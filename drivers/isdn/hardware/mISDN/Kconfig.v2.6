@@ -46,6 +46,20 @@ config MISDN_HFCMULTI
 	   * HFC-8S (8 S/T interfaces on one chip)
 	   * HFC-E1 (E1 interface for 2Mbit ISDN)
 
+if MISDN_HFCMULTI!=n
+
+config HFCMULTI_PCIMEM
+	bool "HFC multiport driver with memory mapped IO"
+	depends on PCI
+	help
+	  Use memory mapped PCI access rather than IO access.
+	  This feature MIGHT be slightly faster, especially when
+	  using hardware DTMF detection. Also it may cause trouble with some
+	  PCI bridges.
+	  If unsure, say 'N'.
+
+endif
+
 config MISDN_SPEEDFAX
 	bool "Support for Sedlbauer Speedfax+"
 	depends on PCI || ISA

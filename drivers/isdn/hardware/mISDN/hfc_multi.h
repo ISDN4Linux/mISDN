@@ -14,8 +14,8 @@
 #define DEBUG_HFCMULTI_DTMF	0x0200
 #define DEBUG_HFCMULTI_LOCK	0x8000
 
+#define PCI_ENA_REGIO	0x01
 #define PCI_ENA_MEMIO	0x02
-#define PCI_ENA_MASTER	0x04
 
 /* NOTE: some registers are assigned multiple times due to different modes
          also registers are assigned differen for HFC-4s/8s and HFC-E1
@@ -95,7 +95,11 @@ struct hfc_multi {
 	u_int		irq;	/* irq used by card */
 	u_int		irqcnt;
 	struct pci_dev	*pci_dev;
-	unsigned char	*pci_io;/* PCI IO memory (MUST BE BYTE POINTER) */
+#ifdef CONFIG_HFCMULTI_PCIMEM
+	unsigned char	*pci_membase;/* PCI memory (MUST BE BYTE POINTER) */
+#else
+	u_int		pci_iobase;/* PCI IO (MUST BE BYTE POINTER) */
+#endif
 	hfcmulti_hw_t	hw;	/* remember data of write-only-registers */
 
 	u_long		chip;	/* chip configuration */
@@ -1073,29 +1077,31 @@ struct hfc_register_names {
 };
 #endif /* HFC_REGISTER_MAP */
 
+/* ACCESS TO PCI MEMORY MAPPED REGISTERS */
 
-//#define HFC_outw(a,b,c) (*((volatile u_short *)((a->pci_io)+b)) = c)
-#define HFC_outl(a,b,c) (*((volatile u_long *)((a->pci_io)+b)) = c)
-#define HFC_inl(a,b) (*((volatile u_long *)((a->pci_io)+b)))
+#ifdef CONFIG_HFCMULTI_PCIMEM
+
+#define HFC_outl(a,b,c) (*((volatile u_long *)((a->pci_membase)+b)) = c)
+#define HFC_inl(a,b) (*((volatile u_long *)((a->pci_membase)+b)))
 
 /* no debug */
-#define HFC_outl_(a,b,c) (*((volatile u_long *)((a->pci_io)+b)) = c)
-#define HFC_inl_(a,b) (*((volatile u_long *)((a->pci_io)+b)))
-#define HFC_inw_(a,b) (*((volatile u_short *)((a->pci_io)+b)))
-#define HFC_outb_(a,b,c) (*((volatile u_char *)((a->pci_io)+b)) = c)
-#define HFC_inb_(a,b) (*((volatile u_char *)((a->pci_io)+b)))
-#define HFC_wait_(a) while((*((volatile u_char *)((a->pci_io)+R_STATUS))) & V_BUSY)
+#define HFC_outl_(a,b,c) (*((volatile u_long *)((a->pci_membase)+b)) = c)
+#define HFC_inl_(a,b) (*((volatile u_long *)((a->pci_membase)+b)))
+#define HFC_inw_(a,b) (*((volatile u_short *)((a->pci_membase)+b)))
+#define HFC_outb_(a,b,c) (*((volatile u_char *)((a->pci_membase)+b)) = c)
+#define HFC_inb_(a,b) (*((volatile u_char *)((a->pci_membase)+b)))
+#define HFC_wait_(a) while((*((volatile u_char *)((a->pci_membase)+R_STATUS))) & V_BUSY)
 
 /* macros */
 #ifndef HFC_REGISTER_MAP
 
 /* usage: HFC_outX(card,register,value); */
-#define HFC_outb(a,b,c) (*((volatile u_char *)((a->pci_io)+b)) = c)
+#define HFC_outb(a,b,c) (*((volatile u_char *)((a->pci_membase)+b)) = c)
 /* usage: register=HFC_inX(card,register); */
-#define HFC_inb(a,b) (*((volatile u_char *)((a->pci_io)+b)))
-#define HFC_inw(a,b) (*((volatile u_short *)((a->pci_io)+b)))
+#define HFC_inb(a,b) (*((volatile u_char *)((a->pci_membase)+b)))
+#define HFC_inw(a,b) (*((volatile u_short *)((a->pci_membase)+b)))
 /* usage: HFC_wait(card); */
-#define HFC_wait(a) while((*((volatile u_char *)((a->pci_io)+R_STATUS))) & V_BUSY)
+#define HFC_wait(a) while((*((volatile u_char *)((a->pci_membase)+R_STATUS))) & V_BUSY)
 
 #else /* HFC_REGISTER_MAP */
 
@@ -1122,13 +1128,13 @@ static unsigned char _HFC_outb(hfc_multi_t *a, unsigned char b, unsigned char c,
 	bits[1] = '0'+(!!(c&64));
 	bits[0] = '0'+(!!(c&128));
 	printk(KERN_DEBUG "HFC_outb(\"%s\", %02x=%s, 0x%02x=%s); in %s() line %d\n", a->name, b, regname, c, bits, function, line);
-	return(*(((volatile u_char *)a->pci_io)+b) = c);
+	return(*(((volatile u_char *)a->pci_membase)+b) = c);
 }
 #define HFC_inb(a,b) _HFC_inb(a, b, __FUNCTION__, __LINE__)
 static unsigned char _HFC_inb(hfc_multi_t *a, unsigned char b, char *function, int line)
 {
 	char regname[256]="", bits[9]="xxxxxxxx";
-	u_char c = (*(((volatile u_char *)a->pci_io)+b));
+	u_char c = (*(((volatile u_char *)a->pci_membase)+b));
 	int i;
 
 	i = 0;
@@ -1156,7 +1162,7 @@ static unsigned char _HFC_inb(hfc_multi_t *a, unsigned char b, char *function, i
 static unsigned short _HFC_inw(hfc_multi_t *a, unsigned char b, char *function, int line)
 {
 	char regname[256]="";
-	u_short c = (*(((volatile u_short *)a->pci_io)+b));
+	u_short c = (*(((volatile u_short *)a->pci_membase)+b));
 	int i;
 
 	i = 0;
@@ -1176,10 +1182,73 @@ static unsigned short _HFC_inw(hfc_multi_t *a, unsigned char b, char *function, 
 static void _HFC_wait(hfc_multi_t *a, char *function, int line)
 {
 	printk(KERN_DEBUG "HFC_wait(\"%s\"); in %s() line %d\n", a->name, function, line);
-	while((*(((volatile u_char *)a->pci_io)+R_STATUS)) & V_BUSY);
+	while((*(((volatile u_char *)a->pci_membase)+R_STATUS)) & V_BUSY);
 }
 
-#endif /* HFC_REGISTER_MAP */
+#endif /* else HFC_REGISTER_MAP */
 
+#else /* CONFIG_HFCMULTI_PCIMEM */
 
+/* ACCESS TO PCI IO REGISTERS */
+
+#ifdef HFC_REGISTER_MAP
+#error Please use "HFC_REGISTER_MAP" debugging only in conjuction with PCIMEM access.
+#endif
+
+/* usage: HFC_outX(card,register,value); */
+static inline void HFC_outb(hfc_multi_t *a, u_char b, u_char c)
+{
+	outb(b,(a->pci_iobase)+4);
+	outb(c,a->pci_iobase);
+}
+static inline void HFC_outl(hfc_multi_t *a, u_char b, u_long c)
+{
+	outb(b,(a->pci_iobase)+4);
+	outl(c,a->pci_iobase);
+}
+
+/* usage: value=HFC_inX(card,register); */
+static inline u_char HFC_inb(hfc_multi_t *a, u_char b)
+{
+	outb(b,(a->pci_iobase)+4);
+	return (inb((volatile u_int)a->pci_iobase));
+}
+static inline u_short HFC_inw(hfc_multi_t *a, u_char b)
+{
+	outb(b,(a->pci_iobase)+4);
+	return (inw((volatile u_int)a->pci_iobase));
+}
+static inline u_long HFC_inl(hfc_multi_t *a, u_char b)
+{
+	outb(b,(a->pci_iobase)+4);
+	return (inl((volatile u_int)a->pci_iobase));
+}
+
+/* usage: HFC_wait(card); */
+static inline void HFC_wait(hfc_multi_t *a)
+{
+	outb(R_STATUS,(a->pci_iobase)+4);
+	while(inb((volatile u_int)a->pci_iobase) & V_BUSY);
+}
+
+/* usage: HFC_set(card,register); */
+#define HFC_set(a, b) outb(b,(a->pci_iobase)+4)
+
+/* usage: HFC_putX(card,value); */
+#define HFC_putb(a,b) outb(b,a->pci_iobase)
+#define HFC_putl(a,b) outl(b,a->pci_iobase)
+
+/* usage: value=HFC_getX(card); */
+#define HFC_getb(a) inb((volatile u_int)a->pci_iobase)
+#define HFC_getl(a) inl((volatile u_int)a->pci_iobase)
+
+/* no debug */
+#define HFC_outl_(a,b,c) HFC_outl(a,b,c)
+#define HFC_inl_(a,b) HFC_inl(a,b)
+#define HFC_inw_(a,b) HFC_inw(a,b)
+#define HFC_outb_(a,b,c) HFC_outb(a,b,c)
+#define HFC_inb_(a,b) HFC_inb(a,b)
+#define HFC_wait_(a) HFC_wait(a)
+
+#endif /* else CONFIG_HFCMULTI_PCIMEM */
 

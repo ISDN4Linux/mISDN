@@ -108,7 +108,7 @@
 
 extern const char *CardType[];
 
-static const char *hfcmulti_revision = "$Revision: 1.14 $";
+static const char *hfcmulti_revision = "$Revision: 1.15 $";
 
 static int HFC_cnt;
 
@@ -243,11 +243,17 @@ release_io_hfcmulti(hfc_multi_t *hc)
 	udelay(10);
 	hc->hw.r_cirm &= ~V_SRES;
 	HFC_outb(hc, R_CIRM, hc->hw.r_cirm);
-	HFC_wait(hc);
+	udelay(10); /* instead of 'wait' that may cause locking */
 
-	/* disable memory mapped ports + busmaster */
+	/* disable memory mapped ports / io ports */
 	pci_write_config_word(hc->pci_dev, PCI_COMMAND, 0);
-	iounmap((void *)hc->pci_io);
+#ifdef CONFIG_HFCMULTI_PCIMEM
+	if (hc->pci_membase)
+		iounmap((void *)hc->pci_membase);
+#else
+	if (hc->pci_iobase)
+		release_region(hc->pci_iobase, 8);
+#endif
 
 	if (debug & DEBUG_HFCMULTI_INIT)
 		printk(KERN_DEBUG "%s: done\n", __FUNCTION__);
@@ -269,6 +275,7 @@ init_chip(hfc_multi_t *hc)
 	/* reset all registers */
 	memset(&hc->hw, 0, sizeof(hfcmulti_hw_t));
 
+	/* revision check */
 	if (debug & DEBUG_HFCMULTI_INIT)
 		printk(KERN_DEBUG "%s: entered\n", __FUNCTION__);
 	val = HFC_inb(hc, R_CHIP_ID);
@@ -277,6 +284,9 @@ init_chip(hfc_multi_t *hc)
 	if (rev == 0) {
 		test_and_set_bit(HFC_CHIP_REVISION0, &hc->chip);
 		printk(KERN_WARNING "HFC_multi: NOTE: Your chip is revision 0, ask Cologne Chip for update. Newer chips have a better FIFO handling. Old chips still work but may have slightly lower HDLC transmit performance.\n");
+	}
+	if (rev > 1) {
+		printk(KERN_WARNING "HFC_multi: WARNING: This driver doesn't consider chip revision = %ld. The chip / bridge may not work.\n", rev);
 	}
 
 	/* set s-ram size */
@@ -518,7 +528,11 @@ hfcmulti_dtmf(hfc_multi_t *hc)
 			HFC_outb_(hc, R_RAM_ADDR1, addr>>8);
 			HFC_outb_(hc, R_RAM_ADDR2, (addr>>16) | V_ADDR_INC);
 			w_float = HFC_inb_(hc, R_RAM_DATA);
+#ifdef CONFIG_HFCMULTI_PCIMEM
 			w_float |= (HFC_inb_(hc, R_RAM_DATA) << 8);
+#else
+			w_float |= (HFC_getb(hc) << 8);
+#endif
 			if (debug & DEBUG_HFCMULTI_DTMF)
 				printk(" %04x", w_float);
 
@@ -537,7 +551,11 @@ hfcmulti_dtmf(hfc_multi_t *hc)
 
 			/* read W(n) coefficient */
 			w_float = HFC_inb_(hc, R_RAM_DATA);
+#ifdef CONFIG_HFCMULTI_PCIMEM
 			w_float |= (HFC_inb_(hc, R_RAM_DATA) << 8);
+#else
+			w_float |= (HFC_getb(hc) << 8);
+#endif
 			if (debug & DEBUG_HFCMULTI_DTMF)
 				printk(" %04x", w_float);
 
@@ -712,10 +730,17 @@ next_frame:
 			__FUNCTION__, ch, Zspace, z1, z2, ii-i, (*len)-i, hdlc?"HDLC":"TRANS");
 	}
 #ifdef FIFO_32BIT_ACCESS
+#ifndef CONFIG_HFCMULTI_PCIMEM
+	HFC_set(hc, A_FIFO_DATA0);
+#endif
 	dd = d + ((ii-i)&0xfffc);
 	i += (ii-i) & 0xfffc;
 	while(d != dd) {
+#ifdef CONFIG_HFCMULTI_PCIMEM
 		HFC_outl_(hc, A_FIFO_DATA0, *((unsigned long *)d));
+#else
+		HFC_putl(hc, *((unsigned long *)d));
+#endif
 //		if (debug & DEBUG_HFCMULTI_FIFO)
 //			printk("%02x %02x %02x %02x ", d[0], d[1], d[2], d[3]);
 		d+=4;
@@ -723,7 +748,11 @@ next_frame:
 #endif
 	dd = d + (ii-i);
 	while(d != dd) {
+#ifdef CONFIG_HFCMULTI_PCIMEM
 		HFC_outb_(hc, A_FIFO_DATA0, *d);
+#else
+		HFC_putb(hc, *d);
+#endif
 //		if (debug & DEBUG_HFCMULTI_FIFO)
 //			printk("%02x ", d[0]);
 		d++;
@@ -864,9 +893,16 @@ next_frame:
 		}
 		d = buf + *idx;
 #ifdef FIFO_32BIT_ACCESS
+#ifndef CONFIG_HFCMULTI_PCIMEM
+		HFC_set(hc, A_FIFO_DATA0);
+#endif
 		dd = d + (ii&0xfffc);
 		while(d != dd) {
+#ifdef CONFIG_HFCMULTI_PCIMEM
 			*((unsigned long *)d) = HFC_inl_(hc, A_FIFO_DATA0);
+#else
+			*((unsigned long *)d) = HFC_getl(hc);
+#endif
 			d+=4;
 		}
 		dd = d + (ii&0x0003);
@@ -874,7 +910,11 @@ next_frame:
 		dd = d + ii;
 #endif
 		while(d != dd) {
+#ifdef CONFIG_HFCMULTI_PCIMEM
 			*d++ = HFC_inb_(hc, A_FIFO_DATA0);
+#else
+			*d++ = HFC_getb(hc);
+#endif
 		}
 		*idx += ii;
 		if (f1 != f2) {
@@ -939,15 +979,26 @@ next_frame:
 				__FUNCTION__, ch, ii, z1, z2);
 		d = skb_put(skb, ii);
 #ifdef FIFO_32BIT_ACCESS
+#ifndef CONFIG_HFCMULTI_PCIMEM
+		HFC_set(hc, A_FIFO_DATA0);
+#endif
 		dd = d + (ii&0xfffc);
 		while(d != dd) {
+#ifdef CONFIG_HFCMULTI_PCIMEM
 			*((unsigned long *)d) = HFC_inl_(hc, A_FIFO_DATA0);
+#else
+			*((unsigned long *)d) = HFC_getl(hc);
+#endif
 			d+=4;
 		}
 #endif
 		dd = d + (ii&0x0003);
 		while(d != dd) {
+#ifdef CONFIG_HFCMULTI_PCIMEM
 			*d++ = HFC_inb_(hc, A_FIFO_DATA0);
+#else
+			*d++ = HFC_getb(hc);
+#endif
 		}
 		if (dch) {
 			/* schedule D-channel event */
@@ -1550,9 +1601,16 @@ hfcmulti_splloop(hfc_multi_t *hc, int ch, u_char *data, int len)
 	/* write loop data */
 	d = data;
 #ifdef FIFO_32BIT_ACCESS
+#ifndef CONFIG_HFCMULTI_PCIMEM
+	HFC_set(hc, A_FIFO_DATA0);
+#endif
 	dd = d + (len & 0xfffc);
 	while(d != dd) {
+#ifdef CONFIG_HFCMULTI_PCIMEM
 		HFC_outl_(hc, A_FIFO_DATA0, *((unsigned long *)d));
+#else
+		HFC_putl(hc, *((unsigned long *)d));
+#endif
 		d+=4;
 		
 	}
@@ -1561,7 +1619,11 @@ hfcmulti_splloop(hfc_multi_t *hc, int ch, u_char *data, int len)
 	dd = d + len;
 #endif
 	while(d != dd) {
+#ifdef CONFIG_HFCMULTI_PCIMEM
 		HFC_outb_(hc, A_FIFO_DATA0, *d);
+#else
+		HFC_putb(hc, *d);
+#endif
 		d++;
 	}
 
@@ -2632,16 +2694,36 @@ setup_pci(hfc_multi_t *hc)
 		printk(KERN_WARNING "HFC-multi: Error enabling PCI card.\n");
 		return (-EIO);
 	}
-	hc->pci_io = (char *) get_pcibase(dev_hfcmulti, 1);
-	if (!hc->pci_io) {
-		printk(KERN_WARNING "HFC-multi: No IO-Mem for PCI card found\n");
+	hc->leds = id_list[i].leds;
+#ifdef CONFIG_HFCMULTI_PCIMEM
+	hc->pci_membase = (char *) get_pcibase(dev_hfcmulti, 1);
+	if (!hc->pci_membase) {
+		printk(KERN_WARNING "HFC-multi: No IO-Memory for PCI card found\n");
 		return (-EIO);
 	}
 
-	hc->pci_io = ioremap((ulong) hc->pci_io, 256);
-	hc->leds = id_list[i].leds;
-	printk(KERN_INFO "%s: defined at IO %#x IRQ %d HZ %d leds-type %d\n", hc->name, (u_int) hc->pci_io, hc->pci_dev->irq, HZ, hc->leds);
+	if (!(hc->pci_membase = ioremap((ulong) hc->pci_membase, 256))) {
+		printk(KERN_WARNING "HFC-multi: failed to remap io address space. (internal error)\n");
+		hc->pci_membase = NULL;
+		return (-EIO);
+	}
+	printk(KERN_INFO "%s: defined at MEMBASE %#x IRQ %d HZ %d leds-type %d\n", hc->name, (u_int) hc->pci_membase, hc->pci_dev->irq, HZ, hc->leds);
 	pci_write_config_word(hc->pci_dev, PCI_COMMAND, PCI_ENA_MEMIO);
+#else
+	hc->pci_iobase = (u_int) get_pcibase(dev_hfcmulti, 0);
+	if (!hc->pci_iobase) {
+		printk(KERN_WARNING "HFC-multi: No IO for PCI card found\n");
+		return (-EIO);
+	}
+	if (!request_region(hc->pci_iobase, 8, "hfcmulti")) {
+		printk(KERN_WARNING "HFC-multi: failed to rquest address space at 0x%04x (internal error)\n", hc->pci_iobase);
+		hc->pci_iobase = 0;
+		return (-EIO);
+	}
+
+	printk(KERN_INFO "%s: defined at IOBASE %#x IRQ %d HZ %d leds-type %d\n", hc->name, (u_int) hc->pci_iobase, hc->pci_dev->irq, HZ, hc->leds);
+	pci_write_config_word(hc->pci_dev, PCI_COMMAND, PCI_ENA_REGIO);
+#endif
 
 	/* At this point the needed PCI config is done */
 	/* fifos are still not enabled */
