@@ -1,4 +1,4 @@
-/* $Id: hfc_pci.c,v 1.22 2003/06/24 21:58:53 kkeil Exp $
+/* $Id: hfc_pci.c,v 1.23 2003/06/25 16:44:48 kkeil Exp $
 
  * hfc_pci.c     low level driver for CCD's hfc-pci based cards
  *
@@ -47,7 +47,7 @@
 
 extern const char *CardType[];
 
-static const char *hfcpci_revision = "$Revision: 1.22 $";
+static const char *hfcpci_revision = "$Revision: 1.23 $";
 
 /* table entry in the PCI devices list */
 typedef struct {
@@ -810,6 +810,7 @@ next_t_frame:
 				} else
 					printk(KERN_WARNING "hfcB tx irq TX_NEXT without skb\n");
 			}
+			bch->tx_len = 0;
 			test_and_clear_bit(BC_FLG_TX_BUSY, &bch->Flag);
 			bch->tx_idx = bch->tx_len;
 		}

@@ -1,4 +1,4 @@
-/* $Id: isar.c,v 1.7 2003/06/22 12:03:36 kkeil Exp $
+/* $Id: isar.c,v 1.8 2003/06/25 16:44:48 kkeil Exp $
  *
  * isar.c   ISAR (Siemens PSB 7110) specific routines
  *
@@ -237,6 +237,11 @@ isar_load_firmware(bchannel_t *bch, u_char *buf, int size)
 			blk_head->sadr, blk_head->len, blk_head->d_key & 0xff);
 		sadr = blk_head->sadr;
 		left = blk_head->len;
+		if (cnt+left > size) {
+			printk(KERN_ERR"isar: firmware size error have %d need %d bytes\n",
+				size, cnt+left);
+			ret = 1;goto reterror;
+		}
 		if (!sendmsg(bch, ISAR_HIS_DKEY, blk_head->d_key & 0xff, 0, NULL)) {
 			printk(KERN_ERR"isar sendmsg dkey failed\n");
 			ret = 1;goto reterror;
@@ -785,10 +790,12 @@ send_frames(bchannel_t *bch)
 				isar_fill_fifo(bch);
 				bch_sched_event(bch, B_XMTBUFREADY);
 			} else {
+				bch->tx_len = 0;
 				printk(KERN_WARNING "isar tx irq TX_NEXT without skb\n");
 				test_and_clear_bit(BC_FLG_TX_BUSY, &bch->Flag);
 			}
 		} else {
+			bch->tx_len = 0;
 			if (test_and_clear_bit(BC_FLG_DLEETX, &bch->Flag)) {
 				if (test_and_clear_bit(BC_FLG_LASTDATA, &bch->Flag)) {
 					if (test_and_clear_bit(BC_FLG_NMD_DATA, &bch->Flag)) {

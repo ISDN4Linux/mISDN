@@ -1,4 +1,4 @@
-/* $Id: isac.c,v 1.6 2003/06/24 21:58:53 kkeil Exp $
+/* $Id: isac.c,v 1.7 2003/06/25 16:44:48 kkeil Exp $
  *
  * isac.c   ISAC specific routines
  *
@@ -23,7 +23,7 @@
 #define DBUSY_TIMER_VALUE 80
 #define ARCOFI_USE 1
 
-const char *isac_revision = "$Revision: 1.6 $";
+const char *isac_revision = "$Revision: 1.7 $";
 
 #ifdef MODULE
 MODULE_AUTHOR("Karsten Keil");
@@ -228,7 +228,6 @@ isac_rme_irq(dchannel_t *dch)
 			count = 32;
 		isac_empty_fifo(dch, count);
 		if (dch->rx_skb) {
-			skb_trim(dch->rx_skb, dch->rx_skb->len - 1); /* remove status byte */
 			skb_queue_tail(&dch->rqueue, dch->rx_skb);
 		}
 	}
@@ -488,7 +487,6 @@ isacsx_rme_irq(dchannel_t *dch)
 			count = 32;
 		isac_empty_fifo(dch, count);
 		if (dch->rx_skb) {
-			skb_trim(dch->rx_skb, dch->rx_skb->len - 1); /* remove status byte */
 			skb_queue_tail(&dch->rqueue, dch->rx_skb);
 		}
 	}
