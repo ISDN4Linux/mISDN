@@ -1,4 +1,4 @@
-/* $Id: l3_udss1.c,v 0.18 2001/10/31 23:06:07 kkeil Exp $
+/* $Id: l3_udss1.c,v 0.19 2001/11/02 23:41:26 kkeil Exp $
  *
  * EURO/DSS1 D-channel protocol
  *
@@ -24,7 +24,7 @@ static int debug = 0;
 static hisaxobject_t u_dss1;
 
 
-const char *dss1_revision = "$Revision: 0.18 $";
+const char *dss1_revision = "$Revision: 0.19 $";
 
 static int dss1man(l3_process_t *, u_int, void *);
 
@@ -61,7 +61,7 @@ static int SendMsg(l3_process_t *pc, int state) {
 	if (state != -1)
 		newl3state(pc, state);
 	if ((ret=l3_msg(pc->l3, DL_DATA | REQUEST, DINFO_SKB, 0, skb)))
-		dev_kfree_skb(skb);
+		kfree_skb(skb);
 	return(ret);
 }
 
@@ -80,7 +80,7 @@ l3dss1_message(l3_process_t *pc, u_char mt)
 	*p++ = pc->callref ^ 0x80;
 	*p++ = mt;
 	if ((ret=l3_msg(pc->l3, DL_DATA | REQUEST, DINFO_SKB, 0, skb)))
-		dev_kfree_skb(skb);
+		kfree_skb(skb);
 	return(ret);
 }
 

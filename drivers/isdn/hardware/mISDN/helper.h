@@ -1,4 +1,4 @@
-/* $Id: helper.h,v 0.11 2001/08/02 14:51:56 kkeil Exp $
+/* $Id: helper.h,v 0.12 2001/11/02 23:41:26 kkeil Exp $
  *
  *   Basic declarations, defines and prototypes
  *
@@ -129,7 +129,7 @@ extern __inline__ int if_link(hisaxif_t *i, u_int prim, int dinfo, int len,
 	else
 		err = i->func(i, skb);
 	if (err)
-		dev_kfree_skb(skb);
+		kfree_skb(skb);
 	return(err);
 }
 

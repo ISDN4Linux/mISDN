@@ -1,4 +1,4 @@
-/* $Id: udevice.c,v 0.25 2001/11/01 00:42:35 kkeil Exp $
+/* $Id: udevice.c,v 0.26 2001/11/02 23:41:26 kkeil Exp $
  *
  * Copyright 2000  by Karsten Keil <kkeil@isdn4linux.de>
  */
@@ -218,7 +218,7 @@ hisax_rdata_raw(hisaxif_t *hif, struct sk_buff *skb) {
 		retval = -EINVAL;
 	}
 	if (!retval)
-		dev_kfree_skb(skb);
+		dev_kfree_skb_any(skb);
 	return(retval);
 }
 
@@ -1413,7 +1413,7 @@ hisax_wdata(hisaxdevice_t *dev) {
 						printk(KERN_WARNING __FUNCTION__
 							": dev(%d) down err(%d)\n",
 							dev->minor, used);
-						dev_kfree_skb(skb);
+						kfree_skb(skb);
 					}
 					spin_lock_irqsave(&dev->wport.lock, flags);
 				} else {

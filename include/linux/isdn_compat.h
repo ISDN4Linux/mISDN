@@ -27,7 +27,8 @@
 #define pci_resource_start_mem(pdev,nr)	pdev->base_address[nr] & PCI_BASE_ADDRESS_MEM_MASK
 #define pci_get_sub_vendor(pdev, id)	pci_read_config_word(pdev, PCI_SUBSYSTEM_VENDOR_ID, &id)
 #define pci_get_sub_system(pdev, id)	pci_read_config_word(pdev, PCI_SUBSYSTEM_ID, &id)
-
+#define dev_kfree_skb_any(a)		dev_kfree_skb(a)
+#define dev_kfree_skb_irq(a)		dev_kfree_skb(a)
 #else /* 2.4.0 and later */
 
 #define pci_resource_start_io(pdev, nr) pci_resource_start(pdev, nr)
@@ -35,7 +36,6 @@
 #define get_pcibase(ps, nr) ps->resource[nr].start
 #define pci_get_sub_system(pdev, id)	id = pdev->subsystem_device
 #define pci_get_sub_vendor(pdev, id)	id = pdev->subsystem_vendor
-
 #endif /* 2,4,0 */
 
 #ifndef COMPAT_HAS_NEW_WAITQ
