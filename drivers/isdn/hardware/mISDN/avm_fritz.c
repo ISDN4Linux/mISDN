@@ -1,4 +1,4 @@
-/* $Id: avm_fritz.c,v 1.27 2004/02/16 10:09:53 keil Exp $
+/* $Id: avm_fritz.c,v 1.28 2004/05/28 23:00:20 keil Exp $
  *
  * fritz_pci.c    low level stuff for AVM Fritz!PCI and ISA PnP isdn cards
  *              Thanks to AVM, Berlin for informations
@@ -28,7 +28,7 @@
 #define LOCK_STATISTIC
 #include "hw_lock.h"
 
-static const char *avm_fritz_rev = "$Revision: 1.27 $";
+static const char *avm_fritz_rev = "$Revision: 1.28 $";
 
 enum {
 	AVM_FRITZ_PCI,
@@ -1341,6 +1341,7 @@ static int __devinit fritzpci_probe(struct pci_dev *pdev, const struct pci_devic
 	return(err);
 }
 
+#if defined(CONFIG_PNP)
 #ifdef NEW_ISAPNP
 static int __devinit fritzpnp_probe(struct pnp_dev *pdev, const struct pnp_device_id *dev_id)
 #else
@@ -1380,6 +1381,7 @@ static int __devinit fritzpnp_probe(struct pci_dev *pdev, const struct isapnp_de
 		pnp_set_drvdata(pdev, NULL);
 	return(err);
 }
+#endif /* CONFIG_PNP */
 
 static void __devexit fritz_remove_pci(struct pci_dev *pdev)
 {
@@ -1391,6 +1393,7 @@ static void __devexit fritz_remove_pci(struct pci_dev *pdev)
 		printk(KERN_WARNING "%s: drvdata allready removed\n", __FUNCTION__);
 }
 
+#if defined(CONFIG_PNP)
 #ifdef NEW_ISAPNP
 static void __devexit fritz_remove_pnp(struct pnp_dev *pdev)
 #else
@@ -1404,6 +1407,7 @@ static void __devexit fritz_remove_pnp(struct pci_dev *pdev)
 	else
 		printk(KERN_WARNING "%s: drvdata allready removed\n", __FUNCTION__);
 }
+#endif /* CONFIG_PNP */
 
 static struct pci_device_id fcpci_ids[] __devinitdata = {
 	{ PCI_VENDOR_ID_AVM, PCI_DEVICE_ID_AVM_A1   , PCI_ANY_ID, PCI_ANY_ID,
@@ -1421,6 +1425,7 @@ static struct pci_driver fcpci_driver = {
 	id_table: fcpci_ids,
 };
 
+#if defined(CONFIG_PNP)
 #ifdef NEW_ISAPNP
 static struct pnp_device_id fcpnp_ids[] __devinitdata = {
 	{ 
@@ -1446,6 +1451,7 @@ static struct isapnp_driver fcpnp_driver = {
 	remove:   __devexit_p(fritz_remove_pnp),
 	id_table: fcpnp_ids,
 };
+#endif /* CONFIG_PNP */
 
 static char FritzName[] = "AVM Fritz";
 
@@ -1474,11 +1480,11 @@ static int __init Fritz_init(void)
 	if (err < 0)
 		goto out;
 	pci_nr_found = err;
-
+#if defined(CONFIG_PNP)
 	err = pnp_register_driver(&fcpnp_driver);
 	if (err < 0)
 		goto out_unregister_pci;
-
+#endif
 #if !defined(CONFIG_HOTPLUG) || defined(MODULE)
 	if (pci_nr_found + err == 0) {
 		err = -ENODEV;
@@ -1489,7 +1495,9 @@ static int __init Fritz_init(void)
 
 #if !defined(CONFIG_HOTPLUG) || defined(MODULE)
  out_unregister_isapnp:
+#if defined(CONFIG_PNP)
 	pnp_unregister_driver(&fcpnp_driver);
+#endif
 #endif
  out_unregister_pci:
 	pci_unregister_driver(&fcpci_driver);
@@ -1508,7 +1516,9 @@ static void __exit Fritz_cleanup(void)
 			fritz.refcnt);
 		release_card(fritz.ilist);
 	}
+#if defined(CONFIG_PNP)
 	pnp_unregister_driver(&fcpnp_driver);
+#endif
 	pci_unregister_driver(&fcpci_driver);
 }
 
