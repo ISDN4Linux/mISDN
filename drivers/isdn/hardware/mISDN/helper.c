@@ -1,4 +1,4 @@
-/* $Id: helper.c,v 0.7 2001/03/04 17:08:33 kkeil Exp $
+/* $Id: helper.c,v 0.8 2001/03/04 18:55:15 kkeil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -24,6 +24,18 @@ discard_queue(struct sk_buff_head *q)
 	return(ret);
 }
 
+struct sk_buff *
+alloc_uplink_skb(size_t size)
+{
+	struct sk_buff *skb;
+
+	if (!(skb = alloc_skb(size + UPLINK_HEADER_SPACE, GFP_ATOMIC)))
+		printk(KERN_WARNING __FUNCTION__"(%d): no skb size\n",
+			size);
+	else
+		skb_reserve(skb, UPLINK_HEADER_SPACE);
+	return(skb);
+}
 
 int
 init_dchannel(dchannel_t *dch) {
