@@ -1,4 +1,4 @@
-/* $Id: l3_udss1.c,v 0.7 2001/02/21 19:18:27 kkeil Exp $
+/* $Id: l3_udss1.c,v 0.8 2001/02/21 21:29:36 kkeil Exp $
  *
  * EURO/DSS1 D-channel protocol
  *
@@ -25,7 +25,7 @@ static int debug = 0;
 static hisaxobject_t u_dss1;
 
 
-const char *dss1_revision = "$Revision: 0.7 $";
+const char *dss1_revision = "$Revision: 0.8 $";
 
 static int dss1man(l3_process_t *, u_int, void *);
 
@@ -2267,7 +2267,7 @@ add_if(layer3_t *l3, hisaxif_t *hif) {
 	int err;
 	hisaxinstance_t *inst = &l3->inst;
 
-	printk(KERN_DEBUG "layer3 add_if lay %d/%d prot %x\n", hif->layer,
+	printk(KERN_DEBUG "layer3 add_if lay %d/%x prot %x\n", hif->layer,
 		hif->stat, hif->protocol);
 	hif->fdata = l3;
 	if (IF_TYPE(hif) == IF_UP) {
@@ -2300,7 +2300,7 @@ del_if(layer3_t *l3, hisaxif_t *hif) {
 	int err;
 	hisaxinstance_t *inst = &l3->inst;
 
-	printk(KERN_DEBUG "layer3 del_if lay %d/%d %p/%p\n", hif->layer,
+	printk(KERN_DEBUG "layer3 del_if lay %d/%x %p/%p\n", hif->layer,
 		hif->stat, hif->func, hif->fdata);
 	if ((hif->func == inst->up.func) && (hif->fdata == inst->up.fdata)) {
 		inst->up.stat = IF_NOACTIV;
