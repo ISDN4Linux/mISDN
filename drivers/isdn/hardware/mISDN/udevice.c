@@ -1,4 +1,4 @@
-/* $Id: udevice.c,v 0.20 2001/09/29 20:05:01 kkeil Exp $
+/* $Id: udevice.c,v 0.21 2001/09/29 20:11:20 kkeil Exp $
  *
  * Copyright 2000  by Karsten Keil <kkeil@isdn4linux.de>
  */
@@ -210,9 +210,13 @@ hisax_rdata(hisaxdevice_t *dev, iframe_t *iff, int use_value) {
 			if (iff->len>0)
 				p_memcpy_i(port, iff->data.p, iff->len);
 		}
-	} else
+		spin_unlock_irqrestore(&port->lock, flags);
+	} else {
+		spin_unlock_irqrestore(&port->lock, flags);
+		printk(KERN_WARNING __FUNCTION__ ":no rport space for %d\n",
+			len);
 		len = -ENOSPC;
-	spin_unlock_irqrestore(&port->lock, flags);
+	}
 	wake_up_interruptible(&port->procq);
 	return(len);
 }
@@ -1564,7 +1568,7 @@ do_hisax_read(struct file *file, char *buf, size_t count, loff_t * off)
 	if (!access_ok(VERIFY_WRITE, buf, count))
 		return(-EFAULT);
 	if (device_debug & DEBUG_DEV_OP)
-		printk(KERN_DEBUG "hisax_read: file(%d) %p count %d\n",
+		printk(KERN_DEBUG "hisax_read: file(%d) %p max %d\n",
 			dev->minor, file, count);
 	while (!dev->rport.cnt) {
 		if (file->f_flags & O_NONBLOCK)
@@ -1599,6 +1603,9 @@ do_hisax_read(struct file *file, char *buf, size_t count, loff_t * off)
 	}
 	*off += len + frag;
 	spin_unlock_irqrestore(&dev->rport.lock, flags);
+	if (device_debug & DEBUG_DEV_OP)
+		printk(KERN_DEBUG "hisax_read: file(%d) %d\n",
+			dev->minor, len + frag);
 	return(len + frag);
 }
 

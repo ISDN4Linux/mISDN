@@ -1,4 +1,4 @@
-/* $Id: hfc_pci.c,v 0.3 2001/09/29 20:05:00 kkeil Exp $
+/* $Id: hfc_pci.c,v 0.4 2001/09/29 20:11:20 kkeil Exp $
 
  * hfc_pci.c     low level driver for CCD´s hfc-pci based cards
  *
@@ -39,7 +39,7 @@
 
 extern const char *CardType[];
 
-static const char *hfcpci_revision = "$Revision: 0.3 $";
+static const char *hfcpci_revision = "$Revision: 0.4 $";
 
 /* table entry in the PCI devices list */
 typedef struct {
@@ -1349,7 +1349,7 @@ HFCD_l1hw(hisaxif_t *hif, struct sk_buff *skb)
 	ret = 0;
 	if (hh->prim == PH_DATA_REQ) {
 		if (dch->next_skb) {
-			debugprint(&dch->inst, " l2l1 next_skb exist this shouldn't happen");
+			printk(KERN_WARNING __FUNCTION__": next_skb exist ERROR");
 			return(-EBUSY);
 		}
 		skb_pull(skb, HISAX_HEAD_SIZE);
@@ -1679,7 +1679,7 @@ hfcpci_l2l1(hisaxif_t *hif, struct sk_buff *skb)
 	if ((hh->prim == PH_DATA_REQ) ||
 		(hh->prim == (DL_DATA | REQUEST))) {
 		if (bch->next_skb) {
-			debugprint(&bch->inst, " l2l1 next_skb exist this shouldn't happen");
+			printk(KERN_WARNING __FUNCTION__": next_skb exist ERROR");
 			return(-EBUSY);
 		}
 		skb_pull(skb, HISAX_HEAD_SIZE);
@@ -1862,7 +1862,7 @@ hfcD_bh(dchannel_t *dch)
 {
 	if (!dch)
 		return;
-	printk(KERN_DEBUG __FUNCTION__": event %x\n", dch->event);
+//	printk(KERN_DEBUG __FUNCTION__": event %x\n", dch->event);
 	if (test_and_clear_bit(D_L1STATECHANGE, &dch->event))
 		hfcD_newstate(dch);		
 	if (test_and_clear_bit(D_XMTBUFREADY, &dch->event)) {
@@ -1903,10 +1903,12 @@ hfcB_bh(bchannel_t *bch)
 		printk(KERN_WARNING "HiSax: hdlc_bh without up.func\n");
 		return;
 	}
+#if 0
 	printk(KERN_DEBUG __FUNCTION__": event %x\n", bch->event);
 	if (bch->dev)
 		printk(KERN_DEBUG __FUNCTION__": rpflg(%x) wpflg(%x)\n",
 			bch->dev->rport.Flag, bch->dev->wport.Flag);
+#endif
 	if (test_and_clear_bit(B_XMTBUFREADY, &bch->event)) {
 		skb = bch->next_skb;
 		if (skb) {

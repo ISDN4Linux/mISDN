@@ -1,4 +1,4 @@
-/* $Id: stack.c,v 0.15 2001/09/29 20:05:01 kkeil Exp $
+/* $Id: stack.c,v 0.16 2001/09/29 20:11:20 kkeil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -523,6 +523,18 @@ set_stack(hisaxstack_t *st, hisax_pid_t *pid) {
 	}
 	hl = st->lstack;
 	while(hl && hl->next) {
+		if (!hl->inst) {
+			int_error();
+			return(-EINVAL);
+		}
+		if (!hl->inst->obj) {
+			int_error();
+			return(-EINVAL);
+		}
+		if (!hl->inst->obj->own_ctrl) {
+			int_error();
+			return(-EINVAL);
+		}
 		hl->inst->obj->own_ctrl(hl->inst, MGR_CONNECT | REQUEST,
 			hl->next->inst);
 		hl = hl->next;
