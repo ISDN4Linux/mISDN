@@ -1,4 +1,4 @@
-/* $Id: avm_fritz.c,v 1.23 2004/01/19 11:01:11 keil Exp $
+/* $Id: avm_fritz.c,v 1.24 2004/01/19 11:02:48 keil Exp $
  *
  * fritz_pci.c    low level stuff for AVM Fritz!PCI and ISA PnP isdn cards
  *              Thanks to AVM, Berlin for informations
@@ -28,7 +28,7 @@
 #define LOCK_STATISTIC
 #include "hw_lock.h"
 
-static const char *avm_fritz_rev = "$Revision: 1.23 $";
+static const char *avm_fritz_rev = "$Revision: 1.24 $";
 
 enum {
 	AVM_FRITZ_PCI,
@@ -623,8 +623,8 @@ HDLC_irq(bchannel_t *bch, u_int stat)
 		hdlc->ctrl.sr.cmd |= HDLC_CMD_XRS;
 		write_ctrl(bch, 1);
 		hdlc->ctrl.sr.cmd &= ~HDLC_CMD_XRS;
-		write_ctrl(bch, 1);
 		HDLC_irq_xpr(bch);
+		return;
 	} else if (stat & HDLC_INT_XPR)
 		HDLC_irq_xpr(bch);
 }

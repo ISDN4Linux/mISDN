@@ -1,4 +1,4 @@
-/* $Id: app_plci.c,v 1.6 2004/01/13 13:38:02 keil Exp $
+/* $Id: app_plci.c,v 1.7 2004/01/19 11:02:47 keil Exp $
  *
  */
 
@@ -1358,7 +1358,7 @@ PL_l3l4(mISDNif_t *hif, struct sk_buff *skb)
 	capidebug(CAPI_DBG_NCCI_L3, "%s: prim(%x) dinfo (%x) skb(%p) APLCI(%x) ncci(%p)",
 		__FUNCTION__, hh->prim, hh->dinfo, skb, aplci->addr, ncci);
 	if (!ncci) {
-		if (hh->prim != (DL_ESTABLISH | INDICATION)) {
+		if ((hh->prim != (DL_ESTABLISH | INDICATION)) && (hh->prim != (DL_ESTABLISH | CONFIRM))) {
 			int_error();
 			return(-ENODEV);
 		}
