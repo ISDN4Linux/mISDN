@@ -1,7 +1,9 @@
-/* $Id: contr.c,v 1.9 2003/07/21 12:44:45 kkeil Exp $
+/* $Id: contr.c,v 1.10 2003/07/28 12:05:47 kkeil Exp $
  *
  */
 
+#include <linux/vmalloc.h>
+#include <asm/uaccess.h>
 #include "capi.h"
 #include "helper.h"
 #include "debug.h"
@@ -9,50 +11,8 @@
 #define contrDebug(contr, lev, fmt, args...) \
 	capidebug(lev, fmt, ## args)
 
-int contrConstr(Contr_t *contr, mISDNstack_t *st, mISDN_pid_t *pid, mISDNobject_t *ocapi)
-{ 
-	char		tmp[10];
-	mISDNstack_t	*cst = st->child;
-	BInst_t		*binst;
-
-	memset(contr, 0, sizeof(Contr_t));
-	memcpy(&contr->inst.pid, pid, sizeof(mISDN_pid_t));
-	contr->adrController = st->id;
-	sprintf(contr->inst.name, "CAPI %d", st->id);
-	contr->inst.obj = ocapi;
-	if (!SetHandledPID(ocapi, &contr->inst.pid)) {
-		int_error();
-		return(-ENOPROTOOPT);
-	}
-	while(cst) {
-		if (!(binst = kmalloc(sizeof(BInst_t), GFP_ATOMIC))) {
-			printk(KERN_ERR "no mem for Binst\n");
-			int_error();
-			return -ENOMEM;
-		}
-		memset(binst, 0, sizeof(BInst_t));
-		binst->bst = cst;
-		binst->inst.st = cst;
-		binst->inst.data = binst;
-		binst->inst.obj = ocapi;
-		binst->inst.pid.layermask |= ISDN_LAYER(4);
-		binst->inst.down.stat = IF_NOACTIV;
-		APPEND_TO_LIST(binst, contr->binst);
-		cst = cst->next;
-	}
-	APPEND_TO_LIST(contr, ocapi->ilist);
-	sprintf(tmp, "mISDN%d", st->id);
-	contr->ctrl = cdrv_if->attach_ctr(&mISDN_driver, tmp, contr);
-	if (!contr->ctrl)
-		return -ENODEV;
-	contr->adrController = contr->ctrl->cnr;
-	contr->inst.data = contr;
-	ocapi->ctrl(st, MGR_REGLAYER | INDICATION, &contr->inst);
-	contr->inst.up.stat = IF_DOWN;
-	return 0;
-}
-
-void contrDestr(Contr_t *contr)
+void
+contrDestr(Contr_t *contr)
 {
 	int i;
 	mISDNinstance_t *inst = &contr->inst;
@@ -78,9 +38,14 @@ void contrDestr(Contr_t *contr)
 			contr->dummy_pcs[i] = NULL;
 		}
 	}
+#ifdef OLDCAPI_DRIVER_INTERFACE
 	if (contr->ctrl)
 		cdrv_if->detach_ctr(contr->ctrl);
-	
+#else
+	detach_capi_ctr(contr->ctrl);
+	kfree(contr->ctrl);
+	contr->ctrl = NULL;
+#endif
 	while (contr->binst) {
 		BInst_t *binst = contr->binst;
 		REMOVE_FROM_LISTBASE(binst, contr->binst);
@@ -98,9 +63,9 @@ void contrDestr(Contr_t *contr)
 	REMOVE_FROM_LISTBASE(contr, ((Contr_t *)inst->obj->ilist));
 }
 
-void contrRun(Contr_t *contr)
+void
+contrRun(Contr_t *contr)
 {
-	struct capi_ctr	*ctrl = contr->ctrl;
 	BInst_t		*binst;
 	int		nb;
 
@@ -110,23 +75,29 @@ void contrRun(Contr_t *contr)
 		nb++;
 		binst = binst->next;
 	}
-	strncpy(ctrl->manu, "ISDN4Linux, (C) Kai Germaschewski", CAPI_MANUFACTURER_LEN);
-	strncpy(ctrl->serial, "0002", CAPI_SERIAL_LEN);
-	ctrl->version.majorversion = 2;
-	ctrl->version.minorversion = 0;
-	ctrl->version.majormanuversion = 1;
-	ctrl->version.minormanuversion = 1;
-	memset(&ctrl->profile, 0, sizeof(struct capi_profile));
-	ctrl->profile.ncontroller = 1;
-	ctrl->profile.nbchannel = nb;
-	ctrl->profile.goptions = 0x11; // internal controller, supplementary services
-	ctrl->profile.support1 = 3; // HDLC, TRANS
-	ctrl->profile.support2 = 3; // X75SLP, TRANS
-	ctrl->profile.support3 = 1; // TRANS
-	ctrl->ready(ctrl);
+	strncpy(contr->ctrl->manu, "mISDN CAPI (C) Kai Germaschewski, Karsten Keil", CAPI_MANUFACTURER_LEN);
+	strncpy(contr->ctrl->serial, "0002", CAPI_SERIAL_LEN);
+	contr->ctrl->version.majorversion = 2;
+	contr->ctrl->version.minorversion = 0;
+	contr->ctrl->version.majormanuversion = 1;
+	contr->ctrl->version.minormanuversion = 1;
+	memset(&contr->ctrl->profile, 0, sizeof(struct capi_profile));
+	contr->ctrl->profile.ncontroller = 1;
+	contr->ctrl->profile.nbchannel = nb;
+	// FIXME
+	contr->ctrl->profile.goptions = 0x11; // internal controller, supplementary services
+	contr->ctrl->profile.support1 = 3; // HDLC, TRANS
+	contr->ctrl->profile.support2 = 3; // X75SLP, TRANS
+	contr->ctrl->profile.support3 = 1; // TRANS
+#ifdef OLDCAPI_DRIVER_INTERFACE
+	contr->ctrl->ready(contr->ctrl);
+#else
+	capi_ctr_ready(contr->ctrl);
+#endif
 }
 
-Appl_t *contrId2appl(Contr_t *contr, __u16 ApplId)
+Appl_t
+*contrId2appl(Contr_t *contr, __u16 ApplId)
 {
 	if ((ApplId < 1) || (ApplId > CAPI_MAXAPPL)) {
 		int_error();
@@ -135,7 +106,8 @@ Appl_t *contrId2appl(Contr_t *contr, __u16 ApplId)
 	return contr->appls[ApplId - 1];
 }
 
-Plci_t *contrAdr2plci(Contr_t *contr, __u32 adr)
+Plci_t
+*contrAdr2plci(Contr_t *contr, __u32 adr)
 {
 	int i = (adr >> 8);
 
@@ -146,10 +118,13 @@ Plci_t *contrAdr2plci(Contr_t *contr, __u32 adr)
 	return contr->plcis[i - 1];
 }
 
-void contrRegisterAppl(Contr_t *contr, __u16 ApplId, capi_register_params *rp)
-{ 
-	Appl_t *appl;
+static void
+RegisterAppl(struct capi_ctr *ctrl, __u16 ApplId, capi_register_params *rp)
+{
+	Contr_t	*contr = ctrl->driverdata;
+	Appl_t	*appl;
 
+	contrDebug(contr, CAPI_DBG_APPL, "%s: ApplId(%x)", __FUNCTION__, ApplId);
 	appl = contrId2appl(contr, ApplId);
 	if (appl) {
 		int_error();
@@ -162,12 +137,16 @@ void contrRegisterAppl(Contr_t *contr, __u16 ApplId, capi_register_params *rp)
 	}
 	contr->appls[ApplId - 1] = appl;
 	applConstr(appl, contr, ApplId, rp);
+#ifdef OLDCAPI_DRIVER_INTERFACE
 	contr->ctrl->appl_registered(contr->ctrl, ApplId);
+#endif
 }
 
-void contrReleaseAppl(Contr_t *contr, __u16 ApplId)
-{ 
-	Appl_t *appl;
+static void
+ReleaseAppl(struct capi_ctr *ctrl, __u16 ApplId)
+{
+	Contr_t *contr = ctrl->driverdata;
+	Appl_t	*appl;
 
 	contrDebug(contr, CAPI_DBG_APPL, "%s: ApplId(%x)", __FUNCTION__, ApplId);
 	appl = contrId2appl(contr, ApplId);
@@ -178,56 +157,148 @@ void contrReleaseAppl(Contr_t *contr, __u16 ApplId)
 	applDestr(appl);
 	kfree(appl);
 	contr->appls[ApplId - 1] = NULL;
+#ifdef OLDCAPI_DRIVER_INTERFACE
 	contr->ctrl->appl_released(contr->ctrl, ApplId);
+#else
+	capilib_release_appl(&contr->ncci_head, ApplId);
+#endif
 }
 
-void contrSendMessage(Contr_t *contr, struct sk_buff *skb)
-{ 
-	Appl_t *appl;
-	int ApplId;
+#ifdef OLDCAPI_DRIVER_INTERFACE
+static void
+#else
+static u16
+#endif
+SendMessage(struct capi_ctr *ctrl, struct sk_buff *skb)
+{
+	Contr_t	*contr = ctrl->driverdata;
+	Appl_t	*appl;
+	int	ApplId;
+	int	err = CAPI_NOERROR;
 
 	ApplId = CAPIMSG_APPID(skb->data);
 	appl = contrId2appl(contr, ApplId);
 	if (!appl) {
 		int_error();
-		return;
-	}
-	applSendMessage(appl, skb);
+		err = CAPI_ILLAPPNR;
+	} else
+		applSendMessage(appl, skb);
+#ifndef OLDCAPI_DRIVER_INTERFACE
+	return(err);
+#endif
 }
 
-void contrLoadFirmware(Contr_t *contr, int len, void *data)
+static int
+LoadFirmware(struct capi_ctr *ctrl, capiloaddata *data)
 {
+	Contr_t	*contr = ctrl->driverdata;
 	struct firm {
 		int	len;
 		void	*data;
 	} firm;
+	int	retval;
 	
-	firm.len  = len;
-	firm.data = data;
+	firm.len  = data->firmware.len;
+	if (data->firmware.user) {
+		firm.data = vmalloc(data->firmware.len);
+		if (!firm.data)
+			return(-ENOMEM);
+		retval = copy_from_user(firm.data, data->firmware.data, data->firmware.len);
+		if (retval) {
+			vfree(firm.data);
+			return(retval);
+		}
+	} else
+		firm.data = data;
 	contr->inst.obj->ctrl(contr->inst.st, MGR_LOADFIRM | REQUEST, &firm);
+	if (data->firmware.user)
+		vfree(firm.data);
 	contrRun(contr);
+	return(0);
 }
 
-void contrReset(Contr_t *contr)
+static char *
+procinfo(struct capi_ctr *ctrl)
 {
-	int ApplId;
-	Appl_t *appl;
+	Contr_t *contr = ctrl->driverdata;
+
+	if (CAPI_DBG_INFO & contr->debug)
+		printk(KERN_DEBUG "%s\n", __FUNCTION__);
+	if (!contr)
+		return "";
+	sprintf(contr->infobuf, "-");
+	return contr->infobuf;
+}
+
+static int
+read_proc(char *page, char **start, off_t off, int count, int *eof, struct capi_ctr *ctrl)
+{
+       int len = 0;
+
+       len += sprintf(page+len, "mISDN_read_proc\n");
+       if (off+count >= len)
+          *eof = 1;
+       if (len < off)
+           return 0;
+       *start = page + off;
+       return ((count < len-off) ? count : len-off);
+};
+
+
+static void
+ResetContr(struct capi_ctr *ctrl)
+{
+	Contr_t	*contr = ctrl->driverdata;
+	int	ApplId;
+	Appl_t	*appl;
 
 	for (ApplId = 1; ApplId <= CAPI_MAXAPPL; ApplId++) {
 		appl = contrId2appl(contr, ApplId);
-		if (appl)
+		if (appl) {
 			applDestr(appl);
-		kfree(appl);
+			kfree(appl);
+		}
 		contr->appls[ApplId - 1] = NULL;
 	}
-
+#ifdef OLDCAPI_DRIVER_INTERFACE
 	contr->ctrl->reseted(contr->ctrl);
+#else
+	capilib_release(&contr->ncci_head);
+	capi_ctr_reseted(contr->ctrl);
+#endif
 }
 
-void contrD2Trace(Contr_t *contr, u_char *buf, int len)
+#ifdef OLDCAPI_DRIVER_INTERFACE
+static void
+Remove_Contr(struct capi_ctr *ctrl)
 {
-	Appl_t *appl;
-	__u16 applId;
+	Contr_t *contr = ctrl->driverdata;
+
+	if (CAPI_DBG_INFO & contr->debug)
+		printk(KERN_DEBUG "%s\n", __FUNCTION__);
+}
+
+struct capi_driver mISDN_driver = {
+	"mISDN",
+	"0.01",
+	LoadFirmware,
+	ResetContr,
+	Remove_Contr,
+	RegisterAppl,
+	ReleaseAppl,
+	SendMessage,
+	procinfo,
+	read_proc,
+	0,
+	0,
+};
+#endif
+
+void
+contrD2Trace(Contr_t *contr, u_char *buf, int len)
+{
+	Appl_t	*appl;
+	__u16	applId;
 
 	for (applId = 1; applId <= CAPI_MAXAPPL; applId++) {
 		appl = contrId2appl(contr, applId);
@@ -237,10 +308,11 @@ void contrD2Trace(Contr_t *contr, u_char *buf, int len)
 	}
 }
 
-void contrRecvCmsg(Contr_t *contr, _cmsg *cmsg)
+void
+contrRecvCmsg(Contr_t *contr, _cmsg *cmsg)
 {
-	struct sk_buff *skb;
-	int len;
+	struct sk_buff	*skb;
+	int		len;
 	
 	capi_cmsg2message(cmsg, contr->msgbuf);
 	len = CAPIMSG_LEN(contr->msgbuf);
@@ -249,29 +321,36 @@ void contrRecvCmsg(Contr_t *contr, _cmsg *cmsg)
 		int_error();
 		return;
 	}
-	
 	memcpy(skb_put(skb, len), contr->msgbuf, len);
+#ifdef OLDCAPI_DRIVER_INTERFACE
 	contr->ctrl->handle_capimsg(contr->ctrl, cmsg->ApplId, skb);
+#else
+	capi_ctr_handle_message(contr->ctrl, cmsg->ApplId, skb);
+#endif
 }
 
-void contrAnswerCmsg(Contr_t *contr, _cmsg *cmsg, __u16 Info)
+void
+contrAnswerCmsg(Contr_t *contr, _cmsg *cmsg, __u16 Info)
 {
 	capi_cmsg_answer(cmsg);
 	cmsg->Info = Info;
 	contrRecvCmsg(contr, cmsg);
 }
 
-void contrAnswerMessage(Contr_t *contr, struct sk_buff *skb, __u16 Info)
+void
+contrAnswerMessage(Contr_t *contr, struct sk_buff *skb, __u16 Info)
 {
-	_cmsg cmsg;
+	_cmsg	cmsg;
+
 	capi_message2cmsg(&cmsg, skb->data);
 	contrAnswerCmsg(contr, &cmsg, Info);
 }
 
-Plci_t *contrNewPlci(Contr_t *contr)
+Plci_t *
+contrNewPlci(Contr_t *contr)
 {
-	Plci_t *plci;
-	int i;
+	Plci_t	*plci;
+	int	i;
 
 	for (i = 0; i < CAPI_MAXPLCI; i++) {
 		if (!contr->plcis[i])
@@ -290,9 +369,10 @@ Plci_t *contrNewPlci(Contr_t *contr)
 	return plci;
 }
 
-void contrDelPlci(Contr_t *contr, Plci_t *plci)
+void
+contrDelPlci(Contr_t *contr, Plci_t *plci)
 {
-	int i = plci->adrPLCI >> 8;
+	int	i = plci->adrPLCI >> 8;
 
 	contrDebug(contr, CAPI_DBG_PLCI, "%s: PLCI(%x)", __FUNCTION__, plci->adrPLCI);
 	if ((i < 1) || (i > CAPI_MAXPLCI)) {
@@ -308,10 +388,10 @@ void contrDelPlci(Contr_t *contr, Plci_t *plci)
 	contr->plcis[i-1] = NULL;
 }
 
-static Plci_t
-*contrGetPLCI4addr(Contr_t *contr, int addr)
+static Plci_t *
+contrGetPLCI4addr(Contr_t *contr, u_int addr)
 {
-	int i;
+	int	i;
 
 	for (i = 0; i < CAPI_MAXPLCI; i++) {
 		if (!contr->plcis[i])
@@ -358,17 +438,103 @@ contrL3L4(mISDNif_t *hif, struct sk_buff *skb)
 	return(ret);
 }
 
-int contrL4L3(Contr_t *contr, u_int prim, int dinfo, struct sk_buff *skb)
+int
+contrL4L3(Contr_t *contr, u_int prim, int dinfo, struct sk_buff *skb)
 {
 	return(if_newhead(&contr->inst.down, prim, dinfo, skb));
 }
 
-void contrPutStatus(Contr_t *contr, char *msg)
+void
+contrPutStatus(Contr_t *contr, char *msg)
 {
 	contrDebug(contr, CAPI_DBG_CONTR, "%s: %s", __FUNCTION__, msg);
 }
 
-Contr_t *newContr(mISDNobject_t *ocapi, mISDNstack_t *st, mISDN_pid_t *pid)
+static int
+contrConstr(Contr_t *contr, mISDNstack_t *st, mISDN_pid_t *pid, mISDNobject_t *ocapi)
+{ 
+	int		retval;
+	mISDNstack_t	*cst = st->child;
+	BInst_t		*binst;
+
+	memset(contr, 0, sizeof(Contr_t));
+	memcpy(&contr->inst.pid, pid, sizeof(mISDN_pid_t));
+#ifndef OLDCAPI_DRIVER_INTERFACE
+	if (!(contr->ctrl = kmalloc(sizeof(struct capi_ctr), GFP_ATOMIC))) {
+		printk(KERN_ERR "no mem for contr->ctrl\n");
+		int_error();
+		return -ENOMEM;
+	}
+	memset(contr->ctrl, 0, sizeof(struct capi_ctr));
+#endif
+	contr->adrController = st->id;
+	sprintf(contr->inst.name, "CAPI %d", st->id);
+	contr->inst.obj = ocapi;
+	contr->inst.data = contr;
+	if (!SetHandledPID(ocapi, &contr->inst.pid)) {
+		int_error();
+		return(-ENOPROTOOPT);
+	}
+	while(cst) {
+		if (!(binst = kmalloc(sizeof(BInst_t), GFP_ATOMIC))) {
+			printk(KERN_ERR "no mem for Binst\n");
+			int_error();
+#ifndef OLDCAPI_DRIVER_INTERFACE
+			kfree(contr->ctrl);
+			contr->ctrl = NULL;
+#endif
+			return -ENOMEM;
+		}
+		memset(binst, 0, sizeof(BInst_t));
+		binst->bst = cst;
+		binst->inst.st = cst;
+		binst->inst.data = binst;
+		binst->inst.obj = ocapi;
+		binst->inst.pid.layermask |= ISDN_LAYER(4);
+		binst->inst.down.stat = IF_NOACTIV;
+		APPEND_TO_LIST(binst, contr->binst);
+		cst = cst->next;
+	}
+	APPEND_TO_LIST(contr, ocapi->ilist);
+	retval = 0;
+#ifdef OLDCAPI_DRIVER_INTERFACE
+	{
+		char	tmp[10];
+
+		sprintf(tmp, "mISDN%d", st->id);
+		contr->ctrl = cdrv_if->attach_ctr(&mISDN_driver, tmp, contr);
+		if (!contr->ctrl)
+			retval = -ENODEV;
+	}
+#else
+	INIT_LIST_HEAD(&contr->ncci_head);
+	contr->ctrl->owner = THIS_MODULE;
+	sprintf(contr->ctrl->name, "mISDN%d", st->id);
+	contr->ctrl->driver_name = "mISDN";
+	contr->ctrl->driverdata = contr;
+	contr->ctrl->register_appl = RegisterAppl;
+	contr->ctrl->release_appl = ReleaseAppl;
+	contr->ctrl->send_message = SendMessage;
+	contr->ctrl->load_firmware = LoadFirmware;
+	contr->ctrl->reset_ctr = ResetContr;
+	contr->ctrl->procinfo = procinfo;
+	contr->ctrl->ctr_read_proc = read_proc;
+	retval = attach_capi_ctr(contr->ctrl);
+	if (retval) {
+		kfree(contr->ctrl);
+		contr->ctrl = NULL;
+	}
+#endif
+	if (!retval) {
+		contr->adrController = contr->ctrl->cnr;
+		ocapi->ctrl(st, MGR_REGLAYER | INDICATION, &contr->inst);
+		contr->inst.up.stat = IF_DOWN;
+	}
+	return retval;
+}
+
+Contr_t *
+newContr(mISDNobject_t *ocapi, mISDNstack_t *st, mISDN_pid_t *pid)
 {
 	Contr_t *contr;
 
@@ -390,7 +556,8 @@ Contr_t *newContr(mISDNobject_t *ocapi, mISDNstack_t *st, mISDN_pid_t *pid)
 	return contr;
 }
 
-BInst_t *contrSelChannel(Contr_t *contr, u_int channel)
+BInst_t *
+contrSelChannel(Contr_t *contr, u_int channel)
 { 
 	mISDNstack_t	*cst;
 	BInst_t		*binst;
@@ -437,7 +604,8 @@ BInst_t *contrSelChannel(Contr_t *contr, u_int channel)
 }
 
 #if 0
-static void d2_listener(struct IsdnCardState *cs, u_char *buf, int len)
+static void
+d2_listener(struct IsdnCardState *cs, u_char *buf, int len)
 {
 	Contr_t *contr = cs->contr;
 

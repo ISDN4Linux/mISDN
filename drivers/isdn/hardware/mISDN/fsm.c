@@ -1,4 +1,4 @@
-/* $Id: fsm.c,v 1.1 2003/07/27 11:14:19 kkeil Exp $
+/* $Id: fsm.c,v 1.2 2003/07/28 12:05:47 kkeil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -11,6 +11,10 @@
 #define __NO_VERSION__
 #include <linux/kernel.h>
 #include <linux/slab.h>
+#include <linux/isdn_compat.h>
+#ifdef NEED_JIFFIES_INCLUDE
+#include <linux/jiffies.h>
+#endif
 #include <linux/string.h>
 #include "fsm.h"
 

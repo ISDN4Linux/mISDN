@@ -37,15 +37,38 @@ typedef	struct timer_list		timer_t;
 #define get_pcibase(ps, nr) ps->resource[nr].start
 #define pci_get_sub_system(pdev, id)	id = pdev->subsystem_device
 #define pci_get_sub_vendor(pdev, id)	id = pdev->subsystem_vendor
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2,5,0)
+#endif /* 2,4,0 */
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,5,0)
 typedef void irqreturn_t;
 #define IRQ_NONE
 #define IRQ_HANDLED
 #define IRQ_RETVAL(x)
-
+#define CAPI_SendMessage_void
+#define OLDCAPI_DRIVER_INTERFACE
+#undef  HAS_WORKQUEUE
+#define work_struct	tq_struct
+#define INIT_WORK(q, f, d)	(q)->routine=f;(q)->data=d;
+#define schedule_work(q)	queue_task(q, &tq_immediate);mark_bh(IMMEDIATE_BH);
+#define MAKEDAEMON(n)		daemonize();strcpy(current->comm, n)
+#undef NEW_ISAPNP
+#define pnp_register_driver(d)		isapnp_register_driver(d)
+#define pnp_unregister_driver(d)	isapnp_unregister_driver(d)
+#define pnp_get_drvdata(d)		pci_get_drvdata(d)
+#define pnp_set_drvdata(p,d)		pci_set_drvdata(p,d)
+#define pnp_activate_dev(d)		isapnp_activate_dev(d, "mISDN")
+#define pnp_disable_dev(d)		((struct pci_dev *)d)->prepare(d);((struct pci_dev *)d)->deactivate(d)
+#define pnp_port_start(d,n)		d->resource[n].start
+#define pnp_irq(d,n)			d->irq_resource[n].start
+#else
+#undef  OLDCAPI_DRIVER_INTERFACE
+#define HAS_WORKQUEUE
+#undef  MINOR
+#define MINOR(inode)	minor(inode)
+#define NEED_JIFFIES_INCLUDE
+#define MAKEDAEMON(n)	daemonize(n)
+#define NEW_ISAPNP
 #endif /* 2,5,0 */
-#endif /* 2,4,0 */
 
 #ifndef COMPAT_HAS_NEW_WAITQ
 typedef struct wait_queue wait_queue_t;

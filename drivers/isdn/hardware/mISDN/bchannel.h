@@ -1,4 +1,4 @@
-/* $Id: bchannel.h,v 1.5 2003/07/27 11:14:19 kkeil Exp $
+/* $Id: bchannel.h,v 1.6 2003/07/28 12:05:47 kkeil Exp $
  *
  *   Basic declarations, defines for Bchannel hardware
  *
@@ -7,7 +7,11 @@
  */
 
 #include <linux/mISDNif.h>
+#ifdef HAS_WORKQUEUE
+#include <linux/workqueue.h>
+#else
 #include <linux/tqueue.h>
+#endif
 #include <linux/smp.h>
 #include <linux/ptrace.h>
 #include <linux/interrupt.h>
@@ -60,7 +64,7 @@ typedef struct _bchannel_t {
 	u_char			*blog;
 	u_char			*conmsg;
 	struct timer_list	transbusy;
-	struct tq_struct	tqueue;
+	struct work_struct	work;
 	void			(*hw_bh) (struct _bchannel_t *);
 	u_long			event;
 	int			err_crc;
@@ -76,6 +80,5 @@ static inline void
 bch_sched_event(bchannel_t *bch, int event)
 {
 	test_and_set_bit(event, &bch->event);
-	queue_task(&bch->tqueue, &tq_immediate);
-	mark_bh(IMMEDIATE_BH);
+	schedule_work(&bch->work);
 }

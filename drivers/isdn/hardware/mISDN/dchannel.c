@@ -1,4 +1,4 @@
-/* $Id: dchannel.c,v 1.6 2003/07/27 11:14:19 kkeil Exp $
+/* $Id: dchannel.c,v 1.7 2003/07/28 12:05:47 kkeil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -75,8 +75,7 @@ init_dchannel(dchannel_t *dch) {
 	dch->tx_idx = 0;
 	dch->next_skb = NULL;
 	dch->event = 0;
-	dch->tqueue.data = dch;
-	dch->tqueue.routine = (void *) (void *) dchannel_bh;
+	INIT_WORK(&dch->work, (void *)(void *)dchannel_bh, dch);
 	dch->hw_bh = NULL;
 	skb_queue_head_init(&dch->rqueue);
 	return(0);
@@ -84,9 +83,13 @@ init_dchannel(dchannel_t *dch) {
 
 int
 free_dchannel(dchannel_t *dch) {
-
-	if (dch->tqueue.sync)
-		printk(KERN_ERR"free_dchannel tqueue.sync\n");
+#ifdef HAS_WORKQUEUE
+	if (dch->work.pending)
+		printk(KERN_ERR "free_dchannel work:(%lx)\n", dch->work.pending);
+#else
+	if (dch->work.sync)
+		printk(KERN_ERR "free_dchannel work:(%lx)\n", dch->work.sync);
+#endif
 	discard_queue(&dch->rqueue);
 	if (dch->rx_skb) {
 		dev_kfree_skb(dch->rx_skb);

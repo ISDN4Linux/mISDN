@@ -1,19 +1,16 @@
-/* $Id: capi.c,v 1.6 2003/07/27 11:14:19 kkeil Exp $
+/* $Id: capi.c,v 1.7 2003/07/28 12:05:47 kkeil Exp $
  *
  */
 
 #include <linux/module.h>
-#include <linux/vmalloc.h>
-#include <asm/uaccess.h>
 #include "capi.h"
 #include "helper.h"
 #include "debug.h"
 
-static char *capi_revision = "$Revision: 1.6 $";
+static char *capi_revision = "$Revision: 1.7 $";
 
 static int debug = 0;
 static mISDNobject_t capi_obj;
-
 
 static char MName[] = "mISDN Capi 2.0";
 
@@ -39,129 +36,19 @@ void capidebug(int level, char *fmt, ...)
 	}
 }
 
-// ---------------------------------------------------------------------------
-// registration to kernelcapi
-
-int mISDN_load_firmware(struct capi_ctr *ctrl, capiloaddata *data)
-{
-	Contr_t *contr = ctrl->driverdata;
-	u_char *tmp;
-	int retval;
-
-	if (CAPI_DBG_INFO & debug) {
-		printk(KERN_INFO "%s: firm user(%d) len(%d)\n", __FUNCTION__,
-			data->firmware.user, data->firmware.len);
-		printk(KERN_INFO "%s: cfg user(%d) len(%d)\n", __FUNCTION__,
-			data->configuration.user, data->configuration.len);
-	}
-	if (data->firmware.user) {
-		tmp = vmalloc(data->firmware.len);
-		if (!tmp)
-			return(-ENOMEM);
-		retval = copy_from_user(tmp, data->firmware.data,
-			data->firmware.len);
-		if (retval)
-			return(retval);
-	} else
-		tmp = data->firmware.data;
-	contrLoadFirmware(contr, data->firmware.len, tmp);
-	if (data->firmware.user)
-		vfree(tmp);
-	return 0;
-}
-
-void mISDN_reset_ctr(struct capi_ctr *ctrl)
-{
-	Contr_t *contr = ctrl->driverdata;
-
-	if (CAPI_DBG_INFO & debug)
-		printk(KERN_DEBUG "%s\n", __FUNCTION__);
-	contrReset(contr);
-}
-
-void mISDN_remove_ctr(struct capi_ctr *ctrl)
-{
-	if (CAPI_DBG_INFO & debug)
-		printk(KERN_DEBUG "%s\n", __FUNCTION__);
-}
-
-static char *mISDN_procinfo(struct capi_ctr *ctrl)
-{
-	Contr_t *contr = (ctrl->driverdata);
-
-	if (CAPI_DBG_INFO & debug)
-		printk(KERN_DEBUG "%s\n", __FUNCTION__);
-	if (!contr)
-		return "";
-	sprintf(contr->infobuf, "-");
-	return contr->infobuf;
-}
-
-void mISDN_register_appl(struct capi_ctr *ctrl,
-			 __u16 ApplId, capi_register_params *rp)
-{
-	Contr_t *contr = ctrl->driverdata;
-
-	if (CAPI_DBG_INFO & debug)
-		printk(KERN_DEBUG "%s\n", __FUNCTION__);
-	contrRegisterAppl(contr, ApplId, rp);
-}
-
-void mISDN_release_appl(struct capi_ctr *ctrl, __u16 ApplId)
-{
-	Contr_t *contr = ctrl->driverdata;
-
-	if (CAPI_DBG_INFO & debug)
-		printk(KERN_DEBUG "%s\n", __FUNCTION__);
-	contrReleaseAppl(contr, ApplId);
-}
-
-void mISDN_send_message(struct capi_ctr *ctrl, struct sk_buff *skb)
-{
-	Contr_t *contr = ctrl->driverdata;
-
-	contrSendMessage(contr, skb);
-}
-
-static int mISDN_read_proc(char *page, char **start, off_t off,
-		int count, int *eof, struct capi_ctr *ctrl)
-{
-       int len = 0;
-
-       len += sprintf(page+len, "mISDN_read_proc\n");
-       if (off+count >= len)
-          *eof = 1;
-       if (len < off)
-           return 0;
-       *start = page + off;
-       return ((count < len-off) ? count : len-off);
-};
-
-struct capi_driver_interface *cdrv_if;                  
-
-struct capi_driver mISDN_driver = {
-       "mISDN",
-       "0.01",
-       mISDN_load_firmware,
-       mISDN_reset_ctr,
-       mISDN_remove_ctr,
-       mISDN_register_appl,
-       mISDN_release_appl,
-       mISDN_send_message,
-       mISDN_procinfo,
-       mISDN_read_proc,
-       0,
-       0,
-};
+#ifdef OLDCAPI_DRIVER_INTERFACE
+struct capi_driver_interface *cdrv_if;
+#endif
 
 int CapiNew(void)
 {
-	printk(KERN_INFO "new %s instance\n", MName);
+#ifdef OLDCAPI_DRIVER_INTERFACE
 	cdrv_if = attach_capi_driver(&mISDN_driver);
 	if (!cdrv_if) {
 		printk(KERN_ERR "mISDN: failed to attach capi_driver\n");
 		return -EIO;
 	}
+#endif
 	init_listen();
 	init_cplci();
 	init_ncci();
@@ -170,10 +57,10 @@ int CapiNew(void)
 
 static int
 capi20_manager(void *data, u_int prim, void *arg) {
-	mISDNinstance_t *inst = data;
-	int	found=0;
-	BInst_t *binst = NULL;
-	Contr_t *ctrl = (Contr_t *)capi_obj.ilist;
+	mISDNinstance_t	*inst = data;
+	int		found=0;
+	BInst_t		*binst = NULL;
+	Contr_t		*ctrl = (Contr_t *)capi_obj.ilist;
 
 	if (CAPI_DBG_INFO & debug)
 		printk(KERN_DEBUG "capi20_manager data:%p prim:%x arg:%p\n", data, prim, arg);
@@ -253,6 +140,17 @@ capi20_manager(void *data, u_int prim, void *arg) {
 			capi_obj.ctrl(&binst->inst, MGR_UNREGLAYER | REQUEST, NULL);
 		}
 		break;
+	    case MGR_CTRLREADY | INDICATION:
+		if (ctrl) {
+			if (CAPI_DBG_INFO & debug)
+				printk(KERN_DEBUG "ctrl %x ready\n", ctrl->inst.st->id);
+			contrRun(ctrl);
+		} else {
+			if (CAPI_DBG_WARN & debug)
+				printk(KERN_WARNING "ctrl ready no instance\n");
+			return(-EINVAL);
+		}
+		break;
 	    default:
 	    	if (CAPI_DBG_WARN & debug)
 			printk(KERN_WARNING "capi20_manager prim %x not handled\n", prim);
@@ -279,7 +177,9 @@ int Capi20Init(void)
 		return(err);
 	if ((err = mISDN_register(&capi_obj))) {
 		printk(KERN_ERR "Can't register %s error(%d)\n", MName, err);
+#ifdef OLDCAPI_DRIVER_INTERFACE
 		detach_capi_driver(&mISDN_driver);
+#endif
 		free_listen();
 		free_cplci();
 		free_ncci();
@@ -303,7 +203,9 @@ static void Capi20cleanup(void)
 			kfree(contr);
 		}
 	}
+#ifdef OLDCAPI_DRIVER_INTERFACE
 	detach_capi_driver(&mISDN_driver);
+#endif
 	free_listen();
 	free_cplci();
 	free_ncci();

@@ -1,4 +1,4 @@
-/* $Id: avm_fritz.c,v 1.13 2003/07/27 11:14:19 kkeil Exp $
+/* $Id: avm_fritz.c,v 1.14 2003/07/28 12:05:47 kkeil Exp $
  *
  * fritz_pci.c    low level stuff for AVM Fritz!PCI and ISA PnP isdn cards
  *              Thanks to AVM, Berlin for informations
@@ -11,8 +11,11 @@
 #include <linux/config.h>
 #include <linux/module.h>
 #include <linux/pci.h>
+#ifdef NEW_ISAPNP
+#include <linux/pnp.h>
+#else
 #include <linux/isapnp.h>
-#include <linux/kernel_stat.h>
+#endif
 #include <linux/delay.h>
 #include "dchannel.h"
 #include "bchannel.h"
@@ -25,7 +28,7 @@
 #define LOCK_STATISTIC
 #include "hw_lock.h"
 
-static const char *avm_fritz_rev = "$Revision: 1.13 $";
+static const char *avm_fritz_rev = "$Revision: 1.14 $";
 
 enum {
 	AVM_FRITZ_PCI,
@@ -129,7 +132,7 @@ typedef struct hdlc_hw {
 typedef struct _fritzpnppci {
 	struct _fritzpnppci	*prev;
 	struct _fritzpnppci	*next;
-	struct pci_dev		*pdev;
+	void			*pdev;
 	u_int			type;
 	u_int			irq;
 	u_int			irqcnt;
@@ -901,40 +904,18 @@ MODULE_PARM(protocol, MODULE_PARM_T);
 MODULE_PARM(layermask, MODULE_PARM_T);
 #endif
 
-static char FritzName[] = "Fritz!PCI";
-
-static struct pci_device_id fcpci_ids[] __devinitdata = {
-	{ PCI_VENDOR_ID_AVM, PCI_DEVICE_ID_AVM_A1   , PCI_ANY_ID, PCI_ANY_ID,
-	  0, 0, (unsigned long) "Fritz!Card PCI" },
-	{ PCI_VENDOR_ID_AVM, PCI_DEVICE_ID_AVM_A1_V2, PCI_ANY_ID, PCI_ANY_ID,
-	  0, 0, (unsigned long) "Fritz!Card PCI v2" },
-	{ }
-};
-MODULE_DEVICE_TABLE(pci, fcpci_ids);
-
-static struct isapnp_device_id fcpnp_ids[] __devinitdata = {
-	{ ISAPNP_VENDOR('A', 'V', 'M'), ISAPNP_FUNCTION(0x0900),
-	  ISAPNP_VENDOR('A', 'V', 'M'), ISAPNP_FUNCTION(0x0900), 
-	  (unsigned long) "Fritz!Card PnP" },
-	{ }
-};
-MODULE_DEVICE_TABLE(isapnp, fcpnp_ids);
-
 int
 setup_fritz(fritzpnppci *fc)
 {
-	u_int val, ver;
+	u_int	val, ver;
 
-	if (check_region((fc->addr), 32)) {
+	if (!request_region(fc->addr, 32, (fc->type == AVM_FRITZ_PCI) ? "avm PCI" : "avm PnP")) {
 		printk(KERN_WARNING
 		       "mISDN: %s config port %x-%x already in use\n",
 		       "AVM Fritz!PCI",
 		       fc->addr,
 		       fc->addr + 31);
 		return(-EIO);
-	} else {
-		request_region(fc->addr, 32,
-			(fc->type == AVM_FRITZ_PCI) ? "avm PCI" : "avm PnP");
 	}
 	switch (fc->type) {
 	    case AVM_FRITZ_PCI:
@@ -1020,11 +1001,12 @@ release_card(fritzpnppci *card)
 	REMOVE_FROM_LISTBASE(card, ((fritzpnppci *)fritz.ilist));
 	unlock_dev(card);
 	if (card->type == AVM_FRITZ_PNP) {
-		if (card->pdev->deactivate)
-			card->pdev->deactivate(card->pdev);
-	} else
+		pnp_disable_dev(card->pdev);
+		pnp_set_drvdata(card->pdev, NULL);
+	} else {
 		pci_disable_device(card->pdev);
-	pci_set_drvdata(card->pdev, NULL);
+		pci_set_drvdata(card->pdev, NULL);
+	}
 	kfree(card);
 	fritz.refcnt--;
 }
@@ -1273,32 +1255,45 @@ static int __devinit fritzpci_probe(struct pci_dev *pdev, const struct pci_devic
 	return(err);
 }
 
-static int __devinit fritzpnp_probe(struct pci_dev *pdev, const struct isapnp_device_id *ent)
+#ifdef NEW_ISAPNP
+static int __devinit fritzpnp_probe(struct pnp_dev *pdev, const struct pnp_device_id *dev_id)
+#else
+static int __devinit fritzpnp_probe(struct pci_dev *pdev, const struct isapnp_device_id *dev_id)
+#endif
 {
-	int		err = -ENOMEM;
+	int		err;
 	fritzpnppci	*card;
+
+	if (!pdev)
+		return(-ENODEV);
 
 	if (!(card = kmalloc(sizeof(fritzpnppci), GFP_ATOMIC))) {
 		printk(KERN_ERR "No kmem for fritzcard\n");
-		return(err);
+		return(-ENOMEM);
 	}
 	memset(card, 0, sizeof(fritzpnppci));
 	card->type = AVM_FRITZ_PNP;
 	card->pdev = pdev;
-	pdev->prepare(pdev);
-	pdev->deactivate(pdev); // why?
-	pdev->activate(pdev);
-	card->addr = pdev->resource[0].start;
-	card->irq = pdev->irq_resource[0].start;
+	pnp_disable_dev(pdev);
+	err = pnp_activate_dev(pdev);
+	if (err<0) {
+		printk(KERN_WARNING "%s: pnp_activate_dev(%s) ret(%d)\n", __FUNCTION__,
+			(char *)dev_id->driver_data, err);
+		kfree(card);
+		return(err);
+	}
+	card->addr = pnp_port_start(pdev, 0);
+	card->irq = pnp_irq(pdev, 0);
 
 	printk(KERN_INFO "mISDN_fcpcipnp: found adapter %s at IO %#x irq %d\n",
-	       (char *) ent->driver_data, card->addr, card->irq);
+	       (char *)dev_id->driver_data, card->addr, card->irq);
 
+	pnp_set_drvdata(pdev, card);
 	err = setup_instance(card);
 	return(err);
 }
 
-static void __devexit fritz_remove(struct pci_dev *pdev)
+static void __devexit fritz_remove_pci(struct pci_dev *pdev)
 {
 	fritzpnppci	*card = pci_get_drvdata(pdev);
 
@@ -1308,27 +1303,69 @@ static void __devexit fritz_remove(struct pci_dev *pdev)
 		printk(KERN_WARNING "%s: drvdata allready removed\n", __FUNCTION__);
 }
 
+#ifdef NEW_ISAPNP
+static void __devexit fritz_remove_pnp(struct pnp_dev *pdev)
+#else
+static void __devexit fritz_remove_pnp(struct pci_dev *pdev)
+#endif
+{
+	fritzpnppci	*card = pnp_get_drvdata(pdev);
+
+	if (card)
+		fritz.ctrl(card->dch.inst.st, MGR_DELSTACK | REQUEST, NULL);
+	else
+		printk(KERN_WARNING "%s: drvdata allready removed\n", __FUNCTION__);
+}
+
+static struct pci_device_id fcpci_ids[] __devinitdata = {
+	{ PCI_VENDOR_ID_AVM, PCI_DEVICE_ID_AVM_A1   , PCI_ANY_ID, PCI_ANY_ID,
+	  0, 0, (unsigned long) "Fritz!Card PCI" },
+	{ PCI_VENDOR_ID_AVM, PCI_DEVICE_ID_AVM_A1_V2, PCI_ANY_ID, PCI_ANY_ID,
+	  0, 0, (unsigned long) "Fritz!Card PCI v2" },
+	{ }
+};
+MODULE_DEVICE_TABLE(pci, fcpci_ids);
+
 static struct pci_driver fcpci_driver = {
 	name:     "fcpci",
 	probe:    fritzpci_probe,
-	remove:   __devexit_p(fritz_remove),
+	remove:   __devexit_p(fritz_remove_pci),
 	id_table: fcpci_ids,
 };
 
+#ifdef NEW_ISAPNP
+static struct pnp_device_id fcpnp_ids[] __devinitdata = {
+	{ 
+		.id		= "AVM0900",
+		.driver_data	= (unsigned long) "Fritz!Card PnP",
+	},
+};
+
+static struct pnp_driver fcpnp_driver = {
+#else
+static struct isapnp_device_id fcpnp_ids[] __devinitdata = {
+	{ ISAPNP_VENDOR('A', 'V', 'M'), ISAPNP_FUNCTION(0x0900),
+	  ISAPNP_VENDOR('A', 'V', 'M'), ISAPNP_FUNCTION(0x0900), 
+	  (unsigned long) "Fritz!Card PnP" },
+	{ }
+};
+MODULE_DEVICE_TABLE(isapnp, fcpnp_ids);
+
 static struct isapnp_driver fcpnp_driver = {
+#endif
 	name:     "fcpnp",
 	probe:    fritzpnp_probe,
-	remove:   __devexit_p(fritz_remove),
+	remove:   __devexit_p(fritz_remove_pnp),
 	id_table: fcpnp_ids,
 };
+
+static char FritzName[] = "AVM Fritz";
 
 static int __init Fritz_init(void)
 {
 	int	err, pci_nr_found;
-	char tmp[64];
 
-	strcpy(tmp, avm_fritz_rev);
-	printk(KERN_INFO "AVM Fritz PCI/PnP driver Rev. %s\n", mISDN_getrev(tmp));
+	printk(KERN_INFO "AVM Fritz PCI/PnP driver Rev. %s\n", mISDN_getrev(avm_fritz_rev));
 
 	SET_MODULE_OWNER(&fritz);
 	fritz.name = FritzName;
@@ -1348,7 +1385,7 @@ static int __init Fritz_init(void)
 		goto out;
 	pci_nr_found = err;
 
-	err = isapnp_register_driver(&fcpnp_driver);
+	err = pnp_register_driver(&fcpnp_driver);
 	if (err < 0)
 		goto out_unregister_pci;
 
@@ -1362,7 +1399,7 @@ static int __init Fritz_init(void)
 
 #if !defined(CONFIG_HOTPLUG) || defined(MODULE)
  out_unregister_isapnp:
-	isapnp_unregister_driver(&fcpnp_driver);
+	pnp_unregister_driver(&fcpnp_driver);
 #endif
  out_unregister_pci:
 	pci_unregister_driver(&fcpci_driver);
@@ -1381,7 +1418,7 @@ static void __exit Fritz_cleanup(void)
 			fritz.refcnt);
 		release_card(fritz.ilist);
 	}
-	isapnp_unregister_driver(&fcpnp_driver);
+	pnp_unregister_driver(&fcpnp_driver);
 	pci_unregister_driver(&fcpci_driver);
 }
 

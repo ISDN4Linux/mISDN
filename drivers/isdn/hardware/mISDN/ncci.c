@@ -1,4 +1,4 @@
-/* $Id: ncci.c,v 1.9 2003/07/21 12:44:46 kkeil Exp $
+/* $Id: ncci.c,v 1.10 2003/07/28 12:05:47 kkeil Exp $
  *
  */
 
@@ -456,8 +456,11 @@ void ncciReleaseSt(Ncci_t *ncci)
 
 void ncciLinkUp(Ncci_t *ncci)
 {
-	ncci->contr->ctrl->new_ncci(ncci->contr->ctrl, ncci->appl->ApplId, 
-				    ncci->adrNCCI, ncci->window);
+#ifdef OLDCAPI_DRIVER_INTERFACE
+	ncci->contr->ctrl->new_ncci(ncci->contr->ctrl, ncci->appl->ApplId, ncci->adrNCCI, ncci->window);
+#else
+	capilib_new_ncci(&ncci->contr->ncci_head, ncci->appl->ApplId, ncci->adrNCCI, ncci->window);
+#endif
 	ncciInitSt(ncci);
 }
 
@@ -485,8 +488,11 @@ void ncciDestr(Ncci_t *ncci)
 	if (ncci->binst)
 		ncciReleaseSt(ncci);
 	if (ncci->appl)
-		ncci->contr->ctrl->free_ncci(ncci->contr->ctrl, 
-			ncci->appl->ApplId, ncci->adrNCCI);
+#ifdef OLDCAPI_DRIVER_INTERFACE
+		ncci->contr->ctrl->free_ncci(ncci->contr->ctrl, ncci->appl->ApplId, ncci->adrNCCI);
+#else
+		capilib_free_ncci(&ncci->contr->ncci_head, ncci->appl->ApplId, ncci->adrNCCI);
+#endif
 	/* cleanup data queues */
 	discard_queue(&ncci->squeue);
 	for (i = 0; i < ncci->window; i++) {
@@ -538,8 +544,11 @@ void ncciDataInd(Ncci_t *ncci, int pr, struct sk_buff *skb)
 	*((__u16*)(nskb->data+16)) = nskb->len - 22;
 	*((__u16*)(nskb->data+18)) = i;
 	*((__u16*)(nskb->data+20)) = 0;
-	ncci->contr->ctrl->handle_capimsg(ncci->contr->ctrl, 
-					  ncci->appl->ApplId, nskb);
+#ifdef OLDCAPI_DRIVER_INTERFACE
+	ncci->contr->ctrl->handle_capimsg(ncci->contr->ctrl, ncci->appl->ApplId, nskb);
+#else
+	capi_ctr_handle_message(ncci->contr->ctrl, ncci->appl->ApplId, nskb);
+#endif
 }
 
 void ncciDataReq(Ncci_t *ncci, struct sk_buff *skb)

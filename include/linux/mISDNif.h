@@ -1,4 +1,4 @@
-/* $Id: mISDNif.h,v 1.13 2003/07/27 11:14:19 kkeil Exp $
+/* $Id: mISDNif.h,v 1.14 2003/07/28 12:05:47 kkeil Exp $
  *
  */
 
@@ -39,6 +39,7 @@
 #define MGR_REGLAYER	0x0f1600
 #define MGR_UNREGLAYER	0x0f1700
 #define MGR_SELCHANNEL	0x0f1800
+#define MGR_SETSTACK_NW	0x0f1900
 #define MGR_GETLAYER	0x0f2100
 #define MGR_GETLAYERID	0x0f2200
 #define MGR_NEWLAYER	0x0f2300
@@ -60,6 +61,7 @@
 #define MGR_DELTIMER	0x0f8300
 #define MGR_REMOVETIMER	0x0f8400
 #define MGR_TIMER	0x0f8800
+#define MGR_CTRLREADY	0x0f9100
 #define MGR_CONTROL	0x0fe100
 #define MGR_STATUS	0x0fe200
 #define MGR_HASPROTOCOL 0x0fe300

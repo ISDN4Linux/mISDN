@@ -1,4 +1,4 @@
-/* $Id: dchannel.h,v 1.5 2003/07/27 11:14:19 kkeil Exp $
+/* $Id: dchannel.h,v 1.6 2003/07/28 12:05:47 kkeil Exp $
  *
  *   Basic declarations for dchannel HW
  *
@@ -7,7 +7,11 @@
  */
 
 #include <linux/mISDNif.h>
+#ifdef HAS_WORKQUEUE
+#include <linux/workqueue.h>
+#else
 #include <linux/tqueue.h>
+#endif
 #include <linux/smp.h>
 #include <linux/ptrace.h>
 #include <linux/interrupt.h>
@@ -57,7 +61,7 @@ typedef struct _dchannel_t {
 	struct timer_list	dbusytimer;
 	u_long			event;
 	struct sk_buff_head	rqueue; /* D-channel receive queue */
-	struct tq_struct	tqueue;
+	struct work_struct	work;
 	void			(*hw_bh) (struct _dchannel_t *);
 } dchannel_t;
 
@@ -73,21 +77,5 @@ static inline void
 dchannel_sched_event(dchannel_t *dch, int event)
 {
 	test_and_set_bit(event, &dch->event);
-	queue_task(&dch->tqueue, &tq_immediate);
-	mark_bh(IMMEDIATE_BH);
+	schedule_work(&dch->work);
 }
-
-#ifdef __powerpc__
-#include <linux/pci.h>
-static inline int pci_enable_device(struct pci_dev *dev)
-{
-	u16 cmd;
-	pci_read_config_word(dev, PCI_COMMAND, &cmd);
-	cmd |= PCI_COMMAND_MEMORY | PCI_COMMAND_IO | PCI_COMMAND_SERR;
-	cmd &= ~PCI_COMMAND_FAST_BACK;
-	pci_write_config_word(dev, PCI_COMMAND, cmd);
-	return(0);
-}
-#else
-#define pci_enable_device(dev)	!dev
-#endif /* __powerpc__ */

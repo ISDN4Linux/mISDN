@@ -1,4 +1,4 @@
-/* $Id: capi.h,v 1.6 2003/07/27 11:14:19 kkeil Exp $
+/* $Id: capi.h,v 1.7 2003/07/28 12:05:47 kkeil Exp $
  *
  */
 
@@ -10,9 +10,16 @@
 #include <linux/timer.h>
 #include <linux/capi.h>
 #include <linux/kernelcapi.h>
+#ifdef OLDCAPI_DRIVER_INTERFACE
 #include "../avmb1/capiutil.h"
 #include "../avmb1/capicmd.h"
 #include "../avmb1/capilli.h"
+#else
+#include <linux/list.h>
+#include <linux/isdn/capiutil.h>
+#include <linux/isdn/capicmd.h>
+#include <linux/isdn/capilli.h>
+#endif
 #include "asn1.h"
 #include "fsm.h"
 #ifdef MEMDBG
@@ -39,8 +46,10 @@
 #define CAPI_DBG_NCCI_INFO	0x04000000
 #define CAPI_DBG_NCCI_L3	0x08000000
 
+#ifdef OLDCAPI_DRIVER_INTERFACE
 extern struct capi_driver_interface *cdrv_if;                  
 extern struct capi_driver mISDN_driver;
+#endif
 
 void init_listen(void);
 void init_cplci(void);
@@ -162,41 +171,39 @@ typedef struct _BInst {
 } BInst_t;
 
 typedef struct _Contr {
-	struct _Contr	*prev;
-	struct _Contr	*next;
-	mISDNinstance_t	inst;
-	BInst_t		*binst;
-	struct capi_ctr	*ctrl;
-	__u32		adrController;
-	int		b3_mode;
-	u_int		debug;
-	char		infobuf[128];
-	char		msgbuf[128];
-	struct _Plci	*plcis[CAPI_MAXPLCI];
-	struct _Appl	*appls[CAPI_MAXAPPL];
-	DummyProcess_t	*dummy_pcs[CAPI_MAXDUMMYPCS];
-	__u16		lastInvokeId;
+	struct _Contr		*prev;
+	struct _Contr		*next;
+	mISDNinstance_t		inst;
+	BInst_t			*binst;
+	struct capi_ctr		*ctrl;
+#ifndef OLDCAPI_DRIVER_INTERFACE
+	struct list_head	ncci_head;
+#endif
+	__u32			adrController;
+	int			b3_mode;
+	u_int			debug;
+	char			infobuf[128];
+	char			msgbuf[128];
+	struct _Plci		*plcis[CAPI_MAXPLCI];
+	struct _Appl		*appls[CAPI_MAXAPPL];
+	DummyProcess_t		*dummy_pcs[CAPI_MAXDUMMYPCS];
+	__u16			lastInvokeId;
 } Contr_t;
 
 Contr_t		*newContr(mISDNobject_t *, mISDNstack_t *, mISDN_pid_t *);
-int		contrConstr(Contr_t *, mISDNstack_t *, mISDN_pid_t *, mISDNobject_t *);
-void		contrDestr(Contr_t *contr);
-void		contrDebug(Contr_t *contr, __u32 level, char *fmt, ...);
-void		contrRegisterAppl(Contr_t *contr, __u16 ApplId, capi_register_params *rp);
-void		contrReleaseAppl(Contr_t *contr, __u16 ApplId);
-void		contrSendMessage(Contr_t *contr, struct sk_buff *skb);
-void		contrLoadFirmware(Contr_t *, int, void *);
-void		contrReset(Contr_t *contr);
-void		contrRecvCmsg(Contr_t *contr, _cmsg *cmsg);
-void		contrAnswerCmsg(Contr_t *contr, _cmsg *cmsg, __u16 Info);
-void		contrAnswerMessage(Contr_t *contr, struct sk_buff *skb, __u16 Info);
-struct _Plci	*contrNewPlci(Contr_t *contr);
-struct _Appl	*contrId2appl(Contr_t *contr, __u16 ApplId);
-struct _Plci	*contrAdr2plci(Contr_t *contr, __u32 adr);
-void		contrDelPlci(Contr_t *contr, struct _Plci *plci);
+void		contrDestr(Contr_t *);
+void		contrRun(Contr_t *);
+void		contrDebug(Contr_t *, __u32, char *, ...);
+void		contrRecvCmsg(Contr_t *, _cmsg *);
+void		contrAnswerCmsg(Contr_t *, _cmsg *, __u16);
+void		contrAnswerMessage(Contr_t *, struct sk_buff *, __u16);
+struct _Plci	*contrNewPlci(Contr_t *);
+struct _Appl	*contrId2appl(Contr_t *, __u16);
+struct _Plci	*contrAdr2plci(Contr_t *, __u32);
+void		contrDelPlci(Contr_t *, struct _Plci *);
 int		contrDummyInd(Contr_t *, __u32, struct sk_buff *);
-DummyProcess_t	*contrNewDummyPc(Contr_t *contr);
-DummyProcess_t	*contrId2DummyPc(Contr_t *contr, __u16 invokeId);
+DummyProcess_t	*contrNewDummyPc(Contr_t *);
+DummyProcess_t	*contrId2DummyPc(Contr_t *, __u16);
 int		contrL4L3(Contr_t *, u_int, int, struct sk_buff *);
 int		contrL3L4(mISDNif_t *, struct sk_buff *);
 BInst_t		*contrSelChannel(Contr_t *, u_int);
