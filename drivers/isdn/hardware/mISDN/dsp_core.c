@@ -1,4 +1,4 @@
-/* $Id: dsp_core.c,v 1.4 2003/11/09 16:13:39 keil Exp $
+/* $Id: dsp_core.c,v 1.5 2004/01/11 13:58:49 keil Exp $
  *
  * Author       Andreas Eversberg (jolly@jolly.de)
  * Based on source code structure by
@@ -168,7 +168,7 @@ die daten der struktur
 	- loop
 #endif
 
-const char *dsp_revision = "$Revision: 1.4 $";
+const char *dsp_revision = "$Revision: 1.5 $";
 
 #include <linux/delay.h>
 #include <linux/config.h>
@@ -802,7 +802,7 @@ static int dsp_init(void)
 	/* fill mISDN object (dsp_obj) */
 	memset(&dsp_obj, 0, sizeof(dsp_obj));
 #ifdef MODULE
-	SET_MODULE_OWNER(&dsp_obj);
+	dsp_obj.owner = THIS_MODULE;
 #endif
 	dsp_obj.name = DSPName;
 	dsp_obj.BPROTO.protocol[3] = ISDN_PID_L3_B_DSP;

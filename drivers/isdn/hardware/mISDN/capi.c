@@ -1,4 +1,4 @@
-/* $Id: capi.c,v 1.11 2003/12/13 00:36:16 keil Exp $
+/* $Id: capi.c,v 1.12 2004/01/11 13:58:49 keil Exp $
  *
  */
 
@@ -7,7 +7,7 @@
 #include "helper.h"
 #include "debug.h"
 
-static char *capi_revision = "$Revision: 1.11 $";
+static char *capi_revision = "$Revision: 1.12 $";
 
 static int debug = 0;
 static mISDNobject_t capi_obj;
@@ -390,7 +390,9 @@ int Capi20Init(void)
 	int err;
 
 	printk(KERN_INFO "%s driver file version %s\n", MName, mISDN_getrev(capi_revision));
-	SET_MODULE_OWNER(&capi_obj);
+#ifdef MODULE
+	capi_obj.owner = THIS_MODULE;
+#endif
 	capi_obj.name = MName;
 	capi_obj.DPROTO.protocol[4] = ISDN_PID_L4_CAPI20;
 	capi_obj.BPROTO.protocol[4] = ISDN_PID_L4_B_CAPI20;

@@ -1,4 +1,4 @@
-/* $Id: x25_dte.c,v 1.2 2003/12/13 00:36:16 keil Exp $
+/* $Id: x25_dte.c,v 1.3 2004/01/11 13:58:50 keil Exp $
  *
  * Linux modular ISDN subsystem, mISDN
  * X.25/X.31 Layer3 for DTE mode   
@@ -22,7 +22,7 @@ static int debug = 0;
 
 static mISDNobject_t x25dte_obj;
 
-static char *mISDN_dte_revision = "$Revision: 1.2 $";
+static char *mISDN_dte_revision = "$Revision: 1.3 $";
 
 /* local prototypes */
 static x25_channel_t *	dte_create_channel(x25_l3_t *, int, u_char, __u16, int, u_char *);
@@ -1310,7 +1310,9 @@ x25_dte_init(void)
 	int err;
 
 	printk(KERN_INFO "X25 DTE modul version %s\n", mISDN_getrev(mISDN_dte_revision));
-	SET_MODULE_OWNER(&x25dte_obj);
+#ifdef MODULE
+	x25dte_obj.owner = THIS_MODULE;
+#endif
 	x25dte_obj.name = MName;
 	x25dte_obj.BPROTO.protocol[3] = ISDN_PID_L3_B_X25DTE;
 	x25dte_obj.own_ctrl = dte_manager;

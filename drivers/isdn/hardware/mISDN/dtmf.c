@@ -1,4 +1,4 @@
-/* $Id: dtmf.c,v 1.8 2003/11/11 10:02:23 keil Exp $
+/* $Id: dtmf.c,v 1.9 2004/01/11 13:58:49 keil Exp $
  *
  * Linux ISDN subsystem, DTMF tone module
  *
@@ -47,7 +47,7 @@ static int debug = 0;
 
 static mISDNobject_t dtmf_obj;
 
-static char *mISDN_dtmf_revision = "$Revision: 1.8 $";
+static char *mISDN_dtmf_revision = "$Revision: 1.9 $";
 
 /*
  * Misc. lookup-tables.
@@ -610,7 +610,9 @@ static int dtmf_init(void)
 	int err;
 
 	printk(KERN_INFO "DTMF modul version %s\n", mISDN_getrev(mISDN_dtmf_revision));
-	SET_MODULE_OWNER(&dtmf_obj);
+#ifdef MODULE
+	dtmf_obj.owner = THIS_MODULE;
+#endif
 	dtmf_obj.name = MName;
 	dtmf_obj.BPROTO.protocol[2] = ISDN_PID_L2_B_TRANSDTMF;
 	dtmf_obj.own_ctrl = dtmf_manager;

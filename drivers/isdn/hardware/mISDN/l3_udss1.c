@@ -1,4 +1,4 @@
-/* $Id: l3_udss1.c,v 1.19 2003/12/14 15:20:38 keil Exp $
+/* $Id: l3_udss1.c,v 1.20 2004/01/11 13:58:49 keil Exp $
  *
  * EURO/DSS1 D-channel protocol
  *
@@ -24,7 +24,7 @@ static int debug = 0;
 static mISDNobject_t u_dss1;
 
 
-const char *dss1_revision = "$Revision: 1.19 $";
+const char *dss1_revision = "$Revision: 1.20 $";
 
 static int dss1man(l3_process_t *, u_int, void *);
 
@@ -2397,7 +2397,9 @@ int UDSS1Init(void)
 
 	strcpy(tmp, dss1_revision);
 	printk(KERN_INFO "mISDN: DSS1 Rev. %s\n", mISDN_getrev(tmp));
-	SET_MODULE_OWNER(&u_dss1);
+#ifdef MODULE
+	u_dss1.owner = THIS_MODULE;
+#endif
 	u_dss1.name = MName;
 	u_dss1.DPROTO.protocol[3] = ISDN_PID_L3_DSS1USER |
 		ISDN_PID_L3_DF_PTP |

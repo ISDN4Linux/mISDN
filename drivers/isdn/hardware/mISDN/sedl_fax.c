@@ -1,4 +1,4 @@
-/* $Id: sedl_fax.c,v 1.15 2004/01/03 23:07:35 keil Exp $
+/* $Id: sedl_fax.c,v 1.16 2004/01/11 13:58:50 keil Exp $
  *
  * sedl_fax.c  low level stuff for Sedlbauer Speedfax + cards
  *
@@ -45,7 +45,7 @@
 
 extern const char *CardType[];
 
-const char *Sedlfax_revision = "$Revision: 1.15 $";
+const char *Sedlfax_revision = "$Revision: 1.16 $";
 
 const char *Sedlbauer_Types[] =
 	{"None", "speed fax+", "speed fax+ pyramid", "speed fax+ pci"};
@@ -792,7 +792,9 @@ static int __init Speedfax_init(void)
 	sedl_fax *card;
 	mISDN_pid_t pid;
 
-	SET_MODULE_OWNER(&speedfax);
+#ifdef MODULE
+	speedfax.owner = THIS_MODULE;
+#endif
 	speedfax.name = SpeedfaxName;
 	speedfax.own_ctrl = speedfax_manager;
 	speedfax.DPROTO.protocol[0] = ISDN_PID_L0_TE_S0;

@@ -1,4 +1,4 @@
-/* $Id: i4l_mISDN.c,v 1.4 2003/08/01 22:15:53 kkeil Exp $
+/* $Id: i4l_mISDN.c,v 1.5 2004/01/11 13:58:49 keil Exp $
  *
  * interface for old I4L hardware drivers to the CAPI driver
  *
@@ -21,7 +21,7 @@
 #include "dss1.h"
 #include "debug.h"
 
-static char *i4lcapi_revision = "$Revision: 1.4 $";
+static char *i4lcapi_revision = "$Revision: 1.5 $";
 
 /* data struct */
 typedef struct _i4l_channel	i4l_channel_t;
@@ -1530,7 +1530,9 @@ I4Lcapi_init(void)
 	int err;
 
 	printk(KERN_INFO "I4L CAPI interface modul version %s\n", mISDN_getrev(i4lcapi_revision));
-	SET_MODULE_OWNER(&I4Lcapi);
+#ifdef MODULE
+	I4Lcapi.owner = THIS_MODULE;
+#endif
 	I4Lcapi.name = I4L_capi_name;
 	I4Lcapi.own_ctrl = I4Lcapi_manager;
 	I4Lcapi.DPROTO.protocol[0] = ISDN_PID_L0_TE_S0;

@@ -1,4 +1,4 @@
-/* $Id: w6692.c,v 1.7 2004/01/03 23:07:35 keil Exp $
+/* $Id: w6692.c,v 1.8 2004/01/11 13:58:50 keil Exp $
 
  * w6692.c     low level driver for CCD's hfc-pci based cards
  *
@@ -41,7 +41,7 @@
 
 extern const char *CardType[];
 
-const char *w6692_rev = "$Revision: 1.7 $";
+const char *w6692_rev = "$Revision: 1.8 $";
 
 #define DBUSY_TIMER_VALUE	80
 
@@ -1529,7 +1529,9 @@ static int __init w6692_init(void)
 
 	printk(KERN_INFO "Winbond W6692 PCI driver Rev. %s\n", mISDN_getrev(w6692_rev));
 
-	SET_MODULE_OWNER(&w6692);
+#ifdef MODULE
+	w6692.owner = THIS_MODULE;
+#endif
 	w6692.name = W6692Name;
 	w6692.own_ctrl = w6692_manager;
 	w6692.DPROTO.protocol[0] = ISDN_PID_L0_TE_S0;

@@ -1,4 +1,4 @@
-/* $Id: avm_fritz.c,v 1.20 2004/01/03 23:07:35 keil Exp $
+/* $Id: avm_fritz.c,v 1.21 2004/01/11 13:58:49 keil Exp $
  *
  * fritz_pci.c    low level stuff for AVM Fritz!PCI and ISA PnP isdn cards
  *              Thanks to AVM, Berlin for informations
@@ -28,7 +28,7 @@
 #define LOCK_STATISTIC
 #include "hw_lock.h"
 
-static const char *avm_fritz_rev = "$Revision: 1.20 $";
+static const char *avm_fritz_rev = "$Revision: 1.21 $";
 
 enum {
 	AVM_FRITZ_PCI,
@@ -1343,7 +1343,9 @@ static int __init Fritz_init(void)
 
 	printk(KERN_INFO "AVM Fritz PCI/PnP driver Rev. %s\n", mISDN_getrev(avm_fritz_rev));
 
-	SET_MODULE_OWNER(&fritz);
+#ifdef MODULE
+	fritz.owner = THIS_MODULE;
+#endif
 	fritz.name = FritzName;
 	fritz.own_ctrl = fritz_manager;
 	fritz.DPROTO.protocol[0] = ISDN_PID_L0_TE_S0;
