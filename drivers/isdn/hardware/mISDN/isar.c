@@ -1,4 +1,4 @@
-/* $Id: isar.c,v 1.18 2004/01/26 22:21:30 keil Exp $
+/* $Id: isar.c,v 1.19 2004/01/27 22:42:37 keil Exp $
  *
  * isar.c   ISAR (Siemens PSB 7110) specific routines
  *
@@ -23,6 +23,7 @@
 #define DLE	0x10
 #define ETX	0x03
 
+static char *ISAR_revision = "$Revision: 1.19 $";
 
 const u_char faxmodulation_s[] = "3,24,48,72,73,74,96,97,98,121,122,145,146"; 
 const u_char faxmodulation[] = {3,24,48,72,73,74,96,97,98,121,122,145,146}; 
@@ -398,7 +399,6 @@ isar_load_firmware(bchannel_t *bch, u_char *buf, int size)
 	isar_setup(bch);
 	bch->inst.unlock(bch->inst.data);
 	bch->inst.obj->own_ctrl(&bch->inst, MGR_LOADFIRM | CONFIRM, NULL);
-	bch->inst.lock(bch->inst.data, 0);
 	ret = 0;
 reterrflg:
 	bch->inst.lock(bch->inst.data, 0);
@@ -1793,6 +1793,7 @@ int init_isar(bchannel_t *bch)
 {
 	isar_hw_t *ih = bch->hw;
 
+	printk(KERN_INFO "mISDN: ISAR driver Rev. %s\n", mISDN_getrev(ISAR_revision));
 	bch->hw_bh = isar_bh;
 	ih->ftimer.function = (void *) ftimer_handler;
 	ih->ftimer.data = (long) bch;
