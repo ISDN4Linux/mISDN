@@ -1,0 +1,63 @@
+# 
+# local Rules for 2.4
+#
+
+O_TARGET := vmlinux-obj.o
+
+ifdef MEMDBG
+EXTRA_CFLAGS += -DMEMDBG
+MX_OBJS += memdbg.o
+endif
+
+export-objs := core.o isac.o
+
+M_OBJS := $(obj-m)
+
+include $(TOPDIR)/Rules.make
+
+mISDN_core.o: $(mISDN_core-objs)
+	$(RM) $@
+	$(LD) -r -o $@ $(filter-out $(MODVERFILE) dummy ,$^)
+
+mISDN_isac.o: $(mISDN_isac-objs)
+	$(RM) $@
+	$(LD) -r -o $@ $(filter-out $(MODVERFILE) dummy ,$^)
+
+avmfritz.o: $(avmfritz-objs)
+	$(RM) $@
+	$(LD) -r -o $@ $(filter-out $(MODVERFILE) dummy ,$^)
+
+sedlfax.o: $(sedlfax-objs)
+	$(RM) $@
+	$(LD) -r -o $@ $(filter-out $(MODVERFILE) dummy ,$^)
+
+hfcpci.o: $(hfcpci-objs)
+	$(RM) $@
+	$(LD) -r -o $@ $(filter-out $(MODVERFILE) dummy ,$^)
+
+mISDN_l1.o: $(mISDN_l1-objs)
+	$(RM) $@
+	$(LD) -r -o $@ $(filter-out $(MODVERFILE) dummy ,$^)
+
+mISDN_l2.o: $(mISDN_l2-objs)
+	$(RM) $@
+	$(LD) -r -o $@ $(filter-out $(MODVERFILE) dummy ,$^)
+
+l3udss1.o: $(l3udss1-objs)
+	$(RM) $@
+	$(LD) -r -o $@ $(filter-out $(MODVERFILE) dummy ,$^)
+
+mISDN_capi.o: $(mISDN_capi-objs)
+	$(RM) $@
+	$(LD) -r -o $@ $(filter-out $(MODVERFILE) dummy ,$^)
+
+mISDN_dtmf.o: $(mISDN_dtmf-objs)
+	$(RM) $@
+	$(LD) -r -o $@ $(filter-out $(MODVERFILE) dummy ,$^)
+
+ifdef CONFIG_I4L_CAPI_LAYER
+I4LmISDN.o: $(I4LmISDN-objs)
+	$(RM) $@
+	$(LD) -r -o $@ $(filter-out $(MODVERFILE) dummy ,$^)
+
+endif

@@ -1,0 +1,37 @@
+#
+# modularer ISDN driver
+#
+
+menu "Modular ISDN driver"
+	depends on NET && ISDN_BOOL && ISDN_CAPI!=n
+
+config MISDN_DRV
+	tristate "Support modular ISDN driver"
+	help
+	  Enable support for the modular ISDN driver.
+          This driver is the successor of the famous HiSax driver.
+
+if MISDN_DRV!=n
+
+config MISDN_AVM_FRITZ
+	bool "Support for AVM Fritz!Cards"
+	depends on PCI || ISA
+	help
+	  Enable support for AVM Fritz!Card PCI and PnP.
+
+config MISDN_HFCPCI
+	bool "Support for HFC PCI cards"
+	depends on PCI
+	help
+	  Enable support for card with Cologne Chips Design HFC PCI based
+	  cards.
+
+config MISDN_SPEEDFAX
+	bool "Support for Sedlbauer Speedfax+"
+	depends on PCI || ISA
+	help
+	  Enable support for Sedlbauer Speedfax+.
+
+endif
+
+endmenu
