@@ -32,6 +32,17 @@ config MISDN_SPEEDFAX
 	help
 	  Enable support for Sedlbauer Speedfax+.
 
+config MISDN_DSP
+	bool "Digital Audio Processing of transparent data"
+	help
+	  Enable support for digital audio processing capability.
+	  This module may be used for special applications that require
+	  cross connecting of bchannels, conferencing, dtmf decoding and
+	  tone generation. It may use hardware features if available.
+	  E.g. it is required for PBX4Linux. Go to http://isdn.jolly.de
+	  and get more informations about this module and it's usage.
+	  If unsure, say 'N'.
+
 endif
 
 endmenu

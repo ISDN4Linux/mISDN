@@ -23,6 +23,10 @@ ifdef CONFIG_MISDN_SPEEDFAX
 obj-$(CONFIG_MISDN_DRV) += sedlfax.o
 endif
 
+ifdef CONFIG_MISDN_DSP
+obj-$(CONFIG_MISDN_DRV) += mISDN_dsp.o
+endif
+
 ifdef CONFIG_I4L_CAPI_LAYER
 obj-$(CONFIG_MISDN_DRV) += I4LmISDN.o
 endif
@@ -42,6 +46,7 @@ mISDN_capi-objs := capi.o contr.o listen.o appl.o plci.o cplci.o ncci.o asn1.o \
                    asn1_basic_service.o asn1_address.o asn1_enc.o capi_enc.o \
                    supp_serv.o helper.o l3helper.o debug.o fsm.o
 mISDN_dtmf-objs := dtmf.o helper.o debug.o
+mISDN_dsp-objs := dsp_core.o dsp_cmx.o dsp_tones.o dsp_dtmf.o dsp_audio.o helper.o debug.o
 I4LmISDN-objs := i4l_mISDN.o helper.o l3helper.o debug.o fsm.o
 
 include Rules.mISDN
