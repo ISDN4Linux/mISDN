@@ -110,7 +110,7 @@
 
 extern const char *CardType[];
 
-static const char *hfcmulti_revision = "$Revision: 1.22 $";
+static const char *hfcmulti_revision = "$Revision: 1.23 $";
 
 static int HFC_cnt;
 
@@ -2608,7 +2608,7 @@ hfcmulti_initmode(hfc_multi_t *hc)
 		if (test_bit(HFC_CHIP_RX_SYNC, &hc->chip)) {
 			HFC_outb(hc, R_SYNC_OUT, V_SYNC_E1_RX | V_IPATS0 | V_IPATS1 | V_IPATS2);
 		} else {
-			HFC_outb(hc, V_SYNC_E1_RX | V_IPATS0 | V_IPATS1 | V_IPATS2);
+			HFC_outb(hc, R_SYNC_OUT, V_IPATS0 | V_IPATS1 | V_IPATS2);
 		}
 		HFC_outb(hc, R_PWM_MD, V_PWM0_MD);
 		HFC_outb(hc, R_PWM0, 0x50);
