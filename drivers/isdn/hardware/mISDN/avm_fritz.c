@@ -1,4 +1,4 @@
-/* $Id: avm_fritz.c,v 0.15 2001/03/27 10:23:48 kkeil Exp $
+/* $Id: avm_fritz.c,v 0.16 2001/05/18 00:48:51 kkeil Exp $
  *
  * fritz_pci.c    low level stuff for AVM Fritz!PCI and ISA PnP isdn cards
  *              Thanks to AVM, Berlin for informations
@@ -18,7 +18,7 @@
 #include "helper.h"
 #include "debug.h"
 
-static const char *avm_pci_rev = "$Revision: 0.15 $";
+static const char *avm_pci_rev = "$Revision: 0.16 $";
 
 #define ISDN_CTYPE_FRITZPCI 1
 
@@ -999,6 +999,7 @@ fritz_manager(void *data, u_int prim, void *arg) {
 			}
 			fritz.ctrl(inst->up.peer, MGR_DISCONNECT | REQUEST,
 				&inst->up);
+			fritz.ctrl(inst, MGR_UNREGLAYER | REQUEST, NULL);
 		}
 		break;
 	    case MGR_RELEASE | INDICATION:

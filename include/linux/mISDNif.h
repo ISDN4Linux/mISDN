@@ -1,4 +1,4 @@
-/* $Id: mISDNif.h,v 0.24 2001/04/11 16:38:57 kkeil Exp $
+/* $Id: mISDNif.h,v 0.25 2001/05/18 00:48:52 kkeil Exp $
  *
  */
 
@@ -37,8 +37,10 @@
 #define MGR_REGLAYER	0x0f1600
 #define MGR_UNREGLAYER	0x0f1700
 #define MGR_GETLAYER	0x0f2100
-#define MGR_NEWLAYER	0x0f2200
-#define MGR_DELLAYER	0x0f2300
+#define MGR_GETLAYERID	0x0f2200
+#define MGR_NEWLAYER	0x0f2300
+#define MGR_DELLAYER	0x0f2400
+#define MGR_CLONELAYER	0x0f2500
 #define MGR_GETIF	0x0f3100
 #define MGR_CONNECT	0x0f3200
 #define MGR_DISCONNECT	0x0f3300
@@ -216,7 +218,6 @@
 #define LAYER_OUTRANGE(layer)	((layer<0) || (layer>MAX_LAYER_NR))
 #define HISAX_MAX_IDLEN	16
 
-#define IADDR_BIT	0x10000000
 #define IF_NOACTIV	0x00000000
 #define IF_DOWN		0x01000000
 #define IF_UP		0x02000000
@@ -235,7 +236,15 @@
 
 
 /* interface extentions */
-#define EXT_LAYER_SPLIT
+#define EXT_STACK_CLONE 0x00000001
+#define EXT_INST_CLONE	0x00000100
+#define EXT_INST_MGR	0x00000200
+#define EXT_IF_CHAIN	0x00010000
+#define EXT_IF_EXCLUSIV	0x00020000
+#define EXT_IF_CREATE	0x00040000
+#define EXT_IF_SPLIT	0x00080000
+
+
 /* special packet type */
 #define PACKET_NOACK	250
 
@@ -289,6 +298,17 @@ typedef struct _hisax_pid {
 	__u16	global;
 	int	layermask;
 } hisax_pid_t;
+
+typedef struct _stack_info {
+	u_int		id;
+	int		extentions;
+	hisax_pid_t	pid;
+	int		mgr;
+	int		instcnt;
+	int		inst[MAX_LAYER_NR +1];
+	int		childcnt;
+	int		child[2];
+} stack_info_t;
 
 typedef struct _layer_info {
 	char		name[HISAX_MAX_IDLEN];
@@ -546,6 +566,7 @@ typedef struct _hisaxstack {
 	struct _hisaxstack	*prev;
 	struct _hisaxstack	*next;
 	u_int			id;
+	int			extentions;
 	hisax_pid_t		pid;
 	hisaxlayer_t		*lstack;
 	hisaxinstance_t		*mgr;

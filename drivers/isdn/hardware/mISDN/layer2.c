@@ -1,4 +1,4 @@
-/* $Id: layer2.c,v 0.14 2001/04/11 16:38:57 kkeil Exp $
+/* $Id: layer2.c,v 0.15 2001/05/18 00:48:51 kkeil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -12,7 +12,7 @@
 #include "helper.h"
 #include "debug.h"
 
-const char *l2_revision = "$Revision: 0.14 $";
+const char *l2_revision = "$Revision: 0.15 $";
 
 static void l2m_debug(struct FsmInst *fi, char *fmt, ...);
 
@@ -1952,13 +1952,23 @@ release_l2(layer2_t *l2)
 		inst->down.peer->obj->ctrl(inst->down.peer,
 			MGR_DISCONNECT | REQUEST, &inst->down);
 	}
+	if (l2->cloneif) {
+		printk(KERN_DEBUG __FUNCTION__ "cloneif(%p) owner(%p) peer(%p)\n",
+			l2->cloneif, l2->cloneif->owner, l2->cloneif->peer);
+		REMOVE_FROM_LIST(l2->cloneif);
+		if (l2->cloneif->owner &&
+			(l2->cloneif->owner->up.next == l2->cloneif))
+			l2->cloneif->owner->up.next = l2->cloneif->next;
+		kfree(l2->cloneif);
+		l2->cloneif = NULL;
+	}
 	REMOVE_FROM_LISTBASE(l2, ((layer2_t *)isdnl2.ilist));
 	isdnl2.ctrl(inst, MGR_UNREGLAYER | REQUEST, NULL);
 	kfree(l2);
 }
 
 static int
-new_l2(hisaxstack_t *st, hisax_pid_t *pid) {
+new_l2(hisaxstack_t *st, hisax_pid_t *pid, layer2_t **newl2) {
 	layer2_t *nl2;
 	int err;
 	u_char *p;
@@ -1972,6 +1982,7 @@ new_l2(hisaxstack_t *st, hisax_pid_t *pid) {
 	memset(nl2, 0, sizeof(layer2_t));
 	nl2->debug = debug;
 	nl2->inst.obj = &isdnl2;
+	nl2->inst.extentions = EXT_INST_CLONE;
 	memcpy(&nl2->inst.pid, pid, sizeof(hisax_pid_t));
 	if (!SetHandledPID(&isdnl2, &nl2->inst.pid)) {
 		int_error();
@@ -2053,7 +2064,53 @@ new_l2(hisaxstack_t *st, hisax_pid_t *pid) {
 		FsmDelTimer(&nl2->t203, 0);
 		REMOVE_FROM_LISTBASE(nl2, ((layer2_t *)isdnl2.ilist));
 		kfree(nl2);
+		nl2 = NULL;
 	}
+	if (newl2)
+		*newl2 = nl2;
+	return(err);
+}
+
+static int
+clone_l2(layer2_t *l2, hisaxinstance_t **new_ip) {
+	int err;
+	layer2_t	*nl2;
+	hisaxif_t	*nif;
+	hisaxstack_t	*st;
+
+	if (!l2)
+		return(-EINVAL);
+	if (!new_ip)
+		return(-EINVAL);
+	st = (hisaxstack_t *)*new_ip;
+	if (!st)
+		return(-EINVAL);
+	if (!l2->inst.down.peer)
+		return(-EINVAL);
+	if (!(nif = kmalloc(sizeof(hisaxif_t), GFP_ATOMIC))) {
+		printk(KERN_ERR "clone l2 no if mem\n");
+		return(-ENOMEM);
+	}
+	err = new_l2(st, &l2->inst.pid, &nl2);
+	if (err) {
+		kfree(nif);
+		printk(KERN_ERR "clone l2 failed err(%d)\n", err);
+		return(err);
+	}
+	memset(nif, 0, sizeof(hisaxif_t));
+	nl2->cloneif = nif;
+	nif->func = l2from_down;
+	nif->fdata = nl2;
+	nif->owner = l2->inst.down.peer;
+	nif->peer = &nl2->inst;
+	nif->stat = IF_DOWN;
+	APPEND_TO_LIST(nif, nif->owner->up.next);
+	nl2->inst.down.owner = &nl2->inst;
+	nl2->inst.down.peer = &l2->inst;
+	nl2->inst.down.func = l2_chain_down;
+	nl2->inst.down.fdata = l2;
+	nl2->inst.down.stat = IF_UP;
+	*new_ip = &nl2->inst;
 	return(err);
 }
 
@@ -2119,7 +2176,9 @@ l2_manager(void *data, u_int prim, void *arg) {
 	}
 	switch(prim) {
 	    case MGR_NEWLAYER | REQUEST:
-		return(new_l2(data, arg));
+		return(new_l2(data, arg, NULL));
+	    case MGR_CLONELAYER | REQUEST:
+		return(clone_l2(l2l, arg));
 	    case MGR_CONNECT | REQUEST:
 		if (!l2l) {
 			printk(KERN_WARNING "l2_manager connect l2 no instance\n");

@@ -1,4 +1,4 @@
-/* $Id: stack.c,v 0.10 2001/04/08 16:45:56 kkeil Exp $
+/* $Id: stack.c,v 0.11 2001/05/18 00:48:52 kkeil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -9,6 +9,7 @@
 #include "hisax_core.h"
 
 hisaxstack_t	*hisax_stacklist = NULL;
+hisaxinstance_t	*hisax_instlist = NULL;
 
 int
 get_stack_cnt(void) {
@@ -23,34 +24,44 @@ get_stack_cnt(void) {
 }
 
 void
-get_stack_profile(iframe_t *frm) {
-	hisaxstack_t *cst, *st = hisax_stacklist;
-	int cnt = 0, i;
-	int *dp,*ccnt;
+get_stack_info(iframe_t *frm) {
+	hisaxstack_t *cst, *st;
+	stack_info_t *si;
+	hisaxlayer_t *lay;
 
-	while(st) {
-		cnt++;
-		if (cnt == frm->addr) {
-			dp = frm->data.p;
-			*dp++ = st->id;
-			for (i=0; i<=MAX_LAYER_NR; i++)
-				*dp++ = st->pid.protocol[i];
-			ccnt = dp++;
-			*ccnt=0;
-			cst = st->child;
-			while(cst) {
-				(*ccnt)++;
-				*dp++ = cst->id;
-				for (i=0; i<=MAX_LAYER_NR; i++)
-					*dp++ = cst->pid.protocol[i];
-				cst = cst->next;
+	st = get_stack4id(frm->addr);
+	if (!st)
+		frm->len = 0;
+	else {
+		si = (stack_info_t *)frm->data.p;
+		memset(si, 0, sizeof(stack_info_t));
+		si->id = st->id;
+		si->extentions = st->extentions;
+		if (st->mgr)
+			si->mgr = st->mgr->id;
+		else
+			si->mgr = 0;
+		memcpy(&si->pid, &st->pid, sizeof(hisax_pid_t));
+		si->instcnt = 0;
+		lay = st->lstack;
+		while(lay) {
+			if (lay->inst) {
+				si->inst[si->instcnt] = lay->inst->id;
+				si->instcnt++;
 			}
-			frm->len = (u_char *)dp - (u_char *)frm->data.p;
-			return;
+			lay = lay->next;
 		}
-		st = st->next;
+		si->childcnt = 0;
+		cst = st->child;
+		while(cst) {
+			si->child[si->childcnt] = cst->id;
+			si->childcnt++;
+			cst = cst->next;
+		}
+		frm->len = sizeof(stack_info_t);
+		if (si->childcnt>2)
+			frm->len += (si->childcnt-2)*sizeof(int);
 	}
-	frm->len = 0;	
 }
 
 static int
@@ -97,6 +108,8 @@ get_stack4id(int id)
 	
 	if (core_debug & DEBUG_CORE_FUNC)
 		printk(KERN_DEBUG "get_stack4id(%x)\n", id);
+	if (!id) /* 0 isn't a valid id */
+		return(NULL);
 	while(st) {
 		if (id == st->id)
 			return(st);
@@ -124,14 +137,10 @@ getlayer4lay(hisaxstack_t *st, int layermask)
 	layer = st->lstack;
 	while(layer) {
 		inst = layer->inst;
-		while(inst) {
-			if (inst->pid.layermask & layermask)
-				goto out;
-			inst = inst->next;
-		}
+		if(inst && (inst->pid.layermask & layermask))
+			break;
 		layer = layer->next;
 	}
-out:
 	return(layer);
 }
 
@@ -155,7 +164,7 @@ get_instance(hisaxstack_t *st, int layer_nr, int protocol)
 	layer = st->lstack;
 	while(layer) {
 		inst = layer->inst;
-		while(inst) {
+		if (inst) {
 			if (core_debug & DEBUG_CORE_FUNC)
 				printk(KERN_DEBUG "get_instance inst(%p) lm %x/%x prot %x/%x\n",
 					inst, inst->pid.layermask, ISDN_LAYER(layer_nr),
@@ -163,11 +172,7 @@ get_instance(hisaxstack_t *st, int layer_nr, int protocol)
 			if ((inst->pid.layermask & ISDN_LAYER(layer_nr)) &&
 				(inst->pid.protocol[layer_nr] == protocol))
 				goto out;
-			if (inst == inst->next) {
-				int_errtxt("deadloop inst %p %s", inst, inst->name);
-				return(NULL);
-			}
-			inst = inst->next;
+			inst = NULL;
 		}
 		if (layer == layer->next) {
 			int_errtxt("deadloop layer %p", layer);
@@ -179,49 +184,15 @@ out:
 	return(inst);
 }
 
-static hisaxinstance_t *
-get_st_instance4id(hisaxstack_t *st, int id)
-{
-	hisaxinstance_t *inst;
-	hisaxlayer_t *layer;
-
-	layer = st->lstack;
-	while(layer) {
-		inst = layer->inst;
-		while(inst) {
-			if (inst->id == id)
-				return(inst);
-			if (inst == inst->next) {
-				int_errtxt("deadloop inst %p %s", inst, inst->name);
-				return(NULL);
-			}
-			inst = inst->next;
-		}
-		if (layer == layer->next) {
-			int_errtxt("deadloop layer %p", layer);
-			return(NULL);
-		}
-		layer = layer->next;
-	}
-	return(NULL);
-}
-
 hisaxinstance_t *
 get_instance4id(int id)
 {
-	hisaxstack_t *cst, *st = hisax_stacklist;
-	hisaxinstance_t *inst;
+	hisaxinstance_t *inst = hisax_instlist;
 
-	while(st) {
-		if ((inst = get_st_instance4id(st, id)))
+	while(inst) {
+		if (inst->id == id)
 			return(inst);
-		cst = st->child;
-		while (cst) {
-			if ((inst = get_st_instance4id(cst, id)))
-				return(inst);
-			cst = cst->next;
-		}
-		st = st->next;
+		inst = inst->next;
 	}
 	return(NULL);
 }
@@ -230,13 +201,9 @@ int
 get_layermask(hisaxlayer_t *layer)
 {
 	int mask = 0;
-	hisaxinstance_t *inst;
 
-	inst = layer->inst;
-	while(inst) {
-		mask |= inst->pid.layermask;
-		inst = inst->next;
-	}
+	if (layer->inst)
+		mask |= layer->inst->pid.layermask;
 	return(mask);
 }
 
@@ -302,19 +269,17 @@ new_stack(hisaxstack_t *master, hisaxinstance_t *inst)
 
 static int
 release_layers(hisaxstack_t *st, u_int prim) {
-	hisaxinstance_t *inst, *tmp;
+	hisaxinstance_t *inst;
 	hisaxlayer_t    *layer;
 	int cnt = 0;
 
 	while((layer = st->lstack)) {
 		inst = layer->inst;
-		while (inst) {
+		if (inst) {
 			if (core_debug & DEBUG_CORE_FUNC)
 				printk(KERN_DEBUG __FUNCTION__ ": st(%p) inst(%p):%s lm(%x)\n",
 					st, inst, inst->name, inst->pid.layermask);
-			tmp = inst->next;
 			inst->obj->own_ctrl(inst, prim, NULL);
-			inst = tmp;
 		}
 		REMOVE_FROM_LISTBASE(layer, st->lstack);
 		kfree(layer);
@@ -372,13 +337,12 @@ release_stacks(hisaxobject_t *obj) {
 				st, layer);
 		while(layer) {
 			inst = layer->inst;
-			while (inst) {
+			if (inst) {
 				if (core_debug & DEBUG_CORE_FUNC)
 					printk(KERN_DEBUG __FUNCTION__ ": inst(%p)\n",
 						inst);
 				if (inst->obj == obj)
 					rel++;
-				inst = inst->next;
 			}
 			layer = layer->next;
 		}		
@@ -394,67 +358,92 @@ release_stacks(hisaxobject_t *obj) {
 			obj->name, obj->refcnt);
 }
 
+#define INST_ID_INC	0x100
+
+static void
+get_free_instid(hisaxstack_t *st, hisaxinstance_t *inst) {
+	hisaxinstance_t *il = hisax_instlist;
+
+	inst->id = get_lowlayer(inst->pid.layermask)<<20;
+	if (st) {
+		inst->id |= st->id;
+	} else {
+		inst->id += INST_ID_INC;
+		while(il) {
+			if (il->id == inst->id) {
+				inst->id += INST_ID_INC;
+				il = hisax_instlist;
+				continue;
+			}
+			il = il->next;
+		}
+	}
+}
+
 int
 register_layer(hisaxstack_t *st, hisaxinstance_t *inst) {
-	int count=0;
 	hisaxlayer_t *layer;
-	hisaxinstance_t *itmp;
 
-	if (!st || !inst)
+	if (!inst)
 		return(-EINVAL);
 	if (core_debug & DEBUG_CORE_FUNC)
 		printk(KERN_DEBUG __FUNCTION__":st(%p) inst(%p/%p) lmask(%x)\n",
 			st, inst, inst->obj, inst->pid.layermask);
-	if (!(layer = getlayer4lay(st, inst->pid.layermask))) {
-		if (!(layer = kmalloc(sizeof(hisaxlayer_t), GFP_ATOMIC))) {
+	if (inst->id) { /* allready registered */
+		if (inst->st || !st) {
+			int_errtxt("register duplicate %08x %p %p",
+				inst->id, inst->st, st);
+			return(-EBUSY);
+		}
+	}
+	if (st) {
+		if ((layer = getlayer4lay(st, inst->pid.layermask))) {
+			if (layer->inst) {
+				int_errtxt("stack %08x has layer %08x",
+					st->id, layer->inst->id);
+				return(-EBUSY);
+			}
+		} else if (!(layer = kmalloc(sizeof(hisaxlayer_t), GFP_ATOMIC))) {
 			int_errtxt("no mem for layer %d", inst->pid.layermask);
 			return(-ENOMEM);
 		}
-		if (core_debug & DEBUG_CORE_FUNC)
-			printk(KERN_DEBUG __FUNCTION__": create layer(%p)\n",
-				layer); 
 		memset(layer, 0, sizeof(hisaxlayer_t));
 		insertlayer(st, layer, inst->pid.layermask);
-	} else {
-		if (core_debug & DEBUG_CORE_FUNC)
-			printk(KERN_DEBUG __FUNCTION__": add to layer(%p)\n",
-				layer);
-		itmp = layer->inst;
-		while(itmp) {
-			count++;
-			itmp = itmp->next;
-		}
+		layer->inst =inst;
 	}
-	APPEND_TO_LIST(inst, layer->inst);
+	if (!inst->id)
+		inst->obj->refcnt++;
+	get_free_instid(st, inst);
 	inst->st = st;
-	inst->obj->refcnt++;
-	inst->id = st->id;
-	inst->id |= get_lowlayer(inst->pid.layermask)<<20;
-	inst->id |= count<<8;
+	APPEND_TO_LIST(inst, hisax_instlist);
 	return(0);
 }
 
 int
 unregister_instance(hisaxinstance_t *inst) {
-	hisaxstack_t *st;
 	hisaxlayer_t *layer;
+	int err = 0;
 
-	if (!inst || !inst->st)
+	if (!inst)
 		return(-EINVAL);
-	st = inst->st;
 	if (core_debug & DEBUG_CORE_FUNC)
 		printk(KERN_DEBUG __FUNCTION__": st(%p) inst(%p) lay(%x)\n",
-			st, inst, inst->pid.layermask);
-	if ((layer = getlayer4lay(st, inst->pid.layermask))) {
-		if (core_debug & DEBUG_CORE_FUNC)
-			printk(KERN_DEBUG __FUNCTION__":layer(%p)->inst(%p)\n",
-				layer, layer->inst);
-		REMOVE_FROM_LISTBASE(inst, layer->inst);
-		inst->obj->refcnt--;
-	} else {
-		printk(KERN_WARNING __FUNCTION__": no layer found\n");
-		return(-ENODEV);
+			inst->st, inst, inst->pid.layermask);
+	if (inst->st) {
+		if ((layer = getlayer4lay(inst->st, inst->pid.layermask))) {
+			if (core_debug & DEBUG_CORE_FUNC)
+				printk(KERN_DEBUG __FUNCTION__
+					":layer(%p)->inst(%p)\n", layer, layer->inst);
+			layer->inst = NULL;
+		} else {
+			printk(KERN_WARNING __FUNCTION__": no layer found\n");
+			err = -ENODEV;
+		}
+		inst->st = NULL;
 	}
+	REMOVE_FROM_LISTBASE(inst, hisax_instlist);
+	inst->id = 0;
+	inst->obj->refcnt--;
 	return(0);
 }
 

@@ -1,4 +1,4 @@
-/* $Id: sedl_fax.c,v 0.17 2001/03/27 10:23:48 kkeil Exp $
+/* $Id: sedl_fax.c,v 0.18 2001/05/18 00:48:52 kkeil Exp $
  *
  * sedl_fax.c  low level stuff for Sedlbauer Speedfax + cards
  *
@@ -40,7 +40,7 @@
 
 extern const char *CardType[];
 
-const char *Sedlfax_revision = "$Revision: 0.17 $";
+const char *Sedlfax_revision = "$Revision: 0.18 $";
 
 const char *Sedlbauer_Types[] =
 	{"None", "speed fax+", "speed fax+ pyramid", "speed fax+ pci"};
@@ -631,9 +631,11 @@ speedfax_manager(void *data, u_int prim, void *arg) {
 				inst->down.fdata = &card->bch[channel];
 				isar_down(&inst->down, MGR_DISCONNECT | REQUEST,
 					0, 0, NULL);
+				
 			}
 			speedfax.ctrl(inst->up.peer, MGR_DISCONNECT | REQUEST,
 				&inst->up);
+			speedfax.ctrl(inst, MGR_UNREGLAYER | REQUEST, NULL);
 		}
 		break;
 	    case MGR_RELEASE | INDICATION:

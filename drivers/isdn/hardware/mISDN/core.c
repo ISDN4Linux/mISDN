@@ -1,4 +1,4 @@
-/* $Id: core.c,v 0.16 2001/04/11 10:21:10 kkeil Exp $
+/* $Id: core.c,v 0.17 2001/05/18 00:48:51 kkeil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -209,20 +209,11 @@ debugout(hisaxinstance_t *inst, logdata_t *log)
 static int central_manager(void *data, u_int prim, void *arg) {
 	hisaxstack_t *st = data;
 
-	if ((prim != (MGR_NEWSTACK | REQUEST)) &&
-		(prim != (MGR_DISCONNECT | REQUEST)) && !data)
-		return(-EINVAL);
 	switch(prim) {
 	    case MGR_NEWSTACK | REQUEST:
 		if (!(st = new_stack(data, arg)))
 			return(-EINVAL);
 		return(0);
-	    case MGR_SETSTACK | REQUEST:
-		return(set_stack(st, arg));
-	    case MGR_CLEARSTACK | REQUEST:
-		return(clear_stack(st));
-	    case MGR_DELSTACK | REQUEST:
-		return(release_stack(st));
 	    case MGR_REGLAYER | INDICATION:
 		return(register_layer(st, arg));
 	    case MGR_REGLAYER | REQUEST:
@@ -236,6 +227,16 @@ static int central_manager(void *data, u_int prim, void *arg) {
 	    case MGR_DISCONNECT | REQUEST:
 	    case MGR_DISCONNECT | INDICATION:
 		return(disconnect_if(data, prim, arg));
+	}
+	if (!data)
+		return(-EINVAL);
+	switch(prim) {
+	    case MGR_SETSTACK | REQUEST:
+		return(set_stack(st, arg));
+	    case MGR_CLEARSTACK | REQUEST:
+		return(clear_stack(st));
+	    case MGR_DELSTACK | REQUEST:
+		return(release_stack(st));
 	    case MGR_ADDIF | REQUEST:
 		return(add_if(data, prim, arg));
 	    case MGR_CONNECT | REQUEST:

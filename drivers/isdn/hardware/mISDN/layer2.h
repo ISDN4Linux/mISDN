@@ -1,4 +1,4 @@
-/* $Id: layer2.h,v 0.8 2001/04/11 16:38:57 kkeil Exp $
+/* $Id: layer2.h,v 0.9 2001/05/18 00:48:52 kkeil Exp $
  *
  * Layer 2 defines
  *
@@ -47,6 +47,7 @@ typedef struct _layer2 {
 	int		T200, N200, T203;
 	int		debug;
 	hisaxinstance_t	inst;
+	hisaxif_t	*cloneif;
 	struct sk_buff	*windowar[MAX_WINDOW];
 	struct sk_buff	*down_skb;
 	struct sk_buff_head i_queue;
