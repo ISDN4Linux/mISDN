@@ -108,7 +108,7 @@
 
 extern const char *CardType[];
 
-static const char *hfcmulti_revision = "$Revision: 1.17 $";
+static const char *hfcmulti_revision = "$Revision: 1.18 $";
 
 static int HFC_cnt;
 
@@ -1105,6 +1105,13 @@ hfcmulti_interrupt(int intno, void *dev_id, struct pt_regs *regs)
 					if (r_irq_statech & 1) {
 						HFC_outb_(hc, R_ST_SEL, hc->chan[ch].port);
 						dch->ph_state = HFC_inb(hc, A_ST_RD_STATE) & 0x0f;
+						if (dch->ph_state == (test_bit(HFC_CFG_NTMODE, &hc->chan[dch->channel].cfg)?3:7)) {
+							HFC_outb_(hc, R_FIFO, (ch<<1)|1);
+							HFC_wait_(hc);
+							HFC_outb_(hc, R_INC_RES_FIFO, V_RES_F);
+							HFC_wait_(hc);
+						}
+
 						dchannel_sched_event(dch, D_L1STATECHANGE);
 						if (debug & DEBUG_HFCMULTI_STATE)
 							printk(KERN_DEBUG "%s: S/T newstate %x port %d\n", __FUNCTION__, dch->ph_state, hc->chan[ch].port);
