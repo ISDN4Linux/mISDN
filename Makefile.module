@@ -34,9 +34,9 @@ include: $(KDIR)/include
 	ln -s $(KDIR)/include
 
 clean:
-	rm -f $(TARGETS) $(TARGETDIR)/.*.flags $(TARGETDIR)/*.o
+	rm -f $(TARGETS) $(TARGETDIR)/.*.flags $(TARGETDIR)/*.o $(TARGETDIR)/.depend
 	rm -f $(TARGETDIR)/*~ newinclude/linux/*~ *~ .kversion
-	rm -f -r modules
+	rm -f -r modules .depend .hdepend
 	
 $(TARGET):
 	$(MAKE) -f Makefile KDIR=$(KDIR) TARGETDIR=$(TARGETDIR) $(TARGET)

@@ -1,4 +1,4 @@
-/* $Id: hfc_pci.c,v 1.17 2003/06/20 10:06:14 kkeil Exp $
+/* $Id: hfc_pci.c,v 1.18 2003/06/21 21:39:54 kkeil Exp $
 
  * hfc_pci.c     low level driver for CCD's hfc-pci based cards
  *
@@ -31,18 +31,23 @@
 #include <linux/kernel_stat.h>
 #include <linux/delay.h>
 
-#include "hisax_hw.h"
+#include "hisax_dch.h"
+#include "hisax_bch.h"
 #include "hfc_pci.h"
 #include "hisaxl1.h"
 #include "helper.h"
 #include "debug.h"
 #include <linux/isdn_compat.h>
 
+#define SPIN_DEBUG
+#define LOCK_STATISTIC
+#include "hw_lock.h"
+
 #define HFC_INFO(txt)	printk(KERN_DEBUG txt)
 
 extern const char *CardType[];
 
-static const char *hfcpci_revision = "$Revision: 1.17 $";
+static const char *hfcpci_revision = "$Revision: 1.18 $";
 
 /* table entry in the PCI devices list */
 typedef struct {
@@ -126,7 +131,6 @@ struct hfcPCI_hw {
 	unsigned char	mst_m;
 	unsigned char	int_m1;
 	unsigned char	int_m2;
-	unsigned char	int_s1;
 	unsigned char	sctrl;
 	unsigned char	sctrl_r;
 	unsigned char	sctrl_e;
@@ -163,11 +167,7 @@ typedef struct _hfc_pci {
 	u_int		cfg;
 	u_int		irq;
 	hfcPCI_hw_t	hw;
-	spinlock_t	devlock;
-	u_long		flags;
-#ifdef SPIN_DEBUG
-	void		*lock_adr;
-#endif
+	hisax_HWlock_t	lock;
 	dchannel_t	dch;
 	bchannel_t	bch[2];
 } hfc_pci_t;
@@ -175,24 +175,16 @@ typedef struct _hfc_pci {
 
 static void lock_dev(void *data)
 {
-	register u_long	flags;
-	register hfc_pci_t *card = data;
-
-	spin_lock_irqsave(&card->devlock, flags);
-	card->flags = flags;
-#ifdef SPIN_DEBUG
-	card->lock_adr = __builtin_return_address(0);
-#endif
+	register hisax_HWlock_t	*lock = &((hfc_pci_t *)data)->lock;
+	
+	lock_HW(lock);
 } 
 
 static void unlock_dev(void *data)
 {
-	register hfc_pci_t *card = data;
+	register hisax_HWlock_t	*lock = &((hfc_pci_t *)data)->lock;
 
-	spin_unlock_irqrestore(&card->devlock, card->flags);
-#ifdef SPIN_DEBUG
-	card->lock_adr = NULL;
-#endif
+	unlock_HW(lock);
 }
 
 /* Interface functions */
@@ -203,13 +195,8 @@ static void unlock_dev(void *data)
 void
 release_io_hfcpci(hfc_pci_t *hc)
 {
-	int flags;
-
-	save_flags(flags);
-	cli();
 	hc->hw.int_m2 = 0;	/* interrupt output off ! */
 	Write_hfc(hc, HFCPCI_INT_M2, hc->hw.int_m2);
-	restore_flags(flags);
 	Write_hfc(hc, HFCPCI_CIRM, HFCPCI_RESET);	/* Reset On */
 	set_current_state(TASK_UNINTERRUPTIBLE);
 	schedule_timeout((30 * HZ) / 1000);	/* Timeout 30ms */
@@ -230,15 +217,12 @@ release_io_hfcpci(hfc_pci_t *hc)
 static void
 reset_hfcpci(hfc_pci_t *hc)
 {
-	long	flags;
 	u_char	val;
 	int	cnt = 0;
 
 	HFC_INFO("reset_hfcpci: entered\n");
 	val = Read_hfc(hc, HFCPCI_CHIP_ID);
 	printk(KERN_INFO "HFC_PCI: resetting HFC ChipId(%x)\n", val);
-	save_flags(flags);
-	cli();
 	pcibios_write_config_word(hc->hw.pci_bus, hc->hw.pci_device_fn, PCI_COMMAND, PCI_ENA_MEMIO);	/* enable memory mapped ports, disable busmaster */
 	hc->hw.int_m2 = 0;	/* interrupt output off ! */
 	Write_hfc(hc, HFCPCI_INT_M2, hc->hw.int_m2);
@@ -247,11 +231,8 @@ reset_hfcpci(hfc_pci_t *hc)
 	printk(KERN_DEBUG "HFC-PCI status(%x) before reset\n", val);
 	hc->hw.cirm = HFCPCI_RESET;		/* Reset On */
 	Write_hfc(hc, HFCPCI_CIRM, hc->hw.cirm);
-	restore_flags(flags);
 	set_current_state(TASK_UNINTERRUPTIBLE);
 	schedule_timeout((30 * HZ) / 1000);	/* Timeout 30ms */
-	save_flags(flags);
-	cli();
 	hc->hw.cirm = 0;			/* Reset Off */
 	Write_hfc(hc, HFCPCI_CIRM, hc->hw.cirm);
 	val = Read_hfc(hc, HFCPCI_STATUS);
@@ -333,7 +314,6 @@ reset_hfcpci(hfc_pci_t *hc)
 	}
 	Write_hfc(hc, HFCPCI_CONNECT, hc->hw.conn);
 	val = Read_hfc(hc, HFCPCI_INT_S2);
-	restore_flags(flags);
 }
 
 /***************************************************/
@@ -349,28 +329,6 @@ hfcpci_Timer(hfc_pci_t *hc)
  */
 }
 
-
-/*********************************/
-/* schedule a new D-channel task */
-/*********************************/
-static void
-sched_event_D_pci(hfc_pci_t *hc, int event)
-{
-	test_and_set_bit(event, &hc->dch.event);
-	queue_task(&hc->dch.tqueue, &tq_immediate);
-	mark_bh(IMMEDIATE_BH);
-}
-
-/*********************************/
-/* schedule a new b_channel task */
-/*********************************/
-static void
-hfcpci_sched_event(bchannel_t *bch, int event)
-{
-	bch->event |= 1 << event;
-	queue_task(&bch->tqueue, &tq_immediate);
-	mark_bh(IMMEDIATE_BH);
-}
 
 /************************************************/
 /* select a b-channel entry matching and active */
@@ -520,10 +478,6 @@ receive_dmsg(hfc_pci_t *hc)
 	z_type		*zp;
 
 	df = &((fifo_area *) (hc->hw.fifos))->d_chan.d_rx;
-	if (test_and_set_bit(FLG_LOCK_ATOMIC, &dch->DFlags)) {
-		debugprint(&dch->inst, "rec_dmsg blocked");
-		return (1);
-	}
 	while (((df->f1 & D_FREG_MASK) != (df->f2 & D_FREG_MASK)) && count--) {
 		zp = &df->za[df->f2 & D_FREG_MASK];
 		rcnt = zp->z1 - zp->z2;
@@ -575,11 +529,10 @@ receive_dmsg(hfc_pci_t *hc)
 				debugprint(&dch->inst, dch->dlog);
 			}
 			skb_queue_tail(&dch->rqueue, skb);
-			sched_event_D_pci(hc, D_RCVBUFREADY);
+			dchannel_sched_event(dch, D_RCVBUFREADY);
 		} else
 			printk(KERN_WARNING "HFC-PCI: D receive out of memory\n");
 	}
-	test_and_clear_bit(FLG_LOCK_ATOMIC, &dch->DFlags);
 	return (1);
 }
 
@@ -628,7 +581,7 @@ hfcpci_empty_fifo_trans(bchannel_t *bch, bzfifo_type * bz, u_char * bdata)
 			memcpy(ptr, ptr1, fcnt);	/* rest */
 		}
 		skb_queue_tail(&bch->rqueue, skb);
-		hfcpci_sched_event(bch, B_RCVBUFREADY);
+		bch_sched_event(bch, B_RCVBUFREADY);
 	}
 
 	*z2r = new_z2;		/* new position */
@@ -641,7 +594,6 @@ hfcpci_empty_fifo_trans(bchannel_t *bch, bzfifo_type * bz, u_char * bdata)
 void
 main_rec_hfcpci(bchannel_t *bch)
 {
-	long		flags;
 	hfc_pci_t	*hc = bch->inst.data;
 	int		rcnt, real_fifo;
 	int		receive, count = 5;
@@ -662,14 +614,6 @@ main_rec_hfcpci(bchannel_t *bch)
 	}
       Begin:
 	count--;
-	save_flags(flags);
-	cli();
-	if (test_and_set_bit(FLG_LOCK_ATOMIC, &hc->dch.DFlags)) {
-		restore_flags(flags);
-		debugprint(&bch->inst, "rec_data ch(%x) blocked", bch->channel);
-		return;
-	}
-	restore_flags(flags);
 	if (bz->f1 != bz->f2) {
 		if (bch->debug & L1_DEB_HSCX)
 			debugprint(&bch->inst, "hfcpci rec ch(%x) f1(%d) f2(%d)",
@@ -685,7 +629,7 @@ main_rec_hfcpci(bchannel_t *bch)
 				bch->channel, zp->z1, zp->z2, rcnt);
 		if ((skb = hfcpci_empty_fifo(bch, bz, bdata, rcnt))) {
 			skb_queue_tail(&bch->rqueue, skb);
-			hfcpci_sched_event(bch, B_RCVBUFREADY);
+			bch_sched_event(bch, B_RCVBUFREADY);
 		}
 		rcnt = bz->f1 - bz->f2;
 		if (rcnt < 0)
@@ -703,7 +647,6 @@ main_rec_hfcpci(bchannel_t *bch)
 		receive = hfcpci_empty_fifo_trans(bch, bz, bdata);
 	else
 		receive = 0;
-	test_and_clear_bit(FLG_LOCK_ATOMIC, &hc->dch.DFlags);
 	if (count && receive)
 		goto Begin;
 	return;
@@ -716,7 +659,6 @@ static void
 hfcpci_fill_dfifo(hfc_pci_t *hc)
 {
 	dchannel_t	*dch = &hc->dch;
-	long		flags;
 	int		fcnt;
 	int		count, new_z1, maxlen;
 	dfifo_type	*df;
@@ -773,12 +715,9 @@ hfcpci_fill_dfifo(hfc_pci_t *hc)
 		src += maxlen;	/* new position */
 		memcpy(dst, src, count);
 	}
-	save_flags(flags);
-	cli();
 	df->za[new_f1 & D_FREG_MASK].z1 = new_z1;	/* for next buffer */
 	df->za[df->f1 & D_FREG_MASK].z1 = new_z1;	/* new pos actual buffer */
 	df->f1 = new_f1;	/* next frame */
-	restore_flags(flags);
 	if (dch->debug & L1_DEB_ISAC_FIFO) {
 		char *t = dch->dlog;
 
@@ -792,20 +731,6 @@ hfcpci_fill_dfifo(hfc_pci_t *hc)
 	return;
 }
 
-static void
-hfcD_send_fifo(dchannel_t *dch)
-{
-	hfc_pci_t	*hc = dch->inst.data;
-
-	if (!test_and_set_bit(FLG_LOCK_ATOMIC, &dch->DFlags)) {
-		hfcpci_fill_dfifo(hc);
-		test_and_clear_bit(FLG_LOCK_ATOMIC, &dch->DFlags);
-	} else {
-		debugprint(&dch->inst, "hfcpci_fill_dfifo blocked");
-		sched_event_D_pci(hc, D_BLOCKEDATOMIC);
-	}
-}
-
 /**************************/
 /* B-channel send routine */
 /**************************/
@@ -813,7 +738,7 @@ static void
 hfcpci_fill_fifo(bchannel_t *bch)
 {
 	hfc_pci_t 	*hc = bch->inst.data;
-	int		flags, maxlen, fcnt;
+	int		maxlen, fcnt;
 	int		count, new_z1;
 	bzfifo_type	*bz;
 	u_char		*bdata;
@@ -873,19 +798,19 @@ next_t_frame:
 			} else if (bch->debug & L1_DEB_HSCX)
 				debugprint(&bch->inst, "hfcpci_fill_fifo_trans ch(%x) frame length %d discarded",
 					bch->channel, bch->tx_len);
-			if (test_and_clear_bit(FLG_TX_NEXT, &bch->Flag)) {
+			if (test_and_clear_bit(BC_FLG_TX_NEXT, &bch->Flag)) {
 				if (bch->next_skb) {
 					bch->tx_idx = 0;
 					bch->tx_len = bch->next_skb->len;
 					memcpy(bch->tx_buf,
 						bch->next_skb->data,
 						bch->tx_len);
-					hfcpci_sched_event(bch, B_XMTBUFREADY);
+					bch_sched_event(bch, B_XMTBUFREADY);
 					goto next_t_frame;
 				} else
 					printk(KERN_WARNING "hfcB tx irq TX_NEXT without skb\n");
 			}
-			test_and_clear_bit(FLG_TX_BUSY, &bch->Flag);
+			test_and_clear_bit(BC_FLG_TX_BUSY, &bch->Flag);
 			bch->tx_idx = bch->tx_len;
 		}
 		return;
@@ -934,32 +859,13 @@ next_t_frame:
 		src += maxlen;	/* new position */
 		memcpy(dst, src, count);
 	}
-	save_flags(flags);
-	cli();
 	bz->za[new_f1].z1 = new_z1;	/* for next buffer */
 	bz->f1 = new_f1;	/* next frame */
-	restore_flags(flags);
 	bch->tx_idx = bch->tx_len;
-	test_and_clear_bit(FLG_TX_BUSY, &bch->Flag);
+	test_and_clear_bit(BC_FLG_TX_BUSY, &bch->Flag);
 	return;
 }
 
-/**************************************/
-/* send B-channel data if not blocked */
-/**************************************/
-static void
-hfcpci_send_data(bchannel_t *bch)
-{
-	hfc_pci_t *hc = bch->inst.data;
-
-	if (!test_and_set_bit(FLG_LOCK_ATOMIC, &hc->dch.DFlags)) {
-		hfcpci_fill_fifo(bch);
-		test_and_clear_bit(FLG_LOCK_ATOMIC, &hc->dch.DFlags);
-	} else {
-		debugprint(&bch->inst, "send_data ch(%x) blocked", bch->channel);
-		hfcpci_sched_event(bch, B_BLOCKEDATOMIC);
-	}
-}
 
 #if 0
 /**********************************************/
@@ -1003,13 +909,10 @@ dch_nt_l2l1(struct PStack *st, int pr, void *arg)
 static int
 hfcpci_auxcmd(hfc_pci_t *hc, isdn_ctrl * ic)
 {
-	int flags;
 	int i = *(unsigned int *) ic->parm.num;
 
 	if ((ic->arg == 98) &&
 	    (!(hc->hw.int_m1 & (HFCPCI_INTS_B2TRANS + HFCPCI_INTS_B2REC + HFCPCI_INTS_B1TRANS + HFCPCI_INTS_B1REC)))) {
-		save_flags(flags);
-		cli();
 		hc->hw.clkdel = CLKDEL_NT; /* ST-Bit delay for NT-Mode */
 		Write_hfc(hc, HFCPCI_CLKDEL, hc->hw.clkdel);
 		Write_hfc(hc, HFCPCI_STATES, HFCPCI_LOAD_STATE | 0);	/* HFC ST G0 */
@@ -1024,7 +927,6 @@ hfcpci_auxcmd(hfc_pci_t *hc, isdn_ctrl * ic)
 		hc->hw.nt_mode = 1;
 		hc->hw.nt_timer = 0;
 		cs->stlist->l2.l2l1 = dch_nt_l2l1;
-		restore_flags(flags);
 		debugl1(hc, "NT mode activated");
 		return (0);
 	}
@@ -1032,8 +934,6 @@ hfcpci_auxcmd(hfc_pci_t *hc, isdn_ctrl * ic)
 	    (hc->hw.nt_mode) || (ic->arg != 12))
 		return (-EINVAL);
 
-	save_flags(flags);
-	cli();
 	if (i) {
 		cs->logecho = 1;
 		hc->hw.trm |= 0x20;	/* enable echo chan */
@@ -1056,7 +956,6 @@ hfcpci_auxcmd(hfc_pci_t *hc, isdn_ctrl * ic)
 	Write_hfc(hc, HFCPCI_TRM, hc->hw.trm);
 	Write_hfc(hc, HFCPCI_FIFO_EN, hc->hw.fifo_en);
 	Write_hfc(hc, HFCPCI_INT_M1, hc->hw.int_m1);
-	restore_flags(flags);
 	return (0);
 }				/* hfcpci_auxcmd */
 
@@ -1066,7 +965,6 @@ hfcpci_auxcmd(hfc_pci_t *hc, isdn_ctrl * ic)
 static void
 receive_emsg(hfc_pci_t *hc)
 {
-	long flags;
 	int rcnt;
 	int receive, count = 5;
 	bzfifo_type *bz;
@@ -1076,18 +974,10 @@ receive_emsg(hfc_pci_t *hc)
 	int total, maxlen, new_z2;
 	u_char e_buffer[256];
 
-	save_flags(flags);
 	bz = &((fifo_area *) (hc->hw.fifos))->b_chans.rxbz_b2;
 	bdata = ((fifo_area *) (hc->hw.fifos))->b_chans.rxdat_b2;
       Begin:
 	count--;
-	cli();
-	if (test_and_set_bit(FLG_LOCK_ATOMIC, &dch->DFlags)) {
-		debugl1(hc, "echo_rec_data blocked");
-		restore_flags(flags);
-		return;
-	}
-	sti();
 	if (bz->f1 != bz->f2) {
 		if (hc->debug & L1_DEB_ISAC)
 			debugl1(hc, "hfcpci e_rec f1(%d) f2(%d)",
@@ -1159,10 +1049,8 @@ receive_emsg(hfc_pci_t *hc)
 			receive = 0;
 	} else
 		receive = 0;
-	test_and_clear_bit(FLG_LOCK_ATOMIC, &dch->DFlags);
 	if (count && receive)
 		goto Begin;
-	restore_flags(flags);
 	return;
 }				/* receive_emsg */
 
@@ -1177,28 +1065,61 @@ hfcpci_interrupt(int intno, void *dev_id, struct pt_regs *regs)
 	hfc_pci_t	*hc = dev_id;
 	u_char		exval;
 	bchannel_t	*bch;
-	int		count = 15;
 	long		flags;
 	u_char		val, stat;
 
-	if (!hc) {
-		printk(KERN_WARNING "HFC-PCI: Spurious interrupt!\n");
-		return;
-	}
-	if (!(hc->hw.int_m2 & 0x08))
+	spin_lock_irqsave(&hc->lock.lock, flags);
+#ifdef SPIN_DEBUG
+	hc->lock.spin_adr = (void *)0x3001;
+#endif
+	if (!(hc->hw.int_m2 & 0x08)) {
+#ifdef SPIN_DEBUG
+		hc->lock.spin_adr = NULL;
+#endif
+		spin_unlock_irqrestore(&hc->lock.lock, flags);
 		return;		/* not initialised */
+	}
 
 	if (HFCPCI_ANYINT & (stat = Read_hfc(hc, HFCPCI_STATUS))) {
 		val = Read_hfc(hc, HFCPCI_INT_S1);
 		if (hc->dch.debug & L1_DEB_ISAC)
 			debugprint(&hc->dch.inst, "HFC-PCI: stat(%02x) s1(%02x)",
 				stat, val);
-	} else
+	} else {
+		/* shared */
+#ifdef SPIN_DEBUG
+		hc->lock.spin_adr = NULL;
+#endif
+		spin_unlock_irqrestore(&hc->lock.lock, flags);
 		return;
+	}
+	if (test_and_set_bit(STATE_FLAG_BUSY, &hc->lock.state)) {
+		printk(KERN_ERR "%s: STATE_FLAG_BUSY allready activ, should never happen state:%x\n",
+			__FUNCTION__, hc->lock.state);
+#ifdef SPIN_DEBUG
+		printk(KERN_ERR "%s: previous lock:%p\n",
+			__FUNCTION__, hc->lock.busy_adr);
+#endif
+#ifdef LOCK_STATISTIC
+		hc->lock.irq_fail++;
+#endif
+	} else {
+#ifdef LOCK_STATISTIC
+		hc->lock.irq_ok++;
+#endif
+#ifdef SPIN_DEBUG
+		hc->lock.busy_adr = hfcpci_interrupt;
+#endif
+	}
+
+	test_and_set_bit(STATE_FLAG_INIRQ, &hc->lock.state);
+#ifdef SPIN_DEBUG
+	hc->lock.spin_adr= NULL;
+#endif
+	spin_unlock_irqrestore(&hc->lock.lock, flags);
+
 	if (hc->dch.debug & L1_DEB_ISAC)
-		debugprint(&hc->dch.inst, "HFC-PCI irq %x %s", val,
-			test_bit(FLG_LOCK_ATOMIC, &hc->dch.DFlags) ?
-			"locked" : "unlocked");
+		debugprint(&hc->dch.inst, "HFC-PCI irq %x", val);
 	val &= hc->hw.int_m1;
 	if (val & 0x40) {	/* state machine irq */
 		exval = Read_hfc(hc, HFCPCI_STATES) & 0xf;
@@ -1206,144 +1127,137 @@ hfcpci_interrupt(int intno, void *dev_id, struct pt_regs *regs)
 			debugprint(&hc->dch.inst, "ph_state chg %d->%d",
 				hc->dch.ph_state, exval);
 		hc->dch.ph_state = exval;
-		sched_event_D_pci(hc, D_L1STATECHANGE);
+		dchannel_sched_event(&hc->dch, D_L1STATECHANGE);
 		val &= ~0x40;
 	}
 	if (val & 0x80) {	/* timer irq */
 		if (hc->hw.nt_mode) {
 			if ((--hc->hw.nt_timer) < 0)
-				sched_event_D_pci(hc, D_L1STATECHANGE);
+				dchannel_sched_event(&hc->dch, D_L1STATECHANGE);
 		}
 		val &= ~0x80;
 		Write_hfc(hc, HFCPCI_CTMT, hc->hw.ctmt | HFCPCI_CLTIMER);
 	}
-	while (val) {
-		save_flags(flags);
-		cli();
-		if (test_bit(FLG_LOCK_ATOMIC, &hc->dch.DFlags)) {
-			hc->hw.int_s1 |= val;
-			restore_flags(flags);
-			return;
-		}
-		if (hc->hw.int_s1 & 0x18) {
-			exval = val;
-			val = hc->hw.int_s1;
-			hc->hw.int_s1 = exval;
-		}
-		if (val & 0x08) {
-			if (!(bch = Sel_BCS(hc, hc->hw.bswapped ? 2 : 1))) {
-				if (hc->dch.debug)
-					debugprint(&hc->dch.inst, "hfcpci spurious 0x08 IRQ");
-			} else
-				main_rec_hfcpci(bch);
-		}
-		if (val & 0x10) {
-//			if (hc->logecho)
-//				receive_emsg(hc);
-//			else 
-			if (!(bch = Sel_BCS(hc, 2))) {
-				if (hc->dch.debug)
-					debugprint(&hc->dch.inst, "hfcpci spurious 0x10 IRQ");
-			} else
-				main_rec_hfcpci(bch);
-		}
-		if (val & 0x01) {
-			if (!(bch = Sel_BCS(hc, hc->hw.bswapped ? 2 : 1))) {
-				if (hc->dch.debug)
-					debugprint(&hc->dch.inst, "hfcpci spurious 0x01 IRQ");
-			} else {
-				if (bch->tx_idx < bch->tx_len) {
-					hfcpci_send_data(bch);
-				} else {
-					bch->tx_idx = 0;
-					if (test_and_clear_bit(FLG_TX_NEXT, &bch->Flag)) {
-						if (bch->next_skb) {
-							bch->tx_len = bch->next_skb->len;
-							memcpy(bch->tx_buf,
-								bch->next_skb->data,
-								bch->tx_len);
-							hfcpci_send_data(bch);
-							hfcpci_sched_event(bch, B_XMTBUFREADY);
-						} else {
-							printk(KERN_WARNING "hfcB tx irq TX_NEXT without skb\n");
-							test_and_clear_bit(FLG_TX_BUSY, &bch->Flag);
-							bch->tx_len = 0;
-						}
-					} else {
-						test_and_clear_bit(FLG_TX_BUSY, &bch->Flag);
-						hfcpci_sched_event(bch, B_XMTBUFREADY);
-						bch->tx_len = 0;
-					}
-				}
-			}
-		}
-		if (val & 0x02) {
-			if (!(bch = Sel_BCS(hc, 2))) {
-				if (hc->dch.debug)
-					debugprint(&hc->dch.inst, "hfcpci spurious 0x02 IRQ");
-			} else {
-				if (bch->tx_idx < bch->tx_len) {
-					hfcpci_send_data(bch);
-				} else {
-					bch->tx_idx = 0;
-					if (test_and_clear_bit(FLG_TX_NEXT, &bch->Flag)) {
-						if (bch->next_skb) {
-							bch->tx_len = bch->next_skb->len;
-							memcpy(bch->tx_buf,
-								bch->next_skb->data,
-								bch->tx_len);
-							hfcpci_send_data(bch);
-							hfcpci_sched_event(bch, B_XMTBUFREADY);
-						} else {
-							printk(KERN_WARNING "hfcB tx irq TX_NEXT without skb\n");
-							test_and_clear_bit(FLG_TX_BUSY, &bch->Flag);
-							bch->tx_len = 0;
-						}
-					} else {
-						test_and_clear_bit(FLG_TX_BUSY, &bch->Flag);
-						hfcpci_sched_event(bch, B_XMTBUFREADY);
-						bch->tx_len = 0;
-					}
-				}
-			}
-		}
-		if (val & 0x20) {	/* receive dframe */
-			receive_dmsg(hc);
-		}
-		if (val & 0x04) {	/* dframe transmitted */
-			if (test_and_clear_bit(FLG_DBUSY_TIMER, &hc->dch.DFlags))
-				del_timer(&hc->dch.dbusytimer);
-			if (test_and_clear_bit(FLG_L1_DBUSY, &hc->dch.DFlags))
-				sched_event_D_pci(hc, D_CLEARBUSY);
-			if (hc->dch.tx_idx < hc->dch.tx_len) {
-				hfcD_send_fifo(&hc->dch);
-			} else {
-				if (test_and_clear_bit(FLG_TX_NEXT, &hc->dch.DFlags)) {
-					if (hc->dch.next_skb) {
-						hc->dch.tx_len = hc->dch.next_skb->len;
-						memcpy(hc->dch.tx_buf,
-							hc->dch.next_skb->data,
-							hc->dch.tx_len);
-						hc->dch.tx_idx = 0;
-						hfcD_send_fifo(&hc->dch);
-						sched_event_D_pci(hc, D_XMTBUFREADY);
-					} else {
-						printk(KERN_WARNING "hfcd tx irq TX_NEXT without skb\n");
-						test_and_clear_bit(FLG_TX_BUSY, &hc->dch.DFlags);
-					}
-				} else
-					test_and_clear_bit(FLG_TX_BUSY, &hc->dch.DFlags);
-			}
-		}
-		if (hc->hw.int_s1 && count--) {
-			val = hc->hw.int_s1;
-			hc->hw.int_s1 = 0;
-			if (hc->dch.debug & L1_DEB_ISAC)
-				debugprint(&hc->dch.inst, "HFC-PCI irq %x loop %d", val, 15 - count);
+	if (val & 0x08) {
+		if (!(bch = Sel_BCS(hc, hc->hw.bswapped ? 2 : 1))) {
+			if (hc->dch.debug)
+				debugprint(&hc->dch.inst, "hfcpci spurious 0x08 IRQ");
 		} else
-			val = 0;
-		restore_flags(flags);
+			main_rec_hfcpci(bch);
 	}
+	if (val & 0x10) {
+//		if (hc->logecho)
+//			receive_emsg(hc);
+//		else 
+		if (!(bch = Sel_BCS(hc, 2))) {
+			if (hc->dch.debug)
+				debugprint(&hc->dch.inst, "hfcpci spurious 0x10 IRQ");
+		} else
+			main_rec_hfcpci(bch);
+	}
+	if (val & 0x01) {
+		if (!(bch = Sel_BCS(hc, hc->hw.bswapped ? 2 : 1))) {
+			if (hc->dch.debug)
+				debugprint(&hc->dch.inst, "hfcpci spurious 0x01 IRQ");
+		} else {
+			if (bch->tx_idx < bch->tx_len) {
+				hfcpci_fill_fifo(bch);
+			} else {
+				bch->tx_idx = 0;
+				if (test_and_clear_bit(BC_FLG_TX_NEXT, &bch->Flag)) {
+					if (bch->next_skb) {
+						bch->tx_len = bch->next_skb->len;
+						memcpy(bch->tx_buf,
+							bch->next_skb->data,
+							bch->tx_len);
+						hfcpci_fill_fifo(bch);
+						bch_sched_event(bch, B_XMTBUFREADY);
+					} else {
+						printk(KERN_WARNING "hfcB tx irq TX_NEXT without skb\n");
+						test_and_clear_bit(BC_FLG_TX_BUSY, &bch->Flag);
+						bch->tx_len = 0;
+					}
+				} else {
+					test_and_clear_bit(BC_FLG_TX_BUSY, &bch->Flag);
+					bch_sched_event(bch, B_XMTBUFREADY);
+					bch->tx_len = 0;
+				}
+			}
+		}
+	}
+	if (val & 0x02) {
+		if (!(bch = Sel_BCS(hc, 2))) {
+			if (hc->dch.debug)
+				debugprint(&hc->dch.inst, "hfcpci spurious 0x02 IRQ");
+		} else {
+			if (bch->tx_idx < bch->tx_len) {
+				hfcpci_fill_fifo(bch);
+			} else {
+				bch->tx_idx = 0;
+				if (test_and_clear_bit(BC_FLG_TX_NEXT, &bch->Flag)) {
+					if (bch->next_skb) {
+						bch->tx_len = bch->next_skb->len;
+						memcpy(bch->tx_buf,
+							bch->next_skb->data,
+							bch->tx_len);
+						hfcpci_fill_fifo(bch);
+						bch_sched_event(bch, B_XMTBUFREADY);
+					} else {
+						printk(KERN_WARNING "hfcB tx irq TX_NEXT without skb\n");
+						test_and_clear_bit(BC_FLG_TX_BUSY, &bch->Flag);
+						bch->tx_len = 0;
+					}
+				} else {
+					test_and_clear_bit(BC_FLG_TX_BUSY, &bch->Flag);
+					bch_sched_event(bch, B_XMTBUFREADY);
+					bch->tx_len = 0;
+				}
+			}
+		}
+	}
+	if (val & 0x20) {	/* receive dframe */
+		receive_dmsg(hc);
+	}
+	if (val & 0x04) {	/* dframe transmitted */
+		if (test_and_clear_bit(FLG_DBUSY_TIMER, &hc->dch.DFlags))
+			del_timer(&hc->dch.dbusytimer);
+		if (test_and_clear_bit(FLG_L1_DBUSY, &hc->dch.DFlags))
+			dchannel_sched_event(&hc->dch, D_CLEARBUSY);
+		if (hc->dch.tx_idx < hc->dch.tx_len) {
+			hfcpci_fill_dfifo(hc);
+		} else {
+			if (test_and_clear_bit(FLG_TX_NEXT, &hc->dch.DFlags)) {
+				if (hc->dch.next_skb) {
+					hc->dch.tx_len = hc->dch.next_skb->len;
+					memcpy(hc->dch.tx_buf,
+						hc->dch.next_skb->data,
+						hc->dch.tx_len);
+					hc->dch.tx_idx = 0;
+					hfcpci_fill_dfifo(hc);
+					dchannel_sched_event(&hc->dch, D_XMTBUFREADY);
+				} else {
+					printk(KERN_WARNING "hfcd tx irq TX_NEXT without skb\n");
+					test_and_clear_bit(FLG_TX_BUSY, &hc->dch.DFlags);
+				}
+			} else
+				test_and_clear_bit(FLG_TX_BUSY, &hc->dch.DFlags);
+		}
+	}
+	spin_lock_irqsave(&hc->lock.lock, flags);
+#ifdef SPIN_DEBUG
+	hc->lock.spin_adr = (void *)0x3002;
+#endif
+	if (!test_and_clear_bit(STATE_FLAG_INIRQ, &hc->lock.state)) {
+	}
+	if (!test_and_clear_bit(STATE_FLAG_BUSY, &hc->lock.state)) {
+		printk(KERN_ERR "%s: STATE_FLAG_BUSY not locked state(%x)\n",
+			__FUNCTION__, hc->lock.state);
+	}
+#ifdef SPIN_DEBUG
+	hc->lock.busy_adr = NULL;
+	hc->lock.spin_adr = NULL;
+#endif
+	spin_unlock_irqrestore(&hc->lock.lock, flags);
 }
 
 /********************************************************************/
@@ -1364,7 +1278,6 @@ HFCD_l1hw(hisaxif_t *hif, struct sk_buff *skb)
 	hfc_pci_t	*hc;
 	int		ret = -EINVAL;
 	hisax_head_t	*hh;
-	long		flags;
 
 	if (!hif || !skb)
 		return(ret);
@@ -1387,7 +1300,7 @@ HFCD_l1hw(hisaxif_t *hif, struct sk_buff *skb)
 			dch->tx_len = skb->len;
 			memcpy(dch->tx_buf, skb->data, dch->tx_len);
 			dch->tx_idx = 0;
-			hfcD_send_fifo(dch);
+			hfcpci_fill_dfifo(dch->inst.data);
 			dch->inst.unlock(dch->inst.data);
 			skb_trim(skb, 0);
 			return(if_newhead(&dch->inst.up, PH_DATA_CNF,
@@ -1426,7 +1339,7 @@ HFCD_l1hw(hisaxif_t *hif, struct sk_buff *skb)
 			if (test_and_clear_bit(FLG_DBUSY_TIMER, &dch->DFlags))
 				del_timer(&dch->dbusytimer);
 			if (test_and_clear_bit(FLG_L1_DBUSY, &dch->DFlags))
-				sched_event_D_pci(hc, D_CLEARBUSY);
+				dchannel_sched_event(&hc->dch, D_CLEARBUSY);
 		} else if (hh->dinfo == HW_POWERUP) {
 			Write_hfc(hc, HFCPCI_STATES, HFCPCI_DO_ACTION);
 		} else if ((hh->dinfo & HW_TESTLOOP) == HW_TESTLOOP) {
@@ -1440,11 +1353,8 @@ HFCD_l1hw(hisaxif_t *hif, struct sk_buff *skb)
 					__FUNCTION__, slot);
 				Write_hfc(hc, HFCPCI_B1_SSL, slot);
 				Write_hfc(hc, HFCPCI_B1_RSL, slot);
-				save_flags(flags);
-				cli();
 				hc->hw.conn = (hc->hw.conn & ~7) | 1;
 				Write_hfc(hc, HFCPCI_CONNECT, hc->hw.conn);
-				restore_flags(flags);
 			}
 			if (2 & hh->dinfo) {
 				if (test_bit(HFC_CFG_SW_DD_DU, &hc->cfg))
@@ -1455,20 +1365,14 @@ HFCD_l1hw(hisaxif_t *hif, struct sk_buff *skb)
 					__FUNCTION__, slot);
 				Write_hfc(hc, HFCPCI_B2_SSL, slot);
 				Write_hfc(hc, HFCPCI_B2_RSL, slot);
-				save_flags(flags);
-				cli();
 				hc->hw.conn = (hc->hw.conn & ~0x38) | 0x08;
 				Write_hfc(hc, HFCPCI_CONNECT, hc->hw.conn);
-				restore_flags(flags);
 			}
-			save_flags(flags);
-			cli();
 			if (3 & hh->dinfo)
 				hc->hw.trm |= 0x80;	/* enable IOM-loop */
 			else
 				hc->hw.trm &= 0x7f;	/* disable IOM-loop */
 			Write_hfc(hc, HFCPCI_TRM, hc->hw.trm);
-			restore_flags(flags);
 		} else {
 			if (dch->debug & L1_DEB_WARN)
 				debugprint(&dch->inst, "%s: unknown ctrl %x",
@@ -1510,7 +1414,7 @@ HFCD_l1hw(hisaxif_t *hif, struct sk_buff *skb)
 			if (test_and_clear_bit(FLG_DBUSY_TIMER, &dch->DFlags))
 				del_timer(&dch->dbusytimer);
 			if (test_and_clear_bit(FLG_L1_DBUSY, &dch->DFlags))
-				sched_event_D_pci(hc, D_CLEARBUSY);
+				dchannel_sched_event(&hc->dch, D_CLEARBUSY);
 			dch->inst.unlock(dch->inst.data);
 		} else {
 			if (dch->debug & L1_DEB_WARN)
@@ -1536,7 +1440,6 @@ static int
 mode_hfcpci(bchannel_t *bch, int bc, int protocol)
 {
 	hfc_pci_t	*hc = bch->inst.data;
-	long		flags;
 	int		fifo2;
 	u_char		rx_slot = 0, tx_slot = 0, pcm_mode;
 
@@ -1556,8 +1459,6 @@ mode_hfcpci(bchannel_t *bch, int bc, int protocol)
 	} else if (test_bit(HFC_CFG_PCM, &hc->cfg) && (protocol > ISDN_PID_NONE))
 		printk(KERN_WARNING "%s: no pcm channel id but HFC_CFG_PCM\n",
 				__FUNCTION__);
-	save_flags(flags);
-	cli();
 	if (hc->chanlimit > 1) {
 		hc->hw.bswapped = 0;	/* B1 and B2 normal mode */
 		hc->hw.sctrl_e &= ~0x80;
@@ -1582,7 +1483,6 @@ mode_hfcpci(bchannel_t *bch, int bc, int protocol)
 			bch->channel = bc;
 		case (ISDN_PID_NONE):
 			if (bch->protocol == ISDN_PID_NONE) {
-				restore_flags(flags);
 				return(0);
 			}
 			if (bc & 2) {
@@ -1677,7 +1577,6 @@ mode_hfcpci(bchannel_t *bch, int bc, int protocol)
 #endif
 		default:
 			debugprint(&bch->inst, "prot not known %x", protocol);
-			restore_flags(flags);
 			return(-ENOPROTOOPT);
 	}
 	if (test_bit(HFC_CFG_PCM, &hc->cfg)) {
@@ -1723,8 +1622,7 @@ mode_hfcpci(bchannel_t *bch, int bc, int protocol)
 	Write_hfc(hc, HFCPCI_CONNECT, hc->hw.conn);
 	Write_hfc(hc, HFCPCI_CIRM, hc->hw.cirm);
 	if (bch->protocol)
-		hfcpci_sched_event(bch, B_XMTBUFREADY);
-	restore_flags(flags);
+		bch_sched_event(bch, B_XMTBUFREADY);
 	return(0);
 }
 
@@ -1750,8 +1648,8 @@ hfcpci_l2l1(hisaxif_t *hif, struct sk_buff *skb)
 			return(-EBUSY);
 		}
 		bch->inst.lock(bch->inst.data);
-		if (test_and_set_bit(FLG_TX_BUSY, &bch->Flag)) {
-			test_and_set_bit(FLG_TX_NEXT, &bch->Flag);
+		if (test_and_set_bit(BC_FLG_TX_BUSY, &bch->Flag)) {
+			test_and_set_bit(BC_FLG_TX_NEXT, &bch->Flag);
 			bch->next_skb = skb;
 			bch->inst.unlock(bch->inst.data);
 			return(0);
@@ -1759,7 +1657,7 @@ hfcpci_l2l1(hisaxif_t *hif, struct sk_buff *skb)
 			bch->tx_len = skb->len;
 			memcpy(bch->tx_buf, skb->data, bch->tx_len);
 			bch->tx_idx = 0;
-			hfcpci_send_data(bch);
+			hfcpci_fill_fifo(bch);
 			bch->inst.unlock(bch->inst.data);
 			if ((bch->inst.pid.protocol[2] == ISDN_PID_L2_B_RAWDEV)
 				&& bch->dev)
@@ -1790,11 +1688,11 @@ hfcpci_l2l1(hisaxif_t *hif, struct sk_buff *skb)
 		(hh->prim == (DL_RELEASE | REQUEST)) ||
 		(hh->prim == (MGR_DISCONNECT | REQUEST))) {
 		bch->inst.lock(bch->inst.data);
-		if (test_and_clear_bit(FLG_TX_NEXT, &bch->Flag)) {
+		if (test_and_clear_bit(BC_FLG_TX_NEXT, &bch->Flag)) {
 			dev_kfree_skb(bch->next_skb);
 			bch->next_skb = NULL;
 		}
-		test_and_clear_bit(FLG_TX_BUSY, &bch->Flag);
+		test_and_clear_bit(BC_FLG_TX_BUSY, &bch->Flag);
 		mode_hfcpci(bch, bch->channel, ISDN_PID_NONE);
 		test_and_clear_bit(BC_FLG_ACTIV, &bch->Flag);
 		bch->inst.unlock(bch->inst.data);
@@ -1933,8 +1831,6 @@ hfcD_bh(dchannel_t *dch)
 //	printk(KERN_DEBUG "%s: event %x\n", __FUNCTION__, dch->event);
 	if (test_and_clear_bit(D_L1STATECHANGE, &dch->event))
 		hfcD_newstate(dch);
-	if (test_and_clear_bit(D_BLOCKEDATOMIC, &dch->event))
-		hfcD_send_fifo(dch);
 	if (test_and_clear_bit(D_XMTBUFREADY, &dch->event)) {
 		struct sk_buff	*skb = dch->next_skb;
 		hisax_head_t	*hh;
@@ -1973,8 +1869,6 @@ hfcB_bh(bchannel_t *bch)
 		printk(KERN_DEBUG "%s: rpflg(%x) wpflg(%x)\n", __FUNCTION__,
 			bch->dev->rport.Flag, bch->dev->wport.Flag);
 #endif
-	if (test_and_clear_bit(B_BLOCKEDATOMIC, &bch->event))
-		hfcpci_send_data(bch);
 	if (test_and_clear_bit(B_XMTBUFREADY, &bch->event)) {
 		skb = bch->next_skb;
 		if (skb) {
@@ -2243,7 +2137,6 @@ setup_hfcpci(hfc_pci_t *hc)
 #endif
 	strcpy(tmp, hfcpci_revision);
 	printk(KERN_INFO "HiSax: HFC-PCI driver Rev. %s\n", HiSax_getrev(tmp));
-	hc->hw.int_s1 = 0;
 	hc->hw.cirm = 0;
 	hc->dch.ph_state = 0;
 	while (id_list[i].vendor_id) {
@@ -2307,7 +2200,8 @@ setup_hfcpci(hfc_pci_t *hc)
 	init_timer(&hc->hw.timer);
 	lock_dev(hc);
 #ifdef SPIN_DEBUG
-	printk(KERN_ERR "lock_adr=%p now(%p)\n", &hc->lock_adr, hc->lock_adr);
+	printk(KERN_ERR "spin_lock_adr=%p now(%p)\n", &hc->lock.spin_adr, hc->lock.spin_adr);
+	printk(KERN_ERR "busy_lock_adr=%p now(%p)\n", &hc->lock.busy_adr, hc->lock.busy_adr);
 #endif
 	unlock_dev(hc);
 	reset_hfcpci(hc);
@@ -2513,7 +2407,7 @@ HFC_init(void)
 		APPEND_TO_LIST(card, ((hfc_pci_t *)HFC_obj.ilist));
 		card->dch.debug = debug;
 		card->dch.inst.obj = &HFC_obj;
-		spin_lock_init(&card->devlock);
+		lock_HW_init(&card->lock);
 		card->dch.inst.lock = lock_dev;
 		card->dch.inst.unlock = unlock_dev;
 		card->dch.inst.data = card;

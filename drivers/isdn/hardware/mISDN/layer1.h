@@ -1,4 +1,4 @@
-/* $Id: layer1.h,v 1.0 2001/11/02 23:42:26 kkeil Exp $
+/* $Id: layer1.h,v 1.1 2003/06/21 21:39:54 kkeil Exp $
  *
  * Layer 1 defines
  *
@@ -34,3 +34,18 @@
 #define FLG_L1_PULL_REQ		6
 #define FLG_L1_UINT		7
 #define FLG_L1_DBLOCKED		8
+
+/* L1 Debug */
+#define	L1_DEB_WARN		0x01
+#define	L1_DEB_INTSTAT		0x02
+#define	L1_DEB_ISAC		0x04
+#define	L1_DEB_ISAC_FIFO	0x08
+#define	L1_DEB_HSCX		0x10
+#define	L1_DEB_HSCX_FIFO	0x20
+#define	L1_DEB_LAPD	        0x40
+#define	L1_DEB_IPAC	        0x80
+#define	L1_DEB_RECEIVE_FRAME    0x100
+#define L1_DEB_MONITOR		0x200
+#define DEB_DLOG_HEX		0x400
+#define DEB_DLOG_VERBOSE	0x800
+

@@ -17,7 +17,7 @@ TOPDIR := $(KDIR)
 include $(KDIR)/.config
 include $(KDIR)/Makefile
 
-CFLAGS := -I. -I $(KDIR)/drivers/isdn/avmb1 $(CFLAGS) -DLINUX
+CFLAGS := -I. -I $(KDIR)/drivers/isdn/avmb1 $(CFLAGS) -I $(MYDIR)/newinclude -DLINUX
 CC := $(filter-out -I$(HPATH), $(CC)) -I $(MYDIR)/newinclude -I $(HPATH)
 
 ifdef CONFIG_MODVERSIONS
@@ -26,11 +26,21 @@ else
 CFLAGS := -DMODULE $(CFLAGS)
 endif
 
+FINDHPATH += $(MYDIR)/newinclude/linux
 
 MODLIB := $(DESTDIR)$(INSTALL_MOD_PATH)/lib/modules/$(KERNELRELEASE)
 
-newhisax: $(TARGETDIR) newhisax_mod
+newhisax: $(TARGETDIR) depend newhisax_mod 
 	$(MAKE) -C $(TARGETDIR) CFLAGS="$(CFLAGS)" MAKING_MODULES=1 modules
+
+dep-files: scripts/mkdep archdep include/linux/version.h
+	scripts/mkdep -- `find $(FINDHPATH) \( -name SCCS -o -name .svn \) -prune -o -follow -name \*.h ! -name modversions.h -print` > .hdepend
+	$(MAKE) $(patsubst %,_sfdep_%,$(TARGETDIR)) _FASTDEP_ALL_SUB_DIRS="$(TARGETDIR)"
+ifdef CONFIG_MODVERSIONS
+	$(MAKE) update-modverfile
+endif
+
+depend dep: dep-files
 
 ifeq ($(PATCHLEVEL), 2)
 

@@ -1,4 +1,4 @@
-/* $Id: avm_fritz.c,v 1.4 2003/06/20 10:06:14 kkeil Exp $
+/* $Id: avm_fritz.c,v 1.5 2003/06/21 21:39:54 kkeil Exp $
  *
  * fritz_pci.c    low level stuff for AVM Fritz!PCI and ISA PnP isdn cards
  *              Thanks to AVM, Berlin for informations
@@ -12,13 +12,19 @@
 #include <linux/module.h>
 #include <linux/pci.h>
 #include <linux/kernel_stat.h>
-#include "hisax_hw.h"
+#include <linux/delay.h>
+#include "hisax_dch.h"
+#include "hisax_bch.h"
 #include "isac.h"
 #include "hisaxl1.h"
 #include "helper.h"
 #include "debug.h"
 
-static const char *avm_pci_rev = "$Revision: 1.4 $";
+#define SPIN_DEBUG
+#define LOCK_STATISTIC
+#include "hw_lock.h"
+
+static const char *avm_pci_rev = "$Revision: 1.5 $";
 
 #define ISDN_CTYPE_FRITZPCI 1
 
@@ -80,17 +86,38 @@ static const char *avm_pci_rev = "$Revision: 1.4 $";
 
 /* data struct */
 
+struct hdlc_stat_reg {
+#ifdef __BIG_ENDIAN
+	u_char fill __attribute__((packed));
+	u_char mode __attribute__((packed));
+	u_char xml  __attribute__((packed));
+	u_char cmd  __attribute__((packed));
+#else
+	u_char cmd  __attribute__((packed));
+	u_char xml  __attribute__((packed));
+	u_char mode __attribute__((packed));
+	u_char fill __attribute__((packed));
+#endif
+};
+
+typedef struct hdlc_hw {
+	union {
+		u_int ctrl;
+		struct hdlc_stat_reg sr;
+	} ctrl;
+	u_int stat;
+} hdlc_hw_t;
+
+
 typedef struct _fritzpnppci {
 	struct _fritzpnppci	*prev;
 	struct _fritzpnppci	*next;
 	u_char			subtyp;
 	u_int			irq;
 	u_int			addr;
-	spinlock_t		devlock;
-	u_long			flags;
-#ifdef SPIN_DEBUG
-	void			*lock_adr;
-#endif
+	hisax_HWlock_t		lock;
+	isac_chip_t		isac;
+	hdlc_hw_t		hdlc[2];
 	dchannel_t		dch;
 	bchannel_t		bch[2];
 } fritzpnppci;
@@ -98,24 +125,18 @@ typedef struct _fritzpnppci {
 
 static void lock_dev(void *data)
 {
-	register u_long	flags;
-	register fritzpnppci *card = data;
-
-	spin_lock_irqsave(&card->devlock, flags);
-	card->flags = flags;
-#ifdef SPIN_DEBUG
-	card->lock_adr = __builtin_return_address(0);
-#endif
+	fritzpnppci		*card = data;
+	register hisax_HWlock_t	*lock = &card->lock;
+	
+	lock_HW(lock);
 } 
 
 static void unlock_dev(void *data)
 {
-	register fritzpnppci *card = data;
-
-	spin_unlock_irqrestore(&card->devlock, card->flags);
-#ifdef SPIN_DEBUG
-	card->lock_adr = NULL;
-#endif
+	fritzpnppci		*card = data;
+	register hisax_HWlock_t	*lock = &card->lock;
+	
+	unlock_HW(lock);
 }
 
 /* Interface functions */
@@ -227,45 +248,39 @@ bchannel_t *Sel_BCS(fritzpnppci *fc, int channel)
 		return(NULL);
 }
 
-void inline
-hdlc_sched_event(bchannel_t *bch, int event)
-{
-	bch->event |= 1 << event;
-	queue_task(&bch->tqueue, &tq_immediate);
-	mark_bh(IMMEDIATE_BH);
-}
-
 void
 write_ctrl(bchannel_t *bch, int which) {
-	fritzpnppci *fc = bch->inst.data;
+	fritzpnppci	*fc = bch->inst.data;
+	hdlc_hw_t	*hdlc = bch->hw;
 
 	if (fc->dch.debug & L1_DEB_HSCX)
 		debugprint(&bch->inst, "hdlc %c wr%x ctrl %x",
-			'A' + bch->channel, which, bch->hw.hdlc.ctrl.ctrl);
+			'A' + bch->channel, which, hdlc->ctrl.ctrl);
 	if (fc->subtyp == AVM_FRITZ_PCI) {
-		WriteHDLCPCI(fc, bch->channel, HDLC_STATUS, bch->hw.hdlc.ctrl.ctrl);
+		WriteHDLCPCI(fc, bch->channel, HDLC_STATUS, hdlc->ctrl.ctrl);
 	} else {
 		if (which & 4)
 			WriteHDLCPnP(fc, bch->channel, HDLC_STATUS + 2,
-				bch->hw.hdlc.ctrl.sr.mode);
+				hdlc->ctrl.sr.mode);
 		if (which & 2)
 			WriteHDLCPnP(fc, bch->channel, HDLC_STATUS + 1,
-				bch->hw.hdlc.ctrl.sr.xml);
+				hdlc->ctrl.sr.xml);
 		if (which & 1)
 			WriteHDLCPnP(fc, bch->channel, HDLC_STATUS,
-				bch->hw.hdlc.ctrl.sr.cmd);
+				hdlc->ctrl.sr.cmd);
 	}
 }
 
 static int
 modehdlc(bchannel_t *bch, int bc, int protocol)
 {
-	int hdlc = bch->channel;
+	int		hdlc_ch = bch->channel;
+	hdlc_hw_t	*hdlc = bch->hw;
 
 	if (bch->debug & L1_DEB_HSCX)
 		debugprint(&bch->inst, "hdlc %c protocol %x-->%x ch %d-->%d",
-			'A' + hdlc, bch->protocol, protocol, hdlc, bc);
-	bch->hw.hdlc.ctrl.ctrl = 0;
+			'A' + hdlc_ch, bch->protocol, protocol, hdlc_ch, bc);
+	hdlc->ctrl.ctrl = 0;
 	switch (protocol) {
 		case (-1): /* used for init */
 			bch->protocol = -1;
@@ -274,8 +289,8 @@ modehdlc(bchannel_t *bch, int bc, int protocol)
 		case (ISDN_PID_NONE):
 			if (bch->protocol == ISDN_PID_NONE)
 				break;
-			bch->hw.hdlc.ctrl.sr.cmd  = HDLC_CMD_XRS | HDLC_CMD_RRS;
-			bch->hw.hdlc.ctrl.sr.mode = HDLC_MODE_TRANS;
+			hdlc->ctrl.sr.cmd  = HDLC_CMD_XRS | HDLC_CMD_RRS;
+			hdlc->ctrl.sr.mode = HDLC_MODE_TRANS;
 			write_ctrl(bch, 5);
 			bch->protocol = ISDN_PID_NONE;
 			bch->channel = bc;
@@ -283,24 +298,24 @@ modehdlc(bchannel_t *bch, int bc, int protocol)
 		case (ISDN_PID_L1_B_64TRANS):
 			bch->protocol = protocol;
 			bch->channel = bc;
-			bch->hw.hdlc.ctrl.sr.cmd  = HDLC_CMD_XRS | HDLC_CMD_RRS;
-			bch->hw.hdlc.ctrl.sr.mode = HDLC_MODE_TRANS;
+			hdlc->ctrl.sr.cmd  = HDLC_CMD_XRS | HDLC_CMD_RRS;
+			hdlc->ctrl.sr.mode = HDLC_MODE_TRANS;
 			write_ctrl(bch, 5);
-			bch->hw.hdlc.ctrl.sr.cmd = HDLC_CMD_XRS;
+			hdlc->ctrl.sr.cmd = HDLC_CMD_XRS;
 			write_ctrl(bch, 1);
-			bch->hw.hdlc.ctrl.sr.cmd = 0;
-			hdlc_sched_event(bch, B_XMTBUFREADY);
+			hdlc->ctrl.sr.cmd = 0;
+			bch_sched_event(bch, B_XMTBUFREADY);
 			break;
 		case (ISDN_PID_L1_B_64HDLC):
 			bch->protocol = protocol;
 			bch->channel = bc;
-			bch->hw.hdlc.ctrl.sr.cmd  = HDLC_CMD_XRS | HDLC_CMD_RRS;
-			bch->hw.hdlc.ctrl.sr.mode = HDLC_MODE_ITF_FLG;
+			hdlc->ctrl.sr.cmd  = HDLC_CMD_XRS | HDLC_CMD_RRS;
+			hdlc->ctrl.sr.mode = HDLC_MODE_ITF_FLG;
 			write_ctrl(bch, 5);
-			bch->hw.hdlc.ctrl.sr.cmd = HDLC_CMD_XRS;
+			hdlc->ctrl.sr.cmd = HDLC_CMD_XRS;
 			write_ctrl(bch, 1);
-			bch->hw.hdlc.ctrl.sr.cmd = 0;
-			hdlc_sched_event(bch, B_XMTBUFREADY);
+			hdlc->ctrl.sr.cmd = 0;
+			bch_sched_event(bch, B_XMTBUFREADY);
 			break;
 		default:
 			debugprint(&bch->inst, "prot not known %x", protocol);
@@ -365,10 +380,11 @@ hdlc_empty_fifo(bchannel_t *bch, int count)
 static void
 hdlc_fill_fifo(bchannel_t *bch)
 {
-	fritzpnppci *fc = bch->inst.data;
-	int count, cnt =0;
-	u_char *p;
-	u_int *ptr;
+	fritzpnppci	*fc = bch->inst.data;
+	hdlc_hw_t	*hdlc = bch->hw;
+	int		count, cnt =0;
+	u_char		*p;
+	u_int		*ptr;
 
 	if ((bch->debug & L1_DEB_HSCX) && !(bch->debug & L1_DEB_HSCX_FIFO))
 		debugprint(&bch->inst, __FUNCTION__);
@@ -376,19 +392,19 @@ hdlc_fill_fifo(bchannel_t *bch)
 	if (count <= 0)
 		return;
 	p = bch->tx_buf + bch->tx_idx;
-	bch->hw.hdlc.ctrl.sr.cmd &= ~HDLC_CMD_XME;
+	hdlc->ctrl.sr.cmd &= ~HDLC_CMD_XME;
 	if (count > HDLC_FIFO_SIZE) {
 		count = HDLC_FIFO_SIZE;
 	} else {
 		if (bch->protocol != ISDN_PID_L1_B_64TRANS)
-			bch->hw.hdlc.ctrl.sr.cmd |= HDLC_CMD_XME;
+			hdlc->ctrl.sr.cmd |= HDLC_CMD_XME;
 	}
 	if ((bch->debug & L1_DEB_HSCX) && !(bch->debug & L1_DEB_HSCX_FIFO))
 		debugprint(&bch->inst, "%s: %d/%d", __FUNCTION__,
 			count, bch->tx_idx);
 	ptr = (u_int *) p;
 	bch->tx_idx += count;
-	bch->hw.hdlc.ctrl.sr.xml = ((count == HDLC_FIFO_SIZE) ? 0 : count);
+	hdlc->ctrl.sr.xml = ((count == HDLC_FIFO_SIZE) ? 0 : count);
 	write_ctrl(bch, 3);  /* sets the correct index too */
 	if (fc->subtyp == AVM_FRITZ_PCI) {
 		while (cnt<count) {
@@ -423,8 +439,9 @@ hdlc_fill_fifo(bchannel_t *bch)
 
 static void
 HDLC_irq(bchannel_t *bch, u_int stat) {
-	int len;
-	struct sk_buff *skb;
+	int		len;
+	struct sk_buff	*skb;
+	hdlc_hw_t	*hdlc = bch->hw;
 
 	if (bch->debug & L1_DEB_HSCX)
 		debugprint(&bch->inst, "ch%d stat %#x", bch->channel, stat);
@@ -434,10 +451,10 @@ HDLC_irq(bchannel_t *bch, u_int stat) {
 				debugprint(&bch->inst, "RDO");
 			else
 				debugprint(&bch->inst, "ch%d stat %#x", bch->channel, stat);
-			bch->hw.hdlc.ctrl.sr.xml = 0;
-			bch->hw.hdlc.ctrl.sr.cmd |= HDLC_CMD_RRS;
+			hdlc->ctrl.sr.xml = 0;
+			hdlc->ctrl.sr.cmd |= HDLC_CMD_RRS;
 			write_ctrl(bch, 1);
-			bch->hw.hdlc.ctrl.sr.cmd &= ~HDLC_CMD_RRS;
+			hdlc->ctrl.sr.cmd &= ~HDLC_CMD_RRS;
 			write_ctrl(bch, 1);
 			bch->rx_idx = 0;
 		} else {
@@ -455,7 +472,7 @@ HDLC_irq(bchannel_t *bch, u_int stat) {
 						skb_queue_tail(&bch->rqueue, skb);
 					}
 					bch->rx_idx = 0;
-					hdlc_sched_event(bch, B_RCVBUFREADY);
+					bch_sched_event(bch, B_RCVBUFREADY);
 				} else {
 					if (bch->debug & L1_DEB_HSCX)
 						debugprint(&bch->inst, "invalid frame");
@@ -476,10 +493,10 @@ HDLC_irq(bchannel_t *bch, u_int stat) {
 				debugprint(&bch->inst, "ch%d XDU", bch->channel);
 		} else if (bch->debug & L1_DEB_WARN)
 			debugprint(&bch->inst, "ch%d XDU without data", bch->channel);
-		bch->hw.hdlc.ctrl.sr.xml = 0;
-		bch->hw.hdlc.ctrl.sr.cmd |= HDLC_CMD_XRS;
+		hdlc->ctrl.sr.xml = 0;
+		hdlc->ctrl.sr.cmd |= HDLC_CMD_XRS;
 		write_ctrl(bch, 1);
-		bch->hw.hdlc.ctrl.sr.cmd &= ~HDLC_CMD_XRS;
+		hdlc->ctrl.sr.cmd &= ~HDLC_CMD_XRS;
 		write_ctrl(bch, 1);
 		hdlc_fill_fifo(bch);
 	} else if (stat & HDLC_INT_XPR) {
@@ -487,20 +504,20 @@ HDLC_irq(bchannel_t *bch, u_int stat) {
 			hdlc_fill_fifo(bch);
 		} else {
 			bch->tx_idx = 0;
-			if (test_and_clear_bit(FLG_TX_NEXT, &bch->Flag)) {
+			if (test_and_clear_bit(BC_FLG_TX_NEXT, &bch->Flag)) {
 				if (bch->next_skb) {
 					bch->tx_len = bch->next_skb->len;
 					memcpy(bch->tx_buf,
 						bch->next_skb->data, bch->tx_len);
 					hdlc_fill_fifo(bch);
-					hdlc_sched_event(bch, B_XMTBUFREADY);
+					bch_sched_event(bch, B_XMTBUFREADY);
 				} else {
 					printk(KERN_WARNING "hdlc tx irq TX_NEXT without skb\n");
-					test_and_clear_bit(FLG_TX_BUSY, &bch->Flag);
+					test_and_clear_bit(BC_FLG_TX_BUSY, &bch->Flag);
 				}
 			} else {
-				test_and_clear_bit(FLG_TX_BUSY, &bch->Flag);
-				hdlc_sched_event(bch, B_XMTBUFREADY);
+				test_and_clear_bit(BC_FLG_TX_BUSY, &bch->Flag);
+				bch_sched_event(bch, B_XMTBUFREADY);
 			}
 		}
 	}
@@ -545,21 +562,48 @@ HDLC_irq_main(fritzpnppci *fc)
 static void
 avm_pcipnp_interrupt(int intno, void *dev_id, struct pt_regs *regs)
 {
-	fritzpnppci *fc = dev_id;
+	fritzpnppci	*fc = dev_id;
+	u_long		flags;
 	u_char val;
 	u_char sval;
 
-	if (!fc) {
-		printk(KERN_WARNING "AVM PCI: Spurious interrupt!\n");
-		return;
-	}
-	lock_dev(fc);
+	spin_lock_irqsave(&fc->lock.lock, flags);
+#ifdef SPIN_DEBUG
+	fc->lock.spin_adr = (void *)0x2001;
+#endif
 	sval = inb(fc->addr + 2);
 	if ((sval & AVM_STATUS0_IRQ_MASK) == AVM_STATUS0_IRQ_MASK) {
 		/* possible a shared  IRQ reqest */
-		unlock_dev(fc);
+#ifdef SPIN_DEBUG
+		fc->lock.spin_adr = NULL;
+#endif
+		spin_unlock_irqrestore(&fc->lock.lock, flags);
 		return;
 	}
+	if (test_and_set_bit(STATE_FLAG_BUSY, &fc->lock.state)) {
+		printk(KERN_ERR "%s: STATE_FLAG_BUSY allready activ, should never happen state:%x\n",
+			__FUNCTION__, fc->lock.state);
+#ifdef SPIN_DEBUG
+		printk(KERN_ERR "%s: previous lock:%p\n",
+			__FUNCTION__, fc->lock.busy_adr);
+#endif
+#ifdef LOCK_STATISTIC
+		fc->lock.irq_fail++;
+#endif
+	} else {
+#ifdef LOCK_STATISTIC
+		fc->lock.irq_ok++;
+#endif
+#ifdef SPIN_DEBUG
+		fc->lock.busy_adr = avm_pcipnp_interrupt;
+#endif
+	}
+
+	test_and_set_bit(STATE_FLAG_INIRQ, &fc->lock.state);
+#ifdef SPIN_DEBUG
+	fc->lock.spin_adr = NULL;
+#endif
+	spin_unlock_irqrestore(&fc->lock.lock, flags);
 	if (!(sval & AVM_STATUS0_IRQ_ISAC)) {
 		val = ReadISAC(fc, ISAC_ISTA);
 		ISAC_interrupt(&fc->dch, val);
@@ -569,7 +613,21 @@ avm_pcipnp_interrupt(int intno, void *dev_id, struct pt_regs *regs)
 	}
 	WriteISAC(fc, ISAC_MASK, 0xFF);
 	WriteISAC(fc, ISAC_MASK, 0x0);
-	unlock_dev(fc);
+	spin_lock_irqsave(&fc->lock.lock, flags);
+#ifdef SPIN_DEBUG
+	fc->lock.spin_adr = (void *)0x2002;
+#endif
+	if (!test_and_clear_bit(STATE_FLAG_INIRQ, &fc->lock.state)) {
+	}
+	if (!test_and_clear_bit(STATE_FLAG_BUSY, &fc->lock.state)) {
+		printk(KERN_ERR "%s: STATE_FLAG_BUSY not locked state(%x)\n",
+			__FUNCTION__, fc->lock.state);
+	}
+#ifdef SPIN_DEBUG
+	fc->lock.busy_adr = NULL;
+	fc->lock.spin_adr = NULL;
+#endif
+	spin_unlock_irqrestore(&fc->lock.lock, flags);
 }
 
 static int
@@ -590,8 +648,8 @@ hdlc_down(hisaxif_t *hif, struct sk_buff *skb)
 			return(-EBUSY);
 		}
 		bch->inst.lock(bch->inst.data);
-		if (test_and_set_bit(FLG_TX_BUSY, &bch->Flag)) {
-			test_and_set_bit(FLG_TX_NEXT, &bch->Flag);
+		if (test_and_set_bit(BC_FLG_TX_BUSY, &bch->Flag)) {
+			test_and_set_bit(BC_FLG_TX_NEXT, &bch->Flag);
 			bch->next_skb = skb;
 			bch->inst.unlock(bch->inst.data);
 			return(0);
@@ -621,11 +679,11 @@ hdlc_down(hisaxif_t *hif, struct sk_buff *skb)
 		(hh->prim == (DL_RELEASE | REQUEST)) ||
 		(hh->prim == (MGR_DISCONNECT | REQUEST))) {
 		bch->inst.lock(bch->inst.data);
-		if (test_and_clear_bit(FLG_TX_NEXT, &bch->Flag)) {
+		if (test_and_clear_bit(BC_FLG_TX_NEXT, &bch->Flag)) {
 			dev_kfree_skb(bch->next_skb);
 			bch->next_skb = NULL;
 		}
-		test_and_clear_bit(FLG_TX_BUSY, &bch->Flag);
+		test_and_clear_bit(BC_FLG_TX_BUSY, &bch->Flag);
 		modehdlc(bch, bch->channel, 0);
 		test_and_clear_bit(BC_FLG_ACTIV, &bch->Flag);
 		bch->inst.unlock(bch->inst.data);
@@ -899,20 +957,20 @@ setup_fritz(fritzpnppci *fc, u_int io_cfg, u_int irq_cfg)
 		printk(KERN_INFO "AVM PCI: stat %#x\n", val);
 		printk(KERN_INFO "AVM PCI: Class %X Rev %d\n",
 			val & 0xff, (val>>8) & 0xff);
-		fc->bch[0].BC_Read_Reg = &ReadHDLC_s;
-		fc->bch[0].BC_Write_Reg = &WriteHDLC_s;
-		fc->bch[1].BC_Read_Reg = &ReadHDLC_s;
-		fc->bch[1].BC_Write_Reg = &WriteHDLC_s;
+		fc->bch[0].Read_Reg = &ReadHDLC_s;
+		fc->bch[0].Write_Reg = &WriteHDLC_s;
+		fc->bch[1].Read_Reg = &ReadHDLC_s;
+		fc->bch[1].Write_Reg = &WriteHDLC_s;
 		break;
 	    case AVM_FRITZ_PNP:
 		val = inb(fc->addr);
 		ver = inb(fc->addr + 1);
 		printk(KERN_INFO "AVM PnP: Class %X Rev %d\n", val, ver);
 		reset_avmpcipnp(fc);
-		fc->bch[0].BC_Read_Reg = &ReadHDLCPnP;
-		fc->bch[0].BC_Write_Reg = &WriteHDLCPnP;
-		fc->bch[1].BC_Read_Reg = &ReadHDLCPnP;
-		fc->bch[1].BC_Write_Reg = &WriteHDLCPnP;
+		fc->bch[0].Read_Reg = &ReadHDLCPnP;
+		fc->bch[0].Write_Reg = &WriteHDLCPnP;
+		fc->bch[1].Read_Reg = &ReadHDLCPnP;
+		fc->bch[1].Write_Reg = &WriteHDLCPnP;
 		break;
 	    default:
 	  	printk(KERN_WARNING "AVM unknown subtype %d\n", fc->subtyp);
@@ -926,9 +984,11 @@ setup_fritz(fritzpnppci *fc, u_int io_cfg, u_int irq_cfg)
 	fc->dch.write_reg = &WriteISAC;
 	fc->dch.read_fifo = &ReadISACfifo;
 	fc->dch.write_fifo = &WriteISACfifo;
+	fc->dch.hw = &fc->isac;
 	lock_dev(fc);
 #ifdef SPIN_DEBUG
-	printk(KERN_ERR "lock_adr=%p now(%p)\n", &fc->lock_adr, fc->lock_adr);
+	printk(KERN_ERR "spin_lock_adr=%p now(%p)\n", &fc->lock.busy_adr, fc->lock.busy_adr);
+	printk(KERN_ERR "busy_lock_adr=%p now(%p)\n", &fc->lock.busy_adr, fc->lock.busy_adr);
 #endif
 	unlock_dev(fc);
 	return(0);
@@ -1120,7 +1180,7 @@ Fritz_init(void)
 		APPEND_TO_LIST(card, ((fritzpnppci *)fritz.ilist));
 		card->dch.debug = debug;
 		card->dch.inst.obj = &fritz;
-		spin_lock_init(&card->devlock);
+		lock_HW_init(&card->lock);
 		card->dch.inst.lock = lock_dev;
 		card->dch.inst.unlock = unlock_dev;
 		card->dch.inst.data = card;
@@ -1149,6 +1209,7 @@ Fritz_init(void)
 			sprintf(card->bch[i].inst.name, "%s B%d",
 				card->dch.inst.name, i+1);
 			init_bchannel(&card->bch[i]);
+			card->bch[i].hw = &card->hdlc[i];
 		}
 		printk(KERN_DEBUG "fritz card %p dch %p bch1 %p bch2 %p\n",
 			card, &card->dch, &card->bch[0], &card->bch[1]);

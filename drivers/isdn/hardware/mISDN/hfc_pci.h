@@ -1,4 +1,4 @@
-/* $Id: hfc_pci.h,v 1.2 2003/06/20 10:06:14 kkeil Exp $
+/* $Id: hfc_pci.h,v 1.3 2003/06/21 21:39:54 kkeil Exp $
  *
  *  specific defines for CCD's HFC 2BDS0 PCI chips
  *
@@ -237,7 +237,6 @@ typedef union {
 	} b_chans;  
 	u_char fill[32768]; 
 } fifo_area;
-
 
 #define Write_hfc(a,b,c) (*(((u_char *)a->hw.pci_io)+b) = c) 
 #define Read_hfc(a,b) (*(((u_char *)a->hw.pci_io)+b))
