@@ -1,4 +1,4 @@
-/* $Id: stack.c,v 0.16 2001/09/29 20:11:20 kkeil Exp $
+/* $Id: stack.c,v 0.17 2001/10/31 23:06:07 kkeil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -297,8 +297,9 @@ release_layers(hisaxstack_t *st, u_int prim) {
 		inst = layer->inst;
 		if (inst) {
 			if (core_debug & DEBUG_CORE_FUNC)
-				printk(KERN_DEBUG __FUNCTION__ ": st(%p) inst(%p):%s lm(%x)\n",
-					st, inst, inst->name, inst->pid.layermask);
+				printk(KERN_DEBUG __FUNCTION__ ": st(%p) inst(%p):%x %s lm(%x)\n",
+					st, inst, inst->id, inst->name,
+					inst->pid.layermask);
 			inst->obj->own_ctrl(inst, prim, NULL);
 		}
 		REMOVE_FROM_LISTBASE(layer, st->lstack);
@@ -464,8 +465,8 @@ unregister_instance(hisaxinstance_t *inst) {
 	if (!inst)
 		return(-EINVAL);
 	if (core_debug & DEBUG_CORE_FUNC)
-		printk(KERN_DEBUG __FUNCTION__": st(%p) inst(%p) lay(%x)\n",
-			inst->st, inst, inst->pid.layermask);
+		printk(KERN_DEBUG __FUNCTION__": st(%p) inst(%p):%x lay(%x)\n",
+			inst->st, inst, inst->id, inst->pid.layermask);
 	if (inst->st) {
 		if ((layer = getlayer4lay(inst->st, inst->pid.layermask))) {
 			if (core_debug & DEBUG_CORE_FUNC)
@@ -548,6 +549,8 @@ clear_stack(hisaxstack_t *st) {
 
 	if (!st)
 		return(-EINVAL);
+	if (core_debug & DEBUG_CORE_FUNC)
+		printk(KERN_DEBUG __FUNCTION__": st(%p)\n", st);
 	memset(&st->pid, 0, sizeof(hisax_pid_t));
 	return(release_layers(st, MGR_UNREGLAYER | REQUEST));
 }

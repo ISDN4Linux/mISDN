@@ -1,4 +1,4 @@
-/* $Id: layer2.c,v 0.18 2001/08/03 09:03:48 kkeil Exp $
+/* $Id: layer2.c,v 0.19 2001/10/31 23:06:07 kkeil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -12,7 +12,7 @@
 #include "helper.h"
 #include "debug.h"
 
-const char *l2_revision = "$Revision: 0.18 $";
+const char *l2_revision = "$Revision: 0.19 $";
 
 static void l2m_debug(struct FsmInst *fi, char *fmt, ...);
 
@@ -502,9 +502,13 @@ setva(layer2_t *l2, unsigned int nr)
 			l2->va %= 128;
 		else
 			l2->va %= 8;
-		l2up(l2, DL_DATA | CONFIRM, DINFO_SKB, l2->windowar[l2->sow]);
-		dev_kfree_skb(l2->windowar[l2->sow]);
-		l2->windowar[l2->sow] = NULL;
+		if (l2->windowar[l2->sow]) {
+			skb_trim(l2->windowar[l2->sow], HISAX_HEAD_SIZE);
+			if (l2up(l2, DL_DATA | CONFIRM, (int)l2->windowar[l2->sow],
+				l2->windowar[l2->sow]))
+				dev_kfree_skb(l2->windowar[l2->sow]);
+			l2->windowar[l2->sow] = NULL;
+		}
 		l2->sow = (l2->sow + 1) % l2->window;
 	}
 }

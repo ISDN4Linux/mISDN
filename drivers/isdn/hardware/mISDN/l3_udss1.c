@@ -1,4 +1,4 @@
-/* $Id: l3_udss1.c,v 0.17 2001/08/02 14:51:56 kkeil Exp $
+/* $Id: l3_udss1.c,v 0.18 2001/10/31 23:06:07 kkeil Exp $
  *
  * EURO/DSS1 D-channel protocol
  *
@@ -24,7 +24,7 @@ static int debug = 0;
 static hisaxobject_t u_dss1;
 
 
-const char *dss1_revision = "$Revision: 0.17 $";
+const char *dss1_revision = "$Revision: 0.18 $";
 
 static int dss1man(l3_process_t *, u_int, void *);
 
@@ -1005,7 +1005,7 @@ l3dss1_setup(l3_process_t *pc, u_char pr, void *arg)
 	u_char *p, cause;
 	int bcfound = 0;
 	struct sk_buff *skb = arg;
-	int err = 0;
+	int err = 0, *id;
 
 	/*
 	 * Bearer Capabilities
@@ -1125,13 +1125,17 @@ l3dss1_setup(l3_process_t *pc, u_char pr, void *arg)
 	L3AddTimer(&pc->timer, T_CTRL, CC_TCTRL);
 	if (err) /* STATUS for none mandatory IE errors after actions are taken */
 		l3dss1_std_ie_err(pc, err);
-	if (hisax_l3up(pc, NULL, CC_NEW_CR | INDICATION, 4, &pc->id)) {
+	id = &pc->id;
+	err = hisax_l3up(pc, NULL, CC_NEW_CR | INDICATION, sizeof(id), &id);
+	if (err) {
 		if (pc->l3->debug & L3_DEB_WARN)
-			l3_debug(pc->l3, "cannot register SETUP CR");
+			l3_debug(pc->l3, "cannot register SETUP CR err(%d)",
+				err);
 		release_l3_process(pc);
-	} else
-		hisax_l3up(pc, NULL, CC_SETUP | INDICATION, sizeof(SETUP_t),
-			&pc->para.SETUP);
+		return;
+	}
+	hisax_l3up(pc, NULL, CC_SETUP | INDICATION, sizeof(SETUP_t),
+		&pc->para.SETUP);
 }
 
 static void
@@ -1774,6 +1778,8 @@ static struct stateentry downstatelist[] =
 	 CC_RESTART | REQUEST, l3dss1_restart},
 	{SBIT(6) | SBIT(25),
 	 CC_SETUP | RESPONSE, l3dss1_release_cmpl_req},
+	{ALL_STATES,
+	 CC_RELEASE_COMPLETE | REQUEST, l3dss1_release_cmpl_req},
 	{SBIT(6) | SBIT(25),
 	 CC_PROCEEDING | REQUEST, l3dss1_proceed_req},
 	{SBIT(6),
@@ -2156,10 +2162,13 @@ dss1_fromup(hisaxif_t *hif, struct sk_buff *skb)
 		}
 	} else {
 		if (l3->debug & L3_DEB_STATE) {
-			l3_debug(l3, "dss1down state %d prim %#x",
-				proc->state, hh->prim);
+			l3_debug(l3, "dss1down state %d prim %#x para len %d",
+				proc->state, hh->prim, skb->len);
 		}
-		downstatelist[i].rout(proc, hh->prim, skb);
+		if (skb->len)
+			downstatelist[i].rout(proc, hh->prim, skb->data);
+		else
+			downstatelist[i].rout(proc, hh->prim, NULL);
 	}
 	dev_kfree_skb(skb);
 	return(0);
