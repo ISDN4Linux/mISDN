@@ -1,4 +1,4 @@
-/* $Id: sedl_fax.c,v 0.13 2001/03/11 21:23:39 kkeil Exp $
+/* $Id: sedl_fax.c,v 0.14 2001/03/13 02:04:37 kkeil Exp $
  *
  * sedl_fax.c  low level stuff for Sedlbauer Speedfax + cards
  *
@@ -40,7 +40,7 @@
 
 extern const char *CardType[];
 
-const char *Sedlfax_revision = "$Revision: 0.13 $";
+const char *Sedlfax_revision = "$Revision: 0.14 $";
 
 const char *Sedlbauer_Types[] =
 	{"None", "speed fax+", "speed fax+ pyramid", "speed fax+ pci"};
@@ -97,7 +97,7 @@ const char *Sedlbauer_Types[] =
 #define SEDL_RESET      0x3	/* same as DOS driver */
 
 /* data struct */
-
+// #define SPIN_DEBUG
 typedef struct _sedl_fax {
 	struct _sedl_fax	*prev;
 	struct _sedl_fax	*next;
@@ -581,7 +581,8 @@ add_if(hisaxinstance_t *inst, int channel, hisaxif_t *hif) {
 	    case ISDN_PID_L1_B_TRANS_TTS:
 	    case ISDN_PID_L1_B_64HDLC:
 	    case ISDN_PID_L2_B_TRANS:
-		printk(KERN_DEBUG "speedfax_add_if ch%d p:%x\n", channel, hif->protocol);
+		printk(KERN_DEBUG "speedfax_add_if ch%d p:%x\n", channel,
+			hif->protocol);
 	    	if ((channel<0) || (channel>1))
 	    		return(-EINVAL);
 		hif->fdata = &card->bch[channel];

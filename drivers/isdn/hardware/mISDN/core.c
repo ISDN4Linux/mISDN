@@ -1,4 +1,4 @@
-/* $Id: core.c,v 0.11 2001/03/11 21:23:39 kkeil Exp $
+/* $Id: core.c,v 0.12 2001/03/13 02:04:37 kkeil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -162,6 +162,8 @@ del_stack_if(hisaxstack_t *st, hisaxif_t *hif) {
 	hisaxobject_t	*obj = NULL;
 
 	if (!hif)
+		return(-EINVAL);
+	if (!hif->layermask)
 		return(-EINVAL);
 	lay = layermask2layer(hif->layermask);
 	if (debug & DEBUG_CORE_FUNC)
