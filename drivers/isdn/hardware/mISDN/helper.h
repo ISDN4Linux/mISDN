@@ -1,4 +1,4 @@
-/* $Id: helper.h,v 0.6 2001/03/03 08:07:29 kkeil Exp $
+/* $Id: helper.h,v 0.7 2001/03/03 08:27:06 kkeil Exp $
  *
  *   Basic declarations, defines and prototypes
  *
@@ -27,7 +27,16 @@
 		item->prev->next = item; \
 	else \
 		base = item
-	                                                        
+
+#define INSERT_INTO_LIST(newi,nexti,base) \
+	newi->next = nexti; \
+	newi->prev = nexti->prev; \
+	if (newi->prev) \
+		newi->prev->next = newi; \
+	nexti->prev = newi; \
+	if (base == nexti) \
+		base = newi
+
 #define REMOVE_FROM_LIST(item) \
 	if (item->prev) \
 		item->prev->next = item->next; \
