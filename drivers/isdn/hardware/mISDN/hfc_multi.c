@@ -108,7 +108,7 @@
 
 extern const char *CardType[];
 
-static const char *hfcmulti_revision = "$Revision: 1.10 $";
+static const char *hfcmulti_revision = "$Revision: 1.11 $";
 
 static int HFC_cnt;
 
@@ -144,19 +144,27 @@ static u_char silence =	0xff;	/* silence by LAW */
 static const PCI_ENTRY id_list[] =
 {
 	{0x1397, 0x1397, 0x08B4, 0x08B4, VENDOR_CCD,
-	 "HFC-4S Eval", 4, 0, 1},
+	 "HFC-4S Eval", 4, 0, 0},
 	{0x1397, 0x1397, 0x16B8, 0x16B8, VENDOR_CCD,
 	 "HFC-8S Eval", 8, 0, 0},
 	{0x1397, 0x1397, 0x30B1, 0x30B1, VENDOR_CCD,
 	 "HFC-E1 Eval", 1, 0, 0},
 	{0x1397, 0x1397, 0x08B4, 0xB520, VENDOR_CCD,
-	 "HFC-4S OEM IOB4ST", 4, 1, 2},
+	 "HFC-4S IOB4ST", 4, 1, 2},
+	{0x1397, 0x1397, 0x08B4, 0xB620, VENDOR_CCD,
+	 "HFC-4S Beronet", 4, 1, 2},
 	{0x1397, 0x1397, 0x16B8, 0xB521, VENDOR_CCD,
-	 "HFC-8S OEM IOB4ST Recording", 8, 1, 0},
+	 "HFC-8S IOB4ST Recording", 8, 1, 0},
 	{0x1397, 0x1397, 0x16B8, 0xB522, VENDOR_CCD,
-	 "HFC-8S OEM IOB8ST", 8, 1, 0},
+	 "HFC-8S IOB8ST", 8, 1, 0},
+	{0x1397, 0x1397, 0x16B8, 0xB622, VENDOR_CCD,
+	 "HFC-8S Beronet Card", 8, 1, 0},
 	{0x1397, 0x1397, 0x30B1, 0xB523, VENDOR_CCD,
-	 "HFC-E1 OEM IOB1E1", 1, 0, 0}, /* E1 only supports single clock */
+	 "HFC-E1 IOB1E1", 1, 0, 1}, /* E1 only supports single clock */
+	{0x1397, 0x1397, 0x30B1, 0xB523, VENDOR_CCD,
+	 "HFC-E1 IOB2E1", 1, 0, 1}, /* E1 only supports single clock */
+	{0x1397, 0x1397, 0x30B1, 0xC523, VENDOR_CCD,
+	 "HFC-E1 Beronet Card", 1, 0, 1}, /* E1 only supports single clock */
 	{0, 0, 0, 0, NULL, NULL, 0, 0, 0},
 };
 
@@ -343,16 +351,20 @@ init_chip(hfc_multi_t *hc)
 	}
 
 	/* check if R_F0_CNT counts */
-	val = HFC_inw(hc, R_F0_CNT);
-	printk(KERN_DEBUG "HFC_multi F0_CNT %ld after status ok\n", val);
-	while (cnt < 50) { /* max 50 ms */
- 		udelay(1000);
-		cnt++;
-		val2 = HFC_inw(hc, R_F0_CNT);
+	val = HFC_inb(hc, R_F0_CNTL);
+	val += HFC_inb(hc, R_F0_CNTH) << 8;
+	if (debug & DEBUG_HFCMULTI_INIT)
+		printk(KERN_DEBUG "HFC_multi F0_CNT %ld after status ok\n", val);
+	while (cnt < 5) { /* max 50 ms */
+		schedule_timeout((10*HZ)/1000); /* Timeout 10ms */
+		cnt+=10;
+		val2 = HFC_inb(hc, R_F0_CNTL);
+		val2 += HFC_inb(hc, R_F0_CNTH) << 8;
 		if (val2 >= val+4) /* wait 4 pulses */
 			break;
 	}
-	printk(KERN_DEBUG "HFC_multi F0_CNT %ld after %dms\n", val2, cnt);
+	if (debug & DEBUG_HFCMULTI_INIT)
+		printk(KERN_DEBUG "HFC_multi F0_CNT %ld after %dms\n", val2, cnt);
 	if (val2 < val+2) {
 		printk(KERN_ERR "HFC_multi ERROR 125us pulse still not counting.\n");
 		printk(KERN_ERR "HFC_multi This happens in PCM slave mode without connected master.\n");
@@ -385,6 +397,18 @@ init_chip(hfc_multi_t *hc)
 		r_conf_en = V_CONF_EN;
 	HFC_outb(hc, R_CONF_EN, r_conf_en);
 
+	/* setting leds */
+	switch(hc->leds) {
+		case 1: /* HFC-E1 OEM */
+		break;
+
+		case 2: /* HFC-4S OEM */
+		HFC_outb(hc, R_GPIO_SEL, 0xf0);
+		HFC_outb(hc, R_GPIO_EN1, 0xff);
+		HFC_outb(hc, R_GPIO_OUT1, 0x00);
+		break;
+	}
+
 	/* set master clock */
 	if (hc->masterclk >= 0) {
 		if (debug & DEBUG_HFCMULTI_INIT)
@@ -408,7 +432,7 @@ init_chip(hfc_multi_t *hc)
 static void
 hfcmulti_leds(hfc_multi_t *hc)
 {
-	int i, state;
+	int i, state, active;
 	dchannel_t *dch;
 	int led[4];
 
@@ -416,24 +440,25 @@ hfcmulti_leds(hfc_multi_t *hc)
 	if (hc->ledcount > 4096)
 		hc->ledcount -= 4096;
 
-	i = 0;
-	while(i < 4) {
-		state = 0;
-		if ((dch = hc->chan[(i<<2)|2].dch))
-			state = dch->ph_state;
-		if (state==3)
-			led[i] = 2; /* led green */
-		else if (state && (hc->ledcount>>10)==(i^(i>1)))
-			led[i] = 1; /* led red */
-		else
-			led[i] = 0; /* led off */
-		i++;
-	}
 	switch(hc->leds) {
-		case 1: /* Eval Board */
+		case 1: /* HFC-E1 OEM */
 		break;
-	
-		case 2: /* OEM Board */
+
+		case 2: /* HFC-4S OEM */
+		i = 0;
+		while(i < 4) {
+			state = 0;
+			if ((dch = hc->chan[(i<<2)|2].dch))
+				state = dch->ph_state;
+			active = test_bit(HFC_CFG_NTMODE, &hc->chan[dch->channel].cfg)?3:7;
+			if (state==active)
+				led[i] = 1; /* led green */
+			else if (state && (hc->ledcount>>10)==(i^(i>1)))
+				led[i] = 2; /* led red */
+			else
+				led[i] = 0; /* led off */
+			i++;
+		}
 //printk("leds %d %d %d %d\n", led[0], led[1], led[2], led[3]);
 		HFC_outb(hc, R_GPIO_EN1,
 			((led[0]>0)<<0) | ((led[1]>0)<<1) |
@@ -444,8 +469,6 @@ hfcmulti_leds(hfc_multi_t *hc)
 		break;
 	}
 }
-
-
 /**************************/
 /* read dtmf coefficients */
 /**************************/
@@ -1468,7 +1491,7 @@ hfcmulti_conf(hfc_multi_t *hc, int ch, int num)
 /***************************/
 /* set/disable sample loop */
 /***************************/
-
+// NOTE: this function is experimental and therefore disabled
 static void
 hfcmulti_splloop(hfc_multi_t *hc, int ch, u_char *data, int len)
 {
@@ -1493,8 +1516,10 @@ hfcmulti_splloop(hfc_multi_t *hc, int ch, u_char *data, int len)
 
 	/* reset fifo */
 	HFC_outb(hc, A_SUBCH_CFG, 0);
+	udelay(500);
 	HFC_outb_(hc, R_INC_RES_FIFO, V_RES_F);
 	HFC_wait_(hc);
+	udelay(500);
 
 	/* if off */
 	if (len <= 0) {
@@ -1513,8 +1538,6 @@ hfcmulti_splloop(hfc_multi_t *hc, int ch, u_char *data, int len)
 	}
 
 	/* loop fifo */
-	HFC_outb(hc, A_SUBCH_CFG, V_LOOP_FIFO);
-	udelay(300);
 
 	/* set mode */
 	hc->chan[ch].txpending = 2;
@@ -1537,6 +1560,10 @@ hfcmulti_splloop(hfc_multi_t *hc, int ch, u_char *data, int len)
 		HFC_outb_(hc, A_FIFO_DATA0, *d);
 		d++;
 	}
+
+	udelay(500);
+	HFC_outb(hc, A_SUBCH_CFG, V_LOOP_FIFO);
+	udelay(500);
 
 	/* disconnect slot */
 	if (hc->chan[ch].slot_tx>=0) {
@@ -2611,16 +2638,6 @@ setup_pci(hfc_multi_t *hc)
 	hc->leds = id_list[i].leds;
 	printk(KERN_INFO "%s: defined at IO %#x IRQ %d HZ %d leds-type %d\n", hc->name, (u_int) hc->pci_io, hc->pci_dev->irq, HZ, hc->leds);
 	pci_write_config_word(hc->pci_dev, PCI_COMMAND, PCI_ENA_MEMIO);
-	switch(hc->leds) {
-		case 1: /* eval */
-		break;
-
-		case 2: /* OEM */
-		HFC_outb(hc, R_GPIO_SEL, 0xf0);
-		HFC_outb(hc, R_GPIO_EN1, 0xff);
-		HFC_outb(hc, R_GPIO_OUT1, 0x00);
-		break;
-	}
 
 	/* At this point the needed PCI config is done */
 	/* fifos are still not enabled */

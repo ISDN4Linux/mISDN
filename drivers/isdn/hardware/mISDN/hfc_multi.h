@@ -242,7 +242,6 @@ typedef struct hfc_multi	hfc_multi_t;
 #define R_RAM_USE		0x15
 #define R_CHIP_ID		0x16
 #define R_BERT_STA		0x17
-#define R_F0_CNT		0x18
 #define R_F0_CNTL		0x18
 #define R_F0_CNTH		0x19
 #define R_BERT_EC		0x1A
