@@ -36,6 +36,7 @@
 	Bit 10	= spare 
 	Bit 11	= Set PCM bus into slave mode.
 	Bit 12	= Ignore missing frame clock on PCM bus.
+	Bit 13	= Use direct RX clock for PCM sync rather than PLL. (E1 only)
 	Bit 14	= Use external ram (128K)
 	Bit 15	= Use external ram (512K)
 	Bit 16	= Use 64 timeslots instead of 32
@@ -109,7 +110,7 @@
 
 extern const char *CardType[];
 
-static const char *hfcmulti_revision = "$Revision: 1.21 $";
+static const char *hfcmulti_revision = "$Revision: 1.22 $";
 
 static int HFC_cnt;
 
@@ -2604,8 +2605,11 @@ hfcmulti_initmode(hfc_multi_t *hc)
 			r_e1_wr_sta = 0; /* F0 */
 		}
 		HFC_outb(hc, R_JATT_ATT, 0x9c); /* undoc register */
-//		HFC_outb(hc, R_SYNC_OUT, V_IPATS0 | V_IPATS1 | V_IPATS2);
-		HFC_outb(hc, R_SYNC_OUT, V_SYNC_E1_RX | V_IPATS0 | V_IPATS1 | V_IPATS2);
+		if (test_bit(HFC_CHIP_RX_SYNC, &hc->chip)) {
+			HFC_outb(hc, R_SYNC_OUT, V_SYNC_E1_RX | V_IPATS0 | V_IPATS1 | V_IPATS2);
+		} else {
+			HFC_outb(hc, V_SYNC_E1_RX | V_IPATS0 | V_IPATS1 | V_IPATS2);
+		}
 		HFC_outb(hc, R_PWM_MD, V_PWM0_MD);
 		HFC_outb(hc, R_PWM0, 0x50);
 		HFC_outb(hc, R_PWM1, 0xff);
@@ -3325,6 +3329,8 @@ HFCmulti_init(void)
 			test_and_set_bit(HFC_CHIP_PCM_SLAVE, &hc->chip);
 		if (type[HFC_cnt] & 0x1000)
 			test_and_set_bit(HFC_CHIP_CLOCK_IGNORE, &hc->chip);
+		if (type[HFC_cnt] & 0x2000)
+			test_and_set_bit(HFC_CHIP_RX_SYNC, &hc->chip);
 		if (type[HFC_cnt] & 0x4000)
 			test_and_set_bit(HFC_CHIP_EXRAM_128, &hc->chip);
 		if (type[HFC_cnt] & 0x8000)

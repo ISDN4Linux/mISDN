@@ -82,9 +82,10 @@ typedef struct hfcmulti_hw	hfcmulti_hw_t;
 #define HFC_CHIP_REVISION0	2 /* old fifo handling */
 #define HFC_CHIP_PCM_SLAVE	3 /* PCM is slave */
 #define HFC_CHIP_CLOCK_IGNORE	4 /* ignore missing PCM clock */
-#define HFC_CHIP_DTMF		5 /* DTMF decoding is enabled */
-#define HFC_CHIP_ULAW		6 /* ULAW mode */
-#define HFC_CHIP_CLOCK2		7 /* double clock mode */
+#define HFC_CHIP_RX_SYNC	5 /* ignore missing PCM clock */
+#define HFC_CHIP_DTMF		6 /* DTMF decoding is enabled */
+#define HFC_CHIP_ULAW		7 /* ULAW mode */
+#define HFC_CHIP_CLOCK2		8 /* double clock mode */
 
 struct hfc_multi {
 	struct list_head	list;
