@@ -1,4 +1,4 @@
-/* $Id: isar.c,v 0.10 2001/03/05 01:48:27 kkeil Exp $
+/* $Id: isar.c,v 0.11 2001/03/06 10:31:30 kkeil Exp $
  *
  * isar.c   ISAR (Siemens PSB 7110) specific routines
  *
@@ -72,14 +72,14 @@ sendmsg(bchannel_t *bch, u_char his, u_char creg, u_char len,
 			bch->BC_Write_Reg(bch->inst.data, 2, ISAR_MBOX, msg[i]);
 #if DUMP_MBOXFRAME>1
 		if (bch->debug & L1_DEB_HSCX_FIFO) {
-			char tmp[256], *t;
+			char *t;
 			
 			i = len;
 			while (i>0) {
-				t = tmp;
+				t = bch->blog;
 				t += sprintf(t, "sendmbox cnt %d", len);
 				QuickHex(t, &msg[len-i], (i>64) ? 64:i);
-				debugprint(&bch->inst, tmp);
+				debugprint(&bch->inst, bch->blog);
 				i -= 64;
 			}
 		}
@@ -103,14 +103,14 @@ rcv_mbox(bchannel_t *bch, struct isar_reg *ireg, u_char *msg)
 			 msg[i] = bch->BC_Read_Reg(bch->inst.data, 2, ISAR_MBOX);
 #if DUMP_MBOXFRAME>1
 		if (bch->debug & L1_DEB_HSCX_FIFO) {
-			char tmp[256], *t;
+			char *t;
 			
 			i = ireg->clsb;
 			while (i>0) {
-				t = tmp;
+				t = bch->blog;
 				t += sprintf(t, "rcv_mbox cnt %d", ireg->clsb);
 				QuickHex(t, &msg[ireg->clsb-i], (i>64) ? 64:i);
-				debugprint(&bch->inst, tmp);
+				debugprint(&bch->inst, bch->blog);
 				i -= 64;
 			}
 		}
