@@ -1,4 +1,4 @@
-/* $Id: layer1.h,v 0.4 2001/03/03 08:07:30 kkeil Exp $
+/* $Id: layer1.h,v 0.5 2001/09/30 17:10:25 kkeil Exp $
  *
  * Layer 1 defines
  *
@@ -20,9 +20,11 @@
 #define D_RX_MON1	5
 #define D_TX_MON0	6
 #define D_TX_MON1	7
+#define D_BLOCKEDATOMIC	8
 
-#define B_RCVBUFREADY 0
-#define B_XMTBUFREADY 1
+#define B_RCVBUFREADY	0
+#define B_XMTBUFREADY	1
+#define B_BLOCKEDATOMIC	2
 
 #define FLG_L1_ACTIVATING	1
 #define FLG_L1_ACTIVATED	2

@@ -1,4 +1,4 @@
-/* $Id: hfc_pci.c,v 0.5 2001/09/30 17:09:23 kkeil Exp $
+/* $Id: hfc_pci.c,v 0.6 2001/09/30 17:10:25 kkeil Exp $
 
  * hfc_pci.c     low level driver for CCD´s hfc-pci based cards
  *
@@ -39,7 +39,7 @@
 
 extern const char *CardType[];
 
-static const char *hfcpci_revision = "$Revision: 0.5 $";
+static const char *hfcpci_revision = "$Revision: 0.6 $";
 
 /* table entry in the PCI devices list */
 typedef struct {
@@ -766,6 +766,20 @@ hfcpci_fill_dfifo(hfc_pci_t *hc)
 	return;
 }
 
+static void
+hfcD_send_fifo(dchannel_t *dch)
+{
+	hfc_pci_t	*hc = dch->inst.data;
+
+	if (!test_and_set_bit(FLG_LOCK_ATOMIC, &dch->DFlags)) {
+		hfcpci_fill_dfifo(hc);
+		test_and_clear_bit(FLG_LOCK_ATOMIC, &dch->DFlags);
+	} else {
+		debugprint(&dch->inst, "hfcpci_fill_dfifo blocked");
+		sched_event_D_pci(hc, D_BLOCKEDATOMIC);
+	}
+}
+
 /**************************/
 /* B-channel send routine */
 /**************************/
@@ -907,6 +921,23 @@ next_t_frame:
 	bch->tx_idx = bch->tx_len;
 	test_and_clear_bit(FLG_TX_BUSY, &bch->Flag);
 	return;
+}
+
+/**************************************/
+/* send B-channel data if not blocked */
+/**************************************/
+static void
+hfcpci_send_data(bchannel_t *bch)
+{
+	hfc_pci_t *hc = bch->inst.data;
+
+	if (!test_and_set_bit(FLG_LOCK_ATOMIC, &hc->dch.DFlags)) {
+		hfcpci_fill_fifo(bch);
+		test_and_clear_bit(FLG_LOCK_ATOMIC, &hc->dch.DFlags);
+	} else {
+		debugprint(&bch->inst, "send_data %d blocked", bch->channel);
+		hfcpci_sched_event(bch, B_BLOCKEDATOMIC);
+	}
 }
 
 #if 0
@@ -1201,11 +1232,7 @@ hfcpci_interrupt(int intno, void *dev_id, struct pt_regs *regs)
 					debugprint(&hc->dch.inst, "hfcpci spurious 0x01 IRQ");
 			} else {
 				if (bch->tx_idx < bch->tx_len) {
-					if (!test_and_set_bit(FLG_LOCK_ATOMIC, &hc->dch.DFlags)) {
-						hfcpci_fill_fifo(bch);
-						test_and_clear_bit(FLG_LOCK_ATOMIC, &hc->dch.DFlags);
-					} else
-						debugprint(&bch->inst, "fill_data %d blocked", bch->channel);
+					hfcpci_send_data(bch);
 				} else {
 					bch->tx_idx = 0;
 					if (test_and_clear_bit(FLG_TX_NEXT, &bch->Flag)) {
@@ -1214,11 +1241,7 @@ hfcpci_interrupt(int intno, void *dev_id, struct pt_regs *regs)
 							memcpy(bch->tx_buf,
 								bch->next_skb->data,
 								bch->tx_len);
-							if (!test_and_set_bit(FLG_LOCK_ATOMIC, &hc->dch.DFlags)) {
-								hfcpci_fill_fifo(bch);
-								test_and_clear_bit(FLG_LOCK_ATOMIC, &hc->dch.DFlags);
-							} else
-								debugprint(&bch->inst, "fill_data %d blocked", bch->channel);
+							hfcpci_send_data(bch);
 							hfcpci_sched_event(bch, B_XMTBUFREADY);
 						} else {
 							printk(KERN_WARNING "hfcB tx irq TX_NEXT without skb\n");
@@ -1239,11 +1262,7 @@ hfcpci_interrupt(int intno, void *dev_id, struct pt_regs *regs)
 					debugprint(&hc->dch.inst, "hfcpci spurious 0x02 IRQ");
 			} else {
 				if (bch->tx_idx < bch->tx_len) {
-					if (!test_and_set_bit(FLG_LOCK_ATOMIC, &hc->dch.DFlags)) {
-						hfcpci_fill_fifo(bch);
-						test_and_clear_bit(FLG_LOCK_ATOMIC, &hc->dch.DFlags);
-					} else
-						debugprint(&bch->inst, "fill_data %d blocked", bch->channel);
+					hfcpci_send_data(bch);
 				} else {
 					bch->tx_idx = 0;
 					if (test_and_clear_bit(FLG_TX_NEXT, &bch->Flag)) {
@@ -1252,11 +1271,7 @@ hfcpci_interrupt(int intno, void *dev_id, struct pt_regs *regs)
 							memcpy(bch->tx_buf,
 								bch->next_skb->data,
 								bch->tx_len);
-							if (!test_and_set_bit(FLG_LOCK_ATOMIC, &hc->dch.DFlags)) {
-								hfcpci_fill_fifo(bch);
-								test_and_clear_bit(FLG_LOCK_ATOMIC, &hc->dch.DFlags);
-							} else
-								debugprint(&bch->inst, "fill_data %d blocked", bch->channel);
+							hfcpci_send_data(bch);
 							hfcpci_sched_event(bch, B_XMTBUFREADY);
 						} else {
 							printk(KERN_WARNING "hfcB tx irq TX_NEXT without skb\n");
@@ -1280,12 +1295,7 @@ hfcpci_interrupt(int intno, void *dev_id, struct pt_regs *regs)
 			if (test_and_clear_bit(FLG_L1_DBUSY, &hc->dch.DFlags))
 				sched_event_D_pci(hc, D_CLEARBUSY);
 			if (hc->dch.tx_idx < hc->dch.tx_len) {
-				if (!test_and_set_bit(FLG_LOCK_ATOMIC, &hc->dch.DFlags)) {
-					hfcpci_fill_dfifo(hc);
-					test_and_clear_bit(FLG_LOCK_ATOMIC, &hc->dch.DFlags);
-				} else {
-					debugprint(&hc->dch.inst, "hfcpci_fill_dfifo irq blocked");
-				}
+				hfcD_send_fifo(&hc->dch);
 			} else {
 				if (test_and_clear_bit(FLG_TX_NEXT, &hc->dch.DFlags)) {
 					if (hc->dch.next_skb) {
@@ -1294,12 +1304,7 @@ hfcpci_interrupt(int intno, void *dev_id, struct pt_regs *regs)
 							hc->dch.next_skb->data,
 							hc->dch.tx_len);
 						hc->dch.tx_idx = 0;
-						if (!test_and_set_bit(FLG_LOCK_ATOMIC, &hc->dch.DFlags)) {
-							hfcpci_fill_dfifo(hc);
-							test_and_clear_bit(FLG_LOCK_ATOMIC, &hc->dch.DFlags);
-						} else {
-							debugprint(&hc->dch.inst, "hfcpci_fill_dfifo irq blocked");
-						}
+						hfcD_send_fifo(&hc->dch);
 						sched_event_D_pci(hc, D_XMTBUFREADY);
 					} else {
 						printk(KERN_WARNING "hfcd tx irq TX_NEXT without skb\n");
@@ -1364,13 +1369,7 @@ HFCD_l1hw(hisaxif_t *hif, struct sk_buff *skb)
 			dch->tx_len = skb->len;
 			memcpy(dch->tx_buf, skb->data, dch->tx_len);
 			dch->tx_idx = 0;
-			if (!test_and_set_bit(FLG_LOCK_ATOMIC, &dch->DFlags)) {
-				hfcpci_fill_dfifo(hc);
-				test_and_clear_bit(FLG_LOCK_ATOMIC, &dch->DFlags);
-			} else {
-				debugprint(&dch->inst, "hfcpci_fill_dfifo blocked");
-				return(-EBUSY);
-			}
+			hfcD_send_fifo(dch);
 			dch->inst.unlock(dch->inst.data);
 			return(if_addhead(&dch->inst.up, PH_DATA_CNF,
 				hh->dinfo, skb));
@@ -1491,21 +1490,6 @@ HFCD_l1hw(hisaxif_t *hif, struct sk_buff *skb)
 	if (!ret)
 		dev_kfree_skb(skb);
 	return(ret);
-}
-
-/**************************************/
-/* send B-channel data if not blocked */
-/**************************************/
-static void
-hfcpci_send_data(bchannel_t *bch)
-{
-	hfc_pci_t *hc = bch->inst.data;
-
-	if (!test_and_set_bit(FLG_LOCK_ATOMIC, &hc->dch.DFlags)) {
-		hfcpci_fill_fifo(bch);
-		test_and_clear_bit(FLG_LOCK_ATOMIC, &hc->dch.DFlags);
-	} else
-		debugprint(&bch->inst, "send_data %d blocked", bch->channel);
 }
 
 /***************************************************************/
@@ -1857,7 +1841,6 @@ hfcD_rcv(dchannel_t *dch)
 	}
 }
 
-
 static void
 hfcD_bh(dchannel_t *dch)
 {
@@ -1865,7 +1848,9 @@ hfcD_bh(dchannel_t *dch)
 		return;
 //	printk(KERN_DEBUG __FUNCTION__": event %x\n", dch->event);
 	if (test_and_clear_bit(D_L1STATECHANGE, &dch->event))
-		hfcD_newstate(dch);		
+		hfcD_newstate(dch);
+	if (test_and_clear_bit(D_BLOCKEDATOMIC, &dch->event))
+		hfcD_send_fifo(dch);
 	if (test_and_clear_bit(D_XMTBUFREADY, &dch->event)) {
 		struct sk_buff *skb = dch->next_skb;
 		int	dinfo;
@@ -1910,6 +1895,8 @@ hfcB_bh(bchannel_t *bch)
 		printk(KERN_DEBUG __FUNCTION__": rpflg(%x) wpflg(%x)\n",
 			bch->dev->rport.Flag, bch->dev->wport.Flag);
 #endif
+	if (test_and_clear_bit(B_BLOCKEDATOMIC, &bch->event))
+		hfcpci_send_data(bch);
 	if (test_and_clear_bit(B_XMTBUFREADY, &bch->event)) {
 		skb = bch->next_skb;
 		if (skb) {
