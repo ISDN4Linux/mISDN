@@ -1,4 +1,4 @@
-/* $Id: udevice.c,v 0.2 2001/02/11 22:57:23 kkeil Exp $
+/* $Id: udevice.c,v 0.3 2001/02/13 14:30:32 kkeil Exp $
  *
  * Copyright 2000  by Karsten Keil <kkeil@isdn4linux.de>
  */
@@ -97,13 +97,21 @@ create_layer(hisaxdevice_t *dev, hisaxstack_t *st, int *ip) {
 
 	if ((*ip < 0) || (*ip > MAX_LAYER))
 		return(-EINVAL);
-	if (st->inst[*ip])
+	if (st->inst[*ip]) {
+		printk(KERN_WARNING
+			"HiSax create_layer st(%d) lay(%d) inst not empty(%p)\n",
+			st->id, *ip, st->inst[*ip]);
 		return(-EBUSY);
+	}
 	if (!(nl = kmalloc(sizeof(devicelayer_t), GFP_ATOMIC))) {
 		printk(KERN_ERR "kmalloc devicelayer failed\n");
 		return(-ENOMEM);
 	}
 	memset(nl, 0, sizeof(devicelayer_t));
+	if (device_debug & DEBUG_MGR_FUNC)
+		printk(KERN_DEBUG
+			"HiSax create_layer lay(%d) nl(%p) nl inst(%p)\n",
+			*ip, nl, &nl->inst);
 	nl->dev = dev;
 	nl->inst.layer = *ip++;
 	nl->inst.protocol = *ip++;
@@ -149,8 +157,8 @@ del_layer(devicelayer_t *dl) {
 	hisaxdevice_t	*dev = dl->dev;
 
 	if (device_debug & DEBUG_MGR_FUNC) {
-		printk(KERN_DEBUG "del_layer: dl(%p) inst(%p) dev(%p)\n", 
-			dl, inst, dev);
+		printk(KERN_DEBUG "del_layer: dl(%p) inst(%p) lay(%d) dev(%p) nexti(%p)\n", 
+			dl, inst, inst->layer, dev, inst->next);
 		printk(KERN_DEBUG "del_layer iaddr %x inst %s\n",
 			dl->iaddr, inst->id);
 	}
@@ -169,6 +177,11 @@ del_layer(devicelayer_t *dl) {
 	REMOVE_FROM_LISTBASE(dl, dev->layer);
 	REMOVE_FROM_LIST(inst);
 	if (inst->st) {
+		if (device_debug & DEBUG_MGR_FUNC)
+			printk(KERN_DEBUG
+				"del_layer: st(%p) st->prot(l)%x st->inst(l) %p\n",
+				inst->st, inst->st->protocols[inst->layer],
+				inst->st->inst[inst->layer]);
 		inst->st->protocols[inst->layer] = ISDN_PID_NONE;
 		if (inst->st->inst[inst->layer] == inst)
 			inst->st->inst[inst->layer] = inst->next;
@@ -402,20 +415,22 @@ hisax_close(struct inode *ino, struct file *filep)
 
 	if (device_debug & DEBUG_DEV_OP)
 		printk(KERN_DEBUG "hisax: hisax_close %p %p\n", filep, filep->private_data);
-	write_lock_irqsave(&hisax_device_lock, flags);
+	read_lock(&hisax_device_lock);
 	while (dev) {
 		if (dev == filep->private_data) {
 			if (device_debug & DEBUG_DEV_OP)
 				printk(KERN_DEBUG "hisax: dev: %p\n", dev);
 			/* release related stuff */
+			while(dev->layer)
+				del_layer(dev->layer);
+			read_unlock(&hisax_device_lock);
+			write_lock_irqsave(&hisax_device_lock, flags);
 			vfree(dev->rbuf);
 			vfree(dev->wbuf);
 			dev->rp = dev->rbuf = NULL;
 			dev->wp = dev->wbuf = NULL;
 			dev->rcnt = 0;
 			dev->wcnt = 0;
-			while(dev->layer)
-				del_layer(dev->layer);
 			REMOVE_FROM_LISTBASE(dev, hisax_devicelist);
 			write_unlock_irqrestore(&hisax_device_lock, flags);
 			filep->private_data = NULL;
@@ -425,7 +440,7 @@ hisax_close(struct inode *ino, struct file *filep)
 		}
 		dev = dev->next;
 	}
-	write_unlock_irqrestore(&hisax_device_lock, flags);
+	read_unlock(&hisax_device_lock);
 	printk(KERN_WARNING "hisax: No private data while closing device\n");
 	return 0;
 }

@@ -1,4 +1,4 @@
-/* $Id: core.c,v 0.2 2001/02/11 22:57:23 kkeil Exp $
+/* $Id: core.c,v 0.3 2001/02/13 14:30:32 kkeil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *              based on the teles driver from Jan den Ouden
@@ -115,6 +115,9 @@ get_stack4id(int id)
 {
 	hisaxstack_t *cst, *st = hisax_stacklist;
 
+	
+	if (debug & DEBUG_CORE_FUNC)
+		printk(KERN_DEBUG "get_stack4id(%x)\n", id);
 	while(st) {
 		if (id == st->id)
 			return(st);
