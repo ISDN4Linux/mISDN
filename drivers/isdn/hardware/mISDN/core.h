@@ -1,4 +1,4 @@
-/* $Id: core.h,v 1.6 2003/11/11 09:59:00 keil Exp $
+/* $Id: core.h,v 1.7 2003/11/21 22:57:08 keil Exp $
  * 
  * This file is (c) under GNU PUBLIC LICENSE
  *
@@ -8,7 +8,7 @@
 #include <linux/string.h>
 #include <linux/mISDNif.h>
 #include "helper.h"
-#ifdef MEMDBG
+#ifdef MISDN_MEMDEBUG
 #include "memdbg.h"
 #endif
 

@@ -1,4 +1,4 @@
-/* $Id: helper.h,v 1.10 2003/09/06 17:13:02 keil Exp $
+/* $Id: helper.h,v 1.11 2003/11/21 22:57:08 keil Exp $
  *
  *   Basic declarations, defines and prototypes
  *
@@ -8,7 +8,7 @@
 #ifndef _mISDN_HELPER_H
 #define	_mISDN_HELPER_H
 #include <linux/kernel.h>
-#ifdef MEMDBG
+#ifdef MISDN_MEMDEBUG
 #include "memdbg.h"
 #endif
 
@@ -69,12 +69,22 @@ discard_queue(struct sk_buff_head *q)
 	return(ret);
 }
 
+#ifdef MISDN_MEMDEBUG
+#define alloc_stack_skb(s, r)	__mid_alloc_stack_skb(s, r, __FILE__, __LINE__)
+static inline struct sk_buff *
+__mid_alloc_stack_skb(size_t size, size_t reserve, char *fn, int line)
+{
+	struct sk_buff *skb;
+
+	if (!(skb = __mid_alloc_skb(size + reserve, GFP_ATOMIC, fn, line)))
+#else
 static inline struct sk_buff *
 alloc_stack_skb(size_t size, size_t reserve)
 {
 	struct sk_buff *skb;
 
 	if (!(skb = alloc_skb(size + reserve, GFP_ATOMIC)))
+#endif
 		printk(KERN_WARNING "%s(%d,%d): no skb size\n", __FUNCTION__,
 			size, reserve);
 	else
@@ -119,13 +129,22 @@ extern __inline__ int if_newhead(mISDNif_t *i, u_int prim, int dinfo,
 	return(i->func(i, skb));
 }
 
+#ifdef MISDN_MEMDEBUG
+#define create_link_skb(p, d, l, a, r)	__mid_create_link_skb(p, d, l, a, r, __FILE__, __LINE__)
+extern __inline__ struct sk_buff *
+__mid_create_link_skb(u_int prim, int dinfo, int len, void *arg, int reserve, char *fn, int line)
+{
+	struct sk_buff	*skb;
 
-extern __inline__ struct sk_buff *create_link_skb(u_int prim, int dinfo,
-	int len, void *arg, int reserve)
+	if (!(skb = __mid_alloc_skb(len + reserve, GFP_ATOMIC, fn, line))) {
+#else
+extern __inline__ struct sk_buff *
+create_link_skb(u_int prim, int dinfo, int len, void *arg, int reserve)
 {
 	struct sk_buff	*skb;
 
 	if (!(skb = alloc_skb(len + reserve, GFP_ATOMIC))) {
+#endif
 		printk(KERN_WARNING "%s: no skb size %d+%d\n",
 			__FUNCTION__, len, reserve);
 		return(NULL);
@@ -137,13 +156,24 @@ extern __inline__ struct sk_buff *create_link_skb(u_int prim, int dinfo,
 	return(skb);
 }
 
-extern __inline__ int if_link(mISDNif_t *i, u_int prim, int dinfo, int len,
-	void *arg, int reserve)
+#ifdef MISDN_MEMDEBUG
+#define if_link(i, p, d, l, a, r)	__mid_if_link(i, p, d, l, a, r, __FILE__, __LINE__)
+extern __inline__ int
+__mid_if_link(mISDNif_t *i, u_int prim, int dinfo, int len, void *arg, int reserve, char *fn, int line)
+{
+	struct sk_buff	*skb;
+	int		err;
+
+	if (!(skb = __mid_create_link_skb(prim, dinfo, len, arg, reserve, fn, line)))
+#else
+extern __inline__ int
+if_link(mISDNif_t *i, u_int prim, int dinfo, int len, void *arg, int reserve)
 {
 	struct sk_buff	*skb;
 	int		err;
 
 	if (!(skb = create_link_skb(prim, dinfo, len, arg, reserve)))
+#endif
 		return(-ENOMEM);
 	if (!i)
 		err = -ENXIO;
@@ -159,7 +189,12 @@ extern __inline__ int if_link(mISDNif_t *i, u_int prim, int dinfo, int len,
 extern	signed int	l3_ie2pos(u_char);
 extern	unsigned char	l3_pos2ie(int);
 extern	void		initQ931_info(Q931_info_t *);
+#ifdef MISDN_MEMDEBUG
+#define alloc_l3msg(a, b)	__mid_alloc_l3msg(a, b, __FILE__, __LINE__)
+extern	struct sk_buff 	*__mid_alloc_l3msg(int, u_char, char *, int);
+#else
 extern	struct sk_buff 	*alloc_l3msg(int, u_char);
+#endif
 extern	void		AddvarIE(struct sk_buff *, u_char *);
 extern	void		AddIE(struct sk_buff *, u_char, u_char *);
 extern	void		LogL3Msg(struct sk_buff *);

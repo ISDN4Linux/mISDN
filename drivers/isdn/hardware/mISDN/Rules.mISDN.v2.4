@@ -4,9 +4,8 @@
 
 O_TARGET := vmlinux-obj.o
 
-ifdef MEMDBG
-EXTRA_CFLAGS += -DMEMDBG
-MX_OBJS += memdbg.o
+ifdef CONFIG_MISDN_MEMDEBUG
+	export-objs += memdbg.o
 endif
 
 export-objs := core.o isac.o

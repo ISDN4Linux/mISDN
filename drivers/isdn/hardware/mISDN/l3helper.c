@@ -1,4 +1,4 @@
-/* $Id: l3helper.c,v 1.3 2003/08/01 22:15:53 kkeil Exp $
+/* $Id: l3helper.c,v 1.4 2003/11/21 22:57:08 keil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -52,12 +52,20 @@ initQ931_info(Q931_info_t *qi) {
 };
 
 struct sk_buff *
+#ifdef MISDN_MEMDEBUG
+__mid_alloc_l3msg(int len, u_char type, char *fn, int line)
+#else
 alloc_l3msg(int len, u_char type)
+#endif
 {
 	struct sk_buff	*skb;
 	Q931_info_t	*qi;
 
+#ifdef MISDN_MEMDEBUG
+	if (!(skb = __mid_alloc_skb(len + L3_EXTRA_SIZE +1, GFP_ATOMIC, fn, line))) {
+#else
 	if (!(skb = alloc_skb(len + L3_EXTRA_SIZE +1, GFP_ATOMIC))) {
+#endif
 		printk(KERN_WARNING "mISDN: No skb for L3\n");
 		return (NULL);
 	}

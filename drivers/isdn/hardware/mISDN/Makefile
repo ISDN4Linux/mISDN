@@ -3,6 +3,10 @@
 # EXTRA_CFLAGS += -S -g
 #
 
+ifdef CONFIG_MISDN_MEMDEBUG
+	EXTRA_CFLAGS += -DMISDN_MEMDEBUG
+endif
+
 obj-$(CONFIG_MISDN_DRV) += mISDN_core.o
 obj-$(CONFIG_MISDN_DRV) += mISDN_isac.o
 obj-$(CONFIG_MISDN_DRV) += mISDN_l1.o
@@ -43,6 +47,9 @@ hfcpci-objs := hfc_pci.o debug.o helper.o dchannel.o bchannel.o
 w6692pci-objs := w6692.o debug.o helper.o dchannel.o bchannel.o
 mISDN_isac-objs := isac.o arcofi.o debug.o
 mISDN_core-objs := core.o stack.o udevice.o helper.o
+ifdef CONFIG_MISDN_MEMDEBUG
+mISDN_core-objs += memdbg.o
+endif
 mISDN_l1-objs := layer1.o helper.o debug.o fsm.o
 mISDN_l2-objs := layer2.o tei.o helper.o debug.o fsm.o
 l3udss1-objs := layer3.o helper.o l3helper.o debug.o fsm.o l3_udss1.o

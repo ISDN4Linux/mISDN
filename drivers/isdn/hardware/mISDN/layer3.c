@@ -1,4 +1,4 @@
-/* $Id: layer3.c,v 1.8 2003/11/11 09:59:00 keil Exp $
+/* $Id: layer3.c,v 1.9 2003/11/21 22:57:08 keil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -14,7 +14,7 @@
 #include "layer3.h"
 #include "helper.h"
 
-const char *l3_revision = "$Revision: 1.8 $";
+const char *l3_revision = "$Revision: 1.9 $";
 
 static
 struct Fsm l3fsm = {NULL, 0, 0, NULL, NULL};
@@ -263,7 +263,7 @@ l3_process_t
 l3_process_t
 *new_l3_process(layer3_t *l3, int cr, int n303, u_int id)
 {
-	l3_process_t *p;
+	l3_process_t *p = NULL;
 
 	if (id == MISDN_ID_ANY) {
 		if (l3->entity == MISDN_ENTITY_NONE) {

@@ -1,4 +1,4 @@
-/* $Id: layer2.h,v 1.3 2003/09/06 17:11:42 keil Exp $
+/* $Id: layer2.h,v 1.4 2003/11/21 22:57:08 keil Exp $
  *
  * Layer 2 defines
  *
@@ -9,7 +9,7 @@
 #include <linux/mISDNif.h>
 #include <linux/skbuff.h>
 #include "fsm.h"
-#ifdef MEMDBG
+#ifdef MISDN_MEMDEBUG
 #include "memdbg.h"
 #endif
 

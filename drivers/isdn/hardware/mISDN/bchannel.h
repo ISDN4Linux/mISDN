@@ -1,4 +1,4 @@
-/* $Id: bchannel.h,v 1.7 2003/08/01 22:15:52 kkeil Exp $
+/* $Id: bchannel.h,v 1.8 2003/11/21 22:57:08 keil Exp $
  *
  *   Basic declarations, defines for Bchannel hardware
  *
@@ -19,7 +19,7 @@
 #include <asm/io.h>
 #include <linux/ioport.h>
 #include <linux/skbuff.h>
-#ifdef MEMDBG
+#ifdef MISDN_MEMDEBUG
 #include "memdbg.h"
 #endif
 

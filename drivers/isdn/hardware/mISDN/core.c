@@ -1,4 +1,4 @@
-/* $Id: core.c,v 1.18 2003/11/11 09:59:00 keil Exp $
+/* $Id: core.c,v 1.19 2003/11/21 22:57:08 keil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -19,7 +19,7 @@
 #include <linux/smp_lock.h>
 #endif
 
-static char	*mISDN_core_revision = "$Revision: 1.18 $";
+static char	*mISDN_core_revision = "$Revision: 1.19 $";
 
 mISDNobject_t	*mISDN_objects = NULL;
 rwlock_t	mISDN_objects_lock = RW_LOCK_UNLOCKED;
@@ -609,6 +609,11 @@ mISDNInit(void)
 
 	printk(KERN_INFO "Modular ISDN Stack core %s\n", mISDN_core_revision);
 	core_debug = debug;
+#ifdef MISDN_MEMDEBUG
+	err = __mid_init();
+	if (err)
+		return(err);
+#endif
 	err = init_mISDNdev(debug);
 	if (err)
 		return(err);
@@ -652,6 +657,9 @@ void mISDN_cleanup(void) {
 		down(&sem);
 		mISDN_thread.notify = NULL;
 	}
+#ifdef MISDN_MEMDEBUG
+	__mid_cleanup();
+#endif
 	printk(KERN_DEBUG "mISDNcore unloaded\n");
 }
 
