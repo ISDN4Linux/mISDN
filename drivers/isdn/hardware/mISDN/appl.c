@@ -1,10 +1,11 @@
-/* $Id: appl.c,v 1.6 2003/11/11 10:02:23 keil Exp $
+/* $Id: appl.c,v 1.7 2003/11/11 20:31:34 keil Exp $
  *
  */
 
 #include "capi.h"
 #include "helper.h"
 #include "debug.h"
+#include "mISDNManufacturer.h"
 
 #define applDebug(appl, lev, fmt, args...) \
         capidebug(lev, fmt, ## args)
@@ -193,111 +194,88 @@ void applDelCplci(Appl_t *appl, Cplci_t *cplci)
 	appl->cplcis[i-1] = NULL;
 }
 
-#define CLASS_I4L                   0x00
-#define FUNCTION_I4L_LEASED_IN      0x01
-#define FUNCTION_I4L_DEC_USE_COUNT  0x02
-#define FUNCTION_I4L_INC_USE_COUNT  0x03
-
-#define CLASS_AVM                   0x00
-#define FUNCTION_AVM_D2_TRACE       0x01
-
-
-struct I4LLeasedManuData {
-	__u8 Length;
-	__u8 BChannel;
-};
+#define AVM_MANUFACTURER_ID	0x214D5641 /* "AVM!" */
+#define CLASS_AVM		0x00
+#define FUNCTION_AVM_D2_TRACE	0x01
 
 struct AVMD2Trace {
 	__u8 Length;
 	__u8 data[4];
 };
 
-struct ManufacturerReq {
-	__u32 Class;
-	__u32 Function;
-	union {
-		struct I4LLeasedManuData leased;
-		struct AVMD2Trace d2trace;
-	} f;
-}; 
-
-void applManufacturerReqAVM(Appl_t *appl, struct sk_buff *skb)
+void applManufacturerReqAVM(Appl_t *appl, _cmsg *cmsg, struct sk_buff *skb)
 {
-	struct ManufacturerReq *manuReq;
+	struct AVMD2Trace *at;
 
-	manuReq = (struct ManufacturerReq *)&skb->data[16];
-	if (manuReq->Class != CLASS_AVM) {
-		applDebug(appl, CAPI_DBG_APPL_INFO, "CAPI: unknown class %#x\n", manuReq->Class);
-		goto out;
+	if (cmsg->Class != CLASS_AVM) {
+		applDebug(appl, CAPI_DBG_APPL_INFO, "CAPI: unknown class %#x\n", cmsg->Class);
+		dev_kfree_skb(skb);
+		return;
 	}
-	switch (manuReq->Function) {
-	case FUNCTION_AVM_D2_TRACE:
-		if (skb->len != 16 + 8 + 5)
-			goto out;
-		if (manuReq->f.d2trace.Length != 4)
-			goto out;
-		if (memcmp(manuReq->f.d2trace.data, "\200\014\000\000", 4) == 0) {
-			test_and_set_bit(APPL_FLAG_D2TRACE, &appl->flags);
-		} else if (memcmp(manuReq->f.d2trace.data, "\000\000\000\000", 4) == 0) {
-			test_and_clear_bit(APPL_FLAG_D2TRACE, &appl->flags);
-		} else {
-			int_error();
-		}
-		break;
-	default:
-		applDebug(appl, CAPI_DBG_APPL_INFO, "CAPI: unknown function %#x\n", manuReq->Function);
+	switch (cmsg->Function) {
+		case FUNCTION_AVM_D2_TRACE:
+			at = (struct AVMD2Trace *)cmsg->ManuData;
+			if (!at || at->Length != 4) {
+				int_error();
+				break;
+			}
+			if (memcmp(at->data, "\200\014\000\000", 4) == 0) {
+				test_and_set_bit(APPL_FLAG_D2TRACE, &appl->flags);
+			} else if (memcmp(at->data, "\000\000\000\000", 4) == 0) {
+				test_and_clear_bit(APPL_FLAG_D2TRACE, &appl->flags);
+			} else {
+				int_error();
+			}
+			break;
+		default:
+			applDebug(appl, CAPI_DBG_APPL_INFO, "CAPI: unknown function %#x\n", cmsg->Function);
 	}
-
- out:
 	dev_kfree_skb(skb);
 }
 
-void applManufacturerReqI4L(Appl_t *appl, struct sk_buff *skb)
+void applManufacturerReqmISDN(Appl_t *appl, _cmsg *cmsg, struct sk_buff *skb)
 {
-	int bchannel;
-	struct ManufacturerReq *manuReq;
+	Cplci_t	*cplci;
 
-	manuReq = (struct ManufacturerReq *)&skb->data[16];
-	if (manuReq->Class != CLASS_I4L) {
-		applDebug(appl, CAPI_DBG_APPL_INFO, "CAPI: unknown class %#x\n", manuReq->Class);
-		goto out;
+	switch (cmsg->Class) {
+		case mISDN_MF_CLASS_HANDSET:
+			/* Note normally MANUFATURER messages are only defined for
+			 * controller address we extent it here to PLCI/NCCI
+			 */
+			cplci = applAdr2cplci(appl, CAPIMSG_CONTROL(skb->data));
+			if (cplci && cplci->ncci) {
+				ncciSendMessage(cplci->ncci, skb);
+				return;
+			}
+			contrAnswerMessage(appl->contr, skb, CapiIllContrPlciNcci);
+			break;
+		default:
+			dev_kfree_skb(skb);
+			break;
 	}
-	switch (manuReq->Function) {
-	case FUNCTION_I4L_LEASED_IN:
-		if (skb->len < 16 + 8 + 2)
-			goto out;
-		if (manuReq->f.leased.Length != 2)
-			goto out;
-		bchannel = manuReq->f.leased.BChannel;
-		if (bchannel < 1 || bchannel > 2)
-			goto out;
-// FIXME
-//		contrL4L3(appl->contr, CC_SETUP | INDICATION, &bchannel);
-		break;
-	case FUNCTION_I4L_DEC_USE_COUNT:
-		break;
-	case FUNCTION_I4L_INC_USE_COUNT:
-		break;
-	default:
-		applDebug(appl, CAPI_DBG_APPL_INFO, "CAPI: unknown function %#x\n", manuReq->Function);
-	}
-
- out:
-	dev_kfree_skb(skb);
 }
 
 void applManufacturerReq(Appl_t *appl, struct sk_buff *skb)
 {
+	_cmsg	cmsg;
+
 	if (skb->len < 16 + 8) {
+		dev_kfree_skb(skb);
 		return;
 	}
-	if (memcmp(&skb->data[12], "AVM!", 4) == 0) {
-		applManufacturerReqAVM(appl, skb);
+	capi_message2cmsg(&cmsg, skb->data);
+	switch (cmsg.ManuID) {
+		case mISDN_MANUFACTURER_ID:
+			applManufacturerReqmISDN(appl, &cmsg, skb);
+			break;
+		case AVM_MANUFACTURER_ID:
+			applManufacturerReqAVM(appl, &cmsg, skb);
+			break;
+		default:
+			applDebug(appl, CAPI_DBG_APPL_INFO, "CAPI: unknown ManuID %#x\n", cmsg.ManuID);
+			dev_kfree_skb(skb);
+			break;
 	}
-	if (memcmp(&skb->data[12], "I4L!", 4) == 0) {
-		applManufacturerReqI4L(appl, skb);
-	}
-	return;
 }
 
 void applD2Trace(Appl_t *appl, u_char *buf, int len)
@@ -311,7 +289,7 @@ void applD2Trace(Appl_t *appl, u_char *buf, int len)
 	memset(&cmsg, 0, sizeof(_cmsg));
 	capi_cmsg_header(&cmsg, appl->ApplId, CAPI_MANUFACTURER, CAPI_IND, 
 			 appl->MsgId++, appl->contr->adrController);
-	cmsg.ManuID = 0x214D5641; // "AVM!"
+	cmsg.ManuID = AVM_MANUFACTURER_ID;
 	cmsg.Class = CLASS_AVM;
 	cmsg.Function = FUNCTION_AVM_D2_TRACE;
 	cmsg.ManuData = (_cstruct) &manuData;

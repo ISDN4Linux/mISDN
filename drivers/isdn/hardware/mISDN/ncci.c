@@ -1,4 +1,4 @@
-/* $Id: ncci.c,v 1.14 2003/11/11 10:02:23 keil Exp $
+/* $Id: ncci.c,v 1.15 2003/11/11 20:31:34 keil Exp $
  *
  */
 
@@ -6,6 +6,7 @@
 #include "helper.h"
 #include "debug.h"
 #include "dss1.h"
+#include "mISDNManufacturer.h"
 
 static int ncciL4L3(Ncci_t *, u_int, int, int, void *, struct sk_buff *);
 
@@ -51,6 +52,7 @@ enum {
 	EV_NCCI_DISCONNECT_B3_CONF,
 	EV_NCCI_DISCONNECT_B3_RESP,
 	EV_NCCI_FACILITY_REQ,
+	EV_NCCI_MANUFACTURER_REQ,
 	EV_NCCI_SELECT_B_PROTOCOL,
 	EV_NCCI_DL_ESTABLISH_IND,
 	EV_NCCI_DL_ESTABLISH_CONF,
@@ -76,6 +78,7 @@ static char* str_ev_ncci[] = {
 	"EV_NCCI_DISCONNECT_B3_CONF",
 	"EV_NCCI_DISCONNECT_B3_RESP",
 	"EV_NCCI_FACILITY_REQ",
+	"EV_NCCI_MANUFACTURER_REQ",
 	"EV_NCCI_SELECT_B_PROTOCOL",
 	"EV_NCCI_DL_ESTABLISH_IND",
 	"EV_NCCI_DL_ESTABLISH_CONF",
@@ -228,6 +231,64 @@ ncci_facility_req(struct FsmInst *fi, int event, void *arg)
 	ncciRecvCmsg(ncci, cmsg);
 }
 
+static void
+ncci_manufacturer_req(struct FsmInst *fi, int event, void *arg)
+{
+	Ncci_t	*ncci = fi->userdata;
+	_cmsg	*cmsg = arg;
+	int	err, op;
+	struct  _manu_conf_para {
+			u8	len	__attribute__((packed));
+			u16	Info	__attribute__((packed));
+			u16	vol	__attribute__((packed));
+		} mcp = {2, CAPI_NOERROR,0};
+	struct  _manu_req_para {
+			u8	len	__attribute__((packed));
+			u16	vol	__attribute__((packed));
+		} *mrp;
+
+	mrp = (struct  _manu_req_para *)cmsg->ManuData;
+	capi_cmsg_answer(cmsg);
+	if (cmsg->Class == mISDN_MF_CLASS_HANDSET) { // Handset
+		switch(cmsg->Function) {
+			case mISDN_MF_HANDSET_ENABLE:
+				err = ncciL4L3(ncci, PH_CONTROL | REQUEST, HW_POTS_ON, 0, NULL, NULL);
+				if (err)
+					mcp.Info = CapiFacilityNotSupported;
+				break;
+			case mISDN_MF_HANDSET_DISABLE:
+				err = ncciL4L3(ncci, PH_CONTROL | REQUEST, HW_POTS_OFF, 0, NULL, NULL);
+				if (err)
+					mcp.Info = CapiFacilityNotSupported;
+				break;
+			case mISDN_MF_HANDSET_SETMICVOLUME:
+			case mISDN_MF_HANDSET_SETSPKVOLUME:
+				if (!mrp || mrp->len != 2) {
+					mcp.Info = CapiIllMessageParmCoding;
+					break;
+				}
+				op = (cmsg->Function == mISDN_MF_HANDSET_SETSPKVOLUME) ?
+					HW_POTS_SETSPKVOL : HW_POTS_SETMICVOL;
+				err = ncciL4L3(ncci, PH_CONTROL | REQUEST, op, 2, &mrp->vol, NULL);
+				if (err == -ENODEV)
+					mcp.Info = CapiFacilityNotSupported;
+				else if (err)
+					mcp.Info = CapiIllMessageParmCoding;
+				break;
+			/* not handled yet */
+			case mISDN_MF_HANDSET_GETMICVOLUME:
+			case mISDN_MF_HANDSET_GETSPKVOLUME:
+			default:
+				mcp.Info = CapiFacilityNotSupported;
+				break;
+		}
+	} else
+		mcp.Info = CapiIllMessageParmCoding;
+
+	cmsg->ManuData = (_cstruct)&mcp;
+	ncciRecvCmsg(ncci, cmsg);
+}
+
 static void ncci_connect_b3_active_ind(struct FsmInst *fi, int event, void *arg)
 {
 	Ncci_t *ncci = fi->userdata;
@@ -312,16 +373,19 @@ static struct FsmNode fn_ncci_list[] =
   {ST_NCCI_N_0,       EV_NCCI_DL_ESTABLISH_IND,          ncci_n0_dl_establish_ind_conf},
 
   {ST_NCCI_N_0_1,     EV_NCCI_CONNECT_B3_CONF,           ncci_connect_b3_conf},
+  {ST_NCCI_N_0_1,     EV_NCCI_MANUFACTURER_REQ,          ncci_manufacturer_req},
 
   {ST_NCCI_N_1,       EV_NCCI_CONNECT_B3_RESP,           ncci_connect_b3_resp},
   {ST_NCCI_N_1,       EV_NCCI_DISCONNECT_B3_REQ,         ncci_disconnect_b3_req},
   {ST_NCCI_N_1,       EV_NCCI_DISCONNECT_B3_IND,         ncci_disconnect_b3_ind},
+  {ST_NCCI_N_1,       EV_NCCI_MANUFACTURER_REQ,          ncci_manufacturer_req},
 
   {ST_NCCI_N_2,       EV_NCCI_CONNECT_B3_ACTIVE_IND,     ncci_connect_b3_active_ind},
   {ST_NCCI_N_2,       EV_NCCI_DISCONNECT_B3_REQ,         ncci_disconnect_b3_req},
   {ST_NCCI_N_2,       EV_NCCI_DISCONNECT_B3_IND,         ncci_disconnect_b3_ind},
   {ST_NCCI_N_2,       EV_NCCI_DL_ESTABLISH_CONF,         ncci_dl_establish_conf},
   {ST_NCCI_N_2,       EV_NCCI_DL_RELEASE_IND,            ncci_dl_release_ind_conf},
+  {ST_NCCI_N_2,       EV_NCCI_MANUFACTURER_REQ,          ncci_manufacturer_req},
      
   {ST_NCCI_N_ACT,     EV_NCCI_CONNECT_B3_ACTIVE_RESP,    ncci_connect_b3_active_resp},
   {ST_NCCI_N_ACT,     EV_NCCI_DISCONNECT_B3_REQ,         ncci_disconnect_b3_req},
@@ -329,11 +393,13 @@ static struct FsmNode fn_ncci_list[] =
   {ST_NCCI_N_ACT,     EV_NCCI_DL_RELEASE_IND,            ncci_dl_release_ind_conf},
   {ST_NCCI_N_ACT,     EV_NCCI_DL_DOWN_IND,               ncci_dl_down_ind},
   {ST_NCCI_N_ACT,     EV_NCCI_FACILITY_REQ,              ncci_facility_req},
+  {ST_NCCI_N_ACT,     EV_NCCI_MANUFACTURER_REQ,          ncci_manufacturer_req},
 
   {ST_NCCI_N_4,       EV_NCCI_DISCONNECT_B3_CONF,        ncci_disconnect_b3_conf},
   {ST_NCCI_N_4,       EV_NCCI_DISCONNECT_B3_IND,         ncci_disconnect_b3_ind},
   {ST_NCCI_N_4,       EV_NCCI_DL_RELEASE_CONF,           ncci_dl_release_ind_conf},
   {ST_NCCI_N_4,       EV_NCCI_DL_DOWN_IND,               ncci_dl_down_ind},
+  {ST_NCCI_N_4,       EV_NCCI_MANUFACTURER_REQ,          ncci_manufacturer_req},
 
   {ST_NCCI_N_5,       EV_NCCI_DISCONNECT_B3_RESP,        ncci_disconnect_b3_resp},
 
@@ -737,6 +803,10 @@ void ncciSendMessage(Ncci_t *ncci, struct sk_buff *skb)
 			break;
 		case CAPI_FACILITY_REQ:
 			retval = FsmEvent(&ncci->ncci_m, EV_NCCI_FACILITY_REQ,
+				&ncci->tmpmsg);
+			break;
+		case CAPI_MANUFACTURER_REQ:
+			retval = FsmEvent(&ncci->ncci_m, EV_NCCI_MANUFACTURER_REQ,
 				&ncci->tmpmsg);
 			break;
 		default:

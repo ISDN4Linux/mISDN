@@ -1,4 +1,4 @@
-/* $Id: w6692.c,v 1.2 2003/11/11 10:02:23 keil Exp $
+/* $Id: w6692.c,v 1.3 2003/11/11 20:31:34 keil Exp $
 
  * w6692.c     low level driver for CCD's hfc-pci based cards
  *
@@ -41,7 +41,7 @@
 
 extern const char *CardType[];
 
-const char *w6692_rev = "$Revision: 1.2 $";
+const char *w6692_rev = "$Revision: 1.3 $";
 
 #define DBUSY_TIMER_VALUE	80
 
@@ -484,6 +484,32 @@ W6692_fill_Bfifo(bchannel_t *bch)
 		QuickHex(t, ptr, count);
 		debugprint(&bch->inst, bch->blog);
 	}
+}
+
+static int
+setvolume(bchannel_t *bch, int mic, struct sk_buff *skb)
+{
+	w6692pci	*card = bch->inst.data;
+	u16		*vol = (u16 *)skb->data;
+	u_char		val;
+
+	if ((card->pots == 0) || (bch->protocol != ISDN_PID_L1_B_64TRANS))
+		return(-ENODEV);
+	if (skb->len < 2)
+		return(-EINVAL);
+	if (*vol > 7)
+		return(-EINVAL);
+	val = *vol & 7;
+	val = 7 - val;
+	if (mic) {
+		val <<= 3;
+		card->xaddr &= 0xc7;
+	} else {
+		card->xaddr &= 0xf8;
+	}
+	card->xaddr |= val;
+	WriteW6692(card, W_XADDR, card->xaddr);
+	return(0);
 }
 
 static int
@@ -1045,6 +1071,10 @@ w6692_l2l1B(mISDNif_t *hif, struct sk_buff *skb)
 			ret = enable_pots(bch);
 		} else if (hh->dinfo == HW_POTS_OFF) {
 			ret = disable_pots(bch);
+		} else if (hh->dinfo == HW_POTS_SETMICVOL) {
+			ret = setvolume(bch, 1, skb);
+		} else if (hh->dinfo == HW_POTS_SETSPKVOL) {
+			ret = setvolume(bch, 0, skb);
 		} else
 			ret = -EINVAL;
 	} else {

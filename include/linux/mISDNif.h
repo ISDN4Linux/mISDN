@@ -1,4 +1,4 @@
-/* $Id: mISDNif.h,v 1.19 2003/11/11 09:59:01 keil Exp $
+/* $Id: mISDNif.h,v 1.20 2003/11/11 20:31:35 keil Exp $
  *
  */
 
@@ -106,8 +106,6 @@
 #define HW_MOD_NOCARR	0x0412
 #define HW_MOD_FCERROR	0x0413
 #define HW_HFC_COEFF	0x0500
-#define HW_POTS_ON	0x1001
-#define HW_POTS_OFF	0x1002
 #define HW_D_BLOCKED	0xFF20 
 #define HW_D_NOBLOCKED	0xFF21 
 #define HW_TESTLOOP	0xFF00
@@ -131,6 +129,12 @@
 #define TONE_PATT_OFF	0x2311
 #define VOL_CHANGE_TX	0x2312
 #define VOL_CHANGE_RX	0x2313
+#define HW_POTS_ON		0x1001
+#define HW_POTS_OFF		0x1002
+#define HW_POTS_SETMICVOL	0x1100
+#define HW_POTS_SETSPKVOL	0x1101
+#define HW_POTS_GETMICVOL	0x1110
+#define HW_POTS_GETSPKVOL	0x1111
 
 /* TONE_PATT_ON parameter */
 #define TONE_OFF			0x0000
