@@ -1,4 +1,4 @@
-/* $Id: layer2.c,v 1.13 2003/11/09 16:02:36 keil Exp $
+/* $Id: layer2.c,v 1.14 2003/11/16 19:34:00 keil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -12,7 +12,7 @@
 #include "helper.h"
 #include "debug.h"
 
-static char *l2_revision = "$Revision: 1.13 $";
+static char *l2_revision = "$Revision: 1.14 $";
 
 static void l2m_debug(struct FsmInst *fi, char *fmt, ...);
 
@@ -232,6 +232,22 @@ l2mgr(layer2_t *l2, u_int prim, void *arg) {
 	long c = (long)arg;
 
 	printk(KERN_DEBUG "l2mgr: prim %x %c\n", prim, (char)c);
+	if (test_bit(FLG_LAPD, &l2->flag) &&
+		!test_bit(FLG_FIXED_TEI, &l2->flag)) {
+		struct sk_buff  *skb;
+		switch(c) {
+			case 'C':
+			case 'D':
+			case 'G':
+			case 'H':
+				skb = create_link_skb(prim, 0, 0, NULL, 0);
+				if (!skb)
+					break;
+				if (l2_tei(l2->tm, skb))
+					dev_kfree_skb(skb);
+				break;
+		}
+	}
 	return(0);
 }
 

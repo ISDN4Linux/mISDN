@@ -1,4 +1,4 @@
-/* $Id: tei.c,v 1.4 2003/07/21 12:44:46 kkeil Exp $
+/* $Id: tei.c,v 1.5 2003/11/16 19:34:00 keil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -13,7 +13,7 @@
 #include "debug.h"
 #include <linux/random.h>
 
-const char *tei_revision = "$Revision: 1.4 $";
+const char *tei_revision = "$Revision: 1.5 $";
 
 #define ID_REQUEST	1
 #define ID_ASSIGNED	2
@@ -423,7 +423,7 @@ l2_tei(teimgr_t *tm, struct sk_buff *skb)
 		} else
 			FsmEvent(&tm->tei_m, EV_IDREQ, NULL);
 		break;
-	    case (MDL_ERROR | REQUEST):
+	    case (MDL_ERROR | INDICATION):
 	    	if (!test_bit(FLG_FIXED_TEI, &tm->l2->flag))
 			FsmEvent(&tm->tei_m, EV_VERIFY, NULL);
 		break;
