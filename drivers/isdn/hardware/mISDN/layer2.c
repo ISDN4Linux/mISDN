@@ -1,4 +1,4 @@
-/* $Id: layer2.c,v 0.11 2001/03/26 11:40:02 kkeil Exp $
+/* $Id: layer2.c,v 0.12 2001/03/27 15:34:20 kkeil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -12,7 +12,7 @@
 #include "helper.h"
 #include "debug.h"
 
-const char *l2_revision = "$Revision: 0.11 $";
+const char *l2_revision = "$Revision: 0.12 $";
 
 static void l2m_debug(struct FsmInst *fi, char *fmt, ...);
 
@@ -1947,7 +1947,7 @@ release_l2(layer2_t *l2)
 			MGR_DISCONNECT | REQUEST, &inst->down);
 	}
 	REMOVE_FROM_LISTBASE(l2, ((layer2_t *)isdnl2.ilist));
-	isdnl2.ctrl(inst->st, MGR_UNREGLAYER | REQUEST, inst);
+	isdnl2.ctrl(inst, MGR_UNREGLAYER | REQUEST, NULL);
 	kfree(l2);
 }
 

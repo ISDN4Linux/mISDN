@@ -1,4 +1,4 @@
-/* $Id: core.c,v 0.13 2001/03/26 11:40:02 kkeil Exp $
+/* $Id: core.c,v 0.14 2001/03/27 15:34:20 kkeil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -201,10 +201,12 @@ static int central_manager(void *data, u_int prim, void *arg) {
 		}
 		return(-EINVAL);
 	    case MGR_UNREGLAYER | REQUEST:
-		return(unregister_instance(arg));
+		return(unregister_instance(data));
 	    case MGR_DISCONNECT | REQUEST:
 	    case MGR_DISCONNECT | INDICATION:
 		return(disconnect_if(data, prim, arg));
+	    case MGR_CONNECT | REQUEST:
+		return(ConnectIF(data, arg));
 	    case MGR_LOADFIRM | REQUEST:
 	    	if (st->mgr && st->mgr->obj && st->mgr->obj->own_ctrl)
 	    		return(st->mgr->obj->own_ctrl(st->mgr, prim, arg));

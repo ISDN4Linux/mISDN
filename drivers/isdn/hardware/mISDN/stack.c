@@ -1,4 +1,4 @@
-/* $Id: stack.c,v 0.7 2001/03/26 11:40:02 kkeil Exp $
+/* $Id: stack.c,v 0.8 2001/03/27 15:34:20 kkeil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -263,8 +263,8 @@ release_layers(hisaxstack_t *st, u_int prim) {
 		inst = layer->inst;
 		while (inst) {
 			if (core_debug & DEBUG_CORE_FUNC)
-				printk(KERN_DEBUG __FUNCTION__ ": st(%p) inst(%p) lm(%x)\n",
-					st, inst, inst->pid.layermask);
+				printk(KERN_DEBUG __FUNCTION__ ": st(%p) inst(%p):%s lm(%x)\n",
+					st, inst, inst->name, inst->pid.layermask);
 			tmp = inst->next;
 			inst->obj->own_ctrl(inst, prim, NULL);
 			inst = tmp;
@@ -284,8 +284,12 @@ release_stack(hisaxstack_t *st) {
 	int err;
 	hisaxstack_t *cst;
 
+	if (core_debug & DEBUG_CORE_FUNC)
+		printk(KERN_DEBUG __FUNCTION__ ": st(%p)\n", st);
 	while (st->child) {
 		cst = st->child;
+		if (core_debug & DEBUG_CORE_FUNC)
+			printk(KERN_DEBUG __FUNCTION__ ": cst(%p)\n", cst);
 		if ((err = release_layers(cst, MGR_RELEASE | INDICATION))) {
 			printk(KERN_WARNING "release_stack child err(%d)\n", err);
 			return(err);
@@ -310,12 +314,21 @@ release_stacks(hisaxobject_t *obj) {
 	int rel;
 
 	st = hisax_stacklist;
+	if (core_debug & DEBUG_CORE_FUNC)
+		printk(KERN_DEBUG __FUNCTION__ ": obj(%p) %s\n",
+			obj, obj->name);
 	while (st) {
 		rel = 0;
 		layer = st->lstack;
+		if (core_debug & DEBUG_CORE_FUNC)
+			printk(KERN_DEBUG __FUNCTION__ ": st(%p) l(%p)\n",
+				st, layer);
 		while(layer) {
 			inst = layer->inst;
 			while (inst) {
+				if (core_debug & DEBUG_CORE_FUNC)
+					printk(KERN_DEBUG __FUNCTION__ ": inst(%p)\n",
+						inst);
 				if (inst->obj == obj)
 					rel++;
 				inst = inst->next;
@@ -343,16 +356,22 @@ register_layer(hisaxstack_t *st, hisaxinstance_t *inst) {
 		return(-EINVAL);
 	lay = inst->pid.layermask;
 	if (core_debug & DEBUG_CORE_FUNC)
-		printk(KERN_DEBUG "register_layer st(%p) inst(%p/%p) lmask(%x)\n",
+		printk(KERN_DEBUG __FUNCTION__":st(%p) inst(%p/%p) lmask(%x)\n",
 			st, inst, inst->obj, lay);
 	if (!(layer = getlayer4lay(st, lay))) {
 		if (!(layer = kmalloc(sizeof(hisaxlayer_t), GFP_ATOMIC))) {
 			int_errtxt("no mem for layer %d", lay);
 			return(-ENOMEM);
 		}
+		if (core_debug & DEBUG_CORE_FUNC)
+			printk(KERN_DEBUG __FUNCTION__": create layer(%p)\n",
+				layer); 
 		memset(layer, 0, sizeof(hisaxlayer_t));
 		insertlayer(st, layer, lay);
-	}
+	} else
+		if (core_debug & DEBUG_CORE_FUNC)
+			printk(KERN_DEBUG __FUNCTION__": add to layer(%p)\n",
+				layer);
 	APPEND_TO_LIST(inst, layer->inst);
 	inst->st = st;
 	inst->obj->refcnt++;
@@ -368,13 +387,18 @@ unregister_instance(hisaxinstance_t *inst) {
 		return(-EINVAL);
 	st = inst->st;
 	if (core_debug & DEBUG_CORE_FUNC)
-		printk(KERN_DEBUG "unregister_instance st(%p) inst(%p) lay(%x)\n",
+		printk(KERN_DEBUG __FUNCTION__": st(%p) inst(%p) lay(%x)\n",
 			st, inst, inst->pid.layermask);
 	if ((layer = getlayer4lay(st, inst->pid.layermask))) {
+		if (core_debug & DEBUG_CORE_FUNC)
+			printk(KERN_DEBUG __FUNCTION__":layer(%p)->inst(%p)\n",
+				layer, layer->inst);
 		REMOVE_FROM_LISTBASE(inst, layer->inst);
 		inst->obj->refcnt--;
-	} else
+	} else {
+		printk(KERN_WARNING __FUNCTION__": no layer found\n");
 		return(-ENODEV);
+	}
 	return(0);
 }
 

@@ -1,4 +1,4 @@
-/* $Id: l3_udss1.c,v 0.15 2001/03/26 11:40:02 kkeil Exp $
+/* $Id: l3_udss1.c,v 0.16 2001/03/27 15:34:20 kkeil Exp $
  *
  * EURO/DSS1 D-channel protocol
  *
@@ -24,7 +24,7 @@ static int debug = 0;
 static hisaxobject_t u_dss1;
 
 
-const char *dss1_revision = "$Revision: 0.15 $";
+const char *dss1_revision = "$Revision: 0.16 $";
 
 static int dss1man(l3_process_t *, u_int, void *);
 
@@ -2188,7 +2188,7 @@ release_udss1(layer3_t *l3)
 			MGR_DISCONNECT | REQUEST, &inst->down);
 	}
 	REMOVE_FROM_LISTBASE(l3, ((layer3_t *)u_dss1.ilist));
-	u_dss1.ctrl(inst->st, MGR_UNREGLAYER | REQUEST, inst);
+	u_dss1.ctrl(inst, MGR_UNREGLAYER | REQUEST, NULL);
 	kfree(l3);
 }
 

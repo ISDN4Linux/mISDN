@@ -1,4 +1,4 @@
-/* $Id: layer1.c,v 0.11 2001/03/26 11:40:02 kkeil Exp $
+/* $Id: layer1.c,v 0.12 2001/03/27 15:34:20 kkeil Exp $
  *
  * hisax_l1.c     common low level stuff for I.430 layer1
  *
@@ -10,7 +10,7 @@
  *
  */
 
-const char *l1_revision = "$Revision: 0.11 $";
+const char *l1_revision = "$Revision: 0.12 $";
 
 #include <linux/config.h>
 #include <linux/module.h>
@@ -603,7 +603,7 @@ release_l1(layer1_t *l1) {
 			MGR_DISCONNECT | REQUEST, &inst->down);
 	}
 	REMOVE_FROM_LISTBASE(l1, ((layer1_t *)isdnl1.ilist));
-	isdnl1.ctrl(inst->st, MGR_UNREGLAYER | REQUEST, inst);
+	isdnl1.ctrl(inst, MGR_UNREGLAYER | REQUEST, NULL);
 	kfree(l1);
 }
 
