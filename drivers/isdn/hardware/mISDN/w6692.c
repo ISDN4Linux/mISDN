@@ -1,4 +1,4 @@
-/* $Id: w6692.c,v 1.5 2003/12/03 14:32:45 keil Exp $
+/* $Id: w6692.c,v 1.6 2003/12/14 15:19:02 keil Exp $
 
  * w6692.c     low level driver for CCD's hfc-pci based cards
  *
@@ -41,7 +41,7 @@
 
 extern const char *CardType[];
 
-const char *w6692_rev = "$Revision: 1.5 $";
+const char *w6692_rev = "$Revision: 1.6 $";
 
 #define DBUSY_TIMER_VALUE	80
 
@@ -430,6 +430,13 @@ W6692_empty_Bfifo(bchannel_t *bch, int count)
 
 	if ((bch->debug & L1_DEB_HSCX) && !(bch->debug & L1_DEB_HSCX_FIFO))
 		debugprint(&bch->inst, "empty_Bfifo %d", count);
+	if (bch->protocol == ISDN_PID_NONE) {
+		if (bch->debug & L1_DEB_WARN)
+			debugprint(&bch->inst, "empty_Bfifo ISDN_PID_NONE");
+		WriteW6692B(card, bch->channel, W_B_CMDR, W_B_CMDR_RACK | W_B_CMDR_RACT);
+		bch->rx_idx = 0;
+		return;
+	}
 	if (bch->rx_idx + count > MAX_DATA_MEM) {
 		if (bch->debug & L1_DEB_WARN)
 			debugprint(&bch->inst, "empty_Bfifo incoming packet too large");
@@ -564,6 +571,14 @@ mode_w6692(bchannel_t *bch, int bc, int protocol)
 			if (card->pots && (bhw->b_mode & W_B_MODE_EPCM))
 				disable_pots(bch);
 			bhw->b_mode = 0;
+			bch->tx_len = 0;
+			bch->tx_idx = 0;
+			bch->rx_idx = 0;
+			if (bch->next_skb) {
+				dev_kfree_skb(bch->next_skb);
+				bch->next_skb = NULL;
+			}
+			discard_queue(&bch->rqueue);
 			WriteW6692B(card, bch->channel, W_B_MODE, bhw->b_mode);
 			WriteW6692B(card, bch->channel, W_B_CMDR, W_B_CMDR_RRST | W_B_CMDR_XRST);
 			break;
@@ -595,6 +610,8 @@ mode_w6692(bchannel_t *bch, int bc, int protocol)
 static void
 send_next(bchannel_t *bch)
 {
+	if (bch->protocol == ISDN_PID_NONE)
+		return;
 	if (bch->tx_idx < bch->tx_len)
 		W6692_fill_Bfifo(bch);
 	else {
@@ -1178,6 +1195,7 @@ w6692_l1hwD(mISDNif_t *hif, struct sk_buff *skb)
 int __init 
 setup_w6692(w6692pci *card)
 {
+	u_int	val;
 	if (!request_region(card->addr, 256, "w6692")) {
 		printk(KERN_WARNING
 		       "mISDN: %s config port %x-%x already in use\n",
@@ -1187,11 +1205,21 @@ setup_w6692(w6692pci *card)
 		return(-EIO);
 	}
 	W6692Version(card, "W6692:");
-	printk(KERN_INFO "W6692 ISTA=0x%X\n", ReadW6692(card, W_ISTA));
-	printk(KERN_INFO "W6692 IMASK=0x%X\n", ReadW6692(card, W_IMASK));
-	printk(KERN_INFO "W6692 D_EXIR=0x%X\n", ReadW6692(card, W_D_EXIR));
-	printk(KERN_INFO "W6692 D_EXIM=0x%X\n", ReadW6692(card, W_D_EXIM));
-	printk(KERN_INFO "W6692 D_RSTA=0x%X\n", ReadW6692(card, W_D_RSTA));
+	val = ReadW6692(card, W_ISTA);
+	if (debug)
+		printk(KERN_DEBUG "W6692 ISTA=0x%X\n", val);
+	val = ReadW6692(card, W_IMASK);
+	if (debug)
+		printk(KERN_DEBUG "W6692 IMASK=0x%X\n", val);
+	val = ReadW6692(card, W_D_EXIR);
+	if (debug)
+		printk(KERN_DEBUG "W6692 D_EXIR=0x%X\n", val);
+	val = ReadW6692(card, W_D_EXIM);
+	if (debug)
+		printk(KERN_DEBUG "W6692 D_EXIM=0x%X\n", val);
+	val = ReadW6692(card, W_D_RSTA);
+	if (debug)
+		printk(KERN_DEBUG "W6692 D_RSTA=0x%X\n", val);
 	return (0);
 }
 
@@ -1340,6 +1368,9 @@ w6692_manager(void *data, u_int prim, void *arg) {
 		} else
 			return(-EINVAL);
 		break;
+	    case MGR_SELCHANNEL | REQUEST:
+		/* no special procedure */
+		return(-EINVAL);
 	    PRIM_NOT_HANDLED(MGR_CTRLREADY | INDICATION);
 	    default:
 		printk(KERN_WARNING "%s: prim %x not handled\n",
@@ -1377,8 +1408,9 @@ static int __devinit setup_instance(w6692pci *card)
 		init_bchannel(&card->bch[i]);
 		card->bch[i].hw = &card->wbc[i];
 	}
-	printk(KERN_DEBUG "w6692 card %p dch %p bch1 %p bch2 %p\n",
-		card, &card->dch, &card->bch[0], &card->bch[1]);
+	if (debug)
+		printk(KERN_DEBUG "w6692 card %p dch %p bch1 %p bch2 %p\n",
+			card, &card->dch, &card->bch[0], &card->bch[1]);
 	err = setup_w6692(card);
 	if (err) {
 		free_dchannel(&card->dch);
