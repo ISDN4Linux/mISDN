@@ -1,4 +1,4 @@
-/* $Id: helper.c,v 0.8 2001/03/04 18:55:15 kkeil Exp $
+/* $Id: helper.c,v 0.9 2001/03/05 23:13:19 kkeil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -96,14 +96,23 @@ free_dchannel(dchannel_t *dch) {
 
 int
 init_bchannel(bchannel_t *bch) {
+	if (!(bch->blog = kmalloc(MAX_BLOG_SPACE, GFP_ATOMIC))) {
+		printk(KERN_WARNING
+			"HiSax: No memory for blog\n");
+		return(-ENOMEM);
+	}
 	if (!(bch->rx_buf = kmalloc(MAX_DATA_MEM, GFP_ATOMIC))) {
 		printk(KERN_WARNING
 			"HiSax: No memory for bchannel rx_buf\n");
+		kfree(bch->blog);
+		bch->blog = NULL;
 		return (-ENOMEM);
 	}
 	if (!(bch->tx_buf = kmalloc(MAX_DATA_MEM, GFP_ATOMIC))) {
 		printk(KERN_WARNING
 			"HiSax: No memory for bchannel tx_buf\n");
+		kfree(bch->blog);
+		bch->blog = NULL;
 		kfree(bch->rx_buf);
 		bch->rx_buf = NULL;
 		return (-ENOMEM);
@@ -125,6 +134,10 @@ free_bchannel(bchannel_t *bch) {
 	if (bch->tqueue.sync)
 		printk(KERN_ERR"free_bchannel tqueue.sync\n");
 	discard_queue(&bch->rqueue);
+	if (bch->blog) {
+		kfree(bch->blog);
+		bch->blog = NULL;
+	}
 	if (bch->rx_buf) {
 		kfree(bch->rx_buf);
 		bch->rx_buf = NULL;
