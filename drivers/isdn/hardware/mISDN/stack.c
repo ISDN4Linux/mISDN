@@ -1,4 +1,4 @@
-/* $Id: stack.c,v 1.11 2004/06/30 15:13:18 keil Exp $
+/* $Id: stack.c,v 1.12 2005/02/24 12:48:08 keil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -303,8 +303,9 @@ release_layers(mISDNstack_t *st, u_int prim)
 }
 
 int
-do_for_all_layers(mISDNstack_t *st, u_int prim, void *arg)
+do_for_all_layers(void *data, u_int prim, void *arg)
 {
+	mISDNstack_t	*st = data;
 	mISDNinstance_t *inst;
 	mISDNlayer_t    *layer, *nl;
 	int		cnt = 0;

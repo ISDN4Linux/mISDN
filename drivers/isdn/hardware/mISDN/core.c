@@ -1,4 +1,4 @@
-/* $Id: core.c,v 1.23 2004/06/30 15:13:18 keil Exp $
+/* $Id: core.c,v 1.24 2005/02/24 12:48:08 keil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -19,7 +19,7 @@
 #include <linux/smp_lock.h>
 #endif
 
-static char		*mISDN_core_revision = "$Revision: 1.23 $";
+static char		*mISDN_core_revision = "$Revision: 1.24 $";
 
 LIST_HEAD(mISDN_objectlist);
 rwlock_t		mISDN_objects_lock = RW_LOCK_UNLOCKED;
@@ -106,7 +106,8 @@ mISDNd(void *data)
 			hhe=mISDN_HEADEXT_P(skb);
 			switch (hhe->addr) {
 				case MGR_FUNCTION:
-					err=hhe->func.ctrl(hhe->data[0], hhe->prim, skb->data);
+					err = hhe->func.ctrl(hhe->data[0], hhe->prim,
+						skb->len ? skb->data : NULL);
 					if (err) {
 						printk(KERN_WARNING "mISDNd: addr(%x) prim(%x) failed err(%x)\n",
 							hhe->addr, hhe->prim, err);
@@ -423,7 +424,8 @@ set_stack_req(mISDNstack_t *st, mISDN_pid_t *pid)
 	mISDN_pid_t	*npid;
 	u_char		*pbuf = NULL;
 
-	skb = alloc_skb(sizeof(mISDN_pid_t) + pid->maxplen, GFP_ATOMIC);
+	if (!(skb = alloc_skb(sizeof(mISDN_pid_t) + pid->maxplen, GFP_ATOMIC)))
+		return(-ENOMEM);
 	hhe = mISDN_HEADEXT_P(skb);
 	hhe->prim = MGR_SETSTACK_NW | REQUEST;
 	hhe->addr = MGR_FUNCTION;
@@ -433,6 +435,26 @@ set_stack_req(mISDNstack_t *st, mISDN_pid_t *pid)
 		pbuf = skb_put(skb, pid->maxplen);
 	copy_pid(npid, pid, pbuf);
 	hhe->func.ctrl = central_manager;
+	skb_queue_tail(&mISDN_thread.workq, skb);
+	wake_up_interruptible(&mISDN_thread.waitq);
+	return(0);
+}
+
+static int
+queue_ctrl_ready(mISDNstack_t *st, void *arg)
+{
+	struct sk_buff	*skb;
+	mISDN_headext_t	*hhe;
+
+	if (!(skb = alloc_skb(4, GFP_ATOMIC)))
+		return(-ENOMEM);
+	if (arg) /* maybe changed for future enhancements */
+		return(-EINVAL);
+	hhe = mISDN_HEADEXT_P(skb);
+	hhe->prim = MGR_CTRLREADY | INDICATION;
+	hhe->addr = MGR_FUNCTION;
+	hhe->data[0] = st;
+	hhe->func.ctrl = do_for_all_layers;
 	skb_queue_tail(&mISDN_thread.workq, skb);
 	wake_up_interruptible(&mISDN_thread.waitq);
 	return(0);
@@ -540,7 +562,7 @@ static int central_manager(void *data, u_int prim, void *arg) {
 	    case MGR_ADDIF | REQUEST:
 		return(add_if(data, prim, arg));
 	    case MGR_CTRLREADY | INDICATION:
-		return(do_for_all_layers(st, prim, arg));
+	    	return(queue_ctrl_ready(st, arg));
 	    case MGR_ADDSTPARA | REQUEST:
 	    case MGR_CLRSTPARA | REQUEST:
 		return(change_stack_para(st, prim, arg));
