@@ -1,4 +1,4 @@
-/* $Id: isar.c,v 1.16 2003/12/03 14:32:44 keil Exp $
+/* $Id: isar.c,v 1.17 2004/01/19 11:01:11 keil Exp $
  *
  * isar.c   ISAR (Siemens PSB 7110) specific routines
  *
@@ -192,7 +192,6 @@ isar_load_firmware(bchannel_t *bch, u_char *buf, int size)
 	u_short sadr, left, *sp;
 	u_char *p = buf;
 	u_char *msg, *tmpmsg, *mp, tmp[64];
-	u_long flags;
 	isar_hw_t *ih = bch->hw;
 	
 	struct {u_short sadr;
@@ -326,8 +325,6 @@ isar_load_firmware(bchannel_t *bch, u_char *buf, int size)
 	/* Enable IRQs of ISAR */
 	bch->Write_Reg(bch->inst.data, 0, ISAR_IRQBIT, ISAR_IRQSTA);
 	bch->inst.unlock(bch->inst.data);
-	save_flags(flags);
-	sti();
 	cnt = 1000; /* max 1s */
 	while ((!ih->reg->bstat) && cnt) {
 		mdelay(1);
@@ -349,7 +346,7 @@ isar_load_firmware(bchannel_t *bch, u_char *buf, int size)
 	bch->inst.lock(bch->inst.data, 0);
 	if (!sendmsg(bch, ISAR_HIS_DIAG, ISAR_CTRL_STST, 0, NULL)) {
 		printk(KERN_ERR"isar sendmsg self tst failed\n");
-		ret = 1;goto reterrflg_l;
+		ret = 1;goto reterror;
 	}
 	bch->inst.unlock(bch->inst.data);
 	cnt = 10000; /* max 100 ms */
@@ -374,7 +371,7 @@ isar_load_firmware(bchannel_t *bch, u_char *buf, int size)
 	ih->reg->iis = 0;
 	if (!sendmsg(bch, ISAR_HIS_DIAG, ISAR_CTRL_SWVER, 0, NULL)) {
 		printk(KERN_ERR"isar RQST SVN failed\n");
-		ret = 1;goto reterrflg_l;
+		ret = 1;goto reterror;
 	}
 	bch->inst.unlock(bch->inst.data);
 	cnt = 30000; /* max 300 ms */
@@ -404,10 +401,7 @@ isar_load_firmware(bchannel_t *bch, u_char *buf, int size)
 	bch->inst.obj->own_ctrl(&bch->inst, MGR_LOADFIRM | CONFIRM, NULL);
 	bch->inst.lock(bch->inst.data, 0);
 	ret = 0;
-reterrflg_l:
-	bch->inst.unlock(bch->inst.data);
 reterrflg:
-	restore_flags(flags);
 	bch->inst.lock(bch->inst.data, 0);
 reterror:
 	bch->debug = debug;
