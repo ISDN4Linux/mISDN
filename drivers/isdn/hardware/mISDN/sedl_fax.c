@@ -1,4 +1,4 @@
-/* $Id: sedl_fax.c,v 1.19 2004/01/30 23:46:37 keil Exp $
+/* $Id: sedl_fax.c,v 1.20 2004/01/31 00:04:36 keil Exp $
  *
  * sedl_fax.c  low level stuff for Sedlbauer Speedfax + cards
  *
@@ -50,7 +50,7 @@
 
 extern const char *CardType[];
 
-const char *Sedlfax_revision = "$Revision: 1.19 $";
+const char *Sedlfax_revision = "$Revision: 1.20 $";
 
 const char *Sedlbauer_Types[] =
 	{"None", "speed fax+", "speed fax+ pyramid", "speed fax+ pci"};
@@ -915,15 +915,15 @@ static struct pnp_device_id sedlpnp_ids[] __devinitdata = {
 
 static struct pnp_driver sedlpnp_driver = {
 #else
-static struct isapnp_device_id fcpnp_ids[] __devinitdata = {
+static struct isapnp_device_id sedlpnp_ids[] __devinitdata = {
 	{ ISAPNP_VENDOR('S', 'A', 'G'), ISAPNP_FUNCTION(0x02),
 	  ISAPNP_VENDOR('S', 'A', 'G'), ISAPNP_FUNCTION(0x02), 
 	  (unsigned long) "Speedfax + PnP" },
 	{ }
 };
-MODULE_DEVICE_TABLE(isapnp, fcpnp_ids);
+MODULE_DEVICE_TABLE(isapnp, sedlpnp_ids);
 
-static struct isapnp_driver fcpnp_driver = {
+static struct isapnp_driver sedlpnp_driver = {
 #endif
 	name:     "speedfax pnp",
 	probe:    sedlpnp_probe,
