@@ -1,4 +1,4 @@
-/* $Id: mISDNif.h,v 0.2 2001/02/13 10:42:55 kkeil Exp $
+/* $Id: mISDNif.h,v 0.3 2001/02/13 14:29:32 kkeil Exp $
  *
  */
 
@@ -239,6 +239,8 @@ typedef struct _bsetup {
 	u_int	protocol[MAX_LAYER+1];
 } bsetup_t;
 
+#ifdef __KERNEL__
+
 typedef struct _hisaxobject {
 	struct _hisaxobject *prev;
 	struct _hisaxobject *next;
@@ -291,6 +293,5 @@ typedef struct _hisaxstack {
 int HiSax_register(hisaxobject_t *obj);
 int HiSax_unregister(hisaxobject_t *obj);
 
-#ifdef __KERNEL__
 #endif /* __KERNEL__ */
 #endif /* HISAXIF_H */
