@@ -100,7 +100,7 @@
 
 extern const char *CardType[];
 
-static const char *hfcmulti_revision = "$Revision: 1.5 $";
+static const char *hfcmulti_revision = "$Revision: 1.6 $";
 
 static int HFC_cnt;
 
@@ -320,6 +320,7 @@ init_chip(hfc_multi_t *hc)
 	while (i < 256) {
 		HFC_outb_(hc, R_SLOT, i);
 		HFC_outb_(hc, A_SL_CFG, 0);
+		HFC_outb_(hc, A_CONF, 0);
 		i++;
 	}
 
@@ -514,7 +515,8 @@ hfcmulti_dtmf(hfc_multi_t *hc)
 		if (debug & DEBUG_HFCMULTI_DTMF)
 			printk("\n");
 		if (hc->chan[ch].dtmf_skb) {
-			printk(KERN_WARNING "%s: dtmf_skb still exist\n", __FUNCTION__);
+#warning remove when bug fixed
+//			printk(KERN_WARNING "%s: dtmf_skb still exist\n", __FUNCTION__);
 			ch++;
 			continue;
 		}
@@ -631,6 +633,9 @@ next_frame:
 		if (z1 == z2) { /* empty */
 			/* if done with FIFO audio data during PCM connection */
 			if (!hdlc && txpending && slot_tx>=0) {
+				if (debug & DEBUG_HFCMULTI_MODE)
+					printk(KERN_DEBUG "%s: reconnecting PCM due to no more FIFO data: channel %d slot_tx %d\n", __FUNCTION__, ch, slot_tx);
+				
 				/* connect slot */
 				HFC_outb(hc, A_CON_HDLC, 0xc0 | 0x00 | V_HDLC_TRP | V_IFF);
 				HFC_outb_(hc, R_FIFO, ch<<1 | 1);
@@ -646,6 +651,8 @@ next_frame:
 
 	/* if audio data */
 	if (!hdlc && !txpending && slot_tx>=0) {
+		if (debug & DEBUG_HFCMULTI_MODE)
+			printk(KERN_DEBUG "%s: disconnecting PCM due to FIFO data: channel %d slot_tx %d\n", __FUNCTION__, ch, slot_tx);
 		/* disconnect slot */
 		HFC_outb(hc, A_CON_HDLC, 0x80 | 0x00 | V_HDLC_TRP | V_IFF);
 		HFC_outb_(hc, R_FIFO, ch<<1 | 1);
@@ -1236,7 +1243,6 @@ mode_hfcmulti(hfc_multi_t *hc, int ch, int protocol, int slot_tx, int bank_tx, i
 			printk(KERN_DEBUG "%s: remove from slot %d (RX)\n", __FUNCTION__, oslot_rx);
 		HFC_outb(hc, R_SLOT, (oslot_rx<<1) | V_SL_DIR);
 		HFC_outb(hc, A_SL_CFG, 0);
-		HFC_outb(hc, A_CONF, 0);
 	}
 
 	if (slot_tx < 0) {
@@ -1281,7 +1287,6 @@ mode_hfcmulti(hfc_multi_t *hc, int ch, int protocol, int slot_tx, int bank_tx, i
 			printk(KERN_DEBUG "%s: put to slot %d bank %d flow %02x routing %02x conf %d (RX)\n", __FUNCTION__, slot_rx, bank_rx, flow_rx, routing, conf);
 		HFC_outb(hc, R_SLOT, (slot_rx<<1) | V_SL_DIR);
 		HFC_outb(hc, A_SL_CFG, (ch<<1) | V_CH_DIR | routing);
-		HFC_outb(hc, A_CONF, 0);
 		hc->chan[ch].slot_rx = slot_rx;
 		hc->chan[ch].bank_rx = bank_rx;
 	}
@@ -1457,14 +1462,13 @@ hfcmulti_splloop(hfc_multi_t *hc, int ch, u_char *data, int len)
 	HFC_outb_(hc, R_INC_RES_FIFO, V_RES_F);
 	HFC_wait_(hc);
 
-	/* loop fifo */
-	HFC_outb(hc, A_SUBCH_CFG, V_LOOP_FIFO);
-
 	/* if off */
 	if (len <= 0) {
 		HFC_outb_(hc, A_FIFO_DATA0_NOINC, silence);
 		HFC_outb(hc, A_SUBCH_CFG, 0);
 		if (hc->chan[ch].slot_tx>=0) {
+			if (debug & DEBUG_HFCMULTI_MODE)
+				printk(KERN_DEBUG "%s: connecting PCM due to no more TONE: channel %d slot_tx %d\n", __FUNCTION__, ch, hc->chan[ch].slot_tx);
 			/* connect slot */
 			HFC_outb(hc, A_CON_HDLC, 0xc0 | 0x00 | V_HDLC_TRP | V_IFF);
 			HFC_outb(hc, R_FIFO, ch<<1 | 1);
@@ -1474,6 +1478,9 @@ hfcmulti_splloop(hfc_multi_t *hc, int ch, u_char *data, int len)
 		hc->chan[ch].txpending = 0;
 		return;
 	}
+
+	/* loop fifo */
+	HFC_outb(hc, A_SUBCH_CFG, V_LOOP_FIFO);
 
 	/* set mode */
 	hc->chan[ch].txpending = 2;
@@ -1502,14 +1509,14 @@ hfcmulti_splloop(hfc_multi_t *hc, int ch, u_char *data, int len)
 
 	/* disconnect slot */
 	if (hc->chan[ch].slot_tx>=0) {
+		if (debug & DEBUG_HFCMULTI_MODE)
+			printk(KERN_DEBUG "%s: disconnecting PCM due to TONE: channel %d slot_tx %d\n", __FUNCTION__, ch, hc->chan[ch].slot_tx);
 		HFC_outb(hc, A_CON_HDLC, 0x80 | 0x00 | V_HDLC_TRP | V_IFF);
 		HFC_outb(hc, R_FIFO, ch<<1 | 1);
 		HFC_wait(hc);
 		HFC_outb(hc, A_CON_HDLC, 0x80 | 0x00 | V_HDLC_TRP | V_IFF);
-HFC_outb(hc, R_FIFO, ch<<1);
-HFC_wait(hc);
 	} else {
-		HFC_outb(hc, A_CON_HDLC, 0x80 | 0x00 | V_HDLC_TRP | V_IFF);
+//		HFC_outb(hc, A_CON_HDLC, 0x80 | 0x00 | V_HDLC_TRP | V_IFF);
 		/* change fifo */
 		HFC_outb(hc, R_FIFO, ch<<1);
 		HFC_wait(hc);
@@ -2651,8 +2658,13 @@ release_port(hfc_multi_t *hc, int port)
 				dev_kfree_skb(hc->chan[i].dtmf_skb);
 				hc->chan[i].dtmf_skb = NULL;
 			}
-			hc->created[hc->chan[i].port] = 0;
 		}
+		i++;
+	}
+	i = 0;
+	while(i < 8) {
+		if (i==port || all)
+			hc->created[i] = 0;
 		i++;
 	}
 

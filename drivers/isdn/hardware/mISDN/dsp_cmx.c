@@ -1,4 +1,4 @@
-/* $Id: dsp_cmx.c,v 1.3 2004/02/14 17:43:14 jolly Exp $
+/* $Id: dsp_cmx.c,v 1.4 2004/02/14 20:09:28 jolly Exp $
  *
  * Audio crossconnecting/conferrencing (hardware level).
  *
@@ -182,7 +182,7 @@ dsp_cmx_debug(dsp_t *dsp)
 		member = conf->mlist;
 		while(member)
 		{
-			printk(KERN_DEBUG "  - member = %s %s (slot_tx %d, bank_tx %d, slot_rx %d, bank_rx %d hfc_conf %d)\n", member->dsp->inst.name, (member->dsp==dsp)?" *this*":"", member->dsp->pcm_slot_tx, member->dsp->pcm_bank_tx, member->dsp->pcm_slot_rx, member->dsp->pcm_bank_rx, member->dsp->hfc_conf);
+			printk(KERN_DEBUG "  - member = %s (slot_tx %d, bank_tx %d, slot_rx %d, bank_rx %d hfc_conf %d)%s\n", member->dsp->inst.name, member->dsp->pcm_slot_tx, member->dsp->pcm_bank_tx, member->dsp->pcm_slot_rx, member->dsp->pcm_bank_rx, member->dsp->hfc_conf, (member->dsp==dsp)?" *this*":"");
 			member = member->next;
 		}
 		conf = conf->next;
@@ -874,7 +874,7 @@ dsp_cmx_conf(dsp_t *dsp, u32 conf_id)
 	/* now add us to conf */
 	if (dsp_debug & DEBUG_DSP_CMX)
 		printk(KERN_DEBUG "searching conference %d\n",
-			dsp->conf_id);
+			conf_id);
 	conf = dsp_cmx_search_conf(conf_id);
 	if (!conf) {
 		if (dsp_debug & DEBUG_DSP_CMX)
