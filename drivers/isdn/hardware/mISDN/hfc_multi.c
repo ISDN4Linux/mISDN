@@ -100,7 +100,7 @@
 
 extern const char *CardType[];
 
-static const char *hfcmulti_revision = "$Revision: 1.6 $";
+static const char *hfcmulti_revision = "$Revision: 1.7 $";
 
 static int HFC_cnt;
 
@@ -321,6 +321,7 @@ init_chip(hfc_multi_t *hc)
 		HFC_outb_(hc, R_SLOT, i);
 		HFC_outb_(hc, A_SL_CFG, 0);
 		HFC_outb_(hc, A_CONF, 0);
+		hc->slot_owner[i] = -1;
 		i++;
 	}
 
@@ -1232,17 +1233,29 @@ mode_hfcmulti(hfc_multi_t *hc, int ch, int protocol, int slot_tx, int bank_tx, i
 		/* remove from slot */
 		if (debug & DEBUG_HFCMULTI_MODE)
 			printk(KERN_DEBUG "%s: remove from slot %d (TX)\n", __FUNCTION__, oslot_tx);
-		HFC_outb(hc, R_SLOT, oslot_tx<<1);
-		HFC_outb(hc, A_SL_CFG, 0);
-		HFC_outb(hc, A_CONF, 0);
+		if (hc->slot_owner[oslot_tx<<1] == ch) {
+			HFC_outb(hc, R_SLOT, oslot_tx<<1);
+			HFC_outb(hc, A_SL_CFG, 0);
+			HFC_outb(hc, A_CONF, 0);
+			hc->slot_owner[oslot_tx<<1] = -1;
+		} else {
+			if (debug & DEBUG_HFCMULTI_MODE)
+				printk(KERN_DEBUG "%s: we are not owner of this slot anymore, channel %d is.\n", __FUNCTION__, hc->slot_owner[oslot_tx<<1]);
+		}
 	}
 
 	if (oslot_rx>=0 && slot_rx!=oslot_rx) {
 		/* remove from slot */
 		if (debug & DEBUG_HFCMULTI_MODE)
 			printk(KERN_DEBUG "%s: remove from slot %d (RX)\n", __FUNCTION__, oslot_rx);
-		HFC_outb(hc, R_SLOT, (oslot_rx<<1) | V_SL_DIR);
-		HFC_outb(hc, A_SL_CFG, 0);
+		if (hc->slot_owner[(oslot_rx<<1)|1] == ch) {
+			HFC_outb(hc, R_SLOT, (oslot_rx<<1) | V_SL_DIR);
+			HFC_outb(hc, A_SL_CFG, 0);
+			hc->slot_owner[(oslot_rx<<1)|1] = -1;
+		} else {
+			if (debug & DEBUG_HFCMULTI_MODE)
+				printk(KERN_DEBUG "%s: we are not owner of this slot anymore, channel %d is.\n", __FUNCTION__, hc->slot_owner[(oslot_rx<<1)|1]);
+		}
 	}
 
 	if (slot_tx < 0) {
@@ -1265,6 +1278,7 @@ mode_hfcmulti(hfc_multi_t *hc, int ch, int protocol, int slot_tx, int bank_tx, i
 		HFC_outb(hc, R_SLOT, slot_tx<<1);
 		HFC_outb(hc, A_SL_CFG, (ch<<1) | routing);
 		HFC_outb(hc, A_CONF, (conf<0)?0:(conf|V_CONF_SL));
+		hc->slot_owner[slot_tx<<1] = ch;
 		hc->chan[ch].slot_tx = slot_tx;
 		hc->chan[ch].bank_tx = bank_tx;
 	}
@@ -1287,6 +1301,7 @@ mode_hfcmulti(hfc_multi_t *hc, int ch, int protocol, int slot_tx, int bank_tx, i
 			printk(KERN_DEBUG "%s: put to slot %d bank %d flow %02x routing %02x conf %d (RX)\n", __FUNCTION__, slot_rx, bank_rx, flow_rx, routing, conf);
 		HFC_outb(hc, R_SLOT, (slot_rx<<1) | V_SL_DIR);
 		HFC_outb(hc, A_SL_CFG, (ch<<1) | V_CH_DIR | routing);
+		hc->slot_owner[(slot_rx<<1)|1] = ch;
 		hc->chan[ch].slot_rx = slot_rx;
 		hc->chan[ch].bank_rx = bank_rx;
 	}

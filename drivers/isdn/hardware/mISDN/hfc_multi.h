@@ -119,7 +119,8 @@ struct hfc_multi {
 	 * the bch->channel is equvalent to the hfc-channel
 	 */
 	hfc_chan_t	chan[32];
-	int		created[8]; /* what port is created */
+	u_char		created[8]; /* what port is created */
+	signed char	slot_owner[256]; /* owner channel of slot */
 };
 
 typedef struct hfc_multi	hfc_multi_t;
