@@ -1,4 +1,4 @@
-/* $Id: hfc_pci.c,v 1.19 2003/06/21 22:25:55 kkeil Exp $
+/* $Id: hfc_pci.c,v 1.20 2003/06/22 10:39:43 kkeil Exp $
 
  * hfc_pci.c     low level driver for CCD's hfc-pci based cards
  *
@@ -47,7 +47,7 @@
 
 extern const char *CardType[];
 
-static const char *hfcpci_revision = "$Revision: 1.19 $";
+static const char *hfcpci_revision = "$Revision: 1.20 $";
 
 /* table entry in the PCI devices list */
 typedef struct {
@@ -1719,164 +1719,103 @@ hfcpci_l2l1(hisaxif_t *hif, struct sk_buff *skb)
 /***************************/
 /* handle L1 state changes */
 /***************************/
+
 static void
-hfcD_newstate(dchannel_t *dch)
+HW_hfcD_bh(dchannel_t *dch)
 {
 	hfc_pci_t	*hc = dch->inst.data;
 	u_int		prim = PH_SIGNAL | INDICATION;
 	u_int		para = 0;
 	hisaxif_t	*upif = &dch->inst.up;
 
-	if (!hc->hw.nt_mode) {
-		printk(KERN_DEBUG "%s: TE newstate %x\n",
-			__FUNCTION__, dch->ph_state);
-		switch (dch->ph_state) {
-			case (0):
-				prim = PH_CONTROL | INDICATION;
-				para = HW_RESET;
-				break;
-			case (3):
-				prim = PH_CONTROL | INDICATION;
-				para = HW_DEACTIVATE;
-				break;
-			case (5):
-			case (8):
-				para = ANYSIGNAL;
-				break;
-			case (6):
-				para = INFO2;
-				break;
-			case (7):
-				para = INFO4_P8;
-				break;
-			default:
-				return;
-		}
-	} else { 
-		printk(KERN_DEBUG "%s: NT newstate %x\n",
-			__FUNCTION__, dch->ph_state);
-		dch->inst.lock(dch->inst.data);
-		switch (dch->ph_state) {
-			case (2):
-				if (hc->hw.nt_timer < 0) {
+	if (test_and_clear_bit(D_L1STATECHANGE, &dch->event)) {
+		if (!hc->hw.nt_mode) {
+			if (dch->debug)
+				printk(KERN_DEBUG "%s: TE newstate %x\n",
+					__FUNCTION__, dch->ph_state);
+			switch (dch->ph_state) {
+				case (0):
+					prim = PH_CONTROL | INDICATION;
+					para = HW_RESET;
+					break;
+				case (3):
+					prim = PH_CONTROL | INDICATION;
+					para = HW_DEACTIVATE;
+					break;
+				case (5):
+				case (8):
+					para = ANYSIGNAL;
+					break;
+				case (6):
+					para = INFO2;
+					break;
+				case (7):
+					para = INFO4_P8;
+					break;
+				default:
+					return;
+			}
+		} else {
+			if (dch->debug)
+				printk(KERN_DEBUG "%s: NT newstate %x\n",
+					__FUNCTION__, dch->ph_state);
+			dch->inst.lock(dch->inst.data);
+			switch (dch->ph_state) {
+				case (2):
+					if (hc->hw.nt_timer < 0) {
+						hc->hw.nt_timer = 0;
+						hc->hw.int_m1 &= ~HFCPCI_INTS_TIMER;
+						Write_hfc(hc, HFCPCI_INT_M1, hc->hw.int_m1);
+						/* Clear already pending ints */
+						if (Read_hfc(hc, HFCPCI_INT_S1));
+	
+						Write_hfc(hc, HFCPCI_STATES, 4 | HFCPCI_LOAD_STATE);
+						udelay(10);
+						Write_hfc(hc, HFCPCI_STATES, 4);
+						dch->ph_state = 4;
+					} else {
+						hc->hw.int_m1 |= HFCPCI_INTS_TIMER;
+						Write_hfc(hc, HFCPCI_INT_M1, hc->hw.int_m1);
+						hc->hw.ctmt &= ~HFCPCI_AUTO_TIMER;
+						hc->hw.ctmt |= HFCPCI_TIM3_125;
+						Write_hfc(hc, HFCPCI_CTMT, hc->hw.ctmt | HFCPCI_CLTIMER);
+						Write_hfc(hc, HFCPCI_CTMT, hc->hw.ctmt | HFCPCI_CLTIMER);
+						hc->hw.nt_timer = NT_T1_COUNT;
+						Write_hfc(hc, HFCPCI_STATES, 2 | HFCPCI_NT_G2_G3);	/* allow G2 -> G3 transition */
+					}
+					upif = NULL;
+					break;
+				case (1):
+					prim = PH_DEACTIVATE | INDICATION;
+					para = 0;
 					hc->hw.nt_timer = 0;
 					hc->hw.int_m1 &= ~HFCPCI_INTS_TIMER;
 					Write_hfc(hc, HFCPCI_INT_M1, hc->hw.int_m1);
-					/* Clear already pending ints */
-					if (Read_hfc(hc, HFCPCI_INT_S1));
-
-					Write_hfc(hc, HFCPCI_STATES, 4 | HFCPCI_LOAD_STATE);
-					udelay(10);
-					Write_hfc(hc, HFCPCI_STATES, 4);
-					dch->ph_state = 4;
-				} else {
-					hc->hw.int_m1 |= HFCPCI_INTS_TIMER;
+					break;
+				case (4):
+					hc->hw.nt_timer = 0;
+					hc->hw.int_m1 &= ~HFCPCI_INTS_TIMER;
 					Write_hfc(hc, HFCPCI_INT_M1, hc->hw.int_m1);
-					hc->hw.ctmt &= ~HFCPCI_AUTO_TIMER;
-					hc->hw.ctmt |= HFCPCI_TIM3_125;
-					Write_hfc(hc, HFCPCI_CTMT, hc->hw.ctmt | HFCPCI_CLTIMER);
-					Write_hfc(hc, HFCPCI_CTMT, hc->hw.ctmt | HFCPCI_CLTIMER);
-					hc->hw.nt_timer = NT_T1_COUNT;
-					Write_hfc(hc, HFCPCI_STATES, 2 | HFCPCI_NT_G2_G3);	/* allow G2 -> G3 transition */
-				}
-				return;
-			case (1):
-				prim = PH_DEACTIVATE | INDICATION;
-				para = 0;
-				hc->hw.nt_timer = 0;
-				hc->hw.int_m1 &= ~HFCPCI_INTS_TIMER;
-				Write_hfc(hc, HFCPCI_INT_M1, hc->hw.int_m1);
-				break;
-			case (4):
-				hc->hw.nt_timer = 0;
-				hc->hw.int_m1 &= ~HFCPCI_INTS_TIMER;
-				Write_hfc(hc, HFCPCI_INT_M1, hc->hw.int_m1);
-				return;
-			case (3):
-				prim = PH_ACTIVATE | INDICATION;
-				para = 0;
-				hc->hw.nt_timer = 0;
-				hc->hw.int_m1 &= ~HFCPCI_INTS_TIMER;
-				Write_hfc(hc, HFCPCI_INT_M1, hc->hw.int_m1);
-				break;
-			default:
-				break;
-		}
-		dch->inst.unlock(dch->inst.data);
-	}
-	while(upif) {
-		if_link(upif, prim, para, 0, NULL, 0);
-		upif = upif->next;
-	}
-}
-
-static void
-HW_hfcD_bh(dchannel_t *dch)
-{
-	if (test_and_clear_bit(D_L1STATECHANGE, &dch->event))
-		hfcD_newstate(dch);
-}
-
-static void
-hfcB_bh(bchannel_t *bch)
-{
-	struct sk_buff	*skb;
-	u_int 		pr;
-	int		ret;
-	hisax_head_t	*hh;
-	hisaxif_t	*hif;
-
-	if (!bch)
-		return;
-	if (!bch->inst.up.func) {
-		printk(KERN_WARNING "HiSax: hdlc_bh without up.func\n");
-		return;
-	}
-#if 0
-	printk(KERN_DEBUG "%s: event %x\n", __FUNCTION__, bch->event);
-	if (bch->dev)
-		printk(KERN_DEBUG "%s: rpflg(%x) wpflg(%x)\n", __FUNCTION__,
-			bch->dev->rport.Flag, bch->dev->wport.Flag);
-#endif
-	if (test_and_clear_bit(B_XMTBUFREADY, &bch->event)) {
-		skb = bch->next_skb;
-		if (skb) {
-			hh = HISAX_HEAD_P(skb);
-			bch->next_skb = NULL;
-			if (bch->inst.pid.protocol[2] == ISDN_PID_L2_B_TRANS)
-				pr = DL_DATA | CONFIRM;
-			else
-				pr = PH_DATA | CONFIRM;
-			if ((bch->inst.pid.protocol[2] == ISDN_PID_L2_B_RAWDEV)
-				&& bch->dev)
-				hif = &bch->dev->rport.pif;
-			else
-				hif = &bch->inst.up;
-			if (if_newhead(hif, pr, hh->dinfo, skb))
-				dev_kfree_skb(skb);
-		}
-	}
-	if (test_and_clear_bit(B_RCVBUFREADY, &bch->event)) {
-		if ((bch->inst.pid.protocol[2] == ISDN_PID_L2_B_RAWDEV)
-			&& bch->dev)
-			hif = &bch->dev->rport.pif;
-		else
-			hif = &bch->inst.up;
-		while ((skb = skb_dequeue(&bch->rqueue))) {
-			if (bch->inst.pid.protocol[2] == ISDN_PID_L2_B_TRANS)
-				pr = DL_DATA | INDICATION;
-			else
-				pr = PH_DATA | INDICATION;
-			ret = if_newhead(hif, pr, DINFO_SKB, skb);
-			if (ret < 0) {
-				printk(KERN_WARNING "hdlc_bh deliver err %d\n",
-					ret);
-				dev_kfree_skb(skb);
+					upif = NULL;
+					break;
+				case (3):
+					prim = PH_ACTIVATE | INDICATION;
+					para = 0;
+					hc->hw.nt_timer = 0;
+					hc->hw.int_m1 &= ~HFCPCI_INTS_TIMER;
+					Write_hfc(hc, HFCPCI_INT_M1, hc->hw.int_m1);
+					break;
+				default:
+					break;
 			}
+			dch->inst.unlock(dch->inst.data);
+		}
+		while(upif) {
+			if_link(upif, prim, para, 0, NULL, 0);
+			upif = upif->next;
 		}
 	}
 }
-
 
 /********************************/
 /* called for card init message */
@@ -1887,8 +1826,6 @@ inithfcpci(hfc_pci_t *hc)
 {
 	HFC_INFO("inithfcpci: entered\n");
 	hc->dch.hw_bh = HW_hfcD_bh;
-	hc->bch[0].tqueue.routine = (void *) (void *) hfcB_bh;
-	hc->bch[1].tqueue.routine = (void *) (void *) hfcB_bh;
 	hc->dch.dbusytimer.function = (void *) hfcpci_dbusy_timer;
 	hc->dch.dbusytimer.data = (long) &hc->dch;
 	init_timer(&hc->dch.dbusytimer);

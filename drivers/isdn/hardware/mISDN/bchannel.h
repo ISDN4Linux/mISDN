@@ -1,4 +1,4 @@
-/* $Id: bchannel.h,v 1.1 2003/06/21 21:39:54 kkeil Exp $
+/* $Id: bchannel.h,v 1.2 2003/06/22 10:39:43 kkeil Exp $
  *
  *   Basic declarations, defines for Bchannel hardware
  *
@@ -60,6 +60,7 @@ typedef struct _bchannel_t {
 	u_char			*conmsg;
 	struct			timer_list transbusy;
 	struct			tq_struct tqueue;
+	void			(*hw_bh) (struct _bchannel_t *);
 	int			event;
 	int			err_crc;
 	int			err_tx;

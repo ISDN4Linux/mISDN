@@ -1,4 +1,4 @@
-/* $Id: isar.c,v 1.5 2003/06/21 22:25:56 kkeil Exp $
+/* $Id: isar.c,v 1.6 2003/06/22 10:39:43 kkeil Exp $
  *
  * isar.c   ISAR (Siemens PSB 7110) specific routines
  *
@@ -429,42 +429,8 @@ deliver_status(bchannel_t *bch, int status)
 static void
 isar_bh(bchannel_t *bch)
 {
-	struct sk_buff	*skb;
-	u_int 		pr;
-	int		ret;
+	int	tt;
 
-	if (!bch)
-		return;
-	if (!bch->inst.up.func) {
-		printk(KERN_WARNING "HiSax: isar_bh without up.func\n");
-		return;
-	}
-	if (test_and_clear_bit(B_XMTBUFREADY, &bch->event)) {
-		skb = bch->next_skb;
-		if (skb) {
-			bch->next_skb = NULL;
-			if (bch->inst.pid.protocol[2] == ISDN_PID_L2_B_TRANS)
-				pr = DL_DATA | CONFIRM;
-			else
-				pr = PH_DATA | CONFIRM;
-			if (if_newhead(&bch->inst.up, pr, DINFO_SKB, skb))
-				dev_kfree_skb(skb);
-		}
-	}
-	if (test_and_clear_bit(B_RCVBUFREADY, &bch->event)) {
-		while ((skb = skb_dequeue(&bch->rqueue))) {
-			if (bch->inst.pid.protocol[2] == ISDN_PID_L2_B_TRANS)
-				pr = DL_DATA | INDICATION;
-			else
-				pr = PH_DATA | INDICATION;
-			ret = if_newhead(&bch->inst.up, pr, DINFO_SKB, skb);
-			if (ret < 0) {
-				printk(KERN_WARNING "HiSax: isar deliver err %d\n",
-					ret);
-				dev_kfree_skb(skb);
-			}
-		}
-	}
 	if (test_and_clear_bit(B_LL_READY, &bch->event))
 		deliver_status(bch, HW_MOD_OK);
 	if (test_and_clear_bit(B_LL_NOCARRIER, &bch->event))
@@ -476,12 +442,11 @@ isar_bh(bchannel_t *bch)
 	if (test_and_clear_bit(B_LL_FCERROR, &bch->event))
 		deliver_status(bch, HW_MOD_FCERROR);
 	if (test_and_clear_bit(B_TOUCH_TONE, &bch->event)) {
-		ret = bch->conmsg[0];
-		ret |= TOUCH_TONE_VAL;
+		tt = bch->conmsg[0];
+		tt |= TOUCH_TONE_VAL;
 		if_link(&bch->inst.up, PH_CONTROL | INDICATION,
-			0, sizeof(int), &ret, 0);
+			0, sizeof(int), &tt, 0);
 	}
-
 }
 
 static inline void
@@ -1814,7 +1779,7 @@ int init_isar(bchannel_t *bch)
 {
 	isar_hw_t *ih = bch->hw;
 
-	bch->tqueue.routine = (void *) (void *) isar_bh;
+	bch->hw_bh = isar_bh;
 	ih->ftimer.function = (void *) ftimer_handler;
 	ih->ftimer.data = (long) bch;
 	init_timer(&ih->ftimer);

@@ -11,11 +11,11 @@ O_TARGET := vmlinux-obj.o
 
 # multi objects
 
-SEDLFAXOBJ := sedl_fax.o debug.o helper.o fsm.o isar.o hisax_dch.o
+SEDLFAXOBJ := sedl_fax.o debug.o helper.o fsm.o isar.o hisax_dch.o hisax_bch.o
 
-FRITZOBJ := fritz_pci.o debug.o helper.o fsm.o hisax_dch.o
+FRITZOBJ := fritz_pci.o debug.o helper.o fsm.o hisax_dch.o hisax_bch.o
 
-HFC_PCIOBJ := hfc_pci.o debug.o helper.o hisax_dch.o
+HFC_PCIOBJ := hfc_pci.o debug.o helper.o hisax_dch.o hisax_bch.o
 
 hisaxisac-objs := isac.o arcofi.o debug.o
 

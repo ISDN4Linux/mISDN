@@ -1,4 +1,4 @@
-/* $Id: dchannel.c,v 1.1 2003/06/21 22:04:45 kkeil Exp $
+/* $Id: dchannel.c,v 1.2 2003/06/22 10:39:43 kkeil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -13,23 +13,11 @@
 #include "hisax_dch.h"
 
 static void
-dchannel_rcv(dchannel_t *dch)
+dchannel_bh(dchannel_t *dch)
 {
 	struct sk_buff	*skb;
 	int		err;
 
-	while ((skb = skb_dequeue(&dch->rqueue))) {
-		err = if_newhead(&dch->inst.up, PH_DATA_IND, DINFO_SKB, skb);
-		if (err < 0) {
-			printk(KERN_WARNING "HiSax: dchannel deliver err %d\n", err);
-			dev_kfree_skb(skb);
-		}
-	}
-}
-
-static void
-dchannel_bh(dchannel_t *dch)
-{
 	if (!dch)
 		return;
 	if (dch->debug)
@@ -46,18 +34,24 @@ dchannel_bh(dchannel_t *dch)
 	}
 #endif
 	if (test_and_clear_bit(D_XMTBUFREADY, &dch->event)) {
-		struct sk_buff *skb = dch->next_skb;
-
-		if (skb) {
+		if ((skb = dch->next_skb)) {
 			dch->next_skb = NULL;
 			skb_trim(skb, 0);
-			if (if_newhead(&dch->inst.up, PH_DATA_CNF, DINFO_SKB,
-				skb))
+			if (if_newhead(&dch->inst.up, PH_DATA_CNF, DINFO_SKB, skb))
 				dev_kfree_skb(skb);
 		}
 	}
-	if (test_and_clear_bit(D_RCVBUFREADY, &dch->event))
-		dchannel_rcv(dch);
+
+	if (test_and_clear_bit(D_RCVBUFREADY, &dch->event)) {
+		while ((skb = skb_dequeue(&dch->rqueue))) {
+			err = if_newhead(&dch->inst.up, PH_DATA_IND, DINFO_SKB, skb);
+			if (err < 0) {
+				printk(KERN_WARNING "%s: deliver err %d\n", __FUNCTION__, err);
+				dev_kfree_skb(skb);
+			}
+		}
+	}
+
 	if (dch->hw_bh)
 		dch->hw_bh(dch);
 }

@@ -1,4 +1,4 @@
-/* $Id: helper.c,v 1.3 2003/06/21 21:39:54 kkeil Exp $
+/* $Id: helper.c,v 1.4 2003/06/22 10:39:43 kkeil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -9,80 +9,6 @@
 #define __NO_VERSION__
 #include <linux/hisaxif.h>
 #include "helper.h"
-#include "hisax_bch.h"
-
-int
-init_bchannel(bchannel_t *bch) {
-	int	devtyp = HISAX_RAW_DEVICE;
-
-	if (!(bch->blog = kmalloc(MAX_BLOG_SPACE, GFP_ATOMIC))) {
-		printk(KERN_WARNING
-			"HiSax: No memory for blog\n");
-		return(-ENOMEM);
-	}
-	if (!(bch->rx_buf = kmalloc(MAX_DATA_MEM, GFP_ATOMIC))) {
-		printk(KERN_WARNING
-			"HiSax: No memory for bchannel rx_buf\n");
-		kfree(bch->blog);
-		bch->blog = NULL;
-		return (-ENOMEM);
-	}
-	if (!(bch->tx_buf = kmalloc(MAX_DATA_MEM, GFP_ATOMIC))) {
-		printk(KERN_WARNING
-			"HiSax: No memory for bchannel tx_buf\n");
-		kfree(bch->blog);
-		bch->blog = NULL;
-		kfree(bch->rx_buf);
-		bch->rx_buf = NULL;
-		return (-ENOMEM);
-	}
-	skb_queue_head_init(&bch->rqueue);
-	bch->next_skb = NULL;
-	bch->Flag = 0;
-	bch->event = 0;
-	bch->rx_idx = 0;
-	bch->tx_len = 0;
-	bch->tx_idx = 0;
-	bch->tqueue.data = bch;
-	if (!bch->dev) {
-		if (bch->inst.obj->ctrl(&bch->dev, MGR_GETDEVICE | REQUEST,
-			&devtyp)) {
-			printk(KERN_WARNING
-				"HiSax: no raw device for bchannel\n");
-		}
-	}
-	return(0);
-}
-
-int
-free_bchannel(bchannel_t *bch) {
-
-	if (bch->tqueue.sync)
-		printk(KERN_ERR"free_bchannel tqueue.sync\n");
-	discard_queue(&bch->rqueue);
-	if (bch->blog) {
-		kfree(bch->blog);
-		bch->blog = NULL;
-	}
-	if (bch->rx_buf) {
-		kfree(bch->rx_buf);
-		bch->rx_buf = NULL;
-	}
-	if (bch->tx_buf) {
-		kfree(bch->tx_buf);
-		bch->tx_buf = NULL;
-	}
-	if (bch->next_skb) {
-		dev_kfree_skb(bch->next_skb);
-		bch->next_skb = NULL;
-	}
-	if (bch->inst.obj->ctrl(bch->dev, MGR_DELDEVICE | REQUEST, NULL)) {
-		printk(KERN_WARNING
-			"HiSax: del raw device error\n");
-	} else
-		bch->dev = NULL;
-	return(0);
-}
 
 int bprotocol2pid(void *bp, hisax_pid_t *pid) {
 	__u8	*p = bp;
