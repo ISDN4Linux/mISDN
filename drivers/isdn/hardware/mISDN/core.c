@@ -1,4 +1,4 @@
-/* $Id: core.c,v 0.3 2001/02/13 14:30:32 kkeil Exp $
+/* $Id: core.c,v 0.4 2001/02/21 19:17:44 kkeil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *              based on the teles driver from Jan den Ouden
@@ -83,31 +83,39 @@ get_stack_profile(iframe_t *frm) {
 }
 
 static int
-get_free_stackid(void) {
+get_free_stackid(hisaxstack_t *mst) {
 	int id=1;
-	hisaxstack_t *st, *cst;
+	hisaxstack_t *st;
 
-	while(id) {
-		st = hisax_stacklist;
-		while (st) {
-			if (st->id == id)
-				break;
-			cst = st->child;
-			while (cst) {
-				if (cst->id == id)
+	if (!mst) {
+		while(id<127) {
+			st = hisax_stacklist;
+			while (st) {
+				if (st->id == id)
 					break;
-				cst = cst->next;
+				st = st->next;
 			}
-			if (cst)
-				break;
-			st = st->next;
+			if (st)
+				id++;
+			else
+				return(id);
 		}
-		if (st)
-			id++;
-		else
-			break;
+		return(0); /* 127 used controllers ??? */
+	} else { /* new child_id */
+		id = mst->id;
+		while(id<0x7fffffff) {
+			id += 0x00010000;
+			st = mst->child;
+			while (st) {
+				if (st->id == id)
+					break;
+				st = st->next;
+			}
+			if (!st)
+				return(id);
+		}
 	}
-	return(id);
+	return(0);
 }
 
 hisaxstack_t *
@@ -213,7 +221,7 @@ create_stack(hisaxinstance_t *inst, hisaxstack_t *master) {
 	}
 	memset(newst, 0, sizeof(hisaxstack_t));
 	register_instance(newst, inst);
-	newst->id = get_free_stackid();
+	newst->id = get_free_stackid(master);
 	if ((err = inst->obj->own_ctrl(newst, MGR_ADDLAYER | CONFIRM, NULL))) {
 		printk(KERN_ERR "hisax_stack register failed err %d\n", err);
 		kfree(newst);
