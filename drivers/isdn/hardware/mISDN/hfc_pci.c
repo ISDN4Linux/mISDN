@@ -1,4 +1,4 @@
-/* $Id: hfc_pci.c,v 1.33 2004/01/03 23:07:35 keil Exp $
+/* $Id: hfc_pci.c,v 1.34 2004/01/03 23:10:43 keil Exp $
 
  * hfc_pci.c     low level driver for CCD's hfc-pci based cards
  *
@@ -46,7 +46,7 @@
 
 extern const char *CardType[];
 
-static const char *hfcpci_revision = "$Revision: 1.33 $";
+static const char *hfcpci_revision = "$Revision: 1.34 $";
 
 /* table entry in the PCI devices list */
 typedef struct {
@@ -2232,7 +2232,7 @@ release_card(hfc_pci_t *hc) {
 	free_bchannel(&hc->bch[1]);
 	free_bchannel(&hc->bch[0]);
 	free_dchannel(&hc->dch);
-	HFC_obj.ctrl(card->dch.inst.up.peer, MGR_DISCONNECT | REQUEST, &card->dch.inst.up);
+	HFC_obj.ctrl(hc->dch.inst.up.peer, MGR_DISCONNECT | REQUEST, &hc->dch.inst.up);
 	HFC_obj.ctrl(&hc->dch.inst, MGR_UNREGLAYER | REQUEST, NULL);
 	REMOVE_FROM_LISTBASE(hc, ((hfc_pci_t *)HFC_obj.ilist));
 	unlock_dev(hc);
