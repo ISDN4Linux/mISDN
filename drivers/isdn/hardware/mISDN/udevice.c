@@ -1,4 +1,4 @@
-/* $Id: udevice.c,v 0.22 2001/09/30 17:09:23 kkeil Exp $
+/* $Id: udevice.c,v 0.23 2001/10/30 12:54:46 kkeil Exp $
  *
  * Copyright 2000  by Karsten Keil <kkeil@isdn4linux.de>
  */
@@ -371,10 +371,12 @@ create_layer(hisaxdevice_t *dev, layer_info_t *linfo, int *adr)
 			return(-EINVAL);
 		}
 	} else if ((layer = getlayer4lay(st, linfo->pid.layermask))) {
-		printk(KERN_WARNING
-			"HiSax create_layer st(%x) LM(%x) inst not empty(%p)\n",
-			st->id, linfo->pid.layermask, layer);
-		return(-EBUSY);
+		if (!(linfo->extentions & EXT_INST_MIDDLE)) {
+			printk(KERN_WARNING
+				"HiSax create_layer st(%x) LM(%x) inst not empty(%p)\n",
+				st->id, linfo->pid.layermask, layer);
+			return(-EBUSY);
+		}
 	}
 	if (!(nl = kmalloc(sizeof(devicelayer_t), GFP_ATOMIC))) {
 		printk(KERN_ERR "kmalloc devicelayer failed\n");
@@ -429,7 +431,7 @@ remove_if(devicelayer_t *dl, int stat) {
 		shif = &dl->s_up;
 		if (shif->owner)
 			phif = &shif->owner->down;
-	else if (stat & IF_DOWN)
+	} else if (stat & IF_DOWN) {
 		hif = &dl->inst.down;
 		shif = &dl->s_down;
 		if (shif->owner)
@@ -439,8 +441,10 @@ remove_if(devicelayer_t *dl, int stat) {
 		return(-EINVAL);
 	}
 	err = udev_obj.ctrl(hif->peer, MGR_DISCONNECT | REQUEST, hif);
-	if (phif)
+	if (phif) {
 		memcpy(phif, shif, sizeof(hisaxif_t));
+		memset(shif, 0, sizeof(hisaxif_t));
+	}
 	REMOVE_FROM_LIST(hif);
 	return(err);
 }
