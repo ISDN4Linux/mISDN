@@ -1,4 +1,4 @@
-/* $Id: bchannel.c,v 1.5 2003/12/03 14:32:44 keil Exp $
+/* $Id: bchannel.c,v 1.6 2004/01/26 22:21:30 keil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -6,7 +6,6 @@
  *
  */
 
-#define __NO_VERSION__
 #include <linux/mISDNif.h>
 #include "layer1.h"
 #include "bchannel.h"
@@ -75,7 +74,7 @@ bchannel_bh(bchannel_t *bch)
 }
 
 int
-init_bchannel(bchannel_t *bch) {
+mISDN_init_bch(bchannel_t *bch) {
 	int	devtyp = mISDN_RAW_DEVICE;
 
 	if (!(bch->blog = kmalloc(MAX_BLOG_SPACE, GFP_ATOMIC))) {
@@ -119,13 +118,13 @@ init_bchannel(bchannel_t *bch) {
 }
 
 int
-free_bchannel(bchannel_t *bch) {
+mISDN_free_bch(bchannel_t *bch) {
 #ifdef HAS_WORKQUEUE
 	if (bch->work.pending)
-		printk(KERN_ERR "free_bchannel work:(%lx)\n", bch->work.pending);
+		printk(KERN_ERR "mISDN_free_bch work:(%lx)\n", bch->work.pending);
 #else
 	if (bch->work.sync)
-		printk(KERN_ERR "free_bchannel work:(%lx)\n", bch->work.sync);
+		printk(KERN_ERR "mISDN_free_bch work:(%lx)\n", bch->work.sync);
 #endif
 	discard_queue(&bch->rqueue);
 	if (bch->blog) {
@@ -151,3 +150,6 @@ free_bchannel(bchannel_t *bch) {
 		bch->dev = NULL;
 	return(0);
 }
+
+EXPORT_SYMBOL(mISDN_init_bch);
+EXPORT_SYMBOL(mISDN_free_bch);

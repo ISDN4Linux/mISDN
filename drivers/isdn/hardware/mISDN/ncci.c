@@ -1,4 +1,4 @@
-/* $Id: ncci.c,v 1.22 2004/01/19 11:02:48 keil Exp $
+/* $Id: ncci.c,v 1.23 2004/01/26 22:21:30 keil Exp $
  *
  */
 
@@ -18,7 +18,7 @@ log_skbdata(struct sk_buff *skb)
 	char *t = logbuf;
 
 	t += sprintf(t, "skbdata(%d):", skb->len);
-	QuickHex(t, skb->data, skb->len);
+	mISDN_QuickHex(t, skb->data, skb->len);
 	printk(KERN_DEBUG "%s\n", logbuf);
 }
 
@@ -202,7 +202,7 @@ ncci_connect_b3_req(struct FsmInst *fi, int event, void *arg)
 		cmsg_free(cmsg);
 		return;
 	}
-	FsmChangeState(fi, ST_NCCI_N_0_1);
+	mISDN_FsmChangeState(fi, ST_NCCI_N_0_1);
 	capi_cmsg_answer(cmsg);
 
 	// TODO: NCPI handling
@@ -221,7 +221,7 @@ ncci_connect_b3_req(struct FsmInst *fi, int event, void *arg)
 	cmsg->adr.adrNCCI = ncci->addr;
 	ncci_debug(fi, "ncci_connect_b3_req NCCI %x cmsg->Info(%x)",
 		ncci->addr, cmsg->Info);
-	if (FsmEvent(fi, EV_NC_CONNECT_B3_CONF, cmsg))
+	if (mISDN_FsmEvent(fi, EV_NC_CONNECT_B3_CONF, cmsg))
 		cmsg_free(cmsg);
 }
 
@@ -229,7 +229,7 @@ static void
 ncci_connect_b3_ind(struct FsmInst *fi, int event, void *arg)
 {
 	// from DL_ESTABLISH
-	FsmChangeState(fi, ST_NCCI_N_1);
+	mISDN_FsmChangeState(fi, ST_NCCI_N_1);
 	Send2Application(fi->userdata, arg);
 }
 
@@ -245,16 +245,16 @@ ncci_connect_b3_resp(struct FsmInst *fi, int event, void *arg)
 		return;
 	}
 	if (cmsg->Info == 0) {
-		FsmChangeState(fi, ST_NCCI_N_2);
+		mISDN_FsmChangeState(fi, ST_NCCI_N_2);
 		ncciCmsgHeader(ncci, cmsg, CAPI_CONNECT_B3_ACTIVE, CAPI_IND);
 		event = EV_NC_CONNECT_B3_ACTIVE_IND;
 	} else {
-		FsmChangeState(fi, ST_NCCI_N_4);
+		mISDN_FsmChangeState(fi, ST_NCCI_N_4);
 		cmsg->Info = 0;
 		ncciCmsgHeader(ncci, cmsg, CAPI_DISCONNECT_B3, CAPI_IND);
 		event = EV_NC_DISCONNECT_B3_IND;
 	}
-	if (FsmEvent(&ncci->ncci_m, event, cmsg))
+	if (mISDN_FsmEvent(&ncci->ncci_m, event, cmsg))
 		cmsg_free(cmsg);
 }
 
@@ -264,11 +264,11 @@ ncci_connect_b3_conf(struct FsmInst *fi, int event, void *arg)
 	_cmsg	*cmsg = arg;
   
 	if (cmsg->Info == 0) {
-		FsmChangeState(fi, ST_NCCI_N_2);
+		mISDN_FsmChangeState(fi, ST_NCCI_N_2);
 		Send2Application(fi->userdata, cmsg);
 		ncciL4L3(fi->userdata, DL_ESTABLISH | REQUEST, 0, 0, NULL, NULL);
 	} else {
-		FsmChangeState(fi, ST_NCCI_N_0);
+		mISDN_FsmChangeState(fi, ST_NCCI_N_0);
 		Send2Application(fi->userdata, cmsg);
 		ncciDestr(fi->userdata);
 	}
@@ -287,11 +287,11 @@ ncci_disconnect_b3_req(struct FsmInst *fi, int event, void *arg)
 		 */ 
 		capi_cmsg_answer(cmsg);
 		cmsg->Info = Info;
-		if (FsmEvent(fi, EV_NC_DISCONNECT_B3_CONF, cmsg))
+		if (mISDN_FsmEvent(fi, EV_NC_DISCONNECT_B3_CONF, cmsg))
 			cmsg_free(cmsg);
 	} else {
 		cmsg_free(cmsg);
-		FsmChangeState(fi, ST_NCCI_N_4);
+		mISDN_FsmChangeState(fi, ST_NCCI_N_4);
 	}
 	ncciL4L3(ncci, DL_RELEASE | REQUEST, 0, 0, NULL, NULL);
 }
@@ -302,7 +302,7 @@ ncci_disconnect_b3_conf(struct FsmInst *fi, int event, void *arg)
 	_cmsg	*cmsg = arg;
 
 	if (cmsg->Info == 0) {
-		FsmChangeState(fi, ST_NCCI_N_4);
+		mISDN_FsmChangeState(fi, ST_NCCI_N_4);
 	}
 	Send2Application(fi->userdata, cmsg);
 }
@@ -312,12 +312,12 @@ ncci_disconnect_b3_ind(struct FsmInst *fi, int event, void *arg)
 {
 	Ncci_t	*ncci = fi->userdata;
 
-	FsmChangeState(fi, ST_NCCI_N_5);
+	mISDN_FsmChangeState(fi, ST_NCCI_N_5);
 	if (ncci->appl) { // FIXME
 		Send2Application(ncci, arg);
 	} else {
 		cmsg_free(arg);
-		FsmChangeState(fi, ST_NCCI_N_0);
+		mISDN_FsmChangeState(fi, ST_NCCI_N_0);
 		ncciDestr(ncci);
 	}
 }
@@ -327,7 +327,7 @@ ncci_disconnect_b3_resp(struct FsmInst *fi, int event, void *arg)
 {
 	if (arg)
 		cmsg_free(arg);
-	FsmChangeState(fi, ST_NCCI_N_0);
+	mISDN_FsmChangeState(fi, ST_NCCI_N_0);
 	ncciDestr(fi->userdata);
 }
 
@@ -439,7 +439,7 @@ ncci_connect_b3_active_ind(struct FsmInst *fi, int event, void *arg)
 	Ncci_t *ncci = fi->userdata;
 	int i;
 
-	FsmChangeState(fi, ST_NCCI_N_ACT);
+	mISDN_FsmChangeState(fi, ST_NCCI_N_ACT);
 	for (i = 0; i < CAPI_MAXDATAWINDOW; i++) {
 		ncci->xmit_skb_handles[i].PktId = 0;
 		ncci->recv_skb_handles[i] = 0;
@@ -472,7 +472,7 @@ ncci_n0_dl_establish_ind_conf(struct FsmInst *fi, int event, void *arg)
 	}
 	CMSG_ALLOC(cmsg);
 	ncciCmsgHeader(ncci, cmsg, CAPI_CONNECT_B3, CAPI_IND);
-	if (FsmEvent(&ncci->ncci_m, EV_NC_CONNECT_B3_IND, cmsg))
+	if (mISDN_FsmEvent(&ncci->ncci_m, EV_NC_CONNECT_B3_IND, cmsg))
 		cmsg_free(cmsg);
 }
 
@@ -486,7 +486,7 @@ ncci_dl_establish_conf(struct FsmInst *fi, int event, void *arg)
 		return;
 	CMSG_ALLOC(cmsg);
 	ncciCmsgHeader(ncci, cmsg, CAPI_CONNECT_B3_ACTIVE, CAPI_IND);
-	if (FsmEvent(&ncci->ncci_m, EV_NC_CONNECT_B3_ACTIVE_IND, cmsg))
+	if (mISDN_FsmEvent(&ncci->ncci_m, EV_NC_CONNECT_B3_ACTIVE_IND, cmsg))
 		cmsg_free(cmsg);
 }
 
@@ -498,7 +498,7 @@ ncci_dl_release_ind_conf(struct FsmInst *fi, int event, void *arg)
 
 	CMSG_ALLOC(cmsg);
 	ncciCmsgHeader(ncci, cmsg, CAPI_DISCONNECT_B3, CAPI_IND);
-	if (FsmEvent(&ncci->ncci_m, EV_NC_DISCONNECT_B3_IND, cmsg))
+	if (mISDN_FsmEvent(&ncci->ncci_m, EV_NC_DISCONNECT_B3_IND, cmsg))
 		cmsg_free(cmsg);
 }
 
@@ -510,7 +510,7 @@ ncci_linkdown(struct FsmInst *fi, int event, void *arg)
 
 	CMSG_ALLOC(cmsg);
 	ncciCmsgHeader(ncci, cmsg, CAPI_DISCONNECT_B3, CAPI_IND);
-	if (FsmEvent(&ncci->ncci_m, EV_NC_DISCONNECT_B3_IND, cmsg))
+	if (mISDN_FsmEvent(&ncci->ncci_m, EV_NC_DISCONNECT_B3_IND, cmsg))
 		cmsg_free(cmsg);
 }
 
@@ -523,14 +523,14 @@ ncci_dl_down_ind(struct FsmInst *fi, int event, void *arg)
 	CMSG_ALLOC(cmsg);
 	ncciCmsgHeader(ncci, cmsg, CAPI_DISCONNECT_B3, CAPI_IND);
 	cmsg->Reason_B3 = CapiProtocolErrorLayer1;
-	if (FsmEvent(&ncci->ncci_m, EV_NC_DISCONNECT_B3_IND, cmsg))
+	if (mISDN_FsmEvent(&ncci->ncci_m, EV_NC_DISCONNECT_B3_IND, cmsg))
 		cmsg_free(cmsg);
 }
 
 static void
 ncci_appl_release(struct FsmInst *fi, int event, void *arg)
 {
-	FsmChangeState(fi, ST_NCCI_N_0);
+	mISDN_FsmChangeState(fi, ST_NCCI_N_0);
 	ncciDestr(fi->userdata);
 }
 
@@ -608,7 +608,7 @@ const int FN_NCCI_COUNT = sizeof(fn_ncci_list)/sizeof(struct FsmNode);
 static void
 ncciD_connect_b3_req(struct FsmInst *fi, int event, void *arg)
 {
-	FsmChangeState(fi, ST_NCCI_N_0_1);
+	mISDN_FsmChangeState(fi, ST_NCCI_N_0_1);
 	if (SKB_l4l3(fi->userdata, arg))
 		dev_kfree_skb(arg);
 }
@@ -620,9 +620,9 @@ ncciD_connect_b3_conf(struct FsmInst *fi, int event, void *arg)
 	__u16		info = CAPIMSG_U16(skb->data, 12);
 
 	if (info == 0)
-		FsmChangeState(fi, ST_NCCI_N_2);
+		mISDN_FsmChangeState(fi, ST_NCCI_N_2);
 	else
-		FsmChangeState(fi, ST_NCCI_N_0);
+		mISDN_FsmChangeState(fi, ST_NCCI_N_0);
 	SKB2Application(fi->userdata, skb);
 	if (info != 0)
 		ncciDestr(fi->userdata);
@@ -631,7 +631,7 @@ ncciD_connect_b3_conf(struct FsmInst *fi, int event, void *arg)
 static void
 ncciD_connect_b3_ind(struct FsmInst *fi, int event, void *arg)
 {
-	FsmChangeState(fi, ST_NCCI_N_1);
+	mISDN_FsmChangeState(fi, ST_NCCI_N_1);
 	SKB2Application(fi->userdata, arg);
 }
 
@@ -642,9 +642,9 @@ ncciD_connect_b3_resp(struct FsmInst *fi, int event, void *arg)
 	__u16		rej = CAPIMSG_U16(skb->data, 4);
 
 	if (rej)
-		FsmChangeState(fi, ST_NCCI_N_4);
+		mISDN_FsmChangeState(fi, ST_NCCI_N_4);
 	else
-		FsmChangeState(fi, ST_NCCI_N_2);
+		mISDN_FsmChangeState(fi, ST_NCCI_N_2);
 	if (SKB_l4l3(fi->userdata, arg))
 		dev_kfree_skb(arg);
 }
@@ -652,7 +652,7 @@ ncciD_connect_b3_resp(struct FsmInst *fi, int event, void *arg)
 static void
 ncciD_connect_b3_active_ind(struct FsmInst *fi, int event, void *arg)
 {
-	FsmChangeState(fi, ST_NCCI_N_ACT);
+	mISDN_FsmChangeState(fi, ST_NCCI_N_ACT);
 	SKB2Application(fi->userdata, arg);
 }
 
@@ -666,7 +666,7 @@ ncciD_connect_b3_active_resp(struct FsmInst *fi, int event, void *arg)
 static void
 ncciD_reset_b3_ind(struct FsmInst *fi, int event, void *arg)
 {
-	FsmChangeState(fi, ST_NCCI_N_ACT);
+	mISDN_FsmChangeState(fi, ST_NCCI_N_ACT);
 	SKB2Application(fi->userdata, arg);
 }
 
@@ -680,7 +680,7 @@ ncciD_reset_b3_resp(struct FsmInst *fi, int event, void *arg)
 static void
 ncciD_reset_b3_conf(struct FsmInst *fi, int event, void *arg)
 {
-	FsmChangeState(fi, ST_NCCI_N_3);
+	mISDN_FsmChangeState(fi, ST_NCCI_N_3);
 	SKB2Application(fi->userdata, arg);
 }
 
@@ -696,7 +696,7 @@ ncciD_disconnect_b3_req(struct FsmInst *fi, int event, void *arg)
 	Ncci_t	*ncci = fi->userdata;
 
 	ncci->savedstate = fi->state;
-	FsmChangeState(fi, ST_NCCI_N_4);
+	mISDN_FsmChangeState(fi, ST_NCCI_N_4);
 	if (SKB_l4l3(fi->userdata, arg))
 		dev_kfree_skb(arg);
 }
@@ -711,7 +711,7 @@ ncciD_disconnect_b3_conf(struct FsmInst *fi, int event, void *arg)
 	if (test_bit(NCCI_STATE_APPLRELEASED, &ncci->state))
 		return;
 	if (info != 0)
-		FsmChangeState(fi, ncci->savedstate);
+		mISDN_FsmChangeState(fi, ncci->savedstate);
 	SKB2Application(ncci, skb);
 }
 
@@ -721,7 +721,7 @@ ncciD_disconnect_b3_ind(struct FsmInst *fi, int event, void *arg)
 	Ncci_t	*ncci = fi->userdata;
 	struct sk_buff	*skb = arg;
 
-	FsmChangeState(fi, ST_NCCI_N_5);
+	mISDN_FsmChangeState(fi, ST_NCCI_N_5);
 	if (test_bit(NCCI_STATE_APPLRELEASED, &ncci->state)) {
 		skb_pull(skb, CAPIMSG_BASELEN);
 		skb_trim(skb, 4);
@@ -734,7 +734,7 @@ ncciD_disconnect_b3_ind(struct FsmInst *fi, int event, void *arg)
 static void
 ncciD_disconnect_b3_resp(struct FsmInst *fi, int event, void *arg)
 {
-	FsmChangeState(fi, ST_NCCI_N_0);
+	mISDN_FsmChangeState(fi, ST_NCCI_N_0);
 	if (SKB_l4l3(fi->userdata, arg))
 		dev_kfree_skb(arg);
 	ncciDestr(fi->userdata);
@@ -748,7 +748,7 @@ ncciD_linkdown(struct FsmInst *fi, int event, void *arg)
 
 	CMSG_ALLOC(cmsg);
 	ncciCmsgHeader(ncci, cmsg, CAPI_DISCONNECT_B3, CAPI_IND);
-	FsmChangeState(fi, ST_NCCI_N_5);
+	mISDN_FsmChangeState(fi, ST_NCCI_N_5);
 	Send2Application(ncci, cmsg);
 }
 
@@ -760,7 +760,7 @@ ncciD_appl_release_disc(struct FsmInst *fi, int event, void *arg)
 
 	capimsg_setu32(parm, 0, ncci->addr);
 	parm[4] = 0;
-	FsmChangeState(fi, ST_NCCI_N_4);
+	mISDN_FsmChangeState(fi, ST_NCCI_N_4);
 	if_link(&ncci->link->inst.down, CAPI_DISCONNECT_B3_REQ, 0, 5, parm, 0); 
 }
 
@@ -875,7 +875,7 @@ void
 ncciApplRelease(Ncci_t *ncci)
 {
 	test_and_set_bit(NCCI_STATE_APPLRELEASED, &ncci->state);
-	FsmEvent(&ncci->ncci_m, EV_AP_RELEASE, NULL);
+	mISDN_FsmEvent(&ncci->ncci_m, EV_AP_RELEASE, NULL);
 }
 
 void
@@ -891,7 +891,7 @@ void
 ncciReleaseLink(Ncci_t *ncci)
 {
 	/* this is normal shutdown on speech and other transparent protocols */
-	FsmEvent(&ncci->ncci_m, EV_NC_LINKDOWN, NULL);
+	mISDN_FsmEvent(&ncci->ncci_m, EV_NC_LINKDOWN, NULL);
 }
 
 void
@@ -1117,19 +1117,19 @@ ncci_l4l3_direct(Ncci_t *ncci, struct sk_buff *skb) {
 		case CAPI_MANUFACTURER_RESP:
 			return(SKB_l4l3(ncci, skb));
 		case CAPI_CONNECT_B3_REQ:
-			ret = FsmEvent(&ncci->ncci_m, EV_AP_CONNECT_B3_REQ, skb);
+			ret = mISDN_FsmEvent(&ncci->ncci_m, EV_AP_CONNECT_B3_REQ, skb);
 			break;
 		case CAPI_CONNECT_B3_RESP:
-			ret = FsmEvent(&ncci->ncci_m, EV_AP_CONNECT_B3_RESP, skb);
+			ret = mISDN_FsmEvent(&ncci->ncci_m, EV_AP_CONNECT_B3_RESP, skb);
 			break;
 		case CAPI_CONNECT_B3_ACTIVE_RESP:
-			ret = FsmEvent(&ncci->ncci_m, EV_AP_CONNECT_B3_ACTIVE_RESP, skb);
+			ret = mISDN_FsmEvent(&ncci->ncci_m, EV_AP_CONNECT_B3_ACTIVE_RESP, skb);
 			break;
 		case CAPI_DISCONNECT_B3_REQ:
-			ret = FsmEvent(&ncci->ncci_m, EV_AP_DISCONNECT_B3_REQ, skb);
+			ret = mISDN_FsmEvent(&ncci->ncci_m, EV_AP_DISCONNECT_B3_REQ, skb);
 			break;
 		case CAPI_DISCONNECT_B3_RESP:
-			ret = FsmEvent(&ncci->ncci_m, EV_AP_DISCONNECT_B3_RESP, skb);
+			ret = mISDN_FsmEvent(&ncci->ncci_m, EV_AP_DISCONNECT_B3_RESP, skb);
 			break;
 		default:
 			int_error();
@@ -1154,25 +1154,25 @@ ncciGetCmsg(Ncci_t *ncci, _cmsg *cmsg)
 	}
 	switch (CMSGCMD(cmsg)) {
 		case CAPI_CONNECT_B3_REQ:
-			retval = FsmEvent(&ncci->ncci_m, EV_AP_CONNECT_B3_REQ, cmsg);
+			retval = mISDN_FsmEvent(&ncci->ncci_m, EV_AP_CONNECT_B3_REQ, cmsg);
 			break;
 		case CAPI_CONNECT_B3_RESP:
-			retval = FsmEvent(&ncci->ncci_m, EV_AP_CONNECT_B3_RESP, cmsg);
+			retval = mISDN_FsmEvent(&ncci->ncci_m, EV_AP_CONNECT_B3_RESP, cmsg);
 			break;
 		case CAPI_CONNECT_B3_ACTIVE_RESP:
-			retval = FsmEvent(&ncci->ncci_m, EV_AP_CONNECT_B3_ACTIVE_RESP, cmsg);
+			retval = mISDN_FsmEvent(&ncci->ncci_m, EV_AP_CONNECT_B3_ACTIVE_RESP, cmsg);
 			break;
 		case CAPI_DISCONNECT_B3_REQ:
-			retval = FsmEvent(&ncci->ncci_m, EV_AP_DISCONNECT_B3_REQ, cmsg);
+			retval = mISDN_FsmEvent(&ncci->ncci_m, EV_AP_DISCONNECT_B3_REQ, cmsg);
 			break;
 		case CAPI_DISCONNECT_B3_RESP:
-			retval = FsmEvent(&ncci->ncci_m, EV_AP_DISCONNECT_B3_RESP, cmsg);
+			retval = mISDN_FsmEvent(&ncci->ncci_m, EV_AP_DISCONNECT_B3_RESP, cmsg);
 			break;
 		case CAPI_FACILITY_REQ:
-			retval = FsmEvent(&ncci->ncci_m, EV_AP_FACILITY_REQ, cmsg);
+			retval = mISDN_FsmEvent(&ncci->ncci_m, EV_AP_FACILITY_REQ, cmsg);
 			break;
 		case CAPI_MANUFACTURER_REQ:
-			retval = FsmEvent(&ncci->ncci_m, EV_AP_MANUFACTURER_REQ, cmsg);
+			retval = mISDN_FsmEvent(&ncci->ncci_m, EV_AP_MANUFACTURER_REQ, cmsg);
 			break;
 		default:
 			int_error();
@@ -1309,7 +1309,7 @@ ncci_l3l4_direct(Ncci_t *ncci, mISDN_head_t *hh, struct sk_buff *skb)
 			int_error();
 			return(-EINVAL);
 	}
-	if (FsmEvent(&ncci->ncci_m, event, skb))
+	if (mISDN_FsmEvent(&ncci->ncci_m, event, skb))
 		dev_kfree_skb(skb);
 	return(0);
 }
@@ -1333,16 +1333,16 @@ ncci_l3l4(Ncci_t *ncci, mISDN_head_t *hh, struct sk_buff *skb)
 			}
 			break;
 		case DL_ESTABLISH | INDICATION:
-			FsmEvent(&ncci->ncci_m, EV_DL_ESTABLISH_IND, skb);
+			mISDN_FsmEvent(&ncci->ncci_m, EV_DL_ESTABLISH_IND, skb);
 			break;
 		case DL_ESTABLISH | CONFIRM:
-			FsmEvent(&ncci->ncci_m, EV_DL_ESTABLISH_CONF, skb);
+			mISDN_FsmEvent(&ncci->ncci_m, EV_DL_ESTABLISH_CONF, skb);
 			break;
 		case DL_RELEASE | INDICATION:
-			FsmEvent(&ncci->ncci_m, EV_DL_RELEASE_IND, skb);
+			mISDN_FsmEvent(&ncci->ncci_m, EV_DL_RELEASE_IND, skb);
 			break;
 		case DL_RELEASE | CONFIRM:
-			FsmEvent(&ncci->ncci_m, EV_DL_RELEASE_CONF, skb);
+			mISDN_FsmEvent(&ncci->ncci_m, EV_DL_RELEASE_CONF, skb);
 			break;
 		case PH_CONTROL | INDICATION: /* e.g touch tones */
 			/* handled by AppPlci */
@@ -1377,18 +1377,18 @@ init_ncci(void)
 	ncci_fsm.event_count = EV_NCCI_COUNT;
 	ncci_fsm.strEvent = str_ev_ncci;
 	ncci_fsm.strState = str_st_ncci;
-	FsmNew(&ncci_fsm, fn_ncci_list, FN_NCCI_COUNT);
+	mISDN_FsmNew(&ncci_fsm, fn_ncci_list, FN_NCCI_COUNT);
 
 	ncciD_fsm.state_count = ST_NCCI_COUNT;
 	ncciD_fsm.event_count = EV_NCCI_COUNT;
 	ncciD_fsm.strEvent = str_ev_ncci;
 	ncciD_fsm.strState = str_st_ncci;
-	FsmNew(&ncciD_fsm, fn_ncciD_list, FN_NCCID_COUNT);
+	mISDN_FsmNew(&ncciD_fsm, fn_ncciD_list, FN_NCCID_COUNT);
 }
 
 void
 free_ncci(void)
 {
-	FsmFree(&ncci_fsm);
-	FsmFree(&ncciD_fsm);
+	mISDN_FsmFree(&ncci_fsm);
+	mISDN_FsmFree(&ncciD_fsm);
 }

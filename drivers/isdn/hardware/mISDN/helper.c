@@ -1,4 +1,4 @@
-/* $Id: helper.c,v 1.10 2003/11/09 16:01:12 keil Exp $
+/* $Id: helper.c,v 1.11 2004/01/26 22:21:30 keil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -6,7 +6,6 @@
  *
  */
 
-#define __NO_VERSION__
 #include <linux/mISDNif.h>
 #include "helper.h"
 
@@ -14,7 +13,7 @@
 #undef	DEBUG_IF
 
 void
-set_dchannel_pid(mISDN_pid_t *pid, int protocol, int layermask)
+mISDN_set_dchannel_pid(mISDN_pid_t *pid, int protocol, int layermask)
 {
 	if (!layermask)
 		layermask = ISDN_LAYER(0)| ISDN_LAYER(1) | ISDN_LAYER(2) |
@@ -42,7 +41,7 @@ set_dchannel_pid(mISDN_pid_t *pid, int protocol, int layermask)
 }
 
 int
-bprotocol2pid(void *bp, mISDN_pid_t *pid)
+mISDN_bprotocol2pid(void *bp, mISDN_pid_t *pid)
 {
 	__u8	*p = bp;
 	__u16	*w = bp;
@@ -75,7 +74,7 @@ bprotocol2pid(void *bp, mISDN_pid_t *pid)
 }
 
 int
-HasProtocol(mISDNobject_t *obj, u_int protocol)
+mISDN_HasProtocol(mISDNobject_t *obj, u_int protocol)
 {
 	int layer;
 	u_int pmask;
@@ -102,7 +101,7 @@ HasProtocol(mISDNobject_t *obj, u_int protocol)
 }
 
 int
-SetHandledPID(mISDNobject_t *obj, mISDN_pid_t *pid)
+mISDN_SetHandledPID(mISDNobject_t *obj, mISDN_pid_t *pid)
 {
 	int layer;
 	int ret = 0;
@@ -129,7 +128,7 @@ SetHandledPID(mISDNobject_t *obj, mISDN_pid_t *pid)
 			else
 				continue;
 		}
-		if (0 == HasProtocol(obj, sav.protocol[layer])) {
+		if (0 == mISDN_HasProtocol(obj, sav.protocol[layer])) {
 			ret++;
 			pid->protocol[layer] = sav.protocol[layer];
 			pid->param[layer] = sav.param[layer];
@@ -141,7 +140,7 @@ SetHandledPID(mISDNobject_t *obj, mISDN_pid_t *pid)
 }
 
 void
-RemoveUsedPID(mISDN_pid_t *pid, mISDN_pid_t *used)
+mISDN_RemoveUsedPID(mISDN_pid_t *pid, mISDN_pid_t *used)
 {
 	int layer;
 
@@ -162,7 +161,7 @@ RemoveUsedPID(mISDN_pid_t *pid, mISDN_pid_t *used)
 }
 
 int
-layermask2layer(int layermask) {
+mISDN_layermask2layer(int layermask) {
 	switch(layermask) {
 		case ISDN_LAYER(0): return(0);
 		case ISDN_LAYER(1): return(1);
@@ -178,7 +177,7 @@ layermask2layer(int layermask) {
 }
 
 int
-get_protocol(mISDNstack_t *st, int layer)
+mISDN_get_protocol(mISDNstack_t *st, int layer)
 {
 
 	if (!st){
@@ -193,7 +192,7 @@ get_protocol(mISDNstack_t *st, int layer)
 }
 
 int
-get_lowlayer(int layermask)
+mISDN_get_lowlayer(int layermask)
 {
 	int layer;
 
@@ -206,7 +205,7 @@ get_lowlayer(int layermask)
 }
 
 int
-get_down_layer(int layermask)
+mISDN_get_down_layer(int layermask)
 {
 	int downlayer = 1;
 	
@@ -224,7 +223,7 @@ get_down_layer(int layermask)
 }
 
 int
-get_up_layer(int layermask) {
+mISDN_get_up_layer(int layermask) {
 	int uplayer = MAX_LAYER_NR;
 	
 	if (layermask>=128) {
@@ -241,7 +240,7 @@ get_up_layer(int layermask) {
 }
 
 int
-SetIF(mISDNinstance_t *owner, mISDNif_t *hif, u_int prim, void *upfunc,
+mISDN_SetIF(mISDNinstance_t *owner, mISDNif_t *hif, u_int prim, void *upfunc,
 	void *downfunc, void *data)
 {
 	mISDNif_t *own_hif;
@@ -290,7 +289,7 @@ SetIF(mISDNinstance_t *owner, mISDNif_t *hif, u_int prim, void *upfunc,
 }
 
 int
-ConnectIF(mISDNinstance_t *owner, mISDNinstance_t *peer)
+mISDN_ConnectIF(mISDNinstance_t *owner, mISDNinstance_t *peer)
 {
 	mISDNif_t *hif;
 
@@ -319,7 +318,7 @@ ConnectIF(mISDNinstance_t *owner, mISDNinstance_t *peer)
 }
 
 int
-DisConnectIF(mISDNinstance_t *inst, mISDNif_t *hif) {
+mISDN_DisConnectIF(mISDNinstance_t *inst, mISDNif_t *hif) {
 	if (hif) {
 		if (hif->next && hif->next->owner) {
 			hif->next->owner->obj->ctrl(hif->next->owner,
@@ -340,7 +339,7 @@ DisConnectIF(mISDNinstance_t *inst, mISDNif_t *hif) {
 }
 
 void
-init_mISDNinstance(mISDNinstance_t *inst, mISDNobject_t *obj, void *data)
+mISDN_init_instance(mISDNinstance_t *inst, mISDNobject_t *obj, void *data)
 {
 	if (!obj) {
 		int_error();
@@ -357,3 +356,18 @@ init_mISDNinstance(mISDNinstance_t *inst, mISDNobject_t *obj, void *data)
 	obj->ctrl(NULL, MGR_DISCONNECT | REQUEST, &inst->down);
 	obj->ctrl(NULL, MGR_DISCONNECT | REQUEST, &inst->up);
 }
+
+EXPORT_SYMBOL(mISDN_set_dchannel_pid);
+EXPORT_SYMBOL(mISDN_get_lowlayer);
+EXPORT_SYMBOL(mISDN_get_up_layer);
+EXPORT_SYMBOL(mISDN_get_down_layer);
+EXPORT_SYMBOL(mISDN_layermask2layer);
+EXPORT_SYMBOL(mISDN_get_protocol);
+EXPORT_SYMBOL(mISDN_HasProtocol);
+EXPORT_SYMBOL(mISDN_SetHandledPID);
+EXPORT_SYMBOL(mISDN_RemoveUsedPID);
+EXPORT_SYMBOL(mISDN_init_instance);
+EXPORT_SYMBOL(mISDN_SetIF);
+EXPORT_SYMBOL(mISDN_ConnectIF);
+EXPORT_SYMBOL(mISDN_DisConnectIF);
+EXPORT_SYMBOL(mISDN_bprotocol2pid);

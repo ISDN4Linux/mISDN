@@ -1,4 +1,4 @@
-/* $Id: x25_dte.c,v 1.4 2004/01/12 16:20:26 keil Exp $
+/* $Id: x25_dte.c,v 1.5 2004/01/26 22:21:31 keil Exp $
  *
  * Linux modular ISDN subsystem, mISDN
  * X.25/X.31 Layer3 for DTE mode   
@@ -22,7 +22,7 @@ static int debug = 0;
 
 static mISDNobject_t x25dte_obj;
 
-static char *mISDN_dte_revision = "$Revision: 1.4 $";
+static char *mISDN_dte_revision = "$Revision: 1.5 $";
 
 /* local prototypes */
 static x25_channel_t *	dte_create_channel(x25_l3_t *, int, u_char, __u16, int, u_char *);
@@ -45,9 +45,9 @@ r_llready(struct FsmInst *fi, int event, void *arg)
 {
 	x25_l3_t *l3 = fi->userdata;
 
-	FsmChangeState(fi, ST_R1);
+	mISDN_FsmChangeState(fi, ST_R1);
 	if (test_and_clear_bit(X25_STATE_ESTABLISH, &l3->state)) {
-		FsmEvent(&l3->x25r, EV_L3_RESTART_REQ, NULL);
+		mISDN_FsmEvent(&l3->x25r, EV_L3_RESTART_REQ, NULL);
 	}
 }
 
@@ -61,7 +61,7 @@ r_r0_restart_l3(struct FsmInst *fi, int event, void *arg)
 	else
 		memset(l3->cause, 0, 2);
 	test_and_set_bit(X25_STATE_ESTABLISH, &l3->state);
-	FsmEvent(&l3->l2l3m, EV_L3_ESTABLISH_REQ, NULL);
+	mISDN_FsmEvent(&l3->l2l3m, EV_L3_ESTABLISH_REQ, NULL);
 }
 
 static void
@@ -71,11 +71,11 @@ r_restart_l3(struct FsmInst *fi, int event, void *arg)
 
 	if (arg)
 		memcpy(l3->cause, arg, 2);
-	FsmChangeState(fi, ST_R2);
+	mISDN_FsmChangeState(fi, ST_R2);
 	l3->TRval = T20_VALUE;
 	l3->TRrep = R20_VALUE;
 	X25sendL3frame(NULL, l3, X25_PTYPE_RESTART, 2, l3->cause);
-	FsmAddTimer(&l3->TR, l3->TRval, EV_L3_RESTART_TOUT, NULL, 0);
+	mISDN_FsmAddTimer(&l3->TR, l3->TRval, EV_L3_RESTART_TOUT, NULL, 0);
 }
 
 static void
@@ -83,10 +83,10 @@ r_restart_ind(struct FsmInst *fi, int event, void *arg)
 {
 	x25_l3_t	*l3 = fi->userdata;
 
-	FsmChangeState(fi, ST_R3);
+	mISDN_FsmChangeState(fi, ST_R3);
 	X25sendL3frame(NULL, l3, X25_PTYPE_RESTART_CNF, 0, NULL);
-	FsmChangeState(fi, ST_R1);
-	FsmDelTimer(&l3->TR, 0);
+	mISDN_FsmChangeState(fi, ST_R1);
+	mISDN_FsmDelTimer(&l3->TR, 0);
 	X25_restart(l3);
 }
 
@@ -95,8 +95,8 @@ r_restart_cnf(struct FsmInst *fi, int event, void *arg)
 {
 	x25_l3_t	*l3 = fi->userdata;
 
-	FsmChangeState(fi, ST_R1);
-	FsmDelTimer(&l3->TR, 0);
+	mISDN_FsmChangeState(fi, ST_R1);
+	mISDN_FsmDelTimer(&l3->TR, 0);
 	X25_restart(l3);
 }
 
@@ -108,7 +108,7 @@ r_restart_cnf_err(struct FsmInst *fi, int event, void *arg)
 
 	if (fi->state == ST_R3)
 		cause[1] = 19;
-	FsmEvent(&l3->x25r, EV_L3_RESTART_REQ, cause);
+	mISDN_FsmEvent(&l3->x25r, EV_L3_RESTART_REQ, cause);
 }
 
 static void
@@ -118,11 +118,11 @@ r_timeout(struct FsmInst *fi, int event, void *arg)
 
 	if (l3->TRrep) {
 		X25sendL3frame(NULL, l3, X25_PTYPE_RESTART, 2, l3->cause);
-		FsmRestartTimer(&l3->TR, l3->TRval, EV_L3_RESTART_TOUT, NULL, 0);
+		mISDN_FsmRestartTimer(&l3->TR, l3->TRval, EV_L3_RESTART_TOUT, NULL, 0);
 		l3->TRrep--;
 	} else {
-		FsmDelTimer(&l3->TR, 0);
-		FsmChangeState(fi, ST_R1);
+		mISDN_FsmDelTimer(&l3->TR, 0);
+		mISDN_FsmChangeState(fi, ST_R1);
 		/* signal failure */
 	}
 }
@@ -157,13 +157,13 @@ p_p0_ready(struct FsmInst *fi, int event, void *arg)
 	x25_channel_t	*l3c = fi->userdata;
 
 	if (test_bit(X25_STATE_PERMANENT, &l3c->state)) {
-		FsmChangeState(fi, ST_P4);
+		mISDN_FsmChangeState(fi, ST_P4);
 		/* connect */
-		FsmEvent(&l3c->x25d, EV_L3_CONNECT, NULL);
+		mISDN_FsmEvent(&l3c->x25d, EV_L3_CONNECT, NULL);
 	} else {
-		FsmChangeState(fi, ST_P1);
+		mISDN_FsmChangeState(fi, ST_P1);
 		if (test_bit(X25_STATE_ORGINATE, &l3c->state))
-			FsmEvent(fi, EV_L3_OUTGOING_CALL, NULL);
+			mISDN_FsmEvent(fi, EV_L3_OUTGOING_CALL, NULL);
 	}
 }
 
@@ -195,12 +195,12 @@ p_outgoing(struct FsmInst *fi, int event, void *arg)
 	x25_channel_t	*l3c = fi->userdata;
 	struct sk_buff	*skb = arg;
 
-	FsmChangeState(fi, ST_P2);
+	mISDN_FsmChangeState(fi, ST_P2);
 	if (skb)
 		X25sendL3frame(l3c, l3c->l3, X25_PTYPE_CALL, skb->len, skb->data);
 	else
 		X25sendL3frame(l3c, l3c->l3, X25_PTYPE_CALL, l3c->ncpi_len, l3c->ncpi_data);
-	FsmAddTimer(&l3c->TP, T21_VALUE, EV_L3_CALL_TOUT, NULL, 0);
+	mISDN_FsmAddTimer(&l3c->TP, T21_VALUE, EV_L3_CALL_TOUT, NULL, 0);
 }
 
 static void
@@ -211,7 +211,7 @@ p_incoming(struct FsmInst *fi, int event, void *arg)
 
 	if (test_bit(X25_STATE_DBIT, &l3c->state))
 		flg = 0x10000;
-	FsmChangeState(fi, ST_P3);
+	mISDN_FsmChangeState(fi, ST_P3);
 	X25sendL4frame(l3c, l3c->l3, CAPI_CONNECT_B3_IND, flg, l3c->ncpi_len, l3c->ncpi_data);
 }
 
@@ -225,15 +225,15 @@ p_call_accept(struct FsmInst *fi, int event, void *arg)
 		X25sendL3frame(l3c, l3c->l3, X25_PTYPE_CALL_CNF, skb->len, skb->data);
 	else
 		X25sendL3frame(l3c, l3c->l3, X25_PTYPE_CALL_CNF, 0, NULL);
-	FsmChangeState(fi, ST_P4);
-	FsmEvent(&l3c->x25d, EV_L3_CONNECT, NULL);
+	mISDN_FsmChangeState(fi, ST_P4);
+	mISDN_FsmEvent(&l3c->x25d, EV_L3_CONNECT, NULL);
 	X25sendL4frame(l3c, l3c->l3, CAPI_CONNECT_B3_ACTIVE_IND, 0, 0, NULL);
 }
 
 static void
 p_collision(struct FsmInst *fi, int event, void *arg)
 {
-	FsmChangeState(fi, ST_P5);
+	mISDN_FsmChangeState(fi, ST_P5);
 }
 
 static void
@@ -243,11 +243,11 @@ p_connect(struct FsmInst *fi, int event, void *arg)
 	struct sk_buff	*skb = arg;
 	int		flg = 0;
 
-	FsmDelTimer(&l3c->TP, 0);
-	FsmChangeState(fi, ST_P4);
+	mISDN_FsmDelTimer(&l3c->TP, 0);
+	mISDN_FsmChangeState(fi, ST_P4);
 	if (test_bit(X25_STATE_DBIT, &l3c->state))
 		flg = 0x10000;
-	FsmEvent(&l3c->x25d, EV_L3_CONNECT, NULL);
+	mISDN_FsmEvent(&l3c->x25d, EV_L3_CONNECT, NULL);
 	if (skb)
 		X25sendL4frame(l3c, l3c->l3, CAPI_CONNECT_B3_ACTIVE_IND, flg, skb->len, skb->data);
 	else
@@ -259,12 +259,12 @@ p_call_timeout(struct FsmInst *fi, int event, void *arg)
 {
 	x25_channel_t	*l3c = fi->userdata;
 
-	FsmChangeState(fi, ST_P6);
+	mISDN_FsmChangeState(fi, ST_P6);
 	l3c->cause[0] = 0;
 	l3c->cause[1] = 49;
 	l3c->TPval = T23_VALUE;
 	l3c->TPrep = R23_VALUE;
-	FsmAddTimer(&l3c->TP, l3c->TPval, EV_L3_CLEAR_TOUT, NULL, 0);
+	mISDN_FsmAddTimer(&l3c->TP, l3c->TPval, EV_L3_CLEAR_TOUT, NULL, 0);
 	X25sendL3frame(l3c, l3c->l3, X25_PTYPE_CLEAR, 2, l3c->cause);
 }
 
@@ -273,10 +273,10 @@ p_clear_ind(struct FsmInst *fi, int event, void *arg)
 {
 	x25_channel_t	*l3c = fi->userdata;
 
-	FsmChangeState(fi, ST_P7);
-	FsmDelTimer(&l3c->TP, 0);
+	mISDN_FsmChangeState(fi, ST_P7);
+	mISDN_FsmDelTimer(&l3c->TP, 0);
 	X25sendL3frame(l3c, l3c->l3, X25_PTYPE_CLEAR_CNF, 0, NULL);
-	FsmChangeState(fi, ST_P1);
+	mISDN_FsmChangeState(fi, ST_P1);
 	X25_clear_connection(l3c, arg, 0);
 }
 
@@ -285,8 +285,8 @@ p_clear_cnf(struct FsmInst *fi, int event, void *arg)
 {
 	x25_channel_t	*l3c = fi->userdata;
 
-	FsmChangeState(fi, ST_P1);
-	FsmDelTimer(&l3c->TP, 0);
+	mISDN_FsmChangeState(fi, ST_P1);
+	mISDN_FsmDelTimer(&l3c->TP, 0);
 	X25_clear_connection(l3c, arg, 0);
 }
 
@@ -296,12 +296,12 @@ p_clear_timeout(struct FsmInst *fi, int event, void *arg)
 	x25_channel_t	*l3c = fi->userdata;
 
 	if (l3c->TPrep) {
-		FsmAddTimer(&l3c->TP, l3c->TPval, EV_L3_CLEAR_TOUT, NULL, 0);
+		mISDN_FsmAddTimer(&l3c->TP, l3c->TPval, EV_L3_CLEAR_TOUT, NULL, 0);
 		X25sendL3frame(l3c, l3c->l3, X25_PTYPE_CLEAR, 2, l3c->cause);
 	} else {
 		l3c->cause[0] = 0;
 		l3c->cause[0] = 50;
-		FsmChangeState(fi, ST_P1);
+		mISDN_FsmChangeState(fi, ST_P1);
 		X25_clear_connection(l3c, NULL, 0x3303);
 	}
 }
@@ -312,10 +312,10 @@ p_clearing_req(struct FsmInst *fi, int event, void *arg)
 	x25_channel_t	*l3c = fi->userdata;
 	struct sk_buff	*skb = arg;
 
-	FsmChangeState(fi, ST_P6);
+	mISDN_FsmChangeState(fi, ST_P6);
 	l3c->TPval = T23_VALUE;
 	l3c->TPrep = R23_VALUE;
-	FsmAddTimer(&l3c->TP, l3c->TPval, EV_L3_CLEAR_TOUT, NULL, 0);
+	mISDN_FsmAddTimer(&l3c->TP, l3c->TPval, EV_L3_CLEAR_TOUT, NULL, 0);
 	if (skb) {
 		if (skb->len >= 2) {
 			memcpy(l3c->cause, skb->data, 2);
@@ -419,7 +419,7 @@ static struct FsmNode PFnList[] =
 static void
 d_connect(struct FsmInst *fi, int event, void *arg)
 {
-	FsmChangeState(fi, ST_D1);
+	mISDN_FsmChangeState(fi, ST_D1);
 }
 
 static void
@@ -428,10 +428,10 @@ d_reset_req(struct FsmInst *fi, int event, void *arg)
 	x25_channel_t	*l3c = fi->userdata;
 	struct sk_buff	*skb = arg;
 
-	FsmChangeState(fi, ST_D2);
+	mISDN_FsmChangeState(fi, ST_D2);
 	l3c->TDval = T22_VALUE;
 	l3c->TDrep = R22_VALUE;
-	FsmAddTimer(&l3c->TD, l3c->TDval, EV_L3_RESET_TOUT, NULL, 0);
+	mISDN_FsmAddTimer(&l3c->TD, l3c->TDval, EV_L3_RESET_TOUT, NULL, 0);
 	if (skb) {
 		if (skb->len >= 2) {
 			memcpy(l3c->cause, skb->data, 2);
@@ -449,9 +449,9 @@ d_reset_ind(struct FsmInst *fi, int event, void *arg)
 {
 	x25_channel_t	*l3c = fi->userdata;
 
-	FsmChangeState(fi, ST_D3);
+	mISDN_FsmChangeState(fi, ST_D3);
 	X25_reset_channel(l3c, arg);
-	FsmChangeState(fi, ST_D1);
+	mISDN_FsmChangeState(fi, ST_D1);
 	/* TODO normal operation trigger */
 }
 
@@ -460,10 +460,10 @@ d_reset_cnf(struct FsmInst *fi, int event, void *arg)
 {
 	x25_channel_t	*l3c = fi->userdata;
 
-	FsmDelTimer(&l3c->TD, 0);
+	mISDN_FsmDelTimer(&l3c->TD, 0);
 	X25_reset_channel(l3c, NULL);
 	/* TODO normal opration trigger */
-	FsmChangeState(fi, ST_D1);
+	mISDN_FsmChangeState(fi, ST_D1);
 }
 
 static void
@@ -473,11 +473,11 @@ d_reset_cnf_err(struct FsmInst *fi, int event, void *arg)
 
 	if (arg)
 		memcpy(l3c->cause, arg, 2);
-	FsmChangeState(fi, ST_D2);
+	mISDN_FsmChangeState(fi, ST_D2);
 	l3c->TDval = T22_VALUE;
 	l3c->TDrep = R22_VALUE;
 	X25sendL3frame(l3c, l3c->l3, X25_PTYPE_RESET, 2, l3c->cause);
-	FsmAddTimer(&l3c->TD, l3c->TDval, EV_L3_RESET_TOUT, NULL, 0);
+	mISDN_FsmAddTimer(&l3c->TD, l3c->TDval, EV_L3_RESET_TOUT, NULL, 0);
 }
 
 static void
@@ -491,11 +491,11 @@ d_reset_timeout(struct FsmInst *fi, int event, void *arg)
 	} else {
 		l3c->cause[0] = 0;
 		l3c->cause[1] = 51;
-		FsmChangeState(fi, ST_D0);
+		mISDN_FsmChangeState(fi, ST_D0);
 		if (test_bit(X25_STATE_PERMANENT, &l3c->state))
 			X25_clear_connection(l3c, NULL, 0x3303); 
 		else
-			FsmEvent(&l3c->x25p, EV_L3_CLEARING, NULL);
+			mISDN_FsmEvent(&l3c->x25p, EV_L3_CLEARING, NULL);
 	}
 }
 
@@ -596,9 +596,9 @@ dte_data_ind_d(x25_channel_t *chan, struct sk_buff *skb, u_char gfi, u_char ptyp
 	}
 	if (event != -1) {
 		if (event == EV_L3_RESETING)
-			FsmEvent(&chan->x25d, event, NULL);
+			mISDN_FsmEvent(&chan->x25d, event, NULL);
 		else
-			FsmEvent(&chan->x25d, event, skb);
+			mISDN_FsmEvent(&chan->x25d, event, skb);
 		return(X25_ERRCODE_DISCARD);
 	}
 	switch (ptype) {
@@ -606,7 +606,7 @@ dte_data_ind_d(x25_channel_t *chan, struct sk_buff *skb, u_char gfi, u_char ptyp
 			if (test_and_set_bit(X25_STATE_DXE_INTSENT, &chan->state)) {
 				chan->cause[0] = 0;
 				chan->cause[1] = 44;
-				FsmEvent(&chan->x25d, EV_L3_RESETING, NULL);
+				mISDN_FsmEvent(&chan->x25d, EV_L3_RESETING, NULL);
 			} else {
 				// X25_got_interrupt(chan, skb);
 			}
@@ -615,7 +615,7 @@ dte_data_ind_d(x25_channel_t *chan, struct sk_buff *skb, u_char gfi, u_char ptyp
 			if (!test_and_clear_bit(X25_STATE_DTE_INTSENT, &chan->state)) {
 				chan->cause[0] = 0;
 				chan->cause[1] = 43;
-				FsmEvent(&chan->x25d, EV_L3_RESETING, NULL);
+				mISDN_FsmEvent(&chan->x25d, EV_L3_RESETING, NULL);
 			}
 			break;
 		case X25_PTYPE_RR:
@@ -625,11 +625,11 @@ dte_data_ind_d(x25_channel_t *chan, struct sk_buff *skb, u_char gfi, u_char ptyp
 			if (pr_m < 0) {
 				chan->cause[0] = 0;
 				chan->cause[1] = -pr_m;
-				FsmEvent(&chan->x25d, EV_L3_RESETING, NULL);
+				mISDN_FsmEvent(&chan->x25d, EV_L3_RESETING, NULL);
 			} else if (skb->len) {
 				chan->cause[0] = 0;
 				chan->cause[1] = 39;
-				FsmEvent(&chan->x25d, EV_L3_RESETING, NULL);
+				mISDN_FsmEvent(&chan->x25d, EV_L3_RESETING, NULL);
 			} else {
 				if (ptype == X25_PTYPE_RR) {
 					test_and_clear_bit(X25_STATE_DXE_RNR, &chan->state);
@@ -653,11 +653,11 @@ dte_data_ind_d(x25_channel_t *chan, struct sk_buff *skb, u_char gfi, u_char ptyp
 			if (pr_m < 0) {
 				chan->cause[0] = 0;
 				chan->cause[1] = -pr_m;
-				FsmEvent(&chan->x25d, EV_L3_RESETING, NULL);
+				mISDN_FsmEvent(&chan->x25d, EV_L3_RESETING, NULL);
 			} else if (ps < 0) {
 				chan->cause[0] = 0;
 				chan->cause[1] = -ps;
-				FsmEvent(&chan->x25d, EV_L3_RESETING, NULL);
+				mISDN_FsmEvent(&chan->x25d, EV_L3_RESETING, NULL);
 			} else {
 				int flag = (pr_m & 1) ? CAPI_FLAG_MOREDATA : 0;
 				
@@ -682,7 +682,7 @@ dte_data_ind_p(x25_l3_t *l3, struct sk_buff *skb, u_char gfi, __u16 channel, u_c
 		if (!chan)
 			chan = dte_create_channel(l3, X25_CHANNEL_INCOMING, gfi, channel, skb->len, skb->data);
 		if (chan) {
-			FsmEvent(&chan->x25p, EV_L2_INCOMING_CALL, skb);
+			mISDN_FsmEvent(&chan->x25p, EV_L2_INCOMING_CALL, skb);
 		} else {
 			ret = 36; /* unassigned channel */
 		}
@@ -744,9 +744,9 @@ dte_data_ind_p(x25_l3_t *l3, struct sk_buff *skb, u_char gfi, __u16 channel, u_c
 			return(dte_data_ind_d(chan, skb, gfi, ptype));
 	}
 	if (event == EV_L3_CLEARING)
-		FsmEvent(&chan->x25p, event, NULL);
+		mISDN_FsmEvent(&chan->x25p, event, NULL);
 	else
-		FsmEvent(&chan->x25p, event, skb);
+		mISDN_FsmEvent(&chan->x25p, event, skb);
 	return(ret);
 }
 
@@ -763,7 +763,7 @@ dte_data_ind_r(x25_l3_t *l3, struct sk_buff *skb, u_char gfi, __u16 channel, u_c
 			if (l3->x25r.state == ST_R2) {
 				l3->cause[0] = 0;
 				l3->cause[1] = 38;
-				FsmEvent(&l3->x25r, EV_L3_RESTART_REQ, NULL);
+				mISDN_FsmEvent(&l3->x25r, EV_L3_RESTART_REQ, NULL);
 			}
 		} else {
 			if (l3->x25r.state == ST_R1)
@@ -771,7 +771,7 @@ dte_data_ind_r(x25_l3_t *l3, struct sk_buff *skb, u_char gfi, __u16 channel, u_c
 			else if (l3->x25r.state == ST_R3) {
 				l3->cause[0] = 0;
 				l3->cause[1] = 38;
-				FsmEvent(&l3->x25r, EV_L3_RESTART_REQ, NULL);
+				mISDN_FsmEvent(&l3->x25r, EV_L3_RESTART_REQ, NULL);
 			}
 		}
 		return(ret);
@@ -783,21 +783,21 @@ dte_data_ind_r(x25_l3_t *l3, struct sk_buff *skb, u_char gfi, __u16 channel, u_c
 			else if (l3->x25r.state == ST_R3) {
 				l3->cause[0] = 0;
 				l3->cause[1] = 41;
-				FsmEvent(&l3->x25r, EV_L3_RESTART_REQ, NULL);
+				mISDN_FsmEvent(&l3->x25r, EV_L3_RESTART_REQ, NULL);
 			}
 			return(ret);
 		}
 		if (ptype == X25_PTYPE_RESTART)
-			FsmEvent(&l3->x25r, EV_L2_RESTART, skb);
+			mISDN_FsmEvent(&l3->x25r, EV_L2_RESTART, skb);
 		else
-			FsmEvent(&l3->x25r, EV_L2_RESTART_CNF, skb);
+			mISDN_FsmEvent(&l3->x25r, EV_L2_RESTART_CNF, skb);
 	} else {
 		if (l3->x25r.state == ST_R1)
 			return(dte_data_ind_p(l3, skb, gfi, channel, ptype));
 		if (l3->x25r.state == ST_R3) {
 			l3->cause[0] = 0;
 			l3->cause[1] = 19;
-			FsmEvent(&l3->x25r, EV_L3_RESTART_REQ, NULL);
+			mISDN_FsmEvent(&l3->x25r, EV_L3_RESTART_REQ, NULL);
 		}
 	}
 	return(ret);
@@ -873,7 +873,7 @@ dte_from_down(mISDNif_t *hif,  struct sk_buff *skb)
 		case DL_DATA | CONFIRM:
 			break;
 		case DL_ESTABLISH_CNF:
-			ret = FsmEvent(&l3->l2l3m, EV_LL_ESTABLISH_CNF, NULL);
+			ret = mISDN_FsmEvent(&l3->l2l3m, EV_LL_ESTABLISH_CNF, NULL);
 			if (ret) {
 				int_error();
 			}
@@ -881,7 +881,7 @@ dte_from_down(mISDNif_t *hif,  struct sk_buff *skb)
 			dev_kfree_skb(skb);
 			break;
 		case DL_ESTABLISH_IND:
-			ret = FsmEvent(&l3->l2l3m, EV_LL_ESTABLISH_IND, NULL);
+			ret = mISDN_FsmEvent(&l3->l2l3m, EV_LL_ESTABLISH_IND, NULL);
 			if (ret) {
 				int_error();
 			}
@@ -889,7 +889,7 @@ dte_from_down(mISDNif_t *hif,  struct sk_buff *skb)
 			dev_kfree_skb(skb);
 			break;
 		case DL_RELEASE_CNF:
-			ret = FsmEvent(&l3->l2l3m, EV_LL_RELEASE_CNF, NULL);
+			ret = mISDN_FsmEvent(&l3->l2l3m, EV_LL_RELEASE_CNF, NULL);
 			if (ret) {
 				int_error();
 			}
@@ -897,7 +897,7 @@ dte_from_down(mISDNif_t *hif,  struct sk_buff *skb)
 			dev_kfree_skb(skb);
 			break;
 		case DL_RELEASE_IND:
-			ret = FsmEvent(&l3->l2l3m, EV_LL_RELEASE_IND, NULL);
+			ret = mISDN_FsmEvent(&l3->l2l3m, EV_LL_RELEASE_IND, NULL);
 			if (ret) {
 				int_error();
 			}
@@ -1111,9 +1111,9 @@ dte_from_up(mISDNif_t *hif, struct sk_buff *skb)
 			if (l3c) {
 				err = 0;
 				if (l3->x25r.state == ST_R0)
-					FsmEvent(&l3->x25r, EV_L3_RESTART_REQ, "\000\000");
+					mISDN_FsmEvent(&l3->x25r, EV_L3_RESTART_REQ, "\000\000");
 				else
-					err = FsmEvent(&l3c->x25p, EV_L3_OUTGOING_CALL, NULL);
+					err = mISDN_FsmEvent(&l3c->x25p, EV_L3_OUTGOING_CALL, NULL);
 				if (err)
 					info = 0x2001; /* wrong state */
 				else
@@ -1131,10 +1131,10 @@ dte_from_up(mISDNif_t *hif, struct sk_buff *skb)
 				if (skb->len <= 4) { // default NCPI
 					l3c->cause[0] = 0;
 					l3c->cause[1] = 0;
-					err = FsmEvent(&l3c->x25d, EV_L3_RESETING, NULL);
+					err = mISDN_FsmEvent(&l3c->x25d, EV_L3_RESETING, NULL);
 				} else {
 					skb_pull(skb, 4);
-					err = FsmEvent(&l3c->x25d, EV_L3_RESETING, skb);
+					err = mISDN_FsmEvent(&l3c->x25d, EV_L3_RESETING, skb);
 					skb_push(skb, 4);
 				}
 				if (err)
@@ -1154,10 +1154,10 @@ dte_from_up(mISDNif_t *hif, struct sk_buff *skb)
 				if (skb->len <= 4) { // default NCPI
 					l3c->cause[0] = 0;
 					l3c->cause[1] = 0;
-					err = FsmEvent(&l3c->x25p, EV_L3_CLEARING, NULL);
+					err = mISDN_FsmEvent(&l3c->x25p, EV_L3_CLEARING, NULL);
 				} else {
 					skb_pull(skb, 4);
-					err = FsmEvent(&l3c->x25p, EV_L3_CLEARING, skb);
+					err = mISDN_FsmEvent(&l3c->x25p, EV_L3_CLEARING, skb);
 					skb_push(skb, 4);
 				}
 				if (err)
@@ -1188,10 +1188,10 @@ dte_from_up(mISDNif_t *hif, struct sk_buff *skb)
 				if (skb->len <= 4) { // default NCPI
 					l3c->cause[0] = 0;
 					l3c->cause[1] = 0;
-					err = FsmEvent(&l3c->x25p, event, NULL);
+					err = mISDN_FsmEvent(&l3c->x25p, event, NULL);
 				} else {
 					skb_pull(skb, 4);
-					err = FsmEvent(&l3c->x25p, event, skb);
+					err = mISDN_FsmEvent(&l3c->x25p, event, skb);
 				}
 			} else {
 				skb_push(skb, 4);
@@ -1285,13 +1285,13 @@ dte_manager(void *data, u_int prim, void *arg) {
 	    case MGR_CLONELAYER | REQUEST:
 		break;
 	    case MGR_CONNECT | REQUEST:
-		return(ConnectIF(inst, arg));
+		return(mISDN_ConnectIF(inst, arg));
 	    case MGR_SETIF | REQUEST:
 	    case MGR_SETIF | INDICATION:
-		return(SetIF(inst, arg, prim, dte_from_up, dte_from_down, l3_l));
+		return(mISDN_SetIF(inst, arg, prim, dte_from_up, dte_from_down, l3_l));
 	    case MGR_DISCONNECT | REQUEST:
 	    case MGR_DISCONNECT | INDICATION:
-		return(DisConnectIF(inst, arg));
+		return(mISDN_DisConnectIF(inst, arg));
 	    case MGR_UNREGLAYER | REQUEST:
 	    case MGR_RELEASE | INDICATION:
 		if (debug & DEBUG_L3X25_MGR)
@@ -1331,17 +1331,17 @@ x25_dte_init(void)
 		dte_rfsm.event_count = R_EVENT_COUNT;
 		dte_rfsm.strEvent = X25strREvent;
 		dte_rfsm.strState = X25strRState;
-		FsmNew(&dte_rfsm, RFnList, R_FN_COUNT);
+		mISDN_FsmNew(&dte_rfsm, RFnList, R_FN_COUNT);
 		dte_pfsm.state_count = P_STATE_COUNT;
 		dte_pfsm.event_count = P_EVENT_COUNT;
 		dte_pfsm.strEvent = X25strPEvent;
 		dte_pfsm.strState = X25strPState;
-		FsmNew(&dte_pfsm, PFnList, P_FN_COUNT);
+		mISDN_FsmNew(&dte_pfsm, PFnList, P_FN_COUNT);
 		dte_dfsm.state_count = D_STATE_COUNT;
 		dte_dfsm.event_count = D_EVENT_COUNT;
 		dte_dfsm.strEvent = X25strDEvent;
 		dte_dfsm.strState = X25strDState;
-		FsmNew(&dte_dfsm, DFnList, D_FN_COUNT);
+		mISDN_FsmNew(&dte_dfsm, DFnList, D_FN_COUNT);
 	}
 	return(err);
 }
@@ -1360,9 +1360,9 @@ x25_dte_cleanup(void)
 			X25_release_l3(x25dte_obj.ilist);
 	}
 	X25_l3_cleanup();
-	FsmFree(&dte_rfsm);
-	FsmFree(&dte_pfsm);
-	FsmFree(&dte_dfsm);
+	mISDN_FsmFree(&dte_rfsm);
+	mISDN_FsmFree(&dte_pfsm);
+	mISDN_FsmFree(&dte_dfsm);
 }
 
 module_init(x25_dte_init);

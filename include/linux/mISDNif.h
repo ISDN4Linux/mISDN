@@ -1,4 +1,4 @@
-/* $Id: mISDNif.h,v 1.22 2003/12/03 14:32:46 keil Exp $
+/* $Id: mISDNif.h,v 1.23 2004/01/26 22:21:32 keil Exp $
  *
  */
 
@@ -695,13 +695,12 @@ struct _mISDNdevice {
 };
 
 /* common helper functions */
-extern int	put_mISDN_header(struct sk_buff *, iframe_t *);
-extern int	bprotocol2pid(void *, mISDN_pid_t *);
-extern int	SetIF(mISDNinstance_t *, mISDNif_t *, u_int, void *, void *, void *);
-extern int	ConnectIF(mISDNinstance_t *, mISDNinstance_t *);
-extern int	DisConnectIF(mISDNinstance_t *, mISDNif_t *);
+extern int	mISDN_bprotocol2pid(void *, mISDN_pid_t *);
+extern int	mISDN_SetIF(mISDNinstance_t *, mISDNif_t *, u_int, void *, void *, void *);
+extern int	mISDN_ConnectIF(mISDNinstance_t *, mISDNinstance_t *);
+extern int	mISDN_DisConnectIF(mISDNinstance_t *, mISDNif_t *);
 
-/* global exported functions */
+/* global register/unregister functions */
 
 extern int	mISDN_register(mISDNobject_t *obj);
 extern int	mISDN_unregister(mISDNobject_t *obj);

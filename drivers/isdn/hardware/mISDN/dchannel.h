@@ -1,4 +1,4 @@
-/* $Id: dchannel.h,v 1.8 2003/11/21 22:57:08 keil Exp $
+/* $Id: dchannel.h,v 1.9 2004/01/26 22:21:30 keil Exp $
  *
  *   Basic declarations for dchannel HW
  *
@@ -71,8 +71,8 @@ typedef struct _dchannel_t {
 #define MON0_TX	4
 #define MON1_TX	8
 
-extern int init_dchannel(dchannel_t *);
-extern int free_dchannel(dchannel_t *);
+extern int mISDN_init_dch(dchannel_t *);
+extern int mISDN_free_dch(dchannel_t *);
 
 static inline void
 dch_set_para(dchannel_t *dch, mISDN_stPara_t *stp)

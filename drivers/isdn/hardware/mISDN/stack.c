@@ -1,4 +1,4 @@
-/* $Id: stack.c,v 1.8 2003/09/06 17:13:02 keil Exp $
+/* $Id: stack.c,v 1.9 2004/01/26 22:21:30 keil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -453,7 +453,7 @@ static void
 get_free_instid(mISDNstack_t *st, mISDNinstance_t *inst) {
 	mISDNinstance_t *il = mISDN_instlist;
 
-	inst->id = get_lowlayer(inst->pid.layermask)<<20;
+	inst->id = mISDN_get_lowlayer(inst->pid.layermask)<<20;
 	inst->id |= FLG_INSTANCE;
 	if (st) {
 		inst->id |= st->id;
@@ -604,11 +604,11 @@ set_stack(mISDNstack_t *st, mISDN_pid_t *pid)
 	if (err)
 		return(err);
 	memcpy(&st->mgr->pid, &st->pid, sizeof(mISDN_pid_t));
-	if (!SetHandledPID(st->mgr->obj, &st->mgr->pid)) {
+	if (!mISDN_SetHandledPID(st->mgr->obj, &st->mgr->pid)) {
 		int_error();
 		return(-ENOPROTOOPT);
 	} else {
-		RemoveUsedPID(pid, &st->mgr->pid);
+		mISDN_RemoveUsedPID(pid, &st->mgr->pid);
 	}
 	err = st->mgr->obj->ctrl(st, MGR_REGLAYER | REQUEST, st->mgr);
 	if (err) {
@@ -622,7 +622,7 @@ set_stack(mISDNstack_t *st, mISDN_pid_t *pid)
 			st->mgr->obj->ctrl(st, MGR_CLEARSTACK| REQUEST, NULL);
 			return(-ENOPROTOOPT);
 		}
-		RemoveUsedPID(pid, &inst->pid);
+		mISDN_RemoveUsedPID(pid, &inst->pid);
 	}
 	hl = st->lstack;
 	while(hl && hl->next) {
@@ -682,11 +682,11 @@ test_stack_protocol(mISDNstack_t *st, u_int l1prot, u_int l2prot, u_int l3prot)
 		pid.protocol[3] = l3prot | ISDN_PID_LAYER(3) | ISDN_PID_BCHANNEL_BIT;
 	copy_pid(&st->pid, &pid, NULL);
 	memcpy(&st->mgr->pid, &pid, sizeof(mISDN_pid_t));
-	if (!SetHandledPID(st->mgr->obj, &st->mgr->pid)) {
+	if (!mISDN_SetHandledPID(st->mgr->obj, &st->mgr->pid)) {
 		memset(&st->pid, 0, sizeof(mISDN_pid_t));
 		return(-ENOPROTOOPT);
 	} else {
-		RemoveUsedPID(&pid, &st->mgr->pid);
+		mISDN_RemoveUsedPID(&pid, &st->mgr->pid);
 	}
 	if (!pid.layermask) {
 		memset(&st->pid, 0, sizeof(mISDN_pid_t));
@@ -703,7 +703,7 @@ test_stack_protocol(mISDNstack_t *st, u_int l1prot, u_int l2prot, u_int l3prot)
 			st->mgr->obj->ctrl(st, MGR_CLEARSTACK| REQUEST, NULL);
 			return(-ENOPROTOOPT);
 		}
-		RemoveUsedPID(&pid, &inst->pid);
+		mISDN_RemoveUsedPID(&pid, &inst->pid);
 	}
 	if (!cnt)
 		ret = -ENOPROTOOPT;

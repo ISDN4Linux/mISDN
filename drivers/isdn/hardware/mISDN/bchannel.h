@@ -1,4 +1,4 @@
-/* $Id: bchannel.h,v 1.8 2003/11/21 22:57:08 keil Exp $
+/* $Id: bchannel.h,v 1.9 2004/01/26 22:21:30 keil Exp $
  *
  *   Basic declarations, defines for Bchannel hardware
  *
@@ -75,8 +75,8 @@ typedef struct _bchannel_t {
 	int			err_inv;
 } bchannel_t;
 
-extern int init_bchannel(bchannel_t *);
-extern int free_bchannel(bchannel_t *);
+extern int mISDN_init_bch(bchannel_t *);
+extern int mISDN_free_bch(bchannel_t *);
 
 static inline void
 bch_set_para(bchannel_t *bch, mISDN_stPara_t *stp)

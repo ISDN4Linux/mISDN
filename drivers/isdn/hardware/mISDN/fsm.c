@@ -1,4 +1,4 @@
-/* $Id: fsm.c,v 1.2 2003/07/28 12:05:47 kkeil Exp $
+/* $Id: fsm.c,v 1.3 2004/01/26 22:21:30 keil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -8,7 +8,6 @@
  * This file is (c) under GNU PUBLIC LICENSE
  *
  */
-#define __NO_VERSION__
 #include <linux/kernel.h>
 #include <linux/slab.h>
 #include <linux/isdn_compat.h>
@@ -21,7 +20,7 @@
 #define FSM_TIMER_DEBUG 0
 
 void
-FsmNew(struct Fsm *fsm,
+mISDN_FsmNew(struct Fsm *fsm,
        struct FsmNode *fnlist, int fncount)
 {
 	int i;
@@ -32,7 +31,7 @@ FsmNew(struct Fsm *fsm,
 
 	for (i = 0; i < fncount; i++) 
 		if ((fnlist[i].state>=fsm->state_count) || (fnlist[i].event>=fsm->event_count)) {
-			printk(KERN_ERR "FsmNew Error line %d st(%ld/%ld) ev(%ld/%ld)\n",
+			printk(KERN_ERR "mISDN_FsmNew Error line %d st(%ld/%ld) ev(%ld/%ld)\n",
 				i,(long)fnlist[i].state,(long)fsm->state_count,
 				(long)fnlist[i].event,(long)fsm->event_count);
 		} else		
@@ -41,18 +40,18 @@ FsmNew(struct Fsm *fsm,
 }
 
 void
-FsmFree(struct Fsm *fsm)
+mISDN_FsmFree(struct Fsm *fsm)
 {
 	kfree((void *) fsm->jumpmatrix);
 }
 
 int
-FsmEvent(struct FsmInst *fi, int event, void *arg)
+mISDN_FsmEvent(struct FsmInst *fi, int event, void *arg)
 {
 	FSMFNPTR r;
 
 	if ((fi->state>=fi->fsm->state_count) || (event >= fi->fsm->event_count)) {
-		printk(KERN_ERR "FsmEvent Error st(%ld/%ld) ev(%d/%ld)\n",
+		printk(KERN_ERR "mISDN_FsmEvent Error st(%ld/%ld) ev(%d/%ld)\n",
 			(long)fi->state,(long)fi->fsm->state_count,event,(long)fi->fsm->event_count);
 		return(1);
 	}
@@ -74,7 +73,7 @@ FsmEvent(struct FsmInst *fi, int event, void *arg)
 }
 
 void
-FsmChangeState(struct FsmInst *fi, int newstate)
+mISDN_FsmChangeState(struct FsmInst *fi, int newstate)
 {
 	fi->state = newstate;
 	if (fi->debug)
@@ -89,46 +88,46 @@ FsmExpireTimer(struct FsmTimer *ft)
 	if (ft->fi->debug)
 		ft->fi->printdebug(ft->fi, "FsmExpireTimer %lx", (long) ft);
 #endif
-	FsmEvent(ft->fi, ft->event, ft->arg);
+	mISDN_FsmEvent(ft->fi, ft->event, ft->arg);
 }
 
 void
-FsmInitTimer(struct FsmInst *fi, struct FsmTimer *ft)
+mISDN_FsmInitTimer(struct FsmInst *fi, struct FsmTimer *ft)
 {
 	ft->fi = fi;
 	ft->tl.function = (void *) FsmExpireTimer;
 	ft->tl.data = (long) ft;
 #if FSM_TIMER_DEBUG
 	if (ft->fi->debug)
-		ft->fi->printdebug(ft->fi, "FsmInitTimer %lx", (long) ft);
+		ft->fi->printdebug(ft->fi, "mISDN_FsmInitTimer %lx", (long) ft);
 #endif
 	init_timer(&ft->tl);
 }
 
 void
-FsmDelTimer(struct FsmTimer *ft, int where)
+mISDN_FsmDelTimer(struct FsmTimer *ft, int where)
 {
 #if FSM_TIMER_DEBUG
 	if (ft->fi->debug)
-		ft->fi->printdebug(ft->fi, "FsmDelTimer %lx %d", (long) ft, where);
+		ft->fi->printdebug(ft->fi, "mISDN_FsmDelTimer %lx %d", (long) ft, where);
 #endif
 	del_timer(&ft->tl);
 }
 
 int
-FsmAddTimer(struct FsmTimer *ft,
+mISDN_FsmAddTimer(struct FsmTimer *ft,
 	    int millisec, int event, void *arg, int where)
 {
 
 #if FSM_TIMER_DEBUG
 	if (ft->fi->debug)
-		ft->fi->printdebug(ft->fi, "FsmAddTimer %lx %d %d",
+		ft->fi->printdebug(ft->fi, "mISDN_FsmAddTimer %lx %d %d",
 			(long) ft, millisec, where);
 #endif
 
 	if (timer_pending(&ft->tl)) {
-		printk(KERN_WARNING "FsmAddTimer: timer already active!\n");
-		ft->fi->printdebug(ft->fi, "FsmAddTimer already active!");
+		printk(KERN_WARNING "mISDN_FsmAddTimer: timer already active!\n");
+		ft->fi->printdebug(ft->fi, "mISDN_FsmAddTimer already active!");
 		return -1;
 	}
 	init_timer(&ft->tl);
@@ -140,13 +139,13 @@ FsmAddTimer(struct FsmTimer *ft,
 }
 
 void
-FsmRestartTimer(struct FsmTimer *ft,
+mISDN_FsmRestartTimer(struct FsmTimer *ft,
 	    int millisec, int event, void *arg, int where)
 {
 
 #if FSM_TIMER_DEBUG
 	if (ft->fi->debug)
-		ft->fi->printdebug(ft->fi, "FsmRestartTimer %lx %d %d",
+		ft->fi->printdebug(ft->fi, "mISDN_FsmRestartTimer %lx %d %d",
 			(long) ft, millisec, where);
 #endif
 
@@ -158,3 +157,12 @@ FsmRestartTimer(struct FsmTimer *ft,
 	ft->tl.expires = jiffies + (millisec * HZ) / 1000;
 	add_timer(&ft->tl);
 }
+
+EXPORT_SYMBOL(mISDN_FsmNew);
+EXPORT_SYMBOL(mISDN_FsmFree);
+EXPORT_SYMBOL(mISDN_FsmEvent);
+EXPORT_SYMBOL(mISDN_FsmChangeState);
+EXPORT_SYMBOL(mISDN_FsmInitTimer);
+EXPORT_SYMBOL(mISDN_FsmAddTimer);
+EXPORT_SYMBOL(mISDN_FsmRestartTimer);
+EXPORT_SYMBOL(mISDN_FsmDelTimer);

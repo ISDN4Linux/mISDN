@@ -1,4 +1,4 @@
-/* $Id: capi.c,v 1.12 2004/01/11 13:58:49 keil Exp $
+/* $Id: capi.c,v 1.13 2004/01/26 22:21:30 keil Exp $
  *
  */
 
@@ -7,7 +7,7 @@
 #include "helper.h"
 #include "debug.h"
 
-static char *capi_revision = "$Revision: 1.12 $";
+static char *capi_revision = "$Revision: 1.13 $";
 
 static int debug = 0;
 static mISDNobject_t capi_obj;
@@ -350,16 +350,16 @@ capi20_manager(void *data, u_int prim, void *arg) {
 		ctrl->entity = (int)arg;
 		break;
 	    case MGR_CONNECT | REQUEST:
-		return(ConnectIF(inst, arg));
+		return(mISDN_ConnectIF(inst, arg));
 	    case MGR_SETIF | INDICATION:
 	    case MGR_SETIF | REQUEST:
 		if (&ctrl->inst == inst)
-			return(SetIF(inst, arg, prim, NULL, ControllerL3L4, ctrl));
+			return(mISDN_SetIF(inst, arg, prim, NULL, ControllerL3L4, ctrl));
 		else
-			return(AppPlciSetIF(inst->data, prim, arg));
+			return(AppPlcimISDN_SetIF(inst->data, prim, arg));
 	    case MGR_DISCONNECT | REQUEST:
 	    case MGR_DISCONNECT | INDICATION:
-		return(DisConnectIF(inst, arg));
+		return(mISDN_DisConnectIF(inst, arg));
 	    case MGR_RELEASE | INDICATION:
 		if (CAPI_DBG_INFO & debug)
 			printk(KERN_DEBUG "release_capi20 id %x\n", ctrl->inst.st->id);

@@ -1,4 +1,4 @@
-/* $Id: l3_udss1.c,v 1.20 2004/01/11 13:58:49 keil Exp $
+/* $Id: l3_udss1.c,v 1.21 2004/01/26 22:21:30 keil Exp $
  *
  * EURO/DSS1 D-channel protocol
  *
@@ -24,7 +24,7 @@ static int debug = 0;
 static mISDNobject_t u_dss1;
 
 
-const char *dss1_revision = "$Revision: 1.20 $";
+const char *dss1_revision = "$Revision: 1.21 $";
 
 static int dss1man(l3_process_t *, u_int, void *);
 
@@ -67,7 +67,7 @@ parseQ931(struct sk_buff *skb) {
 		return(-3);
 	}
 	qi = (Q931_info_t *)skb_push(skb, L3_EXTRA_SIZE);
-	initQ931_info(qi);
+	mISDN_initQ931_info(qi);
 	qi->type = t;
 	qi->crlen = l;
 	qi->cr = cr;
@@ -93,7 +93,7 @@ parseQ931(struct sk_buff *skb) {
 				cnt++;
 				pos++;
 			} else {
-				iep = l3_ie2pos(p[pos]);
+				iep = mISDN_l3_ie2pos(p[pos]);
 				if ((pos+1) >= len)
 					return(-4);
 				l = p[pos+1];
@@ -159,7 +159,7 @@ compose_msg(struct sk_buff *skb, Q931_info_t *qi)
 		if (v_ie[i]) {
 			l = buf[v_ie[i] + 1] +1;
 			p = skb_put(skb, l + 1);
-			*p++ = l3_pos2ie(i);
+			*p++ = mISDN_l3_pos2ie(i);
 			memcpy(p, &buf[v_ie[i] + 1], l);
 		}
 	}
@@ -430,7 +430,7 @@ check_infoelements(l3_process_t *pc, struct sk_buff *skb, int *checklist)
 	oldpos = -1;
 	for (i=0; i<32; i++) {
 		if (iep[i]) {
-			ie = l3_pos2ie(i);
+			ie = mISDN_l3_pos2ie(i);
 			if ((newpos = ie_in_set(pc, ie, cl))) {
 				if (newpos > 0) {
 					if (newpos < oldpos)
@@ -1696,7 +1696,7 @@ l3dss1_dl_reset(l3_process_t *pc, u_char pr, void *arg)
 	if (!skb)
 		return;
 	qi = (Q931_info_t *)skb_put(skb, L3_EXTRA_SIZE);
-	initQ931_info(qi);
+	mISDN_initQ931_info(qi);
 	qi->type = MT_DISCONNECT;
 	qi->cause = 1;
 	p = skb_put(skb, 5);
@@ -2258,8 +2258,8 @@ new_udss1(mISDNstack_t *st, mISDN_pid_t *pid)
 	memset(nl3, 0, sizeof(layer3_t));
 	memcpy(&nl3->inst.pid, pid, sizeof(mISDN_pid_t));
 	nl3->debug = debug;
-	init_mISDNinstance(&nl3->inst, &u_dss1, nl3);
-	if (!SetHandledPID(&u_dss1, &nl3->inst.pid)) {
+	mISDN_init_instance(&nl3->inst, &u_dss1, nl3);
+	if (!mISDN_SetHandledPID(&u_dss1, &nl3->inst.pid)) {
 		int_error();
 		return(-ENOPROTOOPT);
 	}
@@ -2368,13 +2368,13 @@ udss1_manager(void *data, u_int prim, void *arg) {
 	    case MGR_CLRSTPARA | INDICATION:
 		break;
 	    case MGR_CONNECT | REQUEST:
-		return(ConnectIF(inst, arg));
+		return(mISDN_ConnectIF(inst, arg));
 	    case MGR_SETIF | REQUEST:
 	    case MGR_SETIF | INDICATION:
-		return(SetIF(inst, arg, prim, dss1_fromup, dss1_fromdown, l3l));
+		return(mISDN_SetIF(inst, arg, prim, dss1_fromup, dss1_fromdown, l3l));
 	    case MGR_DISCONNECT | REQUEST:
 	    case MGR_DISCONNECT | INDICATION:
-		return(DisConnectIF(inst, arg));
+		return(mISDN_DisConnectIF(inst, arg));
 	    case MGR_RELEASE | INDICATION:
 	    case MGR_UNREGLAYER | REQUEST:
 	    	if (debug & 0x1000)

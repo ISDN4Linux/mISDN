@@ -1,4 +1,4 @@
-/* $Id: debug.c,v 1.1 2003/07/21 12:00:04 kkeil Exp $
+/* $Id: debug.c,v 1.2 2004/01/26 22:21:30 keil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -6,7 +6,6 @@
  *
  */
 
-#define __NO_VERSION__
 #include <linux/mISDNif.h>
 #include <linux/kernel.h>
 #include <linux/string.h>
@@ -17,7 +16,7 @@
 static char tmpbuf[mISDN_STATUS_BUFSIZE];
 
 void
-vmISDNdebug(int id, char *head, char *fmt, va_list args)
+vmISDN_debug(int id, char *head, char *fmt, va_list args)
 {
 /* if head == NULL the fmt contains the full info */
 	char *p = tmpbuf;
@@ -30,17 +29,17 @@ vmISDNdebug(int id, char *head, char *fmt, va_list args)
 } 
 
 void
-mISDNdebug(int id, char *head, char *fmt, ...)
+mISDN_debug(int id, char *head, char *fmt, ...)
 {
 	va_list args;
 
 	va_start(args, fmt);
-	vmISDNdebug(id, head, fmt, args);
+	vmISDN_debug(id, head, fmt, args);
 	va_end(args);
 }
 
 void
-debugprint(mISDNinstance_t *inst, char *fmt, ...)
+mISDN_debugprint(mISDNinstance_t *inst, char *fmt, ...)
 {
 	logdata_t log;
 
@@ -67,7 +66,7 @@ mISDN_getrev(const char *revision)
 }
 
 int
-QuickHex(char *txt, u_char * p, int cnt)
+mISDN_QuickHex(char *txt, u_char * p, int cnt)
 {
 	register int i;
 	register char *t = txt;
@@ -89,3 +88,9 @@ QuickHex(char *txt, u_char * p, int cnt)
 	*t++ = 0;
 	return (t - txt);
 }
+
+EXPORT_SYMBOL(vmISDN_debug);
+EXPORT_SYMBOL(mISDN_debug);
+EXPORT_SYMBOL(mISDN_getrev);
+EXPORT_SYMBOL(mISDN_debugprint);
+EXPORT_SYMBOL(mISDN_QuickHex);

@@ -1,4 +1,4 @@
-/* $Id: helper.h,v 1.11 2003/11/21 22:57:08 keil Exp $
+/* $Id: helper.h,v 1.12 2004/01/26 22:21:30 keil Exp $
  *
  *   Basic declarations, defines and prototypes
  *
@@ -92,27 +92,29 @@ alloc_stack_skb(size_t size, size_t reserve)
 	return(skb);
 }
 
-extern void	set_dchannel_pid(mISDN_pid_t *, int, int);
-extern int	get_lowlayer(int);
-extern int	get_up_layer(int);
-extern int	get_down_layer(int);
-extern int	layermask2layer(int);
-extern int	get_protocol(mISDNstack_t *, int);
-extern int	HasProtocol(mISDNobject_t *, u_int);
-extern int	SetHandledPID(mISDNobject_t *, mISDN_pid_t *);
-extern void	RemoveUsedPID(mISDN_pid_t *, mISDN_pid_t *);
-extern void	init_mISDNinstance(mISDNinstance_t *, mISDNobject_t *, void *);
+extern void	mISDN_set_dchannel_pid(mISDN_pid_t *, int, int);
+extern int	mISDN_get_lowlayer(int);
+extern int	mISDN_get_up_layer(int);
+extern int	mISDN_get_down_layer(int);
+extern int	mISDN_layermask2layer(int);
+extern int	mISDN_get_protocol(mISDNstack_t *, int);
+extern int	mISDN_HasProtocol(mISDNobject_t *, u_int);
+extern int	mISDN_SetHandledPID(mISDNobject_t *, mISDN_pid_t *);
+extern void	mISDN_RemoveUsedPID(mISDN_pid_t *, mISDN_pid_t *);
+extern void	mISDN_init_instance(mISDNinstance_t *, mISDNobject_t *, void *);
 
-static inline int HasProtocolP(mISDNobject_t *obj, int *PP)
+static inline int
+mISDN_HasProtocolP(mISDNobject_t *obj, int *PP)
 {
 	if (!PP) {
 		int_error();
 		return(-EINVAL);
 	}
-	return(HasProtocol(obj, *PP));
+	return(mISDN_HasProtocol(obj, *PP));
 }
 
-extern __inline__ void mISDN_sethead(u_int prim, int dinfo, struct sk_buff *skb)
+static inline void
+mISDN_sethead(u_int prim, int dinfo, struct sk_buff *skb)
 {
 	mISDN_head_t *hh = mISDN_HEAD_P(skb);
 
@@ -120,8 +122,8 @@ extern __inline__ void mISDN_sethead(u_int prim, int dinfo, struct sk_buff *skb)
 	hh->dinfo = dinfo;
 }
 
-extern __inline__ int if_newhead(mISDNif_t *i, u_int prim, int dinfo,
-	struct sk_buff *skb)
+static inline int
+if_newhead(mISDNif_t *i, u_int prim, int dinfo, struct sk_buff *skb)
 {
 	if (!i->func || !skb)
 		return(-ENXIO);
@@ -131,14 +133,14 @@ extern __inline__ int if_newhead(mISDNif_t *i, u_int prim, int dinfo,
 
 #ifdef MISDN_MEMDEBUG
 #define create_link_skb(p, d, l, a, r)	__mid_create_link_skb(p, d, l, a, r, __FILE__, __LINE__)
-extern __inline__ struct sk_buff *
+static inline struct sk_buff *
 __mid_create_link_skb(u_int prim, int dinfo, int len, void *arg, int reserve, char *fn, int line)
 {
 	struct sk_buff	*skb;
 
 	if (!(skb = __mid_alloc_skb(len + reserve, GFP_ATOMIC, fn, line))) {
 #else
-extern __inline__ struct sk_buff *
+static inline struct sk_buff *
 create_link_skb(u_int prim, int dinfo, int len, void *arg, int reserve)
 {
 	struct sk_buff	*skb;
@@ -158,7 +160,7 @@ create_link_skb(u_int prim, int dinfo, int len, void *arg, int reserve)
 
 #ifdef MISDN_MEMDEBUG
 #define if_link(i, p, d, l, a, r)	__mid_if_link(i, p, d, l, a, r, __FILE__, __LINE__)
-extern __inline__ int
+static inline int
 __mid_if_link(mISDNif_t *i, u_int prim, int dinfo, int len, void *arg, int reserve, char *fn, int line)
 {
 	struct sk_buff	*skb;
@@ -166,7 +168,7 @@ __mid_if_link(mISDNif_t *i, u_int prim, int dinfo, int len, void *arg, int reser
 
 	if (!(skb = __mid_create_link_skb(prim, dinfo, len, arg, reserve, fn, line)))
 #else
-extern __inline__ int
+static inline int
 if_link(mISDNif_t *i, u_int prim, int dinfo, int len, void *arg, int reserve)
 {
 	struct sk_buff	*skb;
@@ -186,18 +188,18 @@ if_link(mISDNif_t *i, u_int prim, int dinfo, int len, void *arg, int reserve)
 
 /* L3 data struct helper functions */
 
-extern	signed int	l3_ie2pos(u_char);
-extern	unsigned char	l3_pos2ie(int);
-extern	void		initQ931_info(Q931_info_t *);
+extern	signed int	mISDN_l3_ie2pos(u_char);
+extern	unsigned char	mISDN_l3_pos2ie(int);
+extern	void		mISDN_initQ931_info(Q931_info_t *);
 #ifdef MISDN_MEMDEBUG
-#define alloc_l3msg(a, b)	__mid_alloc_l3msg(a, b, __FILE__, __LINE__)
+#define mISDN_alloc_l3msg(a, b)	__mid_alloc_l3msg(a, b, __FILE__, __LINE__)
 extern	struct sk_buff 	*__mid_alloc_l3msg(int, u_char, char *, int);
 #else
-extern	struct sk_buff 	*alloc_l3msg(int, u_char);
+extern	struct sk_buff 	*mISDN_alloc_l3msg(int, u_char);
 #endif
-extern	void		AddvarIE(struct sk_buff *, u_char *);
-extern	void		AddIE(struct sk_buff *, u_char, u_char *);
-extern	void		LogL3Msg(struct sk_buff *);
+extern	void		mISDN_AddvarIE(struct sk_buff *, u_char *);
+extern	void		mISDN_AddIE(struct sk_buff *, u_char, u_char *);
+extern	void		mISDN_LogL3Msg(struct sk_buff *);
 
 /* manager default handler helper macros */
 
@@ -207,7 +209,7 @@ extern	void		LogL3Msg(struct sk_buff *);
 	if ((MGR_HASPROTOCOL | REQUEST) == p) {\
 		if (a) {\
 			int prot = *((int *)a);\
-			return(HasProtocol(o, prot));\
+			return(mISDN_HasProtocol(o, prot));\
 		} else \
 			return(-EINVAL);\
 	}

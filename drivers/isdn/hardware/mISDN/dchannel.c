@@ -1,4 +1,4 @@
-/* $Id: dchannel.c,v 1.9 2003/12/03 14:32:44 keil Exp $
+/* $Id: dchannel.c,v 1.10 2004/01/26 22:21:30 keil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -6,7 +6,6 @@
  *
  */
 
-#define __NO_VERSION__
 #include <linux/mISDNif.h>
 #include "layer1.h"
 #include "helper.h"
@@ -26,7 +25,7 @@ dchannel_bh(dchannel_t *dch)
 #if 0
 	if (test_and_clear_bit(D_CLEARBUSY, &dch->event)) {
 		if (dch->debug)
-			debugprint(&dch->inst, "D-Channel Busy cleared");
+			mISDN_debugprint(&dch->inst, "D-Channel Busy cleared");
 		stptr = dch->stlist;
 		while (stptr != NULL) {
 			stptr->l1.l1l2(stptr, PH_PAUSE | CONFIRM, NULL);
@@ -59,7 +58,7 @@ dchannel_bh(dchannel_t *dch)
 }
 
 int
-init_dchannel(dchannel_t *dch) {
+mISDN_init_dch(dchannel_t *dch) {
 	if (!(dch->dlog = kmalloc(MAX_DLOG_SPACE, GFP_ATOMIC))) {
 		printk(KERN_WARNING
 			"mISDN: No memory for dlog\n");
@@ -84,13 +83,13 @@ init_dchannel(dchannel_t *dch) {
 }
 
 int
-free_dchannel(dchannel_t *dch) {
+mISDN_free_dch(dchannel_t *dch) {
 #ifdef HAS_WORKQUEUE
 	if (dch->work.pending)
-		printk(KERN_ERR "free_dchannel work:(%lx)\n", dch->work.pending);
+		printk(KERN_ERR "mISDN_free_dch work:(%lx)\n", dch->work.pending);
 #else
 	if (dch->work.sync)
-		printk(KERN_ERR "free_dchannel work:(%lx)\n", dch->work.sync);
+		printk(KERN_ERR "mISDN_free_dch work:(%lx)\n", dch->work.sync);
 #endif
 	discard_queue(&dch->rqueue);
 	if (dch->rx_skb) {
@@ -112,3 +111,5 @@ free_dchannel(dchannel_t *dch) {
 	return(0);
 }
 
+EXPORT_SYMBOL(mISDN_init_dch);
+EXPORT_SYMBOL(mISDN_free_dch);

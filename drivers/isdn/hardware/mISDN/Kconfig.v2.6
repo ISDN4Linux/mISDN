@@ -3,7 +3,7 @@
 #
 
 menu "Modular ISDN driver"
-	depends on NET && ISDN_BOOL && ISDN_CAPI!=n
+	depends on NET && ISDN && ISDN_CAPI!=n
 
 config MISDN_DRV
 	tristate "Support modular ISDN driver"

@@ -1,4 +1,4 @@
-/* $Id: avm_fritz.c,v 1.24 2004/01/19 11:02:48 keil Exp $
+/* $Id: avm_fritz.c,v 1.25 2004/01/26 22:21:30 keil Exp $
  *
  * fritz_pci.c    low level stuff for AVM Fritz!PCI and ISA PnP isdn cards
  *              Thanks to AVM, Berlin for informations
@@ -28,7 +28,7 @@
 #define LOCK_STATISTIC
 #include "hw_lock.h"
 
-static const char *avm_fritz_rev = "$Revision: 1.24 $";
+static const char *avm_fritz_rev = "$Revision: 1.25 $";
 
 enum {
 	AVM_FRITZ_PCI,
@@ -287,7 +287,7 @@ write_ctrl(bchannel_t *bch, int which) {
 	hdlc_hw_t	*hdlc = bch->hw;
 
 	if (fc->dch.debug & L1_DEB_HSCX)
-		debugprint(&bch->inst, "hdlc %c wr%x ctrl %x",
+		mISDN_debugprint(&bch->inst, "hdlc %c wr%x ctrl %x",
 			'A' + bch->channel, which, hdlc->ctrl.ctrl);
 	switch(fc->type) {
 		case AVM_FRITZ_PCIV2:
@@ -350,7 +350,7 @@ modehdlc(bchannel_t *bch, int bc, int protocol)
 	hdlc_hw_t	*hdlc = bch->hw;
 
 	if (bch->debug & L1_DEB_HSCX)
-		debugprint(&bch->inst, "hdlc %c protocol %x-->%x ch %d-->%d",
+		mISDN_debugprint(&bch->inst, "hdlc %c protocol %x-->%x ch %d-->%d",
 			'A' + bch->channel, bch->protocol, protocol, bch->channel, bc);
 	if ((protocol != -1) && (bc != bch->channel))
 		printk(KERN_WARNING "%s: fritzcard mismatch channel(%d/%d)\n", __FUNCTION__, bch->channel, bc);
@@ -388,7 +388,7 @@ modehdlc(bchannel_t *bch, int bc, int protocol)
 			bch_sched_event(bch, B_XMTBUFREADY);
 			break;
 		default:
-			debugprint(&bch->inst, "prot not known %x", protocol);
+			mISDN_debugprint(&bch->inst, "prot not known %x", protocol);
 			return(-ENOPROTOOPT);
 	}
 	return(0);
@@ -404,10 +404,10 @@ hdlc_empty_fifo(bchannel_t *bch, int count)
 	fritzpnppci *fc = bch->inst.data;
 
 	if ((fc->dch.debug & L1_DEB_HSCX) && !(fc->dch.debug & L1_DEB_HSCX_FIFO))
-		debugprint(&bch->inst, "hdlc_empty_fifo %d", count);
+		mISDN_debugprint(&bch->inst, "hdlc_empty_fifo %d", count);
 	if (bch->rx_idx + count > MAX_DATA_MEM) {
 		if (fc->dch.debug & L1_DEB_WARN)
-			debugprint(&bch->inst, "hdlc_empty_fifo: incoming packet too large");
+			mISDN_debugprint(&bch->inst, "hdlc_empty_fifo: incoming packet too large");
 		return;
 	}
 	ptr = (u_int *) p = bch->rx_buf + bch->rx_idx;
@@ -453,8 +453,8 @@ hdlc_empty_fifo(bchannel_t *bch, int count)
 			p = (u_char *) ptr;
 		t += sprintf(t, "hdlc_empty_fifo %c cnt %d",
 			     bch->channel ? 'B' : 'A', count);
-		QuickHex(t, p, count);
-		debugprint(&bch->inst, bch->blog);
+		mISDN_QuickHex(t, p, count);
+		mISDN_debugprint(&bch->inst, bch->blog);
 	}
 }
 
@@ -470,7 +470,7 @@ hdlc_fill_fifo(bchannel_t *bch)
 	u_int		*ptr;
 
 	if ((bch->debug & L1_DEB_HSCX) && !(bch->debug & L1_DEB_HSCX_FIFO))
-		debugprint(&bch->inst, "%s", __FUNCTION__);
+		mISDN_debugprint(&bch->inst, "%s", __FUNCTION__);
 	count = bch->tx_len - bch->tx_idx;
 	if (count <= 0)
 		return;
@@ -483,7 +483,7 @@ hdlc_fill_fifo(bchannel_t *bch)
 			hdlc->ctrl.sr.cmd |= HDLC_CMD_XME;
 	}
 	if ((bch->debug & L1_DEB_HSCX) && !(bch->debug & L1_DEB_HSCX_FIFO))
-		debugprint(&bch->inst, "%s: %d/%d", __FUNCTION__,
+		mISDN_debugprint(&bch->inst, "%s: %d/%d", __FUNCTION__,
 			count, bch->tx_idx);
 	ptr = (u_int *) p;
 	bch->tx_idx += count;
@@ -530,8 +530,8 @@ hdlc_fill_fifo(bchannel_t *bch)
 			p = (u_char *) ptr;
 		t += sprintf(t, "hdlc_fill_fifo %c cnt %d",
 			     bch->channel ? 'B' : 'A', count);
-		QuickHex(t, p, count);
-		debugprint(&bch->inst, bch->blog);
+		mISDN_QuickHex(t, p, count);
+		mISDN_debugprint(&bch->inst, bch->blog);
 	}
 }
 
@@ -568,13 +568,13 @@ HDLC_irq(bchannel_t *bch, u_int stat)
 	hdlc_hw_t	*hdlc = bch->hw;
 
 	if (bch->debug & L1_DEB_HSCX)
-		debugprint(&bch->inst, "ch%d stat %#x", bch->channel, stat);
+		mISDN_debugprint(&bch->inst, "ch%d stat %#x", bch->channel, stat);
 	if (stat & HDLC_INT_RPR) {
 		if (stat & HDLC_STAT_RDO) {
 			if (bch->debug & L1_DEB_HSCX)
-				debugprint(&bch->inst, "RDO");
+				mISDN_debugprint(&bch->inst, "RDO");
 			else
-				debugprint(&bch->inst, "ch%d stat %#x", bch->channel, stat);
+				mISDN_debugprint(&bch->inst, "ch%d stat %#x", bch->channel, stat);
 			hdlc->ctrl.sr.xml = 0;
 			hdlc->ctrl.sr.cmd |= HDLC_CMD_RRS;
 			write_ctrl(bch, 1);
@@ -599,9 +599,9 @@ HDLC_irq(bchannel_t *bch, u_int stat)
 					bch_sched_event(bch, B_RCVBUFREADY);
 				} else {
 					if (bch->debug & L1_DEB_HSCX)
-						debugprint(&bch->inst, "invalid frame");
+						mISDN_debugprint(&bch->inst, "invalid frame");
 					else
-						debugprint(&bch->inst, "ch%d invalid frame %#x", bch->channel, stat);
+						mISDN_debugprint(&bch->inst, "ch%d invalid frame %#x", bch->channel, stat);
 					bch->rx_idx = 0;
 				}
 			}
@@ -613,7 +613,7 @@ HDLC_irq(bchannel_t *bch, u_int stat)
 		 * in transparent mode we send the next data
 		 */
 		if (bch->debug & L1_DEB_WARN)
-			debugprint(&bch->inst, "ch%d XDU tx_len(%d) tx_idx(%d) Flag(%lx)",
+			mISDN_debugprint(&bch->inst, "ch%d XDU tx_len(%d) tx_idx(%d) Flag(%lx)",
 				bch->channel, bch->tx_len, bch->tx_idx, bch->Flag);
 		if (bch->tx_len) {
 			if (bch->protocol != ISDN_PID_L1_B_64TRANS)
@@ -639,7 +639,7 @@ HDLC_irq_main(fritzpnppci *fc)
 	if (stat & HDLC_INT_MASK) {
 		if (!(bch = Sel_BCS(fc, 0))) {
 			if (fc->bch[0].debug)
-				debugprint(&fc->bch[0].inst, "hdlc spurious channel 0 IRQ");
+				mISDN_debugprint(&fc->bch[0].inst, "hdlc spurious channel 0 IRQ");
 		} else
 			HDLC_irq(bch, stat);
 	}
@@ -647,7 +647,7 @@ HDLC_irq_main(fritzpnppci *fc)
 	if (stat & HDLC_INT_MASK) {
 		if (!(bch = Sel_BCS(fc, 1))) {
 			if (fc->bch[1].debug)
-				debugprint(&fc->bch[1].inst, "hdlc spurious channel 1 IRQ");
+				mISDN_debugprint(&fc->bch[1].inst, "hdlc spurious channel 1 IRQ");
 		} else
 			HDLC_irq(bch, stat);
 	}
@@ -667,7 +667,7 @@ avm_fritz_interrupt(int intno, void *dev_id, struct pt_regs *regs)
 #endif
 	sval = inb(fc->addr + 2);
 	if (fc->dch.debug & L1_DEB_INTSTAT)
-		debugprint(&fc->dch.inst, "irq stat0 %x", sval);
+		mISDN_debugprint(&fc->dch.inst, "irq stat0 %x", sval);
 	if ((sval & AVM_STATUS0_IRQ_MASK) == AVM_STATUS0_IRQ_MASK) {
 		/* possible a shared  IRQ reqest */
 #ifdef SPIN_DEBUG
@@ -703,7 +703,7 @@ avm_fritz_interrupt(int intno, void *dev_id, struct pt_regs *regs)
 	spin_unlock_irqrestore(&fc->lock.lock, flags);
 	if (!(sval & AVM_STATUS0_IRQ_ISAC)) {
 		val = ReadISAC(fc, ISAC_ISTA);
-		ISAC_interrupt(&fc->dch, val);
+		mISDN_isac_interrupt(&fc->dch, val);
 	}
 	if (!(sval & AVM_STATUS0_IRQ_HDLC)) {
 		HDLC_irq_main(fc);
@@ -744,7 +744,7 @@ avm_fritzv2_interrupt(int intno, void *dev_id, struct pt_regs *regs)
 #endif
 	sval = inb(fc->addr + 2);
 	if (fc->dch.debug & L1_DEB_INTSTAT)
-		debugprint(&fc->dch.inst, "irq stat0 %x", sval);
+		mISDN_debugprint(&fc->dch.inst, "irq stat0 %x", sval);
 	if (!(sval & AVM_STATUS0_IRQ_MASK)) {
 		/* possible a shared  IRQ reqest */
 #ifdef SPIN_DEBUG
@@ -783,11 +783,11 @@ avm_fritzv2_interrupt(int intno, void *dev_id, struct pt_regs *regs)
 	}
 	if (sval & AVM_STATUS0_IRQ_ISAC) {
 		val = fcpci2_read_isac(fc, ISACSX_ISTA);
-		ISAC_interrupt(&fc->dch, val);
+		mISDN_isac_interrupt(&fc->dch, val);
 	}
 	if (sval & AVM_STATUS0_IRQ_TIMER) {
 		if (fc->dch.debug & L1_DEB_INTSTAT)
-			debugprint(&fc->dch.inst, "Fc2 timer irq");
+			mISDN_debugprint(&fc->dch.inst, "Fc2 timer irq");
 		outb(fc->ctrlreg | AVM_STATUS0_RES_TIMER, fc->addr + 2);
 		udelay(1);
 		outb(fc->ctrlreg, fc->addr + 2);
@@ -824,7 +824,7 @@ hdlc_down(mISDNif_t *hif, struct sk_buff *skb)
 	if ((hh->prim == PH_DATA_REQ) ||
 		(hh->prim == (DL_DATA | REQUEST))) {
 		if (bch->next_skb) {
-			debugprint(&bch->inst, " l2l1 next_skb exist this shouldn't happen");
+			mISDN_debugprint(&bch->inst, " l2l1 next_skb exist this shouldn't happen");
 			return(-EBUSY);
 		}
 		bch->inst.lock(bch->inst.data, 0);
@@ -894,9 +894,9 @@ clear_pending_hdlc_ints(fritzpnppci *fc)
 	u_int val;
 
 	val = read_status(fc, 0);
-	debugprint(&fc->dch.inst, "HDLC 1 STA %x", val);
+	mISDN_debugprint(&fc->dch.inst, "HDLC 1 STA %x", val);
 	val = read_status(fc, 1);
-	debugprint(&fc->dch.inst, "HDLC 2 STA %x", val);
+	mISDN_debugprint(&fc->dch.inst, "HDLC 2 STA %x", val);
 }
 
 static void
@@ -958,9 +958,9 @@ static int init_card(fritzpnppci *fc)
 	}
 	while (cnt) {
 		int	ret;
-		ISAC_clear_pending_ints(&fc->dch);
-		if ((ret=ISAC_init(&fc->dch))) {
-			printk(KERN_WARNING "mISDN: ISAC_init failed with %d\n", ret);
+		mISDN_clear_isac(&fc->dch);
+		if ((ret=mISDN_isac_init(&fc->dch))) {
+			printk(KERN_WARNING "mISDN: mISDN_isac_init failed with %d\n", ret);
 			break;
 		}
 		clear_pending_hdlc_ints(fc);
@@ -1103,11 +1103,11 @@ release_card(fritzpnppci *card)
 	free_irq(card->irq, card);
 	modehdlc(&card->bch[0], 0, ISDN_PID_NONE);
 	modehdlc(&card->bch[1], 1, ISDN_PID_NONE);
-	ISAC_free(&card->dch);
+	mISDN_isac_free(&card->dch);
 	release_region(card->addr, 32);
-	free_bchannel(&card->bch[1]);
-	free_bchannel(&card->bch[0]);
-	free_dchannel(&card->dch);
+	mISDN_free_bch(&card->bch[1]);
+	mISDN_free_bch(&card->bch[0]);
+	mISDN_free_dch(&card->dch);
 	fritz.ctrl(card->dch.inst.up.peer, MGR_DISCONNECT | REQUEST, &card->dch.inst.up);
 	fritz.ctrl(&card->dch.inst, MGR_UNREGLAYER | REQUEST, NULL);
 	REMOVE_FROM_LISTBASE(card, ((fritzpnppci *)fritz.ilist));
@@ -1171,7 +1171,7 @@ fritz_manager(void *data, u_int prim, void *arg) {
 			inst->down.fdata = &card->dch;
 			if ((skb = create_link_skb(PH_CONTROL | REQUEST,
 				HW_DEACTIVATE, 0, NULL, 0))) {
-				if (ISAC_l1hw(&inst->down, skb))
+				if (mISDN_ISAC_l1hw(&inst->down, skb))
 					dev_kfree_skb(skb);
 			}
 		} else {
@@ -1201,19 +1201,19 @@ fritz_manager(void *data, u_int prim, void *arg) {
 		}
 		break;
 	    case MGR_CONNECT | REQUEST:
-		return(ConnectIF(inst, arg));
+		return(mISDN_ConnectIF(inst, arg));
 	    case MGR_SETIF | REQUEST:
 	    case MGR_SETIF | INDICATION:
 		if (channel==2)
-			return(SetIF(inst, arg, prim, ISAC_l1hw, NULL,
+			return(mISDN_SetIF(inst, arg, prim, mISDN_ISAC_l1hw, NULL,
 				&card->dch));
 		else
-			return(SetIF(inst, arg, prim, hdlc_down, NULL,
+			return(mISDN_SetIF(inst, arg, prim, hdlc_down, NULL,
 				&card->bch[channel]));
 		break;
 	    case MGR_DISCONNECT | REQUEST:
 	    case MGR_DISCONNECT | INDICATION:
-		return(DisConnectIF(inst, arg));
+		return(mISDN_DisConnectIF(inst, arg));
 	    case MGR_SETSTACK | CONFIRM:
 		if ((channel!=2) && (inst->pid.global == 2)) {
 			inst->down.fdata = &card->bch[channel];
@@ -1251,28 +1251,28 @@ static int __devinit setup_instance(fritzpnppci *card)
 	card->dch.inst.unlock = unlock_dev;
 	card->dch.inst.pid.layermask = ISDN_LAYER(0);
 	card->dch.inst.pid.protocol[0] = ISDN_PID_L0_TE_S0;
-	init_mISDNinstance(&card->dch.inst, &fritz, card);
+	mISDN_init_instance(&card->dch.inst, &fritz, card);
 	sprintf(card->dch.inst.name, "Fritz%d", fritz_cnt+1);
-	set_dchannel_pid(&pid, protocol[fritz_cnt], layermask[fritz_cnt]);
-	init_dchannel(&card->dch);
+	mISDN_set_dchannel_pid(&pid, protocol[fritz_cnt], layermask[fritz_cnt]);
+	mISDN_init_dch(&card->dch);
 	for (i=0; i<2; i++) {
 		card->bch[i].channel = i;
-		init_mISDNinstance(&card->bch[i].inst, &fritz, card);
+		mISDN_init_instance(&card->bch[i].inst, &fritz, card);
 		card->bch[i].inst.pid.layermask = ISDN_LAYER(0);
 		card->bch[i].inst.lock = lock_dev;
 		card->bch[i].inst.unlock = unlock_dev;
 		card->bch[i].debug = debug;
 		sprintf(card->bch[i].inst.name, "%s B%d", card->dch.inst.name, i+1);
-		init_bchannel(&card->bch[i]);
+		mISDN_init_bch(&card->bch[i]);
 		card->bch[i].hw = &card->hdlc[i];
 	}
 	printk(KERN_DEBUG "fritz card %p dch %p bch1 %p bch2 %p\n",
 		card, &card->dch, &card->bch[0], &card->bch[1]);
 	err = setup_fritz(card);
 	if (err) {
-		free_dchannel(&card->dch);
-		free_bchannel(&card->bch[1]);
-		free_bchannel(&card->bch[0]);
+		mISDN_free_dch(&card->dch);
+		mISDN_free_bch(&card->bch[1]);
+		mISDN_free_bch(&card->bch[0]);
 		REMOVE_FROM_LISTBASE(card, ((fritzpnppci *)fritz.ilist));
 		kfree(card);
 		return(err);

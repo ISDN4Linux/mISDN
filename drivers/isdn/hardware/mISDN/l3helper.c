@@ -1,4 +1,4 @@
-/* $Id: l3helper.c,v 1.4 2003/11/21 22:57:08 keil Exp $
+/* $Id: l3helper.c,v 1.5 2004/01/26 22:21:30 keil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -8,13 +8,12 @@
  *
  */
 
-#define __NO_VERSION__
 #include <linux/mISDNif.h>
 #include "dss1.h"
 #include "helper.h"
 
 
-static signed char _l3_ie2pos[128] = {
+static signed char _mISDN_l3_ie2pos[128] = {
 			-1,-1,-1,-1, 0,-1,-1,-1, 1,-1,-1,-1,-1,-1,-1,-1,
 			 2,-1,-1,-1, 3,-1,-1,-1, 4,-1,-1,-1, 5,-1, 6,-1,
 			 7,-1,-1,-1,-1,-1,-1, 8, 9,10,-1,-1,11,-1,-1,-1,
@@ -25,7 +24,7 @@ static signed char _l3_ie2pos[128] = {
 			24,25,-1,-1,26,-1,-1,-1,27,28,-1,-1,29,30,31,-1
 };
 			
-static unsigned char _l3_pos2ie[32] = {
+static unsigned char _mISDN_l3_pos2ie[32] = {
 			0x04, 0x08, 0x10, 0x14, 0x18, 0x1c, 0x1e, 0x20,
 			0x27, 0x28, 0x29, 0x2c, 0x34, 0x40, 0x42, 0x43,
 			0x44, 0x45, 0x46, 0x47, 0x4c, 0x4d, 0x6c, 0x6d,
@@ -33,21 +32,21 @@ static unsigned char _l3_pos2ie[32] = {
 };
 
 signed int
-l3_ie2pos(u_char c)
+mISDN_l3_ie2pos(u_char c)
 {
 	if (c>0x7f)
 		return(-1);
-	return(_l3_ie2pos[c]);
+	return(_mISDN_l3_ie2pos[c]);
 }
 
 unsigned char
-l3_pos2ie(int pos)
+mISDN_l3_pos2ie(int pos)
 {
-	return(_l3_pos2ie[pos]);
+	return(_mISDN_l3_pos2ie[pos]);
 }
 
 void
-initQ931_info(Q931_info_t *qi) {
+mISDN_initQ931_info(Q931_info_t *qi) {
 	memset(qi, 0, sizeof(Q931_info_t));
 };
 
@@ -55,7 +54,7 @@ struct sk_buff *
 #ifdef MISDN_MEMDEBUG
 __mid_alloc_l3msg(int len, u_char type, char *fn, int line)
 #else
-alloc_l3msg(int len, u_char type)
+mISDN_alloc_l3msg(int len, u_char type)
 #endif
 {
 	struct sk_buff	*skb;
@@ -70,12 +69,12 @@ alloc_l3msg(int len, u_char type)
 		return (NULL);
 	}
 	qi = (Q931_info_t *)skb_put(skb, L3_EXTRA_SIZE +1);
-	initQ931_info(qi);
+	mISDN_initQ931_info(qi);
 	qi->type = type;
 	return (skb);
 }
 
-void AddvarIE(struct sk_buff *skb, u_char *ie)
+void mISDN_AddvarIE(struct sk_buff *skb, u_char *ie)
 {
 	u_char	*p, *ps;
 	u16	*ies;
@@ -98,11 +97,11 @@ void AddvarIE(struct sk_buff *skb, u_char *ie)
 		}
 		l = 1;
 	} else {
-		if (_l3_ie2pos[*ie]<0) {
+		if (_mISDN_l3_ie2pos[*ie]<0) {
 			int_error();
 			return;
 		}
-		ies += _l3_ie2pos[*ie];
+		ies += _mISDN_l3_ie2pos[*ie];
 		l = ie[1] + 2;
 	}
 	p = skb_put(skb, l);
@@ -110,7 +109,7 @@ void AddvarIE(struct sk_buff *skb, u_char *ie)
 	memcpy(p, ie, l);
 }
 
-void AddIE(struct sk_buff *skb, u_char ie, u_char *iep)
+void mISDN_AddIE(struct sk_buff *skb, u_char ie, u_char *iep)
 {
 	u_char	*p, *ps;
 	u16	*ies;
@@ -133,11 +132,11 @@ void AddIE(struct sk_buff *skb, u_char ie, u_char *iep)
 		if (!iep || !iep[0])
 			return;
 		ies = &qi->bearer_capability;
-		if (_l3_ie2pos[ie]<0) {
+		if (_mISDN_l3_ie2pos[ie]<0) {
 			int_error();
 			return;
 		}
-		ies += _l3_ie2pos[ie];
+		ies += _mISDN_l3_ie2pos[ie];
 		l = iep[0] + 1;
 	}
 	ps = (u_char *) qi;
@@ -149,7 +148,7 @@ void AddIE(struct sk_buff *skb, u_char ie, u_char *iep)
 		memcpy(p, iep, l);
 }
 
-void LogL3Msg(struct sk_buff *skb)
+void mISDN_LogL3Msg(struct sk_buff *skb)
 {
 	u_char		*p,*ps, *t, tmp[32];
 	u16		*ies;
@@ -179,7 +178,19 @@ void LogL3Msg(struct sk_buff *skb)
 				t += sprintf(t, " %02x", p[j+2]);
 			}
 			printk(KERN_DEBUG "L3Msg ies[%d] off(%d) ie(%02x/%02x) len(%d) %s\n",
-				i, ies[i], _l3_pos2ie[i], *p, p[1], tmp);
+				i, ies[i], _mISDN_l3_pos2ie[i], *p, p[1], tmp);
 		}
 	}
 }
+
+EXPORT_SYMBOL(mISDN_l3_pos2ie);
+EXPORT_SYMBOL(mISDN_l3_ie2pos);
+EXPORT_SYMBOL(mISDN_initQ931_info);
+#ifdef MISDN_MEMDEBUG
+EXPORT_SYMBOL(__mid_alloc_l3msg);
+#else
+EXPORT_SYMBOL(mISDN_alloc_l3msg);
+#endif
+EXPORT_SYMBOL(mISDN_AddvarIE);
+EXPORT_SYMBOL(mISDN_AddIE);
+EXPORT_SYMBOL(mISDN_LogL3Msg);

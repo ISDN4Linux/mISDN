@@ -1,4 +1,4 @@
-/* $Id: i4l_mISDN.c,v 1.5 2004/01/11 13:58:49 keil Exp $
+/* $Id: i4l_mISDN.c,v 1.6 2004/01/26 22:21:30 keil Exp $
  *
  * interface for old I4L hardware drivers to the CAPI driver
  *
@@ -21,7 +21,7 @@
 #include "dss1.h"
 #include "debug.h"
 
-static char *i4lcapi_revision = "$Revision: 1.5 $";
+static char *i4lcapi_revision = "$Revision: 1.6 $";
 
 /* data struct */
 typedef struct _i4l_channel	i4l_channel_t;
@@ -283,7 +283,7 @@ sendup(i4l_channel_t *ch, int Dchannel, int prim, struct sk_buff *skb)
 	hhe->prim = prim;
 	hhe->dinfo = ch->l4id;
 	if (ch->drv->debug & 0x4)
-		LogL3Msg(skb);
+		mISDN_LogL3Msg(skb);
 	if (Dchannel)
 		I = &ch->drv->inst;
 	else
@@ -516,7 +516,7 @@ i4l_l1err(struct FsmInst *fi, int event, void *arg)
 
 	sendup(ch, 1, DL_RELEASE | INDICATION, NULL);
 	reset_channel(ch);
-	FsmChangeState(fi, ST_NULL);
+	mISDN_FsmChangeState(fi, ST_NULL);
 }
 
 static void
@@ -526,7 +526,7 @@ i4l_dhup(struct FsmInst *fi, int event, void *arg)
 	struct sk_buff	*skb;
 	u_char		tmp[8];
 
-	skb = alloc_l3msg(8, MT_RELEASE);
+	skb = mISDN_alloc_l3msg(8, MT_RELEASE);
 	if (!skb)
 		return;
 
@@ -539,10 +539,10 @@ i4l_dhup(struct FsmInst *fi, int event, void *arg)
 		tmp[2] = 0x80;
 		tmp[3] = 0x9f; /* normal, unspecified */
 	}
-	AddvarIE(skb, tmp);
+	mISDN_AddvarIE(skb, tmp);
 	sendup(ch, 1, CC_RELEASE | INDICATION, skb);
 	reset_channel(ch);
-	FsmChangeState(fi, ST_NULL);
+	mISDN_FsmChangeState(fi, ST_NULL);
 }
 
 static void
@@ -572,7 +572,7 @@ i4l_icall(struct FsmInst *fi, int event, void *arg)
 			printk(KERN_DEBUG "%s: l4id(%x) ch(%p)->nr %d\n", __FUNCTION__, ch->l4id, ch, ch->nr);
 	} else
 		return;
-	skb = alloc_l3msg(260, MT_SETUP);
+	skb = mISDN_alloc_l3msg(260, MT_SETUP);
 	if (!skb)
 		return;
 	p = tmp;
@@ -593,11 +593,11 @@ i4l_icall(struct FsmInst *fi, int event, void *arg)
 			*p++ = 0x90;	/* Circuit-Mode 64kbps              */
 			break;
 	}
-	AddvarIE(skb, tmp);
+	mISDN_AddvarIE(skb, tmp);
 	tmp[0] = IE_CHANNEL_ID;
 	tmp[1] = 1;
 	tmp[2] = 0x85 + ch->nr;
-	AddvarIE(skb, tmp);
+	mISDN_AddvarIE(skb, tmp);
 	if (setup->phone[0]) {
 		i = 1;
 		if (setup->plan) {
@@ -613,7 +613,7 @@ i4l_icall(struct FsmInst *fi, int event, void *arg)
 			tmp[i++] = setup->phone[j++];
 		}
 		tmp[0] = i-1;
-		AddIE(skb, IE_CALLING_PN, tmp);
+		mISDN_AddIE(skb, IE_CALLING_PN, tmp);
 		if (setup->phone[j] == '.') {
 			i = 1;
 			tmp[i++] = 0x80;
@@ -621,7 +621,7 @@ i4l_icall(struct FsmInst *fi, int event, void *arg)
 			while (setup->phone[j])
 				tmp[i++] = setup->phone[j++];
 			tmp[0] = i-1;
-			AddIE(skb, IE_CALLING_SUB, tmp);
+			mISDN_AddIE(skb, IE_CALLING_SUB, tmp);
 		}
 	}
 	if (setup->eazmsn[0]) {
@@ -634,7 +634,7 @@ i4l_icall(struct FsmInst *fi, int event, void *arg)
 			tmp[i++] = setup->eazmsn[j++];
 		}
 		tmp[0] = i-1;
-		AddIE(skb, IE_CALLED_PN, tmp);
+		mISDN_AddIE(skb, IE_CALLED_PN, tmp);
 		if (setup->eazmsn[j] == '.') {
 			i = 1;
 			tmp[i++] = 0x80;
@@ -642,7 +642,7 @@ i4l_icall(struct FsmInst *fi, int event, void *arg)
 			while (setup->eazmsn[j])
 				tmp[i++] = setup->eazmsn[j++];
 			tmp[0] = i-1;
-			AddIE(skb, IE_CALLED_SUB, tmp);
+			mISDN_AddIE(skb, IE_CALLED_SUB, tmp);
 		}
 	}
 	p = tmp;
@@ -688,8 +688,8 @@ i4l_icall(struct FsmInst *fi, int event, void *arg)
 				break;
 		}
 	}
-	AddvarIE(skb, tmp);
-	FsmChangeState(fi, ST_ICALL);
+	mISDN_AddvarIE(skb, tmp);
+	mISDN_FsmChangeState(fi, ST_ICALL);
 	sendup(ch, 1, CC_SETUP | INDICATION, skb);
 }
 
@@ -700,16 +700,16 @@ i4l_dconn_out(struct FsmInst *fi, int event, void *arg)
 	struct sk_buff	*skb;
 	u_char		tmp[4];
 
-	skb = alloc_l3msg(4, MT_CONNECT);
+	skb = mISDN_alloc_l3msg(4, MT_CONNECT);
 	if (!skb)
 		return;
 
 	tmp[0] = IE_CHANNEL_ID;
 	tmp[1] = 1;
 	tmp[2] = 0x85 + ch->nr;
-	AddvarIE(skb, tmp);
+	mISDN_AddvarIE(skb, tmp);
 	sendup(ch, 1, CC_CONNECT | INDICATION, skb);
-	FsmChangeState(fi, ST_ACTIVD);
+	mISDN_FsmChangeState(fi, ST_ACTIVD);
 }
 
 static void
@@ -718,7 +718,7 @@ i4l_dconn_in(struct FsmInst *fi, int event, void *arg)
 	i4l_channel_t	*ch = fi->userdata;
 
 	sendup(ch, 1, CC_CONNECT_ACKNOWLEDGE | INDICATION, NULL);
-	FsmChangeState(fi, ST_ACTIVD);
+	mISDN_FsmChangeState(fi, ST_ACTIVD);
 }
 
 static void
@@ -737,7 +737,7 @@ i4l_bconn(struct FsmInst *fi, int event, void *arg)
 
 	sendup(ch, 0, prim | INDICATION, NULL);
 	test_and_set_bit(I4L_FLG_BCONN, &ch->Flags);
-	FsmChangeState(fi, ST_ACTIVB);
+	mISDN_FsmChangeState(fi, ST_ACTIVB);
 	if (skb_queue_len(&ch->sendq))
 		sendqueued(ch);
 }
@@ -748,7 +748,7 @@ i4l_bhup(struct FsmInst *fi, int event, void *arg)
 	i4l_channel_t	*ch = fi->userdata;
 	int		prim = test_bit(I4L_FLG_LAYER1, &ch->Flags) ? PH_DEACTIVATE : DL_RELEASE;
 
-	FsmChangeState(fi, ST_ACTIVD);
+	mISDN_FsmChangeState(fi, ST_ACTIVD);
 	sendup(ch, 0, prim | INDICATION, NULL);
 }
 
@@ -757,10 +757,10 @@ stackready(struct FsmInst *fi, int event, void *arg)
 {
 	i4l_channel_t	*ch = fi->userdata;
 
-	FsmChangeState(fi, ST_BREADY);
+	mISDN_FsmChangeState(fi, ST_BREADY);
 	test_and_set_bit(I4L_FLG_BREADY, &ch->Flags);
 	if (test_bit(I4L_FLG_BCONN, &ch->Flags))
-		FsmEvent(&ch->i4lm, EV_I4L_BCONN, NULL);
+		mISDN_FsmEvent(&ch->i4lm, EV_I4L_BCONN, NULL);
 }
 
 static void
@@ -773,7 +773,7 @@ capi_ocall(struct FsmInst *fi, int event, void *arg)
 	isdn_ctrl	ctrl;
 	int		i,l;
 
-	FsmChangeState(fi, ST_OCALL);
+	mISDN_FsmChangeState(fi, ST_OCALL);
 	test_and_set_bit(I4L_FLG_LOCK, &ch->Flags);
 	i4l_lock_drv(ch->drv);
 	ps += L3_EXTRA_SIZE;
@@ -894,7 +894,7 @@ capi_alert(struct FsmInst *fi, int event, void *arg)
 	i4l_channel_t	*ch = fi->userdata;
 	struct sk_buff	*skb = arg;
 
-	FsmChangeState(fi, ST_ALERT);
+	mISDN_FsmChangeState(fi, ST_ALERT);
 	i4l_cmd(ch->drv, ch->nr, ISDN_CMD_ALERT);
 	if (skb)
 		dev_kfree_skb(skb);
@@ -913,7 +913,7 @@ capi_connect(struct FsmInst *fi, int event, void *arg)
 		i4l_cmd(ch->drv, ch->nr | (ISDN_PROTO_L2_HDLC << 8), ISDN_CMD_SETL2);
 		i4l_cmd(ch->drv, ch->nr | (ISDN_PROTO_L3_TRANS << 8), ISDN_CMD_SETL3);
 	}
-	FsmChangeState(fi, ST_WAITDCONN);
+	mISDN_FsmChangeState(fi, ST_WAITDCONN);
 	i4l_cmd(ch->drv, ch->nr, ISDN_CMD_ACCEPTD);
 	if (skb)
 		dev_kfree_skb(skb);
@@ -925,7 +925,7 @@ capi_disconnect(struct FsmInst *fi, int event, void *arg)
 	i4l_channel_t	*ch = fi->userdata;
 	struct sk_buff	*skb = arg;
 
-	FsmChangeState(fi, ST_HANGUP);
+	mISDN_FsmChangeState(fi, ST_HANGUP);
 	test_and_set_bit(I4L_FLG_HANGUP, &ch->Flags);
 	i4l_cmd(ch->drv, ch->nr, ISDN_CMD_HANGUP);
 	if (skb)
@@ -943,7 +943,7 @@ capi_release(struct FsmInst *fi, int event, void *arg)
 	if (skb)
 		dev_kfree_skb(skb);
 	reset_channel(ch);
-	FsmChangeState(fi, ST_NULL);
+	mISDN_FsmChangeState(fi, ST_NULL);
 }
 
 static void
@@ -960,7 +960,7 @@ capi_releaseb(struct FsmInst *fi, int event, void *arg)
 	i4l_channel_t	*ch = fi->userdata;
 
 	test_and_clear_bit(I4L_FLG_BREADY, &ch->Flags);
-	FsmChangeState(fi, ST_ACTIVD);
+	mISDN_FsmChangeState(fi, ST_ACTIVD);
 }
 
 static int
@@ -1018,23 +1018,23 @@ Dchannel_i4l(mISDNif_t *hif, struct sk_buff *skb)
 		return(ret);
 	}
 	if (ch->drv->debug & 0x4)
-		LogL3Msg(skb);
+		mISDN_LogL3Msg(skb);
 	switch(hh->prim) {
 		case CC_SETUP | REQUEST:
-			ret = FsmEvent(&ch->i4lm, EV_CAPI_OCALL, skb);
+			ret = mISDN_FsmEvent(&ch->i4lm, EV_CAPI_OCALL, skb);
 			break;
 		case CC_ALERTING | REQUEST:
-			ret = FsmEvent(&ch->i4lm, EV_CAPI_ALERT, skb);
+			ret = mISDN_FsmEvent(&ch->i4lm, EV_CAPI_ALERT, skb);
 			break;
 		case CC_CONNECT | REQUEST:
-			ret = FsmEvent(&ch->i4lm, EV_CAPI_DCONNECT, skb);
+			ret = mISDN_FsmEvent(&ch->i4lm, EV_CAPI_DCONNECT, skb);
 			break;
 		case CC_DISCONNECT | REQUEST:
 		case CC_RELEASE | REQUEST:
-			ret = FsmEvent(&ch->i4lm, EV_CAPI_DISCONNECT, skb);
+			ret = mISDN_FsmEvent(&ch->i4lm, EV_CAPI_DISCONNECT, skb);
 			break;
 		case CC_RELEASE_COMPLETE | REQUEST:
-			ret = FsmEvent(&ch->i4lm, EV_CAPI_RELEASE, skb);
+			ret = mISDN_FsmEvent(&ch->i4lm, EV_CAPI_RELEASE, skb);
 			break;
 		default:
 			if (debug)
@@ -1061,13 +1061,13 @@ Bchannel_i4l(mISDNif_t *hif, struct sk_buff *skb)
 	switch(hh->prim) {
 		case PH_ACTIVATE | REQUEST:
 		case DL_ESTABLISH | REQUEST:
-			FsmEvent(&ch->i4lm, EV_CAPI_ESTABLISHB, NULL);
+			mISDN_FsmEvent(&ch->i4lm, EV_CAPI_ESTABLISHB, NULL);
 			skb_trim(skb, 0);
 			ret = if_newhead(&ch->inst.up, hh->prim | CONFIRM, 0, skb);
 			break;
 		case PH_DEACTIVATE | REQUEST:
 		case DL_RELEASE | REQUEST:
-			FsmEvent(&ch->i4lm, EV_CAPI_RELEASEB, NULL);
+			mISDN_FsmEvent(&ch->i4lm, EV_CAPI_RELEASEB, NULL);
 			skb_trim(skb, 0);
 			ret = if_newhead(&ch->inst.up, hh->prim | CONFIRM, 0, skb);
 			break;
@@ -1225,7 +1225,7 @@ I4Lcapi_status_callback(isdn_ctrl *c)
 			if (c->arg < 0)
 				return -1;
 			ch += c->arg;
-			ret = FsmEvent(&ch->i4lm, EV_I4L_ICALL, &c->parm.setup);
+			ret = mISDN_FsmEvent(&ch->i4lm, EV_I4L_ICALL, &c->parm.setup);
 			break;
 		case ISDN_STAT_CINF:
 			if (c->arg < 0)
@@ -1257,32 +1257,32 @@ I4Lcapi_status_callback(isdn_ctrl *c)
 			if (c->arg < 0)
 				return -1;
 			ch += c->arg;
-			ret = FsmEvent(&ch->i4lm, EV_I4L_DCONN, NULL);
+			ret = mISDN_FsmEvent(&ch->i4lm, EV_I4L_DCONN, NULL);
 			break;
 		case ISDN_STAT_DHUP:
 			if (c->arg < 0)
 				return -1;
 			ch += c->arg;
-			ret = FsmEvent(&ch->i4lm, EV_I4L_DHUP, NULL);
+			ret = mISDN_FsmEvent(&ch->i4lm, EV_I4L_DHUP, NULL);
 			break;
 		case ISDN_STAT_BCONN:
 			if (c->arg < 0)
 				return -1;
 			ch += c->arg;
-			ret = FsmEvent(&ch->i4lm, EV_I4L_BCONN, NULL);
+			ret = mISDN_FsmEvent(&ch->i4lm, EV_I4L_BCONN, NULL);
 			break;
 		case ISDN_STAT_BHUP:
 			if (c->arg < 0)
 				return -1;
 			ch += c->arg;
-			ret = FsmEvent(&ch->i4lm, EV_I4L_BHUP, NULL);
+			ret = mISDN_FsmEvent(&ch->i4lm, EV_I4L_BHUP, NULL);
 			break;
 		case ISDN_STAT_NODCH:
 		case ISDN_STAT_L1ERR:
 			if (c->arg < 0)
 				return -1;
 			ch += c->arg;
-			ret = FsmEvent(&ch->i4lm, EV_I4L_L1ERR, NULL);
+			ret = mISDN_FsmEvent(&ch->i4lm, EV_I4L_L1ERR, NULL);
 			break;
 		case ISDN_STAT_ADDCH:
 		case ISDN_STAT_DISCH:
@@ -1323,7 +1323,7 @@ I4Lcapi_manager(void *data, u_int prim, void *arg) {
 		printk(KERN_DEBUG "%s: data:%p prim:%x arg:%p\n",
 			__FUNCTION__, data, prim, arg);
 	if (prim == (MGR_HASPROTOCOL | REQUEST))
-		return(HasProtocolP(&I4Lcapi, arg));
+		return(mISDN_HasProtocolP(&I4Lcapi, arg));
 	if (!data) {
 		printk(KERN_ERR "I4Lcapi_manager no data prim %x arg %p\n",
 			prim, arg);
@@ -1366,21 +1366,21 @@ I4Lcapi_manager(void *data, u_int prim, void *arg) {
 		}
 		break;
 	    case MGR_CONNECT | REQUEST:
-		return(ConnectIF(inst, arg));
+		return(mISDN_ConnectIF(inst, arg));
 	    case MGR_SETIF | REQUEST:
 	    case MGR_SETIF | INDICATION:
 		if (nr_ch == -1)
-			return(SetIF(inst, arg, prim, Dchannel_i4l, NULL, card));
+			return(mISDN_SetIF(inst, arg, prim, Dchannel_i4l, NULL, card));
 		else
-			return(SetIF(inst, arg, prim, Bchannel_i4l, NULL, channel));
+			return(mISDN_SetIF(inst, arg, prim, Bchannel_i4l, NULL, channel));
 	    case MGR_DISCONNECT | REQUEST:
 	    case MGR_DISCONNECT | INDICATION:
-		return(DisConnectIF(inst, arg));
+		return(mISDN_DisConnectIF(inst, arg));
 	    case MGR_SETSTACK | CONFIRM:
 	    	if (nr_ch >= 0) {
 			if (inst->pid.protocol[2] != ISDN_PID_L2_B_TRANS)
 				test_and_set_bit(I4L_FLG_LAYER1, &channel->Flags);
-			FsmEvent(&channel->i4lm, EV_STACKREADY, NULL);
+			mISDN_FsmEvent(&channel->i4lm, EV_STACKREADY, NULL);
 		}
 		break;
 	    default:
@@ -1440,9 +1440,9 @@ I4Lcapi_register(isdn_if *iif)
 	drvmap[drvidx]->inst.pid.protocol[1] = ISDN_PID_L1_TE_S0;
 	drvmap[drvidx]->inst.pid.protocol[2] = ISDN_PID_L2_LAPD;
 	drvmap[drvidx]->inst.pid.protocol[3] = ISDN_PID_L3_DSS1USER;
-	init_mISDNinstance(&drvmap[drvidx]->inst, &I4Lcapi, drvmap[drvidx]);
+	mISDN_init_instance(&drvmap[drvidx]->inst, &I4Lcapi, drvmap[drvidx]);
 	sprintf(drvmap[drvidx]->inst.name, "Fritz%d", drvidx+1);
-	set_dchannel_pid(&drvmap[drvidx]->pid, 2, 0);
+	mISDN_set_dchannel_pid(&drvmap[drvidx]->pid, 2, 0);
 	for (i=0; i < drvmap[drvidx]->nr_ch; i++) {
 		init_channel(drvmap[drvidx], i);
 	}
@@ -1548,10 +1548,10 @@ I4Lcapi_init(void)
 	i4lfsm_s.event_count = EVENT_COUNT;
 	i4lfsm_s.strEvent = strI4LEvent;
 	i4lfsm_s.strState = strI4LState;
-	FsmNew(&i4lfsm_s, I4LFnList, I4L_FN_COUNT);
+	mISDN_FsmNew(&i4lfsm_s, I4LFnList, I4L_FN_COUNT);
 	if ((err = mISDN_register(&I4Lcapi))) {
 		printk(KERN_ERR "Can't register I4L CAPI error(%d)\n", err);
-		FsmFree(&i4lfsm_s);
+		mISDN_FsmFree(&i4lfsm_s);
 		return(err);
 	}
 	I4Lcapireg.register_func = I4Lcapi_register;
@@ -1576,7 +1576,7 @@ I4Lcapi_cleanup(void)
 			I4Lcapi.refcnt);
 		release_card(((i4l_capi_t *)I4Lcapi.ilist)->idx);
 	}
-	FsmFree(&i4lfsm_s);
+	mISDN_FsmFree(&i4lfsm_s);
 	unregister_i4lcapi();
 	return;
 }

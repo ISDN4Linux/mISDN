@@ -1,4 +1,4 @@
-/* $Id: fsm.h,v 1.0 2001/11/02 23:42:26 kkeil Exp $
+/* $Id: fsm.h,v 1.1 2004/01/26 22:21:30 keil Exp $
  *
  * This file is (c) under GNU PUBLIC LICENSE
  *
@@ -39,11 +39,11 @@ struct FsmTimer {
 	void *arg;
 };
 
-extern void FsmNew(struct Fsm *, struct FsmNode *, int);
-extern void FsmFree(struct Fsm *);
-extern int FsmEvent(struct FsmInst *, int , void *);
-extern void FsmChangeState(struct FsmInst *, int);
-extern void FsmInitTimer(struct FsmInst *, struct FsmTimer *);
-extern int FsmAddTimer(struct FsmTimer *, int, int, void *, int);
-extern void FsmRestartTimer(struct FsmTimer *, int, int, void *, int);
-extern void FsmDelTimer(struct FsmTimer *, int);
+extern void mISDN_FsmNew(struct Fsm *, struct FsmNode *, int);
+extern void mISDN_FsmFree(struct Fsm *);
+extern int mISDN_FsmEvent(struct FsmInst *, int , void *);
+extern void mISDN_FsmChangeState(struct FsmInst *, int);
+extern void mISDN_FsmInitTimer(struct FsmInst *, struct FsmTimer *);
+extern int mISDN_FsmAddTimer(struct FsmTimer *, int, int, void *, int);
+extern void mISDN_FsmRestartTimer(struct FsmTimer *, int, int, void *, int);
+extern void mISDN_FsmDelTimer(struct FsmTimer *, int);

@@ -1,4 +1,4 @@
-/* $Id: x25_l3.c,v 1.1 2003/12/10 23:01:16 keil Exp $
+/* $Id: x25_l3.c,v 1.2 2004/01/26 22:21:31 keil Exp $
  *
  * Linux modular ISDN subsystem, mISDN
  * X.25/X.31 common Layer3 functions 
@@ -136,7 +136,7 @@ ll_activate(struct FsmInst *fi, int event, void *arg)
 {
 	x25_l3_t *l3 = fi->userdata;
 
-	FsmChangeState(fi, ST_LL_ESTAB_WAIT);
+	mISDN_FsmChangeState(fi, ST_LL_ESTAB_WAIT);
 	X25_l3down(l3, DL_ESTABLISH | REQUEST, 0, NULL);
 }
 
@@ -147,8 +147,8 @@ ll_connect(struct FsmInst *fi, int event, void *arg)
 	struct sk_buff *skb;
 	int dequeued = 0;
 
-	FsmChangeState(fi, ST_LL_ESTAB);
-	FsmEvent(&l3->x25r, EV_LL_READY, NULL);
+	mISDN_FsmChangeState(fi, ST_LL_ESTAB);
+	mISDN_FsmEvent(&l3->x25r, EV_LL_READY, NULL);
 	while ((skb = skb_dequeue(&l3->downq))) {
 		mISDN_head_t	*hh = mISDN_HEAD_P(skb);
 		if (X25_l3down(l3, hh->prim, hh->dinfo, skb))
@@ -164,8 +164,8 @@ ll_connected(struct FsmInst *fi, int event, void *arg)
 	struct sk_buff *skb;
 	int dequeued = 0;
 
-	FsmChangeState(fi, ST_LL_ESTAB);
-	FsmEvent(&l3->x25r, EV_LL_READY, NULL);
+	mISDN_FsmChangeState(fi, ST_LL_ESTAB);
+	mISDN_FsmEvent(&l3->x25r, EV_LL_READY, NULL);
 	while ((skb = skb_dequeue(&l3->downq))) {
 		mISDN_head_t	*hh = mISDN_HEAD_P(skb);
 		if (X25_l3down(l3, hh->prim, hh->dinfo, skb))
@@ -179,7 +179,7 @@ ll_release_req(struct FsmInst *fi, int event, void *arg)
 {
 	x25_l3_t *l3 = fi->userdata;
 
-	FsmChangeState(fi, ST_LL_REL_WAIT);
+	mISDN_FsmChangeState(fi, ST_LL_REL_WAIT);
 	X25_l3down(l3, DL_RELEASE | REQUEST, 0, NULL);
 }
 
@@ -188,7 +188,7 @@ ll_release_ind(struct FsmInst *fi, int event, void *arg)
 {
 	x25_l3_t *l3 = fi->userdata;
 
-	FsmChangeState(fi, ST_LL_REL);
+	mISDN_FsmChangeState(fi, ST_LL_REL);
 	discard_queue(&l3->downq);
 }
 
@@ -197,7 +197,7 @@ ll_release_cnf(struct FsmInst *fi, int event, void *arg)
 {
 	x25_l3_t *l3 = fi->userdata;
 
-	FsmChangeState(fi, ST_LL_REL);
+	mISDN_FsmChangeState(fi, ST_LL_REL);
 	discard_queue(&l3->downq);
 }
 
@@ -278,7 +278,7 @@ X25_restart(x25_l3_t *l3)
 	while(l3c) {
 		memcpy(l3c->cause, l3->cause, 2);
 		X25_reset_channel(l3c, NULL);
-		FsmEvent(&l3c->x25p, EV_L3_READY, NULL);
+		mISDN_FsmEvent(&l3c->x25p, EV_L3_READY, NULL);
 		l3c = l3c->next;
 	}
 	return(0);
@@ -547,8 +547,8 @@ X25_release_channel(x25_channel_t *l3c)
 	l3c->ncpi_data = NULL;
 	l3c->ncpi_len = 0;
 	discard_queue(&l3c->dataq);
-	FsmDelTimer(&l3c->TP, 1);
-	FsmDelTimer(&l3c->TD, 2);
+	mISDN_FsmDelTimer(&l3c->TP, 1);
+	mISDN_FsmDelTimer(&l3c->TD, 2);
 	discard_queue(&l3c->dataq);
 	discard_confq(l3c);
 	if (l3c->confq) {
@@ -576,7 +576,7 @@ X25_release_l3(x25_l3_t *l3) {
 	discard_queue(&l3->downq);
 	while(l3->channels)
 		X25_release_channel(l3->channels);
-	FsmDelTimer(&l3->TR, 3);
+	mISDN_FsmDelTimer(&l3->TR, 3);
 	if (inst->obj) {
 		if (l3->entity != MISDN_ENTITY_NONE)
 			inst->obj->ctrl(inst, MGR_DELENTITY | REQUEST, (void *)l3->entity);
@@ -645,13 +645,13 @@ new_x25_channel(x25_l3_t *l3, x25_channel_t **ch_p, __u16 ch, int dlen, u_char *
 	l3c->x25p.userdata = l3c;
 	l3c->x25p.userint = 0;
 	l3c->x25p.printdebug = l3c_debug;
-	FsmInitTimer(&l3c->x25p, &l3c->TP);
+	mISDN_FsmInitTimer(&l3c->x25p, &l3c->TP);
 
 	l3c->x25d.debug = l3->debug;
 	l3c->x25d.userdata = l3c;
 	l3c->x25d.userint = 0;
 	l3c->x25d.printdebug = l3c_debug;
-	FsmInitTimer(&l3c->x25d, &l3c->TD);
+	mISDN_FsmInitTimer(&l3c->x25d, &l3c->TD);
 	skb_queue_head_init(&l3c->dataq);
 
 	APPEND_TO_LIST(l3c, l3->channels);
@@ -675,8 +675,8 @@ new_x25_l3(x25_l3_t **l3_p, mISDNstack_t *st, mISDN_pid_t *pid, mISDNobject_t *o
 	n_l3->next_id = 1;
 	spin_lock_init(&n_l3->lock);
 	memcpy(&n_l3->inst.pid, pid, sizeof(mISDN_pid_t));
-	init_mISDNinstance(&n_l3->inst, obj, n_l3);
-	if (!SetHandledPID(obj, &n_l3->inst.pid)) {
+	mISDN_init_instance(&n_l3->inst, obj, n_l3);
+	if (!mISDN_SetHandledPID(obj, &n_l3->inst.pid)) {
 		int_error();
 		kfree(n_l3);
 		return(-ENOPROTOOPT);
@@ -703,7 +703,7 @@ new_x25_l3(x25_l3_t **l3_p, mISDNstack_t *st, mISDN_pid_t *pid, mISDNobject_t *o
 	n_l3->x25r.userdata = n_l3;
 	n_l3->x25r.userint = 0;
 	n_l3->x25r.printdebug = l3m_debug;
-	FsmInitTimer(&n_l3->x25r, &n_l3->TR);
+	mISDN_FsmInitTimer(&n_l3->x25r, &n_l3->TR);
 	skb_queue_head_init(&n_l3->downq);
 
 	APPEND_TO_LIST(n_l3, ((x25_l3_t *)obj->ilist));
@@ -1170,12 +1170,12 @@ X25_l3_init(void)
 	llfsm.event_count = LL_EVENT_COUNT;
 	llfsm.strEvent = strLLEvent;
 	llfsm.strState = strLLState;
-	FsmNew(&llfsm, LLFnList, LL_FN_COUNT);
+	mISDN_FsmNew(&llfsm, LLFnList, LL_FN_COUNT);
 	return(0);
 }
 
 void
 X25_l3_cleanup(void)
 {
-	FsmFree(&llfsm);
+	mISDN_FsmFree(&llfsm);
 }

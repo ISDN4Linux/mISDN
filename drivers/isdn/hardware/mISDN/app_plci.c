@@ -1,4 +1,4 @@
-/* $Id: app_plci.c,v 1.7 2004/01/19 11:02:47 keil Exp $
+/* $Id: app_plci.c,v 1.8 2004/01/26 22:21:30 keil Exp $
  *
  */
 
@@ -89,24 +89,24 @@ __u16 CIPValue2setup(__u16 CIPValue, struct sk_buff *skb)
 {
 	switch (CIPValue) {
 		case 16:
-			AddvarIE(skb, BEARER_31AUDIO_64K_ALAW);
-			AddvarIE(skb, HLC_TELEPHONY);
+			mISDN_AddvarIE(skb, BEARER_31AUDIO_64K_ALAW);
+			mISDN_AddvarIE(skb, HLC_TELEPHONY);
 			break;
 		case 17:
-			AddvarIE(skb, BEARER_31AUDIO_64K_ALAW);
-			AddvarIE(skb, HLC_FACSIMILE);
+			mISDN_AddvarIE(skb, BEARER_31AUDIO_64K_ALAW);
+			mISDN_AddvarIE(skb, HLC_FACSIMILE);
 			break;
 		case 1:
-			AddvarIE(skb, BEARER_SPEECH_64K_ALAW);
+			mISDN_AddvarIE(skb, BEARER_SPEECH_64K_ALAW);
 			break;
 		case 2:
-			AddvarIE(skb, BEARER_UNRES_DIGITAL_64K);
+			mISDN_AddvarIE(skb, BEARER_UNRES_DIGITAL_64K);
 			break;
 		case 3:
-			AddvarIE(skb, BEARER_RES_DIGITAL_64K);
+			mISDN_AddvarIE(skb, BEARER_RES_DIGITAL_64K);
 			break;
 		case 4:
-			AddvarIE(skb, BEARER_31AUDIO_64K_ALAW);
+			mISDN_AddvarIE(skb, BEARER_31AUDIO_64K_ALAW);
 			break;
 		default:
 			return CapiIllMessageParmCoding;
@@ -118,13 +118,13 @@ __u16 cmsg2setup_req(_cmsg *cmsg, struct sk_buff *skb)
 {
 	if (CIPValue2setup(cmsg->CIPValue, skb))
 		goto err;
-	AddIE(skb, IE_CALLING_PN, cmsg->CallingPartyNumber);
-	AddIE(skb, IE_CALLING_SUB, cmsg->CallingPartySubaddress);
-	AddIE(skb, IE_CALLED_PN, cmsg->CalledPartyNumber);
-	AddIE(skb, IE_CALLED_SUB, cmsg->CalledPartySubaddress);
-	AddIE(skb, IE_BEARER, cmsg->BC);
-	AddIE(skb, IE_LLC, cmsg->LLC);
-	AddIE(skb, IE_HLC, cmsg->HLC);
+	mISDN_AddIE(skb, IE_CALLING_PN, cmsg->CallingPartyNumber);
+	mISDN_AddIE(skb, IE_CALLING_SUB, cmsg->CallingPartySubaddress);
+	mISDN_AddIE(skb, IE_CALLED_PN, cmsg->CalledPartyNumber);
+	mISDN_AddIE(skb, IE_CALLED_SUB, cmsg->CalledPartySubaddress);
+	mISDN_AddIE(skb, IE_BEARER, cmsg->BC);
+	mISDN_AddIE(skb, IE_LLC, cmsg->LLC);
+	mISDN_AddIE(skb, IE_HLC, cmsg->HLC);
 	return 0;
  err:
 	return CapiIllMessageParmCoding;
@@ -132,14 +132,14 @@ __u16 cmsg2setup_req(_cmsg *cmsg, struct sk_buff *skb)
 
 __u16 cmsg2info_req(_cmsg *cmsg, struct sk_buff *skb)
 {
-	AddIE(skb, IE_KEYPAD, cmsg->Keypadfacility);
-	AddIE(skb, IE_CALLED_PN, cmsg->CalledPartyNumber);
+	mISDN_AddIE(skb, IE_KEYPAD, cmsg->Keypadfacility);
+	mISDN_AddIE(skb, IE_CALLED_PN, cmsg->CalledPartyNumber);
 	return 0;
 }
 
 __u16 cmsg2alerting_req(_cmsg *cmsg, struct sk_buff *skb)
 {
-	AddIE(skb, IE_USER_USER, cmsg->Useruserdata);
+	mISDN_AddIE(skb, IE_USER_USER, cmsg->Useruserdata);
 	return 0;
 }
 
@@ -375,10 +375,10 @@ plci_connect_req(struct FsmInst *fi, int event, void *arg)
 	_cmsg		*cmsg = arg;
 	__u16		Info = 0;
 
-	FsmChangeState(fi, ST_PLCI_P_0_1);
+	mISDN_FsmChangeState(fi, ST_PLCI_P_0_1);
 	test_and_set_bit(PLCI_STATE_OUTGOING, &plci->state);
 
-	skb = alloc_l3msg(260, MT_SETUP);
+	skb = mISDN_alloc_l3msg(260, MT_SETUP);
 	
 	if (!skb) {
 		Info = CapiNoPlciAvailable;
@@ -398,7 +398,7 @@ answer:
 	cmsg->Info = Info;
 	if (cmsg->Info == 0) 
 		cmsg->adr.adrPLCI = aplci->addr;
-	FsmEvent(fi, EV_PI_CONNECT_CONF, cmsg);
+	mISDN_FsmEvent(fi, EV_PI_CONNECT_CONF, cmsg);
 }
 
 static void
@@ -409,10 +409,10 @@ plci_connect_conf(struct FsmInst *fi, int event, void *arg)
   
 	if (cmsg->Info == 0) {
 		Send2Application(aplci, cmsg);
-		FsmChangeState(fi, ST_PLCI_P_1);
+		mISDN_FsmChangeState(fi, ST_PLCI_P_1);
 	} else {
 		Send2Application(aplci, cmsg);
-		FsmChangeState(fi, ST_PLCI_P_0);
+		mISDN_FsmChangeState(fi, ST_PLCI_P_0);
 		AppPlciDestr(aplci);
 	}
 }
@@ -420,7 +420,7 @@ plci_connect_conf(struct FsmInst *fi, int event, void *arg)
 static void
 plci_connect_ind(struct FsmInst *fi, int event, void *arg)
 {
-	FsmChangeState(fi, ST_PLCI_P_2);
+	mISDN_FsmChangeState(fi, ST_PLCI_P_2);
 	Send2Application(fi->userdata, arg);
 }
 
@@ -438,7 +438,7 @@ static void plci_resume_req(struct FsmInst *fi, int event, void *arg)
 	Plci_t		*plci = aplci->plci;
 
 	// we already sent CONF with Info = SuppInfo = 0
-	FsmChangeState(fi, ST_PLCI_P_RES);
+	mISDN_FsmChangeState(fi, ST_PLCI_P_RES);
 	plciNewCrReq(plci);
 	plciL4L3(plci, CC_RESUME | REQUEST, arg);
 }
@@ -454,7 +454,7 @@ plci_alert_req(struct FsmInst *fi, int event, void *arg)
 	if (test_and_set_bit(PLCI_STATE_ALERTING, &plci->state)) {
 		Info = 0x0003; // other app is already alerting
 	} else {
-		struct sk_buff	*skb = alloc_l3msg(10, MT_ALERTING);
+		struct sk_buff	*skb = mISDN_alloc_l3msg(10, MT_ALERTING);
 		if (!skb) {
 			int_error();
 			goto answer;
@@ -485,7 +485,7 @@ plci_connect_resp(struct FsmInst *fi, int event, void *arg)
 		}
 		AppPlciClearOtherApps(aplci);
 		plciL4L3(plci, CC_CONNECT | REQUEST, NULL);
-		FsmChangeState(fi, ST_PLCI_P_4);
+		mISDN_FsmChangeState(fi, ST_PLCI_P_4);
 		cmsg_free(cmsg);
 		return;
 	}
@@ -520,11 +520,11 @@ plci_connect_resp(struct FsmInst *fi, int event, void *arg)
 		else 
 			// if we already answered, we can't just ignore but must clear actively
 			prim = CC_RELEASE_COMPLETE | REQUEST;
-		skb = alloc_l3msg(10, MT_DISCONNECT);
+		skb = mISDN_alloc_l3msg(10, MT_DISCONNECT);
 		if (!skb) {
 			plciL4L3(plci, prim, NULL);
 		} else {
-			AddIE(skb, IE_CAUSE, cause);
+			mISDN_AddIE(skb, IE_CAUSE, cause);
 			plciL4L3(plci, prim, skb);
 		}
 	}
@@ -532,7 +532,7 @@ plci_connect_resp(struct FsmInst *fi, int event, void *arg)
 	cmsg->Subcommand = CAPI_IND;
 	cmsg->Messagenumber = aplci->appl->MsgId++;
 	cmsg->Reject = 0x3400 | cause[2];
-	if (FsmEvent(&aplci->plci_m, EV_PI_DISCONNECT_IND, cmsg))
+	if (mISDN_FsmEvent(&aplci->plci_m, EV_PI_DISCONNECT_IND, cmsg))
 		cmsg_free(cmsg);
 }
 
@@ -541,7 +541,7 @@ plci_connect_active_ind(struct FsmInst *fi, int event, void *arg)
 {
 	AppPlci_t *aplci = fi->userdata;
 
-	FsmChangeState(fi, ST_PLCI_P_ACT);
+	mISDN_FsmChangeState(fi, ST_PLCI_P_ACT);
 	AppPlciLinkUp(aplci);
 	if (test_bit(PLCI_STATE_STACKREADY, &aplci->plci->state))
 		Send2Application(aplci, arg);
@@ -561,7 +561,7 @@ static void plci_disconnect_req(struct FsmInst *fi, int event, void *arg)
 	u_char		cause[4];
 	_cmsg		*cmsg = arg;
 
-	FsmChangeState(fi, ST_PLCI_P_5);
+	mISDN_FsmChangeState(fi, ST_PLCI_P_5);
 	
 	if (!plci) {
 		int_error();
@@ -577,12 +577,12 @@ static void plci_disconnect_req(struct FsmInst *fi, int event, void *arg)
 	if (!aplci->cause[0]) { // FIXME handle additional Info
 		struct sk_buff	*skb;
 
-		skb = alloc_l3msg(10, MT_DISCONNECT);
+		skb = mISDN_alloc_l3msg(10, MT_DISCONNECT);
 		if (!skb) {
 			plciL4L3(plci, CC_DISCONNECT | REQUEST, NULL);
 		} else {
 			memcpy(cause, "\x02\x80\x90", 3); // normal call clearing
-			AddIE(skb, IE_CAUSE, cause);
+			mISDN_AddIE(skb, IE_CAUSE, cause);
 			plciL4L3(plci, CC_DISCONNECT | REQUEST, skb);
 		}
 	} else {
@@ -594,7 +594,7 @@ static void plci_disconnect_req(struct FsmInst *fi, int event, void *arg)
 
 static void plci_suspend_conf(struct FsmInst *fi, int event, void *arg)
 {
-	FsmChangeState(fi, ST_PLCI_P_5);
+	mISDN_FsmChangeState(fi, ST_PLCI_P_5);
 }
 
 static void plci_resume_conf(struct FsmInst *fi, int event, void *arg)
@@ -602,7 +602,7 @@ static void plci_resume_conf(struct FsmInst *fi, int event, void *arg)
 	// facility_ind Resume: Reason = 0
 	AppPlci_t	*aplci = fi->userdata;
 
-	FsmChangeState(fi, ST_PLCI_P_ACT);
+	mISDN_FsmChangeState(fi, ST_PLCI_P_ACT);
 	AppPlciLinkUp(aplci);
 	if (test_bit(PLCI_STATE_STACKREADY, &aplci->plci->state))
 		Send2Application(aplci, arg);
@@ -613,7 +613,7 @@ static void plci_resume_conf(struct FsmInst *fi, int event, void *arg)
 static void
 plci_disconnect_ind(struct FsmInst *fi, int event, void *arg)
 {
-	FsmChangeState(fi, ST_PLCI_P_6);
+	mISDN_FsmChangeState(fi, ST_PLCI_P_6);
 	Send2Application(fi->userdata, arg);
 }
 
@@ -622,7 +622,7 @@ plci_disconnect_resp(struct FsmInst *fi, int event, void *arg)
 {
 	if (arg)
 		cmsg_free(arg);
-	FsmChangeState(fi, ST_PLCI_P_0);
+	mISDN_FsmChangeState(fi, ST_PLCI_P_0);
 	AppPlciDestr(fi->userdata);
 }
 
@@ -638,7 +638,7 @@ plci_appl_release_disc(struct FsmInst *fi, int event, void *arg)
 	AppPlci_t	*aplci = fi->userdata;
 	Plci_t		*plci = aplci->plci;
 
-	FsmChangeState(fi, ST_PLCI_P_5);
+	mISDN_FsmChangeState(fi, ST_PLCI_P_5);
 	
 	if (!plci) {
 		int_error();
@@ -650,13 +650,13 @@ plci_appl_release_disc(struct FsmInst *fi, int event, void *arg)
 	if (!aplci->cause[0]) {
 		struct sk_buff	*skb;
 
-		skb = alloc_l3msg(10, MT_DISCONNECT);
+		skb = mISDN_alloc_l3msg(10, MT_DISCONNECT);
 		if (!skb) {
 			plciL4L3(plci, CC_DISCONNECT | REQUEST, NULL);
 		} else {
 			u_char *cause = "\x02\x80\x9f";
 
-			AddIE(skb, IE_CAUSE, cause);
+			mISDN_AddIE(skb, IE_CAUSE, cause);
 			plciL4L3(plci, CC_DISCONNECT | REQUEST, skb);
 		}
 	} else {
@@ -675,7 +675,7 @@ plci_cc_setup_conf(struct FsmInst *fi, int event, void *arg)
 	u_char		*p;
 
 	if (aplci->channel == -1) {/* no valid channel set */
-		FsmEvent(fi, EV_PI_CHANNEL_ERR, NULL);
+		mISDN_FsmEvent(fi, EV_PI_CHANNEL_ERR, NULL);
 		return;
 	}
 	CMSG_ALLOC(cmsg);
@@ -690,7 +690,7 @@ plci_cc_setup_conf(struct FsmInst *fi, int event, void *arg)
 		if (qi->llc)
 			cmsg->LLC = &p[qi->llc + 1];
 	}
-	if (FsmEvent(fi, EV_PI_CONNECT_ACTIVE_IND, cmsg))
+	if (mISDN_FsmEvent(fi, EV_PI_CONNECT_ACTIVE_IND, cmsg))
 		cmsg_free(cmsg);
 }
 
@@ -703,7 +703,7 @@ plci_cc_setup_conf_err(struct FsmInst *fi, int event, void *arg)
 	CMSG_ALLOC(cmsg);
 	AppPlciCmsgHeader(aplci, cmsg, CAPI_DISCONNECT, CAPI_IND);
 	cmsg->Reason = CapiProtocolErrorLayer3;
-	if (FsmEvent(&aplci->plci_m, EV_PI_DISCONNECT_IND, cmsg))
+	if (mISDN_FsmEvent(&aplci->plci_m, EV_PI_DISCONNECT_IND, cmsg))
 		cmsg_free(cmsg);
 }
 
@@ -715,19 +715,19 @@ plci_channel_err(struct FsmInst *fi, int event, void *arg)
 	u_char		cause[4];
 	struct sk_buff	*skb;
 
-	skb = alloc_l3msg(10, MT_RELEASE_COMPLETE);
+	skb = mISDN_alloc_l3msg(10, MT_RELEASE_COMPLETE);
 	if (skb) {
 		cause[0] = 2;
 		cause[1] = 0x80;
 		cause[2] = 0x86; /* channel unacceptable */
-		AddIE(skb, IE_CAUSE, cause);
+		mISDN_AddIE(skb, IE_CAUSE, cause);
 		plciL4L3(aplci->plci, CC_RELEASE_COMPLETE | REQUEST, skb);
 	} else
 		int_error();
 	CMSG_ALLOC(cmsg);
 	AppPlciCmsgHeader(aplci, cmsg, CAPI_DISCONNECT, CAPI_IND);
 	cmsg->Reason = CapiProtocolErrorLayer3;
-	if (FsmEvent(&aplci->plci_m, EV_PI_DISCONNECT_IND, cmsg))
+	if (mISDN_FsmEvent(&aplci->plci_m, EV_PI_DISCONNECT_IND, cmsg))
 		cmsg_free(cmsg);
 }
 
@@ -763,7 +763,7 @@ plci_cc_setup_ind(struct FsmInst *fi, int event, void *arg)
 			cmsg->HLC = &p[qi->hlc + 1];
 		// all else set to default
 	}
-	if (FsmEvent(&aplci->plci_m, EV_PI_CONNECT_IND, cmsg))
+	if (mISDN_FsmEvent(&aplci->plci_m, EV_PI_CONNECT_IND, cmsg))
 		cmsg_free(cmsg);
 }
 
@@ -775,7 +775,7 @@ plci_cc_setup_compl_ind(struct FsmInst *fi, int event, void *arg)
 
 	CMSG_ALLOC(cmsg);
 	AppPlciCmsgHeader(aplci, cmsg, CAPI_CONNECT_ACTIVE, CAPI_IND);
-	if (FsmEvent(&aplci->plci_m, EV_PI_CONNECT_ACTIVE_IND, cmsg))
+	if (mISDN_FsmEvent(&aplci->plci_m, EV_PI_CONNECT_ACTIVE_IND, cmsg))
 		cmsg_free(cmsg);
 }
 
@@ -822,7 +822,7 @@ plci_cc_release_ind(struct FsmInst *fi, int event, void *arg)
 	} else {
 		cmsg->Reason = CapiProtocolErrorLayer1;
 	}
-	if (FsmEvent(&aplci->plci_m, EV_PI_DISCONNECT_IND, cmsg))
+	if (mISDN_FsmEvent(&aplci->plci_m, EV_PI_DISCONNECT_IND, cmsg))
 		cmsg_free(cmsg);
 }
 
@@ -878,7 +878,7 @@ AppPlci_suspend_reply(AppPlci_t *aplci, __u16 SuppServiceReason)
 		Send2Application(aplci, cmsg);
 	}
 	if (SuppServiceReason == CapiSuccess)
-		FsmEvent(&aplci->plci_m, EV_PI_SUSPEND_CONF, NULL);
+		mISDN_FsmEvent(&aplci->plci_m, EV_PI_SUSPEND_CONF, NULL);
 }
 
 static void
@@ -914,7 +914,7 @@ plci_cc_suspend_conf(struct FsmInst *fi, int event, void *arg)
 	
 	CMSG_ALLOC(cmsg);
 	AppPlciCmsgHeader(aplci, cmsg, CAPI_DISCONNECT, CAPI_IND);
-	if (FsmEvent(&aplci->plci_m, EV_PI_DISCONNECT_IND, cmsg))
+	if (mISDN_FsmEvent(&aplci->plci_m, EV_PI_DISCONNECT_IND, cmsg))
 		cmsg_free(cmsg);
 }
 
@@ -938,7 +938,7 @@ plci_cc_resume_err(struct FsmInst *fi, int event, void *arg)
 	} else { // timeout
 		cmsg->Reason = CapiProtocolErrorLayer1;
 	}
-	if (FsmEvent(&aplci->plci_m, EV_PI_DISCONNECT_IND, cmsg))
+	if (mISDN_FsmEvent(&aplci->plci_m, EV_PI_DISCONNECT_IND, cmsg))
 		cmsg_free(cmsg);
 }
 
@@ -965,7 +965,7 @@ plci_cc_resume_conf(struct FsmInst *fi, int event, void *arg)
 	tmp[0] = p - &tmp[1];
 	cmsg->FacilitySelector = 0x0003;
 	cmsg->FacilityIndicationParameter = tmp;
-	if (FsmEvent(&aplci->plci_m, EV_PI_RESUME_CONF, cmsg))
+	if (mISDN_FsmEvent(&aplci->plci_m, EV_PI_RESUME_CONF, cmsg))
 		cmsg_free(cmsg);
 }
 
@@ -1009,7 +1009,7 @@ plci_info_req_overlap(struct FsmInst *fi, int event, void *arg)
 	__u16		Info = 0;
 	struct sk_buff	*skb;
 
-	skb = alloc_l3msg(100, MT_INFORMATION);
+	skb = mISDN_alloc_l3msg(100, MT_INFORMATION);
 	if (skb) {
 		Info = cmsg2info_req(cmsg, skb);
 		if (Info == CapiSuccess)
@@ -1157,11 +1157,11 @@ void AppPlciDestr(AppPlci_t *aplci)
 		AppPlciDebug(aplci, CAPI_DBG_PLCI, "%s plci state %s", __FUNCTION__,
 			str_st_plci[aplci->plci_m.state]);
 		if (aplci->plci_m.state != ST_PLCI_P_0) {
-			struct sk_buff	*skb = alloc_l3msg(10, MT_RELEASE_COMPLETE);
+			struct sk_buff	*skb = mISDN_alloc_l3msg(10, MT_RELEASE_COMPLETE);
 			unsigned char cause[] = {2,0x80,0x80| CAUSE_RESOURCES_UNAVAIL};
 
 			if (skb) {
-				AddIE(skb, IE_CAUSE, cause);
+				mISDN_AddIE(skb, IE_CAUSE, cause);
 				plciL4L3(aplci->plci, CC_RELEASE_COMPLETE | REQUEST, skb);
 			}
 		}
@@ -1184,7 +1184,7 @@ AppPlciRelease(AppPlci_t *aplci)
 	list_for_each_safe(item, next, &aplci->Nccis) {
 		ncciApplRelease((Ncci_t *)item);
 	}
-	FsmEvent(&aplci->plci_m, EV_AP_RELEASE, NULL);
+	mISDN_FsmEvent(&aplci->plci_m, EV_AP_RELEASE, NULL);
 }
 
 static int
@@ -1431,14 +1431,14 @@ PL_l3l4mux(mISDNif_t *hif, struct sk_buff *skb)
 }
 
 int
-AppPlciSetIF(AppPlci_t *aplci, u_int prim, void *arg)
+AppPlcimISDN_SetIF(AppPlci_t *aplci, u_int prim, void *arg)
 {
 	int ret;
 
 	if (aplci->Bprotocol.B3 == 0) // transparent
-		ret = SetIF(&aplci->link->inst, arg, prim, NULL, PL_l3l4, aplci);
+		ret = mISDN_SetIF(&aplci->link->inst, arg, prim, NULL, PL_l3l4, aplci);
 	else
-		ret = SetIF(&aplci->link->inst, arg, prim, NULL, PL_l3l4mux, aplci);
+		ret = mISDN_SetIF(&aplci->link->inst, arg, prim, NULL, PL_l3l4mux, aplci);
 	if (ret)
 		return(ret);
 	
@@ -1472,10 +1472,10 @@ AppPlci_l3l4(AppPlci_t *aplci, int pr, void *arg)
 				ie += L3_EXTRA_SIZE + qi->channel_id;
 				aplci->channel = plci_parse_channel_id(ie);
 			}
-			FsmEvent(&aplci->plci_m, EV_L3_SETUP_IND, arg); 
+			mISDN_FsmEvent(&aplci->plci_m, EV_L3_SETUP_IND, arg); 
 			break;
 		case CC_TIMEOUT | INDICATION:
-			FsmEvent(&aplci->plci_m, EV_L3_SETUP_CONF_ERR, arg); 
+			mISDN_FsmEvent(&aplci->plci_m, EV_L3_SETUP_CONF_ERR, arg); 
 			break;
 		case CC_CONNECT | INDICATION:
 			if (qi) {	
@@ -1491,7 +1491,7 @@ AppPlci_l3l4(AppPlci_t *aplci, int pr, void *arg)
 					aplci->channel = plci_parse_channel_id(ie);
 				}
 			}
-			FsmEvent(&aplci->plci_m, EV_L3_SETUP_CONF, arg); 
+			mISDN_FsmEvent(&aplci->plci_m, EV_L3_SETUP_CONF, arg); 
 			break;
 		case CC_CONNECT_ACKNOWLEDGE | INDICATION:
 			if (qi) {
@@ -1503,7 +1503,7 @@ AppPlci_l3l4(AppPlci_t *aplci, int pr, void *arg)
 					aplci->channel = plci_parse_channel_id(ie);
 				}
 			}
-			FsmEvent(&aplci->plci_m, EV_L3_SETUP_COMPL_IND, arg); 
+			mISDN_FsmEvent(&aplci->plci_m, EV_L3_SETUP_COMPL_IND, arg); 
 			break;
 		case CC_DISCONNECT | INDICATION:
 			if (qi) {
@@ -1514,7 +1514,7 @@ AppPlci_l3l4(AppPlci_t *aplci, int pr, void *arg)
 				AppPlciInfoIndIE(aplci, IE_PROGRESS, CAPI_INFOMASK_PROGRESS, qi);
 				AppPlciInfoIndIE(aplci, IE_FACILITY, CAPI_INFOMASK_FACILITY, qi);
 			}
-		  	FsmEvent(&aplci->plci_m, EV_L3_DISCONNECT_IND, arg); 
+		  	mISDN_FsmEvent(&aplci->plci_m, EV_L3_DISCONNECT_IND, arg); 
 			break;
 		case CC_RELEASE | INDICATION:
 			if (qi) {
@@ -1523,7 +1523,7 @@ AppPlci_l3l4(AppPlci_t *aplci, int pr, void *arg)
 				AppPlciInfoIndIE(aplci, IE_USER_USER, CAPI_INFOMASK_USERUSER, qi);
 				AppPlciInfoIndIE(aplci, IE_FACILITY, CAPI_INFOMASK_FACILITY, qi);
 			}
-		        FsmEvent(&aplci->plci_m, EV_L3_RELEASE_IND, arg); 
+		        mISDN_FsmEvent(&aplci->plci_m, EV_L3_RELEASE_IND, arg); 
 			break;
 		case CC_RELEASE_COMPLETE | INDICATION:
 			if (qi) {
@@ -1532,10 +1532,10 @@ AppPlci_l3l4(AppPlci_t *aplci, int pr, void *arg)
 				AppPlciInfoIndIE(aplci, IE_USER_USER, CAPI_INFOMASK_USERUSER, qi);
 				AppPlciInfoIndIE(aplci, IE_FACILITY, CAPI_INFOMASK_FACILITY, qi);
 			}
-			FsmEvent(&aplci->plci_m, EV_L3_RELEASE_IND, arg);
+			mISDN_FsmEvent(&aplci->plci_m, EV_L3_RELEASE_IND, arg);
 			break;
 		case CC_RELEASE_CR | INDICATION:
-			FsmEvent(&aplci->plci_m, EV_L3_RELEASE_PROC_IND, arg); 
+			mISDN_FsmEvent(&aplci->plci_m, EV_L3_RELEASE_PROC_IND, arg); 
 			break;
 		case CC_SETUP_ACKNOWLEDGE | INDICATION:
 			if (qi) {
@@ -1592,23 +1592,23 @@ AppPlci_l3l4(AppPlci_t *aplci, int pr, void *arg)
 			}
 			break;
 		case CC_SUSPEND_ACKNOWLEDGE | INDICATION:
-			FsmEvent(&aplci->plci_m, EV_L3_SUSPEND_CONF, arg); 
+			mISDN_FsmEvent(&aplci->plci_m, EV_L3_SUSPEND_CONF, arg); 
 			break;
 		case CC_SUSPEND_REJECT | INDICATION:
-			FsmEvent(&aplci->plci_m, EV_L3_SUSPEND_ERR, arg); 
+			mISDN_FsmEvent(&aplci->plci_m, EV_L3_SUSPEND_ERR, arg); 
 			break;
 		case CC_RESUME_ACKNOWLEDGE | INDICATION:
-			FsmEvent(&aplci->plci_m, EV_L3_RESUME_CONF, arg); 
+			mISDN_FsmEvent(&aplci->plci_m, EV_L3_RESUME_CONF, arg); 
 			break;
 		case CC_RESUME_REJECT | INDICATION:
-			FsmEvent(&aplci->plci_m, EV_L3_RESUME_ERR, arg); 
+			mISDN_FsmEvent(&aplci->plci_m, EV_L3_RESUME_ERR, arg); 
 			break;
 		case CC_NOTIFY | INDICATION:
-			FsmEvent(&aplci->plci_m, EV_L3_NOTIFY_IND, arg); 
+			mISDN_FsmEvent(&aplci->plci_m, EV_L3_NOTIFY_IND, arg); 
 			break;
 		case PH_CONTROL | INDICATION:
 			/* TOUCH TONE */
-			FsmEvent(&aplci->plci_m, EV_PH_CONTROL_IND, arg);
+			mISDN_FsmEvent(&aplci->plci_m, EV_PH_CONTROL_IND, arg);
 			break;
 		default:
 			AppPlciDebug(aplci, CAPI_DBG_WARN, 
@@ -1624,28 +1624,28 @@ AppPlciGetCmsg(AppPlci_t *aplci, _cmsg *cmsg)
 
 	switch (CMSGCMD(cmsg)) {
 		case CAPI_INFO_REQ:
-			retval = FsmEvent(&aplci->plci_m, EV_AP_INFO_REQ, cmsg);
+			retval = mISDN_FsmEvent(&aplci->plci_m, EV_AP_INFO_REQ, cmsg);
 			break;
 		case CAPI_ALERT_REQ:
-			retval = FsmEvent(&aplci->plci_m, EV_AP_ALERT_REQ, cmsg);
+			retval = mISDN_FsmEvent(&aplci->plci_m, EV_AP_ALERT_REQ, cmsg);
 			break;
 		case CAPI_CONNECT_REQ:
-			retval = FsmEvent(&aplci->plci_m, EV_AP_CONNECT_REQ, cmsg);
+			retval = mISDN_FsmEvent(&aplci->plci_m, EV_AP_CONNECT_REQ, cmsg);
 			break;
 		case CAPI_CONNECT_RESP:
-			retval = FsmEvent(&aplci->plci_m, EV_AP_CONNECT_RESP, cmsg);
+			retval = mISDN_FsmEvent(&aplci->plci_m, EV_AP_CONNECT_RESP, cmsg);
 			break;
 		case CAPI_DISCONNECT_REQ:
-			retval = FsmEvent(&aplci->plci_m, EV_AP_DISCONNECT_REQ, cmsg);
+			retval = mISDN_FsmEvent(&aplci->plci_m, EV_AP_DISCONNECT_REQ, cmsg);
 			break;
 		case CAPI_DISCONNECT_RESP:
-			retval = FsmEvent(&aplci->plci_m, EV_AP_DISCONNECT_RESP, cmsg);
+			retval = mISDN_FsmEvent(&aplci->plci_m, EV_AP_DISCONNECT_RESP, cmsg);
 			break;
 		case CAPI_CONNECT_ACTIVE_RESP:
-			retval = FsmEvent(&aplci->plci_m, EV_AP_CONNECT_ACTIVE_RESP, cmsg);
+			retval = mISDN_FsmEvent(&aplci->plci_m, EV_AP_CONNECT_ACTIVE_RESP, cmsg);
 			break;
 		case CAPI_SELECT_B_PROTOCOL_REQ:
-			retval = FsmEvent(&aplci->plci_m, EV_AP_SELECT_B_PROTOCOL_REQ, cmsg);
+			retval = mISDN_FsmEvent(&aplci->plci_m, EV_AP_SELECT_B_PROTOCOL_REQ, cmsg);
 			break;
 		default:
 			int_error();
@@ -1714,15 +1714,15 @@ AppPlciFacSuspendReq(AppPlci_t *aplci, FacReqParm_t *facReqParm, FacConfParm_t *
 	CallIdentity = facReqParm->u.Suspend.CallIdentity;
 	if (CallIdentity && CallIdentity[0] > 8) 
 		return CapiIllMessageParmCoding;
-	skb = alloc_l3msg(20, MT_SUSPEND);
+	skb = mISDN_alloc_l3msg(20, MT_SUSPEND);
 	if (!skb) {
 		int_error();
 		return CapiIllMessageParmCoding;
 	}
 	if (CallIdentity && CallIdentity[0])
-		AddIE(skb, IE_CALL_ID, CallIdentity);
+		mISDN_AddIE(skb, IE_CALL_ID, CallIdentity);
 
-	if (FsmEvent(&aplci->plci_m, EV_AP_SUSPEND_REQ, skb)) {
+	if (mISDN_FsmEvent(&aplci->plci_m, EV_AP_SUSPEND_REQ, skb)) {
 		// no routine
 		facConfParm->u.Info.SupplementaryServiceInfo = 
 			CapiRequestNotAllowedInThisState;
@@ -1744,15 +1744,15 @@ AppPlciFacResumeReq(AppPlci_t *aplci, FacReqParm_t *facReqParm, FacConfParm_t *f
 		AppPlciDestr(aplci);
 		return CapiIllMessageParmCoding;
 	}
-	skb = alloc_l3msg(20, MT_RESUME);
+	skb = mISDN_alloc_l3msg(20, MT_RESUME);
 	if (!skb) {
 		int_error();
 		AppPlciDestr(aplci);
 		return CapiIllMessageParmCoding;
 	}
 	if (CallIdentity && CallIdentity[0])
-		AddIE(skb, IE_CALL_ID, CallIdentity);
-	if (FsmEvent(&aplci->plci_m, EV_AP_RESUME_REQ, skb))
+		mISDN_AddIE(skb, IE_CALL_ID, CallIdentity);
+	if (mISDN_FsmEvent(&aplci->plci_m, EV_AP_RESUME_REQ, skb))
 		kfree(skb);
 
 	facConfParm->u.Info.SupplementaryServiceInfo = CapiSuccess;
@@ -1776,7 +1776,7 @@ AppPlciClearOtherApps(AppPlci_t *aplci)
 			CMSG_ALLOC(cm);
 			AppPlciCmsgHeader(o_aplci, cm, CAPI_DISCONNECT, CAPI_IND);
 			cm->Reason = 0x3304; // other application got the call
-			FsmEvent(&o_aplci->plci_m, EV_PI_DISCONNECT_IND, cm);
+			mISDN_FsmEvent(&o_aplci->plci_m, EV_PI_DISCONNECT_IND, cm);
 		}
 	} 
 }
@@ -1812,9 +1812,9 @@ AppPlciInfoIndIE(AppPlci_t *aplci, unsigned char ie, __u32 mask, Q931_info_t *qi
 		int_error();
 		return;
 	} else {
-		if (l3_ie2pos(ie) < 0)
+		if (mISDN_l3_ie2pos(ie) < 0)
 			return;
-		ies += l3_ie2pos(ie);
+		ies += mISDN_l3_ie2pos(ie);
 		if (!*ies)
 			return;
 		iep = (u_char *)qi;
@@ -1843,11 +1843,11 @@ void init_AppPlci(void)
 	plci_fsm.strEvent = str_ev_plci;
 	plci_fsm.strState = str_st_plci;
 	
-	FsmNew(&plci_fsm, fn_plci_list, FN_PLCI_COUNT);
+	mISDN_FsmNew(&plci_fsm, fn_plci_list, FN_PLCI_COUNT);
 }
 
 
 void free_AppPlci(void)
 {
-	FsmFree(&plci_fsm);
+	mISDN_FsmFree(&plci_fsm);
 }

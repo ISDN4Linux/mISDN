@@ -1,4 +1,4 @@
-/* $Id: layer3.c,v 1.11 2003/12/14 15:20:38 keil Exp $
+/* $Id: layer3.c,v 1.12 2004/01/26 22:21:30 keil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -10,11 +10,10 @@
  *              Fritz Elfert
  *
  */
-#define __NO_VERSION__
 #include "layer3.h"
 #include "helper.h"
 
-const char *l3_revision = "$Revision: 1.11 $";
+const char *l3_revision = "$Revision: 1.12 $";
 
 static
 struct Fsm l3fsm = {NULL, 0, 0, NULL, NULL};
@@ -344,7 +343,7 @@ release_l3_process(l3_process_t *p)
 		if (!skb_queue_len(&l3->squeue)) {
 			if (l3->debug)
 				l3_debug(l3, "release_l3_process: release link");
-			FsmEvent(&l3->l3m, EV_RELEASE_REQ, NULL);
+			mISDN_FsmEvent(&l3->l3m, EV_RELEASE_REQ, NULL);
 		} else {
 			if (l3->debug)
 				l3_debug(l3, "release_l3_process: not release link");
@@ -400,7 +399,7 @@ lc_activate(struct FsmInst *fi, int event, void *arg)
 {
 	layer3_t *l3 = fi->userdata;
 
-	FsmChangeState(fi, ST_L3_LC_ESTAB_WAIT);
+	mISDN_FsmChangeState(fi, ST_L3_LC_ESTAB_WAIT);
 	l3down(l3, DL_ESTABLISH | REQUEST, 0, NULL);
 }
 
@@ -411,7 +410,7 @@ lc_connect(struct FsmInst *fi, int event, void *arg)
 	struct sk_buff *skb;
 	int dequeued = 0;
 
-	FsmChangeState(fi, ST_L3_LC_ESTAB);
+	mISDN_FsmChangeState(fi, ST_L3_LC_ESTAB);
 	while ((skb = skb_dequeue(&l3->squeue))) {
 		if (l3down(l3, DL_DATA | REQUEST, l3_newid(l3), skb))
 			dev_kfree_skb(skb);
@@ -420,7 +419,7 @@ lc_connect(struct FsmInst *fi, int event, void *arg)
 	if ((!l3->proc) &&  dequeued) {
 		if (l3->debug)
 			l3m_debug(fi, "lc_connect: release link");
-		FsmEvent(&l3->l3m, EV_RELEASE_REQ, NULL);
+		mISDN_FsmEvent(&l3->l3m, EV_RELEASE_REQ, NULL);
 	} else
 		l3ml3p(l3, DL_ESTABLISH | INDICATION);
 }
@@ -432,8 +431,8 @@ lc_connected(struct FsmInst *fi, int event, void *arg)
 	struct sk_buff *skb;
 	int dequeued = 0;
 
-	FsmDelTimer(&l3->l3m_timer, 51);
-	FsmChangeState(fi, ST_L3_LC_ESTAB);
+	mISDN_FsmDelTimer(&l3->l3m_timer, 51);
+	mISDN_FsmChangeState(fi, ST_L3_LC_ESTAB);
 	while ((skb = skb_dequeue(&l3->squeue))) {
 		if (l3down(l3, DL_DATA | REQUEST, l3_newid(l3), skb))
 			dev_kfree_skb(skb);
@@ -442,7 +441,7 @@ lc_connected(struct FsmInst *fi, int event, void *arg)
 	if ((!l3->proc) &&  dequeued) {
 		if (l3->debug)
 			l3m_debug(fi, "lc_connected: release link");
-		FsmEvent(&l3->l3m, EV_RELEASE_REQ, NULL);
+		mISDN_FsmEvent(&l3->l3m, EV_RELEASE_REQ, NULL);
 	} else
 		l3ml3p(l3, DL_ESTABLISH | CONFIRM);
 }
@@ -452,8 +451,8 @@ lc_start_delay(struct FsmInst *fi, int event, void *arg)
 {
 	layer3_t *l3 = fi->userdata;
 
-	FsmChangeState(fi, ST_L3_LC_REL_DELAY);
-	FsmAddTimer(&l3->l3m_timer, DREL_TIMER_VALUE, EV_TIMEOUT, NULL, 50);
+	mISDN_FsmChangeState(fi, ST_L3_LC_REL_DELAY);
+	mISDN_FsmAddTimer(&l3->l3m_timer, DREL_TIMER_VALUE, EV_TIMEOUT, NULL, 50);
 }
 
 static void
@@ -465,9 +464,9 @@ lc_release_req(struct FsmInst *fi, int event, void *arg)
 		if (l3->debug)
 			l3m_debug(fi, "lc_release_req: l2 blocked");
 		/* restart release timer */
-		FsmAddTimer(&l3->l3m_timer, DREL_TIMER_VALUE, EV_TIMEOUT, NULL, 51);
+		mISDN_FsmAddTimer(&l3->l3m_timer, DREL_TIMER_VALUE, EV_TIMEOUT, NULL, 51);
 	} else {
-		FsmChangeState(fi, ST_L3_LC_REL_WAIT);
+		mISDN_FsmChangeState(fi, ST_L3_LC_REL_WAIT);
 		l3down(l3, DL_RELEASE | REQUEST, 0, NULL);
 	}
 }
@@ -477,8 +476,8 @@ lc_release_ind(struct FsmInst *fi, int event, void *arg)
 {
 	layer3_t *l3 = fi->userdata;
 
-	FsmDelTimer(&l3->l3m_timer, 52);
-	FsmChangeState(fi, ST_L3_LC_REL);
+	mISDN_FsmDelTimer(&l3->l3m_timer, 52);
+	mISDN_FsmChangeState(fi, ST_L3_LC_REL);
 	discard_queue(&l3->squeue);
 	l3ml3p(l3, DL_RELEASE | INDICATION);
 }
@@ -488,7 +487,7 @@ lc_release_cnf(struct FsmInst *fi, int event, void *arg)
 {
 	layer3_t *l3 = fi->userdata;
 
-	FsmChangeState(fi, ST_L3_LC_REL);
+	mISDN_FsmChangeState(fi, ST_L3_LC_REL);
 	discard_queue(&l3->squeue);
 	l3ml3p(l3, DL_RELEASE | CONFIRM);
 }
@@ -528,26 +527,26 @@ l3_msg(layer3_t *l3, u_int pr, int dinfo, int len, void *arg)
 //				printk(KERN_DEBUG "%s: queue skb %p len(%d)\n",
 //					__FUNCTION__, skb, skb->len);
 				skb_queue_tail(&l3->squeue, skb);
-				FsmEvent(&l3->l3m, EV_ESTABLISH_REQ, NULL); 
+				mISDN_FsmEvent(&l3->l3m, EV_ESTABLISH_REQ, NULL); 
 			}
 			break;
 		case (DL_ESTABLISH | REQUEST):
-			FsmEvent(&l3->l3m, EV_ESTABLISH_REQ, NULL);
+			mISDN_FsmEvent(&l3->l3m, EV_ESTABLISH_REQ, NULL);
 			break;
 		case (DL_ESTABLISH | CONFIRM):
-			FsmEvent(&l3->l3m, EV_ESTABLISH_CNF, NULL);
+			mISDN_FsmEvent(&l3->l3m, EV_ESTABLISH_CNF, NULL);
 			break;
 		case (DL_ESTABLISH | INDICATION):
-			FsmEvent(&l3->l3m, EV_ESTABLISH_IND, NULL);
+			mISDN_FsmEvent(&l3->l3m, EV_ESTABLISH_IND, NULL);
 			break;
 		case (DL_RELEASE | INDICATION):
-			FsmEvent(&l3->l3m, EV_RELEASE_IND, NULL);
+			mISDN_FsmEvent(&l3->l3m, EV_RELEASE_IND, NULL);
 			break;
 		case (DL_RELEASE | CONFIRM):
-			FsmEvent(&l3->l3m, EV_RELEASE_CNF, NULL);
+			mISDN_FsmEvent(&l3->l3m, EV_RELEASE_CNF, NULL);
 			break;
 		case (DL_RELEASE | REQUEST):
-			FsmEvent(&l3->l3m, EV_RELEASE_REQ, NULL);
+			mISDN_FsmEvent(&l3->l3m, EV_RELEASE_REQ, NULL);
 			break;
 	}
 	return(0);
@@ -569,7 +568,7 @@ init_l3(layer3_t *l3)
 	l3->l3m.userdata = l3;
 	l3->l3m.userint = 0;
 	l3->l3m.printdebug = l3m_debug;
-        FsmInitTimer(&l3->l3m, &l3->l3m_timer);
+        mISDN_FsmInitTimer(&l3->l3m, &l3->l3m_timer);
 }
 
 
@@ -591,7 +590,7 @@ release_l3(layer3_t *l3)
 		kfree(l3->dummy);
 		l3->dummy = NULL;
 	}
-	FsmDelTimer(&l3->l3m_timer, 54);
+	mISDN_FsmDelTimer(&l3->l3m_timer, 54);
 	discard_queue(&l3->squeue);
 }
 
@@ -602,11 +601,11 @@ mISDNl3New(void)
 	l3fsm.event_count = L3_EVENT_COUNT;
 	l3fsm.strEvent = strL3Event;
 	l3fsm.strState = strL3State;
-	FsmNew(&l3fsm, L3FnList, L3_FN_COUNT);
+	mISDN_FsmNew(&l3fsm, L3FnList, L3_FN_COUNT);
 }
 
 void
 mISDNl3Free(void)
 {
-	FsmFree(&l3fsm);
+	mISDN_FsmFree(&l3fsm);
 }

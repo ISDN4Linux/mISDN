@@ -1,4 +1,4 @@
-/* $Id: dsp_core.c,v 1.5 2004/01/11 13:58:49 keil Exp $
+/* $Id: dsp_core.c,v 1.6 2004/01/26 22:21:30 keil Exp $
  *
  * Author       Andreas Eversberg (jolly@jolly.de)
  * Based on source code structure by
@@ -168,7 +168,7 @@ die daten der struktur
 	- loop
 #endif
 
-const char *dsp_revision = "$Revision: 1.5 $";
+const char *dsp_revision = "$Revision: 1.6 $";
 
 #include <linux/delay.h>
 #include <linux/config.h>
@@ -676,7 +676,7 @@ new_dsp(mISDNstack_t *st, mISDN_pid_t *pid)
 	memcpy(&ndsp->inst.pid, pid, sizeof(mISDN_pid_t));
 	ndsp->inst.obj = &dsp_obj;
 	ndsp->inst.data = ndsp;
-	if (!SetHandledPID(&dsp_obj, &ndsp->inst.pid)) {
+	if (!mISDN_SetHandledPID(&dsp_obj, &ndsp->inst.pid)) {
 		int_error();
 		err = -ENOPROTOOPT;
 		free_mem:
@@ -746,7 +746,7 @@ dsp_manager(void *data, u_int prim, void *arg) {
 			ret = -EINVAL;
 			break;
 		}
-		ret = ConnectIF(inst, arg);
+		ret = mISDN_ConnectIF(inst, arg);
 		break;
 	    case MGR_SETIF | REQUEST:
 	    case MGR_SETIF | INDICATION:
@@ -755,7 +755,7 @@ dsp_manager(void *data, u_int prim, void *arg) {
 			ret = -EINVAL;
 			break;
 		}
-		ret = SetIF(inst, arg, prim, dsp_from_up, dsp_from_down, dspl);
+		ret = mISDN_SetIF(inst, arg, prim, dsp_from_up, dsp_from_down, dspl);
 		break;
 	    case MGR_DISCONNECT | REQUEST:
 	    case MGR_DISCONNECT | INDICATION:
@@ -764,7 +764,7 @@ dsp_manager(void *data, u_int prim, void *arg) {
 			ret = -EINVAL;
 			break;
 		}
-		ret = DisConnectIF(inst, arg);
+		ret = mISDN_DisConnectIF(inst, arg);
 		break;
 	    case MGR_UNREGLAYER | REQUEST:
 	    case MGR_RELEASE | INDICATION:

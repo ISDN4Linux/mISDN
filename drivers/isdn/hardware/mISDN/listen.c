@@ -1,4 +1,4 @@
-/* $Id: listen.c,v 1.7 2004/01/12 16:20:26 keil Exp $
+/* $Id: listen.c,v 1.8 2004/01/26 22:21:30 keil Exp $
  *
  */
 
@@ -68,7 +68,7 @@ listen_req_l_x(struct FsmInst *fi, int event, void *arg, int state)
 	Application_t	*app = fi->userdata;
 	_cmsg		*cmsg = arg;
 
-	FsmChangeState(fi, state);
+	mISDN_FsmChangeState(fi, state);
 
 	app->InfoMask = cmsg->InfoMask;
 	app->CIPmask = cmsg->CIPmask;
@@ -80,7 +80,7 @@ listen_req_l_x(struct FsmInst *fi, int event, void *arg, int state)
 	capi_cmsg_answer(cmsg);
 	cmsg->Info = CAPI_NOERROR;
 
-	if (FsmEvent(&app->listen_m, EV_LISTEN_CONF, cmsg))
+	if (mISDN_FsmEvent(&app->listen_m, EV_LISTEN_CONF, cmsg))
 		cmsg_free(cmsg);
 }
 
@@ -103,14 +103,14 @@ listen_conf_l_x_1(struct FsmInst *fi, int event, void *arg, int state)
 	_cmsg		*cmsg = arg;
 
 	if (cmsg->Info != CAPI_NOERROR) {
-		FsmChangeState(fi, state);
+		mISDN_FsmChangeState(fi, state);
 	} else { // Info == 0
 		if (app->CIPmask == 0) {
 			test_and_clear_bit(APPL_STATE_LISTEN, &app->state);
-			FsmChangeState(fi, ST_LISTEN_L_0);
+			mISDN_FsmChangeState(fi, ST_LISTEN_L_0);
 		} else {
 			test_and_set_bit(APPL_STATE_LISTEN, &app->state);
-			FsmChangeState(fi, ST_LISTEN_L_1);
+			mISDN_FsmChangeState(fi, ST_LISTEN_L_1);
 		}
 	}
 	SendCmsg2Application(app, cmsg);
@@ -172,7 +172,7 @@ listenSendMessage(Application_t *app, struct sk_buff *skb)
 	capi_message2cmsg(cmsg, skb->data);
 	switch (CMSGCMD(cmsg)) {
 		case CAPI_LISTEN_REQ:
-			if (FsmEvent(&app->listen_m, EV_LISTEN_REQ, cmsg))
+			if (mISDN_FsmEvent(&app->listen_m, EV_LISTEN_REQ, cmsg))
 				cmsg_free(cmsg);
 			break;
 		default:
@@ -198,10 +198,10 @@ void init_listen(void)
 	listen_fsm.strEvent = str_ev_listen;
 	listen_fsm.strState = str_st_listen;
 	
-	FsmNew(&listen_fsm, fn_listen_list, FN_LISTEN_COUNT);
+	mISDN_FsmNew(&listen_fsm, fn_listen_list, FN_LISTEN_COUNT);
 }
 
 void free_listen(void)
 {
-	FsmFree(&listen_fsm);
+	mISDN_FsmFree(&listen_fsm);
 }

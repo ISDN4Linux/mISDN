@@ -1,4 +1,4 @@
-/* $Id: supp_serv.c,v 1.7 2003/11/21 22:29:41 keil Exp $
+/* $Id: supp_serv.c,v 1.8 2004/01/26 22:21:30 keil Exp $
  *
  */
 
@@ -241,7 +241,7 @@ static int
 FacCFInterrogateParameters(Application_t *appl, FacReqParm_t *facReqParm, FacConfParm_t *facConfParm)
 {
 	SSProcess_t	*sspc;
-	struct sk_buff	*skb = alloc_l3msg(260, MT_FACILITY);
+	struct sk_buff	*skb = mISDN_alloc_l3msg(260, MT_FACILITY);
 	__u8		*p;
 
 	if (!skb)
@@ -258,7 +258,7 @@ FacCFInterrogateParameters(Application_t *appl, FacReqParm_t *facReqParm, FacCon
 	p += encodeInt(p, 0x0b); // interrogationDiversion
 	p += encodeInterrogationDiversion(p,  &facReqParm->u.CFInterrogateParameters);
 	encodeInvokeComponentLength(sspc->buf, p);
-	AddIE(skb, IE_FACILITY, sspc->buf);
+	mISDN_AddIE(skb, IE_FACILITY, sspc->buf);
 
 	SSProcess_L4L3(sspc, CC_FACILITY | REQUEST, skb);
 	SSProcessAddTimer(sspc, T_INTERROGATE);
@@ -271,7 +271,7 @@ static int
 FacCFInterrogateNumbers(Application_t *appl, FacReqParm_t *facReqParm, FacConfParm_t *facConfParm)
 {
 	SSProcess_t	*sspc;
-	struct sk_buff	*skb = alloc_l3msg(260, MT_FACILITY);
+	struct sk_buff	*skb = mISDN_alloc_l3msg(260, MT_FACILITY);
 	__u8		*p;
 
 	if (!skb)
@@ -287,7 +287,7 @@ FacCFInterrogateNumbers(Application_t *appl, FacReqParm_t *facReqParm, FacConfPa
 	p += encodeInt(p, sspc->invokeId);
 	p += encodeInt(p, 0x11); // InterrogateServedUserNumbers
 	encodeInvokeComponentLength(sspc->buf, p);
-	AddIE(skb, IE_FACILITY, sspc->buf);
+	mISDN_AddIE(skb, IE_FACILITY, sspc->buf);
 	SSProcess_L4L3(sspc, CC_FACILITY | REQUEST, skb);
 	SSProcessAddTimer(sspc, T_INTERROGATE);
 
@@ -299,7 +299,7 @@ static int
 FacCFActivate(Application_t *appl, FacReqParm_t *facReqParm, FacConfParm_t *facConfParm)
 {
 	SSProcess_t	*sspc;
-	struct sk_buff	*skb = alloc_l3msg(260, MT_FACILITY);
+	struct sk_buff	*skb = mISDN_alloc_l3msg(260, MT_FACILITY);
 	__u8		*p;
 
 	if (!skb)
@@ -314,7 +314,7 @@ FacCFActivate(Application_t *appl, FacReqParm_t *facReqParm, FacConfParm_t *facC
 	p += encodeInt(p, 0x07); // activationDiversion
 	p += encodeActivationDiversion(p, &facReqParm->u.CFActivate);
 	encodeInvokeComponentLength(sspc->buf, p);
-	AddIE(skb, IE_FACILITY, sspc->buf);
+	mISDN_AddIE(skb, IE_FACILITY, sspc->buf);
 	SSProcess_L4L3(sspc, CC_FACILITY | REQUEST, skb);
 	SSProcessAddTimer(sspc, T_ACTIVATE);
 
@@ -326,7 +326,7 @@ static int
 FacCFDeactivate(Application_t *appl, FacReqParm_t *facReqParm, FacConfParm_t *facConfParm)
 {
 	SSProcess_t	*sspc;
-	struct sk_buff	*skb = alloc_l3msg(260, MT_FACILITY);
+	struct sk_buff	*skb = mISDN_alloc_l3msg(260, MT_FACILITY);
 	__u8		*p;
 
 	if (!skb)
@@ -341,7 +341,7 @@ FacCFDeactivate(Application_t *appl, FacReqParm_t *facReqParm, FacConfParm_t *fa
 	p += encodeInt(p, 0x08); // dectivationDiversion
 	p += encodeDeactivationDiversion(p, &facReqParm->u.CFDeactivate);
 	encodeInvokeComponentLength(sspc->buf, p);
-	AddIE(skb, IE_FACILITY, sspc->buf);
+	mISDN_AddIE(skb, IE_FACILITY, sspc->buf);
 
 	SSProcess_L4L3(sspc, CC_FACILITY | REQUEST, skb);
 	SSProcessAddTimer(sspc, T_DEACTIVATE);

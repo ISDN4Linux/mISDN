@@ -1,4 +1,4 @@
-/* $Id: sedl_fax.c,v 1.16 2004/01/11 13:58:50 keil Exp $
+/* $Id: sedl_fax.c,v 1.17 2004/01/26 22:21:30 keil Exp $
  *
  * sedl_fax.c  low level stuff for Sedlbauer Speedfax + cards
  *
@@ -45,7 +45,7 @@
 
 extern const char *CardType[];
 
-const char *Sedlfax_revision = "$Revision: 1.16 $";
+const char *Sedlfax_revision = "$Revision: 1.17 $";
 
 const char *Sedlbauer_Types[] =
 	{"None", "speed fax+", "speed fax+ pyramid", "speed fax+ pci"};
@@ -231,7 +231,7 @@ do_sedl_interrupt(sedl_fax *sf)
 	val = readreg(sf->addr, sf->isac, ISAC_ISTA);
       Start_ISAC:
 	if (val)
-		ISAC_interrupt(&sf->dch, val);
+		mISDN_isac_interrupt(&sf->dch, val);
 	val = readreg(sf->addr, sf->isar, ISAR_IRQBIT);
 	if ((val & ISAR_IRQSTA) && cnt) {
 		cnt--;
@@ -428,9 +428,9 @@ static int init_card(sedl_fax *sf)
 	while (cnt) {
 		int	ret;
 
-		ISAC_clear_pending_ints(&sf->dch);
-		if ((ret=ISAC_init(&sf->dch))) {
-			printk(KERN_WARNING "mISDN: ISAC_init failed with %d\n", ret);
+		mISDN_clear_isac(&sf->dch);
+		if ((ret=mISDN_isac_init(&sf->dch))) {
+			printk(KERN_WARNING "mISDN: mISDN_isac_init failed with %d\n", ret);
 			break;
 		}
 		init_isar(&sf->bch[0]);
@@ -644,16 +644,16 @@ release_card(sedl_fax *card) {
 	free_irq(card->irq, card);
 	free_isar(&card->bch[1]);
 	free_isar(&card->bch[0]);
-	ISAC_free(&card->dch);
+	mISDN_isac_free(&card->dch);
 	WriteISAR(card, 0, ISAR_IRQBIT, 0);
 	WriteISAC(card, ISAC_MASK, 0xFF);
 	reset_speedfax(card);
 	WriteISAR(card, 0, ISAR_IRQBIT, 0);
 	WriteISAC(card, ISAC_MASK, 0xFF);
 	release_sedlbauer(card);
-	free_bchannel(&card->bch[1]);
-	free_bchannel(&card->bch[0]);
-	free_dchannel(&card->dch);
+	mISDN_free_bch(&card->bch[1]);
+	mISDN_free_bch(&card->bch[0]);
+	mISDN_free_dch(&card->dch);
 	speedfax.ctrl(card->dch.inst.up.peer, MGR_DISCONNECT | REQUEST, &card->dch.inst.up);
 	speedfax.ctrl(&card->dch.inst, MGR_UNREGLAYER | REQUEST, NULL);
 	REMOVE_FROM_LISTBASE(card, ((sedl_fax *)speedfax.ilist));
@@ -708,7 +708,7 @@ speedfax_manager(void *data, u_int prim, void *arg) {
 			inst->down.fdata = &card->dch;
 			if ((skb = create_link_skb(PH_CONTROL | REQUEST,
 				HW_DEACTIVATE, 0, NULL, 0))) {
-				if (ISAC_l1hw(&inst->down, skb))
+				if (mISDN_ISAC_l1hw(&inst->down, skb))
 					dev_kfree_skb(skb);
 			}
 		} else {
@@ -738,16 +738,16 @@ speedfax_manager(void *data, u_int prim, void *arg) {
 		}
 		break;
 	    case MGR_CONNECT | REQUEST:
-		return(ConnectIF(inst, arg));
+		return(mISDN_ConnectIF(inst, arg));
 	    case MGR_SETIF | REQUEST:
 	    case MGR_SETIF | INDICATION:
 		if (channel==2)
-			return(SetIF(inst, arg, prim, ISAC_l1hw, NULL, &card->dch));
+			return(mISDN_SetIF(inst, arg, prim, mISDN_ISAC_l1hw, NULL, &card->dch));
 		else
-			return(SetIF(inst, arg, prim, isar_down, NULL, &card->bch[channel]));
+			return(mISDN_SetIF(inst, arg, prim, isar_down, NULL, &card->bch[channel]));
 	    case MGR_DISCONNECT | REQUEST:
 	    case MGR_DISCONNECT | INDICATION:
-		return(DisConnectIF(inst, arg));
+		return(mISDN_DisConnectIF(inst, arg));
 	    case MGR_LOADFIRM | REQUEST:
 	    	{
 			struct firm {
@@ -823,29 +823,29 @@ static int __init Speedfax_init(void)
 		lock_HW_init(&card->lock);
 		card->dch.inst.lock = lock_dev;
 		card->dch.inst.unlock = unlock_dev;
-		init_mISDNinstance(&card->dch.inst, &speedfax, card);
-		set_dchannel_pid(&pid, protocol[sedl_cnt], layermask[sedl_cnt]);
+		mISDN_init_instance(&card->dch.inst, &speedfax, card);
+		mISDN_set_dchannel_pid(&pid, protocol[sedl_cnt], layermask[sedl_cnt]);
 		sprintf(card->dch.inst.name, "SFax%d", sedl_cnt+1);
-		init_dchannel(&card->dch);
+		mISDN_init_dch(&card->dch);
 		for (i=0; i<2; i++) {
 			card->bch[i].channel = i;
 			card->bch[i].inst.down.fdata = &card->bch[i];
 			card->bch[i].inst.pid.layermask = 0;
-			init_mISDNinstance(&card->bch[i].inst, &speedfax, card);
+			mISDN_init_instance(&card->bch[i].inst, &speedfax, card);
 			card->bch[i].inst.lock = lock_dev;
 			card->bch[i].inst.unlock = unlock_dev;
 			card->bch[i].debug = debug;
 			sprintf(card->bch[i].inst.name, "%s B%d",
 				card->dch.inst.name, i+1);
-			init_bchannel(&card->bch[i]);
+			mISDN_init_bch(&card->bch[i]);
 		}
 		printk(KERN_DEBUG "sfax card %p dch %p bch1 %p bch2 %p\n",
 			card, &card->dch, &card->bch[0], &card->bch[1]);
 		if (setup_speedfax(card, io[cfg_idx], irq[cfg_idx])) {
 			err = 0;
-			free_dchannel(&card->dch);
-			free_bchannel(&card->bch[1]);
-			free_bchannel(&card->bch[0]);
+			mISDN_free_dch(&card->dch);
+			mISDN_free_bch(&card->bch[1]);
+			mISDN_free_bch(&card->bch[0]);
 			REMOVE_FROM_LISTBASE(card, ((sedl_fax *)speedfax.ilist));
 			kfree(card);
 			card = NULL;

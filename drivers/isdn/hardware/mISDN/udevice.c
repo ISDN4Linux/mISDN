@@ -1,4 +1,4 @@
-/* $Id: udevice.c,v 1.10 2003/11/11 09:59:00 keil Exp $
+/* $Id: udevice.c,v 1.11 2004/01/26 22:21:31 keil Exp $
  *
  * Copyright 2000  by Karsten Keil <kkeil@isdn4linux.de>
  *
@@ -697,7 +697,7 @@ connect_if_req(mISDNdevice_t *dev, iframe_t *iff) {
 			return(-EBUSY);
 		}
 	}			
-	return(ConnectIF(owner, peer));
+	return(mISDN_ConnectIF(owner, peer));
 }
 
 static int
@@ -1934,7 +1934,7 @@ set_if(devicelayer_t *dl, u_int prim, mISDNif_t *hif)
 {
 	int err = 0;
 
-	err = SetIF(&dl->inst, hif, prim, from_up_down, from_up_down, dl);
+	err = mISDN_SetIF(&dl->inst, hif, prim, from_up_down, from_up_down, dl);
 	return(err);
 }
 
@@ -1968,7 +1968,7 @@ udev_manager(void *data, u_int prim, void *arg) {
 	}
 	switch(prim) {
 	    case MGR_CONNECT | REQUEST:
-	    	err = ConnectIF(inst, arg);
+	    	err = mISDN_ConnectIF(inst, arg);
 	    	break;
 	    case MGR_SETIF | REQUEST:
 	    case MGR_SETIF | INDICATION:
@@ -1976,7 +1976,7 @@ udev_manager(void *data, u_int prim, void *arg) {
 		break;
 	    case MGR_DISCONNECT | REQUEST:
 	    case MGR_DISCONNECT | INDICATION:
-	    	err = DisConnectIF(inst, arg);
+	    	err = mISDN_DisConnectIF(inst, arg);
 	    	break;
 	    case MGR_RELEASE | INDICATION:
 		if (device_debug & DEBUG_MGR_FUNC)

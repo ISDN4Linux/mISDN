@@ -1,4 +1,4 @@
-/* $Id: m_capi.h,v 1.8 2004/01/13 13:38:02 keil Exp $
+/* $Id: m_capi.h,v 1.9 2004/01/26 22:21:30 keil Exp $
  *
  * Rewritten CAPI Layer (Layer4 in mISDN)
  * 
@@ -369,7 +369,7 @@ int	AppPlciFacResumeReq(AppPlci_t *, FacReqParm_t *, FacConfParm_t *);
 void	AppPlciGetCmsg(AppPlci_t *, _cmsg *);
 Ncci_t	*getNCCI4addr(AppPlci_t *, __u32, int);
 int	ConnectB3Request(AppPlci_t *, struct sk_buff *);
-int	AppPlciSetIF(AppPlci_t *, u_int, void *);
+int	AppPlcimISDN_SetIF(AppPlci_t *, u_int, void *);
 
 #define	GET_NCCI_EXACT		1
 #define GET_NCCI_ONLY_PLCI	2

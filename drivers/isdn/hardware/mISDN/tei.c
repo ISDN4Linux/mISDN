@@ -1,4 +1,4 @@
-/* $Id: tei.c,v 1.7 2003/12/14 15:20:38 keil Exp $
+/* $Id: tei.c,v 1.8 2004/01/26 22:21:30 keil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -7,13 +7,12 @@
  *		../../../Documentation/isdn/mISDN.cert
  *
  */
-#define __NO_VERSION__
 #include "layer2.h"
 #include "helper.h"
 #include "debug.h"
 #include <linux/random.h>
 
-const char *tei_revision = "$Revision: 1.7 $";
+const char *tei_revision = "$Revision: 1.8 $";
 
 #define ID_REQUEST	1
 #define ID_ASSIGNED	2
@@ -136,8 +135,8 @@ tei_id_request(struct FsmInst *fi, int event, void *arg)
 		tm->tei_m.printdebug(&tm->tei_m,
 			"assign request ri %d", tm->ri);
 	put_tei_msg(tm, ID_REQUEST, tm->ri, 127);
-	FsmChangeState(fi, ST_TEI_IDREQ);
-	FsmAddTimer(&tm->t202, tm->T202, EV_T202, NULL, 1);
+	mISDN_FsmChangeState(fi, ST_TEI_IDREQ);
+	mISDN_FsmAddTimer(&tm->t202, tm->T202, EV_T202, NULL, 1);
 	tm->N202 = 3;
 }
 
@@ -158,7 +157,7 @@ tei_assign_req(struct FsmInst *fi, int event, void *arg)
 		tm->tei_m.printdebug(&tm->tei_m,
 			"net assign request ri %d teim %d", tm->ri, *dp);
 	put_tei_msg(tm, ID_ASSIGNED, tm->ri, tm->l2->tei);
-	FsmChangeState(fi, ST_TEI_NOP);
+	mISDN_FsmChangeState(fi, ST_TEI_NOP);
 }
 
 static void
@@ -188,8 +187,8 @@ tei_id_assign(struct FsmInst *fi, int event, void *arg)
 				dev_kfree_skb(skb);
 		}
 	} else if (ri == tm->ri) {
-		FsmDelTimer(&tm->t202, 1);
-		FsmChangeState(fi, ST_TEI_NOP);
+		mISDN_FsmDelTimer(&tm->t202, 1);
+		mISDN_FsmChangeState(fi, ST_TEI_NOP);
 		skb = create_link_skb(MDL_ASSIGN | REQUEST, tei, 0, NULL, 0);
 		if (!skb)
 			return;
@@ -217,7 +216,7 @@ tei_id_test_dup(struct FsmInst *fi, int event, void *arg)
 		if (ri != otm->ri) {	/* and it wasn't our request */
 			tm->tei_m.printdebug(fi,
 				"possible duplicate assignment tei %d", tei);
-			FsmEvent(&otm->tei_m, EV_VERIFY, NULL);
+			mISDN_FsmEvent(&otm->tei_m, EV_VERIFY, NULL);
 		}
 	} 
 }
@@ -249,8 +248,8 @@ tei_id_chk_req(struct FsmInst *fi, int event, void *arg)
 	if (tm->debug)
 		tm->tei_m.printdebug(fi, "identity check req tei %d", tei);
 	if ((tm->l2->tei != -1) && ((tei == GROUP_TEI) || (tei == tm->l2->tei))) {
-		FsmDelTimer(&tm->t202, 4);
-		FsmChangeState(&tm->tei_m, ST_TEI_NOP);
+		mISDN_FsmDelTimer(&tm->t202, 4);
+		mISDN_FsmChangeState(&tm->tei_m, ST_TEI_NOP);
 		put_tei_msg(tm, ID_CHK_RES, random_ri(), tm->l2->tei);
 	}
 }
@@ -267,8 +266,8 @@ tei_id_remove(struct FsmInst *fi, int event, void *arg)
 	if (tm->debug)
 		tm->tei_m.printdebug(fi, "identity remove tei %d", tei);
 	if ((tm->l2->tei != -1) && ((tei == GROUP_TEI) || (tei == tm->l2->tei))) {
-		FsmDelTimer(&tm->t202, 5);
-		FsmChangeState(&tm->tei_m, ST_TEI_NOP);
+		mISDN_FsmDelTimer(&tm->t202, 5);
+		mISDN_FsmChangeState(&tm->tei_m, ST_TEI_NOP);
 		skb = create_link_skb(MDL_REMOVE | REQUEST, 0, 0, NULL, 0);
 		if (!skb)
 			return;
@@ -287,8 +286,8 @@ tei_id_verify(struct FsmInst *fi, int event, void *arg)
 		tm->tei_m.printdebug(fi, "id verify request for tei %d",
 			tm->l2->tei);
 	put_tei_msg(tm, ID_VERIFY, 0, tm->l2->tei);
-	FsmChangeState(&tm->tei_m, ST_TEI_IDVERIFY);
-	FsmAddTimer(&tm->t202, tm->T202, EV_T202, NULL, 2);
+	mISDN_FsmChangeState(&tm->tei_m, ST_TEI_IDVERIFY);
+	mISDN_FsmAddTimer(&tm->t202, tm->T202, EV_T202, NULL, 2);
 	tm->N202 = 2;
 }
 
@@ -304,7 +303,7 @@ tei_id_req_tout(struct FsmInst *fi, int event, void *arg)
 			tm->tei_m.printdebug(fi, "assign req(%d) ri %d",
 				4 - tm->N202, tm->ri);
 		put_tei_msg(tm, ID_REQUEST, tm->ri, 127);
-		FsmAddTimer(&tm->t202, tm->T202, EV_T202, NULL, 3);
+		mISDN_FsmAddTimer(&tm->t202, tm->T202, EV_T202, NULL, 3);
 	} else {
 		tm->tei_m.printdebug(fi, "assign req failed");
 		skb = create_link_skb(MDL_ERROR | REQUEST, 0, 0, NULL, 0);
@@ -313,7 +312,7 @@ tei_id_req_tout(struct FsmInst *fi, int event, void *arg)
 		if (tei_l2(tm->l2, skb))
 			dev_kfree_skb(skb);
 //		cs->cardmsg(cs, MDL_REMOVE | REQUEST, NULL);
-		FsmChangeState(fi, ST_TEI_NOP);
+		mISDN_FsmChangeState(fi, ST_TEI_NOP);
 	}
 }
 
@@ -329,7 +328,7 @@ tei_id_ver_tout(struct FsmInst *fi, int event, void *arg)
 				"id verify req(%d) for tei %d",
 				3 - tm->N202, tm->l2->tei);
 		put_tei_msg(tm, ID_VERIFY, 0, tm->l2->tei);
-		FsmAddTimer(&tm->t202, tm->T202, EV_T202, NULL, 4);
+		mISDN_FsmAddTimer(&tm->t202, tm->T202, EV_T202, NULL, 4);
 	} else {
 		tm->tei_m.printdebug(fi, "verify req for tei %d failed",
 			tm->l2->tei);
@@ -339,7 +338,7 @@ tei_id_ver_tout(struct FsmInst *fi, int event, void *arg)
 		if (tei_l2(tm->l2, skb))
 			dev_kfree_skb(skb);
 //		cs->cardmsg(cs, MDL_REMOVE | REQUEST, NULL);
-		FsmChangeState(fi, ST_TEI_NOP);
+		mISDN_FsmChangeState(fi, ST_TEI_NOP);
 	}
 }
 
@@ -378,16 +377,16 @@ tei_ph_data_ind(teimgr_t *tm, int dtyp, struct sk_buff *skb)
 		if (tm->debug)
 			tm->tei_m.printdebug(&tm->tei_m, "tei handler mt %x", mt);
 		if (mt == ID_ASSIGNED)
-			FsmEvent(&tm->tei_m, EV_ASSIGN, dp);
+			mISDN_FsmEvent(&tm->tei_m, EV_ASSIGN, dp);
 		else if (mt == ID_DENIED)
-			FsmEvent(&tm->tei_m, EV_DENIED, dp);
+			mISDN_FsmEvent(&tm->tei_m, EV_DENIED, dp);
 		else if (mt == ID_CHK_REQ)
-			FsmEvent(&tm->tei_m, EV_CHKREQ, dp);
+			mISDN_FsmEvent(&tm->tei_m, EV_CHKREQ, dp);
 		else if (mt == ID_REMOVE)
-			FsmEvent(&tm->tei_m, EV_REMOVE, dp);
+			mISDN_FsmEvent(&tm->tei_m, EV_REMOVE, dp);
 		else if (mt == ID_REQUEST && 
 			test_bit(FLG_LAPD_NET, &tm->l2->flag))
-			FsmEvent(&tm->tei_m, EV_ASSIGN_REQ, dp);
+			mISDN_FsmEvent(&tm->tei_m, EV_ASSIGN_REQ, dp);
 		else {
 			tm->tei_m.printdebug(&tm->tei_m,
 				"tei handler wrong mt %x", mt);
@@ -423,11 +422,11 @@ l2_tei(teimgr_t *tm, struct sk_buff *skb)
 				return(0);
 //			cs->cardmsg(cs, MDL_ASSIGN | REQUEST, NULL);
 		} else
-			FsmEvent(&tm->tei_m, EV_IDREQ, NULL);
+			mISDN_FsmEvent(&tm->tei_m, EV_IDREQ, NULL);
 		break;
 	    case (MDL_ERROR | INDICATION):
 	    	if (!test_bit(FLG_FIXED_TEI, &tm->l2->flag))
-			FsmEvent(&tm->tei_m, EV_VERIFY, NULL);
+			mISDN_FsmEvent(&tm->tei_m, EV_VERIFY, NULL);
 		break;
 	}
 	dev_kfree_skb(skb);
@@ -470,7 +469,7 @@ static struct FsmNode TeiFnList[] =
 void
 release_tei(teimgr_t *tm)
 {
-	FsmDelTimer(&tm->t202, 1);
+	mISDN_FsmDelTimer(&tm->t202, 1);
 	kfree(tm);
 }
 
@@ -500,7 +499,7 @@ create_teimgr(layer2_t *l2) {
 		ntei->tei_m.fsm = &teifsm;
 		ntei->tei_m.state = ST_TEI_NOP;
 	}
-	FsmInitTimer(&ntei->tei_m, &ntei->t202);
+	mISDN_FsmInitTimer(&ntei->tei_m, &ntei->t202);
 	l2->tm = ntei;
 	return(0);
 }
@@ -511,11 +510,11 @@ int TEIInit(void)
 	teifsm.event_count = TEI_EVENT_COUNT;
 	teifsm.strEvent = strTeiEvent;
 	teifsm.strState = strTeiState;
-	FsmNew(&teifsm, TeiFnList, TEI_FN_COUNT);
+	mISDN_FsmNew(&teifsm, TeiFnList, TEI_FN_COUNT);
 	return(0);
 }
 
 void TEIFree(void)
 {
-	FsmFree(&teifsm);
+	mISDN_FsmFree(&teifsm);
 }
