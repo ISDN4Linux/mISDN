@@ -1,4 +1,4 @@
-/* $Id: stack.c,v 0.9 2001/03/29 19:14:25 kkeil Exp $
+/* $Id: stack.c,v 0.10 2001/04/08 16:45:56 kkeil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -177,6 +177,53 @@ get_instance(hisaxstack_t *st, int layer_nr, int protocol)
 	}
 out:
 	return(inst);
+}
+
+static hisaxinstance_t *
+get_st_instance4id(hisaxstack_t *st, int id)
+{
+	hisaxinstance_t *inst;
+	hisaxlayer_t *layer;
+
+	layer = st->lstack;
+	while(layer) {
+		inst = layer->inst;
+		while(inst) {
+			if (inst->id == id)
+				return(inst);
+			if (inst == inst->next) {
+				int_errtxt("deadloop inst %p %s", inst, inst->name);
+				return(NULL);
+			}
+			inst = inst->next;
+		}
+		if (layer == layer->next) {
+			int_errtxt("deadloop layer %p", layer);
+			return(NULL);
+		}
+		layer = layer->next;
+	}
+	return(NULL);
+}
+
+hisaxinstance_t *
+get_instance4id(int id)
+{
+	hisaxstack_t *cst, *st = hisax_stacklist;
+	hisaxinstance_t *inst;
+
+	while(st) {
+		if ((inst = get_st_instance4id(st, id)))
+			return(inst);
+		cst = st->child;
+		while (cst) {
+			if ((inst = get_st_instance4id(cst, id)))
+				return(inst);
+			cst = cst->next;
+		}
+		st = st->next;
+	}
+	return(NULL);
 }
 
 int
@@ -383,7 +430,7 @@ register_layer(hisaxstack_t *st, hisaxinstance_t *inst) {
 	inst->obj->refcnt++;
 	inst->id = st->id;
 	inst->id |= get_lowlayer(inst->pid.layermask)<<20;
-	inst->id |= count<8;
+	inst->id |= count<<8;
 	return(0);
 }
 

@@ -1,4 +1,4 @@
-/* $Id: core.c,v 0.14 2001/03/27 15:34:20 kkeil Exp $
+/* $Id: core.c,v 0.15 2001/04/08 16:45:56 kkeil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -35,6 +35,18 @@ static moditem_t modlist[] = {
 	{"hisaxl2", ISDN_PID_L2_B_X75SLP},
 	{NULL, ISDN_PID_NONE}
 };
+
+hisaxobject_t *
+get_object(int id) {
+	hisaxobject_t *obj = hisax_objects;
+
+	while(obj) {
+		if (obj->id == id)
+			return(obj);
+		obj = obj->next;
+	}
+	return(NULL);
+}
 
 static hisaxobject_t *
 find_object(int protocol) {

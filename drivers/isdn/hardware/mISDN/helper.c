@@ -1,4 +1,4 @@
-/* $Id: helper.c,v 0.11 2001/03/26 11:40:02 kkeil Exp $
+/* $Id: helper.c,v 0.12 2001/04/08 16:45:56 kkeil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -388,12 +388,12 @@ SetIF(hisaxinstance_t *owner, hisaxif_t *hif, u_int prim, void *upfunc,
 	if (IF_TYPE(hif) == IF_UP) {
 		hif->func = upfunc;
 		own_hif = &owner->up;
-		printk(KERN_DEBUG __FUNCTION__": IF_UP: f:%p(%p)\n",
+		printk(KERN_DEBUG __FUNCTION__": IF_UP: func:%p(%p)\n",
 			hif->func, owner->data);
 	} else if (IF_TYPE(hif) == IF_DOWN) {
 		hif->func = downfunc;
 		own_hif = &owner->down;
-		printk(KERN_DEBUG __FUNCTION__": IF_DOWN: f:%p(%p)\n",
+		printk(KERN_DEBUG __FUNCTION__": IF_DOWN: func:%p(%p)\n",
 			hif->func, owner->data);
 	} else {
 		int_errtxt("stat(%x)", hif->stat);

@@ -1,4 +1,4 @@
-/* $Id: core.h,v 0.6 2001/03/26 11:40:02 kkeil Exp $
+/* $Id: core.h,v 0.7 2001/04/08 16:45:56 kkeil Exp $
  * 
  * This file is (c) under GNU PUBLIC LICENSE
  *
@@ -53,3 +53,5 @@ extern void		hisaxunlock_core(void);
 extern int		register_layer(hisaxstack_t *, hisaxinstance_t *);
 extern int		unregister_instance(hisaxinstance_t *);
 extern hisaxinstance_t	*get_next_instance(hisaxstack_t *, hisax_pid_t *);
+extern hisaxobject_t	*get_object(int);
+extern hisaxinstance_t	*get_instance4id(int);
