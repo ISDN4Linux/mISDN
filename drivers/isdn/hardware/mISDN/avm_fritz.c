@@ -1,4 +1,4 @@
-/* $Id: avm_fritz.c,v 0.9 2001/03/05 18:46:18 kkeil Exp $
+/* $Id: avm_fritz.c,v 0.10 2001/03/06 10:22:44 kkeil Exp $
  *
  * fritz_pci.c    low level stuff for AVM Fritz!PCI and ISA PnP isdn cards
  *              Thanks to AVM, Berlin for informations
@@ -18,7 +18,7 @@
 #include "helper.h"
 #include "debug.h"
 
-static const char *avm_pci_rev = "$Revision: 0.9 $";
+static const char *avm_pci_rev = "$Revision: 0.10 $";
 
 #define ISDN_CTYPE_FRITZPCI 1
 
@@ -258,13 +258,13 @@ write_ctrl(bchannel_t *bch, int which) {
 }
 
 static int
-modehdlc(bchannel_t *bch, int protocol, int bc)
+modehdlc(bchannel_t *bch, int bc, int protocol)
 {
 	fritzpnppci *fc = bch->inst.data;
 	int hdlc = bch->channel;
 
 	if (fc->dch.debug & L1_DEB_HSCX)
-		debugprint(&bch->inst, "hdlc %c protocol %d --> %d ichan %d --> %d",
+		debugprint(&bch->inst, "hdlc %c protocol %x-->%x ch %d-->%d",
 			'A' + hdlc, bch->protocol, protocol, hdlc, bc);
 	bch->hw.hdlc.ctrl.ctrl = 0;
 	switch (protocol) {
@@ -310,7 +310,7 @@ modehdlc(bchannel_t *bch, int protocol, int bc)
 	return(0);
 }
 
-static inline void
+static void
 hdlc_empty_fifo(bchannel_t *bch, int count)
 {
 	register u_int *ptr;
@@ -363,7 +363,7 @@ hdlc_empty_fifo(bchannel_t *bch, int count)
 
 #define HDLC_FIFO_SIZE	32
 
-static inline void
+static void
 hdlc_fill_fifo(bchannel_t *bch)
 {
 	fritzpnppci *fc = bch->inst.data;
@@ -421,7 +421,7 @@ hdlc_fill_fifo(bchannel_t *bch)
 	}
 }
 
-static inline void
+static void
 HDLC_irq(bchannel_t *bch, u_int stat) {
 	int len;
 	struct sk_buff *skb;
@@ -506,7 +506,7 @@ HDLC_irq(bchannel_t *bch, u_int stat) {
 	}
 }
 
-inline void
+static inline void
 HDLC_irq_main(fritzpnppci *fc)
 {
 	u_int stat;
@@ -521,8 +521,8 @@ HDLC_irq_main(fritzpnppci *fc)
 	}
 	if (stat & HDLC_INT_MASK) {
 		if (!(bch = Sel_BCS(fc, 0))) {
-			if (bch->debug)
-				debugprint(&bch->inst, "hdlc spurious channel 0 IRQ");
+			if (fc->bch[0].debug)
+				debugprint(&fc->bch[0].inst, "hdlc spurious channel 0 IRQ");
 		} else
 			HDLC_irq(bch, stat);
 	}
@@ -535,11 +535,41 @@ HDLC_irq_main(fritzpnppci *fc)
 	}
 	if (stat & HDLC_INT_MASK) {
 		if (!(bch = Sel_BCS(fc, 1))) {
-			if (bch->debug)
-				debugprint(&bch->inst, "hdlc spurious channel 1 IRQ");
+			if (fc->bch[1].debug)
+				debugprint(&fc->bch[1].inst, "hdlc spurious channel 1 IRQ");
 		} else
 			HDLC_irq(bch, stat);
 	}
+}
+
+static void
+avm_pcipnp_interrupt(int intno, void *dev_id, struct pt_regs *regs)
+{
+	fritzpnppci *fc = dev_id;
+	u_char val;
+	u_char sval;
+
+	if (!fc) {
+		printk(KERN_WARNING "AVM PCI: Spurious interrupt!\n");
+		return;
+	}
+	lock_dev(fc);
+	sval = inb(fc->addr + 2);
+	if ((sval & AVM_STATUS0_IRQ_MASK) == AVM_STATUS0_IRQ_MASK) {
+		/* possible a shared  IRQ reqest */
+		unlock_dev(fc);
+		return;
+	}
+	if (!(sval & AVM_STATUS0_IRQ_ISAC)) {
+		val = ReadISAC(fc, ISAC_ISTA);
+		isac_interrupt(&fc->dch, val);
+	}
+	if (!(sval & AVM_STATUS0_IRQ_HDLC)) {
+		HDLC_irq_main(fc);
+	}
+	WriteISAC(fc, ISAC_MASK, 0xFF);
+	WriteISAC(fc, ISAC_MASK, 0x0);
+	unlock_dev(fc);
 }
 
 static int
@@ -607,7 +637,7 @@ hdlc_down(hisaxif_t *hif, u_int prim, int dinfo, int len, void *arg)
 	return(ret);
 }
 
-void
+static void
 hdlc_bh(bchannel_t *bch)
 {
 	struct sk_buff	*skb;
@@ -653,8 +683,8 @@ inithdlc(fritzpnppci *fc)
 {
 	fc->bch[0].tqueue.routine = (void *) (void *) hdlc_bh;
 	fc->bch[1].tqueue.routine = (void *) (void *) hdlc_bh;
-	modehdlc(&fc->bch[0], -1, 0);
-	modehdlc(&fc->bch[1], -1, 1);
+	modehdlc(&fc->bch[0], 0, -1);
+	modehdlc(&fc->bch[1], 1, -1);
 }
 
 void
@@ -685,34 +715,6 @@ clear_pending_hdlc_ints(fritzpnppci *fc)
 		val = ReadHDLCPnP(fc, 1, HDLC_STATUS + 3);
 		debugprint(&fc->dch.inst, "HDLC 2 VIN %x", val);
 	}
-}
-
-static void
-avm_pcipnp_interrupt(int intno, void *dev_id, struct pt_regs *regs)
-{
-	fritzpnppci *fc = dev_id;
-	u_char val;
-	u_char sval;
-
-	if (!fc) {
-		printk(KERN_WARNING "AVM PCI: Spurious interrupt!\n");
-		return;
-	}
-	lock_dev(fc);
-	sval = inb(fc->addr + 2);
-	if ((sval & AVM_STATUS0_IRQ_MASK) == AVM_STATUS0_IRQ_MASK)
-		/* possible a shared  IRQ reqest */
-		return;
-	if (!(sval & AVM_STATUS0_IRQ_ISAC)) {
-		val = ReadISAC(fc, ISAC_ISTA);
-		isac_interrupt(&fc->dch, val);
-	}
-	if (!(sval & AVM_STATUS0_IRQ_HDLC)) {
-		HDLC_irq_main(fc);
-	}
-	WriteISAC(fc, ISAC_MASK, 0xFF);
-	WriteISAC(fc, ISAC_MASK, 0x0);
-	unlock_dev(fc);
 }
 
 static void
@@ -795,7 +797,6 @@ static int init_card(fritzpnppci *fc)
 #define MAX_CARDS	4
 #define MODULE_PARM_T	"1-4i"
 static int fritz_cnt;
-static u_int act_protocol;
 static u_int protocol[MAX_CARDS];
 static u_int io[MAX_CARDS];
 static u_int irq[MAX_CARDS];
@@ -1017,8 +1018,8 @@ release_card(fritzpnppci *card) {
 	lock_dev(card);
 	outb(0, card->addr + 2);
 	free_irq(card->irq, card);
-	modehdlc(&card->bch[0], ISDN_PID_NONE, 0);
-	modehdlc(&card->bch[1], ISDN_PID_NONE, 1);
+	modehdlc(&card->bch[0], 0, ISDN_PID_NONE);
+	modehdlc(&card->bch[1], 1, ISDN_PID_NONE);
 	free_isac(&card->dch);
 	release_region(card->addr, 32);
 	free_bchannel(&card->bch[1]);
@@ -1125,22 +1126,6 @@ fritz_manager(void *data, u_int prim, void *arg) {
 			printk(KERN_WARNING "fritz_manager no card found\n");
 			return(-ENODEV);
 		}
-		if (channel == 2) {
-#if 0
-			card->dch.inst.st->protocols[0] = ISDN_PID_L0_TE_S0;
-			card->dch.inst.st->protocols[1] = ISDN_PID_L1_TE_S0;
-			card->dch.inst.st->protocols[2] = ISDN_PID_L2_LAPD;
-			if (act_protocol == 2) {
-				card->dch.inst.st->protocols[3] = ISDN_PID_L3_DSS1USER;
-				card->dch.inst.st->protocols[4] = ISDN_PID_CAPI20;
-			} else {
-				card->dch.inst.st->protocols[3] = ISDN_PID_NONE;
-				card->dch.inst.st->protocols[4] = ISDN_PID_NONE;
-			}
-#endif
-		} else {
-			break;
-		}
 		break;
 	    case MGR_DELLAYER | REQUEST:
 		if (!card) {
@@ -1199,6 +1184,7 @@ Fritz_init(void)
 {
 	int err,i;
 	fritzpnppci *card;
+	hisax_pid_t pid;
 
 	fritz.name = FritzName;
 	fritz.own_ctrl = fritz_manager;
@@ -1229,8 +1215,20 @@ Fritz_init(void)
 		card->dch.inst.layermask = ISDN_LAYER(0);
 		card->dch.inst.pid.protocol[0] = ISDN_PID_L0_TE_S0;
 		card->dch.inst.up.inst = &card->dch.inst;
-		act_protocol = protocol[fritz_cnt];
+		card->dch.inst.down.inst = &card->dch.inst;
+		card->dch.inst.down.func = dummy_down;
 		sprintf(card->dch.inst.id, "Fritz%d", fritz_cnt+1);
+		memset(&pid, 0, sizeof(hisax_pid_t));
+		pid.protocol[0] = ISDN_PID_L0_TE_S0;
+		pid.protocol[1] = ISDN_PID_L1_TE_S0;
+		pid.protocol[2] = ISDN_PID_L2_LAPD;
+		if (protocol[fritz_cnt] == 2) {
+			pid.protocol[3] = ISDN_PID_L3_DSS1USER;
+			pid.protocol[4] = ISDN_PID_L4_CAPI20;
+		} else {
+			pid.protocol[3] = ISDN_PID_NONE;
+			pid.protocol[4] = ISDN_PID_NONE;
+		}
 		init_dchannel(&card->dch);
 		for (i=0; i<2; i++) {
 			card->bch[i].channel = i;
@@ -1239,6 +1237,8 @@ Fritz_init(void)
 			card->bch[i].inst.layermask = ISDN_LAYER(0);
 			card->bch[i].inst.up.layermask = ISDN_LAYER(1);
 			card->bch[i].inst.up.inst = &card->bch[i].inst;
+			card->bch[i].inst.down.inst = &card->bch[i].inst;
+			card->bch[i].inst.down.func = dummy_down;
 			card->bch[i].inst.lock = lock_dev;
 			card->bch[i].inst.unlock = unlock_dev;
 			card->bch[i].debug = debug;
@@ -1274,27 +1274,9 @@ Fritz_init(void)
 				err = 0;
 			return(err);
 		}
-		if ((err = fritz.ctrl(card->dch.inst.st, MGR_ADDLAYER | REQUEST, &card->dch.inst))) {
-			printk(KERN_ERR  "MGR_ADDLAYER REQUEST dch err(%d)\n", err);
- 			fritz.ctrl(card->dch.inst.st,
-				MGR_DELSTACK | REQUEST, NULL);
-			if (!fritz_cnt)
-				HiSax_unregister(&fritz);
-			else
-				err = 0;
-			return(err);
-		}
-		card->dch.inst.up.layermask = get_up_layer(card->dch.inst.layermask);
-		card->dch.inst.up.stat = IF_DOWN;
-		card->dch.inst.up.protocol = get_protocol(card->dch.inst.st,
-			card->dch.inst.up.layermask);
-		card->dch.inst.down.func = dummy_down;
-		card->dch.inst.down.fdata = card;
-		if ((err = fritz.ctrl(card->dch.inst.st, MGR_ADDIF | REQUEST,
-			&card->dch.inst.up))) {
-			printk(KERN_ERR  "MGR_ADDIF REQUEST dch err(%d)\n", err);
- 			fritz.ctrl(card->dch.inst.st,
-				MGR_DELSTACK | REQUEST, NULL);
+		if ((err = fritz.ctrl(card->dch.inst.st, MGR_SETSTACK | REQUEST, &pid))) {
+			printk(KERN_ERR  "MGR_SETSTACK REQUEST dch err(%d)\n", err);
+			fritz.ctrl(card->dch.inst.st, MGR_DELSTACK | REQUEST, NULL);
 			if (!fritz_cnt)
 				HiSax_unregister(&fritz);
 			else
