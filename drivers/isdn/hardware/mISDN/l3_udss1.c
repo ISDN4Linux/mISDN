@@ -1,4 +1,4 @@
-/* $Id: l3_udss1.c,v 1.23 2004/02/15 23:02:41 jolly Exp $
+/* $Id: l3_udss1.c,v 1.24 2004/03/28 17:13:06 jolly Exp $
  *
  * EURO/DSS1 D-channel protocol
  *
@@ -24,7 +24,7 @@ static int debug = 0;
 static mISDNobject_t u_dss1;
 
 
-const char *dss1_revision = "$Revision: 1.23 $";
+const char *dss1_revision = "$Revision: 1.24 $";
 
 static int dss1man(l3_process_t *, u_int, void *);
 
@@ -100,7 +100,8 @@ parseQ931(struct sk_buff *skb) {
 				if ((pos+l+1) >= len)
 					return(-5);
 				if (iep>=0) {
-					ie[iep] = pos;
+					if (!ie[iep])
+						ie[iep] = pos;
 				}
 				pos += l + 2;
 				cnt++;
@@ -1517,7 +1518,7 @@ l3dss1_global_restart(l3_process_t *pc, u_char pr, void *arg)
 	Q931_info_t	*qi = (Q931_info_t *)skb->data;
 	l3_process_t	*up;
 
-	newl3state(pc, 2);
+//	newl3state(pc, 2);
 	L3DelTimer(&pc->timer);
 	if (qi->restart_ind) {
 		p = skb->data;
@@ -1721,10 +1722,6 @@ l3dss1_dl_release(l3_process_t *pc, u_char pr, void *arg)
         pc->cause = 0x1b;          /* Destination out of order */
         pc->para.loc = 0;
 #endif
-// jolly patch start: shouldn't we use CC_RELEASE_COMPLETE (cause 27=0x1b) instead and do ONE DL_RLEASE for the complete port, not for all processes ?
-//	mISDN_l3up(pc, DL_RELEASE | INDICATION, NULL);
-// hier muesste man eine message mit cause generieren.
-// jolly patch_stop:
 	release_l3_process(pc);
 }
 
@@ -2139,7 +2136,7 @@ dss1_fromup(mISDNif_t *hif, struct sk_buff *skb)
 				__FUNCTION__, hh->dinfo);
 			ret = -EBUSY;
 		} else {
-			cr = newcallref();
+			cr = newcallref(l3);
 			cr |= 0x8000;
 			ret = -ENOMEM;
 			if ((proc = new_l3_process(l3, cr, N303, hh->dinfo))) {
@@ -2195,12 +2192,12 @@ dss1man(l3_process_t *proc, u_int pr, void *arg)
 		if (i == MANSLLEN) {
 			if (proc->l3->debug & L3_DEB_STATE) {
 				l3_debug(proc->l3, "cr %d dss1man state %d prim %#x unhandled",
-					proc->callref & 0x7f, proc->state, pr);
+					proc->callref & 0x7fff, proc->state, pr);
 			}
 		} else {
 			if (proc->l3->debug & L3_DEB_STATE) {
 				l3_debug(proc->l3, "cr %d dss1man state %d prim %#x",
-					proc->callref & 0x7f, proc->state, pr);
+					proc->callref & 0x7fff, proc->state, pr);
 			}
 			manstatelist[i].rout(proc, pr, arg);
 	}
@@ -2261,6 +2258,8 @@ new_udss1(mISDNstack_t *st, mISDN_pid_t *pid)
 		test_and_set_bit(FLG_PTP, &nl3->Flag);
 	if (pid->protocol[3] & ISDN_PID_L3_DF_EXTCID)
 		test_and_set_bit(FLG_EXTCID, &nl3->Flag);
+	if (pid->protocol[3] & ISDN_PID_L3_DF_CRLEN2)
+		test_and_set_bit(FLG_CRLEN2, &nl3->Flag);
 	if (!(nl3->global = kmalloc(sizeof(l3_process_t), GFP_ATOMIC))) {
 		printk(KERN_ERR "mISDN can't get memory for dss1 global CR\n");
 		release_l3(nl3);
@@ -2390,7 +2389,8 @@ int UDSS1Init(void)
 	u_dss1.name = MName;
 	u_dss1.DPROTO.protocol[3] = ISDN_PID_L3_DSS1USER |
 		ISDN_PID_L3_DF_PTP |
-		ISDN_PID_L3_DF_EXTCID;
+		ISDN_PID_L3_DF_EXTCID |
+		ISDN_PID_L3_DF_CRLEN2;
 	u_dss1.own_ctrl = udss1_manager;
 	u_dss1.prev = NULL;
 	u_dss1.next = NULL;

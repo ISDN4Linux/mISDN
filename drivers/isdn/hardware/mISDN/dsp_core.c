@@ -1,4 +1,4 @@
-/* $Id: dsp_core.c,v 1.7 2004/02/14 17:43:14 jolly Exp $
+/* $Id: dsp_core.c,v 1.8 2004/03/28 17:13:06 jolly Exp $
  *
  * Author       Andreas Eversberg (jolly@jolly.de)
  * Based on source code structure by
@@ -161,7 +161,7 @@ or if cmx is currently using software.
  
  */
 
-const char *dsp_revision = "$Revision: 1.7 $";
+const char *dsp_revision = "$Revision: 1.8 $";
 
 #include <linux/delay.h>
 #include <linux/config.h>
@@ -203,7 +203,7 @@ MODULE_LICENSE("GPL");
 static void
 sendevent(dsp_t *dsp)
 {
-	struct		sk_buff *nskb;
+	struct sk_buff *nskb;
 
 	lock_HW(&dsp_lock, 0);
 	if (dsp->b_active && dsp->tx_pending) {
@@ -259,7 +259,7 @@ dsp_control_req(dsp_t *dsp, mISDN_head_t *hh, struct sk_buff *skb)
 				printk(KERN_DEBUG "%s: start dtmf\n", __FUNCTION__);
 			dsp_dtmf_goertzel_init(dsp);
 			/* checking for hardware capability */
-			if (dsp->hfc_dtmf) {
+			if (dsp->features.hfc_dtmf) {
 				dsp->dtmf.hardware = 1;
 				dsp->dtmf.software = 0;
 			} else {
@@ -337,7 +337,7 @@ dsp_control_req(dsp_t *dsp, mISDN_head_t *hh, struct sk_buff *skb)
 			dsp_cmx_hardware(dsp->conf, dsp);
 			break;
 		case CMX_ECHO_ON: /* enable echo */
-			dsp->echo = 1;
+			dsp->echo = 1; /* soft echo */
 			if (dsp_debug & DEBUG_DSP_CORE)
 				printk(KERN_DEBUG "%s: enable cmx-echo\n", __FUNCTION__);
 			dsp_cmx_hardware(dsp->conf, dsp);
@@ -396,8 +396,7 @@ dsp_control_req(dsp_t *dsp, mISDN_head_t *hh, struct sk_buff *skb)
 			/* send indication if it worked to set it */
 			nskb = create_link_skb(PH_CONTROL | INDICATION, 0, sizeof(int), &cont, 0);
 			unlock_HW(&dsp_lock);
-			if (nskb)
-			{
+			if (nskb) {
 				if (dsp->inst.up.func(&dsp->inst.up, nskb))
 					dev_kfree_skb(nskb);
 			}
@@ -532,8 +531,7 @@ dsp_from_down(mISDNif_t *hif,  struct sk_buff *skb)
 					cont = DTMF_TONE_VAL | *digits;
 					nskb = create_link_skb(PH_CONTROL | INDICATION, 0, sizeof(int), &cont, 0);
 					unlock_HW(&dsp_lock);
-					if (!nskb)
-					{
+					if (!nskb) {
 						lock_HW(&dsp_lock, 0);
 						break;
 					}
@@ -554,8 +552,9 @@ dsp_from_down(mISDNif_t *hif,  struct sk_buff *skb)
 			/* we send data only if software or if we have some
 			 * or if we cannot do tones with hardware
 			 */
-			if ((dsp->pcm_slot_tx<0 && !dsp->hfc_loops)
-			 || dsp->R_tx!=dsp->W_tx
+			if ((dsp->pcm_slot_tx<0 && !dsp->features.hfc_loops)
+			 || dsp->R_tx != dsp->W_tx
+			 || dsp->echo == 1
 			 || (dsp->tone.tone && dsp->tone.software)) {
 				/* schedule sending skb->len bytes */
 				dsp->tx_pending = skb->len;
@@ -591,8 +590,7 @@ dsp_from_down(mISDNif_t *hif,  struct sk_buff *skb)
 						k = *digits | DTMF_TONE_VAL;
 						nskb = create_link_skb(PH_CONTROL | INDICATION, 0, sizeof(int), &k, 0);
 						unlock_HW(&dsp_lock);
-						if (!nskb)
-						{
+						if (!nskb) {
 							lock_HW(&dsp_lock, 0);
 							break;
 						}
@@ -713,8 +711,8 @@ release_dsp(dsp_t *dsp)
 static int
 new_dsp(mISDNstack_t *st, mISDN_pid_t *pid) 
 {
-	dsp_t *ndsp;
 	int err = 0;
+	dsp_t *ndsp;
 
 	if (dsp_debug & DEBUG_DSP_MGR)
 		printk(KERN_DEBUG "%s: creating new dsp instance\n", __FUNCTION__);
@@ -744,27 +742,13 @@ new_dsp(mISDNstack_t *st, mISDN_pid_t *pid)
 	/* set frame size to start */
 	ndsp->largest = 64 << 1;
 //#endif
-	ndsp->hfc_id = -1; /* current PCM id */
-	ndsp->pcm_id = -1; /* current PCM id */
+	ndsp->features.hfc_id = -1; /* current PCM id */
+	ndsp->features.pcm_id = -1; /* current PCM id */
 	ndsp->pcm_slot_rx = -1; /* current CPM slot */
 	ndsp->pcm_slot_tx = -1;
 	ndsp->pcm_bank_rx = -1;
 	ndsp->pcm_bank_tx = -1;
 	ndsp->hfc_conf = -1; /* current conference number */
-#ifdef CONFIG_MISDN_DSP_HARDWARETEST
-	if (!(dsp_options & DSP_OPT_NOHARDWARE)) {
-		/* check if b-channel is on HFCmulti */
-		ndsp->hfc_id = 1;
-		/* check if b-channel is capable of HFCmulti DTMF */
-		ndsp->hfc_dtmf = 1;
-		/* check if b-channel is capable of HFCmulti tone loops */
-		ndsp->hfc_loops = 0;
-		/* check if b-channel is on PCM */
-		ndsp->pcm_id = 1;
-		ndsp->pcm_slots = 32;
-		ndsp->pcm_banks = 2;
-	}
-#endif
 	/* set timer */
 	ndsp->tone.tl.function = (void *)dsp_tone_timeout;
 	ndsp->tone.tl.data = (long) ndsp;
@@ -780,12 +764,44 @@ new_dsp(mISDNstack_t *st, mISDN_pid_t *pid)
 		REMOVE_FROM_LISTBASE(ndsp, ((dsp_t *)dsp_obj.ilist));
 		unlock_HW(&dsp_lock);
 		goto free_mem;
-	} else {
-		if (dsp_debug & DEBUG_DSP_MGR)
-			printk(KERN_DEBUG "%s: dsp instance created %s\n", __FUNCTION__, ndsp->inst.name);
-		unlock_HW(&dsp_lock);
 	}
+	if (dsp_debug & DEBUG_DSP_MGR)
+		printk(KERN_DEBUG "%s: dsp instance created %s\n", __FUNCTION__, ndsp->inst.name);
+	unlock_HW(&dsp_lock);
 	return(err);
+}
+
+
+/*
+ * ask for hardware features
+ */
+static void
+dsp_feat(dsp_t *dsp)
+{
+	struct sk_buff *nskb;
+	void *feat;
+
+	if (!(dsp_options & DSP_OPT_NOHARDWARE)) {
+		feat = &dsp->features;
+		nskb = create_link_skb(PH_CONTROL | REQUEST, HW_FEATURES, sizeof(feat), &feat, 0);
+		if (nskb) {
+			if (dsp->inst.down.func(&dsp->inst.down, nskb)) {
+				dev_kfree_skb(nskb);
+				if (dsp_debug & DEBUG_DSP_MGR)
+					printk(KERN_DEBUG "%s: no features supported by %s\n", __FUNCTION__, dsp->inst.name);
+			} else {
+				if (dsp_debug & DEBUG_DSP_MGR)
+					printk(KERN_DEBUG "%s: features of %s: hfc_id=%d hfc_dtmf=%d hfc_loops=%d pcm_id=%d pcm_slots=%d pcm_banks=%d\n",
+					 __FUNCTION__, dsp->inst.name,
+					 dsp->features.hfc_id,
+					 dsp->features.hfc_dtmf,
+					 dsp->features.hfc_loops,
+					 dsp->features.pcm_id,
+					 dsp->features.pcm_slots,
+					 dsp->features.pcm_banks);
+			}
+		}
+	}
 }
 
 
@@ -819,6 +835,7 @@ dsp_manager(void *data, u_int prim, void *arg) {
 			break;
 		}
 		ret = mISDN_ConnectIF(inst, arg);
+		dsp_feat(dspl);
 		break;
 	    case MGR_SETIF | REQUEST:
 	    case MGR_SETIF | INDICATION:

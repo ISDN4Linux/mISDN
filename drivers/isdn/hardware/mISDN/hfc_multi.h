@@ -36,7 +36,7 @@ struct hfc_chan {
 	int		jitter;
 	u_long		cfg; /* port configuration */
 	int		sync; /* sync state (used by E1) */
-	struct sk_buff 	*dtmf_skb;
+	struct sk_buff_head dtmfque;
 	unsigned long	protocol; /* current protocol */
 	int		slot_tx; /* current pcm slot */
 	int		bank_tx; /* current pcm bank */
@@ -44,6 +44,7 @@ struct hfc_chan {
 	int		bank_rx;
 	int		conf; /* conference setting of TX slot */
 	int		txpending; /* if there is currently data in the FIFO 0=no, 1=yes, 2=splloop */
+	int		e1_state; /* keep track of last state */
 };
 
 typedef struct hfc_chan		hfc_chan_t;
@@ -89,6 +90,8 @@ struct hfc_multi {
 	struct hfc_multi *next;
 
 	char		name[32];
+	int		id;	/* chip number starting with 1 */
+	int		pcm;	/* id of pcm bus */
 	int		type;
 
 	u_int		irq;	/* irq used by card */

@@ -71,11 +71,18 @@
 	enable debugging (see hfc_multi.h for debug options)
 
  * poll:
-	NOTE: only one debug value must be given for all cards
+	NOTE: only one poll value must be given for all cards
 	Give the number of samples for each fifo process.
 	By default 128 is used. Decrease to reduce delay, increase to
 	reduce cpu load. If unsure, don't mess with it!
 	Valid is 8, 16, 32, 64, 128, 256.
+
+ * pcm:
+	NOTE: only one pcm value must be given for all cards
+	Give the id of the PCM bus. All PCM busses with the same ID
+	are expected to be connected and have equal slots.
+	Only one chip of the PCM bus must be master, the others slave.
+	-1 means no support of PCM bus.
  */
 
 /* debug using register map (never use this, it will flood your system log) */
@@ -89,6 +96,7 @@
 #include "dchannel.h"
 #include "bchannel.h"
 #include "layer1.h"
+#include "dsp.h"
 #include "helper.h"
 #include "debug.h"
 #include <linux/isdn_compat.h>
@@ -100,7 +108,7 @@
 
 extern const char *CardType[];
 
-static const char *hfcmulti_revision = "$Revision: 1.7 $";
+static const char *hfcmulti_revision = "$Revision: 1.8 $";
 
 static int HFC_cnt;
 
@@ -158,11 +166,12 @@ static const PCI_ENTRY id_list[] =
 /****************/
 
 /* NOTE: MAX_PORTS must be 8*MAX_CARDS */
-#define MAX_CARDS	8
-#define MAX_PORTS	64
-#define MODULE_CARDS_T	"1-8i"
-#define MODULE_PORTS_T	"1-64i" /* 8 cards can have 64 ports */
+#define MAX_CARDS	16
+#define MAX_PORTS	128
+#define MODULE_CARDS_T	"1-16i"
+#define MODULE_PORTS_T	"1-128i" /* 16 cards can have 128 ports */
 static u_int type[MAX_CARDS];
+static int pcm[MAX_PORTS];
 static u_int protocol[MAX_PORTS];
 static int layermask[MAX_PORTS];
 static int debug;
@@ -176,6 +185,7 @@ MODULE_LICENSE("GPL");
 MODULE_PARM(debug, "1i");
 MODULE_PARM(poll, "1i");
 MODULE_PARM(type, MODULE_CARDS_T);
+MODULE_PARM(pcm, MODULE_CARDS_T);
 MODULE_PARM(protocol, MODULE_PORTS_T);
 MODULE_PARM(layermask, MODULE_PORTS_T);
 #endif
@@ -296,7 +306,7 @@ init_chip(hfc_multi_t *hc)
 	udelay(10);
 	hc->hw.r_cirm = 0;
 	HFC_outb(hc, R_CIRM, hc->hw.r_cirm);
-	HFC_wait(hc);
+	udelay(10);
 	HFC_outb(hc, R_RAM_SZ, hc->hw.r_ram_sz);
 
 	/* set pcm mode & reset */
@@ -352,6 +362,10 @@ init_chip(hfc_multi_t *hc)
 	/* set up timer */
 	HFC_outb(hc, R_TI_WD, poll_timer);
 	hc->hw.r_irqmsk_misc |= V_TI_IRQMSK;
+
+	/* set E1 state machine IRQ */
+	if (hc->type == 1)
+		hc->hw.r_irqmsk_misc |= V_STA_IRQMSK;
 
 	/* set DTMF detection */
 	if (test_bit(HFC_CHIP_DTMF, &hc->chip)) {
@@ -447,6 +461,7 @@ hfcmulti_dtmf(hfc_multi_t *hc)
 	int dtmf = 0;
 	int addr;
 	unsigned short w_float;
+	struct sk_buff *skb;
 
 	if (debug & DEBUG_HFCMULTI_DTMF)
 		printk(KERN_DEBUG "%s: dtmf detection irq\n", __FUNCTION__);
@@ -515,18 +530,13 @@ hfcmulti_dtmf(hfc_multi_t *hc)
 		}
 		if (debug & DEBUG_HFCMULTI_DTMF)
 			printk("\n");
-		if (hc->chan[ch].dtmf_skb) {
-#warning remove when bug fixed
-//			printk(KERN_WARNING "%s: dtmf_skb still exist\n", __FUNCTION__);
-			ch++;
-			continue;
-		}
-		hc->chan[ch].dtmf_skb = create_link_skb(PH_CONTROL | INDICATION, HW_HFC_COEFF, sizeof(coeff), coeff, 0);
-		if (!hc->chan[ch].dtmf_skb) {
+		skb = create_link_skb(PH_CONTROL | INDICATION, HW_HFC_COEFF, sizeof(coeff), coeff, 0);
+		if (!skb) {
 			printk(KERN_WARNING "%s: No memory for skb\n", __FUNCTION__);
 			ch++;
 			continue;
 		}
+		skb_queue_tail(&hc->chan[ch].dtmfque, skb);
 		bch_sched_event(bch, B_DTMFREADY);
 		ch++;
 	}
@@ -818,7 +828,8 @@ next_frame:
 		/* HDLC */
 		ii = Zsize;
 		if ((ii + *idx) > max) {
-			printk(KERN_DEBUG "%s: hdlc-frame too large.\n", __FUNCTION__);
+			if (debug & DEBUG_HFCMULTI_FIFO)
+				printk(KERN_DEBUG "%s: hdlc-frame too large.\n", __FUNCTION__);
 			*idx = 0;
 			HFC_outb_(hc, R_INC_RES_FIFO, V_RES_F);
 			HFC_wait_(hc);
@@ -845,7 +856,8 @@ next_frame:
 			HFC_wait_(hc);
 			/* check size */
 			if (*idx < 4) {
-				printk(KERN_DEBUG "%s: Frame below minimum size\n", __FUNCTION__);
+				if (debug & DEBUG_HFCMULTI_FIFO)
+					printk(KERN_DEBUG "%s: Frame below minimum size\n", __FUNCTION__);
 				return;
 			}
 			/* there is at least one complete frame, check crc */
@@ -854,6 +866,9 @@ next_frame:
 					printk(KERN_DEBUG "%s: CRC-error\n", __FUNCTION__);
 				return;
 			} 
+			/* only send dchannel if in active state */
+			if (dch && hc->type==1 && hc->chan[ch].e1_state!=1)
+				return;
 			if (!(skb = alloc_stack_skb((*idx)-3, (bch)?bch->up_headerlen:dch->up_headerlen))) {
 				printk(KERN_DEBUG "%s: No mem for skb\n", __FUNCTION__);
 				return;
@@ -985,14 +1000,7 @@ hfcmulti_interrupt(int intno, void *dev_id, struct pt_regs *regs)
 	spin_unlock_irqrestore(&hc->lock.lock, flags);
 
 	if (r_irq_statech) {
-		if (hc->type == 1) {
-			/* state machine */
-			dch = hc->chan[16].dch;
-			dch->ph_state = HFC_inb_(hc, R_E1_RD_STA) & 0x7;
-			dchannel_sched_event(dch, D_L1STATECHANGE);
-			if (debug & DEBUG_HFCMULTI_STATE)
-				printk(KERN_DEBUG "%s: E1 newstate %x\n", __FUNCTION__, dch->ph_state);
-		} else {
+		if (hc->type != 1) {
 			/* state machine */
 			ch = 0;
 			while(ch < 32) {
@@ -1020,6 +1028,16 @@ hfcmulti_interrupt(int intno, void *dev_id, struct pt_regs *regs)
 	if (status & V_MISC_IRQSTA) {
 		/* misc IRQ */
 		r_irq_misc = HFC_inb_(hc, R_IRQ_MISC);
+		if (r_irq_misc & V_STA_IRQ) {
+			if (hc->type == 1) {
+				/* state machine */
+				dch = hc->chan[16].dch;
+				dch->ph_state = HFC_inb_(hc, R_E1_RD_STA) & 0x7;
+				dchannel_sched_event(dch, D_L1STATECHANGE);
+				if (debug & DEBUG_HFCMULTI_STATE)
+					printk(KERN_DEBUG "%s: E1 newstate %x\n", __FUNCTION__, dch->ph_state);
+			}
+		}
 		if (r_irq_misc & V_TI_IRQ) {
 			/* -> timer IRQ */
 			ch = 0;
@@ -1474,13 +1492,13 @@ hfcmulti_splloop(hfc_multi_t *hc, int ch, u_char *data, int len)
 	HFC_wait_(hc);
 
 	/* reset fifo */
+	HFC_outb(hc, A_SUBCH_CFG, 0);
 	HFC_outb_(hc, R_INC_RES_FIFO, V_RES_F);
 	HFC_wait_(hc);
 
 	/* if off */
 	if (len <= 0) {
 		HFC_outb_(hc, A_FIFO_DATA0_NOINC, silence);
-		HFC_outb(hc, A_SUBCH_CFG, 0);
 		if (hc->chan[ch].slot_tx>=0) {
 			if (debug & DEBUG_HFCMULTI_MODE)
 				printk(KERN_DEBUG "%s: connecting PCM due to no more TONE: channel %d slot_tx %d\n", __FUNCTION__, ch, hc->chan[ch].slot_tx);
@@ -1496,10 +1514,12 @@ hfcmulti_splloop(hfc_multi_t *hc, int ch, u_char *data, int len)
 
 	/* loop fifo */
 	HFC_outb(hc, A_SUBCH_CFG, V_LOOP_FIFO);
+	udelay(300);
 
 	/* set mode */
 	hc->chan[ch].txpending = 2;
 
+//printk("len=%d %02x %02x %02x\n", len, data[0], data[1], data[2]);
 	/* write loop data */
 	d = data;
 #ifdef FIFO_32BIT_ACCESS
@@ -1518,10 +1538,6 @@ hfcmulti_splloop(hfc_multi_t *hc, int ch, u_char *data, int len)
 		d++;
 	}
 
-	/* increment f-counter */
-	HFC_outb_(hc, R_INC_RES_FIFO, V_INC_F);
-	HFC_wait_(hc);
-
 	/* disconnect slot */
 	if (hc->chan[ch].slot_tx>=0) {
 		if (debug & DEBUG_HFCMULTI_MODE)
@@ -1530,12 +1546,15 @@ hfcmulti_splloop(hfc_multi_t *hc, int ch, u_char *data, int len)
 		HFC_outb(hc, R_FIFO, ch<<1 | 1);
 		HFC_wait(hc);
 		HFC_outb(hc, A_CON_HDLC, 0x80 | 0x00 | V_HDLC_TRP | V_IFF);
+		HFC_outb(hc, R_FIFO, ch<<1);
+		HFC_wait(hc);
 	} else {
-//		HFC_outb(hc, A_CON_HDLC, 0x80 | 0x00 | V_HDLC_TRP | V_IFF);
 		/* change fifo */
 		HFC_outb(hc, R_FIFO, ch<<1);
 		HFC_wait(hc);
 	}
+
+//udelay(300);
 }
 
 
@@ -1625,6 +1644,21 @@ hfcmulti_l1hw(mISDNif_t *hif, struct sk_buff *skb)
 	if (hh->prim == (PH_CONTROL | REQUEST)) {
 		dch->inst.lock(hc, 0);
 		switch (hh->dinfo) {
+			case HW_RESET:
+			/* start activation */
+			if (hc->type == 1) {
+				HFC_outb(hc, R_E1_WR_STA, V_E1_LD_STA | 1);
+				udelay(6); /* wait at least 5,21us */
+				HFC_outb(hc, R_E1_WR_STA, 1);
+			} else {
+				HFC_outb(hc, R_ST_SEL, hc->chan[dch->channel].port);
+				HFC_outb(hc, A_ST_WR_STATE, V_ST_LD_STA | 3); /* G1 */
+				udelay(6); /* wait at least 5,21us */
+				HFC_outb(hc, A_ST_WR_STATE, 3);
+				HFC_outb(hc, A_ST_WR_STATE, 3 | (V_ST_ACT*3)); /* activate */
+			}
+			break;
+
 			case HW_DEACTIVATE:
 			if (debug & DEBUG_HFCMULTI_MSG)
 				printk(KERN_DEBUG "%s: HW_DEACTIVATE\n", __FUNCTION__);
@@ -1722,8 +1756,11 @@ hfcmulti_l1hw(mISDNif_t *hif, struct sk_buff *skb)
 			printk(KERN_DEBUG "%s: unknown prim %x\n", __FUNCTION__, hh->prim);
 		ret = -EINVAL;
 	}
-	if (!ret)
+	if (!ret) {
+//		printk("1\n");
 		dev_kfree_skb(skb);
+//		printk("2\n");
+	}
 	return(ret);
 }
 
@@ -1743,6 +1780,7 @@ hfcmulti_l2l1(mISDNif_t *hif, struct sk_buff *skb)
 	int		ret = -EINVAL;
 	mISDN_head_t	*hh;
 	hfc_multi_t	*hc;
+	struct		dsp_features *features;
 
 	if (!hif || !skb)
 		return(ret);
@@ -1843,18 +1881,40 @@ hfcmulti_l2l1(mISDNif_t *hif, struct sk_buff *skb)
 		test_and_clear_bit(BC_FLG_ACTIV, &bch->Flag);
 		bch->inst.unlock(hc);
 		skb_trim(skb, 0);
+//printk("5\n");
 		if (hh->prim != (MGR_DISCONNECT | REQUEST)) {
 			if (bch->inst.pid.protocol[2] == ISDN_PID_L2_B_RAWDEV)
 				if (bch->dev)
 					if_link(&bch->dev->rport.pif, hh->prim | CONFIRM, 0, 0, NULL, 0);
 			if (!if_newhead(&bch->inst.up, hh->prim | CONFIRM, 0, skb))
 				return(0);
+//printk("6\n");
 		}
+//printk("7\n");
 		ret = 0;
 	} else
 	if (hh->prim == (PH_CONTROL | REQUEST)) {
 		bch->inst.lock(hc, 0);
 		switch (hh->dinfo) {
+			/* fill features structure */
+			case HW_FEATURES:
+			if (skb->len != sizeof(void *)) {
+				printk(KERN_WARNING "%s: HW_FEATURES lacks parameters\n", __FUNCTION__);
+				break;
+			}
+			if (debug & DEBUG_HFCMULTI_MSG)
+				printk(KERN_DEBUG "%s: HW_FEATURE request\n", __FUNCTION__);
+			features = *((struct dsp_features **)skb->data);
+			features->hfc_id = hc->id;
+			if (test_bit(HFC_CHIP_DTMF, &hc->chip))
+				features->hfc_dtmf = 1;
+			features->hfc_loops = 0;
+			features->pcm_id = hc->pcm;
+			features->pcm_slots = hc->slots;
+			features->pcm_banks = 2;
+			ret = 0;
+			break;
+
 			/* connect interface to pcm timeslot (0..N) */
 			case HW_PCM_CONN:
 			if (skb->len < 4*sizeof(u_long)) {
@@ -1871,6 +1931,7 @@ hfcmulti_l2l1(mISDNif_t *hif, struct sk_buff *skb)
 				hfcmulti_pcm(hc, bch->channel, slot_tx, bank_tx, slot_rx, bank_rx);
 			else
 				printk(KERN_WARNING "%s: HW_PCM_CONN slot %d bank %d (TX) slot %d bank %d (RX) out of range\n", __FUNCTION__, slot_tx, bank_tx, slot_rx, bank_rx);
+			ret = 0;
 			break;
 
 			/* release interface from pcm timeslot */
@@ -1878,6 +1939,7 @@ hfcmulti_l2l1(mISDNif_t *hif, struct sk_buff *skb)
 			if (debug & DEBUG_HFCMULTI_MSG)
 				printk(KERN_DEBUG "%s: HW_PCM_DISC\n", __FUNCTION__);
 			hfcmulti_pcm(hc, bch->channel, -1, -1, -1, -1); 
+			ret = 0;
 			break;
 
 			/* join conference (0..7) */
@@ -1889,9 +1951,10 @@ hfcmulti_l2l1(mISDNif_t *hif, struct sk_buff *skb)
 			num = ((u_long *)skb->data)[0];
 			if (debug & DEBUG_HFCMULTI_MSG)
 				printk(KERN_DEBUG "%s: HW_CONF_JOIN conf %ld\n", __FUNCTION__, num);
-			if (num <= 7)
+			if (num <= 7) {
 				hfcmulti_conf(hc, bch->channel, num); 
-			else
+				ret = 0;
+			} else
 				printk(KERN_WARNING "%s: HW_CONF_JOIN conf %ld out of range\n", __FUNCTION__, num);
 			break;
 
@@ -1900,6 +1963,7 @@ hfcmulti_l2l1(mISDNif_t *hif, struct sk_buff *skb)
 			if (debug & DEBUG_HFCMULTI_MSG)
 				printk(KERN_DEBUG "%s: HW_CONF_SPLIT\n", __FUNCTION__);
 			hfcmulti_conf(hc, bch->channel, -1); 
+			ret = 0;
 			break;
 
 			/* set sample loop */
@@ -1907,6 +1971,7 @@ hfcmulti_l2l1(mISDNif_t *hif, struct sk_buff *skb)
 			if (debug & DEBUG_HFCMULTI_MSG)
 				printk(KERN_DEBUG "%s: HW_SPL_LOOP_ON (len = %d)\n", __FUNCTION__, skb->len);
 			hfcmulti_splloop(hc, bch->channel, skb->data, skb->len);
+			ret = 0;
 			break;
 
 			/* set silence */
@@ -1914,6 +1979,7 @@ hfcmulti_l2l1(mISDNif_t *hif, struct sk_buff *skb)
 			if (debug & DEBUG_HFCMULTI_MSG)
 				printk(KERN_DEBUG "%s: HW_SPL_LOOP_OFF\n", __FUNCTION__);
 			hfcmulti_splloop(hc, bch->channel, NULL, 0);
+			ret = 0;
 			break;
 
 			default:
@@ -1925,8 +1991,11 @@ hfcmulti_l2l1(mISDNif_t *hif, struct sk_buff *skb)
 		printk(KERN_WARNING "%s: unknown prim(%x)\n", __FUNCTION__, hh->prim);
 		ret = -EINVAL;
 	}
-	if (!ret)
+	if (!ret) {
+//		printk("3\n");
 		dev_kfree_skb(skb);
+//		printk("4\n");
+	}
 	return(ret);
 }
 
@@ -2021,79 +2090,102 @@ hfcmulti_dch_bh(dchannel_t *dch)
 	}
 
 	if (test_and_clear_bit(D_L1STATECHANGE, &dch->event)) {
-		if (!test_bit(HFC_CFG_NTMODE, &hc->chan[ch].cfg)) {
-			if (debug & DEBUG_HFCMULTI_STATE)
-				printk(KERN_DEBUG "%s: TE newstate %x\n", __FUNCTION__, dch->ph_state);
-			switch (dch->ph_state) {
-				case (0):
-				prim = PH_CONTROL | INDICATION;
-				para = HW_RESET;
-				break;
-
-				case (3):
-				prim = PH_CONTROL | INDICATION;
-				para = HW_DEACTIVATE;
-				break;
-
-				case (5):
-				case (8):
-				para = ANYSIGNAL;
-				break;
-
-				case (6):
-				para = INFO2;
-				break;
-
-				case (7):
-				para = INFO4_P8;
-				break;
-
-				default:
-				return;
+		if (hc->type == 1) {
+			if (!test_bit(HFC_CFG_NTMODE, &hc->chan[ch].cfg)) {
+				if (debug & DEBUG_HFCMULTI_STATE)
+					printk(KERN_DEBUG "%s: E1 TE newstate %x\n", __FUNCTION__, dch->ph_state);
+			} else { 
+				if (debug & DEBUG_HFCMULTI_STATE)
+					printk(KERN_DEBUG "%s: E1 NT newstate %x\n", __FUNCTION__, dch->ph_state);
 			}
-		} else { 
-			if (debug & DEBUG_HFCMULTI_STATE)
-				printk(KERN_DEBUG "%s: NT newstate %x\n", __FUNCTION__, dch->ph_state);
-			dch->inst.lock(hc, 0);
 			switch (dch->ph_state) {
-				case (2):
-				if (hc->chan[ch].nt_timer == 0) {
-					hc->chan[ch].nt_timer = -1;
-					HFC_outb(hc, R_ST_SEL, hc->chan[ch].port);
-					HFC_outb(hc, A_ST_WR_STATE, 4 | V_ST_LD_STA); /* G4 */
-					udelay(6); /* wait at least 5,21us */
-					HFC_outb(hc, A_ST_WR_STATE, 4);
-					dch->ph_state = 4;
-				} else {
-					/* one extra count for the next event */
-					hc->chan[ch].nt_timer = nt_t1_count[poll_timer] + 1;
-					HFC_outb(hc, R_ST_SEL, hc->chan[ch].port);
-					HFC_outb(hc, A_ST_WR_STATE, 2 | V_SET_G2_G3); /* allow G2 -> G3 transition */
-				}
-				upif = NULL;
-				break;
-
 				case (1):
-				prim = PH_DEACTIVATE | INDICATION;
-				para = 0;
-				hc->chan[ch].nt_timer = -1;
-				break;
-
-				case (4):
-				hc->chan[ch].nt_timer = -1;
-				upif = NULL;
-				break;
-
-				case (3):
 				prim = PH_ACTIVATE | INDICATION;
 				para = 0;
-				hc->chan[ch].nt_timer = -1;
 				break;
 
 				default:
-				break;
+				if (hc->chan[ch].e1_state != 1)
+					return;
+				prim = PH_DEACTIVATE | INDICATION;
+				para = 0;
 			}
-			dch->inst.unlock(hc);
+			hc->chan[ch].e1_state = dch->ph_state;
+		} else {
+			if (!test_bit(HFC_CFG_NTMODE, &hc->chan[ch].cfg)) {
+				if (debug & DEBUG_HFCMULTI_STATE)
+					printk(KERN_DEBUG "%s: S/T TE newstate %x\n", __FUNCTION__, dch->ph_state);
+				switch (dch->ph_state) {
+					case (0):
+					prim = PH_CONTROL | INDICATION;
+					para = HW_RESET;
+					break;
+
+					case (3):
+					prim = PH_CONTROL | INDICATION;
+					para = HW_DEACTIVATE;
+					break;
+
+					case (5):
+					case (8):
+					para = ANYSIGNAL;
+					break;
+
+					case (6):
+					para = INFO2;
+					break;
+
+					case (7):
+					para = INFO4_P8;
+					break;
+
+					default:
+					return;
+				}
+			} else { 
+				if (debug & DEBUG_HFCMULTI_STATE)
+					printk(KERN_DEBUG "%s: S/T NT newstate %x\n", __FUNCTION__, dch->ph_state);
+				dch->inst.lock(hc, 0);
+				switch (dch->ph_state) {
+					case (2):
+					if (hc->chan[ch].nt_timer == 0) {
+						hc->chan[ch].nt_timer = -1;
+						HFC_outb(hc, R_ST_SEL, hc->chan[ch].port);
+						HFC_outb(hc, A_ST_WR_STATE, 4 | V_ST_LD_STA); /* G4 */
+						udelay(6); /* wait at least 5,21us */
+						HFC_outb(hc, A_ST_WR_STATE, 4);
+						dch->ph_state = 4;
+					} else {
+						/* one extra count for the next event */
+						hc->chan[ch].nt_timer = nt_t1_count[poll_timer] + 1;
+						HFC_outb(hc, R_ST_SEL, hc->chan[ch].port);
+						HFC_outb(hc, A_ST_WR_STATE, 2 | V_SET_G2_G3); /* allow G2 -> G3 transition */
+					}
+					upif = NULL;
+					break;
+
+					case (1):
+					prim = PH_DEACTIVATE | INDICATION;
+					para = 0;
+					hc->chan[ch].nt_timer = -1;
+					break;
+
+					case (4):
+					hc->chan[ch].nt_timer = -1;
+					upif = NULL;
+					break;
+
+					case (3):
+					prim = PH_ACTIVATE | INDICATION;
+					para = 0;
+					hc->chan[ch].nt_timer = -1;
+					break;
+
+					default:
+					break;
+				}
+				dch->inst.unlock(hc);
+			}
 		}
 		/* transmit new state to upper layer if available */
 		if (hc->created[hc->chan[ch].port]) {
@@ -2127,13 +2219,12 @@ hfcmulti_bch_bh(bchannel_t *bch)
 
 	/* DTMF event */
 	if (test_and_clear_bit(B_DTMFREADY, &bch->event)) {
-		if ((skb = hc->chan[bch->channel].dtmf_skb)) {
+		while ((skb = skb_dequeue(&hc->chan[bch->channel].dtmfque))) {
 			if (debug & DEBUG_HFCMULTI_DTMF) {
 				coeff = (u_long *)skb->data;
 				printk("%s: DTMF ready %08lx %08lx %08lx %08lx %08lx %08lx %08lx %08lx len=%d\n", __FUNCTION__,
 				coeff[0], coeff[1], coeff[2], coeff[3], coeff[4], coeff[5], coeff[6], coeff[7], skb->len);
 			}
-			hc->chan[bch->channel].dtmf_skb = NULL;
 			hh = mISDN_HEAD_P(skb);
 			if ((bch->inst.pid.protocol[2] == ISDN_PID_L2_B_RAWDEV) && bch->dev)
 				hif = &bch->dev->rport.pif;
@@ -2665,13 +2756,10 @@ release_port(hfc_multi_t *hc, int port)
 			if (hc->chan[i].bch) {
 				if (debug & DEBUG_HFCMULTI_INIT)
 					printk(KERN_DEBUG "%s: free port %d B-channel %d (1..32)\n", __FUNCTION__, hc->chan[i].port, i);
+				discard_queue(&hc->chan[i].dtmfque);
 				mISDN_free_bch(hc->chan[i].bch);
 				kfree(hc->chan[i].bch);
 				hc->chan[i].bch = NULL;
-			}
-			if (hc->chan[i].dtmf_skb) {
-				dev_kfree_skb(hc->chan[i].dtmf_skb);
-				hc->chan[i].dtmf_skb = NULL;
 			}
 		}
 		i++;
@@ -2921,7 +3009,7 @@ HFCmulti_init(void)
 	HFCM_obj.DPROTO.protocol[0] = ISDN_PID_L0_TE_S0 | ISDN_PID_L0_NT_S0
 				| ISDN_PID_L0_TE_E1 | ISDN_PID_L0_NT_E1;
 	HFCM_obj.DPROTO.protocol[1] = ISDN_PID_L1_NT_S0
-				/*| ISDN_PID_L1_TE_E1 */| ISDN_PID_L1_NT_E1;
+				| ISDN_PID_L1_TE_E1 | ISDN_PID_L1_NT_E1;
 	HFCM_obj.BPROTO.protocol[1] = ISDN_PID_L1_B_64TRANS | ISDN_PID_L1_B_64HDLC;
 	HFCM_obj.BPROTO.protocol[2] = ISDN_PID_L2_B_TRANS | ISDN_PID_L2_B_RAWDEV;
 
@@ -2969,6 +3057,8 @@ HFCmulti_init(void)
 			goto free_object;
 		}
 		memset(hc, 0, sizeof(hfc_multi_t));
+		hc->id = HFC_cnt + 1;
+		hc->pcm = pcm[HFC_cnt];
 
 		/* set chip specific features */
 		hc->masterclk = -1;
@@ -3070,6 +3160,7 @@ HFCmulti_init(void)
 					err = -ENOMEM;
 					goto free_channels;
 				}
+				skb_queue_head_init(&hc->chan[ch2].dtmfque);
 				hc->chan[ch2].bch = bch;
 				if (bch->dev) {
 					bch->dev->wport.pif.func =
@@ -3082,6 +3173,18 @@ HFCmulti_init(void)
 
 			/* set D-channel */
 			mISDN_set_dchannel_pid(&pid, protocol[port_cnt], layermask[port_cnt]);
+
+			/* set PRI */
+			if (hc->type == 1) {
+				if (layermask[port_cnt] & ISDN_LAYER(2)) {
+					pid.protocol[2] |= ISDN_PID_L2_DF_PTP;
+				}
+				if (layermask[port_cnt] & ISDN_LAYER(3)) {
+					pid.protocol[3] |= ISDN_PID_L3_DF_PTP;
+					pid.protocol[3] |= ISDN_PID_L3_DF_EXTCID;
+					pid.protocol[3] |= ISDN_PID_L3_DF_CRLEN2;
+				}
+			}
 
 			/* set protocol type */
 			if (protocol[port_cnt] & 0x10) {
@@ -3096,17 +3199,16 @@ HFCmulti_init(void)
 					pid.protocol[2] = ISDN_PID_L2_LAPD_NET;
 				test_and_set_bit(HFC_CFG_NTMODE, &hc->chan[ch].cfg);
 			} else {
-				/* TE-mode (LT-mode) */
+				/* TE-mode */
 				dch->inst.pid.protocol[0] = (hc->type==1)?ISDN_PID_L0_TE_E1:ISDN_PID_L0_TE_S0;
 				pid.protocol[0] = (hc->type==1)?ISDN_PID_L0_TE_E1:ISDN_PID_L0_TE_S0;
-				/*if (hc->type == 1) {
+				if (hc->type == 1) {
+					/* own E1 for E1 */
 					dch->inst.pid.protocol[1] = ISDN_PID_L1_TE_E1;
 					pid.protocol[1] = ISDN_PID_L1_TE_E1;
 					dch->inst.pid.layermask |= ISDN_LAYER(1);
 					pid.layermask |= ISDN_LAYER(1);
-					if (layermask[port_cnt] & ISDN_LAYER(2))
-						pid.protocol[2] = ISDN_PID_L2_LAPD;
-				}*/
+				}
 			}
 
 
@@ -3260,6 +3362,8 @@ HFCmulti_init(void)
 			if (debug & DEBUG_HFCMULTI_INIT)
 				printk(KERN_DEBUG "%s: (after MGR_SETSTACK REQUEST)\n", __FUNCTION__);
 
+			HFCM_obj.ctrl(dst, MGR_CTRLREADY | INDICATION, NULL);
+
 			pt++;
 		}
 
@@ -3298,6 +3402,7 @@ HFCmulti_init(void)
 		if (hc->chan[i].bch) {
 			if (debug & DEBUG_HFCMULTI_INIT)
 				printk(KERN_DEBUG "%s: free B-channel %d (1..32)\n", __FUNCTION__, i);
+			discard_queue(&hc->chan[i].dtmfque);
 			mISDN_free_bch(hc->chan[i].bch);
 			kfree(hc->chan[i].bch);
 			hc->chan[i].bch = NULL;

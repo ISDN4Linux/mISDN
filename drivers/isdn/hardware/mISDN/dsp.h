@@ -1,4 +1,4 @@
-/* $Id: dsp.h,v 1.3 2004/02/14 17:43:14 jolly Exp $
+/* $Id: dsp.h,v 1.4 2004/03/28 17:13:06 jolly Exp $
  *
  * Audio support data for ISDN4Linux.
  *
@@ -138,6 +138,15 @@ typedef struct _tone_t {
 
 #define DELAY_CHECK 8000
 
+struct dsp_features {
+	int		hfc_id; /* unique id to identify the chip (or -1) */
+	int		hfc_dtmf; /* set if HFCmulti card supports dtmf */
+	int		hfc_loops; /* set if card supports tone loops */
+	int		pcm_id; /* unique id to identify the pcm bus (or -1) */
+	int		pcm_slots; /* number of slots on the pcm bus */
+	int		pcm_banks; /* number of IO banks of pcm bus */
+};		
+
 typedef struct _dsp {
 	struct _dsp	*prev;
 	struct _dsp	*next;
@@ -171,12 +180,7 @@ typedef struct _dsp {
 #endif
 
 	/* hardware stuff */
-	int		hfc_id; /* unique id to identify the chip (or -1) */
-	int		hfc_dtmf; /* set if HFCmulti card supports dtmf */
-	int		hfc_loops; /* set if card supports tone loops */
-	int		pcm_id; /* unique id to identify the pcm bus (or -1) */
-	int		pcm_slots; /* number of slots on the pcm bus */
-	int		pcm_banks; /* number of IO banks of pcm bus */
+	struct dsp_features features; /* features */
 	int		pcm_slot_rx; /* current PCM slot (or -1) */
 	int		pcm_bank_rx;
 	int		pcm_slot_tx;
@@ -196,7 +200,6 @@ typedef struct _dsp {
 	u8		bf_data_out[9];
 	int		bf_sync;
 } dsp_t;
-
 
 /* functions */
 

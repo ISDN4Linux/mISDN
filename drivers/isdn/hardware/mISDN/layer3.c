@@ -1,4 +1,4 @@
-/* $Id: layer3.c,v 1.12 2004/01/26 22:21:30 keil Exp $
+/* $Id: layer3.c,v 1.13 2004/03/28 17:13:06 jolly Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -13,7 +13,7 @@
 #include "layer3.h"
 #include "helper.h"
 
-const char *l3_revision = "$Revision: 1.12 $";
+const char *l3_revision = "$Revision: 1.13 $";
 
 static
 struct Fsm l3fsm = {NULL, 0, 0, NULL, NULL};
@@ -160,16 +160,19 @@ getcallref(u_char * p)
 	return (cr);
 }
 
-static int OrigCallRef = 0;
-
 int
-newcallref(void)
+newcallref(layer3_t *l3)
 {
-	if (OrigCallRef == 127)
-		OrigCallRef = 1;
+	int max = 127;
+
+	if (test_bit(FLG_CRLEN2, &nl3->Flag))
+		max = 32767;
+
+	if (l3->OrigCallRef >= max)
+		l3->OrigCallRef = 1;
 	else
-		OrigCallRef++;
-	return (OrigCallRef);
+		l3->OrigCallRef++;
+	return (l3->OrigCallRef);
 }
 
 void

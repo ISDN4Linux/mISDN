@@ -1,4 +1,4 @@
-/* $Id: dsp_cmx.c,v 1.4 2004/02/14 20:09:28 jolly Exp $
+/* $Id: dsp_cmx.c,v 1.5 2004/03/28 17:13:06 jolly Exp $
  *
  * Audio crossconnecting/conferrencing (hardware level).
  *
@@ -453,7 +453,7 @@ dsp_cmx_hardware(conference_t *conf, dsp_t *dsp)
 //printk("-----5\n");
 
 	member = conf->mlist;
-	same_hfc = member->dsp->hfc_id;
+	same_hfc = member->dsp->features.hfc_id;
 	/* check all members in our conference */
 	while (member) {
 		/* check if member uses mixing */
@@ -511,19 +511,19 @@ dsp_cmx_hardware(conference_t *conf, dsp_t *dsp)
 			goto conf_software;
 		}
 		/* check if member is on a card with PCM support */
-		if (member->dsp->pcm_id < 0) {
+		if (member->dsp->features.pcm_id < 0) {
 			if (dsp_debug & DEBUG_DSP_CMX)
 				printk(KERN_DEBUG "%s dsp %s cannot form a conf, because dsp has no PCM bus\n", __FUNCTION__, member->dsp->inst.name);
 			goto conf_software;
 		}
 		/* check if relations are on the same PCM bus */
-		if (member->dsp->pcm_id != conf->mlist->dsp->pcm_id) {
+		if (member->dsp->features.pcm_id != conf->mlist->dsp->features.pcm_id) {
 			if (dsp_debug & DEBUG_DSP_CMX)
 				printk(KERN_DEBUG "%s dsp %s cannot form a conf, because dsp is on a different PCM bus than the first dsp\n", __FUNCTION__, member->dsp->inst.name);
 			goto conf_software;
 		}
 		/* determine if members are on the same hfc chip */
-		if (same_hfc != member->dsp->hfc_id)
+		if (same_hfc != member->dsp->features.hfc_id)
 			same_hfc = -1;
 		/* if there are members already in a conference */
 		if (current_conf<0 && member->dsp->hfc_conf>=0)
@@ -572,9 +572,9 @@ dsp_cmx_hardware(conference_t *conf, dsp_t *dsp)
 			member->next->dsp->hfc_conf = -1;
 		}
 		/* if members have two banks (and not on the same chip) */
-		if (member->dsp->pcm_banks>1
-		 && member->next->dsp->pcm_banks>1
-		 && member->dsp->pcm_id!=member->next->dsp->pcm_id) {
+		if (member->dsp->features.pcm_banks>1
+		 && member->next->dsp->features.pcm_banks>1
+		 && member->dsp->features.pcm_id!=member->next->dsp->features.pcm_id) {
 			/* if both members have same slots with crossed banks */
 			if (member->dsp->pcm_slot_tx>=0
 			 && member->dsp->pcm_slot_rx>=0
@@ -598,7 +598,7 @@ dsp_cmx_hardware(conference_t *conf, dsp_t *dsp)
 			while(dsp) {
 				if (dsp!=member->dsp
 				 && dsp!=member->next->dsp
-				 && member->dsp->pcm_id==dsp->pcm_id) {
+				 && member->dsp->features.pcm_id==dsp->features.pcm_id) {
 					if (dsp->pcm_slot_rx>=0
 					 && dsp->pcm_slot_rx<sizeof(freeslots))
 						freeslots[dsp->pcm_slot_tx] = 0;
@@ -609,7 +609,7 @@ dsp_cmx_hardware(conference_t *conf, dsp_t *dsp)
 				dsp = dsp->next;
 			}
 			i = 0;
-			ii = member->dsp->pcm_slots;
+			ii = member->dsp->features.pcm_slots;
 			while(i < ii) {
 				if (freeslots[i])
 					break;
@@ -664,7 +664,7 @@ dsp_cmx_hardware(conference_t *conf, dsp_t *dsp)
 			while(dsp) {
 				if (dsp!=member->dsp
 				 && dsp!=member->next->dsp
-				 && member->dsp->pcm_id==dsp->pcm_id) {
+				 && member->dsp->features.pcm_id==dsp->features.pcm_id) {
 					if (dsp->pcm_slot_rx>=0
 					 && dsp->pcm_slot_rx<sizeof(freeslots))
 						freeslots[dsp->pcm_slot_tx] = 0;
@@ -675,7 +675,7 @@ dsp_cmx_hardware(conference_t *conf, dsp_t *dsp)
 				dsp = dsp->next;
 			}
 			i1 = 0;
-			ii = member->dsp->pcm_slots;
+			ii = member->dsp->features.pcm_slots;
 			while(i1 < ii) {
 				if (freeslots[i1])
 					break;
@@ -753,7 +753,7 @@ dsp_cmx_hardware(conference_t *conf, dsp_t *dsp)
 				 */
 				if (dsp!=member->dsp
 				/* dsp must be on the same PCM */
-				 && member->dsp->pcm_id==dsp->pcm_id) {
+				 && member->dsp->features.pcm_id==dsp->features.pcm_id) {
 					/* dsp must be on a slot */
 					if (dsp->pcm_slot_tx>=0
 					 && dsp->pcm_slot_tx<sizeof(freeslots))
@@ -765,7 +765,7 @@ dsp_cmx_hardware(conference_t *conf, dsp_t *dsp)
 				dsp = dsp->next;
 			}
 			i = 0;
-			ii = member->dsp->pcm_slots;
+			ii = member->dsp->features.pcm_slots;
 			while(i < ii) {
 				if (freeslots[i])
 					break;
@@ -798,7 +798,7 @@ dsp_cmx_hardware(conference_t *conf, dsp_t *dsp)
 	dsp = (dsp_t *)dsp_obj.ilist;
 	while(dsp) {
 		/* dsp must be on the same chip */
-		if (dsp->hfc_id==same_hfc
+		if (dsp->features.hfc_id==same_hfc
 		/* dsp must have joined a HW conference */
 		 && dsp->hfc_conf>=0
 		/* slot must be within range */

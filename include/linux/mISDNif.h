@@ -1,4 +1,4 @@
-/* $Id: mISDNif.h,v 1.27 2004/02/14 17:43:15 jolly Exp $
+/* $Id: mISDNif.h,v 1.28 2004/03/28 17:13:08 jolly Exp $
  *
  */
 
@@ -109,6 +109,7 @@
 #define HW_MOD_READY	0x0414
 #define HW_MOD_LASTDATA	0x0415
 #define HW_MOD_SILENCE	0x0416
+#define HW_FEATURES	0x04ff
 #define HW_HFC_COEFF	0x0500
 #define HW_LOS		0x0501
 #define HW_LOS_OFF	0x0502
@@ -361,6 +362,7 @@
 #define ISDN_PID_L2_DF_MULT_TEI		0x00200000
 #define	ISDN_PID_L3_DF_PTP		0x00100000
 #define ISDN_PID_L3_DF_EXTCID		0x00200000
+#define ISDN_PID_L3_DF_CRLEN2		0x00400000
 
 #define mISDN_CORE_DEVICE	0
 #define mISDN_RAW_DEVICE	128

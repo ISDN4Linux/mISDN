@@ -70,20 +70,6 @@ config MISDN_DSP
 	  and get more informations about this module and it's usage.
 	  If unsure, say 'N'.
 
-if MISDN_DSP!=n
-
-config MISDN_DSP_HARDWARETEST
-	bool "Hardware test for one HFC-4S/8S only"
-	depends on PCI
-	help
-	  This is a test option if ONLY ONE HFC-4S/8S card is installed
-	  and NO OTHER CARD is used by mISDN. In this case the DSP module
-	  uses the hardware crossconnect/dtmf/conference/tone features.
-	  Later this flag will be removed when mISDN supports stack
-	  feature lists.
-
-endif
-
 endif
 
 endmenu
