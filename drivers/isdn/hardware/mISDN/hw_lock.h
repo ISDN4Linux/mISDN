@@ -1,4 +1,4 @@
-/* $Id: hw_lock.h,v 1.5 2003/07/27 11:14:19 kkeil Exp $
+/* $Id: hw_lock.h,v 1.6 2005/03/09 03:09:06 keil Exp $
  *
  * hw_lock.h  Hardware locking inline routines
  *
@@ -27,7 +27,7 @@
  * only block our own routines in this case. Since the common IRQ
  * routines allready mask the same IRQ, we only need to protect us
  * from timer and uper layers. The disadvantage is, that we need to
- * disable local IRQ for the 2. and 3. points, but since the routines
+ * disable local IRQ for entry points 2. and 3., but since the routines
  * which need hardware access are well known and small, the impact
  * is very small.
  *
@@ -37,7 +37,7 @@
  *
  * In the hardware IRQ we aquire the spinlock, set the STATE_FLAG_BUSY
  * LOCK Flag and then release the spinlock. It can never happen that
- * the STATE_FLAG_BUSY is allready set in this case, see later.
+ * the STATE_FLAG_BUSY is already set in this case, see later.
  *
  * In the other cases (from timer or upper layers) we aquire the spinlock
  * test_and_set the STATE_FLAG_BUSY LOCK Flag, if it was allready set
