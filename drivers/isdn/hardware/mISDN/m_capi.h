@@ -1,4 +1,4 @@
-/* $Id: m_capi.h,v 1.6 2003/12/14 15:20:38 keil Exp $
+/* $Id: m_capi.h,v 1.7 2004/01/12 16:20:26 keil Exp $
  *
  * Rewritten CAPI Layer (Layer4 in mISDN)
  * 
@@ -325,7 +325,7 @@ int		ControllerNextId(Controller_t *);
 int		ApplicationConstr(Controller_t *, __u16, capi_register_params *);
 int		ApplicationDestr(Application_t *, int);
 void		ApplicationDebug(Application_t *appl, __u32 level, char *fmt, ...);
-void		ApplicationSendMessage(Application_t *appl, struct sk_buff *skb);
+__u16		ApplicationSendMessage(Application_t *appl, struct sk_buff *skb);
 void		SendCmsg2Application(Application_t *, _cmsg *);
 void		SendCmsgAnswer2Application(Application_t *, _cmsg *, __u16);
 void		AnswerMessage2Application(Application_t *, struct sk_buff *, __u16);
@@ -337,7 +337,7 @@ void		ApplicationDelAppPlci(Application_t *, AppPlci_t *);
 
 void		listenConstr(Application_t *);
 void		listenDestr(Application_t *);
-void		listenSendMessage(Application_t *, struct sk_buff *);
+__u16		listenSendMessage(Application_t *, struct sk_buff *);
 int		listenHandle(Application_t *, __u16);
 
 // ---------------------------------------------------------------------------
@@ -361,7 +361,7 @@ int	AppPlciConstr(AppPlci_t **, Application_t *, Plci_t *);
 void	AppPlciDestr(AppPlci_t *);
 void 	AppPlciDelNCCI(Ncci_t *);
 void 	AppPlci_l3l4(AppPlci_t *, int, void *);
-void 	AppPlciSendMessage(AppPlci_t *, struct sk_buff *);
+__u16 	AppPlciSendMessage(AppPlci_t *, struct sk_buff *);
 void	AppPlciRelease(AppPlci_t *);
 int	AppPlciFacSuspendReq(AppPlci_t *, FacReqParm_t *, FacConfParm_t *);
 int	AppPlciFacResumeReq(AppPlci_t *, FacReqParm_t *, FacConfParm_t *);
@@ -382,7 +382,7 @@ Ncci_t	*ncciConstr(AppPlci_t *);
 void	ncciDestr(Ncci_t *);
 void	ncciApplRelease(Ncci_t *);
 void	ncciDelAppPlci(Ncci_t *);
-void	ncciSendMessage(Ncci_t *, struct sk_buff *);
+__u16	ncciSendMessage(Ncci_t *, struct sk_buff *);
 int	ncci_l3l4(Ncci_t *, mISDN_head_t *, struct sk_buff *);
 void	ncciGetCmsg(Ncci_t *, _cmsg *);
 int	ncci_l3l4_direct(Ncci_t *, mISDN_head_t *, struct sk_buff *);

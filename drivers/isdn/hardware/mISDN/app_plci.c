@@ -1,4 +1,4 @@
-/* $Id: app_plci.c,v 1.4 2003/12/14 15:20:38 keil Exp $
+/* $Id: app_plci.c,v 1.5 2004/01/12 16:20:26 keil Exp $
  *
  */
 
@@ -343,7 +343,6 @@ answer:
 	cmsg->Info = Info;
 	if (cmsg->Info == 0) 
 		cmsg->adr.adrPLCI = aplci->addr;
-	Send2Application(aplci, cmsg);
 	FsmEvent(fi, EV_PI_CONNECT_CONF, cmsg);
 }
 
@@ -351,11 +350,13 @@ static void
 plci_connect_conf(struct FsmInst *fi, int event, void *arg)
 {
 	AppPlci_t	*aplci = fi->userdata;
-	_cmsg	*cmsg = arg;
+	_cmsg		*cmsg = arg;
   
 	if (cmsg->Info == 0) {
+		Send2Application(aplci, cmsg);
 		FsmChangeState(fi, ST_PLCI_P_1);
 	} else {
+		Send2Application(aplci, cmsg);
 		FsmChangeState(fi, ST_PLCI_P_0);
 		AppPlciDestr(aplci);
 	}
@@ -1624,20 +1625,23 @@ AppPlciGetCmsg(AppPlci_t *aplci, _cmsg *cmsg)
 	}
 }
 
-void 
+__u16
 AppPlciSendMessage(AppPlci_t *aplci, struct sk_buff *skb)
 {
 	_cmsg	*cmsg;
+	__u16	ret;
 
 	cmsg = cmsg_alloc();
 	if (!cmsg) {
 		int_error();
+		ret = CAPI_REGOSRESOURCEERR;
+	} else {
+		capi_message2cmsg(cmsg, skb->data);
+		AppPlciGetCmsg(aplci, cmsg);
 		dev_kfree_skb(skb);
-		return;
+		ret = CAPI_NOERROR;
 	}
-	capi_message2cmsg(cmsg, skb->data);
-	AppPlciGetCmsg(aplci, cmsg);
-	dev_kfree_skb(skb);
+	return(ret);
 }
 
 int

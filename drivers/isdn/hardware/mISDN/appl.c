@@ -1,4 +1,4 @@
-/* $Id: appl.c,v 1.11 2004/01/11 14:02:26 keil Exp $
+/* $Id: appl.c,v 1.12 2004/01/12 16:20:26 keil Exp $
  *
  *  Applications are owned by the controller and only
  *  handle this controller, multiplexing multiple
@@ -161,12 +161,13 @@ FacilityReq(Application_t *appl, struct sk_buff *skb)
 	dev_kfree_skb(skb);
 }
 
-void
+__u16
 ApplicationSendMessage(Application_t *appl, struct sk_buff *skb)
 {
 	Plci_t		*plci;
 	AppPlci_t	*aplci;
 	Ncci_t		*ncci;
+	__u16		ret = CAPI_NOERROR;
 
 	switch (CAPICMD(CAPIMSG_COMMAND(skb->data), CAPIMSG_SUBCOMMAND(skb->data))) {
 		// for NCCI state machine
@@ -187,7 +188,7 @@ ApplicationSendMessage(Application_t *appl, struct sk_buff *skb)
 				AnswerMessage2Application(appl, skb, CapiIllContrPlciNcci);
 				goto free;
 			}
-			ncciSendMessage(ncci, skb);
+			ret = ncciSendMessage(ncci, skb);
 			break;
 		// new NCCI
 		case CAPI_CONNECT_B3_REQ:
@@ -211,7 +212,7 @@ ApplicationSendMessage(Application_t *appl, struct sk_buff *skb)
 				AnswerMessage2Application(appl, skb, CapiIllContrPlciNcci);
 				goto free;
 			}
-			AppPlciSendMessage(aplci, skb);
+			ret = AppPlciSendMessage(aplci, skb);
 			break;
 		case CAPI_CONNECT_REQ:
 			if (ControllerNewPlci(appl->contr, &plci, MISDN_ID_ANY)) {
@@ -223,12 +224,12 @@ ApplicationSendMessage(Application_t *appl, struct sk_buff *skb)
 				AnswerMessage2Application(appl, skb, CapiNoPlciAvailable);
 				goto free;
 			}
-			AppPlciSendMessage(aplci, skb);
+			ret = AppPlciSendMessage(aplci, skb);
 			break;
 
-			// for LISTEN state machine
-			case CAPI_LISTEN_REQ:
-				listenSendMessage(appl, skb);
+		// for LISTEN state machine
+		case CAPI_LISTEN_REQ:
+			ret = listenSendMessage(appl, skb);
 			break;
 
 		// other
@@ -245,14 +246,13 @@ ApplicationSendMessage(Application_t *appl, struct sk_buff *skb)
 		default:
 			applDebug(appl, CAPI_DBG_WARN, "applSendMessage: %#x %#x not handled!", 
 				CAPIMSG_COMMAND(skb->data), CAPIMSG_SUBCOMMAND(skb->data));
-			if (CAPIMSG_SUBCOMMAND(skb->data) == CAPI_REQ)
-				AnswerMessage2Application(appl, skb, 
-					CapiMessageNotSupportedInCurrentState);
-			goto free;
+			ret = CAPI_ILLCMDORSUBCMDORMSGTOSMALL;
+			break;
 	}
-	return;
+	return(ret);
  free:
 	dev_kfree_skb(skb);
+	return(ret);
 }
 
 AppPlci_t *

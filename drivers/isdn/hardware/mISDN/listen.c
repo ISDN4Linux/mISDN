@@ -1,4 +1,4 @@
-/* $Id: listen.c,v 1.6 2003/11/21 22:29:41 keil Exp $
+/* $Id: listen.c,v 1.7 2004/01/12 16:20:26 keil Exp $
  *
  */
 
@@ -159,7 +159,7 @@ void listenDestr(Application_t *app)
 	listenDebug(app, CAPI_DBG_LISTEN, "%s", __FUNCTION__);
 }
 
-void
+__u16
 listenSendMessage(Application_t *app, struct sk_buff *skb)
 {
 	_cmsg	*cmsg;
@@ -167,8 +167,7 @@ listenSendMessage(Application_t *app, struct sk_buff *skb)
 	cmsg = cmsg_alloc();
 	if (!cmsg) {
 		int_error();
-		dev_kfree_skb(skb);
-		return;
+		return (CAPI_MSGOSRESOURCEERR);
 	}
 	capi_message2cmsg(cmsg, skb->data);
 	switch (CMSGCMD(cmsg)) {
@@ -181,6 +180,7 @@ listenSendMessage(Application_t *app, struct sk_buff *skb)
 			cmsg_free(cmsg);
 	}
 	dev_kfree_skb(skb);
+	return(CAPI_NOERROR);
 }
  
 int listenHandle(Application_t *app, __u16 CIPValue)

@@ -1,4 +1,4 @@
-/* $Id: contr.c,v 1.19 2003/12/13 00:36:16 keil Exp $
+/* $Id: contr.c,v 1.20 2004/01/12 16:20:26 keil Exp $
  *
  */
 
@@ -225,7 +225,7 @@ SendMessage(struct capi_ctr *ctrl, struct sk_buff *skb)
 	Controller_t	*contr = ctrl->driverdata;
 	Application_t	*appl;
 	int		ApplId;
-	int		err = CAPI_NOERROR;
+	int		err;
 
 	ApplId = CAPIMSG_APPID(skb->data);
 	appl = getApplication4Id(contr, ApplId);
@@ -233,7 +233,7 @@ SendMessage(struct capi_ctr *ctrl, struct sk_buff *skb)
 		int_error();
 		err = CAPI_ILLAPPNR;
 	} else
-		ApplicationSendMessage(appl, skb);
+		err = ApplicationSendMessage(appl, skb);
 #ifndef OLDCAPI_DRIVER_INTERFACE
 	return(err);
 #endif

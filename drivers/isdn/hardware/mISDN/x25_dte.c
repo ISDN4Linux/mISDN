@@ -1,4 +1,4 @@
-/* $Id: x25_dte.c,v 1.3 2004/01/11 13:58:50 keil Exp $
+/* $Id: x25_dte.c,v 1.4 2004/01/12 16:20:26 keil Exp $
  *
  * Linux modular ISDN subsystem, mISDN
  * X.25/X.31 Layer3 for DTE mode   
@@ -22,7 +22,7 @@ static int debug = 0;
 
 static mISDNobject_t x25dte_obj;
 
-static char *mISDN_dte_revision = "$Revision: 1.3 $";
+static char *mISDN_dte_revision = "$Revision: 1.4 $";
 
 /* local prototypes */
 static x25_channel_t *	dte_create_channel(x25_l3_t *, int, u_char, __u16, int, u_char *);
@@ -1081,6 +1081,10 @@ dte_from_up(mISDNif_t *hif, struct sk_buff *skb)
 		case CAPI_DATA_B3_REQ:
 			info = x25_data_b3_req(l3c, hh->dinfo, skb);
 			if (info) {
+				if (info == CAPI_SENDQUEUEFULL) {
+					err = -EXFULL;
+					break;
+				}
 				skb_trim(skb, 2);
 				memcpy(skb->data, &info, 2);
 				err = X25sendL4skb(l3c, l3, addr, CAPI_RESET_B3_CONF, hh->dinfo, skb);

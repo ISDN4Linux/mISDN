@@ -1,4 +1,4 @@
-/* $Id: ncci.c,v 1.20 2003/12/14 15:20:38 keil Exp $
+/* $Id: ncci.c,v 1.21 2004/01/12 16:20:26 keil Exp $
  *
  */
 
@@ -951,7 +951,7 @@ ncciDataInd(Ncci_t *ncci, int pr, struct sk_buff *skb)
 #endif
 }
 
-void
+__u16
 ncciDataReq(Ncci_t *ncci, struct sk_buff *skb)
 {
 	int	i, err;
@@ -969,9 +969,7 @@ ncciDataReq(Ncci_t *ncci, struct sk_buff *skb)
 			break;
 	}
 	if (i == ncci->window) {
-		int_error();
-		capierr = CAPI_SENDQUEUEFULL;
-		goto fail;
+		return(CAPI_SENDQUEUEFULL);
 	}
 	mISDN_HEAD_DINFO(skb) = ControllerNextId(ncci->contr);
 	ncci->xmit_skb_handles[i].PktId = mISDN_HEAD_DINFO(skb);
@@ -984,7 +982,7 @@ ncciDataReq(Ncci_t *ncci, struct sk_buff *skb)
 	if (test_bit(NCCI_STATE_FCTRL, &ncci->state)) {
 		if (test_and_set_bit(NCCI_STATE_BUSY, &ncci->state)) {
 			skb_queue_tail(&ncci->squeue, skb);
-			return;
+			return(CAPI_NOERROR);
 		}
 		if (skb_queue_len(&ncci->squeue)) {
 			skb_queue_tail(&ncci->squeue, skb);
@@ -995,7 +993,7 @@ ncciDataReq(Ncci_t *ncci, struct sk_buff *skb)
 	
 	err = ncciL4L3(ncci, DL_DATA | REQUEST, mISDN_HEAD_DINFO(skb), 0, NULL, skb);
 	if (!err)
-		return;
+		return(CAPI_NOERROR);
 
 	int_error();
 	skb_push(skb, len);
@@ -1009,13 +1007,19 @@ ncciDataReq(Ncci_t *ncci, struct sk_buff *skb)
 			int_error();
 		else
 			ncci->xmit_skb_handles[i].PktId = 0;
+	} else {
+		ncci->xmit_skb_handles[i].PktId = 0;
+		return(capierr);
 	}
 fail:
 	cmsg = cmsg_alloc();
 	if (!cmsg) {
 		int_error();
+		if (capierr != CAPI_MSGBUSY)
+			return(CAPI_MSGOSRESOURCEERR);
+		/* we can not do error handling on a skb from the queue here */	
 		dev_kfree_skb(skb);
-		return;
+		return(CAPI_NOERROR);
 	}
 	capi_cmsg_header(cmsg, ncci->AppPlci->appl->ApplId, CAPI_DATA_B3, CAPI_CONF, 
 		CAPIMSG_MSGID(skb->data), ncci->addr);
@@ -1024,6 +1028,7 @@ fail:
 	cmsg->Info = capierr;
 	Send2Application(ncci, cmsg);
 	dev_kfree_skb(skb);
+	return(CAPI_NOERROR);
 }
 
 int
@@ -1110,8 +1115,7 @@ ncci_l4l3_direct(Ncci_t *ncci, struct sk_buff *skb) {
 		case CAPI_FACILITY_RESP:
 		case CAPI_MANUFACTURER_REQ:
 		case CAPI_MANUFACTURER_RESP:
-			ret = SKB_l4l3(ncci, skb);
-			break;
+			return(SKB_l4l3(ncci, skb));
 		case CAPI_CONNECT_B3_REQ:
 			ret = FsmEvent(&ncci->ncci_m, EV_AP_CONNECT_B3_REQ, skb);
 			break;
@@ -1184,39 +1188,53 @@ ncciGetCmsg(Ncci_t *ncci, _cmsg *cmsg)
 	}
 }
 
-void
+__u16
 ncciSendMessage(Ncci_t *ncci, struct sk_buff *skb)
 {
+	int	ret;
 	_cmsg	*cmsg;
 
 	if (!test_bit(NCCI_STATE_L3TRANS, &ncci->state)) {
-		ncci_l4l3_direct(ncci, skb);
-		return;
+		ret = ncci_l4l3_direct(ncci, skb);
+		switch(ret) {
+			case 0:
+				break;
+			case -EINVAL:
+			case -ENXIO:
+				return(CAPI_MSGBUSY);
+			case -EXFULL:
+				return(CAPI_SENDQUEUEFULL);
+			default:
+				int_errtxt("ncci_l4l3_direct return(%d)", ret);
+				dev_kfree_skb(skb);
+				break;
+		}
+		return(CAPI_NOERROR);
 	}
 	// we're not using the cmsg for DATA_B3 for performance reasons
 	switch (CAPIMSG_CMD(skb->data)) {
 		case CAPI_DATA_B3_REQ:
 			if (ncci->ncci_m.state == ST_NCCI_N_ACT) {
-				ncciDataReq(ncci, skb);
+				return(ncciDataReq(ncci, skb));
 			} else {
 				AnswerMessage2Application(ncci->appl, skb, 
 					CapiMessageNotSupportedInCurrentState);
 				dev_kfree_skb(skb);
 			}
-			return;
+			return(CAPI_NOERROR);
 		case CAPI_DATA_B3_RESP:
 			ncciDataResp(ncci, skb);
-			return;
+			return(CAPI_NOERROR);
 	}
 	cmsg = cmsg_alloc();
 	if (!cmsg) {
 		int_error();
-		dev_kfree_skb(skb);
-		return;
+		return(CAPI_MSGOSRESOURCEERR);
 	}
 	capi_message2cmsg(cmsg, skb->data);
 	ncciGetCmsg(ncci, cmsg);
 	dev_kfree_skb(skb);
+	return(CAPI_NOERROR);
 }
 
 int
