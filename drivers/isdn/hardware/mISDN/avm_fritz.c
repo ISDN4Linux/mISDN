@@ -1,4 +1,4 @@
-/* $Id: avm_fritz.c,v 1.17 2003/11/09 09:54:02 keil Exp $
+/* $Id: avm_fritz.c,v 1.18 2003/11/09 16:13:39 keil Exp $
  *
  * fritz_pci.c    low level stuff for AVM Fritz!PCI and ISA PnP isdn cards
  *              Thanks to AVM, Berlin for informations
@@ -28,7 +28,7 @@
 #define LOCK_STATISTIC
 #include "hw_lock.h"
 
-static const char *avm_fritz_rev = "$Revision: 1.17 $";
+static const char *avm_fritz_rev = "$Revision: 1.18 $";
 
 enum {
 	AVM_FRITZ_PCI,
@@ -352,7 +352,7 @@ modehdlc(bchannel_t *bch, int bc, int protocol)
 		debugprint(&bch->inst, "hdlc %c protocol %x-->%x ch %d-->%d",
 			'A' + bch->channel, bch->protocol, protocol, bch->channel, bc);
 	if ((protocol != -1) && (bc != bch->channel))
-		printk(KERN_WARNING "%s: fritzcard mismatch channel(%d/%d)\n", bch->channel, bc);
+		printk(KERN_WARNING "%s: fritzcard mismatch channel(%d/%d)\n", __FUNCTION__, bch->channel, bc);
 	hdlc->ctrl.ctrl = 0;
 	switch (protocol) {
 		case (-1): /* used for init */
