@@ -1,4 +1,4 @@
-/* $Id: core.c,v 0.4 2001/02/21 19:17:44 kkeil Exp $
+/* $Id: core.c,v 0.5 2001/02/22 09:49:10 kkeil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *              based on the teles driver from Jan den Ouden
@@ -30,10 +30,8 @@ EXPORT_SYMBOL(HiSax_unregister);
 
 static moditem_t modlist[] = {
 	{"hisaxl1", 1, ISDN_PID_L1_TE_S0},
-	{"hisaxl1", 1, ISDN_PID_L1_B_TRANS},
-	{"hisaxl1", 1, ISDN_PID_L1_B_HDLC},
 	{"hisaxl2", 2, ISDN_PID_L2_LAPD},
-	{"hisaxl2", 2, ISDN_PID_L2_LAPB},
+	{"hisaxl2", 2, ISDN_PID_L2_B_X75SLP},
 	{NULL, -1, ISDN_PID_NONE}
 };
 

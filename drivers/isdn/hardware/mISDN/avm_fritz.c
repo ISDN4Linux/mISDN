@@ -1,4 +1,4 @@
-/* $Id: avm_fritz.c,v 0.3 2001/02/13 10:42:55 kkeil Exp $
+/* $Id: avm_fritz.c,v 0.4 2001/02/22 09:49:10 kkeil Exp $
  *
  * fritz_pci.c    low level stuff for AVM Fritz!PCI and ISA PnP isdn cards
  *              Thanks to AVM, Berlin for informations
@@ -18,7 +18,7 @@
 #include "helper.h"
 #include "debug.h"
 
-static const char *avm_pci_rev = "$Revision: 0.3 $";
+static const char *avm_pci_rev = "$Revision: 0.4 $";
 
 #define ISDN_CTYPE_FRITZPCI 1
 
@@ -279,7 +279,7 @@ modehdlc(bchannel_t *bch, int protocol, int bc)
 			bch->protocol = ISDN_PID_NONE;
 			bch->channel = bc;
 			break;
-		case (ISDN_PID_L1_B_TRANS):
+		case (ISDN_PID_L1_B_64TRANS):
 			bch->protocol = protocol;
 			bch->channel = bc;
 			bch->hw.hdlc.ctrl.sr.cmd  = HDLC_CMD_XRS | HDLC_CMD_RRS;
@@ -290,7 +290,7 @@ modehdlc(bchannel_t *bch, int protocol, int bc)
 			bch->hw.hdlc.ctrl.sr.cmd = 0;
 			hdlc_sched_event(bch, B_XMTBUFREADY);
 			break;
-		case (ISDN_PID_L1_B_HDLC):
+		case (ISDN_PID_L1_B_64HDLC):
 			bch->protocol = protocol;
 			bch->channel = bc;
 			bch->hw.hdlc.ctrl.sr.cmd  = HDLC_CMD_XRS | HDLC_CMD_RRS;
@@ -376,7 +376,7 @@ hdlc_fill_fifo(bchannel_t *bch)
 	if (count > fifo_size) {
 		count = fifo_size;
 	} else {
-		if (bch->protocol != ISDN_PID_L1_B_TRANS)
+		if (bch->protocol != ISDN_PID_L1_B_64TRANS)
 			bch->hw.hdlc.ctrl.sr.cmd |= HDLC_CMD_XME;
 	}
 	if ((fc->dch.debug & L1_DEB_HSCX) && !(fc->dch.debug & L1_DEB_HSCX_FIFO))
@@ -451,9 +451,9 @@ HDLC_irq(bchannel_t *bch, u_int stat) {
 			if (!(len = (stat & HDLC_STAT_RML_MASK)>>8))
 				len = 32;
 			hdlc_empty_fifo(bch, len);
-			if ((stat & HDLC_STAT_RME) || (bch->protocol == ISDN_PID_L1_B_TRANS)) {
+			if ((stat & HDLC_STAT_RME) || (bch->protocol == ISDN_PID_L1_B_64TRANS)) {
 				if (((stat & HDLC_STAT_CRCVFRRAB)==HDLC_STAT_CRCVFR) ||
-					(bch->protocol == ISDN_PID_L1_B_TRANS)) {
+					(bch->protocol == ISDN_PID_L1_B_64TRANS)) {
 					if (!(skb = dev_alloc_skb(bch->rx_idx)))
 						printk(KERN_WARNING "HDLC: receive out of memory\n");
 					else {
@@ -953,8 +953,8 @@ MODULE_PARM(debug, "1i");
 static char FritzName[] = "Fritz!PCI";
 
 static int FritzProtocols[] = {	ISDN_PID_L0_TE_S0,
-				ISDN_PID_L1_B_TRANS,
-				ISDN_PID_L1_B_HDLC
+				ISDN_PID_L1_B_64TRANS,
+				ISDN_PID_L1_B_64HDLC
 			};
 #define FRITZPCNT	3
  

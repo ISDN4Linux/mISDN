@@ -1,4 +1,4 @@
-/* $Id: isar.c,v 0.3 2001/02/13 10:42:55 kkeil Exp $
+/* $Id: isar.c,v 0.4 2001/02/22 09:49:10 kkeil Exp $
  *
  * isar.c   ISAR (Siemens PSB 7110) specific routines
  *
@@ -537,7 +537,7 @@ isar_rcv_frame(bchannel_t *bch)
 			ireg->iis, ireg->cmsb, ireg->clsb);
 		bch->BC_Write_Reg(bch->inst.data, 1, ISAR_IIA, 0);
 		break;
-	    case ISDN_PID_L1_B_TRANS:
+	    case ISDN_PID_L1_B_64TRANS:
 	    case ISDN_PID_L1_B_TRANS_TT:
 	    case ISDN_PID_L1_B_TRANS_TTR:
 	    case ISDN_PID_L1_B_TRANS_TTS:
@@ -551,7 +551,7 @@ isar_rcv_frame(bchannel_t *bch)
 			bch->BC_Write_Reg(bch->inst.data, 1, ISAR_IIA, 0);
 		}
 		break;
-	    case ISDN_PID_L1_B_HDLC:
+	    case ISDN_PID_L1_B_64HDLC:
 		if ((bch->rx_idx + ireg->clsb) > MAX_DATA_MEM) {
 			if (bch->debug & L1_DEB_WARN)
 				debugprint(&bch->inst, "isar_rcv_frame: incoming packet too large");
@@ -736,14 +736,14 @@ isar_fill_fifo(bchannel_t *bch)
 		case ISDN_PID_NONE:
 			printk(KERN_ERR"isar_fill_fifo wrong protocol 0\n");
 			break;
-		case ISDN_PID_L1_B_TRANS:
+		case ISDN_PID_L1_B_64TRANS:
 		case ISDN_PID_L1_B_TRANS_TTR:
 		case ISDN_PID_L1_B_TRANS_TTS:
 		case ISDN_PID_L1_B_V32:
 			sendmsg(bch, SET_DPS(bch->hw.isar.dpath) | ISAR_HIS_SDATA,
 				0, count, ptr);
 			break;
-		case ISDN_PID_L1_B_HDLC:
+		case ISDN_PID_L1_B_64HDLC:
 			sendmsg(bch, SET_DPS(bch->hw.isar.dpath) | ISAR_HIS_SDATA,
 				msb, count, ptr);
 			break;
@@ -1293,8 +1293,8 @@ setup_pump(bchannel_t *bch) {
 
 	switch (bch->protocol) {
 		case ISDN_PID_NONE:
-		case ISDN_PID_L1_B_TRANS:
-		case ISDN_PID_L1_B_HDLC:
+		case ISDN_PID_L1_B_64TRANS:
+		case ISDN_PID_L1_B_64HDLC:
 			sendmsg(bch, dps | ISAR_HIS_PUMPCFG, PMOD_BYPASS, 0, NULL);
 			break;
 		case ISDN_PID_L1_B_TRANS_TTS:
@@ -1352,14 +1352,14 @@ setup_sart(bchannel_t *bch) {
 			sendmsg(bch, dps | ISAR_HIS_SARTCFG, SMODE_DISABLE, 0,
 				NULL);
 			break;
-		case ISDN_PID_L1_B_TRANS:
+		case ISDN_PID_L1_B_64TRANS:
 		case ISDN_PID_L1_B_TRANS_TT:
 		case ISDN_PID_L1_B_TRANS_TTR:
 		case ISDN_PID_L1_B_TRANS_TTS:
 			sendmsg(bch, dps | ISAR_HIS_SARTCFG, SMODE_BINARY, 2,
 				"\1\0");
 			break;
-		case ISDN_PID_L1_B_HDLC:
+		case ISDN_PID_L1_B_64HDLC:
 		case ISDN_PID_L1_B_FAX:
 			param[0] = 0;
 			sendmsg(bch, dps | ISAR_HIS_SARTCFG, SMODE_HDLC, 1,
@@ -1391,8 +1391,8 @@ setup_iom2(bchannel_t *bch) {
 			/* dummy slot */
 			msg[1] = msg[3] = bch->hw.isar.dpath + 2;
 			break;
-		case ISDN_PID_L1_B_TRANS:
-		case ISDN_PID_L1_B_HDLC:
+		case ISDN_PID_L1_B_64TRANS:
+		case ISDN_PID_L1_B_64HDLC:
 			break;
 		case ISDN_PID_L1_B_V32:
 		case ISDN_PID_L1_B_FAX:
@@ -1420,8 +1420,8 @@ modeisar(bchannel_t *bch, bsetup_t *bs)
 					/* no init for dpath 0 */
 					return(0);
 				break;
-			case ISDN_PID_L1_B_TRANS:
-			case ISDN_PID_L1_B_HDLC:
+			case ISDN_PID_L1_B_64TRANS:
+			case ISDN_PID_L1_B_64HDLC:
 				/* best is datapath 2 */
 				if (!test_and_set_bit(ISAR_DP2_USE, 
 					&bch->hw.isar.reg->Flags))
