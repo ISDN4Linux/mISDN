@@ -1,4 +1,4 @@
-/* $Id: udevice.c,v 0.23 2001/10/30 12:54:46 kkeil Exp $
+/* $Id: udevice.c,v 0.24 2001/10/31 23:02:59 kkeil Exp $
  *
  * Copyright 2000  by Karsten Keil <kkeil@isdn4linux.de>
  */
@@ -136,6 +136,35 @@ p_pull_o(hisaxport_t *port, size_t count)
 		port->cnt -= count;
 		port->op += count;
 	}
+}
+
+static size_t
+next_frame_len(hisaxport_t *port)
+{
+	size_t		len;
+	int		*lp;
+
+	if (port->cnt < IFRAME_HEAD_SIZE) {
+		int_errtxt("not a frameheader cnt(%d)", port->cnt);
+		return(0);
+	}
+	len = port->buf + port->size - port->op;
+	if (len < IFRAME_HEAD_SIZE) {
+		len = IFRAME_HEAD_SIZE - len - 4;
+		lp = (int *)(port->buf + len);
+	} else {
+		lp = (int *)(port->op + 12);
+	}
+	if (*lp <= 0) {
+		len = IFRAME_HEAD_SIZE;
+	} else {
+		len = IFRAME_HEAD_SIZE + *lp;
+	}
+	if (len < port->cnt) {
+		int_errtxt("size mismatch %d/%d", len, port->cnt);
+		return(0);
+	}
+	return(len);
 }
 
 static int
@@ -1218,6 +1247,34 @@ hisax_wdata_if(hisaxdevice_t *dev, iframe_t *iff, int len) {
 		else
 			hisax_rdata(dev, &off, 0);
 		break;
+	    case (MGR_SETDEVOPT | REQUEST):
+	    	used = head;
+	    	off.addr = iff->addr;
+	    	off.prim = MGR_SETDEVOPT | CONFIRM;
+	    	off.dinfo = 0;
+	    	off.len = 0;
+	    	if (iff->dinfo == FLG_HISAXPORT_ONEFRAME) {
+	    		test_and_set_bit(FLG_HISAXPORT_ONEFRAME,
+	    			&dev->rport.Flag);
+	    	} else if (!iff->dinfo) {
+	    		test_and_clear_bit(FLG_HISAXPORT_ONEFRAME,
+	    			&dev->rport.Flag);
+	    	} else {
+	    		off.len = -EINVAL;
+	    	}
+	    	hisax_rdata(dev, &off, 0);
+	    	break;
+	    case (MGR_GETDEVOPT | REQUEST):
+	    	used = head;
+	    	off.addr = iff->addr;
+	    	off.prim = MGR_GETDEVOPT | CONFIRM;
+	    	off.len = 0;
+	    	if (test_bit(FLG_HISAXPORT_ONEFRAME, &dev->rport.Flag))
+	    		off.dinfo = FLG_HISAXPORT_ONEFRAME;
+	    	else
+	    		off.dinfo = 0;
+	    	hisax_rdata(dev, &off, 0);
+	    	break;
 	    default:
 		used = head + iff->len;
 		if (len<used) {
@@ -1584,10 +1641,22 @@ do_hisax_read(struct file *file, char *buf, size_t count, loff_t * off)
 			return(-ERESTARTSYS);
 	}
 	spin_lock_irqsave(&dev->rport.lock, flags);
-	if (count < dev->rport.cnt)
-		len = count;
-	else
-		len = dev->rport.cnt;
+	if (test_bit(FLG_HISAXPORT_ONEFRAME, &dev->rport.Flag)) {
+		len = next_frame_len(&dev->rport);
+		if (!len) {
+			spin_unlock_irqrestore(&dev->rport.lock, flags);
+			return(-EINVAL);
+		}
+		if (count < len) {
+			spin_unlock_irqrestore(&dev->rport.lock, flags);
+			return(-ENOSPC);
+		}
+	} else {
+		if (count < dev->rport.cnt)
+			len = count;
+		else
+			len = dev->rport.cnt;
+	}
 	frag = dev->rport.buf + dev->rport.size - dev->rport.op;
 	if (frag <= len) {
 		if (copy_to_user(buf, dev->rport.op, frag)) {
