@@ -108,7 +108,7 @@
 
 extern const char *CardType[];
 
-static const char *hfcmulti_revision = "$Revision: 1.19 $";
+static const char *hfcmulti_revision = "$Revision: 1.20 $";
 
 static int HFC_cnt;
 
@@ -421,6 +421,9 @@ init_chip(hfc_multi_t *hc)
 	/* setting leds */
 	switch(hc->leds) {
 		case 1: /* HFC-E1 OEM */
+		HFC_outb(hc, R_GPIO_SEL, 0x30);
+		HFC_outb(hc, R_GPIO_EN1, 0x0f);
+		HFC_outb(hc, R_GPIO_OUT1, 0x00);
 		break;
 
 		case 2: /* HFC-4S OEM */
@@ -463,9 +466,83 @@ hfcmulti_leds(hfc_multi_t *hc)
 
 	switch(hc->leds) {
 		case 1: /* HFC-E1 OEM */
+		/* 2 red blinking: LOS
+		   1 red: AIS
+		   left green: PH_ACTIVATE
+		   right green flashing: FIFO activity
+		*/
+		i = HFC_inb(hc, R_GPI_IN0) & 0xf0;
+		if (!(i & 0x40)) { /* LOS */
+			if (hc->e1_switch != i) {
+				hc->e1_switch = i;
+				hc->hw.r_tx0 &= ~V_OUT_EN;
+				HFC_outb(hc, R_TX0, hc->hw.r_tx0);
+			}
+			if (hc->ledcount & 512)
+				led[0] = led[1] = 1;
+			else
+				led[0] = led[1] = 0;
+			led[2] = led[3] = 0;
+		} else
+		if (!(i & 0x80)) { /* AIS */
+			if (hc->e1_switch != i) {
+				hc->e1_switch = i;
+				hc->hw.r_tx0 |= V_OUT_EN;
+				hc->hw.r_tx1 |= V_AIS_OUT;
+				HFC_outb(hc, R_TX0, hc->hw.r_tx0);
+				HFC_outb(hc, R_TX1, hc->hw.r_tx1);
+			}
+			if (hc->ledcount & 512)
+				led[2] = led[3] = 1;
+			else
+				led[2] = led[3] = 0;
+			led[0] = led[1] = 0;
+		} else {
+			if (hc->e1_switch != i) {
+				/* reset LOS/AIS */
+				hc->e1_switch = i;
+				hc->hw.r_tx0 |= V_OUT_EN;
+				hc->hw.r_tx1 &= ~V_AIS_OUT;
+				HFC_outb(hc, R_TX0, hc->hw.r_tx0);
+				HFC_outb(hc, R_TX1, hc->hw.r_tx1);
+			}
+			if (HFC_inb_(hc, R_RX_STA0) & V_SIG_LOS) {
+				if (hc->ledcount>>11)
+					led[0] = led[1] = 1; /* both red blinking */
+				else
+					led[0] = led[1] = 0;
+			} else
+			if (HFC_inb_(hc, R_RX_STA0) & V_AIS) {
+				led[0] = led[1] = 1; /* both red */
+			} else {
+				led[0] = led[1] = 0; /* no red */
+			}
+			state = 0;
+			active = 1;
+			if ((dch = hc->chan[16].dch)) {
+				state = dch->ph_state;
+			}
+			if (state == active) {
+				led[2] = 1; /* left green */
+				if (hc->activity[0]) {
+					led[3] = 1; /* right green */
+					hc->activity[0] = 0;
+				} else
+					led[3] = 0; /* no right green */
+				
+			} else
+				led[2] = led[3] = 0; /* no green */
+		}
+		HFC_outb(hc, R_GPIO_OUT1,
+			(led[0] | (led[1]<<2) | (led[2]<<1) | (led[3]<<3))^0xf); /* leds are inverted */
+		
 		break;
 
 		case 2: /* HFC-4S OEM */
+		/* red blinking = PH_DEACTIVATE
+		   red steady = PH_ACTIVATE
+		   green flashing = fifo activity
+		*/
 		i = 0;
 		while(i < 4) {
 			state = 0;
@@ -1768,9 +1845,9 @@ hfcmulti_l1hw(mISDNif_t *hif, struct sk_buff *skb)
 			case HW_RESET:
 			/* start activation */
 			if (hc->type == 1) {
-				HFC_outb(hc, R_E1_WR_STA, V_E1_LD_STA | 1);
+				HFC_outb(hc, R_E1_WR_STA, V_E1_LD_STA | 0);
 				udelay(6); /* wait at least 5,21us */
-				HFC_outb(hc, R_E1_WR_STA, 1);
+				HFC_outb(hc, R_E1_WR_STA, 0);
 			} else {
 				HFC_outb(hc, R_ST_SEL, hc->chan[dch->channel].port);
 				HFC_outb(hc, A_ST_WR_STATE, V_ST_LD_STA | 3); /* G1 */
@@ -1823,17 +1900,17 @@ hfcmulti_l1hw(mISDNif_t *hif, struct sk_buff *skb)
 			dch->inst.lock(hc, 0);
 			/* start activation */
 			if (hc->type == 1) {
-				HFC_outb(hc, R_E1_WR_STA, V_E1_LD_STA | 1);
-				udelay(6); /* wait at least 5,21us */
-				HFC_outb(hc, R_E1_WR_STA, 1);
+				dchannel_sched_event(dch, D_L1STATECHANGE);
+				if (debug & DEBUG_HFCMULTI_STATE)
+					printk(KERN_DEBUG "%s: E1 report state %x \n", __FUNCTION__, dch->ph_state);
 			} else {
 				HFC_outb(hc, R_ST_SEL, hc->chan[dch->channel].port);
 				HFC_outb(hc, A_ST_WR_STATE, V_ST_LD_STA | 1); /* G1 */
 				udelay(6); /* wait at least 5,21us */
 				HFC_outb(hc, A_ST_WR_STATE, 1);
 				HFC_outb(hc, A_ST_WR_STATE, 1 | (V_ST_ACT*3)); /* activate */
+				dch->ph_state = 1;
 			}
-			dch->ph_state = 1;
 			dch->inst.unlock(hc);
 		} else {
 			if (debug & DEBUG_HFCMULTI_MSG)
@@ -1850,6 +1927,8 @@ hfcmulti_l1hw(mISDNif_t *hif, struct sk_buff *skb)
 			dch->ph_state = 0;
 			/* start deactivation */
 			if (hc->type == 1) {
+			if (debug & DEBUG_HFCMULTI_MSG)
+				printk(KERN_DEBUG "%s: PH_DEACTIVATE no BRI\n", __FUNCTION__);
 			} else {
 				HFC_outb(hc, R_ST_SEL, hc->chan[dch->channel].port);
 				HFC_outb(hc, A_ST_WR_STATE, V_ST_ACT*2); /* deactivate */
@@ -2482,12 +2561,14 @@ hfcmulti_initmode(hfc_multi_t *hc)
 		}
 		if (test_bit(HFC_CFG_OPTICAL, &hc->chan[16].cfg)) {
 			HFC_outb(hc, R_RX0, 0);
-			HFC_outb(hc, R_TX0, 0 | V_OUT_EN);
+			hc->hw.r_tx0 = 0 | V_OUT_EN;
 		} else {
 			HFC_outb(hc, R_RX0, 1);
-			HFC_outb(hc, R_TX0, 1 | V_OUT_EN);
+			hc->hw.r_tx0 = 1 | V_OUT_EN;
 		}
-		HFC_outb(hc, R_TX1, V_ATX | V_NTRI);
+		hc->hw.r_tx1 = V_ATX | V_NTRI;
+		HFC_outb(hc, R_TX0, hc->hw.r_tx0);
+		HFC_outb(hc, R_TX1, hc->hw.r_tx1);
 		HFC_outb(hc, R_TX_FR0, 0x00);
 		HFC_outb(hc, R_TX_FR1, 0xf8);
 		HFC_outb(hc, R_TX_FR2, V_TX_MF | V_TX_E | V_NEG_E);
@@ -2497,14 +2578,14 @@ hfcmulti_initmode(hfc_multi_t *hc)
 			/* NT mode */
 			if (debug & DEBUG_HFCMULTI_INIT)
 				printk(KERN_DEBUG "%s: E1 port NT-mode\n", __FUNCTION__);
-			r_e1_wr_sta = 1; /* G1 */
+			r_e1_wr_sta = 0; /* G0 */
 //			HFC_outb(hc, R_SYNC_CTRL, V_SYNC_OFFS | V_PCM_SYNC);
 			HFC_outb(hc, R_SYNC_CTRL, V_EXT_CLK_SYNC | V_PCM_SYNC);
 		} else {
 			/* TE mode */
 			if (debug & DEBUG_HFCMULTI_INIT)
 				printk(KERN_DEBUG "%s: E1 port is TE-mode\n", __FUNCTION__);
-			r_e1_wr_sta = 2; /* F2 */
+			r_e1_wr_sta = 0; /* F0 */
 			HFC_outb(hc, R_SYNC_CTRL, V_SYNC_OFFS);
 		}
 		HFC_outb(hc, R_JATT_ATT, 0x9c); /* undoc register */

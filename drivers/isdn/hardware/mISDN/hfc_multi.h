@@ -59,6 +59,7 @@ struct hfcmulti_hw {
 	unsigned char	r_dtmf;
 	unsigned char	r_st_sync;
 	unsigned char	r_sci_msk;
+	unsigned char	r_tx0, r_tx1;
 	unsigned char	a_st_ctrl0[8];
 	timer_t	timer;
 };
@@ -101,6 +102,7 @@ struct hfc_multi {
 	u_int		pci_iobase;/* PCI IO (MUST BE BYTE POINTER) */
 #endif
 	hfcmulti_hw_t	hw;	/* remember data of write-only-registers */
+	u_char		e1_switch; /* last state of the switches */
 
 	u_long		chip;	/* chip configuration */
 	int		masterclk;/* port that provides master clock -1=off */
