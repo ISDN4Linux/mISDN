@@ -60,6 +60,8 @@ typedef void irqreturn_t;
 #define pnp_disable_dev(d)		((struct pci_dev *)d)->prepare(d);((struct pci_dev *)d)->deactivate(d)
 #define pnp_port_start(d,n)		d->resource[n].start
 #define pnp_irq(d,n)			d->irq_resource[n].start
+#undef iminor
+#define iminor(i)	MINOR(i->i_rdev)
 #else
 #undef  OLDCAPI_DRIVER_INTERFACE
 #define HAS_WORKQUEUE
