@@ -44,6 +44,8 @@ endif
 #  endif
 #endif
 
+export-objs       := hisax_core.o
+
 obj-$(CONFIG_ISDN_DRV_NEWHISAX) :=
 obj-$(CONFIG_ISDN_DRV_NEWHISAX) += hisaxcore.o
 
