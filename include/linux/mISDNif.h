@@ -1,4 +1,4 @@
-/* $Id: mISDNif.h,v 0.35 2001/10/31 23:08:14 kkeil Exp $
+/* $Id: mISDNif.h,v 1.0 2001/11/02 23:39:07 kkeil Exp $
  *
  */
 
