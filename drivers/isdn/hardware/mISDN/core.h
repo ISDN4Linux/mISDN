@@ -1,4 +1,4 @@
-/* $Id: core.h,v 0.2 2001/02/13 10:42:55 kkeil Exp $
+/* $Id: core.h,v 0.3 2001/02/22 10:14:16 kkeil Exp $
  * 
  * This file is (c) under GNU PUBLIC LICENSE
  *
@@ -9,10 +9,6 @@
 #include <linux/hisaxif.h>
 #include "helper.h"
  
-/* intern exported lists */
-extern hisaxobject_t	*hisax_objects;
-extern hisaxstack_t	*hisax_stacklist;
-
 #define	HISAX_MAJOR		46
 #define HISAX_DEVBUF_SIZE	8192
 
@@ -25,13 +21,24 @@ extern hisaxstack_t	*hisax_stacklist;
 #define DEBUG_WDATA		0x2000
 
 /* from hisax_dev.c */
+
 extern int init_hisaxdev(int);
 extern int free_hisaxdev(void);
 
-/* from hisax_core.c */
+/* from hisax_stack.c */
+
+extern hisaxstack_t	*hisax_stacklist;
+
 extern void get_stack_profile(iframe_t *);
 extern int get_stack_cnt(void);
 extern hisaxstack_t *get_stack4id(int);
+extern hisaxstack_t *create_stack(hisaxinstance_t *, hisaxstack_t *);
+extern void release_stacks(hisaxobject_t *);
+
+/* from hisax_core.c */
+
+extern hisaxobject_t	*hisax_objects;
+extern int core_debug;
 
 extern void hisaxlock_core(void);
 extern void hisaxunlock_core(void);

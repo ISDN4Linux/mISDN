@@ -18,7 +18,7 @@ SEDLFAXOBJ += isac.o arcofi.o fsm.o isar.o
 FRITZOBJ := fritz_pci.o debug.o helper.o
 FRITZOBJ += isac.o arcofi.o fsm.o
 
-OBJ_core := hisax_core.o hisax_dev.o
+OBJ_core := hisax_core.o hisax_stack.o hisax_dev.o
 OBJ_l1 := hisax_l1.o helper.o debug.o fsm.o
 OBJ_l2 := hisax_l2.o tei.o helper.o debug.o fsm.o
 OBJ_l3udss1 := hisax_l3.o helper.o debug.o fsm.o l3_udss1.o
