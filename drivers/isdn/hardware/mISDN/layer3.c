@@ -1,4 +1,4 @@
-/* $Id: layer3.c,v 0.10 2001/08/02 14:51:56 kkeil Exp $
+/* $Id: layer3.c,v 0.11 2001/10/30 12:55:55 kkeil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -14,7 +14,7 @@
 #include "hisaxl3.h"
 #include "helper.h"
 
-const char *l3_revision = "$Revision: 0.10 $";
+const char *l3_revision = "$Revision: 0.11 $";
 
 static
 struct Fsm l3fsm = {NULL, 0, 0, NULL, NULL};
@@ -215,11 +215,11 @@ l3_alloc_skb(int len)
 {
 	struct sk_buff *skb;
 
-	if (!(skb = alloc_skb(len + MAX_HEADER_LEN, GFP_ATOMIC))) {
+	if (!(skb = alloc_skb(len + MAX_HEADER_LEN + IFRAME_HEAD_SIZE, GFP_ATOMIC))) {
 		printk(KERN_WARNING "HiSax: No skb for D-channel\n");
 		return (NULL);
 	}
-	skb_reserve(skb, MAX_HEADER_LEN);
+	skb_reserve(skb, MAX_HEADER_LEN + IFRAME_HEAD_SIZE);
 	return (skb);
 }
 /*
@@ -352,7 +352,7 @@ l3down(layer3_t *l3, u_int prim, int dinfo, struct sk_buff *skb) {
 	if (!skb)
 		err = if_link(&l3->inst.down, prim, dinfo, 0, NULL, 0);
 	else
-		err = if_newhead(&l3->inst.down, prim, dinfo, skb);
+		err = if_addhead(&l3->inst.down, prim, dinfo, skb);
 	return(err);
 }
 
@@ -488,6 +488,8 @@ l3_msg(layer3_t *l3, u_int pr, int dinfo, int len, void *arg)
 			} else {
 				struct sk_buff *skb = arg;
 
+//				printk(KERN_DEBUG __FUNCTION__ "queue skb %p len(%d)\n",
+//					skb, skb->len);
 				skb_queue_tail(&l3->squeue, skb);
 				FsmEvent(&l3->l3m, EV_ESTABLISH_REQ, NULL); 
 			}
