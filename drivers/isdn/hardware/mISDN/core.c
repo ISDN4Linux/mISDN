@@ -1,4 +1,4 @@
-/* $Id: core.c,v 0.15 2001/04/08 16:45:56 kkeil Exp $
+/* $Id: core.c,v 0.16 2001/04/11 10:21:10 kkeil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -172,6 +172,25 @@ disconnect_if(hisaxinstance_t *inst, u_int prim, hisaxif_t *hif) {
 	return(err);
 }
 
+static int
+add_if(hisaxinstance_t *inst, u_int prim, hisaxif_t *hif) {
+	hisaxif_t *myif;
+
+	if (!inst)
+		return(-EINVAL);
+	if (!hif)
+		return(-EINVAL);
+	if (hif->stat & IF_UP) {
+		myif = &inst->down;
+	} else if (hif->stat & IF_DOWN) {
+		myif = &inst->up;
+	} else
+		return(-EINVAL);
+	APPEND_TO_LIST(hif, myif);
+	inst->obj->own_ctrl(inst, prim, hif);
+	return(0);
+}
+
 static char tmpbuf[4096];
 static int
 debugout(hisaxinstance_t *inst, logdata_t *log)
@@ -217,6 +236,8 @@ static int central_manager(void *data, u_int prim, void *arg) {
 	    case MGR_DISCONNECT | REQUEST:
 	    case MGR_DISCONNECT | INDICATION:
 		return(disconnect_if(data, prim, arg));
+	    case MGR_ADDIF | REQUEST:
+		return(add_if(data, prim, arg));
 	    case MGR_CONNECT | REQUEST:
 		return(ConnectIF(data, arg));
 	    case MGR_LOADFIRM | REQUEST:

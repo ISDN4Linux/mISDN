@@ -1,4 +1,4 @@
-/* $Id: udevice.c,v 0.14 2001/04/08 16:45:56 kkeil Exp $
+/* $Id: udevice.c,v 0.15 2001/04/11 10:21:10 kkeil Exp $
  *
  * Copyright 2000  by Karsten Keil <kkeil@isdn4linux.de>
  */
@@ -13,7 +13,7 @@
 #define MAX_HEADER_LEN	4
 
 #define FLG_MGR_SETSTACK	1
-#define FLG_DOWN_BUSY		2
+#define FLG_MGR_OWNSTACK	2
 
 typedef struct _hisaxdevice {
 	struct _hisaxdevice	*prev;
@@ -35,9 +35,8 @@ typedef struct _devicelayer {
 	hisaxdevice_t		*dev;
 	hisaxinstance_t		inst;
 	hisaxinstance_t		*slave;
-	hisaxif_t		sif;
-	struct sk_buff_head	queue;
-	struct sk_buff 		*last_skb;
+	hisaxif_t		s_up;
+	hisaxif_t		s_down;
 	int			iaddr;
 	int			lm_st;
 	int			Flags;
@@ -53,8 +52,8 @@ static u_char  stbuf[1000];
 static int device_debug = 0;
 
 static int from_up_down(hisaxif_t *, u_int, int, int, void *);
-static int from_peer(hisaxif_t *, u_int, int, int, void *);
-static int to_peer(hisaxif_t *, u_int, int, int, void *);
+// static int from_peer(hisaxif_t *, u_int, int, int, void *);
+// static int to_peer(hisaxif_t *, u_int, int, int, void *);
 
 
 static int
@@ -117,8 +116,30 @@ stack_inst_flg(hisaxdevice_t *dev, hisaxstack_t *st, int bit, int clear)
 	return(ret);
 }
 
+static hisaxstack_t *
+clone_stack(int addr)
+{
+	int err;
+	hisaxstack_t	*st;
+	hisaxinstance_t	inst;
+
+	memset(&inst, 0, sizeof(hisaxinstance_t));
+	st = get_stack4id(addr);
+	if (!st)
+		return(NULL);
+	err = udev_obj.ctrl(NULL, MGR_NEWSTACK | REQUEST, &inst);
+	if (err)
+		return(NULL);
+	memcpy(&inst.st->pid, &st->pid, sizeof(hisax_pid_t));
+	inst.st->child = st->child;
+	inst.st->mgr = NULL;
+	return(st);
+}
+
 static int
-create_layer(hisaxdevice_t *dev, hisaxstack_t *st, layer_info_t *linfo, int *adr) {
+create_layer(hisaxdevice_t *dev, hisaxstack_t *st, layer_info_t *linfo,
+	int *adr, int mgr)
+{
 	hisaxlayer_t	*layer;
 	int		i, ret;
 	devicelayer_t	*nl;
@@ -177,6 +198,10 @@ create_layer(hisaxdevice_t *dev, hisaxstack_t *st, layer_info_t *linfo, int *adr
 			}
 		}
 	}
+	if (mgr) {
+		st->mgr = &nl->inst;
+		test_and_set_bit(FLG_MGR_OWNSTACK, &nl->Flags);
+	}
 	nl->inst.down.owner = &nl->inst;
 	nl->inst.up.owner = &nl->inst;
 	nl->inst.obj = &udev_obj;
@@ -186,7 +211,6 @@ create_layer(hisaxdevice_t *dev, hisaxstack_t *st, layer_info_t *linfo, int *adr
 	nl->iaddr = nl->inst.id | IADDR_BIT;
 	*adr++ = nl->iaddr;
 	if (inst) {
-		skb_queue_head_init(&nl->queue);
 		nl->slave = inst;
 		*adr = inst->id;
 	} else
@@ -195,31 +219,32 @@ create_layer(hisaxdevice_t *dev, hisaxstack_t *st, layer_info_t *linfo, int *adr
 }
 
 static int
-reconnect(devicelayer_t *dl)
-{
-	hisaxinstance_t *peer;
+remove_if(devicelayer_t *dl, int stat) {
+	hisaxif_t *hif,*phif,*shif;
+	int err;
 
-	if (dl->inst.down.owner != &dl->inst) {
-		peer = dl->inst.down.owner;
-		if (peer->down.fdata == dl) {
-			memcpy(&peer->down, &dl->inst.down, sizeof(hisaxif_t));
-			memset(&dl->inst.down, 0, sizeof(hisaxif_t));
-		} else if (peer->up.fdata == dl) {
-			memcpy(&peer->up, &dl->inst.down, sizeof(hisaxif_t));
-			memset(&dl->inst.down, 0, sizeof(hisaxif_t));
-		}
+	if (device_debug & DEBUG_MGR_FUNC)
+		printk(KERN_DEBUG __FUNCTION__":dl(%p) stat(%x)\n", dl, stat);
+	phif = NULL;
+	if (stat & IF_UP) {
+		hif = &dl->inst.up;
+		shif = &dl->s_up;
+		if (shif->owner)
+			phif = &shif->owner->down;
+	else if (stat & IF_DOWN)
+		hif = &dl->inst.down;
+		shif = &dl->s_down;
+		if (shif->owner)
+			phif = &shif->owner->up;
+	} else {
+		printk(KERN_WARNING __FUNCTION__": stat not UP/DOWN\n");
+		return(-EINVAL);
 	}
-	if (dl->inst.up.owner != &dl->inst) {
-		peer = dl->inst.up.owner;
-		if (peer->down.fdata == dl) {
-			memcpy(&peer->down, &dl->inst.up, sizeof(hisaxif_t));
-			memset(&dl->inst.up, 0, sizeof(hisaxif_t));
-		} else if (peer->up.fdata == dl) {
-			memcpy(&peer->up, &dl->inst.up, sizeof(hisaxif_t));
-			memset(&dl->inst.up, 0, sizeof(hisaxif_t));
-		}
-	}
-	return(0);
+	err = udev_obj.ctrl(hif->peer, MGR_DISCONNECT | REQUEST, hif);
+	if (phif)
+		memcpy(phif, shif, sizeof(hisaxif_t));
+	REMOVE_FROM_LIST(hif);
+	return(err);
 }
 
 static int
@@ -234,13 +259,9 @@ del_layer(devicelayer_t *dl) {
 		printk(KERN_DEBUG __FUNCTION__": iaddr %x inst %s slave %p\n",
 			dl->iaddr, inst->name, dl->slave);
 	}
-	reconnect(dl);
+	remove_if(dl, IF_UP);
+	remove_if(dl, IF_DOWN);
 	if (dl->slave) {
-		discard_queue(&dl->queue);
-		if (dl->last_skb) {
-			dev_kfree_skb(dl->last_skb);
-			dl->last_skb = NULL;
-		}
 		dl->slave->obj->own_ctrl(dl->slave, MGR_UNREGLAYER | REQUEST,
 			NULL);
 		dl->slave = NULL; 
@@ -270,21 +291,22 @@ del_layer(devicelayer_t *dl) {
 	dl->iaddr = 0;
 	REMOVE_FROM_LISTBASE(dl, dev->layer);
 	udev_obj.ctrl(inst, MGR_UNREGLAYER | REQUEST, NULL);
+	if (test_and_clear_bit(FLG_MGR_OWNSTACK, &dl->Flags)) {
+		udev_obj.ctrl(inst->st, MGR_DELSTACK | REQUEST, NULL);
+	}
 	kfree(dl);
 	return(0);
 }
 
 static int
 connect_if_req(hisaxdevice_t *dev, iframe_t *iff) {
-	hisaxif_t *hif, *phif;
 	devicelayer_t *dl;
-	int stat,err=-ENXIO;
 	interface_info_t *ifi = (interface_info_t *)&iff->data.p;
 	hisaxinstance_t *inst;
 	hisaxinstance_t *peer;
 
 	if (device_debug & DEBUG_MGR_FUNC)
-		printk(KERN_DEBUG __FUNCTION__": addr:%x own(%x) peer(%X)\n",
+		printk(KERN_DEBUG __FUNCTION__": addr:%x own(%x) peer(%x)\n",
 			iff->addr, ifi->owner, ifi->peer);
 	if (!(dl=get_devlayer(dev, iff->addr)))
 		return(-ENXIO);
@@ -298,117 +320,104 @@ connect_if_req(hisaxdevice_t *dev, iframe_t *iff) {
 			ifi->peer);
 		return(-ENODEV);
 	}
-	if (inst != &dl->inst) {
-		printk(KERN_WARNING __FUNCTION__": owner(%x) not our\n",
+	return(ConnectIF(inst, peer));
+}
+
+static int
+set_if_req(hisaxdevice_t *dev, iframe_t *iff) {
+	hisaxif_t *hif,*phif,*shif;
+	int stat;
+	interface_info_t *ifi = (interface_info_t *)&iff->data.p;
+	devicelayer_t *dl;
+	hisaxinstance_t *inst, *peer;
+
+	if (device_debug & DEBUG_MGR_FUNC)
+		printk(KERN_DEBUG __FUNCTION__": addr:%x own(%x) peer(%x)\n",
+			iff->addr, ifi->owner, ifi->peer);
+	if (!(dl=get_devlayer(dev, iff->addr)))
+		return(-ENXIO);
+	if (!(inst = get_instance4id(ifi->owner))) {
+		printk(KERN_WARNING __FUNCTION__": owner(%x) not found\n",
 			ifi->owner);
-		return(-EINVAL);
+		return(-ENODEV);
 	}
+	if (!(peer = get_instance4id(ifi->peer))) {
+		printk(KERN_WARNING __FUNCTION__": peer(%x) not found\n",
+			ifi->peer);
+		return(-ENODEV);
+	}
+
 	if (ifi->stat == IF_UP) {
 		hif = &dl->inst.up;
 		phif = &peer->down;
+		shif = &dl->s_up;
 		stat = IF_DOWN;
 	} else if (ifi->stat == IF_DOWN) {
 		hif = &dl->inst.down;
+		shif = &dl->s_down;
 		phif = &peer->up;
 		stat = IF_UP;
 	} else {
 		printk(KERN_WARNING __FUNCTION__": if not UP/DOWN\n");
 		return(-EINVAL);
 	}
-	if (hif->stat != IF_NOACTIV)
+
+	
+	if (shif->stat != IF_NOACTIV) {
+		printk(KERN_WARNING __FUNCTION__": save if busy\n");
 		return(-EBUSY);
-	if (phif->stat != IF_NOACTIV) { /* install splitter */
-		if (!(inst = phif->peer))
-			return(-EINVAL);
-		memcpy(&dl->inst.down, phif, sizeof(hisaxif_t));
-		phif->func = from_peer;
-		phif->fdata = dl;
-		if (stat == IF_UP) {
-			stat = IF_DOWN;
-			phif = &inst->down;
-		} else {
-			stat = IF_UP;
-			phif = &inst->up;
-		}
-		memcpy(&dl->inst.up, phif, sizeof(hisaxif_t));
-		phif->func = to_peer;
-		phif->fdata = dl;
-		err = 0;
-		if (dl->slave) {
-			
-			dl->sif.stat = stat;
-			dl->sif.owner = &dl->inst;
-			dl->sif.peer = dl->slave;
-			err = dl->slave->obj->own_ctrl(dl->slave, MGR_SETIF |
-				REQUEST, &dl->sif);
-			if (err)
-				dl->sif.stat = IF_NOACTIV;
-			
-		}
-	} else {
-		hif->stat = stat;
-		hif->peer = peer;
-		err = udev_obj.ctrl(&dl->inst, MGR_CONNECT | REQUEST,
-			hif->peer);
-		if (err)
-			hif->stat = IF_NOACTIV;
 	}
-	return(err);
+	if (hif->stat != IF_NOACTIV) {
+		printk(KERN_WARNING __FUNCTION__": own if busy\n");
+		return(-EBUSY);
+	}
+	hif->stat = stat;
+	hif->owner = inst;
+	memcpy(shif, phif, sizeof(hisaxif_t));
+	memset(phif, 0, sizeof(hisaxif_t));
+	return(peer->obj->own_ctrl(peer, iff->prim, hif));
 }
 
 static int
-set_if_req(hisaxdevice_t *dev, iframe_t *iff) {
-	hisaxif_t *hif = NULL;
-	devicelayer_t *dl;
-	int *ip, err=-ENXIO;
+add_if_req(hisaxdevice_t *dev, iframe_t *iff) {
+	hisaxif_t *hif;
+	interface_info_t *ifi = (interface_info_t *)&iff->data.p;
+	hisaxinstance_t *inst, *peer;
 
 	if (device_debug & DEBUG_MGR_FUNC)
-		printk(KERN_DEBUG __FUNCTION__": addr:%x\n", iff->addr);
-	if (iff->len != sizeof(int))
-		return(-EINVAL);
-	if (!(dl=get_devlayer(dev, iff->addr)))
-		return(-ENXIO);
-	ip = &iff->data.i;
-	if (iff->addr & IF_UP) {
-		hif = &dl->inst.up;
-		if (hif->stat == IF_NOACTIV) {
-			hif->stat = IF_DOWN;
-			hif->extentions = *ip++;
-			err = udev_obj.ctrl(dl->inst.st, MGR_CONNECT | REQUEST, hif);
-			if (err)
-				hif->stat = IF_NOACTIV;
-		} else
-			err = -EBUSY;
-	} else if (iff->addr & IF_DOWN) {
-		hif = &dl->inst.down;
-		if (hif->stat == IF_NOACTIV) {
-			hif->stat = IF_UP;
-			
-			err = udev_obj.ctrl(dl->inst.st, MGR_CONNECT | REQUEST, hif);
-			if (err)
-				hif->stat = IF_NOACTIV;
-		} else
-			err = -EBUSY;
+		printk(KERN_DEBUG __FUNCTION__": addr:%x own(%x) peer(%x)\n",
+			iff->addr, ifi->owner, ifi->peer);
+	if (!(inst = get_instance4id(ifi->owner))) {
+		printk(KERN_WARNING __FUNCTION__": owner(%x) not found\n",
+			ifi->owner);
+		return(-ENODEV);
 	}
-	return(err);
+	if (!(peer = get_instance4id(ifi->peer))) {
+		printk(KERN_WARNING __FUNCTION__": peer(%x) not found\n",
+			ifi->peer);
+		return(-ENODEV);
+	}
+
+	if (ifi->stat == IF_DOWN) {
+		hif = &inst->up;
+	} else if (ifi->stat == IF_UP) {
+		hif = &inst->down;
+	} else {
+		printk(KERN_WARNING __FUNCTION__": if not UP/DOWN\n");
+		return(-EINVAL);
+	}
+	return(peer->obj->ctrl(peer, iff->prim, hif));
 }
 
 static int
 del_if_req(hisaxdevice_t *dev, iframe_t *iff) {
 	devicelayer_t *dl;
-	int err=-ENXIO;
 
 	if (device_debug & DEBUG_MGR_FUNC)
 		printk(KERN_DEBUG __FUNCTION__": addr:%x\n", iff->addr);
 	if (!(dl=get_devlayer(dev, iff->addr)))
 		return(-ENXIO);
-	if (iff->addr & IF_UP)
-		err = udev_obj.ctrl(dl->inst.up.peer, MGR_DISCONNECT | REQUEST,
-			&dl->inst.up);
-	else if (iff->addr & IF_DOWN)
-		err = udev_obj.ctrl(dl->inst.down.peer, MGR_DISCONNECT | REQUEST,
-			&dl->inst.down);
-	return(err);
+	return(remove_if(dl, iff->addr));
 }
 
 static int
@@ -512,6 +521,56 @@ hisax_wdata(hisaxdevice_t *dev, void *dp, int len) {
 			off.len = 0;
 		hisax_rdata(dev, &off, err);
 		break;
+	    case (MGR_SETSTACK | REQUEST):
+		used = head + sizeof(hisax_pid_t);
+		if (len<used)
+			return(len);
+		off.addr = iff->addr;
+		off.dinfo = 0;
+		off.prim = MGR_SETSTACK | CONFIRM;
+		off.len = 0;
+		if ((st = get_stack4id(iff->addr))) {
+			stack_inst_flg(dev, st, FLG_MGR_SETSTACK, 0);
+			err = udev_obj.ctrl(st, iff->prim, &iff->data.i);
+			if (err<0)
+				off.len = err;
+		} else
+			off.len = -ENODEV;
+		hisax_rdata(dev, &off, 1);
+		break;	
+	    case (MGR_NEWSTACK | REQUEST):
+		used = head + sizeof(layer_info_t);
+		if (len<used)
+			return(len);
+		off.addr = iff->addr;
+		off.dinfo = 0;
+		off.prim = MGR_NEWSTACK | CONFIRM;
+		off.len = 8;
+		off.data.p = stbuf;
+		if ((st = clone_stack(iff->addr))) {
+			err = create_layer(dev, st,
+				(layer_info_t *)&iff->data.i, off.data.p, 1);
+			if (err<0)
+				off.len = err;
+ 		} else
+			off.len = -ENODEV;
+		hisax_rdata(dev, &off, 1);
+		break;	
+	    case (MGR_CLEARSTACK | REQUEST):
+		used = head;
+		off.addr = iff->addr;
+		off.prim = MGR_CLEARSTACK | CONFIRM;
+		off.dinfo = 0;
+		off.len = 0;
+		if ((st = get_stack4id(iff->addr))) {
+			stack_inst_flg(dev, st, FLG_MGR_SETSTACK, 1);
+			err = udev_obj.ctrl(st, iff->prim, NULL);
+			if (err<0)
+				off.len = err;
+		} else
+			off.len = -ENODEV;
+		hisax_rdata(dev, &off, 1);
+		break;
 	    case (MGR_GETLAYER | REQUEST):
 		used = head + sizeof(u_int);
 		if (len<used)
@@ -564,7 +623,7 @@ hisax_wdata(hisaxdevice_t *dev, void *dp, int len) {
 		off.data.p = stbuf;
 		if ((st = get_stack4id(iff->addr))) {
 			err = create_layer(dev, st,
-				(layer_info_t *)&iff->data.i, off.data.p);
+				(layer_info_t *)&iff->data.i, off.data.p, 0);
 			if (err<0)
 				off.len = err;
 		} else
@@ -656,44 +715,22 @@ hisax_wdata(hisaxdevice_t *dev, void *dp, int len) {
 		off.len = set_if_req(dev, iff);
 		hisax_rdata(dev, &off, 1);
 		break;
+	    case (MGR_ADDIF | REQUEST):
+		used = head + iff->len;
+		if (len<used)
+			return(len);
+		off.addr = iff->addr;
+		off.prim = MGR_ADDIF | CONFIRM;
+		off.dinfo = 0;
+		off.len = add_if_req(dev, iff);
+		hisax_rdata(dev, &off, 1);
+		break;
 	    case (MGR_DISCONNECT | REQUEST):
 		used = head;
 		off.addr = iff->addr;
 		off.prim = MGR_DISCONNECT | CONFIRM;
 		off.dinfo = 0;
 		off.len = del_if_req(dev, iff);
-		hisax_rdata(dev, &off, 1);
-		break;
-	    case (MGR_SETSTACK | REQUEST):
-		used = head + sizeof(hisax_pid_t);
-		if (len<used)
-			return(len);
-		off.addr = iff->addr;
-		off.dinfo = 0;
-		off.prim = MGR_SETSTACK | CONFIRM;
-		off.len = 0;
-		if ((st = get_stack4id(iff->addr))) {
-			stack_inst_flg(dev, st, FLG_MGR_SETSTACK, 0);
-			err = udev_obj.ctrl(st, iff->prim, &iff->data.i);
-			if (err<0)
-				off.len = err;
-		} else
-			off.len = -ENODEV;
-		hisax_rdata(dev, &off, 1);
-		break;	
-	    case (MGR_CLEARSTACK | REQUEST):
-		used = head;
-		off.addr = iff->addr;
-		off.prim = MGR_CLEARSTACK | CONFIRM;
-		off.dinfo = 0;
-		off.len = 0;
-		if ((st = get_stack4id(iff->addr))) {
-			stack_inst_flg(dev, st, FLG_MGR_SETSTACK, 1);
-			err = udev_obj.ctrl(st, iff->prim, NULL);
-			if (err<0)
-				off.len = err;
-		} else
-			off.len = -ENODEV;
 		hisax_rdata(dev, &off, 1);
 		break;
 	    default:
@@ -989,131 +1026,13 @@ from_up_down(hisaxif_t *hif, u_int prim, int dinfo, int len, void *arg) {
 	return(retval);
 }
 
-static int
-from_peer(hisaxif_t *hif, u_int prim, int dinfo, int len, void *arg) {
-	int ret = -EINVAL;
-	devicelayer_t *dl;
-	struct sk_buff *nskb;
-
-	printk(KERN_DEBUG __FUNCTION__ ": prim(%x) di(%x) l(%d) arg(%p)\n",
-		prim, dinfo, len, arg);
-	if (!hif)
-		return(-EINVAL);
-	dl = hif->fdata;
-	if (!dl)
-		return(ret);
-	if (!dl->slave || !dl->sif.func) {
-		if (dl->inst.down.func)
-			ret = dl->inst.down.func(&dl->inst.down, prim, dinfo, len,
-				arg);
-		return(ret);
-	}
-	if (dinfo == DINFO_SKB) {
-		if (test_bit(FLG_DOWN_BUSY, &dl->Flags)) {
-			if (arg == dl->last_skb) {
-				if ((dl->last_skb = skb_dequeue(&dl->queue))) {
-					dl->inst.up.func(&dl->inst.up,
-						dl->last_skb->priority,
-						DINFO_SKB, 0, dl->last_skb);
-				} else
-					test_and_clear_bit(FLG_DOWN_BUSY,
-						&dl->Flags);
-			}
-		}
-		nskb = skb_clone(arg, GFP_ATOMIC);
-		ret = dl->sif.func(&dl->sif, prim, dinfo, len, arg);
-		if (ret) {
-			dev_kfree_skb(nskb);
-			if (dl->inst.down.func)
-				ret = dl->inst.down.func(&dl->inst.down, prim,
-					dinfo, len, arg);
-		} else {
-			if (dl->inst.down.func)
-				ret = dl->inst.down.func(&dl->inst.down, prim,
-					dinfo, len, nskb);
-			else
-				dev_kfree_skb(nskb);
-			if (ret)
-				dev_kfree_skb(nskb);
-			ret = 0; /* first delivery was OK */
-		}
-	} else {
-		ret = dl->sif.func(&dl->sif, prim, dinfo, len, arg);
-		if (ret) {
-			if (dl->inst.down.func)
-				ret = dl->inst.down.func(&dl->inst.down, prim,
-					dinfo, len, arg);
-		} else {
-			if (dl->inst.down.func)
-				dl->inst.down.func(&dl->inst.down, prim,
-					dinfo, len, arg);
-		}
-	}
-	return(ret);
-}
-
-static int
-to_peer(hisaxif_t *hif, u_int prim, int dinfo, int len, void *arg) {
-	int ret = -EINVAL;
-	devicelayer_t *dl;
-	struct sk_buff *skb;
-
-	printk(KERN_DEBUG __FUNCTION__ ": prim(%x) di(%x) l(%d) arg(%p)\n",
-		prim, dinfo, len, arg);
-	if (!hif)
-		return(-EINVAL);
-	dl = hif->fdata;
-	if (!dl)
-		return(ret);
-	if (!dl->slave) {
-		if (dl->inst.up.func)
-			ret = dl->inst.up.func(&dl->inst.up, prim, dinfo,
-				len, arg);
-		return(ret);
-	}
-	if (dinfo == DINFO_SKB) {
-		if (test_and_set_bit(FLG_DOWN_BUSY, &dl->Flags)) {
-			skb = arg;
-			skb->priority = prim;
-			skb_queue_tail(&dl->queue, skb);
-			return(0);
-		}
-		dl->last_skb = arg;
-		ret = dl->inst.up.func(&dl->inst.up, prim, dinfo,
-			len, arg);
-	} else {
-		ret = dl->inst.up.func(&dl->inst.up, prim, dinfo,
-			len, arg);
-	}
-	return(ret);
-}
 
 static int
 set_if(devicelayer_t *dl, u_int prim, hisaxif_t *hif)
 {
 	int err = 0;
-	
-	if (dl->slave && (hif->owner == dl->slave)) {
-		hif->peer = &dl->inst;
-		hif->fdata = dl;
-		hif->func = to_peer;
-		if ((prim & SUBCOMMAND_MASK) == REQUEST) {
-			if (dl->sif.stat == IF_NOACTIV) {
-				if (IF_TYPE(hif) == IF_UP)
-					dl->sif.stat = IF_DOWN;
-				else
-					dl->sif.stat = IF_UP;
-				dl->sif.owner = &dl->inst;
-				err = hif->owner->obj->own_ctrl(hif->owner,
-					MGR_SETIF | INDICATION, &dl->sif);
-			} else {
-				int_errtxt("REQ own stat(%x)", dl->sif.stat);
-				err= -EBUSY;
-			}
-		}
-	} else {
-		err = SetIF(&dl->inst, hif, prim, from_up_down, from_up_down, dl);
-	}
+
+	err = SetIF(&dl->inst, hif, prim, from_up_down, from_up_down, dl);
 	return(err);
 }
 

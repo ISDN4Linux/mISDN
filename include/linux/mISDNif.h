@@ -1,4 +1,4 @@
-/* $Id: mISDNif.h,v 0.22 2001/03/29 19:14:25 kkeil Exp $
+/* $Id: mISDNif.h,v 0.23 2001/04/11 10:21:10 kkeil Exp $
  *
  */
 
@@ -43,6 +43,7 @@
 #define MGR_CONNECT	0x0f3200
 #define MGR_DISCONNECT	0x0f3300
 #define MGR_SETIF	0x0f3400
+#define MGR_ADDIF	0x0f3500
 #define MGR_RELEASE	0x0f4500
 #define MGR_CONTROL	0x0fe100
 #define MGR_STATUS	0x0fe200
@@ -219,7 +220,7 @@
 #define IF_NOACTIV	0x00000000
 #define IF_DOWN		0x01000000
 #define IF_UP		0x02000000
-#define IF_LOG		0x04000000
+#define IF_CHAIN	0x04000000
 #define IF_HANDSHAKE	0x08000000
 #define IF_TYPEMASK	0x07000000
 #define IF_ADDRMASK	0x00FFFFFF
