@@ -1,4 +1,4 @@
-/* $Id: hfc_pci.c,v 1.2 2001/11/16 01:49:21 kkeil Exp $
+/* $Id: hfc_pci.c,v 1.3 2001/11/19 14:54:00 kkeil Exp $
 
  * hfc_pci.c     low level driver for CCD's hfc-pci based cards
  *
@@ -39,7 +39,7 @@
 
 extern const char *CardType[];
 
-static const char *hfcpci_revision = "$Revision: 1.2 $";
+static const char *hfcpci_revision = "$Revision: 1.3 $";
 
 /* table entry in the PCI devices list */
 typedef struct {
@@ -253,7 +253,8 @@ reset_hfcpci(hfc_pci_t *hc)
 	schedule_timeout((20 * HZ) / 1000);	/* Timeout 20ms */
 	save_flags(flags);
 	cli();
-	if (Read_hfc(hc, HFCPCI_STATUS) & 2)
+	val = Read_hfc(hc, HFCPCI_STATUS);
+	if (val & 2)
 		printk(KERN_WARNING "HFC-PCI init bit busy\n");
 
 	hc->hw.fifo_en = 0x30;	/* only D fifos enabled */
@@ -308,7 +309,6 @@ reset_hfcpci(hfc_pci_t *hc)
 	Write_hfc(hc, HFCPCI_B2_SSL, 0x81);	/* B2-Slot 1 STIO1 out enabled */
 	Write_hfc(hc, HFCPCI_B1_RSL, 0x80);	/* B1-Slot 0 STIO2 in enabled */
 	Write_hfc(hc, HFCPCI_B2_RSL, 0x81);	/* B2-Slot 1 STIO2 in enabled */
-
 	val = Read_hfc(hc, HFCPCI_INT_S2);
 	restore_flags(flags);
 }
@@ -1168,10 +1168,10 @@ hfcpci_interrupt(int intno, void *dev_id, struct pt_regs *regs)
 	if (HFCPCI_ANYINT & (stat = Read_hfc(hc, HFCPCI_STATUS))) {
 		val = Read_hfc(hc, HFCPCI_INT_S1);
 		if (hc->dch.debug & L1_DEB_ISAC)
-			debugprint(&hc->dch.inst, "HFC-PCI: stat(%02x) s1(%02x)", stat, val);
+			debugprint(&hc->dch.inst, "HFC-PCI: stat(%02x) s1(%02x)",
+				stat, val);
 	} else
 		return;
-
 	if (hc->dch.debug & L1_DEB_ISAC)
 		debugprint(&hc->dch.inst, "HFC-PCI irq %x %s", val,
 			test_bit(FLG_LOCK_ATOMIC, &hc->dch.DFlags) ?

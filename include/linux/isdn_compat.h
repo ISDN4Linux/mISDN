@@ -29,6 +29,7 @@
 #define pci_get_sub_system(pdev, id)	pci_read_config_word(pdev, PCI_SUBSYSTEM_ID, &id)
 #define dev_kfree_skb_any(a)		dev_kfree_skb(a)
 #define dev_kfree_skb_irq(a)		dev_kfree_skb(a)
+typedef	struct timer_list		timer_t;
 #else /* 2.4.0 and later */
 #include <linux/netdevice.h>
 #define pci_resource_start_io(pdev, nr) pci_resource_start(pdev, nr)

@@ -1,4 +1,4 @@
-/* $Id: sedl_fax.c,v 1.0 2001/11/02 23:42:27 kkeil Exp $
+/* $Id: sedl_fax.c,v 1.1 2001/11/19 14:54:00 kkeil Exp $
  *
  * sedl_fax.c  low level stuff for Sedlbauer Speedfax + cards
  *
@@ -40,7 +40,7 @@
 
 extern const char *CardType[];
 
-const char *Sedlfax_revision = "$Revision: 1.0 $";
+const char *Sedlfax_revision = "$Revision: 1.1 $";
 
 const char *Sedlbauer_Types[] =
 	{"None", "speed fax+", "speed fax+ pyramid", "speed fax+ pci"};
@@ -468,10 +468,10 @@ setup_speedfax(sedl_fax *sf, u_int io_cfg, u_int irq_cfg)
 	 		pci_finished_lookup = 1;
 			printk(KERN_INFO "Sedlbauer: No more PCI cards found\n");
 		}
-#else
-		printk(KERN_WARNING "Sedlbauer: NO_PCI_BIOS\n");
-#endif /* CONFIG_PCI */
 	}
+#else
+	printk(KERN_WARNING "Sedlbauer: NO_PCI_BIOS\n");
+#endif /* CONFIG_PCI */
 	if (!sf->subtyp) { /* OK no PCI found now check for an ISA card */	
 		if ((!io_cfg) || (!irq_cfg)) {
 			if (!sedl_cnt)
