@@ -108,7 +108,7 @@
 
 extern const char *CardType[];
 
-static const char *hfcmulti_revision = "$Revision: 1.15 $";
+static const char *hfcmulti_revision = "$Revision: 1.16 $";
 
 static int HFC_cnt;
 
@@ -2716,7 +2716,7 @@ setup_pci(hfc_multi_t *hc)
 		return (-EIO);
 	}
 	if (!request_region(hc->pci_iobase, 8, "hfcmulti")) {
-		printk(KERN_WARNING "HFC-multi: failed to rquest address space at 0x%04x (internal error)\n", hc->pci_iobase);
+		printk(KERN_WARNING "HFC-multi: failed to request address space at 0x%04x (internal error)\n", hc->pci_iobase);
 		hc->pci_iobase = 0;
 		return (-EIO);
 	}
@@ -3422,10 +3422,9 @@ HFCmulti_init(void)
 		if (debug & DEBUG_HFCMULTI_INIT)
 			printk(KERN_DEBUG "%s: Initializing card(%d)\n", __FUNCTION__, HFC_cnt+1);
 		if ((err = init_card(hc))) {
-			if (debug & DEBUG_HFCMULTI_INIT) {
+			if (debug & DEBUG_HFCMULTI_INIT)
 				printk(KERN_DEBUG "%s: do release_io_hfcmulti\n", __FUNCTION__);
-				release_io_hfcmulti(hc);
-			}
+			release_io_hfcmulti(hc);
 			goto free_channels;
 		}
 
