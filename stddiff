@@ -148,7 +148,7 @@ if [ $# != 0 ]; then
 		$DODIFF $i $KERNELDIR/$i
 	done
 else
-	for i in drivers/isdn/mISDN/*.[ch] ; do
+	for i in drivers/isdn/hardware/mISDN/*.[ch] ; do
 		$DODIFF $i $KERNELDIR/$i
 	done
 	for i in include/linux/*.h ; do
@@ -159,7 +159,7 @@ else
 			$DODIFF $i $KERNELDIR/$i
 		fi
 	done
-	for i in drivers/isdn/mISDN/Makefile \
+	for i in drivers/isdn/hardware/mISDN/Makefile \
                 ; do
 		if [ -f $i.kernel ] ; then
 	    		dodiff $i.kernel $KERNELDIR/$i

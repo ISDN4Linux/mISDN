@@ -40,9 +40,9 @@ install -p Rules.make.ext $DESTDIR
 install -p add.config $DESTDIR
 mkdir -p $DESTDIR/newinclude/linux
 install -p include/linux/*.h $DESTDIR/newinclude/linux
-mkdir -p $DESTDIR/drivers/isdn/mISDN
-install -p drivers/isdn/mISDN/Makefile $DESTDIR/drivers/isdn/mISDN
-install -p drivers/isdn/mISDN/*.[ch] $DESTDIR/drivers/isdn/mISDN
+mkdir -p $DESTDIR/drivers/isdn/hardware/mISDN
+install -p drivers/isdn/hardware/mISDN/Makefile $DESTDIR/drivers/isdn/hardware/mISDN
+install -p drivers/isdn/hardware/mISDN/*.[ch] $DESTDIR/drivers/isdn/hardware/mISDN
 
 #
 %{?suse_check}
