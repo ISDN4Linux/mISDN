@@ -43,6 +43,7 @@ install -p include/linux/*.h $DESTDIR/newinclude/linux
 mkdir -p $DESTDIR/drivers/isdn/hardware/mISDN
 install -p drivers/isdn/hardware/mISDN/Makefile $DESTDIR/drivers/isdn/hardware/mISDN
 install -p drivers/isdn/hardware/mISDN/*.[ch] $DESTDIR/drivers/isdn/hardware/mISDN
+install -p drivers/isdn/hardware/mISDN/Rules.mISDN $DESTDIR/drivers/isdn/hardware/mISDN
 
 #
 %{?suse_check}
