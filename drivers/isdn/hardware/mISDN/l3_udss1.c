@@ -1,4 +1,4 @@
-/* $Id: l3_udss1.c,v 0.6 2001/02/20 00:34:55 kkeil Exp $
+/* $Id: l3_udss1.c,v 0.7 2001/02/21 19:18:27 kkeil Exp $
  *
  * EURO/DSS1 D-channel protocol
  *
@@ -25,8 +25,7 @@ static int debug = 0;
 static hisaxobject_t u_dss1;
 
 
-extern char *HiSax_getrev(const char *revision);
-const char *dss1_revision = "$Revision: 0.6 $";
+const char *dss1_revision = "$Revision: 0.7 $";
 
 static int dss1man(l3_process_t *, u_int, void *);
 
@@ -156,7 +155,8 @@ static int ie_PROGRESS[] = {IE_BEARER, IE_CAUSE, IE_FACILITY, IE_PROGRESS |
 static int ie_RELEASE[] = {IE_CAUSE | IE_MANDATORY_1, IE_FACILITY, IE_DISPLAY,
 		IE_SIGNAL, IE_USER_USER, -1};
 /* a RELEASE_COMPLETE with errors don't require special actions 
-static int ie_RELEASE_COMPLETE[] = {IE_CAUSE | IE_MANDATORY_1, IE_DISPLAY, IE_SIGNAL, IE_USER_USER, -1};
+static int ie_RELEASE_COMPLETE[] = {IE_CAUSE | IE_MANDATORY_1, IE_FACILITY,
+		IE_DISPLAY, IE_SIGNAL, IE_USER_USER, -1};
 */
 static int ie_RESUME_ACKNOWLEDGE[] = {IE_CHANNEL_ID| IE_MANDATORY, IE_FACILITY,
 		IE_DISPLAY, -1};
@@ -606,6 +606,8 @@ l3dss1_release_cmpl_req(l3_process_t *pc, u_char pr, void *arg)
 		MsgStart(pc, MT_RELEASE_COMPLETE);
 		if (rcmpl->CAUSE)
 			AddvarIE(pc, IE_CAUSE, rcmpl->CAUSE);
+		if (rcmpl->FACILITY)
+			AddvarIE(pc, IE_FACILITY, rcmpl->FACILITY);
 		if (rcmpl->USER_USER)
 			AddvarIE(pc, IE_USER_USER, rcmpl->USER_USER);
 		SendMsg(pc, 0);
@@ -743,6 +745,8 @@ l3dss1_release_cmpl(l3_process_t *pc, u_char pr, void *arg)
 				l3_debug(pc->l3, "RELCMPL get_cause err(%d)",
 					pc->err);
 	}
+	pc->para.RELEASE_COMPLETE.FACILITY =
+		findie(skb->data, skb->len, IE_FACILITY, 0);
 	pc->para.RELEASE_COMPLETE.DISPLAY =
 		findie(skb->data, skb->len, IE_DISPLAY, 0);
 	pc->para.RELEASE_COMPLETE.SIGNAL =
@@ -1584,7 +1588,7 @@ l3dss1_t302(l3_process_t *pc, u_char pr, void *arg)
 	L3DelTimer(&pc->timer);
 	newl3state(pc, 11);
 	l3dss1_message_cause(pc, MT_DISCONNECT, CAUSE_INVALID_NUMBER);
-	hisax_l3up(pc, CC_DISCONNECT | REQUEST, pc);
+	hisax_l3up(pc, CC_TIMEOUT | INDICATION, NULL);
 }
 
 static void
@@ -1601,7 +1605,7 @@ l3dss1_t303(l3_process_t *pc, u_char pr, void *arg)
 		}
 	}
 	l3dss1_message_cause(pc, MT_RELEASE_COMPLETE, CAUSE_TIMER_EXPIRED);
-	hisax_l3up(pc, CC_RELEASE | REQUEST, pc);
+	hisax_l3up(pc, CC_TIMEOUT | INDICATION, NULL);
 	release_l3_process(pc);
 }
 
@@ -1611,7 +1615,7 @@ l3dss1_t304(l3_process_t *pc, u_char pr, void *arg)
 	L3DelTimer(&pc->timer);
 	newl3state(pc, 11);
 	l3dss1_message_cause(pc, MT_DISCONNECT, CAUSE_TIMER_EXPIRED);
-	hisax_l3up(pc, CC_DISCONNECT | REQUEST, pc);
+	hisax_l3up(pc, CC_TIMEOUT | INDICATION, NULL);
 }
 
 static void
@@ -1633,7 +1637,7 @@ l3dss1_t310(l3_process_t *pc, u_char pr, void *arg)
 	L3DelTimer(&pc->timer);
 	newl3state(pc, 11);
 	l3dss1_message_cause(pc, MT_DISCONNECT, CAUSE_TIMER_EXPIRED);
-	hisax_l3up(pc, CC_DISCONNECT | REQUEST, pc);
+	hisax_l3up(pc, CC_TIMEOUT | INDICATION, NULL);
 }
 
 static void
@@ -1642,7 +1646,7 @@ l3dss1_t313(l3_process_t *pc, u_char pr, void *arg)
 	L3DelTimer(&pc->timer);
 	newl3state(pc, 11);
 	l3dss1_message_cause(pc, MT_DISCONNECT, CAUSE_TIMER_EXPIRED);
-	hisax_l3up(pc, CC_DISCONNECT | REQUEST, pc);
+	hisax_l3up(pc, CC_TIMEOUT | INDICATION, NULL);
 }
 
 static void
@@ -1658,7 +1662,7 @@ static void
 l3dss1_t308_2(l3_process_t *pc, u_char pr, void *arg)
 {
 	L3DelTimer(&pc->timer);
-	hisax_l3up(pc, CC_RELEASE | REQUEST, pc);
+	hisax_l3up(pc, CC_TIMEOUT | INDICATION, NULL);
 	release_l3_process(pc);
 }
 
@@ -1670,7 +1674,7 @@ l3dss1_t318(l3_process_t *pc, u_char pr, void *arg)
 	pc->cause = 102;	/* Timer expiry */
 	pc->para.loc = 0;	/* local */
 #endif
-	hisax_l3up(pc, CC_RESUME | CONFIRM, pc);
+	hisax_l3up(pc, CC_RESUME_REJECT | INDICATION, NULL);
 	newl3state(pc, 19);
 	l3dss1_message(pc, MT_RELEASE);
 	L3AddTimer(&pc->timer, T308, CC_T308_1);
@@ -1684,40 +1688,43 @@ l3dss1_t319(l3_process_t *pc, u_char pr, void *arg)
 	pc->cause = 102;	/* Timer expiry */
 	pc->para.loc = 0;	/* local */
 #endif
-	hisax_l3up(pc, CC_SUSPEND | CONFIRM, pc);
+	hisax_l3up(pc, CC_SUSPEND_REJECT | INDICATION, NULL);
 	newl3state(pc, 10);
 }
 
 static void
 l3dss1_dl_reset(l3_process_t *pc, u_char pr, void *arg)
 {
-	cause_t cause;
+	DISCONNECT_t disc;
+	u_char cause[4];
 
-	cause.len = 2;
-	cause.loc = 0x80 | CAUSE_LOC_USER;
-	cause.val = 0x80 | CAUSE_TEMPORARY_FAILURE;
-        l3dss1_disconnect_req(pc, pr, &cause);
-        hisax_l3up(pc, CC_DISCONNECT | REQUEST, pc);
+	memset(&disc, 0, sizeof(DISCONNECT_t));
+	disc.CAUSE = cause;
+	cause[0] = 2;
+	cause[1] = 0x80 | CAUSE_LOC_USER;
+	cause[2] = 0x80 | CAUSE_TEMPORARY_FAILURE;
+	l3dss1_disconnect_req(pc, pr, &disc);
+	hisax_l3up(pc, CC_DISCONNECT | REQUEST, &disc);
 }
 
 static void
 l3dss1_dl_release(l3_process_t *pc, u_char pr, void *arg)
 {
-        newl3state(pc, 0);
+	newl3state(pc, 0);
 #if 0
         pc->cause = 0x1b;          /* Destination out of order */
         pc->para.loc = 0;
 #endif
-        hisax_l3up(pc, CC_RELEASE | INDICATION, pc);
-        release_l3_process(pc);
+	hisax_l3up(pc, DL_RELEASE | INDICATION, NULL);
+	release_l3_process(pc);
 }
 
 static void
 l3dss1_dl_reestablish(l3_process_t *pc, u_char pr, void *arg)
 {
-        L3DelTimer(&pc->timer);
-        L3AddTimer(&pc->timer, T309, CC_T309);
-        l3_msg(pc->l3, DL_ESTABLISH | REQUEST, pc->l3->msgnr++, 0, NULL);
+	L3DelTimer(&pc->timer);
+	L3AddTimer(&pc->timer, T309, CC_T309);
+	l3_msg(pc->l3, DL_ESTABLISH | REQUEST, pc->l3->msgnr++, 0, NULL);
 }
  
 static void
