@@ -1,4 +1,4 @@
-/* $Id: contr.c,v 0.1 2001/02/21 19:22:35 kkeil Exp $
+/* $Id: contr.c,v 0.2 2001/02/22 05:54:39 kkeil Exp $
  *
  */
 
@@ -6,30 +6,40 @@
 #include "helper.h"
 #include "debug.h"
 
-#if 0
 #define contrDebug(contr, lev, fmt, args...) \
-	debug(lev, contr->cs, "Contr ", fmt, ## args)
-#endif
+	capidebug(lev, fmt, ## args)
 
-static int contr_l3l4(hisaxif_t *hif, u_int prim, u_int nr, int dtyp, void *arg);
 //static void d2_listener(struct IsdnCardState *cs, u_char *buf, int len);
 
 int contrConstr(Contr_t *contr, hisaxstack_t *st, hisaxif_t *hif, hisaxobject_t *ocapi)
 { 
 	char tmp[10];
 	int lay, err;
+	hisaxstack_t *cst = st->child;
+	hisaxinstance_t	*inst;
 
 	memset(contr, 0, sizeof(Contr_t));
 	contr->adrController = st->id;
+	contr->inst.obj = ocapi;
+	APPEND_TO_LIST(contr, ocapi->ilist);
+	while(cst) {
+		if (!(inst = kmalloc(sizeof(hisaxinstance_t), GFP_KERNEL))) {
+			printk(KERN_ERR "no mem for inst\n");
+			int_error();
+			return -ENOMEM;
+		}
+		inst->st = cst;
+		inst->obj = ocapi;
+		APPEND_TO_LIST(inst, contr->ch_list);
+		cst = cst->next;
+	}
 	sprintf(tmp, "HiSax%d", contr->adrController);
 	contr->ctrl = cdrv_if->attach_ctr(&hisax_driver, tmp, contr);
 	if (!contr->ctrl)
 		return -ENODEV;
 	contr->inst.protocol = hif->protocol;
-	contr->inst.obj = ocapi;
 	contr->inst.layer = hif->layer;
 	contr->inst.data = contr;
-	APPEND_TO_LIST(contr, ocapi->ilist);
 	ocapi->ctrl(st, MGR_ADDLAYER | INDICATION, &contr->inst);
 	contr->inst.up.protocol = ISDN_PID_NONE;
 	contr->inst.up.layer = 0;
@@ -44,7 +54,6 @@ int contrConstr(Contr_t *contr, hisaxstack_t *st, hisaxif_t *hif, hisaxobject_t 
 	contr->inst.down.stat = IF_UP;
 	err = ocapi->ctrl(st, MGR_ADDIF | REQUEST, &contr->inst.down);
 	if (err) {
-		release_(contr);
 		printk(KERN_ERR "contrConstr down interface request failed %d\n", err);
 		return(-EIO);
 	}
@@ -54,6 +63,7 @@ int contrConstr(Contr_t *contr, hisaxstack_t *st, hisaxif_t *hif, hisaxobject_t 
 void contrDestr(Contr_t *contr)
 {
 	int i;
+	Contr_t *base = contr->inst.obj->ilist;
 
 	for (i = 0; i < CAPI_MAXAPPL; i++) {
 		if (contr->appls[i]) {
@@ -73,7 +83,16 @@ void contrDestr(Contr_t *contr)
 			kfree(contr->dummy_pcs[i]);
 		}
 	}
-	cdrv_if->detach_ctr(contr->ctrl);
+	if (contr->ctrl)
+		cdrv_if->detach_ctr(contr->ctrl);
+	
+	while (contr->ch_list) {
+		hisaxinstance_t *inst = contr->ch_list;
+		REMOVE_FROM_LISTBASE(inst, contr->ch_list);
+		kfree(inst);
+	}
+	REMOVE_FROM_LISTBASE(contr, base);
+	contr->inst.obj->ilist = base;
 }
 
 void contrRun(Contr_t *contr)
@@ -289,8 +308,8 @@ static Plci_t
 	return(NULL);
 }
 
-static int
-contr_l3l4(hisaxif_t *hif, u_int prim, u_int nr, int dtyp, void *arg)
+int
+contrL3L4(hisaxif_t *hif, u_int prim, u_int nr, int dtyp, void *arg)
 {
 	Contr_t	*contr;
 	Plci_t	*plci;
@@ -306,17 +325,26 @@ contr_l3l4(hisaxif_t *hif, u_int prim, u_int nr, int dtyp, void *arg)
 		if (!plci)
 			return(-EBUSY);
 		l3msg->id = plci->adrPLCI;
-	} else if (prim == (CC_DUMMY | INDICATION)) {
-		contrDummyInd(contr, arg);
+	} else if ((l3msg->id & ~CONTROLER_MASK) == DUMMY_CR_FLAG) {
+		contrDummyInd(contr, prim, l3msg->arg);
 	} else {
 		if (!(plci = contrGetPLCI4addr(contr, l3msg->id))) {
-			contrDebug(contr, LL_DEB_WARN, __FUNCTION__ 
-				": unknown plci prim(%x) id(%x)", prim, l3msg->id);
+			contrDebug(contr, LL_DEB_WARN, __FUNCTION__ ": unknown plci prim(%x) id(%x)", prim, l3msg->id);
 			return(-ENODEV);
 		}
 		plci_l3l4(plci, prim, l3msg->arg);
 	}
 	return(0);
+}
+
+int contrL4L3(Contr_t *contr, __u32 prim, l3msg_t *l3msg) {
+	int err = -EINVAL;
+
+	if (contr->inst.up.func) {
+		err = contr->inst.up.func(&contr->inst.up, prim, 0,
+			DTYPE_L3MSGP, l3msg);
+	}
+	return(err);
 }
 
 void contrPutStatus(Contr_t *contr, char *msg)
@@ -340,6 +368,7 @@ Contr_t *newContr(hisaxobject_t *ocapi, hisaxstack_t *st, hisaxif_t *hif)
 		return(NULL);
 
 	if (contrConstr(contr, st, hif, ocapi) != 0) {
+		contrDestr(contr);
 		kfree(contr);
 		return(NULL);
 	}

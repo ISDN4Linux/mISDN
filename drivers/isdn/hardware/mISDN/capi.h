@@ -1,4 +1,4 @@
-/* $Id: capi.h,v 0.1 2001/02/21 19:22:35 kkeil Exp $
+/* $Id: capi.h,v 0.2 2001/02/22 05:54:39 kkeil Exp $
  *
  */
 
@@ -33,6 +33,7 @@ void init_ncci(void);
 void free_listen(void);
 void free_cplci(void);
 void free_ncci(void);
+void capidebug(int, char *, ...);
 
 #define SuppServiceCF          0x00000010
 #define SuppServiceTP          0x00000002
@@ -58,6 +59,7 @@ typedef struct _DummyProcess {
 	__u16	invokeId;
 	__u16	Function;  
 	__u32	Handle;
+	__u32	adrDummy;
 	__u16	ApplId;
 	struct _Contr *contr;
 	struct timer_list tl;
@@ -141,6 +143,7 @@ typedef struct _Contr {
 	struct _Contr	*prev;
 	struct _Contr	*next;
 	hisaxinstance_t	inst;
+	hisaxinstance_t *ch_list;
 	struct capi_ctr	*ctrl;
 	__u32		adrController;
 	int		b3_mode;
@@ -168,10 +171,11 @@ struct _Plci	*contrNewPlci(Contr_t *contr);
 struct _Appl	*contrId2appl(Contr_t *contr, __u16 ApplId);
 struct _Plci	*contrAdr2plci(Contr_t *contr, __u32 adr);
 void		contrDelPlci(Contr_t *contr, struct _Plci *plci);
-void		contrDummyInd(Contr_t *contr, struct sk_buff *skb);
+void		contrDummyInd(Contr_t *, __u32, void *);
 DummyProcess_t	*contrNewDummyPc(Contr_t *contr);
 DummyProcess_t	*contrId2DummyPc(Contr_t *contr, __u16 invokeId);
-
+int		contrL4L3(Contr_t *, __u32, l3msg_t *);
+int		contrL3L4(hisaxif_t *, u_int, u_int, int, void *);
 // ---------------------------------------------------------------------------
 // struct Listen
 
@@ -265,20 +269,22 @@ void plciAttachCplci(Plci_t *plci, struct _Cplci *cplci);
 void plciDetachCplci(Plci_t *plci, struct _Cplci *cplci);
 void plciNewCrInd(Plci_t *plci, void *);
 void plciNewCrReq(Plci_t *plci);
+int  plciL4L3(Plci_t *plci, __u32 prim, void *arg);
 
 // ---------------------------------------------------------------------------
 // struct Cplci
 
 typedef struct _Cplci {
-	__u32 adrPLCI;
-	Plci_t *plci;
-	Appl_t *appl;
-	struct _Ncci *ncci;
-	Contr_t *contr;
-	struct FsmInst plci_m;
-	u_char cause[3]; // we may get a cause from l3 DISCONNECT message
-   	                 // which we'll need send in DISCONNECT_IND caused by
-	                 // l3 RELEASE message
+	__u32	adrPLCI;
+	Plci_t	*plci;
+	Appl_t	*appl;
+	struct	_Ncci *ncci;
+	Contr_t	*contr;
+	struct	FsmInst plci_m;
+	u_char	cause[4]; // we may get a cause from l3 DISCONNECT message
+			  // which we'll need send in DISCONNECT_IND caused by
+			  // l3 RELEASE message
+	int	bchannel;
 	struct Bprotocol Bprotocol;
 } Cplci_t;
 
@@ -303,9 +309,7 @@ int cplciFacResumeReq(Cplci_t *cplci, struct FacReqParm *facReqParm,
 // Ncci_t
 
 typedef struct _Ncci {
-	struct _Ncci	*prev;
-	struct _Ncci	*next;
-	hisaxinstance_t	inst;
+	hisaxinstance_t	*inst;
 	__u32		adrNCCI;
 	Contr_t		*contr;
 	Cplci_t		*cplci;

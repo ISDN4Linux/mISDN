@@ -1,4 +1,4 @@
-/* $Id: mISDNif.h,v 0.6 2001/02/21 19:15:14 kkeil Exp $
+/* $Id: mISDNif.h,v 0.7 2001/02/22 05:54:40 kkeil Exp $
  *
  */
 
@@ -133,7 +133,6 @@
 #define CC_TIMEOUT		0x031200
 #define CC_NEW_CR		0x03f000
 #define CC_RELEASE_CR		0x03f100
-#define CC_DUMMY		0x03f200
 
 
 #define LAYER_MASK	0x0F0000
@@ -214,6 +213,9 @@
 
 #define DTYPE_SKB	-1
 #define DTYPE_L3MSGP	-2
+
+#define DUMMY_CR_FLAG	0x7FFFFF00
+#define CONTROLER_MASK	0x000000FF
 
 /* special packet type */
 #define PACKET_NOACK	250

@@ -1,4 +1,4 @@
-/* $Id: cplci.c,v 0.1 2001/02/21 19:22:35 kkeil Exp $
+/* $Id: cplci.c,v 0.2 2001/02/22 05:54:39 kkeil Exp $
  *
  */
 
@@ -7,10 +7,8 @@
 #include "debug.h"
 #include "dss1.h"
 
-#if 0
 #define cplciDebug(cplci, lev, fmt, args...) \
-        debug(lev, cplci->contr->cs, "", fmt, ## args)
-#endif
+	capidebug(lev, fmt, ## args)
 
 static u_char BEARER_SPEECH_64K_ALAW[4] = {3, 0x80, 0x90, 0xA3};
 static u_char BEARER_SPEECH_64K_ULAW[4] = {3, 0x80, 0x90, 0xA2};
@@ -296,7 +294,7 @@ static void plci_connect_req(struct FsmInst *fi, int event, void *arg)
 	}
 
 	plciNewCrReq(plci);
-	p_L4L3(plci, CC_SETUP | REQUEST, &setup_req);
+	plciL4L3(plci, CC_SETUP | REQUEST, &setup_req);
 answer:
 	capi_cmsg_answer(cmsg);
 	cmsg->Info = Info;
@@ -329,7 +327,7 @@ static void plci_suspend_req(struct FsmInst *fi, int event, void *arg)
 	Cplci_t *cplci = fi->userdata;
 	Plci_t *plci = cplci->plci;
 
-	p_L4L3(plci, CC_SUSPEND | REQUEST, arg); 
+	plciL4L3(plci, CC_SUSPEND | REQUEST, arg); 
 }
 
 static void plci_resume_req(struct FsmInst *fi, int event, void *arg)
@@ -342,7 +340,7 @@ static void plci_resume_req(struct FsmInst *fi, int event, void *arg)
 	FsmChangeState(fi, ST_PLCI_P_RES);
 
 	plciNewCrReq(plci);
-	p_L4L3(plci, CC_RESUME | REQUEST, arg);
+	plciL4L3(plci, CC_RESUME | REQUEST, arg);
 }
 
 static void plci_alert_req(struct FsmInst *fi, int event, void *arg)
@@ -358,7 +356,7 @@ static void plci_alert_req(struct FsmInst *fi, int event, void *arg)
 	} else {
 		Info = cmsg2alerting_req(cmsg, &alerting_req);
 		if (Info == 0) {
-			p_L4L3(plci, CC_ALERTING | REQUEST, &alerting_req); 
+			plciL4L3(plci, CC_ALERTING | REQUEST, &alerting_req); 
 		}
 	}
 	
@@ -381,7 +379,7 @@ static void plci_connect_resp(struct FsmInst *fi, int event, void *arg)
 				int_error();
 			}
 			cplciClearOtherApps(cplci);
-			p_L4L3(plci, CC_SETUP | RESPONSE, 0);
+			plciL4L3(plci, CC_CONNECT | REQUEST, 0);
 			FsmChangeState(fi, ST_PLCI_P_4);
 			break;
 		default : // ignore, reject 
@@ -411,9 +409,9 @@ static void plci_connect_resp(struct FsmInst *fi, int event, void *arg)
 				// if we already answered, we can't just ignore but must clear actively
 					memset(&disconnect_req, 0, sizeof(DISCONNECT_t));
 					disconnect_req.CAUSE = cause;
-					p_L4L3(plci, CC_DISCONNECT | REQUEST, &disconnect_req);
+					plciL4L3(plci, CC_DISCONNECT | REQUEST, &disconnect_req);
 				} else {
-					p_L4L3(plci, CC_RESET | REQUEST, 0);
+					plciL4L3(plci, CC_RESET | REQUEST, 0);
 				}
 			}
 		
@@ -459,12 +457,12 @@ static void plci_disconnect_req(struct FsmInst *fi, int event, void *arg)
 	cplciLinkDown(cplci);
 
 	if (cplci->cause[0]) { // FIXME
-		p_L4L3(plci, CC_RELEASE | REQUEST, 0);
+		plciL4L3(plci, CC_RELEASE | REQUEST, 0);
 	} else {
 		memset(&disconnect_req, 0, sizeof(DISCONNECT_t));
 		memcpy(cause, "\x02\x80\x90", 3); // normal call clearing
 		disconnect_req.CAUSE = cause;
-		p_L4L3(plci, CC_DISCONNECT | REQUEST, &disconnect_req);
+		plciL4L3(plci, CC_DISCONNECT | REQUEST, &disconnect_req);
 	}
 }
 
@@ -567,7 +565,7 @@ static void plci_cc_disconnect_ind(struct FsmInst *fi, int event, void *arg)
 		memcpy(cplci->cause, disc->CAUSE, 3);
 	if (!(cplci->appl->listen.InfoMask & CAPI_INFOMASK_EARLYB3)) {
 		cplciLinkDown(cplci);
-		p_L4L3(cplci->plci, CC_RELEASE | REQUEST, 0);
+		plciL4L3(cplci->plci, CC_RELEASE | REQUEST, 0);
 	}
 }
 
@@ -701,9 +699,15 @@ static void plci_cc_resume_err(struct FsmInst *fi, int event, void *arg)
 static void plci_cc_resume_conf(struct FsmInst *fi, int event, void *arg)
 {
 	Cplci_t *cplci = fi->userdata;
+	RESUME_ACKNOWLEDGE_t *ack = arg;
 	_cmsg cmsg;
 	__u8 tmp[10], *p;
 	
+	if (!ack || !ack->CHANNEL_ID) {
+		int_error();
+		return;
+	}
+	cplci->bchannel = ack->CHANNEL_ID[1];
 	cplciCmsgHeader(cplci, &cmsg, CAPI_FACILITY, CAPI_IND);
 	p = &tmp[1];
 	p += capiEncodeWord(p, 0x0005); // Suspend
@@ -747,7 +751,7 @@ static void plci_info_req_overlap(struct FsmInst *fi, int event, void *arg)
 
 	Info = cmsg2info_req(cmsg, &info_req);
 	if (Info == CapiSuccess) {
-		p_L4L3(plci, CC_INFO | REQUEST, &info_req);
+		plciL4L3(plci, CC_INFO | REQUEST, &info_req);
 	}
 	
 	capi_cmsg_answer(cmsg);
@@ -854,6 +858,7 @@ void cplciConstr(Cplci_t *cplci, Appl_t *appl, Plci_t *plci)
 	cplci->plci_m.debug      = 0;
 	cplci->plci_m.userdata   = cplci;
 	cplci->plci_m.printdebug = cplci_debug;
+	cplci->bchannel = -1;
 }
 
 void cplciDestr(Cplci_t *cplci)
@@ -894,7 +899,9 @@ void cplci_l3l4(Cplci_t *cplci, int pr, void *arg)
 			cplciInfoIndIE(cplci, IE_FACILITY, CAPI_INFOMASK_FACILITY,
 				p.setup->FACILITY);
 			cplciInfoIndIE(cplci, IE_CHANNEL_ID, CAPI_INFOMASK_CHANNELID,
-				p.setup->FACILITY);
+				p.setup->CHANNEL_ID);
+			if (p.setup->CHANNEL_ID)
+				cplci->bchannel = p.setup->CHANNEL_ID[1];
 			FsmEvent(&cplci->plci_m, EV_PLCI_CC_SETUP_IND, arg); 
 			break;
 		case CC_TIMEOUT | INDICATION:
@@ -914,6 +921,8 @@ void cplci_l3l4(Cplci_t *cplci, int pr, void *arg)
 					CAPI_INFOMASK_FACILITY, p.conn->FACILITY);
 				cplciInfoIndIE(cplci, IE_CHANNEL_ID,
 					CAPI_INFOMASK_CHANNELID, p.conn->CHANNEL_ID);
+				if (p.conn->CHANNEL_ID)
+					cplci->bchannel = p.conn->CHANNEL_ID[1];
 			}
 			FsmEvent(&cplci->plci_m, EV_PLCI_CC_SETUP_CONF, arg); 
 			break;
@@ -923,6 +932,8 @@ void cplci_l3l4(Cplci_t *cplci, int pr, void *arg)
 					CAPI_INFOMASK_DISPLAY, p.c_ack->DISPLAY);
 				cplciInfoIndIE(cplci, IE_CHANNEL_ID,
 					CAPI_INFOMASK_CHANNELID, p.c_ack->CHANNEL_ID);
+				if (p.c_ack->CHANNEL_ID)
+					cplci->bchannel = p.c_ack->CHANNEL_ID[1];
 			}
 			FsmEvent(&cplci->plci_m, EV_PLCI_CC_SETUP_COMPL_IND, arg); 
 			break;
@@ -982,6 +993,8 @@ void cplci_l3l4(Cplci_t *cplci, int pr, void *arg)
 					p.s_ack->PROGRESS);
 				cplciInfoIndIE(cplci, IE_CHANNEL_ID,
 					CAPI_INFOMASK_CHANNELID, p.s_ack->CHANNEL_ID);
+				if (p.s_ack->CHANNEL_ID)
+					cplci->bchannel = p.s_ack->CHANNEL_ID[1];
 			}
 			break;
 		case CC_PROCEEDING | INDICATION:
@@ -995,6 +1008,8 @@ void cplci_l3l4(Cplci_t *cplci, int pr, void *arg)
 					p.proc->PROGRESS);
 				cplciInfoIndIE(cplci, IE_CHANNEL_ID,
 					CAPI_INFOMASK_CHANNELID, p.proc->CHANNEL_ID);
+				if (p.proc->CHANNEL_ID)
+					cplci->bchannel = p.proc->CHANNEL_ID[1];
 			}
 			break;
 		case CC_ALERTING | INDICATION:
@@ -1012,6 +1027,8 @@ void cplci_l3l4(Cplci_t *cplci, int pr, void *arg)
 					CAPI_INFOMASK_FACILITY, p.alert->FACILITY);
 				cplciInfoIndIE(cplci, IE_CHANNEL_ID,
 					CAPI_INFOMASK_CHANNELID, p.alert->CHANNEL_ID);
+				if (p.alert->CHANNEL_ID)
+					cplci->bchannel = p.alert->CHANNEL_ID[1];
 			}
 			break;
 		case CC_PROGRESS | INDICATION:
@@ -1099,6 +1116,16 @@ void cplciLinkUp(Cplci_t *cplci)
 {
 	if (cplci->ncci)
 		return;
+	if (cplci->bchannel == -1) {/* no valid channel set */
+		int_error();
+		return;
+	}
+	
+	if (!(cplci->bchannel & 3) || ((cplci->bchannel & 3) == 3)) {
+		// at the moment only B-channel 1 or B-channel 2 allowed
+		int_error();
+		return;
+	}
 
 	cplci->ncci = kmalloc(sizeof(Ncci_t), GFP_ATOMIC);
 	if (!cplci->ncci) {

@@ -1,4 +1,4 @@
-/* $Id: supp_serv.c,v 0.1 2001/02/21 19:22:35 kkeil Exp $
+/* $Id: supp_serv.c,v 0.2 2001/02/22 05:54:40 kkeil Exp $
  *
  */
 
@@ -272,6 +272,16 @@ void encodeInvokeComponentLength(__u8 *msg, __u8 *p)
 	msg[0] = p - &msg[1];
 }
 
+
+static int dummy_L4L3(DummyProcess_t *dpc, __u32 prim, void *arg) {
+	Contr_t *contr = dpc->contr;
+	l3msg_t l3msg;
+
+	l3msg.id = contr->adrController | DUMMY_CR_FLAG;
+	l3msg.arg = arg;
+	return(contrL4L3(contr, prim, &l3msg));
+}
+
 DummyProcess_t *applNewDummyPc(Appl_t *appl, __u16 Function, __u32 Handle)
 {
 	DummyProcess_t *dummy_pc;
@@ -452,7 +462,6 @@ DummyProcess_t *contrNewDummyPc(Contr_t* contr)
 	}
 	contr->dummy_pcs[i] = dummy_pc;
 	dummyPcConstr(dummy_pc, contr, ++contr->lastInvokeId);
-
 	return dummy_pc;
 }
 
@@ -701,3 +710,13 @@ void contrDummyFacility(Contr_t *contr, FACILITY_t *fac)
 }
 
 
+void contrDummyInd(Contr_t *contr, __u32 prim, void *arg)
+{
+	switch (prim) {
+		case CC_FACILITY | INDICATION:
+			contrDummyFacility(contr, arg);
+			break;
+		default:
+			int_error();
+	}
+}

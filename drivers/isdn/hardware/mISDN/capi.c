@@ -1,4 +1,4 @@
-/* $Id: capi.c,v 0.1 2001/02/21 19:22:35 kkeil Exp $
+/* $Id: capi.c,v 0.2 2001/02/22 05:54:39 kkeil Exp $
  *
  */
 
@@ -7,7 +7,7 @@
 #include "helper.h"
 #include "debug.h"
 
-const char *capi_revision = "$Revision: 0.1 $";
+const char *capi_revision = "$Revision: 0.2 $";
 
 static int debug = 0;
 static hisaxobject_t capi_obj;
@@ -24,6 +24,20 @@ MODULE_AUTHOR("Karsten Keil");
 MODULE_PARM(debug, "1i");
 #define Capi20Init init_module
 #endif
+
+static char deb_buf[256];
+
+void capidebug(int level, char *fmt, ...)
+{
+	va_list args;
+
+	if (debug & level) {
+		va_start(args, fmt);
+		vsprintf(deb_buf, fmt, args);
+		printk(KERN_DEBUG "%s\n", deb_buf);
+		va_end(args);
+	}
+}
 
 // ---------------------------------------------------------------------------
 // registration to kernelcapi
@@ -136,6 +150,52 @@ int CapiNew(void)
 	return 0;
 }
 
+static int
+add_if_contr(Contr_t *ctrl, hisaxif_t *hif) {
+	int err;
+	hisaxinstance_t *inst = &ctrl->inst;
+
+	printk(KERN_DEBUG "capi add_if lay %d/%x prot %x\n", hif->layer,
+		hif->stat, hif->protocol);
+	if (IF_TYPE(hif) == IF_UP) {
+		printk(KERN_WARNING "capi add_if here is no UP interface\n");
+	} else if (IF_TYPE(hif) == IF_DOWN) {
+		hif->fdata = ctrl;
+		hif->func = contrL3L4;
+		if (inst->down.stat == IF_NOACTIV) {
+			inst->down.stat = IF_UP;
+			inst->down.protocol =
+				inst->st->protocols[inst->down.layer];
+			err = capi_obj.ctrl(inst->st, MGR_ADDIF | REQUEST, &inst->down);
+			if (err)
+				inst->down.stat = IF_NOACTIV;
+		}
+	} else
+		return(-EINVAL);
+	return(0);
+}
+
+static int
+del_if(hisaxinstance_t *inst, hisaxif_t *hif) {
+	int err;
+
+	printk(KERN_DEBUG "capi del_if lay %d/%x %p/%p\n", hif->layer,
+		hif->stat, hif->func, hif->fdata);
+	if ((hif->func == inst->up.func) && (hif->fdata == inst->up.fdata)) {
+		inst->up.stat = IF_NOACTIV;
+		inst->up.protocol = ISDN_PID_NONE;
+		err = capi_obj.ctrl(inst->st, MGR_ADDIF | REQUEST, &inst->up);
+	} else if ((hif->func == inst->down.func) && (hif->fdata == inst->down.fdata)) {
+		inst->down.stat = IF_NOACTIV;
+		inst->down.protocol = ISDN_PID_NONE;
+		err = capi_obj.ctrl(inst->st, MGR_ADDIF | REQUEST, &inst->down);
+	} else {
+		printk(KERN_DEBUG "capi del_if no if found\n");
+		return(-EINVAL);
+	}
+	return(0);
+}
+
 
 static int
 capi20_manager(void *data, u_int prim, void *arg) {
@@ -158,19 +218,19 @@ capi20_manager(void *data, u_int prim, void *arg) {
 			printk(KERN_WARNING "capi20_manager create_ctrl failed\n");
 			return(-EINVAL);
 		}
-		return(add_if(ctrl, arg));
+		return(add_if_contr(ctrl, arg));
 		break;
 	    case MGR_DELIF | REQUEST:
 		if (!ctrl) {
 			printk(KERN_WARNING "capi20_manager delif no instance\n");
 			return(-EINVAL);
 		}
-		return(del_if(ctrl, arg));
+		return(del_if(&ctrl->inst, arg));
 		break;
 	    case MGR_RELEASE | INDICATION:
 	    	if (ctrl) {
 			printk(KERN_DEBUG "release_capi20 id %x\n", ctrl->inst.st->id);
-	    		release_udss1(ctrl);
+	    		delContr(ctrl);
 	    	} else 
 	    		printk(KERN_WARNING "capi20_manager release no instance\n");
 	    	break;
@@ -217,7 +277,7 @@ void cleanup_module(void)
 	if (contrlist) {
 		printk(KERN_WARNING "hisaxl3 contrlist not empty\n");
 		while(contrlist)
-			release_contr(contrlist);
+			delContr(contrlist);
 		capi_obj.ilist = NULL;
 	}
 	detach_capi_driver(&hisax_driver);

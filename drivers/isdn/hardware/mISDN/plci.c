@@ -1,4 +1,4 @@
-/* $Id: plci.c,v 0.1 2001/02/21 19:22:35 kkeil Exp $
+/* $Id: plci.c,v 0.2 2001/02/22 05:54:40 kkeil Exp $
  *
  */
 
@@ -6,18 +6,9 @@
 #include "helper.h"
 #include "debug.h"
 
-#if 0
 #define plciDebug(plci, lev, fmt, args...) \
-        debug(lev, plci->contr->cs, "", fmt, ## args)
+        capidebug(lev, fmt, ## args)
 
-static void l4pc_l3l4(struct l4_process *l4_pc, int pr, void *arg)
-{
-	Plci_t *plci = l4_pc->priv;
-
-	plci_l3l4(plci, pr, arg);
-}
-
-#endif
 
 void plciConstr(Plci_t *plci, Contr_t *contr, __u32 adrPLCI)
 {
@@ -63,7 +54,7 @@ void plciHandleSetupInd(Plci_t *plci, int pr, SETUP_t *setup)
 
 		memset(&relcmpl, 0, sizeof(RELEASE_COMPLETE_t));
 		relcmpl.CAUSE = cause;
-		p_L4L3(plci, CC_RELEASE_COMPLETE | REQUEST, &relcmpl);
+		plciL4L3(plci, CC_RELEASE_COMPLETE | REQUEST, &relcmpl);
 	}
 }
 
@@ -128,5 +119,15 @@ void plciNewCrInd(Plci_t *plci, struct l3_process *l3_pc)
 
 void plciNewCrReq(Plci_t *plci)
 {
-	L4L3(plci->contr, CC_NEW_CR | REQUEST, &plci->adrPLCI);
+	plciL4L3(plci, CC_NEW_CR | REQUEST, NULL);
 }
+
+int plciL4L3(Plci_t *plci, __u32 prim, void *arg)
+{
+	l3msg_t l3msg;
+
+	l3msg.id = plci->adrPLCI;
+	l3msg.arg = arg;
+	return(contrL4L3(plci->contr, prim, &l3msg));
+}
+

@@ -1,4 +1,4 @@
-/* $Id: listen.c,v 0.1 2001/02/21 19:22:35 kkeil Exp $
+/* $Id: listen.c,v 0.2 2001/02/22 05:54:40 kkeil Exp $
  *
  */
 
@@ -6,10 +6,8 @@
 #include "helper.h"
 #include "debug.h"
 
-#if 0
 #define listenDebug(listen, lev, fmt, args...) \
-        debug(lev, listen->contr->cs, "", fmt, ## args)
-#endif
+        capidebug(lev, fmt, ## args)
 
 // --------------------------------------------------------------------
 // LISTEN state machine
@@ -189,3 +187,7 @@ void init_listen(void)
 	FsmNew(&listen_fsm, fn_listen_list, FN_LISTEN_COUNT);
 }
 
+void free_listen(void)
+{
+	FsmFree(&listen_fsm);
+}

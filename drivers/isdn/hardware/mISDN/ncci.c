@@ -1,4 +1,4 @@
-/* $Id: ncci.c,v 0.1 2001/02/21 19:22:35 kkeil Exp $
+/* $Id: ncci.c,v 0.2 2001/02/22 05:54:40 kkeil Exp $
  *
  */
 
@@ -6,6 +6,8 @@
 #include "helper.h"
 #include "debug.h"
 #include "dss1.h"
+
+static int ncciL4L3(Ncci_t *ncci, u_int prim, int dtyp, void *arg);
 
 // --------------------------------------------------------------------
 // NCCI state machine
@@ -123,7 +125,7 @@ static void ncci_connect_b3_req(struct FsmInst *fi, int event, void *arg)
 	ncciRecvCmsg(ncci, cmsg);
 
 	if (cmsg->Info < 0x1000) 
-		L4L3(ncci, DL_ESTABLISH | REQUEST, 0);
+		ncciL4L3(ncci, DL_ESTABLISH | REQUEST, 0, 0);
 }
 
 static void ncci_connect_b3_ind(struct FsmInst *fi, int event, void *arg)
@@ -177,7 +179,7 @@ static void ncci_disconnect_b3_req(struct FsmInst *fi, int event, void *arg)
 		ncciRecvCmsg(ncci, cmsg);
 	} else {
 		ncciRecvCmsg(ncci, cmsg);
-		L4L3(ncci, DL_RELEASE | REQUEST, 0);
+		ncciL4L3(ncci, DL_RELEASE | REQUEST, 0, 0);
 	}
 }
 
@@ -336,7 +338,7 @@ void ncciInitSt(Ncci_t *ncci)
 {
 #if 0
 	struct StackParams sp;
-	int bchannel, retval;
+	int retval;
 	Cplci_t *cplci = ncci->cplci;
 
 	ncci->l4.st = kmalloc(sizeof(struct PStack), GFP_ATOMIC);
@@ -345,19 +347,18 @@ void ncciInitSt(Ncci_t *ncci)
 		return;
 	}
 	memset(ncci->l4.st, 0, sizeof(struct PStack));
-	bchannel = cplci->plci->l4_pc.l3pc->para.bchannel - 1;
 	sp.b1_mode = cplci->Bprotocol.B1protocol;
 	sp.b2_mode = cplci->Bprotocol.B2protocol;
 	sp.b3_mode = cplci->Bprotocol.B3protocol;
 	sp.headroom = 22; // reserve space for DATA_B3 IND message in skb's
-	retval = init_st(&ncci->l4, cplci->contr->cs, &sp, bchannel);
+	retval = init_st(&ncci->l4, cplci->contr->cs, &sp, cplci->bchannel);
 	if (retval) {
 		int_error();
 		return;
 	}
 	if (sp.b2_mode != B2_MODE_TRANS || !test_bit(PLCI_FLAG_OUTGOING, &cplci->plci->flags)) {
 		// listen for e.g. SABME
-		L4L3(&ncci->l4, PH_ACTIVATE | REQUEST, 0);
+		ncciL4L3(ncci, PH_ACTIVATE | REQUEST, 0, 0);
 	}
 #endif
 }
@@ -481,7 +482,7 @@ void ncciDataReq(Ncci_t *ncci, struct sk_buff *skb)
 	ncci->xmit_skb_handles[i].MsgId = CAPIMSG_MSGID(skb->data);
 
 	skb_pull(skb, CAPIMSG_LEN(skb->data));
-	L4L3(ncci, DL_DATA | REQUEST, skb);
+	ncciL4L3(ncci, DL_DATA | REQUEST, DTYPE_SKB, skb);
 	return;
 
  fail:
@@ -634,6 +635,16 @@ static int ncci_l3l4(hisaxif_t *hif, u_int prim, u_int nr, int dtyp, void *arg)
 	return(0);
 }
 
+
+static int ncciL4L3(Ncci_t *ncci, u_int prim, int dtyp, void *arg)
+{
+	if (!ncci->inst->down.func) {
+		int_error();
+		return -EINVAL;
+	}
+	return(ncci->inst->down.func(&ncci->inst->down, prim, 0, dtyp, arg));
+}
+
 void init_ncci(void)
 {
 	ncci_fsm.state_count = ST_NCCI_COUNT;
@@ -644,3 +655,7 @@ void init_ncci(void)
 	FsmNew(&ncci_fsm, fn_ncci_list, FN_NCCI_COUNT);
 }
 
+void free_ncci(void)
+{
+	FsmFree(&ncci_fsm);
+}
