@@ -1,4 +1,4 @@
-/* $Id: m_capi.h,v 1.2 2003/11/25 11:28:32 keil Exp $
+/* $Id: m_capi.h,v 1.3 2003/12/03 14:32:45 keil Exp $
  *
  * Rewritten CAPI Layer (Layer4 in mISDN)
  * 
@@ -155,9 +155,9 @@ struct _BInst {
 };
 
 struct _ConfQueue { 
-	struct sk_buff	*skb; 
-	__u16		DataHandle;
-	__u16		MsgId; 
+	__u32	PktId; 
+	__u16	DataHandle;
+	__u16	MsgId; 
 };
 
 struct Bprotocol {
@@ -179,6 +179,8 @@ struct _Controller {
 	struct capi_ctr		*ctrl;
 	__u32			addr;
 	int			entity;
+	int			next_id;
+	spinlock_t		id_lock;
 	u_int			debug;
 	int			maxplci;
 	Plci_t			*plcis;
@@ -242,7 +244,7 @@ struct _AppPlci {
 	__u32			addr;
 	Plci_t			*plci;
 	Application_t		*appl;
-	Ncci_t			*ncci;
+	struct list_head	Nccis;
 	Controller_t		*contr;
 	struct	FsmInst		plci_m;
 	u_char			cause[4];
@@ -255,6 +257,7 @@ struct _AppPlci {
 // ---------------------------------------------------------------------------
 
 struct _Ncci {
+	struct list_head	head;
 	__u32			addr;
 	BInst_t			*binst;
 	Controller_t		*contr;
@@ -307,6 +310,7 @@ int		ControllerL3L4(mISDNif_t *, struct sk_buff *);
 BInst_t		*ControllerSelChannel(Controller_t *, u_int);
 void		ControllerAddSSProcess(Controller_t *, SSProcess_t *);
 SSProcess_t	*getSSProcess4Id(Controller_t *, __u16);
+int		ControllerNextId(Controller_t *);
 
 // ---------------------------------------------------------------------------
 // Application prototypes
@@ -349,14 +353,18 @@ int	plciL4L3(Plci_t *, __u32, struct sk_buff *);
 
 int	AppPlciConstr(AppPlci_t **, Application_t *, Plci_t *);
 void	AppPlciDestr(AppPlci_t *);
-void 	AppPlciDelNCCI(AppPlci_t *);
+void 	AppPlciDelNCCI(Ncci_t *);
 void 	AppPlci_l3l4(AppPlci_t *, int, void *);
 void 	AppPlciSendMessage(AppPlci_t *, struct sk_buff *);
 void	AppPlciRelease(AppPlci_t *);
 int	AppPlciFacSuspendReq(AppPlci_t *, FacReqParm_t *, FacConfParm_t *);
 int	AppPlciFacResumeReq(AppPlci_t *, FacReqParm_t *, FacConfParm_t *);
 void	AppPlciGetCmsg(AppPlci_t *, _cmsg *);
+Ncci_t	*getNCCI4addr(AppPlci_t *, __u32, int);
 
+#define	GET_NCCI_EXACT	1
+#define GET_NCCI_PLCI	2
+#define GET_NCCI_NEW	3
 
 // ---------------------------------------------------------------------------
 // NCCI prototypes

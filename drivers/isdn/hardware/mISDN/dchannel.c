@@ -1,4 +1,4 @@
-/* $Id: dchannel.c,v 1.8 2003/10/24 21:27:28 keil Exp $
+/* $Id: dchannel.c,v 1.9 2003/12/03 14:32:44 keil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -46,7 +46,7 @@ dchannel_bh(dchannel_t *dch)
 
 	if (test_and_clear_bit(D_RCVBUFREADY, &dch->event)) {
 		while ((skb = skb_dequeue(&dch->rqueue))) {
-			err = if_newhead(&dch->inst.up, PH_DATA_IND, DINFO_SKB, skb);
+			err = if_newhead(&dch->inst.up, PH_DATA_IND, MISDN_ID_ANY, skb);
 			if (err < 0) {
 				printk(KERN_WARNING "%s: deliver err %d\n", __FUNCTION__, err);
 				dev_kfree_skb(skb);

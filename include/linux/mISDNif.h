@@ -1,4 +1,4 @@
-/* $Id: mISDNif.h,v 1.21 2003/11/13 13:01:55 keil Exp $
+/* $Id: mISDNif.h,v 1.22 2003/12/03 14:32:46 keil Exp $
  *
  */
 
@@ -286,6 +286,7 @@
 #define ISDN_PID_L1_NT_UP2		0x01000400
 #define ISDN_PID_L1_TE_E1		0x01000008
 #define ISDN_PID_L1_NT_E1		0x01000800
+/* Bit 15-0  reserved for CAPI defined protocols */
 #define ISDN_PID_L1_B_64HDLC		0x41000001
 #define ISDN_PID_L1_B_64TRANS		0x41000002
 #define ISDN_PID_L1_B_V110_ASYNC	0x41000004
@@ -298,12 +299,20 @@
 #define ISDN_PID_L1_B_MODEM_HDLC	0x41000200
 #define ISDN_PID_L2_LAPD		0x02000001
 #define ISDN_PID_L2_LAPD_NET		0x02000002
+/* Bit 15-0  reserved for CAPI defined protocols */
 #define ISDN_PID_L2_B_X75SLP		0x42000001
 #define ISDN_PID_L2_B_TRANS		0x42000002
 #define ISDN_PID_L2_B_TRANSDTMF		0x42300002
 #define ISDN_PID_L2_B_RAWDEV		0x42400002
 #define ISDN_PID_L3_B_TRANS		0x43000001
-#define ISDN_PID_L3_B_DSP		0x43000002
+#define ISDN_PID_L3_B_T90NL		0x43000002
+#define ISDN_PID_L3_B_X25DTE		0x43000004
+#define ISDN_PID_L3_B_X25DCE		0x43000008
+#define ISDN_PID_L3_B_T30		0x43000010
+#define ISDN_PID_L3_B_T30EXT		0x43000020
+#define ISDN_PID_L3_B_MODEM		0x43000080
+/* Bit 15-0  reserved for CAPI defined protocols */
+#define ISDN_PID_L3_B_DSP		0x43010000
 #define ISDN_PID_L3_DSS1USER		0x03000001
 #define ISDN_PID_L3_DSS1NET		0x03000100
 #define ISDN_PID_L4_CAPI20		0x04000001
@@ -379,8 +388,6 @@
 #define FLG_CHILD_STACK	0x10000000
 #define FLG_CLONE_STACK	0x20000000
 #define FLG_INSTANCE	0x40000000
-
-#define DINFO_SKB	-1
 
 #define DUMMY_CR_FLAG	0x7FFFFF00
 #define CONTROLER_MASK	0x000000FF
@@ -573,7 +580,9 @@ typedef struct _mISDN_head {
 	int	dinfo;
 } mISDN_head_t;
 
-#define mISDN_HEAD_P(s)	((mISDN_head_t *)&s->cb[0])
+#define mISDN_HEAD_P(s)		((mISDN_head_t *)&s->cb[0])
+#define mISDN_HEAD_PRIM(s)	((mISDN_head_t *)&s->cb[0])->prim
+#define mISDN_HEAD_DINFO(s)	((mISDN_head_t *)&s->cb[0])->dinfo
 
 typedef struct _mISDN_headext {
 	u_int	prim;

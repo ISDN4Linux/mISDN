@@ -1,4 +1,4 @@
-/* $Id: tei.c,v 1.5 2003/11/16 19:34:00 keil Exp $
+/* $Id: tei.c,v 1.6 2003/12/03 14:32:45 keil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -13,7 +13,7 @@
 #include "debug.h"
 #include <linux/random.h>
 
-const char *tei_revision = "$Revision: 1.5 $";
+const char *tei_revision = "$Revision: 1.6 $";
 
 #define ID_REQUEST	1
 #define ID_ASSIGNED	2
@@ -111,7 +111,7 @@ put_tei_msg(teimgr_t *tm, u_char m_id, unsigned int ri, u_char tei)
 	bp[5] = ri & 0xff;
 	bp[6] = m_id;
 	bp[7] = (tei << 1) | 1;
-	skb = create_link_skb(MDL_UNITDATA | REQUEST, DINFO_SKB, 8, bp, 0);
+	skb = create_link_skb(MDL_UNITDATA | REQUEST, 0, 8, bp, 0);
 	if (!skb) {
 		printk(KERN_WARNING "mISDN: No skb for TEI manager\n");
 		return;

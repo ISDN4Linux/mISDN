@@ -1,4 +1,4 @@
-/* $Id: bchannel.c,v 1.4 2003/07/28 12:05:47 kkeil Exp $
+/* $Id: bchannel.c,v 1.5 2003/12/03 14:32:44 keil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -62,7 +62,7 @@ bchannel_bh(bchannel_t *bch)
 				pr = DL_DATA | INDICATION;
 			else
 				pr = PH_DATA | INDICATION;
-			ret = if_newhead(hif, pr, DINFO_SKB, skb);
+			ret = if_newhead(hif, pr, MISDN_ID_ANY, skb);
 			if (ret < 0) {
 				printk(KERN_WARNING "%s: deliver err %d\n",
 					__FUNCTION__, ret);

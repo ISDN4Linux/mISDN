@@ -1,4 +1,4 @@
-/* $Id: l3_udss1.c,v 1.17 2003/11/21 13:20:10 keil Exp $
+/* $Id: l3_udss1.c,v 1.18 2003/12/03 14:32:45 keil Exp $
  *
  * EURO/DSS1 D-channel protocol
  *
@@ -24,7 +24,7 @@ static int debug = 0;
 static mISDNobject_t u_dss1;
 
 
-const char *dss1_revision = "$Revision: 1.17 $";
+const char *dss1_revision = "$Revision: 1.18 $";
 
 static int dss1man(l3_process_t *, u_int, void *);
 
@@ -216,7 +216,7 @@ static int SendMsg(l3_process_t *pc, struct sk_buff *skb, int state) {
 	kfree_skb(skb);
 	if (state != -1)
 		newl3state(pc, state);
-	if ((ret=l3_msg(pc->l3, DL_DATA | REQUEST, DINFO_SKB, 0, nskb)))
+	if ((ret=l3_msg(pc->l3, DL_DATA | REQUEST, 0, 0, nskb)))
 		kfree_skb(nskb);
 	return(ret);
 }
@@ -229,7 +229,7 @@ l3dss1_message(l3_process_t *pc, u_char mt)
 
 	if (!(skb = MsgStart(pc, mt, 0)))
 		return(-ENOMEM);
-	if ((ret=l3_msg(pc->l3, DL_DATA | REQUEST, DINFO_SKB, 0, skb)))
+	if ((ret=l3_msg(pc->l3, DL_DATA | REQUEST, 0, 0, skb)))
 		kfree_skb(skb);
 	return(ret);
 }
@@ -248,7 +248,7 @@ l3dss1_message_cause(l3_process_t *pc, u_char mt, u_char cause)
 	*p++ = 0x2;
 	*p++ = 0x80 | CAUSE_LOC_USER;
 	*p++ = 0x80 | cause;
-	if ((ret=l3_msg(pc->l3, DL_DATA | REQUEST, DINFO_SKB, 0, skb)))
+	if ((ret=l3_msg(pc->l3, DL_DATA | REQUEST, 0, 0, skb)))
 		kfree_skb(skb);
 }
 
@@ -270,7 +270,7 @@ l3dss1_status_send(l3_process_t *pc, u_char cause)
 	*p++ = IE_CALL_STATE;
 	*p++ = 1;
 	*p++ = pc->state & 0x3f;
-	if ((ret=l3_msg(pc->l3, DL_DATA | REQUEST, DINFO_SKB, 0, skb)))
+	if ((ret=l3_msg(pc->l3, DL_DATA | REQUEST, 0, 0, skb)))
 		kfree_skb(skb);
 }
 
@@ -1556,7 +1556,7 @@ l3dss1_global_restart(l3_process_t *pc, u_char pr, void *arg)
 	*p++ = IE_RESTART_IND;
 	*p++ = 1;
 	*p++ = ri;
-	if (l3_msg(pc->l3, DL_DATA | REQUEST, DINFO_SKB, 0, skb))
+	if (l3_msg(pc->l3, DL_DATA | REQUEST, 0, 0, skb))
 		kfree_skb(skb);
 }
 

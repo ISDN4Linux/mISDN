@@ -1,4 +1,4 @@
-/* $Id: app_plci.c,v 1.1 2003/11/21 22:29:41 keil Exp $
+/* $Id: app_plci.c,v 1.2 2003/12/03 14:32:44 keil Exp $
  *
  */
 
@@ -912,19 +912,20 @@ plci_select_b_protocol_req(struct FsmInst *fi, int event, void *arg)
 {
 	AppPlci_t	*aplci = fi->userdata;
 	_cmsg		*cmsg = arg;
+	Ncci_t		*ncci;
 	__u16		Info;
 
 	Info = AppPlciCheckBprotocol(aplci, cmsg);
 	if (Info)
 		goto answer;
-
-	if (!aplci->ncci) {
+	ncci = getNCCI4addr(aplci, cmsg->adr.adrNCCI, GET_NCCI_EXACT);
+	if (!ncci) {
 		int_error();
 		cmsg_free(cmsg);
 		return;
 	}
 
-	Info = ncciSelectBprotocol(aplci->ncci);
+	Info = ncciSelectBprotocol(ncci);
 answer:
 	capi_cmsg_answer(cmsg);
 	cmsg->Info = Info;
@@ -1064,6 +1065,7 @@ AppPlciConstr(AppPlci_t **aplci, Application_t *appl, Plci_t *plci)
 		return(-ENOMEM);
 	memset(apl, 0, sizeof(AppPlci_t));
 	INIT_LIST_HEAD(&apl->head);
+	INIT_LIST_HEAD(&apl->Nccis);
 	apl->addr = plci->addr;
 	apl->appl = appl;
 	apl->plci = plci;
@@ -1080,6 +1082,8 @@ AppPlciConstr(AppPlci_t **aplci, Application_t *appl, Plci_t *plci)
 
 void AppPlciDestr(AppPlci_t *aplci)
 {
+	struct list_head	*item, *next;
+	
 	if (aplci->plci) {
 		AppPlciDebug(aplci, CAPI_DBG_PLCI, "%s plci state %s", __FUNCTION__,
 			str_st_plci[aplci->plci_m.state]);
@@ -1094,9 +1098,8 @@ void AppPlciDestr(AppPlci_t *aplci)
 		}
  		plciDetachAppPlci(aplci->plci, aplci);
 	}
-	if (aplci->ncci) {
-		ncciDelAppPlci(aplci->ncci);
-		aplci->ncci = NULL;
+	list_for_each_safe(item, next, &aplci->Nccis) {
+		ncciDelAppPlci((Ncci_t *)item);
 	}
 	if (aplci->appl)
 		ApplicationDelAppPlci(aplci->appl, aplci);
@@ -1106,16 +1109,62 @@ void AppPlciDestr(AppPlci_t *aplci)
 void
 AppPlciRelease(AppPlci_t *aplci)
 {
-	if (aplci->ncci)
-		ncciApplRelease(aplci->ncci);
+	struct list_head	*item, *next;
+
+	list_for_each_safe(item, next, &aplci->Nccis) {
+		ncciApplRelease((Ncci_t *)item);
+	}
 	FsmEvent(&aplci->plci_m, EV_AP_RELEASE, NULL);
 }
 
-void AppPlciDelNCCI(AppPlci_t *aplci) {
-	aplci->ncci = NULL;
+Ncci_t	*
+getNCCI4addr(AppPlci_t *aplci, __u32 addr, int mode)
+{
+	Ncci_t			*ncci;
+	struct list_head	*item;
+	int			cnt = 0;
+
+	list_for_each(item, &aplci->Nccis) {
+		cnt++;
+		ncci = (Ncci_t *)item;
+		if (ncci->addr == addr)
+			return(ncci);
+	}
+	if (!cnt) {
+		int_error();
+		return(NULL);
+	}
+	if (mode == GET_NCCI_EXACT)
+		return(NULL);
+	if (1 == cnt) {
+		if (mode == GET_NCCI_NEW) {
+			if (0xffffffff == ncci->addr)
+				return(ncci);
+		} else {
+			if (!(addr & 0xffff0000))
+				return(ncci);
+		}
+	}
+	if (mode == GET_NCCI_PLCI) {
+		int_error();
+		return(NULL);
+	}
+	ncci = ncciConstr(aplci);
+	if (!ncci) {
+		int_error();
+		return(NULL);
+	}
+	ncciLinkUp(ncci);
+	return(ncci);
 }
 
-void AppPlci_l3l4(AppPlci_t *aplci, int pr, void *arg)
+void
+AppPlciDelNCCI(Ncci_t *ncci) {
+	list_del_init(&ncci->head);
+}
+
+void
+AppPlci_l3l4(AppPlci_t *aplci, int pr, void *arg)
 {
 	Q931_info_t	*qi = arg;
 	u_char		*ie;
@@ -1344,28 +1393,28 @@ AppPlciSendMessage(AppPlci_t *aplci, struct sk_buff *skb)
 static void
 AppPlciLinkUp(AppPlci_t *aplci)
 {
-	if (aplci->ncci)
-		return;
+	Ncci_t	*ncci;
+
 	if (aplci->channel == -1) {/* no valid channel set */
 		int_error();
 		return;
 	}
-	
-	aplci->ncci = ncciConstr(aplci);
-	if (!aplci->ncci) {
+	ncci = ncciConstr(aplci);
+	if (!ncci) {
 		int_error();
 		return;
 	}
-	ncciLinkUp(aplci->ncci);
+	ncciLinkUp(ncci);
 }
 
 static void
 AppPlciLinkDown(AppPlci_t *aplci)
 {
-	if (!aplci->ncci) {
-		return;
+	struct list_head	*item, *next;
+
+	list_for_each_safe(item, next, &aplci->Nccis) {
+		ncciLinkDown((Ncci_t *)item);
 	}
-	ncciLinkDown(aplci->ncci);
 }
 
 int

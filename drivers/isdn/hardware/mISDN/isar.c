@@ -1,4 +1,4 @@
-/* $Id: isar.c,v 1.15 2003/08/02 21:17:58 kkeil Exp $
+/* $Id: isar.c,v 1.16 2003/12/03 14:32:44 keil Exp $
  *
  * isar.c   ISAR (Siemens PSB 7110) specific routines
  *
@@ -1615,7 +1615,7 @@ isar_down(mISDNif_t *hif, struct sk_buff *skb)
 			bch->inst.unlock(bch->inst.data);
 			skb_trim(skb, 0);
 			return(if_newhead(&bch->inst.up, hh->prim | CONFIRM,
-				DINFO_SKB, skb));
+				hh->dinfo, skb));
 		}
 	} else if ((hh->prim == (PH_ACTIVATE | REQUEST)) ||
 		(hh->prim == (DL_ESTABLISH  | REQUEST))) {

@@ -1,4 +1,4 @@
-/* $Id: appl.c,v 1.8 2003/11/21 22:29:41 keil Exp $
+/* $Id: appl.c,v 1.9 2003/12/03 14:32:44 keil Exp $
  *
  *  Applications are owned by the controller and only
  *  handle this controller, multiplexing multiple
@@ -128,6 +128,7 @@ FacilityReq(Application_t *appl, struct sk_buff *skb)
 {
 	_cmsg		*cmsg;
 	AppPlci_t	*aplci;
+	Ncci_t		*ncci;
 
 	cmsg = cmsg_alloc();
 	if (!cmsg) {
@@ -140,9 +141,12 @@ FacilityReq(Application_t *appl, struct sk_buff *skb)
 		case 0x0000: // Handset
 		case 0x0001: // DTMF
 			aplci = getAppPlci4addr(appl, CAPIMSG_CONTROL(skb->data));
-			if (aplci && aplci->ncci) {
-				ncciGetCmsg(aplci->ncci, cmsg);
-				break;
+			if (aplci) {
+				ncci = getNCCI4addr(aplci, CAPIMSG_NCCI(skb->data), GET_NCCI_PLCI);
+				if (ncci) {
+					ncciGetCmsg(ncci, cmsg);
+					break;
+				}
 			}
 			SendCmsgAnswer2Application(appl, cmsg, CapiIllContrPlciNcci);
 			break;
@@ -162,6 +166,7 @@ ApplicationSendMessage(Application_t *appl, struct sk_buff *skb)
 {
 	Plci_t		*plci;
 	AppPlci_t	*aplci;
+	Ncci_t		*ncci;
 
 	switch (CAPICMD(CAPIMSG_COMMAND(skb->data), CAPIMSG_SUBCOMMAND(skb->data))) {
 		// for NCCI state machine
@@ -177,12 +182,16 @@ ApplicationSendMessage(Application_t *appl, struct sk_buff *skb)
 				AnswerMessage2Application(appl, skb, CapiIllContrPlciNcci);
 				goto free;
 			}
-			if (!aplci->ncci) {
+			if (CAPI_CONNECT_B3_REQ == CAPICMD(CAPIMSG_COMMAND(skb->data), CAPIMSG_SUBCOMMAND(skb->data)))
+				ncci = getNCCI4addr(aplci, CAPIMSG_NCCI(skb->data), GET_NCCI_NEW);
+			else
+				ncci = getNCCI4addr(aplci, CAPIMSG_NCCI(skb->data), GET_NCCI_EXACT);
+			if (!ncci) {
 				int_error();
 				AnswerMessage2Application(appl, skb, CapiIllContrPlciNcci);
 				goto free;
 			}
-			ncciSendMessage(aplci->ncci, skb);
+			ncciSendMessage(ncci, skb);
 			break;
 		// for PLCI state machine
 		case CAPI_INFO_REQ:
@@ -298,6 +307,7 @@ SendCmsg2Application(Application_t *appl, _cmsg *cmsg)
 		 * must answer INDICATIONS.
 		 */
 		AppPlci_t	*aplci;
+		Ncci_t		*ncci;
 
 		if (CAPI_IND != cmsg->Subcommand)
 			goto free;
@@ -310,12 +320,13 @@ SendCmsg2Application(Application_t *appl, _cmsg *cmsg)
 				aplci = getAppPlci4addr(appl, (cmsg->adr.adrNCCI & 0xffff));
 				if (!aplci)
 					goto free;
-				if (!aplci->ncci) {
+				ncci = getNCCI4addr(aplci, cmsg->adr.adrNCCI, GET_NCCI_EXACT); 
+				if (!ncci) {
 					int_error();
 					goto free;
 				}
 				capi_cmsg_answer(cmsg);
-				ncciGetCmsg(aplci->ncci, cmsg);
+				ncciGetCmsg(ncci, cmsg);
 				break;
 			// for PLCI state machine
 			case CAPI_CONNECT:
@@ -426,6 +437,7 @@ void applManufacturerReqAVM(Application_t *appl, _cmsg *cmsg, struct sk_buff *sk
 void applManufacturerReqmISDN(Application_t *appl, _cmsg *cmsg, struct sk_buff *skb)
 {
 	AppPlci_t	*aplci;
+	Ncci_t		*ncci;
 
 	switch (cmsg->Class) {
 		case mISDN_MF_CLASS_HANDSET:
@@ -433,10 +445,13 @@ void applManufacturerReqmISDN(Application_t *appl, _cmsg *cmsg, struct sk_buff *
 			 * controller address we extent it here to PLCI/NCCI
 			 */
 			aplci = getAppPlci4addr(appl, CAPIMSG_CONTROL(skb->data));
-			if (aplci && aplci->ncci) {
-				cmsg_free(cmsg);
-				ncciSendMessage(aplci->ncci, skb);
-				return;
+			if (aplci) {
+				ncci = getNCCI4addr(aplci, CAPIMSG_NCCI(skb->data), GET_NCCI_PLCI);
+				if (ncci) {
+					cmsg_free(cmsg);
+					ncciSendMessage(ncci, skb);
+					return;
+				}
 			}
 			SendCmsgAnswer2Application(appl, cmsg, CapiIllContrPlciNcci);
 			break;

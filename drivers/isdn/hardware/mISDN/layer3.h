@@ -1,4 +1,4 @@
-/* $Id: layer3.h,v 1.7 2003/11/21 22:57:08 keil Exp $
+/* $Id: layer3.h,v 1.8 2003/12/03 14:32:45 keil Exp $
  *
  * This file is (c) under GNU PUBLIC LICENSE
  *
@@ -54,7 +54,8 @@ typedef struct _layer3 {
 	struct FsmInst		l3m;
 	struct FsmTimer		l3m_timer;
 	int			entity;
-	int			id_cnt;
+	int			pid_cnt;
+	int			next_id;
 	l3_process_t		*proc;
 	l3_process_t		*global;
 	l3_process_t		*dummy;
@@ -65,6 +66,7 @@ typedef struct _layer3 {
 	u_long			Flag;
 	mISDNinstance_t		inst;
 	struct sk_buff_head	squeue;
+	spinlock_t              lock;
 } layer3_t;
 
 struct stateentry {

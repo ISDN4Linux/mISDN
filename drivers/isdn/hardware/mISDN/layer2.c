@@ -1,4 +1,4 @@
-/* $Id: layer2.c,v 1.14 2003/11/16 19:34:00 keil Exp $
+/* $Id: layer2.c,v 1.15 2003/12/03 14:32:45 keil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -12,7 +12,7 @@
 #include "helper.h"
 #include "debug.h"
 
-static char *l2_revision = "$Revision: 1.14 $";
+static char *l2_revision = "$Revision: 1.15 $";
 
 static void l2m_debug(struct FsmInst *fi, char *fmt, ...);
 
@@ -114,6 +114,21 @@ l2addrsize(layer2_t *l2)
 }
 
 static int
+l2_newid(layer2_t *l2)
+{
+	u_long	flags;
+	int	id;
+
+	spin_lock_irqsave(&l2->lock, flags);
+	id = l2->next_id++;
+	if (id == 0x7fff)
+		l2->next_id = 1;
+	spin_unlock_irqrestore(&l2->lock, flags);
+	id |= (l2->entity << 16);
+	return(id);
+}
+
+static int
 l2up(layer2_t *l2, u_int prim, int dinfo, struct sk_buff *skb)
 {
 	return(if_newhead(&l2->inst.up, prim, dinfo, skb));
@@ -147,7 +162,7 @@ l2down_raw(layer2_t *l2, struct sk_buff *skb)
 			skb_queue_tail(&l2->down_queue, skb);
 			return(0);
 		}
-		l2->down_skb = skb;
+		l2->down_id = mISDN_HEAD_DINFO(skb);
 	}
 	return(l2down_skb(l2, skb));
 }
@@ -189,23 +204,22 @@ ph_data_confirm(mISDNif_t *up, mISDN_head_t *hh, struct sk_buff *skb) {
 	int ret = -EAGAIN;
 
 	if (test_bit(FLG_L1_BUSY, &l2->flag)) {
-#warning  at the moment it is save to use the skb address as reference TODO: change it to dinfo
-		if (skb == l2->down_skb) {
+		if (hh->dinfo == l2->down_id) {
 			if ((nskb = skb_dequeue(&l2->down_queue))) {
-				l2->down_skb = nskb;
+				l2->down_id = mISDN_HEAD_DINFO(nskb);
 				if (l2down_skb(l2, nskb)) {
 					dev_kfree_skb(nskb);
-					l2->down_skb = NULL;
+					l2->down_id = MISDN_ID_NONE;
 				}
 			} else
-				l2->down_skb = NULL;
+				l2->down_id = MISDN_ID_NONE;
 			if (next)
 				ret = next->func(next, skb);
 			if (ret) {
 				dev_kfree_skb(skb);
 				ret = 0;
 			}
-			if (!l2->down_skb) {
+			if (l2->down_id == MISDN_ID_NONE) {
 				test_and_clear_bit(FLG_L1_BUSY, &l2->flag);
 				FsmEvent(&l2->l2m, EV_L2_ACK_PULL, NULL);
 			}
@@ -215,10 +229,10 @@ ph_data_confirm(mISDNif_t *up, mISDN_head_t *hh, struct sk_buff *skb) {
 		ret = next->func(next, skb);
 	if (!test_and_set_bit(FLG_L1_BUSY, &l2->flag)) {
 		if ((nskb = skb_dequeue(&l2->down_queue))) {
-			l2->down_skb = nskb;
+			l2->down_id = mISDN_HEAD_DINFO(nskb);
 			if (l2down_skb(l2, nskb)) {
 				dev_kfree_skb(nskb);
-				l2->down_skb = NULL;
+				l2->down_id = MISDN_ID_NONE;
 				test_and_clear_bit(FLG_L1_BUSY, &l2->flag);
 			}
 		} else
@@ -344,11 +358,16 @@ sethdraddr(layer2_t *l2, u_char *header, int rsp)
 inline static void
 enqueue_super(layer2_t *l2, struct sk_buff *skb)
 {
-	if (l2down(l2, PH_DATA | REQUEST, DINFO_SKB, skb))
+	if (l2down(l2, PH_DATA | REQUEST, l2_newid(l2), skb))
 		dev_kfree_skb(skb);
 }
 
-#define enqueue_ui(a, b) enqueue_super(a, b)
+inline static void
+enqueue_ui(layer2_t *l2, struct sk_buff *skb)
+{
+	if (l2down(l2, PH_DATA | REQUEST, mISDN_HEAD_DINFO(skb), skb))
+		dev_kfree_skb(skb);
+}
 
 inline int
 IsUI(u_char * data)
@@ -530,7 +549,7 @@ setva(layer2_t *l2, unsigned int nr)
 	}
 	spin_unlock_irqrestore(&l2->lock, flags);
 	while((skb =skb_dequeue(&l2->tmp_queue))) {
-		if (l2up(l2, DL_DATA | CONFIRM, (int)skb, skb))
+		if (l2up(l2, DL_DATA | CONFIRM, mISDN_HEAD_DINFO(skb), skb))
 			dev_kfree_skb(skb);
 	}
 }
@@ -755,7 +774,7 @@ l2_got_ui(struct FsmInst *fi, int event, void *arg)
 /*
  *		in states 1-3 for broadcast
  */
-	if (l2up(l2, DL_UNITDATA | INDICATION, DINFO_SKB, skb))
+	if (l2up(l2, DL_UNITDATA | INDICATION, mISDN_HEAD_DINFO(skb), skb))
 		dev_kfree_skb(skb);
 }
 
@@ -1233,7 +1252,7 @@ l2_got_iframe(struct FsmInst *fi, int event, void *arg)
 			else
 				test_and_set_bit(FLG_ACK_PEND, &l2->flag);
 			skb_pull(skb, l2headersize(l2, 0));
-			if (l2up(l2, DL_DATA | INDICATION, DINFO_SKB, skb))
+			if (l2up(l2, DL_DATA | INDICATION, mISDN_HEAD_DINFO(skb), skb))
 				dev_kfree_skb(skb);
 		} else {
 			/* n(s)!=v(r) */
@@ -1388,7 +1407,7 @@ static void
 l2_pull_iqueue(struct FsmInst *fi, int event, void *arg)
 {
 	layer2_t	*l2 = fi->userdata;
-	struct sk_buff	*skb, *oskb;
+	struct sk_buff	*skb, *nskb, *oskb;
 	u_char		header[MAX_HEADER_LEN];
 	u_int		i, p1;
 	u_long		flags;
@@ -1423,25 +1442,25 @@ l2_pull_iqueue(struct FsmInst *fi, int event, void *arg)
 	}
 	spin_unlock_irqrestore(&l2->lock, flags);
 
-	skb = skb_clone(skb, GFP_ATOMIC);
-	p1 = skb_headroom(skb);
+	nskb = skb_clone(skb, GFP_ATOMIC);
+	p1 = skb_headroom(nskb);
 	if (p1 >= i)
-		memcpy(skb_push(skb, i), header, i);
+		memcpy(skb_push(nskb, i), header, i);
 	else {
 		printk(KERN_WARNING
 			"isdnl2 pull_iqueue skb header(%d/%d) too short\n", i, p1);
-		oskb = skb;
-		skb = alloc_skb(oskb->len + i, GFP_ATOMIC);
-		if (!skb) {
+		oskb = nskb;
+		nskb = alloc_skb(oskb->len + i, GFP_ATOMIC);
+		if (!nskb) {
 			dev_kfree_skb(oskb);
 			printk(KERN_WARNING "%s: no skb mem\n", __FUNCTION__);
 			return;
 		}
-		memcpy(skb_put(skb, i), header, i);
-		memcpy(skb_put(skb, oskb->len), oskb->data, oskb->len);
+		memcpy(skb_put(nskb, i), header, i);
+		memcpy(skb_put(nskb, oskb->len), oskb->data, oskb->len);
 		dev_kfree_skb(oskb);
 	}
-	l2down(l2, PH_DATA_REQ, DINFO_SKB, skb);
+	l2down(l2, PH_DATA_REQ, mISDN_HEAD_DINFO(skb), nskb);
 	test_and_clear_bit(FLG_ACK_PEND, &l2->flag);
 	if (!test_and_set_bit(FLG_T200_RUN, &l2->flag)) {
 		FsmDelTimer(&l2->t203, 13);
@@ -1927,6 +1946,8 @@ l2from_down(mISDNif_t *hif, struct sk_buff *askb)
 		case (PH_DEACTIVATE | CONFIRM):
 			test_and_clear_bit(FLG_L1_ACTIV, &l2->flag);
 			ret = FsmEvent(&l2->l2m, EV_L1_DEACTIVATE, cskb);
+			if (ret)
+				dev_kfree_skb(cskb);
 			ret = 0;
 			break;
 		default:
@@ -2019,7 +2040,7 @@ tei_l2(layer2_t *l2, struct sk_buff *skb)
 	printk(KERN_DEBUG "%s: prim(%x)\n", __FUNCTION__, hh->prim);
 	switch(hh->prim) {
 	    case (MDL_UNITDATA | REQUEST):
-		ret = l2down(l2, PH_DATA_REQ, hh->dinfo, skb);
+		ret = l2down(l2, PH_DATA_REQ, l2_newid(l2), skb);
 		break;
 	    case (MDL_ASSIGN | REQUEST):
 		ret = FsmEvent(&l2->l2m, EV_L2_MDL_ASSIGN, skb);
@@ -2083,6 +2104,8 @@ release_l2(layer2_t *l2)
 	}
 	REMOVE_FROM_LISTBASE(l2, ((layer2_t *)isdnl2.ilist));
 	isdnl2.ctrl(inst, MGR_UNREGLAYER | REQUEST, NULL);
+	if (l2->entity != MISDN_ENTITY_NONE)
+		isdnl2.ctrl(inst, MGR_DELENTITY | REQUEST, (void *)l2->entity);
 	kfree(l2);
 }
 
@@ -2101,6 +2124,8 @@ new_l2(mISDNstack_t *st, mISDN_pid_t *pid, layer2_t **newl2) {
 	memset(nl2, 0, sizeof(layer2_t));
 	spin_lock_init(&nl2->lock);
 	nl2->debug = debug;
+	nl2->next_id = 1;
+	nl2->down_id = MISDN_ID_NONE;
 	init_mISDNinstance(&nl2->inst, &isdnl2, nl2);
 	nl2->inst.extentions = EXT_INST_CLONE;
 	memcpy(&nl2->inst.pid, pid, sizeof(mISDN_pid_t));
@@ -2200,6 +2225,11 @@ new_l2(mISDNstack_t *st, mISDN_pid_t *pid, layer2_t **newl2) {
 	FsmInitTimer(&nl2->l2m, &nl2->t200);
 	FsmInitTimer(&nl2->l2m, &nl2->t203);
 	APPEND_TO_LIST(nl2, ((layer2_t *)isdnl2.ilist));
+	err = isdnl2.ctrl(&nl2->inst, MGR_NEWENTITY | REQUEST, NULL);
+	if (err) {
+		printk(KERN_WARNING "mISDN %s: MGR_NEWENTITY REQUEST failed err(%x)\n",
+			__FUNCTION__, err);
+	}
 	err = isdnl2.ctrl(st, MGR_REGLAYER | INDICATION, &nl2->inst);
 	if (err) {
 		FsmDelTimer(&nl2->t200, 0);
@@ -2337,6 +2367,9 @@ l2_manager(void *data, u_int prim, void *arg) {
 		return(-EINVAL);
 	}
 	switch(prim) {
+	    case MGR_NEWENTITY | CONFIRM:
+		l2l->entity = (int)arg;
+		break;
 	    case MGR_ADDSTPARA | INDICATION:
 	    	if (((mISDN_stPara_t *)arg)->maxdatalen)
 		    	l2l->maxlen = ((mISDN_stPara_t *)arg)->maxdatalen;

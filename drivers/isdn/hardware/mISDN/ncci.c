@@ -1,4 +1,4 @@
-/* $Id: ncci.c,v 1.16 2003/11/21 22:29:41 keil Exp $
+/* $Id: ncci.c,v 1.17 2003/12/03 14:32:45 keil Exp $
  *
  */
 
@@ -98,8 +98,31 @@ static char* str_ev_ncci[] = {
 	"EV_AP_RELEASE",
 };
 
-static struct Fsm ncci_fsm =
-{ 0, 0, 0, 0, 0 };
+static struct Fsm ncci_fsm = { 0, 0, 0, 0, 0 };
+
+
+static int
+select_NCCIaddr(Ncci_t *ncci) {
+	__u32	addr;
+	Ncci_t	*test;
+
+	if (!ncci->AppPlci)
+		return(-EINVAL);
+	addr = 0x00010000 | ncci->AppPlci->addr;
+	while (addr < 0x00ffffff) { /* OK not more as 255 NCCI */
+		test = getNCCI4addr(ncci->AppPlci, addr, GET_NCCI_EXACT);
+		if (!test) {
+			ncci->addr = addr;
+#ifdef OLDCAPI_DRIVER_INTERFACE
+			ncci->contr->ctrl->new_ncci(ncci->contr->ctrl, ncci->appl->ApplId, ncci->addr, ncci->window);
+#endif
+			return(0);
+		}
+		addr += 0x00010000;
+	}
+	ncci->addr = ncci->AppPlci->addr;
+	return(-EBUSY);
+}
 
 static void
 ncci_debug(struct FsmInst *fi, char *fmt, ...)
@@ -136,8 +159,8 @@ ncciCmsgHeader(Ncci_t *ncci, _cmsg *cmsg, __u8 cmd, __u8 subcmd)
 static void
 ncci_connect_b3_req(struct FsmInst *fi, int event, void *arg)
 {
-	Ncci_t *ncci = fi->userdata;
-	_cmsg *cmsg = arg;
+	Ncci_t	*ncci = fi->userdata;
+	_cmsg	*cmsg = arg;
 
 	// FIXME
 	if (!ncci->appl) {
@@ -146,11 +169,21 @@ ncci_connect_b3_req(struct FsmInst *fi, int event, void *arg)
 	}
 	FsmChangeState(fi, ST_NCCI_N_0_1);
 	capi_cmsg_answer(cmsg);
-	cmsg->adr.adrNCCI = ncci->addr;
 
 	// TODO: NCPI handling
-	cmsg->Info = 0;
-
+	/* We need a real addr now */
+	if (0xffffffff == ncci->addr) {
+		cmsg->Info = 0;
+		if (select_NCCIaddr(ncci)) {
+			int_error();
+			cmsg->Info = CapiNoNcciAvailable;
+		}
+	} else {
+		int_error();
+		cmsg->Info = CapiNoNcciAvailable;
+		ncci->addr = ncci->AppPlci->addr;
+	}
+	cmsg->adr.adrNCCI = ncci->addr;
 	ncci_debug(fi, "ncci_connect_b3_req NCCI %x cmsg->Info(%x)",
 		ncci->addr, cmsg->Info);
 	if (FsmEvent(fi, EV_NC_CONNECT_B3_CONF, cmsg))
@@ -373,7 +406,7 @@ ncci_connect_b3_active_ind(struct FsmInst *fi, int event, void *arg)
 
 	FsmChangeState(fi, ST_NCCI_N_ACT);
 	for (i = 0; i < CAPI_MAXDATAWINDOW; i++) {
-		ncci->xmit_skb_handles[i].skb = 0;
+		ncci->xmit_skb_handles[i].PktId = 0;
 		ncci->recv_skb_handles[i] = 0;
 	}
 	Send2Application(ncci, arg);
@@ -393,6 +426,15 @@ ncci_n0_dl_establish_ind_conf(struct FsmInst *fi, int event, void *arg)
 
 	if (!ncci->appl)
 		return;
+	if (0xffffffff == ncci->addr) {
+		if (select_NCCIaddr(ncci)) {
+			int_error();
+			return;
+		}
+	} else {
+		int_error();
+		return;
+	}
 	CMSG_ALLOC(cmsg);
 	ncciCmsgHeader(ncci, cmsg, CAPI_CONNECT_B3, CAPI_IND);
 	if (FsmEvent(&ncci->ncci_m, EV_NC_CONNECT_B3_IND, cmsg))
@@ -535,8 +577,8 @@ ncciConstr(AppPlci_t *aplci)
 	ncci->ncci_m.debug      = aplci->plci->contr->debug & CAPI_DBG_NCCI_STATE;
 	ncci->ncci_m.userdata   = ncci;
 	ncci->ncci_m.printdebug = ncci_debug;
-	/* we only support one NCCI per AppPlci at the moment */
-	ncci->addr = 0x10000 | aplci->addr;
+	/* unused NCCI */
+	ncci->addr = 0xffffffff;
 	ncci->AppPlci = aplci;
 	ncci->contr = aplci->contr;
 	ncci->appl = aplci->appl;
@@ -545,6 +587,8 @@ ncciConstr(AppPlci_t *aplci)
 	if (ncci->window > CAPI_MAXDATAWINDOW) {
 		ncci->window = CAPI_MAXDATAWINDOW;
 	}
+	INIT_LIST_HEAD(&ncci->head);
+	list_add(&ncci->head, &aplci->Nccis);
 	printk(KERN_DEBUG "%s: ncci(%p) NCCI(%x) debug (%x/%x)\n",
 		__FUNCTION__, ncci, ncci->addr, aplci->plci->contr->debug, CAPI_DBG_NCCI_STATE); 
 	return(ncci);
@@ -656,9 +700,6 @@ ncciReleaseSt(Ncci_t *ncci)
 void
 ncciLinkUp(Ncci_t *ncci)
 {
-#ifdef OLDCAPI_DRIVER_INTERFACE
-	ncci->contr->ctrl->new_ncci(ncci->contr->ctrl, ncci->appl->ApplId, ncci->addr, ncci->window);
-#endif
 	ncciInitSt(ncci);
 }
 
@@ -698,11 +739,10 @@ ncciDestr(Ncci_t *ncci)
 	/* cleanup data queues */
 	discard_queue(&ncci->squeue);
 	for (i = 0; i < ncci->window; i++) {
-		if (ncci->xmit_skb_handles[i].skb)
-			ncci->xmit_skb_handles[i].skb = NULL;
+		if (ncci->xmit_skb_handles[i].PktId)
+			ncci->xmit_skb_handles[i].PktId = 0;
 	}
-	if (ncci->AppPlci)
-		AppPlciDelNCCI(ncci->AppPlci);
+	AppPlciDelNCCI(ncci);
 	ncci_free(ncci);
 }
 
@@ -793,7 +833,7 @@ ncciDataReq(Ncci_t *ncci, struct sk_buff *skb)
 		goto fail;
 	}
 	for (i = 0; i < ncci->window; i++) {
-		if (ncci->xmit_skb_handles[i].skb == NULL)
+		if (ncci->xmit_skb_handles[i].PktId == 0)
 			break;
 	}
 	if (i == ncci->window) {
@@ -801,8 +841,8 @@ ncciDataReq(Ncci_t *ncci, struct sk_buff *skb)
 		err = CAPI_SENDQUEUEFULL;
 		goto fail;
 	}
-	
-	ncci->xmit_skb_handles[i].skb = skb;
+	mISDN_HEAD_DINFO(skb) = ControllerNextId(ncci->contr);
+	ncci->xmit_skb_handles[i].PktId = mISDN_HEAD_DINFO(skb);
 	ncci->xmit_skb_handles[i].DataHandle = CAPIMSG_REQ_DATAHANDLE(skb->data);
 	ncci->xmit_skb_handles[i].MsgId = CAPIMSG_MSGID(skb->data);
 
@@ -821,7 +861,7 @@ ncciDataReq(Ncci_t *ncci, struct sk_buff *skb)
 		}
 	}
 	
-	err = ncciL4L3(ncci, DL_DATA | REQUEST, DINFO_SKB, 0, NULL, skb);
+	err = ncciL4L3(ncci, DL_DATA | REQUEST, mISDN_HEAD_DINFO(skb), 0, NULL, skb);
 	if (!err)
 		return;
 
@@ -830,13 +870,13 @@ ncciDataReq(Ncci_t *ncci, struct sk_buff *skb)
 	capierr = CAPI_MSGBUSY;
 	if (i == -1) {
 		for (i = 0; i < ncci->window; i++) {
-			if (ncci->xmit_skb_handles[i].skb == skb)
+			if (ncci->xmit_skb_handles[i].PktId == mISDN_HEAD_DINFO(skb))
 				break;
 		}
 		if (i == ncci->window)
 			int_error();
 		else
-			ncci->xmit_skb_handles[i].skb = NULL;
+			ncci->xmit_skb_handles[i].PktId = 0;
 	}
 fail:
 	cmsg = cmsg_alloc();
@@ -861,14 +901,14 @@ ncciDataConf(Ncci_t *ncci, int pr, struct sk_buff *skb)
 	_cmsg	*cmsg;
 
 	for (i = 0; i < ncci->window; i++) {
-		if (ncci->xmit_skb_handles[i].skb == skb)
+		if (ncci->xmit_skb_handles[i].PktId == mISDN_HEAD_DINFO(skb))
 			break;
 	}
 	if (i == ncci->window) {
 		int_error();
 		return(-EINVAL);
 	}
-	ncci->xmit_skb_handles[i].skb = NULL;
+	ncci->xmit_skb_handles[i].PktId = 0;
 	capidebug(CAPI_DBG_NCCI_L3, "%s: entry %d/%d handle (%x)",
 		__FUNCTION__, i, ncci->window, ncci->xmit_skb_handles[i].DataHandle);
 
@@ -886,7 +926,7 @@ ncciDataConf(Ncci_t *ncci, int pr, struct sk_buff *skb)
 	if (ncci->state & NCCI_STATE_FCTRL) {
 		if (skb_queue_len(&ncci->squeue)) {
 			skb = skb_dequeue(&ncci->squeue);
-			if (ncciL4L3(ncci, DL_DATA | REQUEST, DINFO_SKB,
+			if (ncciL4L3(ncci, DL_DATA | REQUEST, mISDN_HEAD_DINFO(skb),
 				0, NULL, skb)) {
 				int_error();
 				dev_kfree_skb(skb);

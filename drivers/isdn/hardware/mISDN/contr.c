@@ -1,4 +1,4 @@
-/* $Id: contr.c,v 1.17 2003/11/25 11:28:32 keil Exp $
+/* $Id: contr.c,v 1.18 2003/12/03 14:32:44 keil Exp $
  *
  */
 
@@ -526,6 +526,8 @@ ControllerConstr(Controller_t **contr_p, mISDNstack_t *st, mISDN_pid_t *pid, mIS
 	INIT_LIST_HEAD(&contr->Applications);
 	INIT_LIST_HEAD(&contr->SSProcesse);
 	spin_lock_init(&contr->list_lock);
+	spin_lock_init(&contr->id_lock);
+	contr->next_id = 1;
 	memcpy(&contr->inst.pid, pid, sizeof(mISDN_pid_t));
 #ifndef OLDCAPI_DRIVER_INTERFACE
 	if (!(contr->ctrl = kmalloc(sizeof(struct capi_ctr), GFP_KERNEL))) {
@@ -657,6 +659,21 @@ ControllerSelChannel(Controller_t *contr, u_int channel)
 		binst = binst->next;
 	}
 	return(binst);
+}
+
+int
+ControllerNextId(Controller_t *contr)
+{
+	u_long	flags;
+	int	id;
+
+	spin_lock_irqsave(&contr->id_lock, flags);
+	id = contr->next_id++;
+	if (id == 0x7fff)
+		contr->next_id = 1;
+	spin_unlock_irqrestore(&contr->id_lock, flags);
+	id |= (contr->entity << 16);
+	return(id);
 }
 
 #if 0

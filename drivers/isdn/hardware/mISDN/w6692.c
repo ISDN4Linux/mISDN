@@ -1,4 +1,4 @@
-/* $Id: w6692.c,v 1.4 2003/11/13 13:00:45 keil Exp $
+/* $Id: w6692.c,v 1.5 2003/12/03 14:32:45 keil Exp $
 
  * w6692.c     low level driver for CCD's hfc-pci based cards
  *
@@ -41,7 +41,7 @@
 
 extern const char *CardType[];
 
-const char *w6692_rev = "$Revision: 1.4 $";
+const char *w6692_rev = "$Revision: 1.5 $";
 
 #define DBUSY_TIMER_VALUE	80
 
@@ -1118,7 +1118,7 @@ w6692_l1hwD(mISDNif_t *hif, struct sk_buff *skb)
 			W6692_fill_Dfifo(dch->hw);
 			dch->inst.unlock(dch->inst.data);
 			return(if_newhead(&dch->inst.up, PH_DATA_CNF,
-				DINFO_SKB, skb));
+				hh->dinfo, skb));
 		}
 	} else if (hh->prim == (PH_SIGNAL | REQUEST)) {
 		dch->inst.lock(dch->inst.data,0);
