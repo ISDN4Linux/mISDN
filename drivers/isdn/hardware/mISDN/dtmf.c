@@ -1,4 +1,4 @@
-/* $Id: dtmf.c,v 1.6 2003/08/01 22:15:52 kkeil Exp $
+/* $Id: dtmf.c,v 1.7 2003/08/12 17:08:50 kkeil Exp $
  *
  * Linux ISDN subsystem, DTMF tone module
  *
@@ -47,7 +47,7 @@ static int debug = 0;
 
 static mISDNobject_t dtmf_obj;
 
-static char *mISDN_dtmf_revision = "$Revision: 1.6 $";
+static char *mISDN_dtmf_revision = "$Revision: 1.7 $";
 
 /*
  * Misc. lookup-tables.
@@ -511,6 +511,7 @@ new_dtmf(mISDNstack_t *st, mISDN_pid_t *pid) {
 	init_mISDNinstance(&n_dtmf->inst, &dtmf_obj, n_dtmf);
 	if (!SetHandledPID(&dtmf_obj, &n_dtmf->inst.pid)) {
 		int_error();
+		kfree(n_dtmf);
 		return(-ENOPROTOOPT);
 	}
 	n_dtmf->debug = debug;
