@@ -1,4 +1,4 @@
-/* $Id: hfc_pci.c,v 1.10 2002/07/08 12:27:45 kkeil Exp $
+/* $Id: hfc_pci.c,v 1.11 2002/07/08 12:33:04 kkeil Exp $
 
  * hfc_pci.c     low level driver for CCD's hfc-pci based cards
  *
@@ -42,7 +42,7 @@
 
 extern const char *CardType[];
 
-static const char *hfcpci_revision = "$Revision: 1.10 $";
+static const char *hfcpci_revision = "$Revision: 1.11 $";
 
 /* table entry in the PCI devices list */
 typedef struct {
@@ -1551,7 +1551,7 @@ mode_hfcpci(bchannel_t *bch, int bc, int protocol)
 		rx_slot = (bc>>8) & 0xff;
 		tx_slot = (bc>>16) & 0xff;
 		bc = bc & 0xff;
-	} else if (test_bit(HFC_CFG_PCM, &hc->cfg) && (protocol != ISDN_PID_NONE))
+	} else if (test_bit(HFC_CFG_PCM, &hc->cfg) && (protocol <= 0))
 		printk(KERN_WARNING __FUNCTION__
 			": no pcm channel id but HFC_CFG_PCM\n");
 	save_flags(flags);
@@ -1679,7 +1679,8 @@ mode_hfcpci(bchannel_t *bch, int bc, int protocol)
 			return(-ENOPROTOOPT);
 	}
 	if (test_bit(HFC_CFG_PCM, &hc->cfg)) {
-		if (protocol == ISDN_PID_NONE) {
+		if ((protocol == ISDN_PID_NONE) ||
+			(protocol == -1)) {	/* init case */
 			rx_slot = 0;
 			tx_slot = 0;
 		} else {

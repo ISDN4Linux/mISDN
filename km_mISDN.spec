@@ -1,7 +1,7 @@
 Vendor:       SuSE GmbH, Nuernberg, Germany
 Distribution: SuSE Linux 7.3 (i386)
 Name:         km_newhisax
-Release:      9
+Release:      10
 Packager:     feedback@suse.de
 
 Copyright:    Karsten Keil GPL
