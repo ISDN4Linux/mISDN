@@ -108,7 +108,7 @@
 
 extern const char *CardType[];
 
-static const char *hfcmulti_revision = "$Revision: 1.16 $";
+static const char *hfcmulti_revision = "$Revision: 1.17 $";
 
 static int HFC_cnt;
 
@@ -369,19 +369,24 @@ init_chip(hfc_multi_t *hc)
 	val += HFC_inb(hc, R_F0_CNTH) << 8;
 	if (debug & DEBUG_HFCMULTI_INIT)
 		printk(KERN_DEBUG "HFC_multi F0_CNT %ld after status ok\n", val);
-	while (cnt < 5) { /* max 50 ms */
-		schedule_timeout((10*HZ)/1000); /* Timeout 10ms */
+	unlock_dev(hc);
+	set_current_state(TASK_UNINTERRUPTIBLE);
+	while (cnt < 50) { /* max 50 ms */
+		schedule_timeout((HZ*10)/1000); /* Timeout 10ms */
 		cnt+=10;
 		val2 = HFC_inb(hc, R_F0_CNTL);
 		val2 += HFC_inb(hc, R_F0_CNTH) << 8;
 		if (val2 >= val+4) /* wait 4 pulses */
 			break;
 	}
+	lock_dev(hc, 0);
 	if (debug & DEBUG_HFCMULTI_INIT)
 		printk(KERN_DEBUG "HFC_multi F0_CNT %ld after %dms\n", val2, cnt);
-	if (val2 < val+2) {
-		printk(KERN_ERR "HFC_multi ERROR 125us pulse still not counting.\n");
-		printk(KERN_ERR "HFC_multi This happens in PCM slave mode without connected master.\n");
+	if (val2 < val+4) {
+		printk(KERN_ERR "HFC_multi ERROR 125us pulse not counting.\n");
+		if (test_bit(HFC_CHIP_PCM_SLAVE, &hc->chip)) {
+			printk(KERN_ERR "HFC_multi This happens in PCM slave mode without connected master.\n");
+		}
 		return(-EIO);
 	}
 
@@ -462,14 +467,23 @@ hfcmulti_leds(hfc_multi_t *hc)
 		i = 0;
 		while(i < 4) {
 			state = 0;
-			if ((dch = hc->chan[(i<<2)|2].dch))
+			active = -1;
+			if ((dch = hc->chan[(i<<2)|2].dch)) {
 				state = dch->ph_state;
-			active = test_bit(HFC_CFG_NTMODE, &hc->chan[dch->channel].cfg)?3:7;
-			if (state==active)
-				led[i] = 1; /* led green */
-			else if (state && (hc->ledcount>>10)==(i^(i>1)))
-				led[i] = 2; /* led red */
-			else
+				active = test_bit(HFC_CFG_NTMODE, &hc->chan[dch->channel].cfg)?3:7;
+			}
+			if (state) {
+				if (state==active) {
+					if (hc->activity[i]) {
+						led[i] = 1; /* led green */
+						hc->activity[i] = 0;
+					} else
+						led[i] = 2; /* led red */
+				} else if (hc->ledcount>>11)
+					led[i] = 2; /* led red */
+				else
+					led[i] = 0; /* led off */
+			} else
 				led[i] = 0; /* led off */
 			i++;
 		}
@@ -719,6 +733,9 @@ next_frame:
 	}
 	txpending = hc->chan[ch].txpending = 1;
 
+	/* show activity */
+	hc->activity[hc->chan[ch].port] = 1;
+
 	/* fill fifo to what we have left */
 	i = *idx;
 	ii = *len; 
@@ -875,6 +892,8 @@ next_frame:
 	if (Zsize <= 0)
 		return;
 	
+	/* show activity */
+	hc->activity[hc->chan[ch].port] = 1;
 
 	/* empty fifo with what we have */
 	if (hdlc) {
@@ -2535,7 +2554,7 @@ init_card(hfc_multi_t *hc)
 		 */
 		unlock_dev(hc);
 		HFC_outb(hc, R_IRQ_CTRL, V_GLOB_IRQ_EN);
-		current->state = TASK_UNINTERRUPTIBLE;
+		set_current_state(TASK_UNINTERRUPTIBLE);
 		schedule_timeout((100*HZ)/1000); /* Timeout 100ms */
 		/* turn IRQ off until chip is completely initialized */
 		HFC_outb(hc, R_IRQ_CTRL, 0);
@@ -2716,7 +2735,7 @@ setup_pci(hfc_multi_t *hc)
 		return (-EIO);
 	}
 	if (!request_region(hc->pci_iobase, 8, "hfcmulti")) {
-		printk(KERN_WARNING "HFC-multi: failed to request address space at 0x%04x (internal error)\n", hc->pci_iobase);
+		printk(KERN_WARNING "HFC-multi: failed to rquest address space at 0x%04x (internal error)\n", hc->pci_iobase);
 		hc->pci_iobase = 0;
 		return (-EIO);
 	}
@@ -3103,6 +3122,7 @@ HFCmulti_init(void)
 		break;
 		case 128: case 0:
 		poll_timer = 6;
+		poll = 128;
 		break;
 		case 256:
 		poll_timer = 7;
@@ -3422,9 +3442,10 @@ HFCmulti_init(void)
 		if (debug & DEBUG_HFCMULTI_INIT)
 			printk(KERN_DEBUG "%s: Initializing card(%d)\n", __FUNCTION__, HFC_cnt+1);
 		if ((err = init_card(hc))) {
-			if (debug & DEBUG_HFCMULTI_INIT)
+			if (debug & DEBUG_HFCMULTI_INIT) {
 				printk(KERN_DEBUG "%s: do release_io_hfcmulti\n", __FUNCTION__);
-			release_io_hfcmulti(hc);
+				release_io_hfcmulti(hc);
+			}
 			goto free_channels;
 		}
 
@@ -3480,6 +3501,7 @@ HFCmulti_init(void)
 				printk(KERN_DEBUG "%s: (after MGR_SETSTACK REQUEST)\n", __FUNCTION__);
 
 			/* delay some time */
+			set_current_state(TASK_UNINTERRUPTIBLE);
 			schedule_timeout((100*HZ)/1000); /* Timeout 100ms */
 
 			/* tell stack, that we are ready */

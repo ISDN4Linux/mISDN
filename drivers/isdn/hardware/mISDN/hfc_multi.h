@@ -113,6 +113,7 @@ struct hfc_multi {
 	u_int		slots;	/* number of PCM slots */
 	u_int		leds;	/* type of leds */
 	u_int		ledcount; /* used to animate leds */
+	u_int		activity[8]; /* if there is any action on this port (will be cleared after showing led-states) */
 
 	mISDN_HWlock_t  lock;	/* the lock */
 #ifdef SPIN_DEBUG

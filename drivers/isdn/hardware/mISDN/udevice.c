@@ -1,4 +1,4 @@
-/* $Id: udevice.c,v 1.14 2004/07/08 00:49:48 keil Exp $
+/* $Id: udevice.c,v 1.15 2004/11/19 18:47:40 jolly Exp $
  *
  * Copyright 2000  by Karsten Keil <kkeil@isdn4linux.de>
  *
@@ -1484,7 +1484,7 @@ do_mISDN_read(struct file *file, char *buf, size_t count, loff_t * off)
 	u_long		flags;
 	struct sk_buff	*skb;
 
-	if (off != &file->f_pos)
+	if (*off != file->f_pos)
 		return(-ESPIPE);
 	if (!access_ok(VERIFY_WRITE, buf, count))
 		return(-EFAULT);
@@ -1575,7 +1575,7 @@ do_mISDN_write(struct file *file, const char *buf, size_t count, loff_t * off)
 	struct sk_buff	*skb;
 	mISDN_head_t	head;
 
-	if (off != &file->f_pos)
+	if (*off != file->f_pos)
 		return(-ESPIPE);
 	if (device_debug & DEBUG_DEV_OP)
 		printk(KERN_DEBUG "mISDN_write: file(%d) %p count %d queue(%d)\n",
