@@ -1,4 +1,4 @@
-/* $Id: hfc_pci.c,v 1.13 2002/07/08 13:02:19 kkeil Exp $
+/* $Id: hfc_pci.c,v 1.14 2002/09/16 22:03:51 kkeil Exp $
 
  * hfc_pci.c     low level driver for CCD's hfc-pci based cards
  *
@@ -42,7 +42,7 @@
 
 extern const char *CardType[];
 
-static const char *hfcpci_revision = "$Revision: 1.13 $";
+static const char *hfcpci_revision = "$Revision: 1.14 $";
 
 /* table entry in the PCI devices list */
 typedef struct {
@@ -435,7 +435,7 @@ static void hfcpci_clear_fifo_tx(hfc_pci_t *hc, int fifo)
 		debugprint(&hc->bch[fifo].inst, "hfcpci_clear_fifo_tx%d f1(%x) f2(%x) z1(%x) z2(%x) state(%x)",
 				fifo, bzt->f1, bzt->f2, bzt->za[MAX_B_FRAMES].z1, bzt->za[MAX_B_FRAMES].z2, fifo_state);
 	bzt->f2 = MAX_B_FRAMES;
-	bzt->f1 = bzt->f1;	/* init F pointers to remain constant */
+	bzt->f1 = bzt->f2;	/* init F pointers to remain constant */
 	bzt->za[MAX_B_FRAMES].z1 = B_FIFO_SIZE + B_SUB_VAL - 1;
 	bzt->za[MAX_B_FRAMES].z2 = bzt->za[MAX_B_FRAMES].z1 - 1;
 	if (fifo_state)
