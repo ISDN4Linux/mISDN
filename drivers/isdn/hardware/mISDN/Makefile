@@ -5,7 +5,7 @@ MX_OBJS :=
 O_OBJS :=
 OX_OBJS :=
 L_TARGET :=
-O_TARGET :=
+O_TARGET := vmlinux-obj.o
 
 # EXTRA_CFLAGS += -S -g
 
@@ -44,14 +44,18 @@ endif
 #  endif
 #endif
 
-M_OBJS += hisaxcore.o
-M_OBJS += fritzpci.o
-M_OBJS += sedlfax.o
-M_OBJS += hfcpci.o
-M_OBJS += hisaxl1.o
-M_OBJS += hisaxl2.o
-M_OBJS += l3udss1.o
-M_OBJS += hisaxcapi.o
+obj-$(CONFIG_ISDN_DRV_HISAX) :=
+obj-$(CONFIG_ISDN_DRV_HISAX) += hisaxcore.o
+
+obj-$(CONFIG_ISDN_DRV_HISAX) += fritzpci.o
+obj-$(CONFIG_ISDN_DRV_HISAX) += sedlfax.o
+obj-$(CONFIG_ISDN_DRV_HISAX) += hfcpci.o
+obj-$(CONFIG_ISDN_DRV_HISAX) += hisaxl1.o
+obj-$(CONFIG_ISDN_DRV_HISAX) += hisaxl2.o
+obj-$(CONFIG_ISDN_DRV_HISAX) += l3udss1.o
+obj-$(CONFIG_ISDN_DRV_HISAX) += hisaxcapi.o
+
+
 
 include $(TOPDIR)/Rules.make
 

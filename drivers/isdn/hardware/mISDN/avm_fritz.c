@@ -1,4 +1,4 @@
-/* $Id: avm_fritz.c,v 0.17 2001/08/02 14:51:56 kkeil Exp $
+/* $Id: avm_fritz.c,v 0.18 2001/09/30 17:09:23 kkeil Exp $
  *
  * fritz_pci.c    low level stuff for AVM Fritz!PCI and ISA PnP isdn cards
  *              Thanks to AVM, Berlin for informations
@@ -18,7 +18,7 @@
 #include "helper.h"
 #include "debug.h"
 
-static const char *avm_pci_rev = "$Revision: 0.17 $";
+static const char *avm_pci_rev = "$Revision: 0.18 $";
 
 #define ISDN_CTYPE_FRITZPCI 1
 
@@ -848,7 +848,7 @@ setup_fritz(fritzpnppci *fc, u_int io_cfg, u_int irq_cfg)
 			}
 			if (pci_enable_device(dev_avm))
 				continue;
-			fc->addr = dev_avm->base_address[ 1] & PCI_BASE_ADDRESS_IO_MASK;
+			fc->addr = pci_resource_start_io(dev_avm,1);
 			if (!fc->addr) {
 				printk(KERN_ERR "FritzPCI: No IO-Adr for PCI card found\n");
 				continue;

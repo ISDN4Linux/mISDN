@@ -16,5 +16,25 @@
 #define __devinitdata
 
 #endif
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,4,0)
+
+#define COMPAT_HAS_2_2_PCI
+#define get_pcibase(ps, nr) ps->base_address[nr]
+#define pci_resource_start_io(pdev, nr) ((pdev)->base_address[nr] & PCI_BASE_ADDRESS_IO_MASK)
+#define pci_resource_start_mem(pdev, nr) ((pdev)->base_address[nr] & PCI_BASE_ADDRESS_MEM_MASK)
+#define pci_get_sub_vendor(pdev, id)	pci_read_config_word(pdev, PCI_SUBSYSTEM_VENDOR_ID, &id)
+#define pci_get_sub_system(pdev, id)	pci_read_config_word(pdev, PCI_SUBSYSTEM_ID, &id)
+
+#else /* 2.4.0 and later */
+
+#define pci_resource_start_io(pdev, nr) pci_resource_start(pdev, nr)
+#define pci_resource_start_mem(pdev, nr) pci_resource_start(pdev, nr)
+#define get_pcibase(ps, nr) ps->resource[nr].start
+#define pci_get_sub_system(pdev, id)	id = pdev->subsystem_device
+#define pci_get_sub_vendor(pdev, id)	id = pdev->subsystem_vendor
+
+#endif /* 2,4,0 */
+
 #endif /* __KERNEL__ */
 #endif /* _LINUX_ISDN_COMPAT_H */

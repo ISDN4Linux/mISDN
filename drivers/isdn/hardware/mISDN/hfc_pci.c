@@ -1,4 +1,4 @@
-/* $Id: hfc_pci.c,v 0.4 2001/09/29 20:11:20 kkeil Exp $
+/* $Id: hfc_pci.c,v 0.5 2001/09/30 17:09:23 kkeil Exp $
 
  * hfc_pci.c     low level driver for CCD´s hfc-pci based cards
  *
@@ -39,7 +39,7 @@
 
 extern const char *CardType[];
 
-static const char *hfcpci_revision = "$Revision: 0.4 $";
+static const char *hfcpci_revision = "$Revision: 0.5 $";
 
 /* table entry in the PCI devices list */
 typedef struct {
@@ -53,6 +53,7 @@ typedef struct {
 #define CLKDEL_TE	0x0e	/* CLKDEL in TE mode */
 #define CLKDEL_NT	0x6c	/* CLKDEL in NT mode */
 
+#ifndef PCI_VENDOR_ID_CCD
 #define PCI_VENDOR_ID_CCD		0x1397
 #define PCI_DEVICE_ID_CCD_2BD0		0x2BD0
 #define PCI_DEVICE_ID_CCD_B000		0xB000
@@ -85,7 +86,7 @@ typedef struct {
 
 #define PCI_VENDOR_ID_ABOCOM		0x13D1
 #define PCI_DEVICE_ID_ABOCOM_2BD1	0x2BD1
-
+#endif
 
 static const PCI_ENTRY id_list[] =
 {
@@ -2115,7 +2116,7 @@ setup_hfcpci(hfc_pci_t *hc)
 			printk(KERN_WARNING "HFC-PCI: No IRQ for PCI card found\n");
 			return (1);
 		}
-		hc->hw.pci_io = (char *) dev_hfcpci->base_address[ 1];
+		hc->hw.pci_io = (char *) get_pcibase(dev_hfcpci, 1);
 		printk(KERN_INFO "HiSax: HFC-PCI card manufacturer: %s card name: %s\n", id_list[i].vendor_name, id_list[i].card_name);
 	} else {
 		printk(KERN_WARNING "HFC-PCI: No PCI card found\n");

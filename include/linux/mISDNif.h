@@ -1,4 +1,4 @@
-/* $Id: mISDNif.h,v 0.31 2001/09/29 20:11:20 kkeil Exp $
+/* $Id: mISDNif.h,v 0.32 2001/09/30 17:09:23 kkeil Exp $
  *
  */
 
@@ -617,7 +617,7 @@ typedef struct _hisaxstack {
 } hisaxstack_t;
 
 typedef struct _hisaxport {
-	struct wait_queue	*procq;
+	wait_queue_head_t	procq;
 	spinlock_t		lock;
 	hisaxif_t		pif;
 	int			Flag;
