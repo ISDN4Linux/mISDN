@@ -1,4 +1,4 @@
-/* $Id: plci.c,v 1.7 2003/10/20 07:19:42 keil Exp $
+/* $Id: plci.c,v 1.8 2003/11/11 09:59:00 keil Exp $
  *
  */
 
@@ -11,10 +11,11 @@
         capidebug(lev, fmt, ## args)
 
 
-void plciConstr(Plci_t *plci, Contr_t *contr, __u32 adrPLCI)
+void plciConstr(Plci_t *plci, Contr_t *contr, __u32 adrPLCI, u_int id)
 {
 	memset(plci, 0, sizeof(Plci_t));
 	plci->adrPLCI = adrPLCI;
+	plci->id = id;
 	plci->contr = contr;
 }
 
@@ -122,14 +123,6 @@ void plciDetachCplci(Plci_t *plci, Cplci_t *cplci)
 	plci->nAppl--;
 }
 
-#if 0
-void plciNewCrInd(Plci_t *plci, struct l3_process *l3_pc)
-{
-	l3_pc->l4pc = &plci->l4_pc; 
-	l3_pc->l4pc->l3pc = l3_pc;
-}
-#endif
-
 void plciNewCrReq(Plci_t *plci)
 {
 	plciL4L3(plci, CC_NEW_CR | REQUEST, NULL);
@@ -148,7 +141,7 @@ int plciL4L3(Plci_t *plci, __u32 prim, struct sk_buff *skb)
 		} else
 			skb_reserve(skb, MY_RESERVE);
 	}
-	err = contrL4L3(plci->contr, prim, plci->adrPLCI, skb);
+	err = contrL4L3(plci->contr, prim, plci->id, skb);
 	if (err)
 		dev_kfree_skb(skb);
 	return(err);

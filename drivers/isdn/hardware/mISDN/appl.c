@@ -1,4 +1,4 @@
-/* $Id: appl.c,v 1.4 2003/07/21 12:44:45 kkeil Exp $
+/* $Id: appl.c,v 1.5 2003/11/11 09:59:00 keil Exp $
  *
  */
 
@@ -88,7 +88,7 @@ void applSendMessage(Appl_t *appl, struct sk_buff *skb)
 		cplciSendMessage(cplci, skb);
 		break;
 	case CAPI_CONNECT_REQ:
-		plci = contrNewPlci(appl->contr);
+		plci = contrNewPlci(appl->contr, MISDN_ID_ANY);
 		if (!plci) {
 			contrAnswerMessage(appl->contr, skb, CapiNoPlciAvailable);
 			goto free;

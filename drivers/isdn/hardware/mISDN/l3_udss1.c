@@ -1,4 +1,4 @@
-/* $Id: l3_udss1.c,v 1.15 2003/11/09 16:03:19 keil Exp $
+/* $Id: l3_udss1.c,v 1.16 2003/11/11 09:59:00 keil Exp $
  *
  * EURO/DSS1 D-channel protocol
  *
@@ -24,7 +24,7 @@ static int debug = 0;
 static mISDNobject_t u_dss1;
 
 
-const char *dss1_revision = "$Revision: 1.15 $";
+const char *dss1_revision = "$Revision: 1.16 $";
 
 static int dss1man(l3_process_t *, u_int, void *);
 
@@ -994,9 +994,9 @@ l3dss1_setup(l3_process_t *pc, u_char pr, void *arg)
 {
 	u_char		*p, cause, bc2 = 0;
 	int		bcfound = 0;
-	struct sk_buff	*nskb, *skb = arg;
+	struct sk_buff	*skb = arg;
 	Q931_info_t	*qi = (Q931_info_t *)skb->data;
-	int		err = 0, **idp;
+	int		err = 0;
 
 	/*
 	 * Bearer Capabilities
@@ -1097,22 +1097,7 @@ l3dss1_setup(l3_process_t *pc, u_char pr, void *arg)
 	L3AddTimer(&pc->timer, T_CTRL, CC_TCTRL);
 	if (err) /* STATUS for none mandatory IE errors after actions are taken */
 		l3dss1_std_ie_err(pc, err);
-	if ((nskb = alloc_skb(sizeof(idp) + 8, GFP_ATOMIC))) {
-		idp = (int **)skb_put(nskb, sizeof(idp));
-		*idp = &pc->id;
-		err = mISDN_l3up(pc, CC_NEW_CR | INDICATION, nskb);
-		if (err)
-			dev_kfree_skb(nskb);
-	} else
-		err = -ENOMEM;
-	if (err) {
-		if (pc->l3->debug & L3_DEB_WARN)
-			l3_debug(pc->l3, "cannot register SETUP CR err(%d)",
-				err);
-		release_l3_process(pc);
-		dev_kfree_skb(skb);
-		return;
-	}
+	err = mISDN_l3up(pc, CC_NEW_CR | INDICATION, NULL);
 	if (mISDN_l3up(pc, CC_SETUP | INDICATION, skb))
 		dev_kfree_skb(skb);
 }
@@ -2028,7 +2013,7 @@ dss1_fromdown(mISDNif_t *hif, struct sk_buff *skb)
 		 * this callreference is active
 		 */
 		if (qi->type == MT_SETUP) {
-			/* Setup creates a new transaction process */
+			/* Setup creates a new l3 process */
 			if (qi->cr & 0x8000) {
 				/* Setup with wrong CREF flag */
 				if (l3->debug & L3_DEB_STATE)
@@ -2036,12 +2021,21 @@ dss1_fromdown(mISDNif_t *hif, struct sk_buff *skb)
 				dev_kfree_skb(skb);
 				return(0);
 			}
-			if (!(proc = new_l3_process(l3, qi->cr, N303))) {
+			if (!(proc = new_l3_process(l3, qi->cr, N303, MISDN_ID_ANY))) {
 				/* May be to answer with RELEASE_COMPLETE and
 				 * CAUSE 0x2f "Resource unavailable", but this
 				 * need a new_l3_process too ... arghh
 				 */
 				dev_kfree_skb(skb);
+				return(0);
+			}
+			/* register this ID in L4 */
+			ret = mISDN_l3up(proc, CC_NEW_CR | INDICATION, NULL);
+			if (ret) {
+				printk(KERN_WARNING "dss1up: cannot register ID(%x)\n",
+					proc->id);
+				dev_kfree_skb(skb);
+				release_l3_process(proc);
 				return(0);
 			}
 		} else if (qi->type == MT_STATUS) {
@@ -2067,7 +2061,7 @@ dss1_fromdown(mISDNif_t *hif, struct sk_buff *skb)
 				 * MT_STATUS is received with call state != 0,
 				 * we must send MT_RELEASE_COMPLETE cause 101
 				 */
-				if ((proc = new_l3_process(l3, qi->cr, N303))) {
+				if ((proc = new_l3_process(l3, qi->cr, N303, MISDN_ID_ANY))) {
 					l3dss1_msg_without_setup(proc,
 						CAUSE_NOTCOMPAT_STATE);
 				}
@@ -2082,7 +2076,7 @@ dss1_fromdown(mISDNif_t *hif, struct sk_buff *skb)
 			 * if setup has not been made and a message type
 			 * (except MT_SETUP and RELEASE_COMPLETE) is received,
 			 * we must send MT_RELEASE_COMPLETE cause 81 */
-			if ((proc = new_l3_process(l3, qi->cr, N303))) {
+			if ((proc = new_l3_process(l3, qi->cr, N303, MISDN_ID_ANY))) {
 				l3dss1_msg_without_setup(proc,
 					CAUSE_INVALID_CALLREF);
 			}
@@ -2158,8 +2152,7 @@ dss1_fromup(mISDNif_t *hif, struct sk_buff *skb)
 			cr = newcallref();
 			cr |= 0x8000;
 			ret = -ENOMEM;
-			if ((proc = new_l3_process(l3, cr, N303))) {
-				proc->id = hh->dinfo;
+			if ((proc = new_l3_process(l3, cr, N303, hh->dinfo))) {
 				ret = 0;
 				dev_kfree_skb(skb);
 			}
@@ -2241,6 +2234,8 @@ release_udss1(layer3_t *l3)
 	}
 	REMOVE_FROM_LISTBASE(l3, ((layer3_t *)u_dss1.ilist));
 	u_dss1.ctrl(inst, MGR_UNREGLAYER | REQUEST, NULL);
+	if (l3->entity != MISDN_ENTITY_NONE)
+		u_dss1.ctrl(inst, MGR_DELENTITY | REQUEST, (void *)l3->entity);
 	kfree(l3);
 }
 
@@ -2283,6 +2278,7 @@ new_udss1(mISDNstack_t *st, mISDN_pid_t *pid)
 	}
 	nl3->global->state = 0;
 	nl3->global->callref = 0;
+	nl3->global->id = MISDN_ID_GLOBAL;
 	nl3->global->next = NULL;
 	nl3->global->n303 = N303;
 	nl3->global->l3 = nl3;
@@ -2296,6 +2292,7 @@ new_udss1(mISDNstack_t *st, mISDN_pid_t *pid)
 	}
 	nl3->dummy->state = 0;
 	nl3->dummy->callref = -1;
+	nl3->dummy->id = MISDN_ID_DUMMY;
 	nl3->dummy->next = NULL;
 	nl3->dummy->n303 = N303;
 	nl3->dummy->l3 = nl3;
@@ -2304,6 +2301,11 @@ new_udss1(mISDNstack_t *st, mISDN_pid_t *pid)
 	sprintf(nl3->inst.name, "DSS1 %d", st->id);
 	nl3->p_mgr = dss1man;
 	APPEND_TO_LIST(nl3, ((layer3_t *)u_dss1.ilist));
+	err = u_dss1.ctrl(&nl3->inst, MGR_NEWENTITY | REQUEST, NULL);
+	if (err) {
+		printk(KERN_WARNING "mISDN %s: MGR_NEWENTITY REQUEST failed err(%x)\n",
+			__FUNCTION__, err);
+	}
 	err = u_dss1.ctrl(st, MGR_REGLAYER | INDICATION, &nl3->inst);
 	if (err) {
 		release_l3(nl3);
@@ -2354,6 +2356,9 @@ udss1_manager(void *data, u_int prim, void *arg) {
 		return(-EINVAL);
 	}
 	switch(prim) {
+	    case MGR_NEWENTITY | CONFIRM:
+		l3l->entity = (int)arg;
+		break;
 	    case MGR_ADDSTPARA | INDICATION:
 	    	l3l->down_headerlen = ((mISDN_stPara_t *)arg)->down_headerlen;
 	    case MGR_CLRSTPARA | INDICATION:

@@ -1,4 +1,4 @@
-/* $Id: core.h,v 1.5 2003/08/02 21:17:58 kkeil Exp $
+/* $Id: core.h,v 1.6 2003/11/11 09:59:00 keil Exp $
  * 
  * This file is (c) under GNU PUBLIC LICENSE
  *
@@ -65,3 +65,5 @@ extern int		unregister_instance(mISDNinstance_t *);
 extern mISDNinstance_t	*get_next_instance(mISDNstack_t *, mISDN_pid_t *);
 extern mISDNobject_t	*get_object(int);
 extern mISDNinstance_t	*get_instance4id(u_int);
+extern int		mISDN_alloc_entity(int *);
+extern int		mISDN_delete_entity(int);

@@ -1,4 +1,4 @@
-/* $Id: contr.c,v 1.14 2003/11/09 09:16:16 keil Exp $
+/* $Id: contr.c,v 1.15 2003/11/11 09:59:00 keil Exp $
  *
  */
 
@@ -61,6 +61,8 @@ contrDestr(Contr_t *contr)
 	}
 	inst->obj->ctrl(inst, MGR_UNREGLAYER | REQUEST, NULL);
 	REMOVE_FROM_LISTBASE(contr, ((Contr_t *)inst->obj->ilist));
+	if (contr->entity != MISDN_ENTITY_NONE)
+		inst->obj->ctrl(inst, MGR_DELENTITY | REQUEST, (void *)contr->entity);
 }
 
 void
@@ -379,8 +381,22 @@ contrAnswerMessage(Contr_t *contr, struct sk_buff *skb, __u16 Info)
 	contrAnswerCmsg(contr, &cmsg, Info);
 }
 
+static Plci_t *
+contrGetPLCI4ID(Contr_t *contr, u_int id)
+{
+	int	i;
+
+	for (i = 0; i < CAPI_MAXPLCI; i++) {
+		if (!contr->plcis[i])
+			continue;
+		if (contr->plcis[i]->id == id)
+			return(contr->plcis[i]);
+	}
+	return(NULL);
+}
+
 Plci_t *
-contrNewPlci(Contr_t *contr)
+contrNewPlci(Contr_t *contr, u_int id)
 {
 	Plci_t	*plci;
 	int	i;
@@ -392,14 +408,29 @@ contrNewPlci(Contr_t *contr)
 	if (i == CAPI_MAXPLCI) {
 		return 0;
 	}
+	if (id == MISDN_ID_ANY) {
+		if (contr->entity == MISDN_ENTITY_NONE) {
+			printk(KERN_ERR "mISDN %s: no ENTITY id\n",
+				__FUNCTION__);
+			return NULL;
+		}
+		id = (contr->entity << 16) | ((i+1) << 8) | (contr->adrController & 0xFF);
+	}
+	plci = contrGetPLCI4ID(contr, id);
+	if (plci) {
+		printk(KERN_ERR "mISDN %s: PLCI(%x) allready has id(%x)\n",
+			__FUNCTION__, plci->adrPLCI, id);
+		return NULL;
+	}
 	plci = kmalloc(sizeof(Plci_t), GFP_ATOMIC);
 	if (!plci) {
 		int_error();
-		return 0;
+		return NULL;
 	}
 	contr->plcis[i] = plci;
-	plciConstr(plci, contr, (i+1) << 8 | contr->adrController);
-	contrDebug(contr, CAPI_DBG_PLCI, "%s: PLCI(%x) plci(%p,%d)", __FUNCTION__, plci->adrPLCI, plci, sizeof(*plci));
+	plciConstr(plci, contr, (i+1) << 8 | contr->adrController, id);
+	contrDebug(contr, CAPI_DBG_PLCI, "%s: PLCI(%x) plci(%p,%d) id(%x)",
+		__FUNCTION__, plci->adrPLCI, plci, sizeof(*plci), plci->id);
 	return plci;
 }
 
@@ -422,26 +453,11 @@ contrDelPlci(Contr_t *contr, Plci_t *plci)
 	contr->plcis[i-1] = NULL;
 }
 
-static Plci_t *
-contrGetPLCI4addr(Contr_t *contr, u_int addr)
-{
-	int	i;
-
-	for (i = 0; i < CAPI_MAXPLCI; i++) {
-		if (!contr->plcis[i])
-			continue;
-		if (contr->plcis[i]->adrPLCI == addr)
-			return(contr->plcis[i]);
-	}
-	return(NULL);
-}
-
 int
 contrL3L4(mISDNif_t *hif, struct sk_buff *skb)
 {
 	Contr_t		*contr;
 	Plci_t		*plci;
-	__u32		*id;
 	int		ret = -EINVAL;
 	mISDN_head_t	*hh;
 
@@ -452,19 +468,16 @@ contrL3L4(mISDNif_t *hif, struct sk_buff *skb)
 	contrDebug(contr, CAPI_DBG_CONTR_INFO, "%s: prim(%x) id(%x)",
 		__FUNCTION__, hh->prim, hh->dinfo);
 	if (hh->prim == (CC_NEW_CR | INDICATION)) {
-		plci = contrNewPlci(contr);
-		if (!plci)
-			return(-EBUSY);
-		if (skb->len >= sizeof(void)) {
-			id = *((__u32 **)skb->data);
-			*id = plci->adrPLCI;
-			dev_kfree_skb(skb);
+		plci = contrNewPlci(contr, hh->dinfo);
+		if (plci) {
 			ret = 0;
-		}
-	} else if ((hh->dinfo & ~CONTROLER_MASK) == DUMMY_CR_FLAG) {
+			dev_kfree_skb(skb);
+		} else 
+			ret = -EBUSY;
+	} else if (hh->dinfo == MISDN_ID_DUMMY) {
 		ret = contrDummyInd(contr, hh->prim, skb);
 	} else {
-		if (!(plci = contrGetPLCI4addr(contr, hh->dinfo))) {
+		if (!(plci = contrGetPLCI4ID(contr, hh->dinfo))) {
 			contrDebug(contr, CAPI_DBG_WARN, "%s: unknown plci prim(%x) id(%x)",
 				__FUNCTION__, hh->prim, hh->dinfo);
 			return(-ENODEV);
@@ -527,6 +540,12 @@ contrConstr(Contr_t *contr, mISDNstack_t *st, mISDN_pid_t *pid, mISDNobject_t *o
 		cst = cst->next;
 	}
 	APPEND_TO_LIST(contr, ocapi->ilist);
+	contr->entity = 
+	retval = ocapi->ctrl(&contr->inst, MGR_NEWENTITY | REQUEST, NULL);
+	if (retval) {
+		printk(KERN_WARNING "mISDN %s: MGR_NEWENTITY REQUEST failed err(%x)\n",
+			__FUNCTION__, retval);
+	}
 	retval = 0;
 #ifdef OLDCAPI_DRIVER_INTERFACE
 	{

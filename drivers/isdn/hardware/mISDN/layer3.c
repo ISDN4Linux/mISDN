@@ -1,4 +1,4 @@
-/* $Id: layer3.c,v 1.7 2003/08/01 22:15:53 kkeil Exp $
+/* $Id: layer3.c,v 1.8 2003/11/11 09:59:00 keil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -14,7 +14,7 @@
 #include "layer3.h"
 #include "helper.h"
 
-const char *l3_revision = "$Revision: 1.7 $";
+const char *l3_revision = "$Revision: 1.8 $";
 
 static
 struct Fsm l3fsm = {NULL, 0, 0, NULL, NULL};
@@ -261,16 +261,46 @@ l3_process_t
 }
 
 l3_process_t
-*new_l3_process(layer3_t *l3, int cr, int n303)
+*new_l3_process(layer3_t *l3, int cr, int n303, u_int id)
 {
 	l3_process_t *p;
 
+	if (id == MISDN_ID_ANY) {
+		if (l3->entity == MISDN_ENTITY_NONE) {
+			printk(KERN_WARNING "%s: no entity allocated for l3(%x)\n",
+				__FUNCTION__, l3->id);
+			return (NULL);
+		}
+		if (l3->id_cnt == 0xFFFF)
+			l3->id_cnt = 0;
+		while(l3->id_cnt <= 0xFFFF) {
+			l3->id_cnt++;
+			id = l3->id_cnt | (l3->entity << 16);
+			p = getl3proc4id(l3, id);
+			if (!p)
+				break;
+		}
+		if (p) {
+			printk(KERN_WARNING "%s: no free process_id for l3(%x) entity(%x)\n",
+				__FUNCTION__, l3->id, l3->entity);
+			return (NULL);
+		}
+	} else {
+		/* id from other entity */
+		p = getl3proc4id(l3, id);
+		if (p) {
+			printk(KERN_WARNING "%s: process_id(%x) allready in use in l3(%x)\n",
+				__FUNCTION__, id, l3->id);
+			return (NULL);
+		}
+	}
 	if (!(p = kmalloc(sizeof(l3_process_t), GFP_ATOMIC))) {
 		printk(KERN_ERR "mISDN can't get memory for cr %d\n", cr);
 		return (NULL);
 	}
 	memset(p, 0, sizeof(l3_process_t));
 	p->l3 = l3;
+	p->id = id;
 	p->callref = cr;
 	p->n303 = n303;
 	L3InitTimer(p, &p->timer);
@@ -511,6 +541,7 @@ init_l3(layer3_t *l3)
 	l3->proc   = NULL;
 	l3->global = NULL;
 	l3->dummy = NULL;
+	l3->entity = MISDN_ENTITY_NONE;
 	skb_queue_head_init(&l3->squeue);
 	l3->l3m.fsm = &l3fsm;
 	l3->l3m.state = ST_L3_LC_REL;

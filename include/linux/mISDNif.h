@@ -1,4 +1,4 @@
-/* $Id: mISDNif.h,v 1.18 2003/11/09 09:19:47 keil Exp $
+/* $Id: mISDNif.h,v 1.19 2003/11/11 09:59:01 keil Exp $
  *
  */
 
@@ -31,6 +31,8 @@
 #define MGR_GETOBJECT	0x0f0100
 #define MGR_NEWOBJECT	0x0f0200
 #define MGR_DELOBJECT	0x0f0300
+#define MGR_NEWENTITY	0x0f0600
+#define MGR_DELENTITY	0x0f0700
 #define MGR_GETSTACK	0x0f1100
 #define MGR_NEWSTACK	0x0f1200
 #define MGR_DELSTACK	0x0f1300
@@ -319,6 +321,28 @@
 #define FLG_mISDNPORT_BLOCK	3
 #define FLG_mISDNPORT_OPEN	4
 #define FLG_mISDNPORT_ONEFRAME	5
+
+
+/*
+ * A "ENTITY" is a instance which assign id's with a none local
+ * scope. A id has a local part (a range of ids which the instance
+ * maintains) and the global ENTITY ID.
+ * A instance which wan't to assign IDs have to request a unique
+ * ENTITY ID with MGR_NEWENTITY | REQUEST.
+ * If the instance is deleted or don't need this feature anymore
+ * it has to delete the ENTITY with MGR_DELENTITY | REQUEST.
+ * ENTITY ID 0xFFFF is a special one.
+ * One example for using this is the L3/L4 process ID.
+ */
+
+#define MISDN_MAX_ENTITY	2048
+#define MISDN_ENTITY_NONE	0x0000ffff
+#define MISDN_ID_ENTITYMASK	0xffff0000
+#define MISDN_ID_LOCALMASK	0x0000FFFF
+#define MISDN_ID_ANY		0xffffffff
+#define MISDN_ID_NONE		0xfffffffe
+#define MISDN_ID_DUMMY		0xffff0001
+#define MISDN_ID_GLOBAL		0xffff0002
 
 #define MAX_LAYER_NR	7
 #define ISDN_LAYER(n)	(1<<n)
@@ -651,6 +675,7 @@ struct _mISDNdevice {
 	struct _devicelayer	*layer;
 	struct _devicestack	*stack;
 	struct _mISDNtimer	*timer;
+	struct list_head	entitylist;
 };
 
 /* common helper functions */

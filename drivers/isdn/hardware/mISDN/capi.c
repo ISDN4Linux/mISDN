@@ -1,4 +1,4 @@
-/* $Id: capi.c,v 1.8 2003/08/01 22:15:52 kkeil Exp $
+/* $Id: capi.c,v 1.9 2003/11/11 09:59:00 keil Exp $
  *
  */
 
@@ -7,7 +7,7 @@
 #include "helper.h"
 #include "debug.h"
 
-static char *capi_revision = "$Revision: 1.8 $";
+static char *capi_revision = "$Revision: 1.9 $";
 
 static int debug = 0;
 static mISDNobject_t capi_obj;
@@ -97,6 +97,9 @@ capi20_manager(void *data, u_int prim, void *arg) {
 		return(-EINVAL);
 	}
 	switch(prim) {
+	    case MGR_NEWENTITY | CONFIRM:
+		ctrl->entity = (int)arg;
+		break;
 	    case MGR_CONNECT | REQUEST:
 		return(ConnectIF(inst, arg));
 	    case MGR_SETIF | INDICATION:

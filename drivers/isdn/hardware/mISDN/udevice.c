@@ -1,4 +1,4 @@
-/* $Id: udevice.c,v 1.9 2003/10/20 07:19:42 keil Exp $
+/* $Id: udevice.c,v 1.10 2003/11/11 09:59:00 keil Exp $
  *
  * Copyright 2000  by Karsten Keil <kkeil@isdn4linux.de>
  *
@@ -10,6 +10,7 @@
 #include <linux/vmalloc.h>
 #include <linux/config.h>
 #include <linux/timer.h>
+#include <linux/list.h>
 #include "core.h"
 
 #define MAX_HEADER_LEN	4
@@ -50,6 +51,11 @@ typedef struct _mISDNtimer {
 	int			id;
 	u_long			Flags;
 } mISDNtimer_t;
+
+typedef struct entity_item {
+	struct list_head	head;
+	int			entity;
+} entity_item_t;
 
 static mISDNdevice_t	*mISDN_devicelist = NULL;
 static rwlock_t	mISDN_device_lock = RW_LOCK_UNLOCKED;
@@ -811,6 +817,39 @@ dev_expire_timer(mISDNtimer_t *ht)
 }
 
 static int
+new_entity_req(mISDNdevice_t *dev, int *entity)
+{
+	int		ret;
+	entity_item_t	*ei = kmalloc(sizeof(entity_item_t), GFP_ATOMIC);
+
+	if (!ei)
+		return(-ENOMEM);
+	ret = mISDN_alloc_entity(entity);
+	ei->entity = *entity;
+	if (ret)
+		kfree(entity);
+	else
+		list_add((struct list_head *)ei, &dev->entitylist);
+	return(ret);
+}
+
+static int
+del_entity_req(mISDNdevice_t *dev, int entity)
+{
+	struct list_head	*item, *nxt;
+
+	list_for_each_safe(item, nxt, &dev->entitylist) {
+		if (((entity_item_t *)item)->entity == entity) {
+			list_del(item);
+			mISDN_delete_entity(entity);
+			kfree(item);
+			return(0);
+		}
+	}
+	return(-ENODEV);
+}
+
+static int
 dev_init_timer(mISDNdevice_t *dev, iframe_t *iff)
 {
 	mISDNtimer_t	*ht;
@@ -1229,6 +1268,21 @@ mISDN_wdata_if(mISDNdevice_t *dev, iframe_t *iff, int len) {
 		off.len = del_if_req(dev, iff);
 		mISDN_rdata(dev, &off, 1);
 		break;
+	    case (MGR_NEWENTITY | REQUEST):
+		used = head;
+		off.addr = iff->addr;
+		off.prim = MGR_NEWENTITY | CONFIRM;
+		off.len = new_entity_req(dev, &off.dinfo);
+		mISDN_rdata(dev, &off, 1);
+		break;
+	    case (MGR_DELENTITY | REQUEST):
+		used = head;
+		off.addr = iff->addr;
+		off.prim = MGR_DELENTITY | CONFIRM;
+		off.dinfo = iff->dinfo;
+		off.len = del_entity_req(dev, iff->dinfo);
+		mISDN_rdata(dev, &off, 1);
+		break;
 	    case (MGR_INITTIMER | REQUEST):
 		used = head;
 		off.len = dev_init_timer(dev, iff);
@@ -1478,6 +1532,7 @@ init_device(u_int minor) {
 		init_waitqueue_head(&dev->rport.procq);
 		init_waitqueue_head(&dev->wport.procq);
 		init_MUTEX(&dev->io_sema);
+		INIT_LIST_HEAD(&dev->entitylist);
 		write_lock_irqsave(&mISDN_device_lock, flags);
 		APPEND_TO_LIST(dev, mISDN_devicelist);
 		write_unlock_irqrestore(&mISDN_device_lock, flags);
@@ -1533,6 +1588,16 @@ free_device(mISDNdevice_t *dev)
 	write_lock_irqsave(&mISDN_device_lock, flags);
 	REMOVE_FROM_LISTBASE(dev, mISDN_devicelist);
 	write_unlock_irqrestore(&mISDN_device_lock, flags);
+	if (!list_empty(&dev->entitylist)) {
+		printk(KERN_WARNING "MISDN %s: entitylist not empty\n", __FUNCTION__);
+		while(!list_empty(&dev->entitylist)) {
+			struct entity_item	*ei;
+			ei = (struct entity_item *)dev->entitylist.next;
+			list_del((struct list_head *)ei);
+			mISDN_delete_entity(ei->entity);
+			kfree(ei);
+		}
+	}
 	kfree(dev);
 	return(0);
 }

@@ -1,4 +1,4 @@
-/* $Id: capi.h,v 1.9 2003/11/09 09:12:28 keil Exp $
+/* $Id: capi.h,v 1.10 2003/11/11 09:59:00 keil Exp $
  *
  */
 
@@ -183,6 +183,7 @@ typedef struct _Contr {
 	struct capi_ctr		*ctrl;
 	__u32			adrController;
 	int			b3_mode;
+	int			entity;
 	u_int			debug;
 	char			infobuf[128];
 	char			msgbuf[128];
@@ -199,7 +200,7 @@ void		contrDebug(Contr_t *, __u32, char *, ...);
 void		contrRecvCmsg(Contr_t *, _cmsg *);
 void		contrAnswerCmsg(Contr_t *, _cmsg *, __u16);
 void		contrAnswerMessage(Contr_t *, struct sk_buff *, __u16);
-struct _Plci	*contrNewPlci(Contr_t *);
+struct _Plci	*contrNewPlci(Contr_t *, u_int);
 struct _Appl	*contrId2appl(Contr_t *, __u16);
 struct _Plci	*contrAdr2plci(Contr_t *, __u32);
 void		contrDelPlci(Contr_t *, struct _Plci *);
@@ -289,12 +290,13 @@ void applDelCplci(Appl_t *appl, struct _Cplci *cplci);
 typedef struct _Plci {
 	Contr_t		*contr;
 	__u32		adrPLCI;
+	u_int		id;
 	u_long		flags;
 	int		nAppl;
 	struct _Cplci	*cplcis[CAPI_MAXAPPL];
 } Plci_t;
 
-void plciConstr(Plci_t *plci, Contr_t *contr, __u32 adrPLCI);
+void plciConstr(Plci_t *plci, Contr_t *contr, __u32 adrPLCI, u_int id);
 void plciDestr(Plci_t *plci);
 void plciDebug(Plci_t *plci, __u32 level, char *fmt, ...);
 int  plci_l3l4(Plci_t *, int, struct sk_buff *);

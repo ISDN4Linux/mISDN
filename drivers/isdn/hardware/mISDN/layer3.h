@@ -1,4 +1,4 @@
-/* $Id: layer3.h,v 1.5 2003/08/01 22:15:53 kkeil Exp $
+/* $Id: layer3.h,v 1.6 2003/11/11 09:59:00 keil Exp $
  *
  * This file is (c) under GNU PUBLIC LICENSE
  *
@@ -53,6 +53,8 @@ typedef struct _layer3 {
 	struct _layer3		*next;
 	struct FsmInst		l3m;
 	struct FsmTimer		l3m_timer;
+	int			entity;
+	int			id_cnt;
 	l3_process_t		*proc;
 	l3_process_t		*global;
 	l3_process_t		*dummy;
@@ -80,7 +82,7 @@ extern void		StopAllL3Timer(l3_process_t *);
 extern void		release_l3_process(l3_process_t *);
 extern l3_process_t	*getl3proc(layer3_t *, int);
 extern l3_process_t	*getl3proc4id(layer3_t *, u_int);
-extern l3_process_t	*new_l3_process(layer3_t *, int, int);
+extern l3_process_t	*new_l3_process(layer3_t *, int, int, u_int);
 extern u_char		*findie(u_char *, int, u_char, int);
 extern int		mISDN_l3up(l3_process_t *, u_int, struct sk_buff *);
 extern int		getcallref(u_char * p);

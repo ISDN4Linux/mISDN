@@ -1,4 +1,4 @@
-/* $Id: core.c,v 1.17 2003/11/09 09:16:16 keil Exp $
+/* $Id: core.c,v 1.18 2003/11/11 09:59:00 keil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -10,6 +10,7 @@
 #include <linux/stddef.h>
 #include <linux/config.h>
 #include <linux/module.h>
+#include <linux/spinlock.h>
 #include "core.h"
 #ifdef CONFIG_KMOD
 #include <linux/kmod.h>
@@ -18,10 +19,14 @@
 #include <linux/smp_lock.h>
 #endif
 
-static char *mISDN_core_revision = "$Revision: 1.17 $";
+static char	*mISDN_core_revision = "$Revision: 1.18 $";
 
 mISDNobject_t	*mISDN_objects = NULL;
+rwlock_t	mISDN_objects_lock = RW_LOCK_UNLOCKED;
 int core_debug;
+
+static u_char		entityarray[MISDN_MAX_ENTITY/8];
+static spinlock_t	entity_lock = SPIN_LOCK_UNLOCKED;
 
 static int debug;
 static int obj_id;
@@ -147,32 +152,38 @@ mISDNd(void *data)
 
 mISDNobject_t *
 get_object(int id) {
-	mISDNobject_t *obj = mISDN_objects;
+	mISDNobject_t	*obj;
 
+	read_lock(&mISDN_objects_lock);
+	obj = mISDN_objects;
 	while(obj) {
 		if (obj->id == id)
-			return(obj);
+			break;
 		obj = obj->next;
 	}
-	return(NULL);
+	read_unlock(&mISDN_objects_lock);
+	return(obj);
 }
 
 static mISDNobject_t *
 find_object(int protocol) {
-	mISDNobject_t *obj = mISDN_objects;
-	int err;
+	mISDNobject_t	*obj;
+	int		err;
 
+	read_lock(&mISDN_objects_lock);
+	obj = mISDN_objects;
 	while (obj) {
 		err = obj->own_ctrl(NULL, MGR_HASPROTOCOL | REQUEST, &protocol);
 		if (!err)
-			return(obj);
+			break;
 		if (err != -ENOPROTOOPT) {
 			if (0 == HasProtocol(obj, protocol))
-				return(obj);
+				break;
 		}	
 		obj = obj->next;
 	}
-	return(NULL);
+	read_unlock(&mISDN_objects_lock);
+	return(obj);
 }
 
 static mISDNobject_t *
@@ -426,6 +437,57 @@ set_stack_req(mISDNstack_t *st, mISDN_pid_t *pid)
 	return(0);
 }
 
+int
+mISDN_alloc_entity(int *entity)
+{
+	u_long	flags;
+
+	spin_lock_irqsave(&entity_lock, flags);
+	*entity = 1;
+	while(*entity < MISDN_MAX_ENTITY) {
+		if (!test_and_set_bit(*entity, entityarray))
+			break;
+		(*entity)++;
+	}
+	spin_unlock_irqrestore(&entity_lock, flags);
+	if (*entity == MISDN_MAX_ENTITY)
+		return(-EBUSY);
+	return(0);
+}
+
+int
+mISDN_delete_entity(int entity)
+{
+	u_long	flags;
+	int	ret = 0;
+
+	spin_lock_irqsave(&entity_lock, flags);
+	if (!test_and_clear_bit(entity, entityarray)) {
+		printk(KERN_WARNING "mISDN: del_entity(%d) but entity not allocated\n", entity);
+		ret = -ENODEV;
+	}
+	spin_unlock_irqrestore(&entity_lock, flags);
+	return(ret);
+}
+
+static int
+new_entity(mISDNinstance_t *inst)
+{
+	int	entity;
+	int	ret;
+
+	if (!inst)
+		return(-EINVAL);
+	ret = mISDN_alloc_entity(&entity);
+	if (ret) {
+		printk(KERN_WARNING "mISDN: no more entity available(max %d)\n", MISDN_MAX_ENTITY);
+		return(ret);
+	}
+	ret = inst->obj->own_ctrl(inst, MGR_NEWENTITY | CONFIRM, (void *)entity);
+	if (ret)
+		mISDN_delete_entity(entity);
+	return(ret);
+}
 
 static int central_manager(void *data, u_int prim, void *arg) {
 	mISDNstack_t *st = data;
@@ -435,6 +497,11 @@ static int central_manager(void *data, u_int prim, void *arg) {
 		if (!(st = new_stack(data, arg)))
 			return(-EINVAL);
 		return(0);
+	    case MGR_NEWENTITY | REQUEST:
+		return(new_entity(data));
+	    case MGR_DELENTITY | REQUEST:
+	    case MGR_DELENTITY | INDICATION:
+	    	return(mISDN_delete_entity((int)arg));
 	    case MGR_REGLAYER | INDICATION:
 		return(register_layer(st, arg));
 	    case MGR_REGLAYER | REQUEST:
@@ -496,11 +563,14 @@ static int central_manager(void *data, u_int prim, void *arg) {
 }
 
 int mISDN_register(mISDNobject_t *obj) {
+	u_long	flags;
 
 	if (!obj)
 		return(-EINVAL);
+	write_lock_irqsave(&mISDN_objects_lock, flags);
 	obj->id = obj_id++;
 	APPEND_TO_LIST(obj, mISDN_objects);
+	write_unlock_irqrestore(&mISDN_objects_lock, flags);
 	obj->ctrl = central_manager;
 	// register_prop
 	if (debug)
@@ -512,7 +582,8 @@ int mISDN_register(mISDNobject_t *obj) {
 }
 
 int mISDN_unregister(mISDNobject_t *obj) {
-	
+	u_long	flags;
+
 	if (!obj)
 		return(-EINVAL);
 	if (debug)
@@ -522,7 +593,9 @@ int mISDN_unregister(mISDNobject_t *obj) {
 		release_stacks(obj);
 	else
 		remove_object(obj);
+	write_lock_irqsave(&mISDN_objects_lock, flags);
 	REMOVE_FROM_LISTBASE(obj, mISDN_objects);
+	write_unlock_irqrestore(&mISDN_objects_lock, flags);
 	if (core_debug & DEBUG_CORE_FUNC)
 		printk(KERN_DEBUG "mISDN_unregister: mISDN_objects(%p)\n", mISDN_objects);
 	return(0);
