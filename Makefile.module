@@ -5,9 +5,9 @@
 DESTDIR = 
 KDIR := /usr/src/linux
 
-TARGET := newmISDN
+TARGET := mISDN
 TARGETS := Rules.make arch scripts .config include $(TARGET)
-TARGETDIR := drivers/isdn/mISDN
+TARGETDIR := drivers/isdn/hardware/mISDN
 
 default: $(TARGETS)
 
