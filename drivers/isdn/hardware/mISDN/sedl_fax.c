@@ -1,4 +1,4 @@
-/* $Id: sedl_fax.c,v 1.17 2004/01/26 22:21:30 keil Exp $
+/* $Id: sedl_fax.c,v 1.18 2004/01/29 00:54:41 keil Exp $
  *
  * sedl_fax.c  low level stuff for Sedlbauer Speedfax + cards
  *
@@ -31,6 +31,11 @@
 #include <linux/pci.h>
 #include <linux/delay.h>
 #include <asm/semaphore.h>
+#ifdef NEW_ISAPNP
+#include <linux/pnp.h>
+#else
+#include <linux/isapnp.h>
+#endif
 #include "dchannel.h"
 #include "bchannel.h"
 #include "isac.h"
@@ -45,7 +50,7 @@
 
 extern const char *CardType[];
 
-const char *Sedlfax_revision = "$Revision: 1.17 $";
+const char *Sedlfax_revision = "$Revision: 1.18 $";
 
 const char *Sedlbauer_Types[] =
 	{"None", "speed fax+", "speed fax+ pyramid", "speed fax+ pci"};
@@ -106,7 +111,8 @@ const char *Sedlbauer_Types[] =
 typedef struct _sedl_fax {
 	struct _sedl_fax	*prev;
 	struct _sedl_fax	*next;
-	u_char			subtyp;
+	void			*pdev;
+	u_int			subtyp;
 	u_int			irq;
 	u_int			irqcnt;
 	u_int			cfg;
@@ -473,10 +479,7 @@ static int sedl_cnt;
 static mISDNobject_t	speedfax;
 static int debug;
 static u_int protocol[MAX_CARDS];
-static u_int io[MAX_CARDS];
-static u_int irq[MAX_CARDS];
 static int layermask[MAX_CARDS];
-static int cfg_idx;
 
 #ifdef MODULE
 MODULE_AUTHOR("Karsten Keil");
@@ -484,103 +487,26 @@ MODULE_AUTHOR("Karsten Keil");
 MODULE_LICENSE("GPL");
 #endif
 MODULE_PARM(debug, "1i");
-MODULE_PARM(io, MODULE_PARM_T);
 MODULE_PARM(protocol, MODULE_PARM_T);
-MODULE_PARM(irq, MODULE_PARM_T);
 MODULE_PARM(layermask, MODULE_PARM_T);
 #endif
 
 static char SpeedfaxName[] = "Speedfax";
 
-static	struct pci_dev *dev_sedl;
-static	int pci_finished_lookup;
-
 int
-setup_speedfax(sedl_fax *sf, u_int io_cfg, u_int irq_cfg)
+setup_speedfax(sedl_fax *sf)
 {
 	int bytecnt, ver;
-	char tmp[64];
-	u16 sub_vendor_id, sub_id;
 
-	strcpy(tmp, Sedlfax_revision);
-	printk(KERN_INFO "mISDN: Sedlbauer speedfax driver Rev. %s\n", mISDN_getrev(tmp));
-	
- 	sf->subtyp = 0;
-	bytecnt = 16;
-/* Probe for Sedlbauer speedfax pci */
-#if CONFIG_PCI
-	if (!pci_finished_lookup) {
-		while ((dev_sedl = pci_find_device(PCI_VENDOR_ID_TIGERJET,
-				PCI_DEVICE_ID_TIGERJET_100, dev_sedl))) {
-			sf->irq = dev_sedl->irq;
-			sf->cfg = pci_resource_start_io(dev_sedl, 0);
-			pci_get_sub_vendor(dev_sedl,sub_vendor_id);
-			pci_get_sub_system(dev_sedl,sub_id);
-			printk(KERN_INFO "Sedlbauer: PCI subvendor:%x subid %x\n",
-				sub_vendor_id, sub_id);
-			printk(KERN_INFO "Sedlbauer: PCI base adr %#x\n",
-				sf->cfg);
-			if (sub_id != PCI_SUB_ID_SEDLBAUER) {
-				printk(KERN_WARNING "Sedlbauer: unknown sub id %#x\n", sub_id);
-				continue;
-			}
-			if (!sf->irq) {
-				printk(KERN_WARNING "Sedlbauer: No IRQ for PCI card found\n");
-				continue;
-			}
-			if (sub_vendor_id == PCI_SUBVENDOR_SPEEDFAX_PYRAMID) {
-				sf->subtyp = SEDL_SPEEDFAX_PYRAMID;
-			} else if (sub_vendor_id == PCI_SUBVENDOR_SPEEDFAX_PCI) {
-				sf->subtyp = SEDL_SPEEDFAX_PCI;
-			} else {
-				printk(KERN_WARNING "Sedlbauer: unknown sub vendor id %#x\n",
-					sub_vendor_id);
-				continue;
-			}
-			if (pci_enable_device(dev_sedl))
-				continue;
-			bytecnt = 256;
-			break;
-	 	}
-	 	if (!dev_sedl) {
-	 		pci_finished_lookup = 1;
-			printk(KERN_INFO "Sedlbauer: No more PCI cards found\n");
-		}
-	}
-#else
-	printk(KERN_WARNING "Sedlbauer: NO_PCI_BIOS\n");
-#endif /* CONFIG_PCI */
-	if (!sf->subtyp) { /* OK no PCI found now check for an ISA card */	
-		if ((!io_cfg) || (!irq_cfg)) {
-			if (!sedl_cnt)
-				printk(KERN_WARNING
-					"Sedlbauer: No io/irq for ISA card\n");
-			return(1);
-		}
-		sf->cfg = io_cfg;
-		sf->irq = irq_cfg;
-		sf->subtyp = SEDL_SPEEDFAX_ISA;
-		bytecnt = 16;
-	}
-	
-	if (!request_region(sf->cfg, bytecnt, "sedlbauer speedfax+")) {
+	bytecnt = (sf->subtyp == SEDL_SPEEDFAX_ISA) ? 16 : 256;
+	if (!request_region(sf->cfg, bytecnt, (sf->subtyp == SEDL_SPEEDFAX_ISA) ? "sedl PnP" : "sedl PCI")) {
 		printk(KERN_WARNING
-			"mISDN: %s config port %x-%x already in use\n",
-			 Sedlbauer_Types[sf->subtyp],
-			sf->cfg,
-			sf->cfg + bytecnt);
-			return (1);
+		       "mISDN: %s config port %x-%x already in use\n",
+		       "Speedfax +",
+		       sf->cfg,
+		       sf->cfg + bytecnt - 1);
+		return(-EIO);
 	}
-
-	printk(KERN_INFO
-	       "Sedlbauer: defined at 0x%x-0x%x IRQ %d\n",
-	       sf->cfg,
-	       sf->cfg + bytecnt,
-	       sf->irq);
-
-	printk(KERN_INFO "Sedlbauer: %s detected\n",
-		Sedlbauer_Types[sf->subtyp]);
-
 	sf->dch.read_reg = &ReadISAC;
 	sf->dch.write_reg = &WriteISAC;
 	sf->dch.read_fifo = &ReadISACfifo;
@@ -626,7 +552,7 @@ setup_speedfax(sedl_fax *sf, u_int io_cfg, u_int irq_cfg)
 		printk(KERN_WARNING
 			"Sedlbauer: wrong ISAR version (ret = %d)\n", ver);
 		release_sedlbauer(sf);
-		return (1);
+		return (-EIO);
 	}
 	return (0);
 }
@@ -658,6 +584,13 @@ release_card(sedl_fax *card) {
 	speedfax.ctrl(&card->dch.inst, MGR_UNREGLAYER | REQUEST, NULL);
 	REMOVE_FROM_LISTBASE(card, ((sedl_fax *)speedfax.ilist));
 	unlock_dev(card);
+	if (card->subtyp == SEDL_SPEEDFAX_ISA) {
+		pnp_disable_dev(card->pdev);
+		pnp_set_drvdata(card->pdev, NULL);
+	} else {
+		pci_disable_device(card->pdev);
+		pci_set_drvdata(card->pdev, NULL);
+	}
 	kfree(card);
 	sedl_cnt--;
 }
@@ -672,6 +605,7 @@ speedfax_manager(void *data, u_int prim, void *arg) {
 	printk(KERN_DEBUG "%s: data:%p prim:%x arg:%p\n",
 		__FUNCTION__, data, prim, arg);
 	if (!data) {
+		MGR_HASPROTOCOL_HANDLER(prim,arg,&speedfax)
 		printk(KERN_ERR "speedfax_manager no data prim %x arg %p\n",
 			prim, arg);
 		return(-EINVAL);
@@ -779,6 +713,8 @@ speedfax_manager(void *data, u_int prim, void *arg) {
 					0, 0, NULL, 0);
 		}
 		break;
+	    PRIM_NOT_HANDLED(MGR_CTRLREADY | INDICATION);
+	    PRIM_NOT_HANDLED(MGR_GLOBALOPT | REQUEST);
 	    default:
 		printk(KERN_WARNING "speedfax_manager prim %x not handled\n", prim);
 		return(-EINVAL);
@@ -786,11 +722,218 @@ speedfax_manager(void *data, u_int prim, void *arg) {
 	return(0);
 }
 
+static int __devinit setup_instance(sedl_fax *card)
+{
+	int		i, err;
+	mISDN_pid_t	pid;
+	
+	if (sedl_cnt >= MAX_CARDS) {
+		kfree(card);
+		return(-EINVAL);
+	}
+	APPEND_TO_LIST(card, ((sedl_fax *)speedfax.ilist));
+	card->dch.debug = debug;
+	lock_HW_init(&card->lock);
+	card->dch.inst.lock = lock_dev;
+	card->dch.inst.unlock = unlock_dev;
+	card->dch.inst.pid.layermask = ISDN_LAYER(0);
+	card->dch.inst.pid.protocol[0] = ISDN_PID_L0_TE_S0;
+	mISDN_init_instance(&card->dch.inst, &speedfax, card);
+	sprintf(card->dch.inst.name, "SpeedFax%d", sedl_cnt+1);
+	mISDN_set_dchannel_pid(&pid, protocol[sedl_cnt], layermask[sedl_cnt]);
+	mISDN_init_dch(&card->dch);
+	for (i=0; i<2; i++) {
+		card->bch[i].channel = i;
+		mISDN_init_instance(&card->bch[i].inst, &speedfax, card);
+		card->bch[i].inst.pid.layermask = ISDN_LAYER(0);
+		card->bch[i].inst.lock = lock_dev;
+		card->bch[i].inst.unlock = unlock_dev;
+		card->bch[i].debug = debug;
+		sprintf(card->bch[i].inst.name, "%s B%d", card->dch.inst.name, i+1);
+		mISDN_init_bch(&card->bch[i]);
+	}
+	printk(KERN_DEBUG "sfax card %p dch %p bch1 %p bch2 %p\n",
+		card, &card->dch, &card->bch[0], &card->bch[1]);
+	err = setup_speedfax(card);
+	if (err) {
+		mISDN_free_dch(&card->dch);
+		mISDN_free_bch(&card->bch[1]);
+		mISDN_free_bch(&card->bch[0]);
+		REMOVE_FROM_LISTBASE(card, ((sedl_fax *)speedfax.ilist));
+		kfree(card);
+		return(err);
+	}
+	sedl_cnt++;
+	err = speedfax.ctrl(NULL, MGR_NEWSTACK | REQUEST, &card->dch.inst);
+	if (err) {
+		release_card(card);
+		return(err);
+	}
+	for (i=0; i<2; i++) {
+		err = speedfax.ctrl(card->dch.inst.st, MGR_NEWSTACK | REQUEST, &card->bch[i].inst);
+		if (err) {
+			printk(KERN_ERR "MGR_ADDSTACK bchan error %d\n", err);
+			speedfax.ctrl(card->dch.inst.st, MGR_DELSTACK | REQUEST, NULL);
+			return(err);
+		}
+	}
+	err = speedfax.ctrl(card->dch.inst.st, MGR_SETSTACK | REQUEST, &pid);
+	if (err) {
+		printk(KERN_ERR  "MGR_SETSTACK REQUEST dch err(%d)\n", err);
+		speedfax.ctrl(card->dch.inst.st, MGR_DELSTACK | REQUEST, NULL);
+		return(err);
+	}
+	err = init_card(card);
+	if (err) {
+		speedfax.ctrl(card->dch.inst.st, MGR_DELSTACK | REQUEST, NULL);
+		return(err);
+	}
+	printk(KERN_INFO "SpeedFax %d cards installed\n", sedl_cnt);
+	return(0);
+}
+
+static int __devinit sedlpci_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
+{
+	int		err = -ENOMEM;
+	sedl_fax	*card;
+
+	if (!(card = kmalloc(sizeof(sedl_fax), GFP_ATOMIC))) {
+		printk(KERN_ERR "No kmem for Speedfax + PCI\n");
+		return(err);
+	}
+	memset(card, 0, sizeof(sedl_fax));
+	card->pdev = pdev;
+	if (PCI_SUBVENDOR_SPEEDFAX_PYRAMID == pdev->subsystem_vendor)
+		card->subtyp = SEDL_SPEEDFAX_PYRAMID;
+	else
+		card->subtyp = SEDL_SPEEDFAX_PCI;
+	err = pci_enable_device(pdev);
+	if (err) {
+		kfree(card);
+		return(err);
+	}
+
+	printk(KERN_INFO "mISDN: sedlpci found adapter %s at %s\n",
+	       (char *) ent->driver_data, pdev->slot_name);
+
+	card->cfg = pci_resource_start(pdev, 0);
+	card->irq = pdev->irq;
+	pci_set_drvdata(pdev, card);
+	err = setup_instance(card);
+	if (err)
+		pci_set_drvdata(pdev, NULL);
+	return(err);
+}
+
+#ifdef NEW_ISAPNP
+static int __devinit sedlpnp_probe(struct pnp_dev *pdev, const struct pnp_device_id *dev_id)
+#else
+static int __devinit sedlpnp_probe(struct pci_dev *pdev, const struct isapnp_device_id *dev_id)
+#endif
+{
+	int		err;
+	sedl_fax	*card;
+
+	if (!pdev)
+		return(-ENODEV);
+
+	if (!(card = kmalloc(sizeof(sedl_fax), GFP_ATOMIC))) {
+		printk(KERN_ERR "No kmem for Speedfax + PnP\n");
+		return(-ENOMEM);
+	}
+	memset(card, 0, sizeof(sedl_fax));
+	card->subtyp = SEDL_SPEEDFAX_ISA;
+	card->pdev = pdev;
+	pnp_disable_dev(pdev);
+	err = pnp_activate_dev(pdev);
+	if (err<0) {
+		printk(KERN_WARNING "%s: pnp_activate_dev(%s) ret(%d)\n", __FUNCTION__,
+			(char *)dev_id->driver_data, err);
+		kfree(card);
+		return(err);
+	}
+	card->cfg = pnp_port_start(pdev, 0);
+	card->irq = pnp_irq(pdev, 0);
+
+	printk(KERN_INFO "mISDN: sedlpnp_probe found adapter %s at IO %#x irq %d\n",
+	       (char *)dev_id->driver_data, card->addr, card->irq);
+
+	pnp_set_drvdata(pdev, card);
+	err = setup_instance(card);
+	if (err)
+		pnp_set_drvdata(pdev, NULL);
+	return(err);
+}
+
+static void __devexit sedl_remove_pci(struct pci_dev *pdev)
+{
+	sedl_fax	*card = pci_get_drvdata(pdev);
+
+	if (card)
+		speedfax.ctrl(card->dch.inst.st, MGR_DELSTACK | REQUEST, NULL);
+	else
+		printk(KERN_WARNING "%s: drvdata allready removed\n", __FUNCTION__);
+}
+
+#ifdef NEW_ISAPNP
+static void __devexit sedl_remove_pnp(struct pnp_dev *pdev)
+#else
+static void __devexit sedl_remove_pnp(struct pci_dev *pdev)
+#endif
+{
+	sedl_fax	*card = pnp_get_drvdata(pdev);
+
+	if (card)
+		speedfax.ctrl(card->dch.inst.st, MGR_DELSTACK | REQUEST, NULL);
+	else
+		printk(KERN_WARNING "%s: drvdata allready removed\n", __FUNCTION__);
+}
+
+static struct pci_device_id sedlpci_ids[] __devinitdata = {
+	{ PCI_VENDOR_ID_TIGERJET, PCI_DEVICE_ID_TIGERJET_100, PCI_SUBVENDOR_SPEEDFAX_PYRAMID, PCI_SUB_ID_SEDLBAUER,
+	  0, 0, (unsigned long) "Pyramid Speedfax + PCI" },
+	{ PCI_VENDOR_ID_TIGERJET, PCI_DEVICE_ID_TIGERJET_100, PCI_SUBVENDOR_SPEEDFAX_PCI, PCI_SUB_ID_SEDLBAUER,
+	  0, 0, (unsigned long) "Sedlbauer Speedfax + PCI" },
+	{ }
+};
+MODULE_DEVICE_TABLE(pci, sedlpci_ids);
+
+static struct pci_driver sedlpci_driver = {
+	name:     "speedfax pci",
+	probe:    sedlpci_probe,
+	remove:   __devexit_p(sedl_remove_pci),
+	id_table: sedlpci_ids,
+};
+
+#ifdef NEW_ISAPNP
+static struct pnp_device_id sedlpnp_ids[] __devinitdata = {
+	{ 
+		.id		= "SAG0002",
+		.driver_data	= (unsigned long) "Speedfax + PnP",
+	},
+};
+
+static struct pnp_driver sedlpnp_driver = {
+#else
+static struct isapnp_device_id fcpnp_ids[] __devinitdata = {
+	{ ISAPNP_VENDOR('S', 'A', 'G'), ISAPNP_FUNCTION(0x02),
+	  ISAPNP_VENDOR('S', 'A', 'G'), ISAPNP_FUNCTION(0x02), 
+	  (unsigned long) "Speedfax + PnP" },
+	{ }
+};
+MODULE_DEVICE_TABLE(isapnp, fcpnp_ids);
+
+static struct isapnp_driver fcpnp_driver = {
+#endif
+	name:     "speedfax pnp",
+	probe:    sedlpnp_probe,
+	remove:   __devexit_p(sedl_remove_pnp),
+	id_table: sedlpnp_ids,
+};
+
 static int __init Speedfax_init(void)
 {
-	int err,i;
-	sedl_fax *card;
-	mISDN_pid_t pid;
+	int err, pci_nr_found;
 
 #ifdef MODULE
 	speedfax.owner = THIS_MODULE;
@@ -802,8 +945,8 @@ static int __init Speedfax_init(void)
 				      ISDN_PID_L1_B_64HDLC |
 				      ISDN_PID_L1_B_T30FAX |
 				      ISDN_PID_L1_B_MODEM_ASYNC;
-	speedfax.BPROTO.protocol[2] = ISDN_PID_L2_B_TRANS |
-				      ISDN_PID_L2_B_TRANSDTMF;
+	speedfax.BPROTO.protocol[2] = ISDN_PID_L2_B_TRANS;
+// 				      ISDN_PID_L2_B_TRANSDTMF;
 	speedfax.prev = NULL;
 	speedfax.next = NULL;
 	
@@ -811,98 +954,32 @@ static int __init Speedfax_init(void)
 		printk(KERN_ERR "Can't register Speedfax error(%d)\n", err);
 		return(err);
 	}
-	while (sedl_cnt < MAX_CARDS) {
-		if (!(card = kmalloc(sizeof(sedl_fax), GFP_ATOMIC))) {
-			printk(KERN_ERR "No kmem for card\n");
-			mISDN_unregister(&speedfax);
-			return(-ENOMEM);
-		}
-		memset(card, 0, sizeof(sedl_fax));
-		APPEND_TO_LIST(card, ((sedl_fax *)speedfax.ilist));
-		card->dch.debug = debug;
-		lock_HW_init(&card->lock);
-		card->dch.inst.lock = lock_dev;
-		card->dch.inst.unlock = unlock_dev;
-		mISDN_init_instance(&card->dch.inst, &speedfax, card);
-		mISDN_set_dchannel_pid(&pid, protocol[sedl_cnt], layermask[sedl_cnt]);
-		sprintf(card->dch.inst.name, "SFax%d", sedl_cnt+1);
-		mISDN_init_dch(&card->dch);
-		for (i=0; i<2; i++) {
-			card->bch[i].channel = i;
-			card->bch[i].inst.down.fdata = &card->bch[i];
-			card->bch[i].inst.pid.layermask = 0;
-			mISDN_init_instance(&card->bch[i].inst, &speedfax, card);
-			card->bch[i].inst.lock = lock_dev;
-			card->bch[i].inst.unlock = unlock_dev;
-			card->bch[i].debug = debug;
-			sprintf(card->bch[i].inst.name, "%s B%d",
-				card->dch.inst.name, i+1);
-			mISDN_init_bch(&card->bch[i]);
-		}
-		printk(KERN_DEBUG "sfax card %p dch %p bch1 %p bch2 %p\n",
-			card, &card->dch, &card->bch[0], &card->bch[1]);
-		if (setup_speedfax(card, io[cfg_idx], irq[cfg_idx])) {
-			err = 0;
-			mISDN_free_dch(&card->dch);
-			mISDN_free_bch(&card->bch[1]);
-			mISDN_free_bch(&card->bch[0]);
-			REMOVE_FROM_LISTBASE(card, ((sedl_fax *)speedfax.ilist));
-			kfree(card);
-			card = NULL;
-			if (!sedl_cnt) {
-				mISDN_unregister(&speedfax);
-				err = -ENODEV;
-			} else
-				printk(KERN_INFO "sedlfax %d cards installed\n",
-					sedl_cnt);
-			return(err);
-		}
-		if (card->subtyp == SEDL_SPEEDFAX_ISA)
-			cfg_idx++;
-		sedl_cnt++;
-		if ((err = speedfax.ctrl(NULL, MGR_NEWSTACK | REQUEST, &card->dch.inst))) {
-			printk(KERN_ERR  "MGR_ADDSTACK REQUEST dch err(%d)\n", err);
-			release_card(card);
-			if (!sedl_cnt)
-				mISDN_unregister(&speedfax);
-			else
-				err = 0;
-			return(err);
-		}
-		for (i=0; i<2; i++) {
-			if ((err = speedfax.ctrl(card->dch.inst.st,
-				MGR_NEWSTACK | REQUEST, &card->bch[i].inst))) {
-				printk(KERN_ERR "MGR_ADDSTACK bchan error %d\n", err);
-				speedfax.ctrl(card->dch.inst.st, MGR_DELSTACK | REQUEST, NULL);
-				if (!sedl_cnt)
-					mISDN_unregister(&speedfax);
-				else
-					err = 0;
-				return(err);
-			}
-		}
-		if ((err = speedfax.ctrl(card->dch.inst.st, MGR_SETSTACK | REQUEST, &pid))) {
-			printk(KERN_ERR  "MGR_SETSTACK REQUEST dch err(%d)\n", err);
-			speedfax.ctrl(card->dch.inst.st, MGR_DELSTACK | REQUEST, NULL);
-			if (!sedl_cnt)
-				mISDN_unregister(&speedfax);
-			else
-				err = 0;
-			return(err);
-		}
-		if ((err = init_card(card))) {
-			speedfax.ctrl(card->dch.inst.st, MGR_DELSTACK | REQUEST, NULL);
-			if (!sedl_cnt)
-				mISDN_unregister(&speedfax);
-			else
-				err = 0;
-			return(err);
-		}
-	}
-	printk(KERN_INFO "sedlfax %d cards installed\n", sedl_cnt);
-	return(0);
-}
+	err = pci_register_driver(&sedlpci_driver);
+	if (err < 0)
+		goto out;
+	pci_nr_found = err;
 
+	err = pnp_register_driver(&sedlpnp_driver);
+	if (err < 0)
+		goto out_unregister_pci;
+
+#if !defined(CONFIG_HOTPLUG) || defined(MODULE)
+	if (pci_nr_found + err == 0) {
+		err = -ENODEV;
+		goto out_unregister_isapnp;
+	}
+#endif
+	return 0;
+
+#if !defined(CONFIG_HOTPLUG) || defined(MODULE)
+ out_unregister_isapnp:
+	pnp_unregister_driver(&sedlpnp_driver);
+#endif
+ out_unregister_pci:
+	pci_unregister_driver(&sedlpci_driver);
+ out:
+ 	return err;
+}
 
 static void __exit Speedfax_cleanup(void)
 {
@@ -915,7 +992,8 @@ static void __exit Speedfax_cleanup(void)
 			speedfax.refcnt);
 		release_card(speedfax.ilist);
 	}
-	return;
+	pnp_unregister_driver(&sedlpnp_driver);
+	pci_unregister_driver(&sedlpci_driver);
 }
 
 module_init(Speedfax_init);
