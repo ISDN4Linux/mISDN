@@ -1,4 +1,4 @@
-/* $Id: mISDNif.h,v 0.11 2001/03/03 18:17:16 kkeil Exp $
+/* $Id: mISDNif.h,v 0.12 2001/03/03 18:19:51 kkeil Exp $
  *
  */
 
@@ -241,7 +241,7 @@
 typedef struct _iframe {
 	u_int	addr;
 	u_int	prim;
-	u_int	dinfo;
+	int	dinfo;
 	int	len;
 	union {
 		u_char	b[4];
