@@ -1,4 +1,4 @@
-/* $Id: layer3.h,v 1.0 2001/11/02 23:42:27 kkeil Exp $
+/* $Id: layer3.h,v 1.1 2001/11/14 10:41:26 kkeil Exp $
  *
  * This file is (c) under GNU PUBLIC LICENSE
  *
@@ -25,6 +25,7 @@
 
 #define FLG_L2BLOCK	1
 #define FLG_PTP		2
+#define FLG_EXTCID	3
 
 typedef struct _L3Timer {
 	struct _l3_process	*pc;

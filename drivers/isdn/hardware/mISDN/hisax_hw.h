@@ -1,4 +1,4 @@
-/* $Id: hisax_hw.h,v 1.0 2001/11/02 23:42:26 kkeil Exp $
+/* $Id: hisax_hw.h,v 1.1 2001/11/14 10:41:26 kkeil Exp $
  *
  *   Basic declarations, defines for HiSax hardware drivers
  *
@@ -93,78 +93,79 @@ struct hfcB_hw {
 #define BC_FLG_LL_CONN	15
 
 typedef struct _bchannel_t {
-	int channel;
-	int protocol;
-	int Flag;
-	int debug;
-	hisaxinstance_t inst;
-	hisaxdevice_t	*dev;
-	u_char		(*BC_Read_Reg)(void *, int, u_char);
-	void		(*BC_Write_Reg)(void *, int, u_char, u_char);
-	struct sk_buff	*next_skb;
-	u_char		*tx_buf;
-	int		tx_idx;
-	int             tx_len;
-	u_char		*rx_buf;
-	int		rx_idx;
-	struct sk_buff_head rqueue;	/* B-Channel receive Queue */
-	u_char *blog;
-	u_char *conmsg;
-	struct timer_list transbusy;
-	struct tq_struct tqueue;
-	int event;
-	int err_crc;
-	int err_tx;
-	int err_rdo;
-	int err_inv;
+	int			channel;
+	int			protocol;
+	int			Flag;
+	int			debug;
+	hisaxstack_t		*st;
+	hisaxinstance_t		inst;
+	hisaxdevice_t		*dev;
+	u_char			(*BC_Read_Reg)(void *, int, u_char);
+	void			(*BC_Write_Reg)(void *, int, u_char, u_char);
+	struct sk_buff		*next_skb;
+	u_char			*tx_buf;
+	int			tx_idx;
+	int             	tx_len;
+	u_char			*rx_buf;
+	int			rx_idx;
+	struct sk_buff_head	rqueue;	/* B-Channel receive Queue */
+	u_char			*blog;
+	u_char			*conmsg;
+	struct			timer_list transbusy;
+	struct			tq_struct tqueue;
+	int			event;
+	int			err_crc;
+	int			err_tx;
+	int			err_rdo;
+	int			err_inv;
 	union {
-		struct hdlc_hw hdlc;
-		struct isar_hw isar;
-	} hw;
+		struct hdlc_hw	hdlc;
+		struct isar_hw	isar;
+	}			hw;
 } bchannel_t;
 
 struct avm_hw {
-	unsigned int cfg_reg;
-	unsigned int isac;
-	unsigned int hscx[2];
-	unsigned int isacfifo;
-	unsigned int hscxfifo[2];
-	unsigned int counter;
+	unsigned int	cfg_reg;
+	unsigned int	isac;
+	unsigned int	hscx[2];
+	unsigned int	isacfifo;
+	unsigned int	hscxfifo[2];
+	unsigned int	counter;
 };
 
 struct sedl_hw {
-	unsigned int cfg_reg;
-	unsigned int adr;
-	unsigned int isac;
-	unsigned int hscx;
-	unsigned int reset_on;
-	unsigned int reset_off;
-	struct isar_reg isar;
-	unsigned int chip;
-	unsigned int bus;
+	unsigned intcfg_reg;
+	unsigned int	adr;
+	unsigned int	isac;
+	unsigned int	hscx;
+	unsigned int	reset_on;
+	unsigned int	reset_off;
+	struct isar_reg	isar;
+	unsigned int	chip;
+	unsigned int	bus;
 };
 
 struct arcofi_msg {
-	struct arcofi_msg *next;
-	u_char receive;
-	u_char len;
-	u_char msg[10];
+	struct arcofi_msg	*next;
+	u_char			receive;
+	u_char			len;
+	u_char			msg[10];
 };
 
 struct isac_chip {
-	int ph_state;
-	u_char *mon_tx;
-	u_char *mon_rx;
-	int mon_txp;
-	int mon_txc;
-	int mon_rxp;
-	struct arcofi_msg *arcofi_list;
-	struct timer_list arcofitimer;
-	wait_queue_head_t arcofi_wait;
-	u_char arcofi_bc;
-	u_char arcofi_state;
-	u_char mocr;
-	u_char adf2;
+	int			ph_state;
+	u_char			*mon_tx;
+	u_char			*mon_rx;
+	int			mon_txp;
+	int			mon_txc;
+	int			mon_rxp;
+	struct arcofi_msg	*arcofi_list;
+	struct timer_list	arcofitimer;
+	wait_queue_head_t	arcofi_wait;
+	u_char			arcofi_bc;
+	u_char			arcofi_state;
+	u_char			mocr;
+	u_char			adf2;
 };
 
 struct hfcpci_chip {
@@ -187,31 +188,31 @@ struct hfcpci_chip {
 #define FLG_HW_INIT		13
 
 typedef struct _dchannel_t {
-	hisaxinstance_t	inst;
-	u_int		DFlags;
-	u_char		(*readisac) (void *, u_char);
-	void		(*writeisac) (void *, u_char, u_char);
-	void		(*readisacfifo) (void *, u_char *, int);
-	void		(*writeisacfifo) (void *, u_char *, int);
-	char		*dlog;
-	int		debug;
-	u_char		*rx_buf;
-	int		rx_idx;
-	struct sk_buff	*next_skb;
-	u_char		*tx_buf;
-	int		tx_idx;
-	int             tx_len;
-	int		event;
-	int		err_crc;
-	int		err_tx;
-	int		err_rx;
+	hisaxinstance_t		inst;
+	u_int			DFlags;
+	u_char			(*readisac) (void *, u_char);
+	void			(*writeisac) (void *, u_char, u_char);
+	void			(*readisacfifo) (void *, u_char *, int);
+	void			(*writeisacfifo) (void *, u_char *, int);
+	char			*dlog;
+	int			debug;
+	u_char			*rx_buf;
+	int			rx_idx;
+	struct sk_buff		*next_skb;
+	u_char			*tx_buf;
+	int			tx_idx;
+	int             	tx_len;
+	int			event;
+	int			err_crc;
+	int			err_tx;
+	int			err_rx;
 	union {
-		struct isac_chip isac;
-		struct hfcpci_chip hfcpci;
-	} hw;
-	struct sk_buff_head rqueue; /* D-channel receive queue */
-	struct tq_struct tqueue;
-	struct timer_list dbusytimer;
+		struct isac_chip	isac;
+		struct hfcpci_chip	hfcpci;
+	}			hw;
+	struct sk_buff_head	rqueue; /* D-channel receive queue */
+	struct tq_struct	tqueue;
+	struct timer_list	dbusytimer;
 } dchannel_t;
 
 #define  MON0_RX	1

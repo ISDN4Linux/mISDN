@@ -1,6 +1,7 @@
-/* $Id: udevice.c,v 1.0 2001/11/02 23:42:26 kkeil Exp $
+/* $Id: udevice.c,v 1.1 2001/11/14 10:41:26 kkeil Exp $
  *
  * Copyright 2000  by Karsten Keil <kkeil@isdn4linux.de>
+ *
  */
 
 #include <linux/types.h>
@@ -160,8 +161,8 @@ next_frame_len(hisaxport_t *port)
 	} else {
 		len = IFRAME_HEAD_SIZE + *lp;
 	}
-	if (len < port->cnt) {
-		int_errtxt("size mismatch %d/%d", len, port->cnt);
+	if (len > port->cnt) {
+		int_errtxt("size mismatch %d/%d/%d", *lp, len, port->cnt);
 		return(0);
 	}
 	return(len);
@@ -358,6 +359,22 @@ new_devstack(hisaxdevice_t *dev, stack_info_t *si)
 	nds->st = inst.st;
 	APPEND_TO_LIST(nds, dev->stack);
 	return(inst.st->id);
+}
+
+static hisaxstack_t *
+sel_channel(u_int addr, u_int channel)
+{
+	hisaxstack_t	*st;
+	channel_info_t	ci;
+
+	st = get_stack4id(addr);
+	if (!st)
+		return(NULL);
+	ci.channel = channel;
+	ci.st.p = NULL;
+	if (udev_obj.ctrl(st, MGR_SELCHANNEL | REQUEST, &ci))
+		return(NULL);
+	return(ci.st.p);
 }
 
 static int
@@ -1097,6 +1114,20 @@ hisax_wdata_if(hisaxdevice_t *dev, iframe_t *iff, int len) {
 				off.len = err;
 		} else
 			off.len = -ENODEV;
+		hisax_rdata(dev, &off, 1);
+		break;
+	    case (MGR_SELCHANNEL | REQUEST):
+		used = head;
+		off.addr = iff->addr;
+		off.prim = MGR_SELCHANNEL | CONFIRM;
+		st = sel_channel(iff->addr, iff->dinfo);
+		if (st) {
+			off.len = 0;
+			off.dinfo = st->id;
+		} else {
+			off.dinfo = 0;
+			off.len = -ENODEV;
+		}
 		hisax_rdata(dev, &off, 1);
 		break;
 	    case (MGR_GETLAYERID | REQUEST):

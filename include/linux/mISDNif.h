@@ -1,4 +1,4 @@
-/* $Id: mISDNif.h,v 1.0 2001/11/02 23:39:07 kkeil Exp $
+/* $Id: mISDNif.h,v 1.1 2001/11/14 10:41:26 kkeil Exp $
  *
  */
 
@@ -37,6 +37,7 @@
 #define MGR_CLEARSTACK	0x0f1500
 #define MGR_REGLAYER	0x0f1600
 #define MGR_UNREGLAYER	0x0f1700
+#define MGR_SELCHANNEL	0x0f1800
 #define MGR_GETLAYER	0x0f2100
 #define MGR_GETLAYERID	0x0f2200
 #define MGR_NEWLAYER	0x0f2300
@@ -225,6 +226,12 @@
 #define ISDN_PID_BCHANNEL_BIT	0x40000000
 #define ISDN_PID_LAYER_MASK	0x0f000000
 #define ISDN_PID_LAYER(n)	(n<<24)
+#define ISDN_PID_FEATURE_MASK	0x00F00000
+
+#define ISDN_PID_L2_DF_PTP	0x00100000
+#define ISDN_PID_L2_DF_MULT_TEI	0x00200000
+#define	ISDN_PID_L3_DF_PTP	0x00100000
+#define ISDN_PID_L3_DF_EXTCID	0x00200000
 
 #define HISAX_CORE_DEVICE	0
 #define HISAX_RAW_DEVICE	128
@@ -269,6 +276,16 @@
 #define DUMMY_CR_FLAG	0x7FFFFF00
 #define CONTROLER_MASK	0x000000FF
 
+/* stack channel values */
+#define CHANNEL_NUMBER	0x000000FF
+#define CHANNEL_RXSLOT	0x0000FF00
+#define CHANNEL_TXSLOT	0x00FF0000
+#define CHANNEL_EXTINFO	0xFF000000
+#define CHANNEL_NR_D	0x00000000
+#define CHANNEL_NR_B1	0x00000001
+#define CHANNEL_NR_B2	0x00000002
+#define CHANNEL_EXT_PCM	0x01000000
+#define CHANNEL_EXT_REV	0x02000000
 
 /* interface extentions */
 #define EXT_STACK_CLONE 0x00000001
@@ -365,6 +382,13 @@ typedef struct _interface_info {
 	int		stat;
 } interface_info_t;
 
+typedef struct _channel_info {
+	u_int		channel;
+	union {
+		u_int	id;
+		void	*p;
+	} st;
+} channel_info_t;
 
 /* l3 pointer arrays */
 

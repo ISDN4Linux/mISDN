@@ -1,4 +1,4 @@
-/* $Id: stack.c,v 1.0 2001/11/02 23:42:26 kkeil Exp $
+/* $Id: stack.c,v 1.1 2001/11/14 10:41:26 kkeil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -477,7 +477,8 @@ unregister_instance(hisaxinstance_t *inst) {
 			printk(KERN_WARNING __FUNCTION__": no layer found\n");
 			err = -ENODEV;
 		}
-		inst->st = NULL;
+		if (inst->st && (inst->st->mgr != inst))
+			inst->st = NULL;
 	}
 	REMOVE_FROM_LISTBASE(inst, hisax_instlist);
 	inst->prev = inst->next = NULL;

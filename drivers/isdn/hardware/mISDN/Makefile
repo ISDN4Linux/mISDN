@@ -44,16 +44,16 @@ endif
 #  endif
 #endif
 
-obj-$(CONFIG_ISDN_DRV_HISAX) :=
-obj-$(CONFIG_ISDN_DRV_HISAX) += hisaxcore.o
+obj-$(CONFIG_ISDN_DRV_NEWHISAX) :=
+obj-$(CONFIG_ISDN_DRV_NEWHISAX) += hisaxcore.o
 
-obj-$(CONFIG_ISDN_DRV_HISAX) += fritzpci.o
-obj-$(CONFIG_ISDN_DRV_HISAX) += sedlfax.o
-obj-$(CONFIG_ISDN_DRV_HISAX) += hfcpci.o
-obj-$(CONFIG_ISDN_DRV_HISAX) += hisaxl1.o
-obj-$(CONFIG_ISDN_DRV_HISAX) += hisaxl2.o
-obj-$(CONFIG_ISDN_DRV_HISAX) += l3udss1.o
-obj-$(CONFIG_ISDN_DRV_HISAX) += hisaxcapi.o
+obj-$(CONFIG_ISDN_DRV_NEWHISAX) += fritzpci.o
+obj-$(CONFIG_ISDN_DRV_NEWHISAX) += sedlfax.o
+obj-$(CONFIG_ISDN_DRV_NEWHISAX) += hfcpci.o
+obj-$(CONFIG_ISDN_DRV_NEWHISAX) += hisaxl1.o
+obj-$(CONFIG_ISDN_DRV_NEWHISAX) += hisaxl2.o
+obj-$(CONFIG_ISDN_DRV_NEWHISAX) += l3udss1.o
+obj-$(CONFIG_ISDN_DRV_NEWHISAX) += hisaxcapi.o
 
 M_OBJS := $(obj-m)
 

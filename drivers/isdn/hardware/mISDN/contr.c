@@ -1,4 +1,4 @@
-/* $Id: contr.c,v 1.0 2001/11/02 23:42:26 kkeil Exp $
+/* $Id: contr.c,v 1.1 2001/11/14 10:41:26 kkeil Exp $
  *
  */
 
@@ -11,9 +11,9 @@
 
 int contrConstr(Contr_t *contr, hisaxstack_t *st, hisax_pid_t *pid, hisaxobject_t *ocapi)
 { 
-	char tmp[10];
-	hisaxstack_t *cst = st->child;
-	BInst_t	*binst;
+	char		tmp[10];
+	hisaxstack_t	*cst = st->child;
+	BInst_t		*binst;
 
 	memset(contr, 0, sizeof(Contr_t));
 	memcpy(&contr->inst.pid, pid, sizeof(hisax_pid_t));
@@ -99,9 +99,16 @@ void contrDestr(Contr_t *contr)
 
 void contrRun(Contr_t *contr)
 {
-	struct capi_ctr *ctrl = contr->ctrl;
+	struct capi_ctr	*ctrl = contr->ctrl;
+	BInst_t		*binst;
+	int		nb;
 
-
+	nb = 0;
+	binst = contr->binst;
+	while(binst) {
+		nb++;
+		binst = binst->next;
+	}
 	strncpy(ctrl->manu, "ISDN4Linux, (C) Kai Germaschewski", CAPI_MANUFACTURER_LEN);
 	strncpy(ctrl->serial, "0002", CAPI_SERIAL_LEN);
 	ctrl->version.majorversion = 2;
@@ -110,7 +117,7 @@ void contrRun(Contr_t *contr)
 	ctrl->version.minormanuversion = 1;
 	memset(&ctrl->profile, 0, sizeof(struct capi_profile));
 	ctrl->profile.ncontroller = 1;
-	ctrl->profile.nbchannel = 2;
+	ctrl->profile.nbchannel = nb;
 	ctrl->profile.goptions = 0x11; // internal controller, supplementary services
 	ctrl->profile.support1 = 3; // HDLC, TRANS
 	ctrl->profile.support2 = 3; // X75SLP, TRANS
@@ -384,10 +391,12 @@ Contr_t *newContr(hisaxobject_t *ocapi, hisaxstack_t *st, hisax_pid_t *pid)
 	return contr;
 }
 
-BInst_t *contrSelChannel(Contr_t *contr, int channr)
+BInst_t *contrSelChannel(Contr_t *contr, u_int channel)
 { 
-	hisaxstack_t *cst;
-	BInst_t	*binst;
+	hisaxstack_t	*cst;
+	BInst_t		*binst;
+	channel_info_t	ci;
+	int		ret;
 
 	if (!contr->binst) {
 		cst = contr->inst.st->child;
@@ -410,11 +419,21 @@ BInst_t *contrSelChannel(Contr_t *contr, int channr)
 			cst = cst->next;
 		}
 	}
-	binst = NULL;
-	if (channr == 1)
-		binst = contr->binst;
-	else if (channr == 2)
-		binst = contr->binst->next;
+	ci.channel = channel;
+	ci.st.p = NULL;
+	ret = contr->inst.obj->ctrl(contr->inst.st, MGR_SELCHANNEL | REQUEST,
+		&ci);
+	if (ret) {
+		int_errtxt("ret(%d)", ret);
+		return(NULL);
+	}
+	cst = ci.st.p;
+	binst = contr->binst;
+	while(binst) {
+		if (cst == binst->bst)
+			break;
+		binst = binst->next;
+	}
 	return(binst);
 }
 

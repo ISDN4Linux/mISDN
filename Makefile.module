@@ -19,6 +19,7 @@ Rules.make: $(KDIR)/Rules.make Rules.make.ext
 
 .config: $(KDIR)/.config
 	cp -pf $(KDIR)/.config .
+	cat add.config >> .config
 
 arch: $(KDIR)/arch
 	rm -f arch

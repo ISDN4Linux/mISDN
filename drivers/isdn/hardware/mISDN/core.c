@@ -1,4 +1,4 @@
-/* $Id: core.c,v 1.0 2001/11/02 23:42:26 kkeil Exp $
+/* $Id: core.c,v 1.1 2001/11/14 10:41:26 kkeil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -165,6 +165,47 @@ get_next_instance(hisaxstack_t *st, hisax_pid_t *pid)
 }
 
 static int
+sel_channel(hisaxstack_t *st, channel_info_t *ci)
+{
+	int		err = -EINVAL;
+
+	if (!ci)
+		return(err);
+	printk(KERN_DEBUG __FUNCTION__": st(%p) st->mgr(%p)\n",
+		st, st->mgr);
+	if (st->mgr) {
+		if (st->mgr->obj && st->mgr->obj->own_ctrl) {
+			err = st->mgr->obj->own_ctrl(st->mgr,
+				MGR_SELCHANNEL | REQUEST, ci);
+			printk(KERN_DEBUG __FUNCTION__": MGR_SELCHANNEL(%d)\n",
+				err);
+		} else
+			int_error();
+	} else {
+		printk(KERN_WARNING __FUNCTION__": no mgr st(%p)\n", st);
+	}
+	if (err) {
+		hisaxstack_t	*cst = st->child;
+		int		nr = 0;
+
+		ci->st.p = NULL;
+		if (!(ci->channel & (~CHANNEL_NUMBER))) {
+			/* only number is set */
+			while(cst) {
+				nr++;
+				if (nr == (ci->channel & 3)) {
+					ci->st.p = cst;
+					err = 0;
+					break;
+				}
+				cst = cst->next;
+			}
+		}
+	}
+	return(err);
+}
+
+static int
 disconnect_if(hisaxinstance_t *inst, u_int prim, hisaxif_t *hif) {
 	int	err = 0;
 
@@ -264,6 +305,8 @@ static int central_manager(void *data, u_int prim, void *arg) {
 		return(clear_stack(st));
 	    case MGR_DELSTACK | REQUEST:
 		return(release_stack(st));
+	    case MGR_SELCHANNEL | REQUEST:
+		return(sel_channel(st, arg));
 	    case MGR_ADDIF | REQUEST:
 		return(add_if(data, prim, arg));
 	    case MGR_CONNECT | REQUEST:

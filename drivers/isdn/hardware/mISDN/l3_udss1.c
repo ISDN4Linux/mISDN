@@ -1,4 +1,4 @@
-/* $Id: l3_udss1.c,v 1.0 2001/11/02 23:42:27 kkeil Exp $
+/* $Id: l3_udss1.c,v 1.1 2001/11/14 10:41:26 kkeil Exp $
  *
  * EURO/DSS1 D-channel protocol
  *
@@ -24,7 +24,7 @@ static int debug = 0;
 static hisaxobject_t u_dss1;
 
 
-const char *dss1_revision = "$Revision: 1.0 $";
+const char *dss1_revision = "$Revision: 1.1 $";
 
 static int dss1man(l3_process_t *, u_int, void *);
 
@@ -403,6 +403,12 @@ l3dss1_get_channel_id(l3_process_t *pc, struct sk_buff *skb) {
 	u_char *sp, *p;
 
 	if ((sp = p = findie(skb->data, skb->len, IE_CHANNEL_ID, 0))) {
+		if (test_bit(FLG_EXTCID, &pc->l3->Flag)) {
+			if (*p != 1) {
+				pc->bc = 1;
+				return (sp);
+			}
+		}
 		if (*p != 1) { /* len for BRI = 1 */
 			if (pc->l3->debug & L3_DEB_WARN)
 				l3_debug(pc->l3, "wrong chid len %d", *p);
@@ -768,6 +774,8 @@ l3dss1_alerting(l3_process_t *pc, u_char pr, void *arg)
 	}
 	L3DelTimer(&pc->timer);	/* T304 */
 	newl3state(pc, 4);
+	pc->para.ALERTING.CHANNEL_ID =
+		l3dss1_get_channel_id(pc, skb);
 	pc->para.ALERTING.BEARER =
 		findie(skb->data, skb->len, IE_BEARER, 0);
 	pc->para.ALERTING.FACILITY =
@@ -851,6 +859,8 @@ l3dss1_connect(l3_process_t *pc, u_char pr, void *arg)
 	}
 	L3DelTimer(&pc->timer);	/* T310 */
 	newl3state(pc, 10);
+	pc->para.CONNECT.CHANNEL_ID =
+		l3dss1_get_channel_id(pc, skb);
 	pc->para.CONNECT.BEARER =
 		findie(skb->data, skb->len, IE_BEARER, 0);
 	pc->para.CONNECT.FACILITY =
@@ -2243,13 +2253,17 @@ new_udss1(hisaxstack_t *st, hisax_pid_t *pid)
 		int_error();
 		return(-ENOPROTOOPT);
 	}
-	if (pid->protocol[3] != ISDN_PID_L3_DSS1USER) {
+	if ((pid->protocol[3] & ~ISDN_PID_FEATURE_MASK) != ISDN_PID_L3_DSS1USER) {
 		printk(KERN_ERR "udss1 create failed prt %x\n",
 			pid->protocol[3]);
 		kfree(nl3);
 		return(-ENOPROTOOPT);
 	}
 	init_l3(nl3);
+	if (pid->protocol[3] & ISDN_PID_L3_DF_PTP)
+		test_and_set_bit(FLG_PTP, &nl3->Flag);
+	if (pid->protocol[3] & ISDN_PID_L3_DF_EXTCID)
+		test_and_set_bit(FLG_EXTCID, &nl3->Flag);
 	if (!(nl3->global = kmalloc(sizeof(l3_process_t), GFP_ATOMIC))) {
 		printk(KERN_ERR "HiSax can't get memory for dss1 global CR\n");
 		release_l3(nl3);
@@ -2360,7 +2374,9 @@ int UDSS1Init(void)
 	strcpy(tmp, dss1_revision);
 	printk(KERN_INFO "HiSax: DSS1 Rev. %s\n", HiSax_getrev(tmp));
 	u_dss1.name = MName;
-	u_dss1.DPROTO.protocol[3] = ISDN_PID_L3_DSS1USER;
+	u_dss1.DPROTO.protocol[3] = ISDN_PID_L3_DSS1USER |
+		ISDN_PID_L3_DF_PTP |
+		ISDN_PID_L3_DF_EXTCID;
 	u_dss1.own_ctrl = udss1_manager;
 	u_dss1.prev = NULL;
 	u_dss1.next = NULL;

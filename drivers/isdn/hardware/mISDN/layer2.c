@@ -1,4 +1,4 @@
-/* $Id: layer2.c,v 1.0 2001/11/02 23:42:26 kkeil Exp $
+/* $Id: layer2.c,v 1.1 2001/11/14 10:41:26 kkeil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -12,7 +12,7 @@
 #include "helper.h"
 #include "debug.h"
 
-const char *l2_revision = "$Revision: 1.0 $";
+const char *l2_revision = "$Revision: 1.1 $";
 
 static void l2m_debug(struct FsmInst *fi, char *fmt, ...);
 
@@ -2096,7 +2096,7 @@ new_l2(hisaxstack_t *st, hisax_pid_t *pid, layer2_t **newl2) {
 		int_error();
 		return(-ENOPROTOOPT);
 	}
-	switch(pid->protocol[2]) {
+	switch(pid->protocol[2] & ~ISDN_PID_FEATURE_MASK) {
 	    case ISDN_PID_L2_LAPD_NET:
 	    	sprintf(nl2->inst.name, "lapdn %x", st->id);
 		test_and_set_bit(FLG_LAPD, &nl2->flag);
@@ -2122,6 +2122,11 @@ new_l2(hisaxstack_t *st, hisax_pid_t *pid, layer2_t **newl2) {
 		test_and_set_bit(FLG_ORIG, &nl2->flag);
 		nl2->sapi = 0;
 		nl2->tei = -1;
+		if (pid->protocol[2] & ISDN_PID_L2_DF_PTP) {
+			test_and_set_bit(FLG_PTP, &nl2->flag);
+			test_and_set_bit(FLG_FIXED_TEI, &nl2->flag);
+			nl2->tei = 0;
+		}
 		nl2->maxlen = MAX_DFRAME_LEN;
 		nl2->window = 1;
 		nl2->T200 = 1000;
@@ -2367,7 +2372,9 @@ int Isdnl2Init(void)
 	int err;
 
 	isdnl2.name = MName;
-	isdnl2.DPROTO.protocol[2] = ISDN_PID_L2_LAPD | ISDN_PID_L2_LAPD_NET;
+	isdnl2.DPROTO.protocol[2] = ISDN_PID_L2_LAPD |
+		ISDN_PID_L2_LAPD_NET |
+		ISDN_PID_L2_DF_PTP;
 	isdnl2.BPROTO.protocol[2] = ISDN_PID_L2_B_X75SLP;
 	isdnl2.own_ctrl = l2_manager;
 	isdnl2.prev = NULL;

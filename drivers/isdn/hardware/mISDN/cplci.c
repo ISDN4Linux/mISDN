@@ -1,4 +1,4 @@
-/* $Id: cplci.c,v 1.0 2001/11/02 23:42:26 kkeil Exp $
+/* $Id: cplci.c,v 1.1 2001/11/14 10:41:26 kkeil Exp $
  *
  */
 
@@ -53,6 +53,25 @@ __u16 q931CIPValue(SETUP_t *setup)
 		}
 	}
 	return CIPValue;
+}
+
+u_int plci_parse_channel_id(u_char *p)
+{
+	u_int	cid = -1;
+	int	l;
+
+	if (p) {
+		printk(KERN_DEBUG __FUNCTION__": l(%d) %x\n",p[0],p[1]);
+		l = *p++;
+		if (l == 1) {
+			cid = *p;
+		} else if (l == 3) {
+			cid =  *p++ << 16;
+			cid |= *p++ << 8;
+			cid |= *p;
+		}
+	}
+	return(cid);
 }
 
 __u16 CIPValue2setup(__u16 CIPValue, SETUP_t *setup)
@@ -195,6 +214,7 @@ enum {
 	EV_PLCI_SUSPEND_CONF,
 	EV_PLCI_RESUME_REQ,
 	EV_PLCI_RESUME_CONF,
+	EV_PLCI_CHANNEL_ERR,
 	EV_PLCI_CC_SETUP_IND,
 	EV_PLCI_CC_SETUP_CONF_ERR,
 	EV_PLCI_CC_SETUP_CONF,
@@ -231,6 +251,7 @@ static char* str_ev_plci[] = {
 	"EV_PLCI_SUSPEND_CONF",
 	"EV_PLCI_RESUME_REQ",
 	"EV_PLCI_RESUME_CONF",
+	"EV_PLCI_CHANNEL_ERR",
 	"EV_PLCI_CC_SETUP_IND",
 	"EV_PLCI_CC_SETUP_CONF_ERR",
 	"EV_PLCI_CC_SETUP_CONF",
@@ -511,7 +532,10 @@ static void plci_cc_setup_conf(struct FsmInst *fi, int event, void *arg)
 	_cmsg cmsg;
 	CONNECT_t *conn = arg;
 
-	memset(&cmsg, 0, sizeof(_cmsg));
+	if (cplci->bchannel == -1) {/* no valid channel set */
+		FsmEvent(fi, EV_PLCI_CHANNEL_ERR, NULL);
+		return;
+	}
 	cplciCmsgHeader(cplci, &cmsg, CAPI_CONNECT_ACTIVE, CAPI_IND);
 	if (arg) {
 		cmsg.ConnectedNumber        = conn->CONNECT_PN;
@@ -533,13 +557,37 @@ static void plci_cc_setup_conf_err(struct FsmInst *fi, int event, void *arg)
 	cplciRecvCmsg(cplci, &cmsg);
 }
 
+static void plci_channel_err(struct FsmInst *fi, int event, void *arg)
+{
+	Cplci_t			*cplci = fi->userdata;
+	Plci_t			*plci = cplci->plci;
+	_cmsg			cmsg;
+	RELEASE_COMPLETE_t	relc;
+	unsigned char		cause[4];
+
+	if (!plci) {
+		int_error();
+		return;
+	}
+	memset(&relc, 0, sizeof(RELEASE_COMPLETE_t));
+	cause[0] = 2;
+	cause[1] = 0x80;
+	cause[2] = 0x86; /* channel unacceptable */
+	relc.CAUSE = cause;
+	plciL4L3(plci, CC_RELEASE_COMPLETE | REQUEST, sizeof(RELEASE_COMPLETE_t),
+		&relc);
+	cplciCmsgHeader(cplci, &cmsg, CAPI_DISCONNECT, CAPI_IND);
+	cmsg.Reason = CapiProtocolErrorLayer3;
+	FsmEvent(&cplci->plci_m, EV_PLCI_DISCONNECT_IND, &cmsg);
+	cplciRecvCmsg(cplci, &cmsg);
+}
+
 static void plci_cc_setup_ind(struct FsmInst *fi, int event, void *arg)
 { 
 	Cplci_t *cplci = fi->userdata;
 	SETUP_t *setup = arg;
 	_cmsg cmsg;
 
-	memset(&cmsg, 0, sizeof(_cmsg));
 	cplciCmsgHeader(cplci, &cmsg, CAPI_CONNECT, CAPI_IND);
 	
 	// FIXME: CW
@@ -590,7 +638,6 @@ static void plci_cc_release_ind(struct FsmInst *fi, int event, void *arg)
 	plciDetachCplci(cplci->plci, cplci);
 
 	cplciLinkDown(cplci);
-
 	cplciCmsgHeader(cplci, &cmsg, CAPI_DISCONNECT, CAPI_IND);
 	if (rel) {
 		if (rel->CAUSE) {
@@ -682,7 +729,6 @@ static void plci_cc_suspend_conf(struct FsmInst *fi, int event, void *arg)
 	plci_suspend_reply(cplci, CapiSuccess);
 	
 	plciDetachCplci(cplci->plci, cplci);
-
 	cplciCmsgHeader(cplci, &cmsg, CAPI_DISCONNECT, CAPI_IND);
 	FsmEvent(&cplci->plci_m, EV_PLCI_DISCONNECT_IND, &cmsg);
 	cplciRecvCmsg(cplci, &cmsg);
@@ -719,7 +765,7 @@ static void plci_cc_resume_conf(struct FsmInst *fi, int event, void *arg)
 		int_error();
 		return;
 	}
-	cplci->bchannel = ack->CHANNEL_ID[1];
+	cplci->bchannel = plci_parse_channel_id(ack->CHANNEL_ID);
 	cplciCmsgHeader(cplci, &cmsg, CAPI_FACILITY, CAPI_IND);
 	p = &tmp[1];
 	p += capiEncodeWord(p, 0x0005); // Suspend
@@ -778,60 +824,62 @@ static void plci_info_req(struct FsmInst *fi, int event, void *arg)
 
 static struct FsmNode fn_plci_list[] =
 {
-  {ST_PLCI_P_0,                EV_PLCI_CONNECT_REQ,           plci_connect_req},
-  {ST_PLCI_P_0,                EV_PLCI_CONNECT_IND,           plci_connect_ind},
-  {ST_PLCI_P_0,                EV_PLCI_RESUME_REQ,            plci_resume_req},
-  {ST_PLCI_P_0,                EV_PLCI_CC_SETUP_IND,          plci_cc_setup_ind},
+  {ST_PLCI_P_0,		EV_PLCI_CONNECT_REQ,		plci_connect_req},
+  {ST_PLCI_P_0,		EV_PLCI_CONNECT_IND,		plci_connect_ind},
+  {ST_PLCI_P_0,		EV_PLCI_RESUME_REQ,		plci_resume_req},
+  {ST_PLCI_P_0,		EV_PLCI_CC_SETUP_IND,		plci_cc_setup_ind},
 
-  {ST_PLCI_P_0_1,              EV_PLCI_CONNECT_CONF,          plci_connect_conf},
+  {ST_PLCI_P_0_1,	EV_PLCI_CONNECT_CONF,		plci_connect_conf},
 
-  {ST_PLCI_P_1,                EV_PLCI_CONNECT_ACTIVE_IND,    plci_connect_active_ind},
-  {ST_PLCI_P_1,                EV_PLCI_DISCONNECT_REQ,        plci_disconnect_req},
-  {ST_PLCI_P_1,                EV_PLCI_DISCONNECT_IND,        plci_disconnect_ind},
-  {ST_PLCI_P_1,                EV_PLCI_INFO_REQ,              plci_info_req_overlap},
-  {ST_PLCI_P_1,                EV_PLCI_CC_SETUP_CONF,         plci_cc_setup_conf},
-  {ST_PLCI_P_1,                EV_PLCI_CC_SETUP_CONF_ERR,     plci_cc_setup_conf_err},
-  {ST_PLCI_P_1,                EV_PLCI_CC_DISCONNECT_IND,     plci_cc_disconnect_ind},
-  {ST_PLCI_P_1,                EV_PLCI_CC_RELEASE_PROC_IND,   plci_cc_setup_conf_err},
-  {ST_PLCI_P_1,                EV_PLCI_CC_RELEASE_IND,        plci_cc_release_ind},
-  {ST_PLCI_P_1,                EV_PLCI_CC_REJECT_IND,         plci_cc_release_ind},
+  {ST_PLCI_P_1,		EV_PLCI_CONNECT_ACTIVE_IND,	plci_connect_active_ind},
+  {ST_PLCI_P_1,		EV_PLCI_DISCONNECT_REQ,		plci_disconnect_req},
+  {ST_PLCI_P_1,		EV_PLCI_DISCONNECT_IND,		plci_disconnect_ind},
+  {ST_PLCI_P_1,		EV_PLCI_INFO_REQ,		plci_info_req_overlap},
+  {ST_PLCI_P_1,		EV_PLCI_CC_SETUP_CONF,		plci_cc_setup_conf},
+  {ST_PLCI_P_1,		EV_PLCI_CC_SETUP_CONF_ERR,	plci_cc_setup_conf_err},
+  {ST_PLCI_P_1,		EV_PLCI_CC_DISCONNECT_IND,	plci_cc_disconnect_ind},
+  {ST_PLCI_P_1,		EV_PLCI_CC_RELEASE_PROC_IND,	plci_cc_setup_conf_err},
+  {ST_PLCI_P_1,		EV_PLCI_CC_RELEASE_IND,		plci_cc_release_ind},
+  {ST_PLCI_P_1,		EV_PLCI_CC_REJECT_IND,		plci_cc_release_ind},
+  {ST_PLCI_P_1,		EV_PLCI_CHANNEL_ERR,		plci_channel_err},
 
-  {ST_PLCI_P_2,                EV_PLCI_ALERT_REQ,             plci_alert_req},
-  {ST_PLCI_P_2,                EV_PLCI_CONNECT_RESP,          plci_connect_resp},
-  {ST_PLCI_P_2,                EV_PLCI_DISCONNECT_REQ,        plci_disconnect_req},
-  {ST_PLCI_P_2,                EV_PLCI_DISCONNECT_IND,        plci_disconnect_ind},
-  {ST_PLCI_P_2,                EV_PLCI_INFO_REQ,              plci_info_req},
-  {ST_PLCI_P_2,                EV_PLCI_CC_RELEASE_IND,        plci_cc_release_ind},
+  {ST_PLCI_P_2,		EV_PLCI_ALERT_REQ,		plci_alert_req},
+  {ST_PLCI_P_2,		EV_PLCI_CONNECT_RESP,		plci_connect_resp},
+  {ST_PLCI_P_2,		EV_PLCI_DISCONNECT_REQ,		plci_disconnect_req},
+  {ST_PLCI_P_2,		EV_PLCI_DISCONNECT_IND,		plci_disconnect_ind},
+  {ST_PLCI_P_2,		EV_PLCI_INFO_REQ,		plci_info_req},
+  {ST_PLCI_P_2,		EV_PLCI_CC_RELEASE_IND,		plci_cc_release_ind},
 
-  {ST_PLCI_P_4,                EV_PLCI_CONNECT_ACTIVE_IND,    plci_connect_active_ind},
-  {ST_PLCI_P_4,                EV_PLCI_DISCONNECT_REQ,        plci_disconnect_req},
-  {ST_PLCI_P_4,                EV_PLCI_DISCONNECT_IND,        plci_disconnect_ind},
-  {ST_PLCI_P_4,                EV_PLCI_INFO_REQ,              plci_info_req},
-  {ST_PLCI_P_4,                EV_PLCI_CC_SETUP_COMPL_IND,    plci_cc_setup_compl_ind},
-  {ST_PLCI_P_4,                EV_PLCI_CC_RELEASE_IND,        plci_cc_release_ind},
+  {ST_PLCI_P_4,		EV_PLCI_CONNECT_ACTIVE_IND,	plci_connect_active_ind},
+  {ST_PLCI_P_4,		EV_PLCI_DISCONNECT_REQ,		plci_disconnect_req},
+  {ST_PLCI_P_4,		EV_PLCI_DISCONNECT_IND,		plci_disconnect_ind},
+  {ST_PLCI_P_4,		EV_PLCI_INFO_REQ,		plci_info_req},
+  {ST_PLCI_P_4,		EV_PLCI_CC_SETUP_COMPL_IND,	plci_cc_setup_compl_ind},
+  {ST_PLCI_P_4,		EV_PLCI_CC_RELEASE_IND,		plci_cc_release_ind},
+  {ST_PLCI_P_4,		EV_PLCI_CHANNEL_ERR,		plci_channel_err},
 
-  {ST_PLCI_P_ACT,              EV_PLCI_CONNECT_ACTIVE_RESP,   plci_connect_active_resp},
-  {ST_PLCI_P_ACT,              EV_PLCI_DISCONNECT_REQ,        plci_disconnect_req},
-  {ST_PLCI_P_ACT,              EV_PLCI_DISCONNECT_IND,        plci_disconnect_ind},
-  {ST_PLCI_P_ACT,              EV_PLCI_INFO_REQ,              plci_info_req},
-  {ST_PLCI_P_ACT,              EV_PLCI_SELECT_B_PROTOCOL_REQ, plci_select_b_protocol_req},
-  {ST_PLCI_P_ACT,              EV_PLCI_SUSPEND_REQ,           plci_suspend_req},
-  {ST_PLCI_P_ACT,              EV_PLCI_SUSPEND_CONF,          plci_suspend_conf},
-  {ST_PLCI_P_ACT,              EV_PLCI_CC_DISCONNECT_IND,     plci_cc_disconnect_ind},
-  {ST_PLCI_P_ACT,              EV_PLCI_CC_RELEASE_IND,        plci_cc_release_ind},
-  {ST_PLCI_P_ACT,              EV_PLCI_CC_NOTIFY_IND,         plci_cc_notify_ind},
-  {ST_PLCI_P_ACT,              EV_PLCI_CC_SUSPEND_ERR,        plci_cc_suspend_err},
-  {ST_PLCI_P_ACT,              EV_PLCI_CC_SUSPEND_CONF,       plci_cc_suspend_conf},
+  {ST_PLCI_P_ACT,	EV_PLCI_CONNECT_ACTIVE_RESP,	plci_connect_active_resp},
+  {ST_PLCI_P_ACT,	EV_PLCI_DISCONNECT_REQ,		plci_disconnect_req},
+  {ST_PLCI_P_ACT,	EV_PLCI_DISCONNECT_IND,		plci_disconnect_ind},
+  {ST_PLCI_P_ACT,	EV_PLCI_INFO_REQ,		plci_info_req},
+  {ST_PLCI_P_ACT,	EV_PLCI_SELECT_B_PROTOCOL_REQ,	plci_select_b_protocol_req},
+  {ST_PLCI_P_ACT,	EV_PLCI_SUSPEND_REQ,		plci_suspend_req},
+  {ST_PLCI_P_ACT,	EV_PLCI_SUSPEND_CONF,		plci_suspend_conf},
+  {ST_PLCI_P_ACT,	EV_PLCI_CC_DISCONNECT_IND,	plci_cc_disconnect_ind},
+  {ST_PLCI_P_ACT,	EV_PLCI_CC_RELEASE_IND,		plci_cc_release_ind},
+  {ST_PLCI_P_ACT,	EV_PLCI_CC_NOTIFY_IND,		plci_cc_notify_ind},
+  {ST_PLCI_P_ACT,	EV_PLCI_CC_SUSPEND_ERR,		plci_cc_suspend_err},
+  {ST_PLCI_P_ACT,	EV_PLCI_CC_SUSPEND_CONF,	plci_cc_suspend_conf},
 
-  {ST_PLCI_P_5,                EV_PLCI_DISCONNECT_IND,        plci_disconnect_ind},
-  {ST_PLCI_P_5,                EV_PLCI_CC_RELEASE_IND,        plci_cc_release_ind},
+  {ST_PLCI_P_5,		EV_PLCI_DISCONNECT_IND,		plci_disconnect_ind},
+  {ST_PLCI_P_5,		EV_PLCI_CC_RELEASE_IND,		plci_cc_release_ind},
 
-  {ST_PLCI_P_6,                EV_PLCI_DISCONNECT_RESP,       plci_disconnect_resp},
+  {ST_PLCI_P_6,		EV_PLCI_DISCONNECT_RESP,	plci_disconnect_resp},
 
-  {ST_PLCI_P_RES,              EV_PLCI_RESUME_CONF,           plci_resume_conf},
-  {ST_PLCI_P_RES,              EV_PLCI_DISCONNECT_IND,        plci_disconnect_ind},
-  {ST_PLCI_P_RES,              EV_PLCI_CC_RESUME_ERR,         plci_cc_resume_err},
-  {ST_PLCI_P_RES,              EV_PLCI_CC_RESUME_CONF,        plci_cc_resume_conf},
+  {ST_PLCI_P_RES,	EV_PLCI_RESUME_CONF,		plci_resume_conf},
+  {ST_PLCI_P_RES,	EV_PLCI_DISCONNECT_IND,		plci_disconnect_ind},
+  {ST_PLCI_P_RES,	EV_PLCI_CC_RESUME_ERR,		plci_cc_resume_err},
+  {ST_PLCI_P_RES,	EV_PLCI_CC_RESUME_CONF,		plci_cc_resume_conf},
 
 #if 0
   {ST_PLCI_P_0,                EV_PLCI_FACILITY_IND,          plci_facility_ind_p_0_off_hook},
@@ -917,7 +965,7 @@ void cplci_l3l4(Cplci_t *cplci, int pr, void *arg)
 			cplciInfoIndIE(cplci, IE_CHANNEL_ID, CAPI_INFOMASK_CHANNELID,
 				p.setup->CHANNEL_ID);
 			if (p.setup->CHANNEL_ID)
-				cplci->bchannel = p.setup->CHANNEL_ID[1];
+				cplci->bchannel = plci_parse_channel_id(p.setup->CHANNEL_ID);
 			FsmEvent(&cplci->plci_m, EV_PLCI_CC_SETUP_IND, arg); 
 			break;
 		case CC_TIMEOUT | INDICATION:
@@ -938,7 +986,7 @@ void cplci_l3l4(Cplci_t *cplci, int pr, void *arg)
 				cplciInfoIndIE(cplci, IE_CHANNEL_ID,
 					CAPI_INFOMASK_CHANNELID, p.conn->CHANNEL_ID);
 				if (p.conn->CHANNEL_ID)
-					cplci->bchannel = p.conn->CHANNEL_ID[1];
+					cplci->bchannel = plci_parse_channel_id(p.conn->CHANNEL_ID);
 			}
 			FsmEvent(&cplci->plci_m, EV_PLCI_CC_SETUP_CONF, arg); 
 			break;
@@ -949,7 +997,7 @@ void cplci_l3l4(Cplci_t *cplci, int pr, void *arg)
 				cplciInfoIndIE(cplci, IE_CHANNEL_ID,
 					CAPI_INFOMASK_CHANNELID, p.c_ack->CHANNEL_ID);
 				if (p.c_ack->CHANNEL_ID)
-					cplci->bchannel = p.c_ack->CHANNEL_ID[1];
+					cplci->bchannel = plci_parse_channel_id(p.c_ack->CHANNEL_ID);
 			}
 			FsmEvent(&cplci->plci_m, EV_PLCI_CC_SETUP_COMPL_IND, arg); 
 			break;
@@ -1010,7 +1058,7 @@ void cplci_l3l4(Cplci_t *cplci, int pr, void *arg)
 				cplciInfoIndIE(cplci, IE_CHANNEL_ID,
 					CAPI_INFOMASK_CHANNELID, p.s_ack->CHANNEL_ID);
 				if (p.s_ack->CHANNEL_ID)
-					cplci->bchannel = p.s_ack->CHANNEL_ID[1];
+					cplci->bchannel = plci_parse_channel_id(p.s_ack->CHANNEL_ID);
 			}
 			break;
 		case CC_PROCEEDING | INDICATION:
@@ -1025,7 +1073,7 @@ void cplci_l3l4(Cplci_t *cplci, int pr, void *arg)
 				cplciInfoIndIE(cplci, IE_CHANNEL_ID,
 					CAPI_INFOMASK_CHANNELID, p.proc->CHANNEL_ID);
 				if (p.proc->CHANNEL_ID)
-					cplci->bchannel = p.proc->CHANNEL_ID[1];
+					cplci->bchannel = plci_parse_channel_id(p.proc->CHANNEL_ID);
 			}
 			break;
 		case CC_ALERTING | INDICATION:
@@ -1044,7 +1092,7 @@ void cplci_l3l4(Cplci_t *cplci, int pr, void *arg)
 				cplciInfoIndIE(cplci, IE_CHANNEL_ID,
 					CAPI_INFOMASK_CHANNELID, p.alert->CHANNEL_ID);
 				if (p.alert->CHANNEL_ID)
-					cplci->bchannel = p.alert->CHANNEL_ID[1];
+					cplci->bchannel = plci_parse_channel_id(p.alert->CHANNEL_ID);
 			}
 			break;
 		case CC_PROGRESS | INDICATION:
@@ -1137,12 +1185,6 @@ void cplciLinkUp(Cplci_t *cplci)
 		return;
 	}
 	
-	if (!(cplci->bchannel & 3) || ((cplci->bchannel & 3) == 3)) {
-		// at the moment only B-channel 1 or B-channel 2 allowed
-		int_error();
-		return;
-	}
-
 	cplci->ncci = kmalloc(sizeof(Ncci_t), GFP_ATOMIC);
 	if (!cplci->ncci) {
 		int_error();
@@ -1214,7 +1256,6 @@ void cplciClearOtherApps(Cplci_t *cplci)
 		cp = plci->cplcis[applId - 1];
 		if (cp && (cp != cplci)) {
 			plciDetachCplci(plci, cp);
-			
 			cplciCmsgHeader(cp, &cm, CAPI_DISCONNECT, CAPI_IND);
 			cm.Reason = 0x3304; // other application got the call
 			FsmEvent(&cp->plci_m, EV_PLCI_DISCONNECT_IND, &cm);
@@ -1248,7 +1289,6 @@ void cplciInfoIndIE(Cplci_t *cplci, unsigned char ie, __u32 mask, u_char *iep)
 			cplciLinkUp(cplci);
 		}
 	}
-
 	cplciCmsgHeader(cplci, &cmsg, CAPI_INFO, CAPI_IND);
 	cmsg.InfoNumber = ie;
 	cmsg.InfoElement = iep;
