@@ -1,4 +1,4 @@
-/* $Id: hfc_pci.c,v 1.18 2003/06/21 21:39:54 kkeil Exp $
+/* $Id: hfc_pci.c,v 1.19 2003/06/21 22:25:55 kkeil Exp $
 
  * hfc_pci.c     low level driver for CCD's hfc-pci based cards
  *
@@ -47,7 +47,7 @@
 
 extern const char *CardType[];
 
-static const char *hfcpci_revision = "$Revision: 1.18 $";
+static const char *hfcpci_revision = "$Revision: 1.19 $";
 
 /* table entry in the PCI devices list */
 typedef struct {
@@ -1755,6 +1755,7 @@ hfcD_newstate(dchannel_t *dch)
 	} else { 
 		printk(KERN_DEBUG "%s: NT newstate %x\n",
 			__FUNCTION__, dch->ph_state);
+		dch->inst.lock(dch->inst.data);
 		switch (dch->ph_state) {
 			case (2):
 				if (hc->hw.nt_timer < 0) {
@@ -1801,6 +1802,7 @@ hfcD_newstate(dchannel_t *dch)
 			default:
 				break;
 		}
+		dch->inst.unlock(dch->inst.data);
 	}
 	while(upif) {
 		if_link(upif, prim, para, 0, NULL, 0);
@@ -1809,43 +1811,10 @@ hfcD_newstate(dchannel_t *dch)
 }
 
 static void
-hfcD_rcv(dchannel_t *dch)
+HW_hfcD_bh(dchannel_t *dch)
 {
-	struct sk_buff	*skb;
-	int		err;
-
-	while ((skb = skb_dequeue(&dch->rqueue))) {
-		err = if_newhead(&dch->inst.up, PH_DATA_IND, (int)skb, skb);
-		if (err < 0) {
-			printk(KERN_WARNING "HiSax: hfcD deliver err %d\n", err);
-			dev_kfree_skb(skb);
-		}
-	}
-}
-
-static void
-hfcD_bh(dchannel_t *dch)
-{
-	if (!dch)
-		return;
-//	printk(KERN_DEBUG "%s: event %x\n", __FUNCTION__, dch->event);
 	if (test_and_clear_bit(D_L1STATECHANGE, &dch->event))
 		hfcD_newstate(dch);
-	if (test_and_clear_bit(D_XMTBUFREADY, &dch->event)) {
-		struct sk_buff	*skb = dch->next_skb;
-		hisax_head_t	*hh;
-
-		if (skb) {
-			hh = HISAX_HEAD_P(skb);
-			dch->next_skb = NULL;
-			skb_trim(skb, 0);
-			if (if_newhead(&dch->inst.up, PH_DATA_CNF,
-				hh->dinfo, skb))
-				dev_kfree_skb(skb);
-		}
-	}
-	if (test_and_clear_bit(D_RCVBUFREADY, &dch->event))
-		hfcD_rcv(dch);
 }
 
 static void
@@ -1917,7 +1886,7 @@ void
 inithfcpci(hfc_pci_t *hc)
 {
 	HFC_INFO("inithfcpci: entered\n");
-	hc->dch.tqueue.routine = (void *) (void *) hfcD_bh;
+	hc->dch.hw_bh = HW_hfcD_bh;
 	hc->bch[0].tqueue.routine = (void *) (void *) hfcB_bh;
 	hc->bch[1].tqueue.routine = (void *) (void *) hfcB_bh;
 	hc->dch.dbusytimer.function = (void *) hfcpci_dbusy_timer;

@@ -1,4 +1,4 @@
-/* $Id: isar.c,v 1.4 2003/06/21 21:39:54 kkeil Exp $
+/* $Id: isar.c,v 1.5 2003/06/21 22:25:56 kkeil Exp $
  *
  * isar.c   ISAR (Siemens PSB 7110) specific routines
  *
@@ -31,7 +31,6 @@ const u_char faxmodulation[] = {3,24,48,72,73,74,96,97,98,121,122,145,146};
 
 void isar_setup(bchannel_t *);
 static void isar_pump_cmd(bchannel_t *, int, u_char);
-static inline void deliver_status(bchannel_t *, int);
 
 static int firmwaresize = 0;
 static u_char *firmware;
@@ -419,6 +418,14 @@ reterror:
 #define B_LL_FCERROR	12
 #define B_TOUCH_TONE	13
 
+static inline void
+deliver_status(bchannel_t *bch, int status)
+{
+	if (bch->debug & L1_DEB_HSCX)
+		debugprint(&bch->inst, "HL->LL FAXIND %x", status);
+	if_link(&bch->inst.up, PH_STATUS | INDICATION, status, 0, NULL, 0);
+}
+
 static void
 isar_bh(bchannel_t *bch)
 {
@@ -477,14 +484,6 @@ isar_bh(bchannel_t *bch)
 
 }
 
-static void
-isar_sched_event(bchannel_t *bch, int event)
-{
-	test_and_set_bit(event, &bch->event);
-	queue_task(&bch->tqueue, &tq_immediate);
-	mark_bh(IMMEDIATE_BH);
-}
-
 static inline void
 send_DLE_ETX(bchannel_t *bch)
 {
@@ -494,7 +493,7 @@ send_DLE_ETX(bchannel_t *bch)
 	if ((skb = alloc_uplink_skb(2))) {
 		memcpy(skb_put(skb, 2), dleetx, 2);
 		skb_queue_tail(&bch->rqueue, skb);
-		isar_sched_event(bch, B_RCVBUFREADY);
+		bch_sched_event(bch, B_RCVBUFREADY);
 	} else {
 		printk(KERN_WARNING "HiSax: skb out of memory\n");
 	}
@@ -549,7 +548,7 @@ isar_rcv_frame(bchannel_t *bch)
 		if ((skb = alloc_uplink_skb(ih->reg->clsb))) {
 			rcv_mbox(bch, ih->reg, (u_char *)skb_put(skb, ih->reg->clsb));
 			skb_queue_tail(&bch->rqueue, skb);
-			isar_sched_event(bch, B_RCVBUFREADY);
+			bch_sched_event(bch, B_RCVBUFREADY);
 		} else {
 			printk(KERN_WARNING "HiSax: skb out of memory\n");
 			bch->Write_Reg(bch->inst.data, 1, ISAR_IIA, 0);
@@ -590,7 +589,7 @@ isar_rcv_frame(bchannel_t *bch)
 					memcpy(skb_put(skb, bch->rx_idx-2),
 						bch->rx_buf, bch->rx_idx-2);
 					skb_queue_tail(&bch->rqueue, skb);
-					isar_sched_event(bch, B_RCVBUFREADY);
+					bch_sched_event(bch, B_RCVBUFREADY);
 				}
 				bch->rx_idx = 0;
 			}
@@ -615,7 +614,7 @@ isar_rcv_frame(bchannel_t *bch)
 				insert_dle((u_char *)skb_put(skb, bch->rx_idx),
 					bch->rx_buf, ih->reg->clsb);
 				skb_queue_tail(&bch->rqueue, skb);
-				isar_sched_event(bch, B_RCVBUFREADY);
+				bch_sched_event(bch, B_RCVBUFREADY);
 				if (ih->reg->cmsb & SART_NMD) { /* ABORT */
 					if (bch->debug & L1_DEB_WARN)
 						debugprint(&bch->inst, "isar_rcv_frame: no more data");
@@ -626,7 +625,7 @@ isar_rcv_frame(bchannel_t *bch)
 						ISAR_HIS_PUMPCTRL, PCTRL_CMD_ESC,
 						0, NULL);
 					ih->state = STFAX_ESCAPE;
-					isar_sched_event(bch, B_LL_NOCARRIER);
+					bch_sched_event(bch, B_LL_NOCARRIER);
 				}
 			} else {
 				printk(KERN_WARNING "HiSax: skb out of memory\n");
@@ -674,9 +673,9 @@ isar_rcv_frame(bchannel_t *bch)
 						bch->rx_buf,
 						bch->rx_idx);
 					skb_queue_tail(&bch->rqueue, skb);
-					isar_sched_event(bch, B_RCVBUFREADY);
+					bch_sched_event(bch, B_RCVBUFREADY);
 					send_DLE_ETX(bch);
-					isar_sched_event(bch, B_LL_OK);
+					bch_sched_event(bch, B_LL_OK);
 				}
 				bch->rx_idx = 0;
 			}
@@ -690,7 +689,7 @@ isar_rcv_frame(bchannel_t *bch)
 			sendmsg(bch, SET_DPS(ih->dpath) |
 				ISAR_HIS_PUMPCTRL, PCTRL_CMD_ESC, 0, NULL);
 			ih->state = STFAX_ESCAPE;
-			isar_sched_event(bch, B_LL_NOCARRIER);
+			bch_sched_event(bch, B_LL_NOCARRIER);
 		}
 		break;
 	default:
@@ -819,7 +818,7 @@ send_frames(bchannel_t *bch)
 				memcpy(bch->tx_buf,
 					bch->next_skb->data, bch->tx_len);
 				isar_fill_fifo(bch);
-				isar_sched_event(bch, B_XMTBUFREADY);
+				bch_sched_event(bch, B_XMTBUFREADY);
 			} else {
 				printk(KERN_WARNING "isar tx irq TX_NEXT without skb\n");
 				test_and_clear_bit(BC_FLG_TX_BUSY, &bch->Flag);
@@ -834,11 +833,11 @@ send_frames(bchannel_t *bch)
 					}
 					test_and_set_bit(BC_FLG_LL_OK, &bch->Flag);
 				} else {
-					isar_sched_event(bch, B_LL_CONNECT);
+					bch_sched_event(bch, B_LL_CONNECT);
 				}
 			}
 			test_and_clear_bit(BC_FLG_TX_BUSY, &bch->Flag);
-			isar_sched_event(bch, B_XMTBUFREADY);
+			bch_sched_event(bch, B_XMTBUFREADY);
 		}
 	}
 }
@@ -938,13 +937,13 @@ isar_pump_statev_modem(bchannel_t *bch, u_char devt) {
 		case PSEV_CON_ON:
 			if (bch->debug & L1_DEB_HSCX)
 				debugprint(&bch->inst, "pump stev CONNECT");
-			isar_sched_event(bch, B_LL_CONNECT);
+			bch_sched_event(bch, B_LL_CONNECT);
 			break;
 		case PSEV_CON_OFF:
 			if (bch->debug & L1_DEB_HSCX)
 				debugprint(&bch->inst, "pump stev NO CONNECT");
 			sendmsg(bch, dps | ISAR_HIS_PSTREQ, 0, 0, NULL);
-			isar_sched_event(bch, B_LL_NOCARRIER);
+			bch_sched_event(bch, B_LL_NOCARRIER);
 			break;
 		case PSEV_V24_OFF:
 			if (bch->debug & L1_DEB_HSCX)
@@ -995,14 +994,6 @@ isar_pump_statev_modem(bchannel_t *bch, u_char devt) {
 	}
 }
 
-static inline void
-deliver_status(bchannel_t *bch, int status)
-{
-	if (bch->debug & L1_DEB_HSCX)
-		debugprint(&bch->inst, "HL->LL FAXIND %x", status);
-	if_link(&bch->inst.up, PH_STATUS | INDICATION, status, 0, NULL, 0);
-}
-
 static void
 isar_pump_statev_fax(bchannel_t *bch, u_char devt) {
 	isar_hw_t	*ih = bch->hw;
@@ -1018,7 +1009,7 @@ isar_pump_statev_fax(bchannel_t *bch, u_char devt) {
 			if (bch->debug & L1_DEB_HSCX)
 				debugprint(&bch->inst, "pump stev RSP_READY");
 			ih->state = STFAX_READY;
-			isar_sched_event(bch, B_LL_READY);
+			bch_sched_event(bch, B_LL_READY);
 			if (test_bit(BC_FLG_ORIG, &bch->Flag)) {
 				isar_pump_cmd(bch, HW_MOD_FRH, 3);
 			} else {
@@ -1091,7 +1082,7 @@ isar_pump_statev_fax(bchannel_t *bch, u_char devt) {
 						&bch->Flag);
 					add_timer(&ih->ftimer);
 				} else {
-					isar_sched_event(bch, B_LL_CONNECT);
+					bch_sched_event(bch, B_LL_CONNECT);
 				}
 			} else {
 				if (bch->debug & L1_DEB_WARN)
@@ -1136,17 +1127,17 @@ isar_pump_statev_fax(bchannel_t *bch, u_char devt) {
 				}
 			} else if (ih->state == STFAX_ACTIV) {
 				if (test_and_clear_bit(BC_FLG_LL_OK, &bch->Flag)) {
-					isar_sched_event(bch, B_LL_OK);
+					bch_sched_event(bch, B_LL_OK);
 				} else if (ih->cmd == PCTRL_CMD_FRM) {
 					send_DLE_ETX(bch);
-					isar_sched_event(bch, B_LL_NOCARRIER);
+					bch_sched_event(bch, B_LL_NOCARRIER);
 				} else {
-					isar_sched_event(bch, B_LL_FCERROR);
+					bch_sched_event(bch, B_LL_FCERROR);
 				}
 				ih->state = STFAX_READY;
 			} else {
 				ih->state = STFAX_READY;
-				isar_sched_event(bch, B_LL_FCERROR);
+				bch_sched_event(bch, B_LL_FCERROR);
 			}
 			break;
 		case PSEV_RSP_SILDET:
@@ -1183,7 +1174,7 @@ isar_pump_statev_fax(bchannel_t *bch, u_char devt) {
 				debugprint(&bch->inst, "pump stev RSP_FCERR");
 			ih->state = STFAX_ESCAPE;
 			sendmsg(bch, dps | ISAR_HIS_PUMPCTRL, PCTRL_CMD_ESC, 0, NULL);
-			isar_sched_event(bch, B_LL_FCERROR);
+			bch_sched_event(bch, B_LL_FCERROR);
 			break;
 		default:
 			break;
@@ -1238,7 +1229,7 @@ isar_int_main(bchannel_t *bch)
 				} else if (bc->protocol == ISDN_PID_L1_B_TRANS_TTR) {
 					ih->conmsg[0] = ih->reg->cmsb;
 					bch->conmsg = ih->conmsg;
-					isar_sched_event(bc, B_TOUCH_TONE);
+					bch_sched_event(bc, B_TOUCH_TONE);
 				} else {
 					if (bch->debug & L1_DEB_WARN)
 						debugprint(&bch->inst, "isar IIS_PSTEV pmode %d stat %x",
@@ -1296,7 +1287,7 @@ ftimer_handler(bchannel_t *bch) {
 			bch->Flag);
 	test_and_clear_bit(BC_FLG_FTI_RUN, &bch->Flag);
 	if (test_and_clear_bit(BC_FLG_LL_CONN, &bch->Flag)) {
-		isar_sched_event(bch, B_LL_CONNECT);
+		bch_sched_event(bch, B_LL_CONNECT);
 	}
 }
 
@@ -1510,7 +1501,7 @@ isar_pump_cmd(bchannel_t *bch, int cmd, u_char para)
 			} else if ((ih->state == STFAX_ACTIV) &&
 				(ih->cmd == PCTRL_CMD_FTM) &&
 				(ih->mod == para)) {
-				isar_sched_event(bch, B_LL_CONNECT);
+				bch_sched_event(bch, B_LL_CONNECT);
 			} else {
 				ih->newmod = para;
 				ih->newcmd = PCTRL_CMD_FTM;
@@ -1533,7 +1524,7 @@ isar_pump_cmd(bchannel_t *bch, int cmd, u_char para)
 			} else if ((ih->state == STFAX_ACTIV) &&
 				(ih->cmd == PCTRL_CMD_FTH) &&
 				(ih->mod == para)) {
-				isar_sched_event(bch, B_LL_CONNECT);
+				bch_sched_event(bch, B_LL_CONNECT);
 			} else {
 				ih->newmod = para;
 				ih->newcmd = PCTRL_CMD_FTH;
@@ -1556,7 +1547,7 @@ isar_pump_cmd(bchannel_t *bch, int cmd, u_char para)
 			} else if ((ih->state == STFAX_ACTIV) &&
 				(ih->cmd == PCTRL_CMD_FRM) &&
 				(ih->mod == para)) {
-				isar_sched_event(bch, B_LL_CONNECT);
+				bch_sched_event(bch, B_LL_CONNECT);
 			} else {
 				ih->newmod = para;
 				ih->newcmd = PCTRL_CMD_FRM;
@@ -1579,7 +1570,7 @@ isar_pump_cmd(bchannel_t *bch, int cmd, u_char para)
 			} else if ((ih->state == STFAX_ACTIV) &&
 				(ih->cmd == PCTRL_CMD_FRH) &&
 				(ih->mod == para)) {
-				isar_sched_event(bch, B_LL_CONNECT);
+				bch_sched_event(bch, B_LL_CONNECT);
 			} else {
 				ih->newmod = para;
 				ih->newcmd = PCTRL_CMD_FRH;
