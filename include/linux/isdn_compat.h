@@ -37,6 +37,7 @@ typedef	struct timer_list		timer_t;
 #define get_pcibase(ps, nr) ps->resource[nr].start
 #define pci_get_sub_system(pdev, id)	id = pdev->subsystem_device
 #define pci_get_sub_vendor(pdev, id)	id = pdev->subsystem_vendor
+typedef	struct timer_list		timer_t;
 #endif /* 2,4,0 */
 
 #ifndef COMPAT_HAS_NEW_WAITQ

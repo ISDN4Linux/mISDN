@@ -1,4 +1,4 @@
-/* $Id: hfc_pci.c,v 1.9 2002/07/07 21:23:11 kkeil Exp $
+/* $Id: hfc_pci.c,v 1.10 2002/07/08 12:27:45 kkeil Exp $
 
  * hfc_pci.c     low level driver for CCD's hfc-pci based cards
  *
@@ -30,29 +30,19 @@
 #include <linux/pci.h>
 #include <linux/kernel_stat.h>
 #include <linux/delay.h>
+
 #include "hisax_hw.h"
 #include "hfc_pci.h"
 #include "hisaxl1.h"
 #include "helper.h"
 #include "debug.h"
+#include <linux/isdn_compat.h>
 
-#ifdef HFC_TENOVIS_TEST
-#include "hfcProc.h"
-#else
 #define HFC_INFO(txt)	printk(KERN_DEBUG txt)
-#endif
 
 extern const char *CardType[];
 
-#ifdef HFC_TENOVIS
-	#ifdef HFC_TENOVIS_LOOP
-		static const char *hfcpci_revision = "$Revision: 1.9 $ , Tenovis loop mod.";
-	#else
-		static const char *hfcpci_revision = "$Revision: 1.9 $ , Tenovis mod.";
-	#endif
-#else
-	static const char *hfcpci_revision = "$Revision: 1.9 $";
-#endif
+static const char *hfcpci_revision = "$Revision: 1.10 $";
 
 /* table entry in the PCI devices list */
 typedef struct {
@@ -327,18 +317,13 @@ reset_hfcpci(hfc_pci_t *hc)
 	if (test_bit(HFC_CFG_PCM, &hc->cfg)) {
 		/* set data flow directions: connect B1,B2: HFC to/from PCM */
 		hc->hw.conn = 0x09;
-#ifdef HFC_TENOVIS_LOOP
-		Write_hfc(hc, HFCPCI_MST_EMOD, 0xA9); /* IOM mode for loop operation over highway */
-#else
-		Write_hfc(hc, HFCPCI_MST_EMOD, 0x01); /* normal operation */
-#endif
 	} else {
 		hc->hw.conn = 0x36;	/* set data flow directions */ 
 		if (test_bit(HFC_CFG_SW_DD_DU, &hc->cfg)) {
-			Write_hfc(hc, HFCPCI_B1_SSL, 0xC0);
-			Write_hfc(hc, HFCPCI_B2_SSL, 0xC1);
-			Write_hfc(hc, HFCPCI_B1_RSL, 0xC0);
-			Write_hfc(hc, HFCPCI_B2_RSL, 0xC1);
+			Write_hfc(hc, HFCPCI_B1_SSL, 0xC0);  modified by Schmidt, Tenovis 
+			Write_hfc(hc, HFCPCI_B2_SSL, 0xC1);  modified by Schmidt, Tenovis
+			Write_hfc(hc, HFCPCI_B1_RSL, 0xC0);  modified by Schmidt, Tenovis
+			Write_hfc(hc, HFCPCI_B2_RSL, 0xC1);  modified by Schmidt, Tenovis
 		} else {
 			Write_hfc(hc, HFCPCI_B1_SSL, 0x80);
 			Write_hfc(hc, HFCPCI_B2_SSL, 0x81);
@@ -2674,11 +2659,6 @@ HFC_init(void)
 				err = 0;
 			return(err);
 		}
-#ifdef HFC_TENOVIS_TEST
-		else{
-			hfc_procCreate(card->hw.pci_io,card->hw.fifos);
-		}
-#endif
 	}
 	printk(KERN_INFO "HFC %d cards installed\n", HFC_cnt);
 	return(0);
@@ -2698,10 +2678,6 @@ cleanup_module(void)
 			HFC_obj.refcnt);
 		release_card(HFC_obj.ilist);
 	}
-
-#ifdef HFC_TENOVIS_TEST
-	hfc_procRelease();
-#endif
 
 	return(0);
 }
