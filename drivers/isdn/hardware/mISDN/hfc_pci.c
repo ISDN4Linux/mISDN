@@ -1,4 +1,4 @@
-/* $Id: hfc_pci.c,v 1.3 2001/11/19 14:54:00 kkeil Exp $
+/* $Id: hfc_pci.c,v 1.4 2001/11/26 17:19:26 kkeil Exp $
 
  * hfc_pci.c     low level driver for CCD's hfc-pci based cards
  *
@@ -39,7 +39,7 @@
 
 extern const char *CardType[];
 
-static const char *hfcpci_revision = "$Revision: 1.3 $";
+static const char *hfcpci_revision = "$Revision: 1.4 $";
 
 /* table entry in the PCI devices list */
 typedef struct {
@@ -1568,8 +1568,8 @@ mode_hfcpci(bchannel_t *bch, int bc, int protocol)
 		case (ISDN_PID_L1_B_64TRANS):
 			bch->protocol = protocol;
 			bch->channel = bc;
-		        hfcpci_clear_fifo_rx(hc, fifo2);
-		        hfcpci_clear_fifo_tx(hc, fifo2);
+		        hfcpci_clear_fifo_rx(hc, (fifo2 & 2)?1:0);
+		        hfcpci_clear_fifo_tx(hc, (fifo2 & 2)?1:0);
 			if (bc & 2) {
 				hc->hw.sctrl |= SCTRL_B2_ENA;
 				hc->hw.sctrl_r |= SCTRL_B2_ENA;
@@ -1594,8 +1594,8 @@ mode_hfcpci(bchannel_t *bch, int bc, int protocol)
 		case (ISDN_PID_L1_B_64HDLC):
 			bch->protocol = protocol;
 			bch->channel = bc;
-		        hfcpci_clear_fifo_rx(hc, fifo2);
-		        hfcpci_clear_fifo_tx(hc, fifo2);
+		        hfcpci_clear_fifo_rx(hc, (fifo2 & 2)?1:0);
+		        hfcpci_clear_fifo_tx(hc, (fifo2 & 2)?1:0);
 			if (bc & 2) {
 				hc->hw.sctrl |= SCTRL_B2_ENA;
 				hc->hw.sctrl_r |= SCTRL_B2_ENA;
