@@ -1,4 +1,4 @@
-/* $Id: layer3.c,v 0.3 2001/02/13 10:42:55 kkeil Exp $
+/* $Id: layer3.c,v 0.4 2001/02/19 11:51:42 kkeil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -14,7 +14,7 @@
 #include "hisaxl3.h"
 #include "helper.h"
 
-const char *l3_revision = "$Revision: 0.3 $";
+const char *l3_revision = "$Revision: 0.4 $";
 
 static
 struct Fsm l3fsm = {NULL, 0, 0, NULL, NULL};
@@ -114,6 +114,7 @@ findie(u_char * p, int size, u_char ie, int wanted_set)
 						return(NULL);
 					if (*(p+1) > (pend - (p+2)))
 						return(NULL);
+					p++; /* points to len */
 				}
 				return (p);
 			} else if ((*p > ie) && !(*p & 0x80))
@@ -160,7 +161,7 @@ newcallref(void)
 void
 newl3state(l3_process_t *pc, int state)
 {
-	if (pc->debug & L3_DEB_STATE)
+	if (pc->l3->debug & L3_DEB_STATE)
 		l3m_debug(&pc->l3->l3m, "newstate cr %d %d --> %d", 
 			 pc->callref & 0x7F,
 			 pc->state, state);
@@ -265,8 +266,8 @@ l3_process_t
 	}
 	memset(p, 0, sizeof(l3_process_t));
 	p->l3 = l3;
-	p->debug = l3->debug;
 	p->callref = cr;
+	p->id = l3->id | (cr << 8);
 	p->n303 = n303;
 	L3InitTimer(p, &p->timer);
 	APPEND_TO_LIST(p, l3->proc);
@@ -283,6 +284,7 @@ release_l3_process(l3_process_t *p)
 	l3 = p->l3;
 	REMOVE_FROM_LISTBASE(p, l3->proc);
 	StopAllL3Timer(p);
+	kfree(p);
 	if (!l3->proc)
 		RELEASE();
 };
@@ -448,7 +450,7 @@ static struct FsmNode L3FnList[] =
 
 #define L3_FN_COUNT (sizeof(L3FnList)/sizeof(struct FsmNode))
 
-void
+int
 l3_msg(layer3_t *l3, u_int pr, u_int nr, int dtyp, void *arg)
 {
 	switch (pr) {
@@ -481,6 +483,7 @@ l3_msg(layer3_t *l3, u_int pr, u_int nr, int dtyp, void *arg)
 			FsmEvent(&l3->l3m, EV_RELEASE_REQ, NULL);
 			break;
 	}
+	return(0);
 }
 
 void

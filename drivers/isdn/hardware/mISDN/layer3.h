@@ -1,4 +1,4 @@
-/* $Id: layer3.h,v 0.3 2001/02/13 10:42:55 kkeil Exp $
+/* $Id: layer3.h,v 0.4 2001/02/19 11:51:42 kkeil Exp $
  *
  * This file is (c) under GNU PUBLIC LICENSE
  *
@@ -22,14 +22,12 @@
 
 #define FLG_L2BLOCK     1
 
-#define MAX_NR_LEN	32
-
 typedef struct _cause {
 	u_char	len __attribute__ ((packed));
 	u_char	loc __attribute__ ((packed));
-	u_char	rec __attribute__ ((packed));
 	u_char	val __attribute__ ((packed));
 	u_char	diag[28] __attribute__ ((packed));
+	u_char	rec __attribute__ ((packed));
 } cause_t;
 
 typedef struct _channel {
@@ -38,17 +36,185 @@ typedef struct _channel {
 	u_char	spare[6] __attribute__ ((packed));
 } channel_t;
 
-typedef struct _setup {
-	u_char	sending_cmpl __attribute__ ((packed));
-	channel_t channel __attribute__ ((packed));
-	u_char	bc[16] __attribute__ ((packed));
-	u_char	calling_nr[MAX_NR_LEN] __attribute__ ((packed));
-	u_char	calling_sub[MAX_NR_LEN] __attribute__ ((packed));
-	u_char	called_nr[MAX_NR_LEN] __attribute__ ((packed));
-	u_char	called_sub[MAX_NR_LEN] __attribute__ ((packed));
-	u_char	llc[16] __attribute__ ((packed));
-	u_char  hlc[8] __attribute__ ((packed));
-} setup_t;
+typedef struct _ALERTING {
+	u_char *BEARER;
+	u_char *CHANNEL_ID;
+	u_char *FACILITY;
+	u_char *PROGRESS;
+	u_char *DISPLAY;
+	u_char *SIGNAL;
+	u_char *HLC;
+	u_char *USER_USER;
+} ALERTING_t;
+
+typedef struct _CALL_PROCEEDING {
+	u_char *BEARER;
+	u_char *CHANNEL_ID;
+	u_char *FACILITY;
+	u_char *PROGRESS;
+	u_char *DISPLAY;
+	u_char *HLC;
+} CALL_PROCEEDING_t;
+
+typedef struct _CONNECT {
+	u_char *BEARER;
+	u_char *CHANNEL_ID;
+	u_char *FACILITY;
+	u_char *PROGRESS;
+	u_char *DISPLAY;
+	u_char *DATE;
+	u_char *SIGNAL;
+	u_char *CONNECT_PN;
+	u_char *CONNECT_SUB;
+	u_char *LLC;
+	u_char *HLC;
+	u_char *USER_USER;
+} CONNECT_t;
+
+typedef struct _CONNECT_ACKNOWLEDGE {
+	u_char *CHANNEL_ID;
+	u_char *DISPLAY;
+	u_char *SIGNAL;
+} CONNECT_ACKNOWLEDGE_t;
+
+typedef struct _DISCONNECT {
+	u_char *CAUSE;
+	u_char *FACILITY;
+	u_char *PROGRESS;
+	u_char *DISPLAY;
+	u_char *SIGNAL;
+	u_char *USER_USER;
+} DISCONNECT_t;
+
+typedef struct _INFORMATION {
+	u_char *COMPLETE;
+	u_char *DISPLAY;
+	u_char *KEYPAD;
+	u_char *SIGNAL;
+	u_char *CALLED_PN;
+} INFORMATION_t;
+
+typedef struct _NOTIFY {
+	u_char *BEARER;
+	u_char *NOTIFY;
+	u_char *DISPLAY;
+} NOTIFY_t;
+
+typedef struct _PROGRESS {
+	u_char *BEARER;
+	u_char *CAUSE;
+	u_char *FACILITY;
+	u_char *PROGRESS;
+	u_char *DISPLAY;
+	u_char *HLC;
+	u_char *USER_USER;
+} PROGRESS_t;
+
+typedef struct _RELEASE {
+	u_char *CAUSE;
+	u_char *FACILITY;
+	u_char *DISPLAY;
+	u_char *SIGNAL;
+	u_char *USER_USER;
+} RELEASE_t;
+
+typedef struct _RELEASE_COMPLETE {
+	u_char *CAUSE;
+	u_char *DISPLAY;
+	u_char *SIGNAL;
+	u_char *USER_USER;
+} RELEASE_COMPLETE_t;
+
+typedef struct _RESUME {
+	u_char *CALL_ID;
+	u_char *FACILITY;
+} RESUME_t;
+
+typedef struct _RESUME_ACKNOWLEDGE {
+	u_char *CHANNEL_ID;
+	u_char *FACILITY;
+	u_char *DISPLAY;
+} RESUME_ACKNOWLEDGE_t;
+
+typedef struct _RESUME_REJECT {
+	u_char *CAUSE;
+	u_char *DISPLAY;
+} RESUME_REJECT_t;
+
+typedef struct _SETUP {
+	u_char *COMPLETE;
+	u_char *BEARER;
+	u_char *CHANNEL_ID;
+	u_char *FACILITY;
+	u_char *PROGRESS;
+	u_char *NET_FAC;
+	u_char *DISPLAY;
+	u_char *KEYPAD;
+	u_char *SIGNAL;
+	u_char *CALLING_PN;
+	u_char *CALLING_SUB;
+	u_char *CALLED_PN;
+	u_char *CALLED_SUB;
+	u_char *REDIR_NR;
+	u_char *LLC;
+	u_char *HLC;
+	u_char *USER_USER;
+} SETUP_t;
+
+typedef struct _SETUP_ACKNOWLEDGE {
+	u_char *CHANNEL_ID;
+	u_char *FACILITY;
+	u_char *PROGRESS;
+	u_char *DISPLAY;
+	u_char *SIGNAL;
+} SETUP_ACKNOWLEDGE_t;
+
+typedef struct _STATUS {
+	u_char *CAUSE;
+	u_char *CALL_STATE;
+	u_char *DISPLAY;
+} STATUS_t;
+
+typedef struct _STATUS_ENQUIRY {
+	u_char *DISPLAY;
+} STATUS_ENQUIRY_t;
+
+typedef struct _SUSPEND {
+	u_char *CALL_ID;
+	u_char *FACILITY;
+} SUSPEND_t;
+
+typedef struct _SUSPEND_ACKNOWLEDGE {
+	u_char *FACILITY;
+	u_char *DISPLAY;
+} SUSPEND_ACKNOWLEDGE_t;
+
+typedef struct _SUSPEND_REJECT {
+	u_char *CAUSE;
+	u_char *DISPLAY;
+} SUSPEND_REJECT_t;
+
+typedef struct _CONGESTION_CONTROL {
+	u_char *CONGESTION;
+	u_char *CAUSE;
+	u_char *DISPLAY;
+} CONGESTION_CONTROL_t;
+
+typedef struct _USER_INFORMATION {
+	u_char *MORE_DATA;
+	u_char *USER_USER;
+} USER_INFORMATION_t;
+
+typedef struct _RESTART {
+	u_char *CHANNEL_ID;
+	u_char *DISPLAY;
+	u_char *RESTART_IND;
+} RESTART_t;
+
+typedef struct _FACILITY {
+	u_char *FACILITY;
+	u_char *DISPLAY;
+} FACILITY_t;
 
 typedef struct _L3Timer {
 	struct _l3_process	*pc;
@@ -63,12 +229,35 @@ typedef struct _l3_process {
 	int			callref;
 	int			state;
 	L3Timer_t		timer;
-	int			debug;
 	int			n303;
+	u_int			id;
+	int			bc;
+	u_char			obuf[MAX_DFRAME_LEN];
+	u_char			*op;
+	int			err;
 	union {
-		setup_t		setup;
-		channel_t	channel;
-		cause_t		cause;
+		ALERTING_t		ALERTING;
+		CALL_PROCEEDING_t	CALL_PROCEEDING;
+		CONGESTION_CONTROL_t	CONGESTION_CONTROL;
+		CONNECT_t		CONNECT;
+		CONNECT_ACKNOWLEDGE_t	CONNECT_ACKNOWLEDGE;
+		DISCONNECT_t		DISCONNECT;
+		FACILITY_t		FACILITY;
+		INFORMATION_t		INFORMATION;
+		NOTIFY_t		NOTIFY;
+		PROGRESS_t		PROGRESS;
+		RELEASE_t		RELEASE;
+		RELEASE_COMPLETE_t	RELEASE_COMPLETE;
+		RESTART_t		RESTART;
+		RESUME_ACKNOWLEDGE_t	RESUME_ACKNOWLEDGE;
+		RESUME_REJECT_t		RESUME_REJECT;
+		SETUP_t			SETUP;
+		SETUP_ACKNOWLEDGE_t	SETUP_ACKNOWLEDGE;
+		STATUS_t		STATUS;
+		STATUS_ENQUIRY_t	STATUS_ENQUIRY;
+		SUSPEND_ACKNOWLEDGE_t	SUSPEND_ACKNOWLEDGE;
+		SUSPEND_REJECT_t	SUSPEND_REJECT;
+		USER_INFORMATION_t	USER_INFORMATION;
 	} para;
 } l3_process_t;
 
@@ -80,6 +269,7 @@ typedef struct _layer3 {
 	l3_process_t	*proc;
 	l3_process_t	*global;
 	int		(*p_mgr)(l3_process_t *, u_int, void *);
+	u_int		id;
 	int		debug;
 	u_int		Flag;
 	u_int		msgnr;
@@ -93,7 +283,7 @@ struct stateentry {
 	void (*rout) (l3_process_t *, u_char, void *);
 };
 
-extern void l3_msg(layer3_t *, u_int, u_int, int, void *);
+extern int l3_msg(layer3_t *, u_int, u_int, int, void *);
 extern struct sk_buff *l3_alloc_skb(int);
 extern void newl3state(l3_process_t *, int);
 extern void L3InitTimer(l3_process_t *, L3Timer_t *);

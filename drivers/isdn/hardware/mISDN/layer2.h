@@ -1,4 +1,4 @@
-/* $Id: layer2.h,v 0.3 2001/02/13 10:42:55 kkeil Exp $
+/* $Id: layer2.h,v 0.4 2001/02/19 11:51:42 kkeil Exp $
  *
  * Layer 2 defines
  *
@@ -10,7 +10,6 @@
 #include <linux/skbuff.h>
 #include "fsm.h"
 
-#define MAX_DFRAME_LEN	260
 #define MAX_WINDOW	8
 
 typedef struct _teimgr {
