@@ -1,4 +1,4 @@
-/* $Id: isac.h,v 1.1 2003/06/20 10:06:14 kkeil Exp $
+/* $Id: isac.h,v 1.2 2003/06/24 21:58:53 kkeil Exp $
  *
  * isac.h   ISAC specific defines
  *
@@ -24,6 +24,13 @@ typedef struct isac_chip {
 	u_char			mocr;
 	u_char			adf2;
 } isac_chip_t;
+
+#define ISAC_TYPE_ISAC		0x0010
+#define ISAC_TYPE_IPAC		0x0020
+#define ISAC_TYPE_ISACSX	0x0040
+#define ISAC_TYPE_IPACSX	0x0080
+#define ISAC_TYPE_IOM1		0x0100
+#define ISAC_TYPE_ARCOFI	0x1000
 
 
 /* All Registers original Siemens Spec  */
@@ -79,6 +86,45 @@ typedef struct isac_chip {
 #define ISAC_IND_AI10	0xD
 #define ISAC_IND_DID	0xF
 
+/* the new ISACX */
+#define ISACSX_MASK       0x60
+#define ISACSX_ISTA       0x60
+#define ISACSX_ISTA_ICD   0x01
+#define ISACSX_ISTA_CIC   0x10
+
+#define ISACSX_MASKD      0x20
+#define ISACSX_ISTAD      0x20
+#define ISACSX_ISTAD_XDU  0x04
+#define ISACSX_ISTAD_XMR  0x08
+#define ISACSX_ISTAD_XPR  0x10
+#define ISACSX_ISTAD_RFO  0x20
+#define ISACSX_ISTAD_RPF  0x40
+#define ISACSX_ISTAD_RME  0x80
+
+#define ISACSX_CMDRD      0x21
+#define ISACSX_CMDRD_XRES 0x01
+#define ISACSX_CMDRD_XME  0x02
+#define ISACSX_CMDRD_XTF  0x08
+#define ISACSX_CMDRD_RRES 0x40
+#define ISACSX_CMDRD_RMC  0x80
+
+#define ISACSX_MODED      0x22
+
+#define ISACSX_RBCLD      0x26
+
+#define ISACSX_RSTAD      0x28
+#define ISACSX_RSTAD_RAB  0x10
+#define ISACSX_RSTAD_CRC  0x20
+#define ISACSX_RSTAD_RDO  0x40
+#define ISACSX_RSTAD_VFR  0x80
+
+#define ISACSX_CIR0       0x2e
+#define ISACSX_CIR0_CIC0  0x08
+#define ISACSX_CIX0       0x2e
+
+#define ISACSX_TR_CONF0   0x30
+
+#define ISACSX_TR_CONF2   0x32
 
 /* interface for the isac module */
 

@@ -1,4 +1,4 @@
-/* $Id: dchannel.h,v 1.1 2003/06/21 21:39:54 kkeil Exp $
+/* $Id: dchannel.h,v 1.2 2003/06/24 21:58:53 kkeil Exp $
  *
  *   Basic declarations for dchannel HW
  *
@@ -23,10 +23,6 @@
 #define MAX_MON_FRAME		32
 #define MAX_DLOG_SPACE		2048
 
-#define HW_IOM1			0
-#define HW_IPAC			1
-#define HW_ISAR			2
-#define HW_ARCOFI		3
 #define FLG_TWO_DCHAN		4
 #define FLG_TX_BUSY		5
 #define FLG_TX_NEXT		6
@@ -65,10 +61,10 @@ typedef struct _dchannel_t {
 	void			(*hw_bh) (struct _dchannel_t *);
 } dchannel_t;
 
-#define  MON0_RX	1
-#define  MON1_RX	2
-#define  MON0_TX	4
-#define  MON1_TX	8
+#define MON0_RX	1
+#define MON1_RX	2
+#define MON0_TX	4
+#define MON1_TX	8
 
 extern int init_dchannel(dchannel_t *);
 extern int free_dchannel(dchannel_t *);

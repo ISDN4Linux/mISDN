@@ -1,4 +1,4 @@
-/* $Id: layer1.c,v 1.1 2002/05/01 01:00:39 kkeil Exp $
+/* $Id: layer1.c,v 1.2 2003/06/24 21:58:53 kkeil Exp $
  *
  * hisax_l1.c     common low level stuff for I.430 layer1
  *
@@ -10,7 +10,7 @@
  *
  */
 
-const char *l1_revision = "$Revision: 1.1 $";
+const char *l1_revision = "$Revision: 1.2 $";
 
 #include <linux/config.h>
 #include <linux/module.h>
@@ -694,6 +694,9 @@ static char MName[] = "ISDNL1";
 #ifdef MODULE
 MODULE_AUTHOR("Karsten Keil");
 MODULE_PARM(debug, "1i");
+#ifdef MODULE_LICENSE
+MODULE_LICENSE("GPL");
+#endif
 #define Isdnl1Init init_module
 #endif
 
@@ -761,6 +764,7 @@ int Isdnl1Init(void)
 {
 	int err;
 
+	SET_MODULE_OWNER(&isdnl1);
 	isdnl1.name = MName;
 	isdnl1.DPROTO.protocol[1] = ISDN_PID_L1_TE_S0;
 	isdnl1.own_ctrl = l1_manager;

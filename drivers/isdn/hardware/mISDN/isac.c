@@ -1,4 +1,4 @@
-/* $Id: isac.c,v 1.5 2003/06/22 12:03:36 kkeil Exp $
+/* $Id: isac.c,v 1.6 2003/06/24 21:58:53 kkeil Exp $
  *
  * isac.c   ISAC specific routines
  *
@@ -23,7 +23,7 @@
 #define DBUSY_TIMER_VALUE 80
 #define ARCOFI_USE 1
 
-const char *isac_revision = "$Revision: 1.5 $";
+const char *isac_revision = "$Revision: 1.6 $";
 
 #ifdef MODULE
 MODULE_AUTHOR("Karsten Keil");
@@ -42,7 +42,10 @@ ph_command(dchannel_t *dch, unsigned int command)
 {
 	if (dch->debug & L1_DEB_ISAC)
 		debugprint(&dch->inst, "ph_command %x", command);
-	dch->write_reg(dch->inst.data, ISAC_CIX0, (command << 2) | 3);
+	if (dch->type & ISAC_TYPE_ISACSX)
+		dch->write_reg(dch->inst.data, ISACSX_CIX0, (command << 4) | 0xE);
+	else
+		dch->write_reg(dch->inst.data, ISAC_CIX0, (command << 2) | 3);
 }
 
 static void
@@ -113,7 +116,7 @@ isac_hwbh(dchannel_t *dch)
 	if (test_and_clear_bit(D_L1STATECHANGE, &dch->event))
 		isac_new_ph(dch);		
 #if ARCOFI_USE
-	if (!test_bit(HW_ARCOFI, &dch->DFlags))
+	if (!(ISAC_TYPE_ARCOFI & dch->type))
 		return;
 	if (test_and_clear_bit(D_RX_MON1, &dch->event))
 		arcofi_fsm(dch, ARCOFI_RX_END, NULL);
@@ -194,264 +197,376 @@ isac_fill_fifo(dchannel_t *dch)
 	}
 }
 
+static void
+isac_rme_irq(dchannel_t *dch)
+{
+	u_char	val;
+	u_int	count;
+
+	val = dch->read_reg(dch->inst.data, ISAC_RSTA);
+	if ((val & 0x70) != 0x20) {
+		if (val & 0x40) {
+			if (dch->debug & L1_DEB_WARN)
+				debugprint(&dch->inst, "ISAC RDO");
+#ifdef ERROR_STATISTIC
+			dch->err_rx++;
+#endif
+		}
+		if (!(val & 0x20)) {
+			if (dch->debug & L1_DEB_WARN)
+				debugprint(&dch->inst, "ISAC CRC error");
+#ifdef ERROR_STATISTIC
+			dch->err_crc++;
+#endif
+		}
+		dch->write_reg(dch->inst.data, ISAC_CMDR, 0x80);
+		if (dch->rx_skb)
+			dev_kfree_skb(dch->rx_skb);
+	} else {
+		count = dch->read_reg(dch->inst.data, ISAC_RBCL) & 0x1f;
+		if (count == 0)
+			count = 32;
+		isac_empty_fifo(dch, count);
+		if (dch->rx_skb) {
+			skb_trim(dch->rx_skb, dch->rx_skb->len - 1); /* remove status byte */
+			skb_queue_tail(&dch->rqueue, dch->rx_skb);
+		}
+	}
+	dch->rx_skb = NULL;
+	dchannel_sched_event(dch, D_RCVBUFREADY);
+}
+
+static void
+isac_xpr_irq(dchannel_t *dch)
+{
+	if (test_and_clear_bit(FLG_DBUSY_TIMER, &dch->DFlags))
+		del_timer(&dch->dbusytimer);
+	if (test_and_clear_bit(FLG_L1_DBUSY, &dch->DFlags))
+		dchannel_sched_event(dch, D_CLEARBUSY);
+	if (dch->tx_idx < dch->tx_len) {
+		isac_fill_fifo(dch);
+	} else {
+		if (test_and_clear_bit(FLG_TX_NEXT, &dch->DFlags)) {
+			if (dch->next_skb) {
+				dch->tx_len = dch->next_skb->len;
+				memcpy(dch->tx_buf,
+					dch->next_skb->data, dch->tx_len);
+				dch->tx_idx = 0;
+				isac_fill_fifo(dch);
+				dchannel_sched_event(dch, D_XMTBUFREADY);
+			} else {
+				printk(KERN_WARNING "isac tx irq TX_NEXT without skb\n");
+				test_and_clear_bit(FLG_TX_BUSY, &dch->DFlags);
+			}
+		} else
+			test_and_clear_bit(FLG_TX_BUSY, &dch->DFlags);
+	}
+}
+
+static void
+isac_retransmit(dchannel_t *dch)
+{
+	if (test_and_clear_bit(FLG_DBUSY_TIMER, &dch->DFlags))
+		del_timer(&dch->dbusytimer);
+	if (test_and_clear_bit(FLG_L1_DBUSY, &dch->DFlags))
+		dchannel_sched_event(dch, D_CLEARBUSY);
+	if (test_bit(FLG_TX_BUSY, &dch->DFlags)) {
+		/* Restart frame */
+		dch->tx_idx = 0;
+		isac_fill_fifo(dch);
+	} else {
+		printk(KERN_WARNING "HiSax: ISAC XDU no TX_BUSY\n");
+		debugprint(&dch->inst, "ISAC XDU no TX_BUSY");
+		if (test_and_clear_bit(FLG_TX_NEXT, &dch->DFlags)) {
+			if (dch->next_skb) {
+				dch->tx_len = dch->next_skb->len;
+				memcpy(dch->tx_buf,
+				dch->next_skb->data,
+				dch->tx_len);
+				dch->tx_idx = 0;
+				isac_fill_fifo(dch);
+				dchannel_sched_event(dch, D_XMTBUFREADY);
+			} else {
+				printk(KERN_WARNING "isac xdu irq TX_NEXT without skb\n");
+			}
+		}
+	}
+}
+
+static void
+isac_mos_irq(dchannel_t *dch)
+{
+	u_char		val;
+	isac_chip_t	*isac = dch->hw;
+
+	val = dch->read_reg(dch->inst.data, ISAC_MOSR);
+	if (dch->debug & L1_DEB_MONITOR)
+		debugprint(&dch->inst, "ISAC MOSR %02x", val);
+#if ARCOFI_USE
+	if (val & 0x08) {
+		if (!isac->mon_rx) {
+			if (!(isac->mon_rx = kmalloc(MAX_MON_FRAME, GFP_ATOMIC))) {
+				if (dch->debug & L1_DEB_WARN)
+					debugprint(&dch->inst, "ISAC MON RX out of memory!");
+				isac->mocr &= 0xf0;
+				isac->mocr |= 0x0a;
+				dch->write_reg(dch->inst.data, ISAC_MOCR, isac->mocr);
+				goto afterMONR0;
+			} else
+				isac->mon_rxp = 0;
+		}
+		if (isac->mon_rxp >= MAX_MON_FRAME) {
+			isac->mocr &= 0xf0;
+			isac->mocr |= 0x0a;
+			dch->write_reg(dch->inst.data, ISAC_MOCR, isac->mocr);
+			isac->mon_rxp = 0;
+			if (dch->debug & L1_DEB_WARN)
+				debugprint(&dch->inst, "ISAC MON RX overflow!");
+			goto afterMONR0;
+		}
+		isac->mon_rx[isac->mon_rxp++] = dch->read_reg(dch->inst.data, ISAC_MOR0);
+		if (dch->debug & L1_DEB_MONITOR)
+			debugprint(&dch->inst, "ISAC MOR0 %02x", isac->mon_rx[isac->mon_rxp -1]);
+		if (isac->mon_rxp == 1) {
+			isac->mocr |= 0x04;
+			dch->write_reg(dch->inst.data, ISAC_MOCR, isac->mocr);
+		}
+	}
+afterMONR0:
+	if (val & 0x80) {
+		if (!isac->mon_rx) {
+			if (!(isac->mon_rx = kmalloc(MAX_MON_FRAME, GFP_ATOMIC))) {
+				if (dch->debug & L1_DEB_WARN)
+					debugprint(&dch->inst, "ISAC MON RX out of memory!");
+				isac->mocr &= 0x0f;
+				isac->mocr |= 0xa0;
+				dch->write_reg(dch->inst.data, ISAC_MOCR, isac->mocr);
+				goto afterMONR1;
+			} else
+				isac->mon_rxp = 0;
+		}
+		if (isac->mon_rxp >= MAX_MON_FRAME) {
+			isac->mocr &= 0x0f;
+			isac->mocr |= 0xa0;
+			dch->write_reg(dch->inst.data, ISAC_MOCR, isac->mocr);
+			isac->mon_rxp = 0;
+			if (dch->debug & L1_DEB_WARN)
+				debugprint(&dch->inst, "ISAC MON RX overflow!");
+			goto afterMONR1;
+		}
+		isac->mon_rx[isac->mon_rxp++] = dch->read_reg(dch->inst.data, ISAC_MOR1);
+		if (dch->debug & L1_DEB_MONITOR)
+			debugprint(&dch->inst, "ISAC MOR1 %02x", isac->mon_rx[isac->mon_rxp -1]);
+		isac->mocr |= 0x40;
+		dch->write_reg(dch->inst.data, ISAC_MOCR, isac->mocr);
+	}
+afterMONR1:
+	if (val & 0x04) {
+		isac->mocr &= 0xf0;
+		dch->write_reg(dch->inst.data, ISAC_MOCR, isac->mocr);
+		isac->mocr |= 0x0a;
+		dch->write_reg(dch->inst.data, ISAC_MOCR, isac->mocr);
+		dchannel_sched_event(dch, D_RX_MON0);
+	}
+	if (val & 0x40) {
+		isac->mocr &= 0x0f;
+		dch->write_reg(dch->inst.data, ISAC_MOCR, isac->mocr);
+		isac->mocr |= 0xa0;
+		dch->write_reg(dch->inst.data, ISAC_MOCR, isac->mocr);
+		dchannel_sched_event(dch, D_RX_MON1);
+	}
+	if (val & 0x02) {
+		if ((!isac->mon_tx) || (isac->mon_txc && 
+			(isac->mon_txp >= isac->mon_txc) && !(val & 0x08))) {
+			isac->mocr &= 0xf0;
+			dch->write_reg(dch->inst.data, ISAC_MOCR, isac->mocr);
+			isac->mocr |= 0x0a;
+			dch->write_reg(dch->inst.data, ISAC_MOCR, isac->mocr);
+			if (isac->mon_txc && (isac->mon_txp >= isac->mon_txc))
+				dchannel_sched_event(dch, D_TX_MON0);
+			goto AfterMOX0;
+		}
+		if (isac->mon_txc && (isac->mon_txp >= isac->mon_txc)) {
+			dchannel_sched_event(dch, D_TX_MON0);
+			goto AfterMOX0;
+		}
+		dch->write_reg(dch->inst.data, ISAC_MOX0,
+		isac->mon_tx[isac->mon_txp++]);
+		if (dch->debug & L1_DEB_MONITOR)
+			debugprint(&dch->inst, "ISAC %02x -> MOX0", isac->mon_tx[isac->mon_txp -1]);
+	}
+AfterMOX0:
+	if (val & 0x20) {
+		if ((!isac->mon_tx) || (isac->mon_txc && 
+			(isac->mon_txp >= isac->mon_txc) && !(val & 0x80))) {
+			isac->mocr &= 0x0f;
+			dch->write_reg(dch->inst.data, ISAC_MOCR, isac->mocr);
+			isac->mocr |= 0xa0;
+			dch->write_reg(dch->inst.data, ISAC_MOCR, isac->mocr);
+			if (isac->mon_txc && (isac->mon_txp >= isac->mon_txc))
+				dchannel_sched_event(dch, D_TX_MON1);
+			goto AfterMOX1;
+		}
+		if (isac->mon_txc && (isac->mon_txp >= isac->mon_txc)) {
+			dchannel_sched_event(dch, D_TX_MON1);
+			goto AfterMOX1;
+		}
+		dch->write_reg(dch->inst.data, ISAC_MOX1,
+		isac->mon_tx[isac->mon_txp++]);
+		if (dch->debug & L1_DEB_MONITOR)
+			debugprint(&dch->inst, "ISAC %02x -> MOX1", isac->mon_tx[isac->mon_txp -1]);
+	}
+AfterMOX1:
+	val = 0; /* dummy to avoid warning */
+#endif
+}
+
+static void
+isac_cisq_irq(dchannel_t *dch) {
+	unsigned char val;
+
+	val = dch->read_reg(dch->inst.data, ISAC_CIR0);
+	if (dch->debug & L1_DEB_ISAC)
+		debugprint(&dch->inst, "ISAC CIR0 %02X", val);
+	if (val & 2) {
+		if (dch->debug & L1_DEB_ISAC)
+			debugprint(&dch->inst, "ph_state change %x->%x",
+				dch->ph_state, (val >> 2) & 0xf);
+		dch->ph_state = (val >> 2) & 0xf;
+		dchannel_sched_event(dch, D_L1STATECHANGE);
+	}
+	if (val & 1) {
+		val = dch->read_reg(dch->inst.data, ISAC_CIR1);
+		if (dch->debug & L1_DEB_ISAC)
+			debugprint(&dch->inst, "ISAC CIR1 %02X", val );
+	}
+}
+
+static void
+isacsx_cic_irq(dchannel_t *dch)
+{
+	unsigned char val;
+
+	val = dch->read_reg(dch->inst.data, ISACSX_CIR0);
+	if (dch->debug & L1_DEB_ISAC)
+		debugprint(&dch->inst, "ISACSX CIR0 %02X", val);
+	if (val & ISACSX_CIR0_CIC0) {
+		if (dch->debug & L1_DEB_ISAC)
+			debugprint(&dch->inst, "ph_state change %x->%x",
+				dch->ph_state, val >> 4);
+		dch->ph_state = val >> 4;
+		dchannel_sched_event(dch, D_L1STATECHANGE);
+	}
+}
+
+static void
+isacsx_rme_irq(dchannel_t *dch)
+{
+	int count;
+	unsigned char val;
+
+	val = dch->read_reg(dch->inst.data, ISACSX_RSTAD);
+	if ((val & (ISACSX_RSTAD_VFR | 
+		    ISACSX_RSTAD_RDO | 
+		    ISACSX_RSTAD_CRC | 
+		    ISACSX_RSTAD_RAB)) 
+	    != (ISACSX_RSTAD_VFR | ISACSX_RSTAD_CRC)) {
+	    	if (dch->debug & L1_DEB_WARN)
+	    		debugprint(&dch->inst, "RSTAD %#x, dropped", val);
+#ifdef ERROR_STATISTIC
+		if (val & ISACSX_RSTAD_CRC)
+			dch->err_rx++;
+		else
+			dch->err_crc++;
+#endif
+	    	dch->write_reg(dch->inst.data, ISACSX_CMDRD, ISACSX_CMDRD_RMC);
+		if (dch->rx_skb)
+			dev_kfree_skb(dch->rx_skb);
+	} else {
+		count = dch->read_reg(dch->inst.data, ISACSX_RBCLD) & 0x1f;
+		if (count == 0)
+			count = 32;
+		isac_empty_fifo(dch, count);
+		if (dch->rx_skb) {
+			skb_trim(dch->rx_skb, dch->rx_skb->len - 1); /* remove status byte */
+			skb_queue_tail(&dch->rqueue, dch->rx_skb);
+		}
+	}
+	dch->rx_skb = NULL;
+	dchannel_sched_event(dch, D_RCVBUFREADY);
+}
+
 void
 ISAC_interrupt(dchannel_t *dch, u_char val)
 {
-	u_char		exval, v1;
-	isac_chip_t	*isac = dch->hw;
-	u_int		count;
-
 	if (dch->debug & L1_DEB_ISAC)
-		debugprint(&dch->inst, "ISAC interrupt %x", val);
-	if (val & 0x80) {	/* RME */
-		exval = dch->read_reg(dch->inst.data, ISAC_RSTA);
-		if ((exval & 0x70) != 0x20) {
-			if (exval & 0x40) {
-				if (dch->debug & L1_DEB_WARN)
-					debugprint(&dch->inst, "ISAC RDO");
-#ifdef ERROR_STATISTIC
-				dch->err_rx++;
-#endif
-			}
-			if (!(exval & 0x20)) {
-				if (dch->debug & L1_DEB_WARN)
-					debugprint(&dch->inst, "ISAC CRC error");
-#ifdef ERROR_STATISTIC
-				dch->err_crc++;
-#endif
-			}
-			dch->write_reg(dch->inst.data, ISAC_CMDR, 0x80);
-			if (dch->rx_skb)
-				dev_kfree_skb(dch->rx_skb);
-		} else {
-			count = dch->read_reg(dch->inst.data, ISAC_RBCL) & 0x1f;
-			if (count == 0)
-				count = 32;
-			isac_empty_fifo(dch, count);
-			if (dch->rx_skb)
-				skb_queue_tail(&dch->rqueue, dch->rx_skb);
-		}
-		dch->rx_skb = NULL;
-		dchannel_sched_event(dch, D_RCVBUFREADY);
-	}
-	if (val & 0x40) {	/* RPF */
-		isac_empty_fifo(dch, 32);
-	}
-	if (val & 0x20) {	/* RSC */
-		/* never */
-		if (dch->debug & L1_DEB_WARN)
-			debugprint(&dch->inst, "ISAC RSC interrupt");
-	}
-	if (val & 0x10) {	/* XPR */
-		if (test_and_clear_bit(FLG_DBUSY_TIMER, &dch->DFlags))
-			del_timer(&dch->dbusytimer);
-		if (test_and_clear_bit(FLG_L1_DBUSY, &dch->DFlags))
-			dchannel_sched_event(dch, D_CLEARBUSY);
-		if (dch->tx_idx < dch->tx_len) {
-			isac_fill_fifo(dch);
-		} else {
-			if (test_and_clear_bit(FLG_TX_NEXT, &dch->DFlags)) {
-				if (dch->next_skb) {
-					dch->tx_len = dch->next_skb->len;
-					memcpy(dch->tx_buf,
-						dch->next_skb->data, dch->tx_len);
-					dch->tx_idx = 0;
-					isac_fill_fifo(dch);
-					dchannel_sched_event(dch, D_XMTBUFREADY);
-				} else {
-					printk(KERN_WARNING "isac tx irq TX_NEXT without skb\n");
-					test_and_clear_bit(FLG_TX_BUSY, &dch->DFlags);
-				}
-			} else
-				test_and_clear_bit(FLG_TX_BUSY, &dch->DFlags);
-		}
-	}
-	if (val & 0x04) {	/* CISQ */
-		exval = dch->read_reg(dch->inst.data, ISAC_CIR0);
-		if (dch->debug & L1_DEB_ISAC)
-			debugprint(&dch->inst, "ISAC CIR0 %02X", exval );
-		if (exval & 2) {
-			dch->ph_state = (exval >> 2) & 0xf;
+		debugprint(&dch->inst, "ISAC interrupt %02x", val);
+	if (dch->type & ISAC_TYPE_ISACSX) {
+		if (val & ISACSX_ISTA_CIC)
+			isacsx_cic_irq(dch);
+		if (val & ISACSX_ISTA_ICD) {
+			val = dch->read_reg(dch->inst.data, ISACSX_ISTAD);
 			if (dch->debug & L1_DEB_ISAC)
-				debugprint(&dch->inst, "ph_state change %x", dch->ph_state);
-			/* unconditional reset procedure */
-			dchannel_sched_event(dch, D_L1STATECHANGE);
-		}
-		if (exval & 1) {
-			exval = dch->read_reg(dch->inst.data, ISAC_CIR1);
-			if (dch->debug & L1_DEB_ISAC)
-				debugprint(&dch->inst, "ISAC CIR1 %02X", exval );
-		}
-	}
-	if (val & 0x02) {	/* SIN */
-		/* never */
-		if (dch->debug & L1_DEB_WARN)
-			debugprint(&dch->inst, "ISAC SIN interrupt");
-	}
-	if (val & 0x01) {	/* EXI */
-		exval = dch->read_reg(dch->inst.data, ISAC_EXIR);
-		if (dch->debug & L1_DEB_WARN)
-			debugprint(&dch->inst, "ISAC EXIR %02x", exval);
-		if (exval & 0x80) {  /* XMR */
-			debugprint(&dch->inst, "ISAC XMR");
-			printk(KERN_WARNING "HiSax: ISAC XMR\n");
-		}
-		if (exval & 0x40) {  /* XDU */
-			debugprint(&dch->inst, "ISAC XDU");
-			printk(KERN_WARNING "HiSax: ISAC XDU\n");
+				debugprint(&dch->inst, "ISTAD %02x", val);
+			if (val & ISACSX_ISTAD_XDU) {
+				if (dch->debug & L1_DEB_WARN)
+					debugprint(&dch->inst, "ISAC XDU");
 #ifdef ERROR_STATISTIC
-			dch->err_tx++;
+				dch->err_tx++;
 #endif
-			if (test_and_clear_bit(FLG_DBUSY_TIMER, &dch->DFlags))
-				del_timer(&dch->dbusytimer);
-			if (test_and_clear_bit(FLG_L1_DBUSY, &dch->DFlags))
-				dchannel_sched_event(dch, D_CLEARBUSY);
-			if (test_bit(FLG_TX_BUSY, &dch->DFlags)) {
-				/* Restart frame */
-				dch->tx_idx = 0;
-				isac_fill_fifo(dch);
-			} else {
-				printk(KERN_WARNING "HiSax: ISAC XDU no TX_BUSY\n");
-				debugprint(&dch->inst, "ISAC XDU no TX_BUSY");
-				if (test_and_clear_bit(FLG_TX_NEXT, &dch->DFlags)) {
-					if (dch->next_skb) {
-						dch->tx_len = dch->next_skb->len;
-						memcpy(dch->tx_buf,
-							dch->next_skb->data,
-							dch->tx_len);
-						dch->tx_idx = 0;
-						isac_fill_fifo(dch);
-						dchannel_sched_event(dch, D_XMTBUFREADY);
-					} else {
-						printk(KERN_WARNING "isac xdu irq TX_NEXT without skb\n");
-					}
-				}
+				isac_retransmit(dch);
 			}
+			if (val & ISACSX_ISTAD_XMR) {
+				if (dch->debug & L1_DEB_WARN)
+					debugprint(&dch->inst, "ISAC XMR");
+#ifdef ERROR_STATISTIC
+				dch->err_tx++;
+#endif
+				isac_retransmit(dch);
+			}
+			if (val & ISACSX_ISTAD_XPR)
+				isac_xpr_irq(dch);
+			if (val & ISACSX_ISTAD_RFO) {
+				if (dch->debug & L1_DEB_WARN)
+					debugprint(&dch->inst, "ISAC RFO");
+				dch->write_reg(dch->inst.data, ISACSX_CMDRD, ISACSX_CMDRD_RMC);
+			}
+			if (val & ISACSX_ISTAD_RME)
+				isacsx_rme_irq(dch);
+			if (val & ISACSX_ISTAD_RPF)
+				isac_empty_fifo(dch, 0x20);
 		}
-		if (exval & 0x04) {  /* MOS */
-			v1 = dch->read_reg(dch->inst.data, ISAC_MOSR);
-			if (dch->debug & L1_DEB_MONITOR)
-				debugprint(&dch->inst, "ISAC MOSR %02x", v1);
-#if ARCOFI_USE
-			if (v1 & 0x08) {
-				if (!isac->mon_rx) {
-					if (!(isac->mon_rx = kmalloc(MAX_MON_FRAME, GFP_ATOMIC))) {
-						if (dch->debug & L1_DEB_WARN)
-							debugprint(&dch->inst, "ISAC MON RX out of memory!");
-						isac->mocr &= 0xf0;
-						isac->mocr |= 0x0a;
-						dch->write_reg(dch->inst.data, ISAC_MOCR, isac->mocr);
-						goto afterMONR0;
-					} else
-						isac->mon_rxp = 0;
-				}
-				if (isac->mon_rxp >= MAX_MON_FRAME) {
-					isac->mocr &= 0xf0;
-					isac->mocr |= 0x0a;
-					dch->write_reg(dch->inst.data, ISAC_MOCR, isac->mocr);
-					isac->mon_rxp = 0;
-					if (dch->debug & L1_DEB_WARN)
-						debugprint(&dch->inst, "ISAC MON RX overflow!");
-					goto afterMONR0;
-				}
-				isac->mon_rx[isac->mon_rxp++] = dch->read_reg(dch->inst.data, ISAC_MOR0);
-				if (dch->debug & L1_DEB_MONITOR)
-					debugprint(&dch->inst, "ISAC MOR0 %02x", isac->mon_rx[isac->mon_rxp -1]);
-				if (isac->mon_rxp == 1) {
-					isac->mocr |= 0x04;
-					dch->write_reg(dch->inst.data, ISAC_MOCR, isac->mocr);
-				}
-			}
-		      afterMONR0:
-			if (v1 & 0x80) {
-				if (!isac->mon_rx) {
-					if (!(isac->mon_rx = kmalloc(MAX_MON_FRAME, GFP_ATOMIC))) {
-						if (dch->debug & L1_DEB_WARN)
-							debugprint(&dch->inst, "ISAC MON RX out of memory!");
-						isac->mocr &= 0x0f;
-						isac->mocr |= 0xa0;
-						dch->write_reg(dch->inst.data, ISAC_MOCR, isac->mocr);
-						goto afterMONR1;
-					} else
-						isac->mon_rxp = 0;
-				}
-				if (isac->mon_rxp >= MAX_MON_FRAME) {
-					isac->mocr &= 0x0f;
-					isac->mocr |= 0xa0;
-					dch->write_reg(dch->inst.data, ISAC_MOCR, isac->mocr);
-					isac->mon_rxp = 0;
-					if (dch->debug & L1_DEB_WARN)
-						debugprint(&dch->inst, "ISAC MON RX overflow!");
-					goto afterMONR1;
-				}
-				isac->mon_rx[isac->mon_rxp++] = dch->read_reg(dch->inst.data, ISAC_MOR1);
-				if (dch->debug & L1_DEB_MONITOR)
-					debugprint(&dch->inst, "ISAC MOR1 %02x", isac->mon_rx[isac->mon_rxp -1]);
-				isac->mocr |= 0x40;
-				dch->write_reg(dch->inst.data, ISAC_MOCR, isac->mocr);
-			}
-		      afterMONR1:
-			if (v1 & 0x04) {
-				isac->mocr &= 0xf0;
-				dch->write_reg(dch->inst.data, ISAC_MOCR, isac->mocr);
-				isac->mocr |= 0x0a;
-				dch->write_reg(dch->inst.data, ISAC_MOCR, isac->mocr);
-				dchannel_sched_event(dch, D_RX_MON0);
-			}
-			if (v1 & 0x40) {
-				isac->mocr &= 0x0f;
-				dch->write_reg(dch->inst.data, ISAC_MOCR, isac->mocr);
-				isac->mocr |= 0xa0;
-				dch->write_reg(dch->inst.data, ISAC_MOCR, isac->mocr);
-				dchannel_sched_event(dch, D_RX_MON1);
-			}
-			if (v1 & 0x02) {
-				if ((!isac->mon_tx) || (isac->mon_txc && 
-					(isac->mon_txp >= isac->mon_txc) && 
-					!(v1 & 0x08))) {
-					isac->mocr &= 0xf0;
-					dch->write_reg(dch->inst.data, ISAC_MOCR, isac->mocr);
-					isac->mocr |= 0x0a;
-					dch->write_reg(dch->inst.data, ISAC_MOCR, isac->mocr);
-					if (isac->mon_txc &&
-						(isac->mon_txp >= isac->mon_txc))
-						dchannel_sched_event(dch, D_TX_MON0);
-					goto AfterMOX0;
-				}
-				if (isac->mon_txc && (isac->mon_txp >= isac->mon_txc)) {
-					dchannel_sched_event(dch, D_TX_MON0);
-					goto AfterMOX0;
-				}
-				dch->write_reg(dch->inst.data, ISAC_MOX0,
-					isac->mon_tx[isac->mon_txp++]);
-				if (dch->debug & L1_DEB_MONITOR)
-					debugprint(&dch->inst, "ISAC %02x -> MOX0", isac->mon_tx[isac->mon_txp -1]);
-			}
-		      AfterMOX0:
-			if (v1 & 0x20) {
-				if ((!isac->mon_tx) || (isac->mon_txc && 
-					(isac->mon_txp >= isac->mon_txc) && 
-					!(v1 & 0x80))) {
-					isac->mocr &= 0x0f;
-					dch->write_reg(dch->inst.data, ISAC_MOCR, isac->mocr);
-					isac->mocr |= 0xa0;
-					dch->write_reg(dch->inst.data, ISAC_MOCR, isac->mocr);
-					if (isac->mon_txc &&
-						(isac->mon_txp >= isac->mon_txc))
-						dchannel_sched_event(dch, D_TX_MON1);
-					goto AfterMOX1;
-				}
-				if (isac->mon_txc && (isac->mon_txp >= isac->mon_txc)) {
-					dchannel_sched_event(dch, D_TX_MON1);
-					goto AfterMOX1;
-				}
-				dch->write_reg(dch->inst.data, ISAC_MOX1,
-					isac->mon_tx[isac->mon_txp++]);
-				if (dch->debug & L1_DEB_MONITOR)
-					debugprint(&dch->inst, "ISAC %02x -> MOX1", isac->mon_tx[isac->mon_txp -1]);
-			}
-		      AfterMOX1:
+	} else {
+		if (val & 0x80)	/* RME */
+			isac_rme_irq(dch);
+		if (val & 0x40)	/* RPF */
+			isac_empty_fifo(dch, 32);
+		if (val & 0x10)	/* XPR */
+			isac_xpr_irq(dch);
+		if (val & 0x04)	/* CISQ */
+			isac_cisq_irq(dch);
+		if (val & 0x20)	/* RSC - never */
+			if (dch->debug & L1_DEB_WARN)
+				debugprint(&dch->inst, "ISAC RSC interrupt");
+		if (val & 0x02)	/* SIN - never */
+			if (dch->debug & L1_DEB_WARN)
+				debugprint(&dch->inst, "ISAC SIN interrupt");
+		if (val & 0x01) {	/* EXI */
+			val = dch->read_reg(dch->inst.data, ISAC_EXIR);
+			if (dch->debug & L1_DEB_WARN)
+				debugprint(&dch->inst, "ISAC EXIR %02x", val);
+			if (val & 0x80)	/* XMR */
+				debugprint(&dch->inst, "ISAC XMR");
+			if (val & 0x40) { /* XDU */
+				if (dch->debug & L1_DEB_WARN)
+					debugprint(&dch->inst, "ISAC XDU");
+#ifdef ERROR_STATISTIC
+				dch->err_tx++;
 #endif
+				isac_retransmit(dch);
+			}
+			if (val & 0x04)	/* MOS */
+				isac_mos_irq(dch);
 		}
 	}
 }
@@ -460,7 +575,6 @@ int
 ISAC_l1hw(hisaxif_t *hif, struct sk_buff *skb)
 {
 	dchannel_t	*dch;
-	u_char		tl;
 	int		ret = -EINVAL;
 	hisax_head_t	*hh;
 
@@ -522,27 +636,32 @@ ISAC_l1hw(hisaxif_t *hif, struct sk_buff *skb)
 			if (test_and_clear_bit(FLG_L1_DBUSY, &dch->DFlags))
 				dchannel_sched_event(dch, D_CLEARBUSY);
 		} else if ((hh->dinfo & HW_TESTLOOP) == HW_TESTLOOP) {
-			tl = 0;
-			if (1 & hh->dinfo)
-				tl |= 0x0c;
-			if (2 & hh->dinfo)
-				tl |= 0x3;
-			if (test_bit(HW_IOM1, &dch->DFlags)) {
-				/* IOM 1 Mode */
-				if (!tl) {
-					dch->write_reg(dch->inst.data, ISAC_SPCR, 0xa);
-					dch->write_reg(dch->inst.data, ISAC_ADF1, 0x2);
-				} else {
-					dch->write_reg(dch->inst.data, ISAC_SPCR, tl);
-					dch->write_reg(dch->inst.data, ISAC_ADF1, 0xa);
-				}
+			u_char		tl;
+			if (dch->type & ISAC_TYPE_ISACSX) {
+			/* TODO */
 			} else {
-				/* IOM 2 Mode */
-				dch->write_reg(dch->inst.data, ISAC_SPCR, tl);
-				if (tl)
-					dch->write_reg(dch->inst.data, ISAC_ADF1, 0x8);
-				else
-					dch->write_reg(dch->inst.data, ISAC_ADF1, 0x0);
+				tl = 0;
+				if (1 & hh->dinfo)
+					tl |= 0x0c;
+				if (2 & hh->dinfo)
+					tl |= 0x3;
+				if (ISAC_TYPE_IOM1 & dch->type) {
+					/* IOM 1 Mode */
+					if (!tl) {
+						dch->write_reg(dch->inst.data, ISAC_SPCR, 0xa);
+						dch->write_reg(dch->inst.data, ISAC_ADF1, 0x2);
+					} else {
+						dch->write_reg(dch->inst.data, ISAC_SPCR, tl);
+						dch->write_reg(dch->inst.data, ISAC_ADF1, 0xa);
+					}
+				} else {
+					/* IOM 2 Mode */
+					dch->write_reg(dch->inst.data, ISAC_SPCR, tl);
+					if (tl)
+						dch->write_reg(dch->inst.data, ISAC_ADF1, 0x8);
+					else
+						dch->write_reg(dch->inst.data, ISAC_ADF1, 0x0);
+				}
 			}
 		} else {
 			if (dch->debug & L1_DEB_WARN)
@@ -633,12 +752,9 @@ ISAC_init(dchannel_t *dch)
 	isac_chip_t	*isac = dch->hw;
 	u_char		val;
 
-  	dch->write_reg(dch->inst.data, ISAC_MASK, 0xff);
-	val = dch->read_reg(dch->inst.data, ISAC_RBCH);
-	printk(KERN_INFO "ISAC_init: ISAC version (%x): %s\n", val, ISACVer[(val >> 5) & 3]);
 
   	if (!isac)
-  		return(-ENOMEM);
+  		return(-EINVAL);
 	dch->hw_bh = isac_hwbh;
 	isac->mon_tx = NULL;
 	isac->mon_rx = NULL;
@@ -646,28 +762,48 @@ ISAC_init(dchannel_t *dch)
 	dch->dbusytimer.data = (long) dch;
 	init_timer(&dch->dbusytimer);
   	isac->mocr = 0xaa;
-	if (test_bit(HW_IOM1, &dch->DFlags)) {
-		/* IOM 1 Mode */
-		dch->write_reg(dch->inst.data, ISAC_ADF2, 0x0);
-		dch->write_reg(dch->inst.data, ISAC_SPCR, 0xa);
-		dch->write_reg(dch->inst.data, ISAC_ADF1, 0x2);
-		dch->write_reg(dch->inst.data, ISAC_STCR, 0x70);
-		dch->write_reg(dch->inst.data, ISAC_MODE, 0xc9);
-	} else {
-		/* IOM 2 Mode */
-		if (!isac->adf2)
-			isac->adf2 = 0x80;
-		dch->write_reg(dch->inst.data, ISAC_ADF2, isac->adf2);
-		dch->write_reg(dch->inst.data, ISAC_SQXR, 0x2f);
-		dch->write_reg(dch->inst.data, ISAC_SPCR, 0x00);
-		dch->write_reg(dch->inst.data, ISAC_STCR, 0x70);
-		dch->write_reg(dch->inst.data, ISAC_MODE, 0xc9);
-		dch->write_reg(dch->inst.data, ISAC_TIMR, 0x00);
-		dch->write_reg(dch->inst.data, ISAC_ADF1, 0x00);
+	if (dch->type & ISAC_TYPE_ISACSX) {
+		// clear LDD
+		dch->write_reg(dch->inst.data, ISACSX_TR_CONF0, 0x00);
+		// enable transmitter
+		dch->write_reg(dch->inst.data, ISACSX_TR_CONF2, 0x00);
+		// transparent mode 0, RAC, stop/go
+		dch->write_reg(dch->inst.data, ISACSX_MODED, 0xc9);
+		// all HDLC IRQ unmasked
+		dch->write_reg(dch->inst.data, ISACSX_MASKD, 0x03);
+		// unmask ICD, CID IRQs
+		dch->write_reg(dch->inst.data, ISACSX_MASK, ~(ISACSX_ISTA_ICD | ISACSX_ISTA_CIC));
+		printk(KERN_INFO "ISAC_init: ISACSX\n");
+		dchannel_sched_event(dch, D_L1STATECHANGE);
+		ph_command(dch, ISAC_CMD_RS);
+	} else { /* old isac */
+	  	dch->write_reg(dch->inst.data, ISAC_MASK, 0xff);
+		val = dch->read_reg(dch->inst.data, ISAC_RBCH);
+		printk(KERN_INFO "ISAC_init: ISAC version (%x): %s\n", val, ISACVer[(val >> 5) & 3]);
+		dch->type |= ((val >> 5) & 3);
+		if (ISAC_TYPE_IOM1 & dch->type) {
+			/* IOM 1 Mode */
+			dch->write_reg(dch->inst.data, ISAC_ADF2, 0x0);
+			dch->write_reg(dch->inst.data, ISAC_SPCR, 0xa);
+			dch->write_reg(dch->inst.data, ISAC_ADF1, 0x2);
+			dch->write_reg(dch->inst.data, ISAC_STCR, 0x70);
+			dch->write_reg(dch->inst.data, ISAC_MODE, 0xc9);
+		} else {
+			/* IOM 2 Mode */
+			if (!isac->adf2)
+				isac->adf2 = 0x80;
+			dch->write_reg(dch->inst.data, ISAC_ADF2, isac->adf2);
+			dch->write_reg(dch->inst.data, ISAC_SQXR, 0x2f);
+			dch->write_reg(dch->inst.data, ISAC_SPCR, 0x00);
+			dch->write_reg(dch->inst.data, ISAC_STCR, 0x70);
+			dch->write_reg(dch->inst.data, ISAC_MODE, 0xc9);
+			dch->write_reg(dch->inst.data, ISAC_TIMR, 0x00);
+			dch->write_reg(dch->inst.data, ISAC_ADF1, 0x00);
+		}
+		dchannel_sched_event(dch, D_L1STATECHANGE);
+		ph_command(dch, ISAC_CMD_RS);
+		dch->write_reg(dch->inst.data, ISAC_MASK, 0x0);
 	}
-	dchannel_sched_event(dch, D_L1STATECHANGE);
-	ph_command(dch, ISAC_CMD_RS);
-	dch->write_reg(dch->inst.data, ISAC_MASK, 0x0);
 	return 0;
 }
 

@@ -1,4 +1,4 @@
-/* $Id: l3_udss1.c,v 1.6 2002/09/16 23:49:38 kkeil Exp $
+/* $Id: l3_udss1.c,v 1.7 2003/06/24 21:58:53 kkeil Exp $
  *
  * EURO/DSS1 D-channel protocol
  *
@@ -24,7 +24,7 @@ static int debug = 0;
 static hisaxobject_t u_dss1;
 
 
-const char *dss1_revision = "$Revision: 1.6 $";
+const char *dss1_revision = "$Revision: 1.7 $";
 
 static int dss1man(l3_process_t *, u_int, void *);
 
@@ -2389,6 +2389,7 @@ int UDSS1Init(void)
 
 	strcpy(tmp, dss1_revision);
 	printk(KERN_INFO "HiSax: DSS1 Rev. %s\n", HiSax_getrev(tmp));
+	SET_MODULE_OWNER(&u_dss1);
 	u_dss1.name = MName;
 	u_dss1.DPROTO.protocol[3] = ISDN_PID_L3_DSS1USER |
 		ISDN_PID_L3_DF_PTP |

@@ -1,4 +1,4 @@
-/* $Id: avm_fritz.c,v 1.7 2003/06/22 12:03:36 kkeil Exp $
+/* $Id: avm_fritz.c,v 1.8 2003/06/24 21:58:53 kkeil Exp $
  *
  * fritz_pci.c    low level stuff for AVM Fritz!PCI and ISA PnP isdn cards
  *              Thanks to AVM, Berlin for informations
@@ -11,6 +11,7 @@
 #include <linux/config.h>
 #include <linux/module.h>
 #include <linux/pci.h>
+#include <linux/isapnp.h>
 #include <linux/kernel_stat.h>
 #include <linux/delay.h>
 #include "hisax_dch.h"
@@ -24,12 +25,13 @@
 #define LOCK_STATISTIC
 #include "hw_lock.h"
 
-static const char *avm_pci_rev = "$Revision: 1.7 $";
+static const char *avm_pci_rev = "$Revision: 1.8 $";
 
-#define ISDN_CTYPE_FRITZPCI 1
-
-#define AVM_FRITZ_PCI		1
-#define AVM_FRITZ_PNP		2
+enum {
+	AVM_FRITZ_PCI,
+	AVM_FRITZ_PNP,
+	AVM_FRITZ_PCIV2,
+};
 
 #ifndef PCI_VENDOR_ID_AVM
 #define PCI_VENDOR_ID_AVM	0x1244
@@ -37,11 +39,15 @@ static const char *avm_pci_rev = "$Revision: 1.7 $";
 #ifndef PCI_DEVICE_ID_AVM_FRITZ
 #define PCI_DEVICE_ID_AVM_FRITZ	0xa00
 #endif
+#ifndef PCI_DEVICE_ID_AVM_A1_V2
+#define PCI_DEVICE_ID_AVM_A1_V2	0xe00
+#endif
 
 #define HDLC_FIFO		0x0
 #define HDLC_STATUS		0x4
 #define CHIP_WINDOW		0x10
 
+#define CHIP_INDEX		0x4
 #define AVM_HDLC_1		0x00
 #define AVM_HDLC_2		0x01
 #define AVM_ISAC_FIFO		0x02
@@ -84,6 +90,17 @@ static const char *avm_pci_rev = "$Revision: 1.7 $";
 #define HDLC_CMD_RRS		0x20
 #define HDLC_CMD_XML_MASK	0x3f00
 
+/* Fritz PCI v2.0 */
+
+#define  AVM_HDLC_FIFO_1        0x10
+#define  AVM_HDLC_FIFO_2        0x18
+
+#define  AVM_HDLC_STATUS_1      0x14
+#define  AVM_HDLC_STATUS_2      0x1c
+
+#define  AVM_ISACSX_INDEX       0x04
+#define  AVM_ISACSX_DATA        0x08
+
 /* data struct */
 
 struct hdlc_stat_reg {
@@ -112,7 +129,8 @@ typedef struct hdlc_hw {
 typedef struct _fritzpnppci {
 	struct _fritzpnppci	*prev;
 	struct _fritzpnppci	*next;
-	u_char			subtyp;
+	struct pci_dev		*pdev;
+	u_int			type;
 	u_int			irq;
 	u_int			addr;
 	hisax_HWlock_t		lock;
@@ -146,7 +164,7 @@ ReadISAC(void *fc, u_char offset)
 	register long addr = ((fritzpnppci *)fc)->addr;
 	register u_char val;
 
-	outb(idx, addr + HDLC_STATUS);
+	outb(idx, addr + CHIP_INDEX);
 	val = inb(addr + CHIP_WINDOW + (offset & 0xf));
 	return (val);
 }
@@ -157,7 +175,7 @@ WriteISAC(void *fc, u_char offset, u_char value)
 	register u_char idx = (offset > 0x2f) ? AVM_ISAC_REG_HIGH : AVM_ISAC_REG_LOW;
 	register long addr = ((fritzpnppci *)fc)->addr;
 
-	outb(idx, addr + HDLC_STATUS);
+	outb(idx, addr + CHIP_INDEX);
 	outb(value, addr + CHIP_WINDOW + (offset & 0xf));
 }
 
@@ -166,7 +184,7 @@ ReadISACfifo(void *fc, u_char * data, int size)
 {
 	register long addr = ((fritzpnppci *)fc)->addr;
 
-	outb(AVM_ISAC_FIFO, addr + HDLC_STATUS);
+	outb(AVM_ISAC_FIFO, addr + CHIP_INDEX);
 	insb(addr + CHIP_WINDOW, data, size);
 }
 
@@ -175,64 +193,50 @@ WriteISACfifo(void *fc, u_char * data, int size)
 {
 	register long addr = ((fritzpnppci *)fc)->addr;
 
-	outb(AVM_ISAC_FIFO, addr + HDLC_STATUS);
+	outb(AVM_ISAC_FIFO, addr + CHIP_INDEX);
 	outsb(addr + CHIP_WINDOW, data, size);
 }
 
-static inline u_int
-ReadHDLCPCI(void *fc, int chan, u_char offset)
+static unsigned char
+fcpci2_read_isac(void *fc, unsigned char offset)
 {
-	register u_int idx = chan ? AVM_HDLC_2 : AVM_HDLC_1;
-	register u_int val;
 	register long addr = ((fritzpnppci *)fc)->addr;
+	unsigned char val;
 
-	outl(idx, addr + HDLC_STATUS);
-	val = inl(addr + CHIP_WINDOW + offset);
-	return (val);
-}
-
-static inline void
-WriteHDLCPCI(void *fc, int chan, u_char offset, u_int value)
-{
-	register u_int idx = chan ? AVM_HDLC_2 : AVM_HDLC_1;
-	register long addr = ((fritzpnppci *)fc)->addr;
-
-	outl(idx, addr + HDLC_STATUS);
-	outl(value, addr + CHIP_WINDOW + offset);
-}
-
-static inline u_char
-ReadHDLCPnP(void *fc, int chan, u_char offset)
-{
-	register u_char idx = chan ? AVM_HDLC_2 : AVM_HDLC_1;
-	register u_char val;
-	register long addr = ((fritzpnppci *)fc)->addr;
-
-	outb(idx, addr + HDLC_STATUS);
-	val = inb(addr + CHIP_WINDOW + offset);
-	return (val);
-}
-
-static inline void
-WriteHDLCPnP(void *fc, int chan, u_char offset, u_char value)
-{
-	register u_char idx = chan ? AVM_HDLC_2 : AVM_HDLC_1;
-	register long addr = ((fritzpnppci *)fc)->addr;
-
-	outb(idx, addr + HDLC_STATUS);
-	outb(value, addr + CHIP_WINDOW + offset);
-}
-
-static u_char
-ReadHDLC_s(void *fc, int chan, u_char offset)
-{
-	return(0xff & ReadHDLCPCI(fc, chan, offset));
+	outl(offset, addr + AVM_ISACSX_INDEX);
+	val = inl(addr + AVM_ISACSX_DATA);
+	return val;
 }
 
 static void
-WriteHDLC_s(void *fc, int chan, u_char offset, u_char value)
+fcpci2_write_isac(void *fc, unsigned char offset, unsigned char value)
 {
-	WriteHDLCPCI(fc, chan, offset, value);
+	register long addr = ((fritzpnppci *)fc)->addr;
+
+	outl(offset, addr + AVM_ISACSX_INDEX);
+	outl(value, addr + AVM_ISACSX_DATA);
+}
+
+static void
+fcpci2_read_isac_fifo(void *fc, unsigned char * data, int size)
+{
+	register long addr = ((fritzpnppci *)fc)->addr;
+	int i;
+
+	outl(0, addr + AVM_ISACSX_INDEX);
+	for (i = 0; i < size; i++)
+		data[i] = inl(addr + AVM_ISACSX_DATA);
+}
+
+static void
+fcpci2_write_isac_fifo(void *fc, unsigned char * data, int size)
+{
+	register long addr = ((fritzpnppci *)fc)->addr;
+	int i;
+
+	outl(0, addr + AVM_ISACSX_INDEX);
+	for (i = 0; i < size; i++)
+		outl(data[i], addr + AVM_ISACSX_DATA);
 }
 
 static inline
@@ -246,6 +250,32 @@ bchannel_t *Sel_BCS(fritzpnppci *fc, int channel)
 		return(NULL);
 }
 
+static inline void
+__write_ctrl_pnp(fritzpnppci *fc, hdlc_hw_t *hdlc, int channel, int which) {
+	register u_char idx = channel ? AVM_HDLC_2 : AVM_HDLC_1;
+
+	outb(idx, fc->addr + CHIP_INDEX);
+	if (which & 4)
+		outb(hdlc->ctrl.sr.mode, fc->addr + CHIP_WINDOW + HDLC_STATUS + 2);
+	if (which & 2)
+		outb(hdlc->ctrl.sr.xml, fc->addr + CHIP_WINDOW + HDLC_STATUS + 1);
+	if (which & 1)
+		outb(hdlc->ctrl.sr.cmd, fc->addr + CHIP_WINDOW + HDLC_STATUS);
+}
+
+static inline void
+__write_ctrl_pci(fritzpnppci *fc, hdlc_hw_t *hdlc, int channel) {
+	register u_int idx = channel ? AVM_HDLC_2 : AVM_HDLC_1;
+
+	outl(idx, fc->addr + CHIP_INDEX);
+	outl(hdlc->ctrl.ctrl, fc->addr + CHIP_WINDOW + HDLC_STATUS);
+}
+
+static inline void
+__write_ctrl_pciv2(fritzpnppci *fc, hdlc_hw_t *hdlc, int channel) {
+	outl(hdlc->ctrl.ctrl, fc->addr + channel ? AVM_HDLC_STATUS_2 : AVM_HDLC_STATUS_1);
+}
+
 void
 write_ctrl(bchannel_t *bch, int which) {
 	fritzpnppci	*fc = bch->inst.data;
@@ -254,19 +284,59 @@ write_ctrl(bchannel_t *bch, int which) {
 	if (fc->dch.debug & L1_DEB_HSCX)
 		debugprint(&bch->inst, "hdlc %c wr%x ctrl %x",
 			'A' + bch->channel, which, hdlc->ctrl.ctrl);
-	if (fc->subtyp == AVM_FRITZ_PCI) {
-		WriteHDLCPCI(fc, bch->channel, HDLC_STATUS, hdlc->ctrl.ctrl);
-	} else {
-		if (which & 4)
-			WriteHDLCPnP(fc, bch->channel, HDLC_STATUS + 2,
-				hdlc->ctrl.sr.mode);
-		if (which & 2)
-			WriteHDLCPnP(fc, bch->channel, HDLC_STATUS + 1,
-				hdlc->ctrl.sr.xml);
-		if (which & 1)
-			WriteHDLCPnP(fc, bch->channel, HDLC_STATUS,
-				hdlc->ctrl.sr.cmd);
+	switch(fc->type) {
+		case AVM_FRITZ_PCIV2:
+			__write_ctrl_pciv2(fc, hdlc, bch->channel);
+			break;
+		case AVM_FRITZ_PCI:
+			__write_ctrl_pci(fc, hdlc, bch->channel);
+			break;
+		case AVM_FRITZ_PNP:
+			__write_ctrl_pnp(fc, hdlc, bch->channel, which);
+			break;
 	}
+}
+
+
+static inline u_int
+__read_status_pnp(u_long addr, u_int channel)
+{
+	register u_int stat;
+
+	outb(channel ? AVM_HDLC_2 : AVM_HDLC_1, addr + CHIP_INDEX);
+	stat = inb(addr + CHIP_WINDOW + HDLC_STATUS);
+	if (stat & HDLC_INT_RPR)
+		stat |= (inb(addr + CHIP_WINDOW + HDLC_STATUS + 1)) << 8;
+	return (stat);
+}
+
+static inline u_int
+__read_status_pci(u_long addr, u_int channel)
+{
+	outl(channel ? AVM_HDLC_2 : AVM_HDLC_1, addr + CHIP_INDEX);
+	return inl(addr + CHIP_WINDOW + HDLC_STATUS);
+}
+
+static inline u_int
+__read_status_pciv2(u_long addr, u_int channel)
+{
+	return inl(addr + channel ? AVM_HDLC_STATUS_2 : AVM_HDLC_STATUS_1);
+}
+
+
+static u_int
+read_status(fritzpnppci *fc, int channel)
+{
+	switch(fc->type) {
+		case AVM_FRITZ_PCIV2:
+			return(__read_status_pciv2(fc->addr, channel));
+		case AVM_FRITZ_PCI:
+			return(__read_status_pci(fc->addr, channel));
+		case AVM_FRITZ_PNP:
+			return(__read_status_pnp(fc->addr, channel));
+	}
+	/* dummy */
+	return(0);
 }
 
 static int
@@ -340,8 +410,21 @@ hdlc_empty_fifo(bchannel_t *bch, int count)
 	}
 	ptr = (u_int *) p = bch->rx_buf + bch->rx_idx;
 	bch->rx_idx += count;
-	if (fc->subtyp == AVM_FRITZ_PCI) {
-		outl(idx, fc->addr + HDLC_STATUS);
+	if (fc->type == AVM_FRITZ_PCIV2) {
+		while (cnt < count) {
+#ifdef __powerpc__
+#ifdef CONFIG_APUS
+			*ptr++ = in_le32((unsigned *)(fc->addr + bch->channel ? AVM_HDLC_FIFO_2 : AVM_HDLC_FIFO_1 +_IO_BASE));
+#else
+			*ptr++ = in_be32((unsigned *)(fc->addr + bch->channel ? AVM_HDLC_FIFO_2 : AVM_HDLC_FIFO_1 +_IO_BASE));
+#endif /* CONFIG_APUS */
+#else
+			*ptr++ = inl(fc->addr + bch->channel ? AVM_HDLC_FIFO_2 : AVM_HDLC_FIFO_1);
+#endif /* __powerpc__ */
+			cnt += 4;
+		}
+	} else if (fc->type == AVM_FRITZ_PCI) {
+		outl(idx, fc->addr + CHIP_INDEX);
 		while (cnt < count) {
 #ifdef __powerpc__
 #ifdef CONFIG_APUS
@@ -355,7 +438,7 @@ hdlc_empty_fifo(bchannel_t *bch, int count)
 			cnt += 4;
 		}
 	} else {
-		outb(idx, fc->addr + HDLC_STATUS);
+		outb(idx, fc->addr + CHIP_INDEX);
 		while (cnt < count) {
 			*p++ = inb(fc->addr + CHIP_WINDOW);
 			cnt++;
@@ -364,7 +447,7 @@ hdlc_empty_fifo(bchannel_t *bch, int count)
 	if (fc->dch.debug & L1_DEB_HSCX_FIFO) {
 		char *t = bch->blog;
 
-		if (fc->subtyp == AVM_FRITZ_PNP)
+		if (fc->type == AVM_FRITZ_PNP)
 			p = (u_char *) ptr;
 		t += sprintf(t, "hdlc_empty_fifo %c cnt %d",
 			     bch->channel ? 'B' : 'A', count);
@@ -403,8 +486,22 @@ hdlc_fill_fifo(bchannel_t *bch)
 	ptr = (u_int *) p;
 	bch->tx_idx += count;
 	hdlc->ctrl.sr.xml = ((count == HDLC_FIFO_SIZE) ? 0 : count);
-	write_ctrl(bch, 3);  /* sets the correct index too */
-	if (fc->subtyp == AVM_FRITZ_PCI) {
+	if (fc->type == AVM_FRITZ_PCIV2) {
+		__write_ctrl_pciv2(fc, hdlc, bch->channel);
+		while (cnt<count) {
+#ifdef __powerpc__
+#ifdef CONFIG_APUS
+			out_le32((unsigned *)(fc->addr + bch->channel ? AVM_HDLC_FIFO_2 : AVM_HDLC_FIFO_1 +_IO_BASE), *ptr++);
+#else
+			out_be32((unsigned *)(fc->addr + bch->channel ? AVM_HDLC_FIFO_2 : AVM_HDLC_FIFO_1 +_IO_BASE), *ptr++);
+#endif /* CONFIG_APUS */
+#else
+			outl(*ptr++, fc->addr + bch->channel ? AVM_HDLC_FIFO_2 : AVM_HDLC_FIFO_1);
+#endif /* __powerpc__ */
+			cnt += 4;
+		}
+	} else if (fc->type == AVM_FRITZ_PCI) {
+		__write_ctrl_pci(fc, hdlc, bch->channel);
 		while (cnt<count) {
 #ifdef __powerpc__
 #ifdef CONFIG_APUS
@@ -418,6 +515,7 @@ hdlc_fill_fifo(bchannel_t *bch)
 			cnt += 4;
 		}
 	} else {
+		__write_ctrl_pnp(fc, hdlc, bch->channel, 3);
 		while (cnt<count) {
 			outb(*p++, fc->addr + CHIP_WINDOW);
 			cnt++;
@@ -426,7 +524,7 @@ hdlc_fill_fifo(bchannel_t *bch)
 	if (bch->debug & L1_DEB_HSCX_FIFO) {
 		char *t = bch->blog;
 
-		if (fc->subtyp == AVM_FRITZ_PNP)
+		if (fc->type == AVM_FRITZ_PNP)
 			p = (u_char *) ptr;
 		t += sprintf(t, "hdlc_fill_fifo %c cnt %d",
 			     bch->channel ? 'B' : 'A', count);
@@ -527,13 +625,7 @@ HDLC_irq_main(fritzpnppci *fc)
 	u_int stat;
 	bchannel_t *bch;
 
-	if (fc->subtyp == AVM_FRITZ_PCI) {
-		stat = ReadHDLCPCI(fc, 0, HDLC_STATUS);
-	} else {
-		stat = ReadHDLCPnP(fc, 0, HDLC_STATUS);
-		if (stat & HDLC_INT_RPR)
-			stat |= (ReadHDLCPnP(fc, 0, HDLC_STATUS+1))<<8;
-	}
+	stat = read_status(fc, 0);
 	if (stat & HDLC_INT_MASK) {
 		if (!(bch = Sel_BCS(fc, 0))) {
 			if (fc->bch[0].debug)
@@ -541,13 +633,7 @@ HDLC_irq_main(fritzpnppci *fc)
 		} else
 			HDLC_irq(bch, stat);
 	}
-	if (fc->subtyp == AVM_FRITZ_PCI) {
-		stat = ReadHDLCPCI(fc, 1, HDLC_STATUS);
-	} else {
-		stat = ReadHDLCPnP(fc, 1, HDLC_STATUS);
-		if (stat & HDLC_INT_RPR)
-			stat |= (ReadHDLCPnP(fc, 1, HDLC_STATUS+1))<<8;
-	}
+	stat = read_status(fc, 1);
 	if (stat & HDLC_INT_MASK) {
 		if (!(bch = Sel_BCS(fc, 1))) {
 			if (fc->bch[1].debug)
@@ -609,8 +695,10 @@ avm_pcipnp_interrupt(int intno, void *dev_id, struct pt_regs *regs)
 	if (!(sval & AVM_STATUS0_IRQ_HDLC)) {
 		HDLC_irq_main(fc);
 	}
-	WriteISAC(fc, ISAC_MASK, 0xFF);
-	WriteISAC(fc, ISAC_MASK, 0x0);
+	if (fc->type == AVM_FRITZ_PNP) {
+		WriteISAC(fc, ISAC_MASK, 0xFF);
+		WriteISAC(fc, ISAC_MASK, 0x0);
+	}
 	spin_lock_irqsave(&fc->lock.lock, flags);
 #ifdef SPIN_DEBUG
 	fc->lock.spin_adr = (void *)0x2002;
@@ -711,29 +799,10 @@ clear_pending_hdlc_ints(fritzpnppci *fc)
 {
 	u_int val;
 
-	if (fc->subtyp == AVM_FRITZ_PCI) {
-		val = ReadHDLCPCI(fc, 0, HDLC_STATUS);
-		debugprint(&fc->dch.inst, "HDLC 1 STA %x", val);
-		val = ReadHDLCPCI(fc, 1, HDLC_STATUS);
-		debugprint(&fc->dch.inst, "HDLC 2 STA %x", val);
-	} else {
-		val = ReadHDLCPnP(fc, 0, HDLC_STATUS);
-		debugprint(&fc->dch.inst, "HDLC 1 STA %x", val);
-		val = ReadHDLCPnP(fc, 0, HDLC_STATUS + 1);
-		debugprint(&fc->dch.inst, "HDLC 1 RML %x", val);
-		val = ReadHDLCPnP(fc, 0, HDLC_STATUS + 2);
-		debugprint(&fc->dch.inst, "HDLC 1 MODE %x", val);
-		val = ReadHDLCPnP(fc, 0, HDLC_STATUS + 3);
-		debugprint(&fc->dch.inst, "HDLC 1 VIN %x", val);
-		val = ReadHDLCPnP(fc, 1, HDLC_STATUS);
-		debugprint(&fc->dch.inst, "HDLC 2 STA %x", val);
-		val = ReadHDLCPnP(fc, 1, HDLC_STATUS + 1);
-		debugprint(&fc->dch.inst, "HDLC 2 RML %x", val);
-		val = ReadHDLCPnP(fc, 1, HDLC_STATUS + 2);
-		debugprint(&fc->dch.inst, "HDLC 2 MODE %x", val);
-		val = ReadHDLCPnP(fc, 1, HDLC_STATUS + 3);
-		debugprint(&fc->dch.inst, "HDLC 2 VIN %x", val);
-	}
+	val = read_status(fc, 0);
+	debugprint(&fc->dch.inst, "HDLC 1 STA %x", val);
+	val = read_status(fc, 1);
+	debugprint(&fc->dch.inst, "HDLC 2 STA %x", val);
 }
 
 static void
@@ -761,7 +830,7 @@ static int init_card(fritzpnppci *fc)
 	long flags;
 	u_int shared = SA_SHIRQ;
 
-	if (fc->subtyp == AVM_FRITZ_PNP)
+	if (fc->type == AVM_FRITZ_PNP)
 		shared = 0;
 	save_flags(flags);
 	irq_cnt = kstat_irqs(fc->irq);
@@ -821,10 +890,7 @@ static int init_card(fritzpnppci *fc)
 #define MODULE_PARM_T	"1-4i"
 static int fritz_cnt;
 static u_int protocol[MAX_CARDS];
-static u_int io[MAX_CARDS];
-static u_int irq[MAX_CARDS];
 static int layermask[MAX_CARDS];
-static int cfg_idx;
 
 static hisaxobject_t	fritz;
 static int debug;
@@ -839,62 +905,32 @@ MODULE_PARM(io, MODULE_PARM_T);
 MODULE_PARM(protocol, MODULE_PARM_T);
 MODULE_PARM(irq, MODULE_PARM_T);
 MODULE_PARM(layermask, MODULE_PARM_T);
-#define Fritz_init init_module
 #endif
 
 static char FritzName[] = "Fritz!PCI";
 
-static	struct pci_dev *dev_avm = NULL;
-static	int pci_finished_lookup;
+static struct pci_device_id fcpci_ids[] __devinitdata = {
+	{ PCI_VENDOR_ID_AVM, PCI_DEVICE_ID_AVM_A1   , PCI_ANY_ID, PCI_ANY_ID,
+	  0, 0, (unsigned long) "Fritz!Card PCI" },
+	{ PCI_VENDOR_ID_AVM, PCI_DEVICE_ID_AVM_A1_V2, PCI_ANY_ID, PCI_ANY_ID,
+	  0, 0, (unsigned long) "Fritz!Card PCI v2" },
+	{ }
+};
+MODULE_DEVICE_TABLE(pci, fcpci_ids);
+
+static struct isapnp_device_id fcpnp_ids[] __devinitdata = {
+	{ ISAPNP_VENDOR('A', 'V', 'M'), ISAPNP_FUNCTION(0x0900),
+	  ISAPNP_VENDOR('A', 'V', 'M'), ISAPNP_FUNCTION(0x0900), 
+	  (unsigned long) "Fritz!Card PnP" },
+	{ }
+};
+MODULE_DEVICE_TABLE(isapnp, fcpnp_ids);
 
 int
-setup_fritz(fritzpnppci *fc, u_int io_cfg, u_int irq_cfg)
+setup_fritz(fritzpnppci *fc)
 {
 	u_int val, ver;
-	char tmp[64];
 
-	strcpy(tmp, avm_pci_rev);
-	printk(KERN_INFO "HiSax: AVM Fritz PCI/PnP driver Rev. %s\n", HiSax_getrev(tmp));
-	fc->subtyp = 0;
-#if CONFIG_PCI
-	if (pci_present() && !pci_finished_lookup) {
-		while ((dev_avm = pci_find_device(PCI_VENDOR_ID_AVM,
-			PCI_DEVICE_ID_AVM_FRITZ,  dev_avm))) {
-			fc->irq = dev_avm->irq;
-			if (!fc->irq) {
-				printk(KERN_ERR "FritzPCI: No IRQ for PCI card found\n");
-				continue;;
-			}
-			if (pci_enable_device(dev_avm))
-				continue;
-			fc->addr = pci_resource_start_io(dev_avm,1);
-			if (!fc->addr) {
-				printk(KERN_ERR "FritzPCI: No IO-Adr for PCI card found\n");
-				continue;
-			}
-			fc->subtyp = AVM_FRITZ_PCI;
-			break;
-		}
-	 	if (!dev_avm) {
-	 		pci_finished_lookup = 1;
-			printk(KERN_INFO "Fritz: No more PCI cards found\n");
-		}
-	}
-#else
-	printk(KERN_WARNING "FritzPCI: NO_PCI_BIOS\n");
-	return (-ENODEV);
-#endif /* CONFIG_PCI */
-	if (!fc->subtyp) { /* OK no PCI found now check for an ISA card */	
-		if ((!io_cfg) || (!irq_cfg)) {
-			if (!fritz_cnt)
-				printk(KERN_WARNING
-					"Fritz: No io/irq for ISA card\n");
-			return(1);
-		}
-		fc->addr = io_cfg;
-		fc->irq = irq_cfg;
-		fc->subtyp = AVM_FRITZ_PNP;
-	}
 	if (check_region((fc->addr), 32)) {
 		printk(KERN_WARNING
 		       "HiSax: %s config port %x-%x already in use\n",
@@ -904,41 +940,60 @@ setup_fritz(fritzpnppci *fc, u_int io_cfg, u_int irq_cfg)
 		return(-EIO);
 	} else {
 		request_region(fc->addr, 32,
-			(fc->subtyp == AVM_FRITZ_PCI) ? "avm PCI" : "avm PnP");
+			(fc->type == AVM_FRITZ_PCI) ? "avm PCI" : "avm PnP");
 	}
-	switch (fc->subtyp) {
+	switch (fc->type) {
 	    case AVM_FRITZ_PCI:
 		val = inl(fc->addr);
 		printk(KERN_INFO "AVM PCI: stat %#x\n", val);
 		printk(KERN_INFO "AVM PCI: Class %X Rev %d\n",
 			val & 0xff, (val>>8) & 0xff);
-		fc->bch[0].Read_Reg = &ReadHDLC_s;
-		fc->bch[0].Write_Reg = &WriteHDLC_s;
-		fc->bch[1].Read_Reg = &ReadHDLC_s;
-		fc->bch[1].Write_Reg = &WriteHDLC_s;
+		outl(AVM_HDLC_1, fc->addr + CHIP_INDEX);
+		ver = inl(fc->addr + CHIP_WINDOW + HDLC_STATUS) >> 24;
+		printk(KERN_INFO "AVM PnP: HDLC version %x\n", ver & 0xf);
+		fc->dch.read_reg = &ReadISAC;
+		fc->dch.write_reg = &WriteISAC;
+		fc->dch.read_fifo = &ReadISACfifo;
+		fc->dch.write_fifo = &WriteISACfifo;
+		fc->dch.type = ISAC_TYPE_ISAC;
+		break;
+	    case AVM_FRITZ_PCIV2:
+		val = inl(fc->addr);
+		printk(KERN_INFO "AVM PCI V2: stat %#x\n", val);
+		printk(KERN_INFO "AVM PCI V2: Class %X Rev %d\n",
+			val & 0xff, (val>>8) & 0xff);
+		ver = inl(fc->addr + AVM_HDLC_STATUS_1) >> 24;
+		printk(KERN_INFO "AVM PnP: HDLC version %x\n", ver & 0xf);
+		fc->dch.read_reg = &fcpci2_read_isac;
+		fc->dch.write_reg = &fcpci2_write_isac;
+		fc->dch.read_fifo = &fcpci2_read_isac_fifo;
+		fc->dch.write_fifo = &fcpci2_write_isac_fifo;
+		fc->dch.type = ISAC_TYPE_ISACSX;
 		break;
 	    case AVM_FRITZ_PNP:
 		val = inb(fc->addr);
 		ver = inb(fc->addr + 1);
 		printk(KERN_INFO "AVM PnP: Class %X Rev %d\n", val, ver);
+		outb(AVM_HDLC_1, fc->addr + CHIP_INDEX);
+		ver = inb(fc->addr + CHIP_WINDOW + 7);
+		printk(KERN_INFO "AVM PnP: HDLC version %x\n", ver & 0xf);
 		reset_avmpcipnp(fc);
-		fc->bch[0].Read_Reg = &ReadHDLCPnP;
-		fc->bch[0].Write_Reg = &WriteHDLCPnP;
-		fc->bch[1].Read_Reg = &ReadHDLCPnP;
-		fc->bch[1].Write_Reg = &WriteHDLCPnP;
+		fc->dch.read_reg = &ReadISAC;
+		fc->dch.write_reg = &WriteISAC;
+		fc->dch.read_fifo = &ReadISACfifo;
+		fc->dch.write_fifo = &WriteISACfifo;
+		fc->dch.type = ISAC_TYPE_ISAC;
 		break;
 	    default:
-	  	printk(KERN_WARNING "AVM unknown subtype %d\n", fc->subtyp);
+	    	release_region(fc->addr, 32);
+	  	printk(KERN_WARNING "AVM unknown type %d\n", fc->type);
 	  	return(-ENODEV);
 	}
 	printk(KERN_INFO "HiSax: %s config irq:%d base:0x%X\n",
-		(fc->subtyp == AVM_FRITZ_PCI) ? "AVM Fritz!PCI" : "AVM Fritz!PnP",
+		(fc->type == AVM_FRITZ_PCI) ? "AVM Fritz!PCI" :
+		(fc->type == AVM_FRITZ_PCIV2) ? "AVM Fritz!PCIv2" : "AVM Fritz!PnP",
 		fc->irq, fc->addr);
 
-	fc->dch.read_reg = &ReadISAC;
-	fc->dch.write_reg = &WriteISAC;
-	fc->dch.read_fifo = &ReadISACfifo;
-	fc->dch.write_fifo = &WriteISACfifo;
 	fc->dch.hw = &fc->isac;
 	lock_dev(fc, 0);
 #ifdef SPIN_DEBUG
@@ -950,8 +1005,8 @@ setup_fritz(fritzpnppci *fc, u_int io_cfg, u_int irq_cfg)
 }
 
 static void
-release_card(fritzpnppci *card) {
-
+release_card(fritzpnppci *card)
+{
 #ifdef LOCK_STATISTIC
 	printk(KERN_INFO "try_ok(%d) try_wait(%d) try_mult(%d) try_inirq(%d)\n",
 		card->lock.try_ok, card->lock.try_wait, card->lock.try_mult, card->lock.try_inirq);
@@ -970,6 +1025,11 @@ release_card(fritzpnppci *card) {
 	free_dchannel(&card->dch);
 	REMOVE_FROM_LISTBASE(card, ((fritzpnppci *)fritz.ilist));
 	unlock_dev(card);
+	if (card->type == AVM_FRITZ_PNP) {
+		if (card->pdev->deactivate)
+			card->pdev->deactivate(card->pdev);
+	} else
+		pci_disable_device(card->pdev);
 	kfree(card);
 	fritz.refcnt--;
 }
@@ -1112,13 +1172,167 @@ fritz_manager(void *data, u_int prim, void *arg) {
 	return(0);
 }
 
-int
-Fritz_init(void)
+static int __devinit setup_instance(fritzpnppci *card)
 {
-	int err,i;
-	fritzpnppci *card;
-	hisax_pid_t pid;
+	int		i, err;
+	hisax_pid_t	pid;
+	
+	pci_set_drvdata(card->pdev, card);
+	APPEND_TO_LIST(card, ((fritzpnppci *)fritz.ilist));
+	card->dch.debug = debug;
+	card->dch.inst.obj = &fritz;
+	lock_HW_init(&card->lock);
+	card->dch.inst.lock = lock_dev;
+	card->dch.inst.unlock = unlock_dev;
+	card->dch.inst.data = card;
+	card->dch.inst.pid.layermask = ISDN_LAYER(0);
+	card->dch.inst.pid.protocol[0] = ISDN_PID_L0_TE_S0;
+	card->dch.inst.up.owner = &card->dch.inst;
+	card->dch.inst.down.owner = &card->dch.inst;
+	fritz.ctrl(NULL, MGR_DISCONNECT | REQUEST, &card->dch.inst.down);
+	sprintf(card->dch.inst.name, "Fritz%d", fritz_cnt+1);
+	set_dchannel_pid(&pid, protocol[fritz_cnt], layermask[fritz_cnt]);
+	init_dchannel(&card->dch);
+	for (i=0; i<2; i++) {
+		card->bch[i].channel = i;
+		card->bch[i].inst.obj = &fritz;
+		card->bch[i].inst.data = card;
+		card->bch[i].inst.pid.layermask = ISDN_LAYER(0);
+		card->bch[i].inst.up.owner = &card->bch[i].inst;
+		card->bch[i].inst.down.owner = &card->bch[i].inst;
+		fritz.ctrl(NULL, MGR_DISCONNECT | REQUEST, &card->bch[i].inst.down);
+		card->bch[i].inst.lock = lock_dev;
+		card->bch[i].inst.unlock = unlock_dev;
+		card->bch[i].debug = debug;
+		sprintf(card->bch[i].inst.name, "%s B%d", card->dch.inst.name, i+1);
+		init_bchannel(&card->bch[i]);
+		card->bch[i].hw = &card->hdlc[i];
+	}
+	printk(KERN_DEBUG "fritz card %p dch %p bch1 %p bch2 %p\n",
+		card, &card->dch, &card->bch[0], &card->bch[1]);
+	err = setup_fritz(card);
+	if (err) {
+		free_dchannel(&card->dch);
+		free_bchannel(&card->bch[1]);
+		free_bchannel(&card->bch[0]);
+		REMOVE_FROM_LISTBASE(card, ((fritzpnppci *)fritz.ilist));
+		kfree(card);
+		return(err);
+	}
+	fritz_cnt++;
+	err = fritz.ctrl(NULL, MGR_NEWSTACK | REQUEST, &card->dch.inst);
+	if (err) {
+		release_card(card);
+		return(err);
+	}
+	for (i=0; i<2; i++) {
+		err = fritz.ctrl(card->dch.inst.st, MGR_NEWSTACK | REQUEST, &card->bch[i].inst);
+		if (err) {
+			printk(KERN_ERR "MGR_ADDSTACK bchan error %d\n", err);
+			fritz.ctrl(card->dch.inst.st, MGR_DELSTACK | REQUEST, NULL);
+			return(err);
+		}
+	}
+	err = fritz.ctrl(card->dch.inst.st, MGR_SETSTACK | REQUEST, &pid);
+	if (err) {
+		printk(KERN_ERR  "MGR_SETSTACK REQUEST dch err(%d)\n", err);
+		fritz.ctrl(card->dch.inst.st, MGR_DELSTACK | REQUEST, NULL);
+		return(err);
+	}
+	err = init_card(card);
+	if (err) {
+		fritz.ctrl(card->dch.inst.st, MGR_DELSTACK | REQUEST, NULL);
+		return(err);
+	}
+	printk(KERN_INFO "fritz %d cards installed\n", fritz_cnt);
+	return(0);
+}
 
+static int __devinit fritzpci_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
+{
+	int		err = -ENOMEM;
+	fritzpnppci	*card;
+
+	if (!(card = kmalloc(sizeof(fritzpnppci), GFP_ATOMIC))) {
+		printk(KERN_ERR "No kmem for fritzcard\n");
+		return(err);
+	}
+	memset(card, 0, sizeof(fritzpnppci));
+	if (pdev->device == PCI_DEVICE_ID_AVM_A1_V2)
+		card->type = AVM_FRITZ_PCIV2;
+	else
+		card->type = AVM_FRITZ_PCI;
+	card->pdev = pdev;
+	err = pci_enable_device(pdev);
+	if (err) {
+		kfree(card);
+		return(err);
+	}
+
+	printk(KERN_INFO "hisax_fcpcipnp: found adapter %s at %s\n",
+	       (char *) ent->driver_data, pdev->slot_name);
+
+	card->addr = pci_resource_start(pdev, 1);
+	card->irq = pdev->irq;
+	err = setup_instance(card);
+	return(err);
+}
+
+static int __devinit fritzpnp_probe(struct pci_dev *pdev, const struct isapnp_device_id *ent)
+{
+	int		err = -ENOMEM;
+	fritzpnppci	*card;
+
+	if (!(card = kmalloc(sizeof(fritzpnppci), GFP_ATOMIC))) {
+		printk(KERN_ERR "No kmem for fritzcard\n");
+		return(err);
+	}
+	memset(card, 0, sizeof(fritzpnppci));
+	card->type = AVM_FRITZ_PNP;
+	card->pdev = pdev;
+	pdev->prepare(pdev);
+	pdev->deactivate(pdev); // why?
+	pdev->activate(pdev);
+	card->addr = pdev->resource[0].start;
+	card->irq = pdev->irq_resource[0].start;
+
+	printk(KERN_INFO "hisax_fcpcipnp: found adapter %s at IO %#x irq %d\n",
+	       (char *) ent->driver_data, card->addr, card->irq);
+
+	err = setup_instance(card);
+	return(err);
+}
+
+static void __devexit fritz_remove(struct pci_dev *pdev)
+{
+	fritzpnppci	*card = pci_get_drvdata(pdev);
+
+	fritz.ctrl(card->dch.inst.st, MGR_DELSTACK | REQUEST, NULL);
+}
+
+static struct pci_driver fcpci_driver = {
+	name:     "fcpci",
+	probe:    fritzpci_probe,
+	remove:   __devexit_p(fritz_remove),
+	id_table: fcpci_ids,
+};
+
+static struct isapnp_driver fcpnp_driver = {
+	name:     "fcpnp",
+	probe:    fritzpnp_probe,
+	remove:   __devexit_p(fritz_remove),
+	id_table: fcpnp_ids,
+};
+
+static int __init Fritz_init(void)
+{
+	int	err, pci_nr_found;
+	char tmp[64];
+
+	strcpy(tmp, avm_pci_rev);
+	printk(KERN_INFO "AVM Fritz PCI/PnP driver Rev. %s\n", HiSax_getrev(tmp));
+
+	SET_MODULE_OWNER(&fritz);
 	fritz.name = FritzName;
 	fritz.own_ctrl = fritz_manager;
 	fritz.DPROTO.protocol[0] = ISDN_PID_L0_TE_S0;
@@ -1131,125 +1345,47 @@ Fritz_init(void)
 		printk(KERN_ERR "Can't register Fritz PCI error(%d)\n", err);
 		return(err);
 	}
-	while (fritz_cnt < MAX_CARDS) {
-		if (!(card = kmalloc(sizeof(fritzpnppci), GFP_ATOMIC))) {
-			printk(KERN_ERR "No kmem for fritzcard\n");
-			HiSax_unregister(&fritz);
-			return(-ENOMEM);
-		}
-		memset(card, 0, sizeof(fritzpnppci));
-		APPEND_TO_LIST(card, ((fritzpnppci *)fritz.ilist));
-		card->dch.debug = debug;
-		card->dch.inst.obj = &fritz;
-		lock_HW_init(&card->lock);
-		card->dch.inst.lock = lock_dev;
-		card->dch.inst.unlock = unlock_dev;
-		card->dch.inst.data = card;
-		card->dch.inst.pid.layermask = ISDN_LAYER(0);
-		card->dch.inst.pid.protocol[0] = ISDN_PID_L0_TE_S0;
-		card->dch.inst.up.owner = &card->dch.inst;
-		card->dch.inst.down.owner = &card->dch.inst;
-		fritz.ctrl(NULL, MGR_DISCONNECT | REQUEST,
-			&card->dch.inst.down);
-		sprintf(card->dch.inst.name, "Fritz%d", fritz_cnt+1);
-		set_dchannel_pid(&pid, protocol[fritz_cnt],
-			layermask[fritz_cnt]);
-		init_dchannel(&card->dch);
-		for (i=0; i<2; i++) {
-			card->bch[i].channel = i;
-			card->bch[i].inst.obj = &fritz;
-			card->bch[i].inst.data = card;
-			card->bch[i].inst.pid.layermask = ISDN_LAYER(0);
-			card->bch[i].inst.up.owner = &card->bch[i].inst;
-			card->bch[i].inst.down.owner = &card->bch[i].inst;
-			fritz.ctrl(NULL, MGR_DISCONNECT | REQUEST,
-				&card->bch[i].inst.down);
-			card->bch[i].inst.lock = lock_dev;
-			card->bch[i].inst.unlock = unlock_dev;
-			card->bch[i].debug = debug;
-			sprintf(card->bch[i].inst.name, "%s B%d",
-				card->dch.inst.name, i+1);
-			init_bchannel(&card->bch[i]);
-			card->bch[i].hw = &card->hdlc[i];
-		}
-		printk(KERN_DEBUG "fritz card %p dch %p bch1 %p bch2 %p\n",
-			card, &card->dch, &card->bch[0], &card->bch[1]);
-		if (setup_fritz(card, io[cfg_idx], irq[cfg_idx])) {
-			err = 0;
-			free_dchannel(&card->dch);
-			free_bchannel(&card->bch[1]);
-			free_bchannel(&card->bch[0]);
-			REMOVE_FROM_LISTBASE(card, ((fritzpnppci *)fritz.ilist));
-			kfree(card);
-			if (!fritz_cnt) {
-				HiSax_unregister(&fritz);
-				err = -ENODEV;
-			} else
-				printk(KERN_INFO "fritz %d cards installed\n",
-					fritz_cnt);
-			return(err);
-		}
-		if (card->subtyp == AVM_FRITZ_PNP)
-			cfg_idx++;
-		fritz_cnt++;
-		if ((err = fritz.ctrl(NULL, MGR_NEWSTACK | REQUEST, &card->dch.inst))) {
-			printk(KERN_ERR  "MGR_ADDSTACK REQUEST dch err(%d)\n", err);
-			release_card(card);
-			if (!fritz_cnt)
-				HiSax_unregister(&fritz);
-			else
-				err = 0;
-			return(err);
-		}
-		for (i=0; i<2; i++) {
-			if ((err = fritz.ctrl(card->dch.inst.st, MGR_NEWSTACK | REQUEST,
-				&card->bch[i].inst))) {
-				printk(KERN_ERR "MGR_ADDSTACK bchan error %d\n", err);
-				fritz.ctrl(card->dch.inst.st,
-					MGR_DELSTACK | REQUEST, NULL);
-				if (!fritz_cnt)
-					HiSax_unregister(&fritz);
-				else
-					err = 0;
-				return(err);
-			}
-		}
-		if ((err = fritz.ctrl(card->dch.inst.st, MGR_SETSTACK | REQUEST, &pid))) {
-			printk(KERN_ERR  "MGR_SETSTACK REQUEST dch err(%d)\n", err);
-			fritz.ctrl(card->dch.inst.st, MGR_DELSTACK | REQUEST, NULL);
-			if (!fritz_cnt)
-				HiSax_unregister(&fritz);
-			else
-				err = 0;
-			return(err);
-		}
-		if ((err = init_card(card))) {
-			fritz.ctrl(card->dch.inst.st, MGR_DELSTACK | REQUEST, NULL);
-			if (!fritz_cnt)
-				HiSax_unregister(&fritz);
-			else
-				err = 0;
-			return(err);
-		}
+	err = pci_register_driver(&fcpci_driver);
+	if (err < 0)
+		goto out;
+	pci_nr_found = err;
+
+	err = isapnp_register_driver(&fcpnp_driver);
+	if (err < 0)
+		goto out_unregister_pci;
+
+#if !defined(CONFIG_HOTPLUG) || defined(MODULE)
+	if (pci_nr_found + err == 0) {
+		err = -ENODEV;
+		goto out_unregister_isapnp;
 	}
-	printk(KERN_INFO "fritz %d cards installed\n", fritz_cnt);
-	return(0);
+#endif
+	return 0;
+
+#if !defined(CONFIG_HOTPLUG) || defined(MODULE)
+ out_unregister_isapnp:
+	isapnp_unregister_driver(&fcpnp_driver);
+#endif
+ out_unregister_pci:
+	pci_unregister_driver(&fcpci_driver);
+ out:
+ 	return err;
 }
 
-#ifdef MODULE
-int
-cleanup_module(void)
+static void __exit Fritz_cleanup(void)
 {
 	int err;
 	if ((err = HiSax_unregister(&fritz))) {
 		printk(KERN_ERR "Can't unregister Fritz PCI error(%d)\n", err);
-		return(err);
 	}
 	while(fritz.ilist) {
 		printk(KERN_ERR "Fritz PCI card struct not empty refs %d\n",
 			fritz.refcnt);
 		release_card(fritz.ilist);
 	}
-	return(0);
+	isapnp_unregister_driver(&fcpnp_driver);
+	pci_unregister_driver(&fcpci_driver);
 }
-#endif
+
+module_init(Fritz_init);
+module_exit(Fritz_cleanup);

@@ -1,4 +1,4 @@
-/* $Id: arcofi.c,v 1.2 2003/06/21 21:39:54 kkeil Exp $
+/* $Id: arcofi.c,v 1.3 2003/06/24 21:58:53 kkeil Exp $
  *
  * arcofi.c   Ansteuerung ARCOFI 2165
  *
@@ -138,5 +138,5 @@ init_arcofi(dchannel_t *dch) {
 	isac->arcofitimer.function = (void *) arcofi_timer;
 	isac->arcofitimer.data = (long) dch;
 	init_timer(&isac->arcofitimer);
-	test_and_set_bit(HW_ARCOFI, &dch->DFlags);
+	dch->type |= ISAC_TYPE_ARCOFI;
 }

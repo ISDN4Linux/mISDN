@@ -1,4 +1,4 @@
-/* $Id: capi.c,v 1.1 2002/09/16 23:49:38 kkeil Exp $
+/* $Id: capi.c,v 1.2 2003/06/24 21:58:53 kkeil Exp $
  *
  */
 
@@ -9,7 +9,7 @@
 #include "helper.h"
 #include "debug.h"
 
-const char *capi_revision = "$Revision: 1.1 $";
+const char *capi_revision = "$Revision: 1.2 $";
 
 static int debug = 0;
 static hisaxobject_t capi_obj;
@@ -256,6 +256,7 @@ int Capi20Init(void)
 {
 	int err;
 
+	SET_MODULE_OWNER(&capi_obj);
 	capi_obj.name = MName;
 	capi_obj.DPROTO.protocol[4] = ISDN_PID_L4_CAPI20;
 	capi_obj.BPROTO.protocol[4] = ISDN_PID_L4_B_CAPI20;

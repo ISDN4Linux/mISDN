@@ -1,4 +1,4 @@
-/* $Id: hfc_pci.c,v 1.21 2003/06/22 12:03:36 kkeil Exp $
+/* $Id: hfc_pci.c,v 1.22 2003/06/24 21:58:53 kkeil Exp $
 
  * hfc_pci.c     low level driver for CCD's hfc-pci based cards
  *
@@ -47,7 +47,7 @@
 
 extern const char *CardType[];
 
-static const char *hfcpci_revision = "$Revision: 1.21 $";
+static const char *hfcpci_revision = "$Revision: 1.22 $";
 
 /* table entry in the PCI devices list */
 typedef struct {
@@ -2294,6 +2294,7 @@ HFC_init(void)
 	hisax_pid_t	pid;
 	hisaxstack_t	*dst;
 
+	SET_MODULE_OWNER(&HFC_obj);
 	HFC_obj.name = HFCName;
 	HFC_obj.own_ctrl = HFC_manager;
 	HFC_obj.DPROTO.protocol[0] = ISDN_PID_L0_TE_S0 |
