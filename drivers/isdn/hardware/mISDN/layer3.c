@@ -1,4 +1,4 @@
-/* $Id: layer3.c,v 1.2 2002/09/16 23:49:38 kkeil Exp $
+/* $Id: layer3.c,v 1.3 2003/07/07 14:29:38 kkeil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -14,7 +14,7 @@
 #include "hisaxl3.h"
 #include "helper.h"
 
-const char *l3_revision = "$Revision: 1.2 $";
+const char *l3_revision = "$Revision: 1.3 $";
 
 static
 struct Fsm l3fsm = {NULL, 0, 0, NULL, NULL};
@@ -208,6 +208,10 @@ void
 StopAllL3Timer(l3_process_t *pc)
 {
 	L3DelTimer(&pc->timer);
+	if (pc->t303skb) {
+		dev_kfree_skb(pc->t303skb);
+		pc->t303skb = NULL;
+	}
 }
 
 struct sk_buff *
@@ -294,7 +298,7 @@ release_l3_process(l3_process_t *p)
 	if (!p)
 		return;
 	l3 = p->l3;
-	hisax_l3up(p, NULL, CC_RELEASE_CR | INDICATION, 0, NULL);
+	hisax_l3up(p, CC_RELEASE_CR | INDICATION, NULL);
 	REMOVE_FROM_LISTBASE(p, l3->proc);
 	StopAllL3Timer(p);
 	kfree(p);
@@ -327,8 +331,7 @@ l3ml3p(layer3_t *l3, int pr)
 }
 
 int
-hisax_l3up(l3_process_t *l3p, struct sk_buff *skb, u_int prim, int len,
-	void *arg)
+hisax_l3up(l3_process_t *l3p, u_int prim, struct sk_buff *skb)
 {
 	layer3_t *l3;
 	int err = -EINVAL;
@@ -337,9 +340,7 @@ hisax_l3up(l3_process_t *l3p, struct sk_buff *skb, u_int prim, int len,
 		return(-EINVAL);
 	l3 = l3p->l3;
 	if (!skb)
-		err = if_link(&l3->inst.up, prim, l3p->id, len, arg, 0);
-	else if (len)
-		int_errtxt("skb and %d data", len);
+		err = if_link(&l3->inst.up, prim, l3p->id, 0, NULL, 0);
 	else
 		err = if_newhead(&l3->inst.up, prim, l3p->id, skb);
 	return(err);

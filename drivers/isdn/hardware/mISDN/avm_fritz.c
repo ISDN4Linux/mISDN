@@ -1,4 +1,4 @@
-/* $Id: avm_fritz.c,v 1.9 2003/06/25 16:44:48 kkeil Exp $
+/* $Id: avm_fritz.c,v 1.10 2003/07/07 14:29:38 kkeil Exp $
  *
  * fritz_pci.c    low level stuff for AVM Fritz!PCI and ISA PnP isdn cards
  *              Thanks to AVM, Berlin for informations
@@ -25,7 +25,7 @@
 #define LOCK_STATISTIC
 #include "hw_lock.h"
 
-static const char *avm_pci_rev = "$Revision: 1.9 $";
+static const char *avm_pci_rev = "$Revision: 1.10 $";
 
 enum {
 	AVM_FRITZ_PCI,
@@ -560,7 +560,7 @@ HDLC_irq(bchannel_t *bch, u_int stat) {
 			if ((stat & HDLC_STAT_RME) || (bch->protocol == ISDN_PID_L1_B_64TRANS)) {
 				if (((stat & HDLC_STAT_CRCVFRRAB)==HDLC_STAT_CRCVFR) ||
 					(bch->protocol == ISDN_PID_L1_B_64TRANS)) {
-					if (!(skb = alloc_uplink_skb(bch->rx_idx)))
+					if (!(skb = dev_alloc_skb(bch->rx_idx)))
 						printk(KERN_WARNING "HDLC: receive out of memory\n");
 					else {
 						memcpy(skb_put(skb, bch->rx_idx),

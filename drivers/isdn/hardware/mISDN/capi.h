@@ -1,4 +1,4 @@
-/* $Id: capi.h,v 1.1 2001/11/14 10:41:26 kkeil Exp $
+/* $Id: capi.h,v 1.2 2003/07/07 14:29:38 kkeil Exp $
  *
  */
 
@@ -56,7 +56,7 @@ struct Bprotocol {
 	__u16 B3protocol;
 };
 
-__u16 q931CIPValue(SETUP_t *);
+__u16 q931CIPValue(Q931_info_t *);
 
 typedef struct _DummyProcess {
 	__u16	invokeId;
@@ -280,7 +280,7 @@ void plciAttachCplci(Plci_t *plci, struct _Cplci *cplci);
 void plciDetachCplci(Plci_t *plci, struct _Cplci *cplci);
 void plciNewCrInd(Plci_t *plci, void *);
 void plciNewCrReq(Plci_t *plci);
-int  plciL4L3(Plci_t *, __u32, int, void *);
+int  plciL4L3(Plci_t *, __u32, struct sk_buff *);
 
 // ---------------------------------------------------------------------------
 // struct Cplci
@@ -306,7 +306,7 @@ void cplci_l3l4(Cplci_t *cplci, int pr, void *arg);
 void cplciSendMessage(Cplci_t *cplci, struct sk_buff *skb);
 void cplciClearOtherApps(Cplci_t *cplci);
 void cplciInfoIndMsg(Cplci_t *,  __u32, unsigned char);
-void cplciInfoIndIE(Cplci_t *, unsigned char, __u32, unsigned char *);
+void cplciInfoIndIE(Cplci_t *, unsigned char, __u32, Q931_info_t *);
 void cplciRecvCmsg(Cplci_t *cplci, _cmsg *cmsg);
 void cplciCmsgHeader(Cplci_t *cplci, _cmsg *cmsg, __u8 cmd, __u8 subcmd);
 void cplciLinkUp(Cplci_t *cplci);
@@ -315,6 +315,9 @@ int  cplciFacSuspendReq(Cplci_t *cplci, struct FacReqParm *facReqParm,
 		       struct FacConfParm *facConfParm);
 int  cplciFacResumeReq(Cplci_t *cplci, struct FacReqParm *facReqParm,
 		      struct FacConfParm *facConfParm);
+struct sk_buff *alloc_l3msg(int, u_char);
+void AddvarIE(struct sk_buff *, u_char *);
+void AddIE(struct sk_buff *, u_char, u_char *);
 
 // ---------------------------------------------------------------------------
 // Ncci_t

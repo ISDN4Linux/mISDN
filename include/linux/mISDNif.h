@@ -1,4 +1,4 @@
-/* $Id: mISDNif.h,v 1.8 2003/06/30 11:23:33 kkeil Exp $
+/* $Id: mISDNif.h,v 1.9 2003/07/07 14:29:39 kkeil Exp $
  *
  */
 
@@ -312,7 +312,6 @@
 #define MAX_DATA_SIZE		2048
 #define MAX_DATA_MEM		2080
 #define MAX_HEADER_LEN		4
-#define UPLINK_HEADER_SPACE	22
 #define IFRAME_HEAD_SIZE	16
 
 /* structure for information exchange between layer/entity boundaries */
@@ -395,188 +394,49 @@ typedef struct _channel_info {
 
 /* l3 pointer arrays */
 
-typedef struct _ALERTING {
-	u_char *BEARER;
-	u_char *CHANNEL_ID;
-	u_char *FACILITY;
-	u_char *PROGRESS;
-	u_char *DISPLAY;
-	u_char *SIGNAL;
-	u_char *HLC;
-	u_char *USER_USER;
-} ALERTING_t;
+typedef struct _Q931_info {
+	u_char	type __attribute__((packed));
+	u_char	crlen __attribute__((packed));
+	u16	cr __attribute__((packed));
+	u16	bearer_capability __attribute__((packed));
+	u16	cause __attribute__((packed));
+	u16	call_id __attribute__((packed));
+	u16	call_state __attribute__((packed));
+	u16	channel_id __attribute__((packed));
+	u16	facility __attribute__((packed));
+	u16	progress __attribute__((packed));
+	u16	net_fac __attribute__((packed));
+	u16	notify __attribute__((packed));
+	u16	display __attribute__((packed));
+	u16	date __attribute__((packed));
+	u16	keypad __attribute__((packed));
+	u16	signal __attribute__((packed));
+	u16	info_rate __attribute__((packed));
+	u16	end2end_transit __attribute__((packed));
+	u16	transit_delay_sel __attribute__((packed));
+	u16	pktl_bin_para __attribute__((packed));
+	u16	pktl_window __attribute__((packed));
+	u16	pkt_size __attribute__((packed));
+	u16	closed_userg __attribute__((packed));
+	u16	connected_nr __attribute__((packed));
+	u16	connected_sub __attribute__((packed));
+	u16	calling_nr __attribute__((packed));
+	u16	calling_sub __attribute__((packed));
+	u16	called_nr __attribute__((packed));
+	u16	called_sub __attribute__((packed));
+	u16	redirect_nr __attribute__((packed));
+	u16	transit_net_sel __attribute__((packed));
+	u16	restart_ind __attribute__((packed));
+	u16	llc __attribute__((packed));
+	u16	hlc __attribute__((packed));
+	u16	useruser __attribute__((packed));
+	u16	more_data __attribute__((packed));
+	u16	sending_complete __attribute__((packed));
+	u16	congestion_level __attribute__((packed));
+	u16	fill1 __attribute__((packed));
+} Q931_info_t;
 
-typedef struct _CALL_PROCEEDING {
-	u_char *BEARER;
-	u_char *CHANNEL_ID;
-	u_char *FACILITY;
-	u_char *PROGRESS;
-	u_char *DISPLAY;
-	u_char *HLC;
-} CALL_PROCEEDING_t;
-
-typedef struct _CONNECT {
-	u_char *BEARER;
-	u_char *CHANNEL_ID;
-	u_char *FACILITY;
-	u_char *PROGRESS;
-	u_char *DISPLAY;
-	u_char *DATE;
-	u_char *SIGNAL;
-	u_char *CONNECT_PN;
-	u_char *CONNECT_SUB;
-	u_char *LLC;
-	u_char *HLC;
-	u_char *USER_USER;
-} CONNECT_t;
-
-typedef struct _CONNECT_ACKNOWLEDGE {
-	u_char *CHANNEL_ID;
-	u_char *DISPLAY;
-	u_char *SIGNAL;
-} CONNECT_ACKNOWLEDGE_t;
-
-typedef struct _DISCONNECT {
-	u_char *CAUSE;
-	u_char *FACILITY;
-	u_char *PROGRESS;
-	u_char *DISPLAY;
-	u_char *SIGNAL;
-	u_char *USER_USER;
-} DISCONNECT_t;
-
-typedef struct _INFORMATION {
-	u_char *COMPLETE;
-	u_char *DISPLAY;
-	u_char *KEYPAD;
-	u_char *SIGNAL;
-	u_char *CALLED_PN;
-} INFORMATION_t;
-
-typedef struct _NOTIFY {
-	u_char *BEARER;
-	u_char *NOTIFY;
-	u_char *DISPLAY;
-} NOTIFY_t;
-
-typedef struct _PROGRESS {
-	u_char *BEARER;
-	u_char *CAUSE;
-	u_char *FACILITY;
-	u_char *PROGRESS;
-	u_char *DISPLAY;
-	u_char *HLC;
-	u_char *USER_USER;
-} PROGRESS_t;
-
-typedef struct _RELEASE {
-	u_char *CAUSE;
-	u_char *FACILITY;
-	u_char *DISPLAY;
-	u_char *SIGNAL;
-	u_char *USER_USER;
-} RELEASE_t;
-
-typedef struct _RELEASE_COMPLETE {
-	u_char *CAUSE;
-	u_char *FACILITY;
-	u_char *DISPLAY;
-	u_char *SIGNAL;
-	u_char *USER_USER;
-} RELEASE_COMPLETE_t;
-
-typedef struct _RESUME {
-	u_char *CALL_ID;
-	u_char *FACILITY;
-} RESUME_t;
-
-typedef struct _RESUME_ACKNOWLEDGE {
-	u_char *CHANNEL_ID;
-	u_char *FACILITY;
-	u_char *DISPLAY;
-} RESUME_ACKNOWLEDGE_t;
-
-typedef struct _RESUME_REJECT {
-	u_char *CAUSE;
-	u_char *DISPLAY;
-} RESUME_REJECT_t;
-
-typedef struct _SETUP {
-	u_char *COMPLETE;
-	u_char *BEARER;
-	u_char *CHANNEL_ID;
-	u_char *FACILITY;
-	u_char *PROGRESS;
-	u_char *NET_FAC;
-	u_char *DISPLAY;
-	u_char *KEYPAD;
-	u_char *SIGNAL;
-	u_char *CALLING_PN;
-	u_char *CALLING_SUB;
-	u_char *CALLED_PN;
-	u_char *CALLED_SUB;
-	u_char *REDIR_NR;
-	u_char *LLC;
-	u_char *HLC;
-	u_char *USER_USER;
-} SETUP_t;
-
-typedef struct _SETUP_ACKNOWLEDGE {
-	u_char *CHANNEL_ID;
-	u_char *FACILITY;
-	u_char *PROGRESS;
-	u_char *DISPLAY;
-	u_char *SIGNAL;
-} SETUP_ACKNOWLEDGE_t;
-
-typedef struct _STATUS {
-	u_char *CAUSE;
-	u_char *CALL_STATE;
-	u_char *DISPLAY;
-} STATUS_t;
-
-typedef struct _STATUS_ENQUIRY {
-	u_char *DISPLAY;
-} STATUS_ENQUIRY_t;
-
-typedef struct _SUSPEND {
-	u_char *CALL_ID;
-	u_char *FACILITY;
-} SUSPEND_t;
-
-typedef struct _SUSPEND_ACKNOWLEDGE {
-	u_char *FACILITY;
-	u_char *DISPLAY;
-} SUSPEND_ACKNOWLEDGE_t;
-
-typedef struct _SUSPEND_REJECT {
-	u_char *CAUSE;
-	u_char *DISPLAY;
-} SUSPEND_REJECT_t;
-
-typedef struct _CONGESTION_CONTROL {
-	u_char *CONGESTION;
-	u_char *CAUSE;
-	u_char *DISPLAY;
-} CONGESTION_CONTROL_t;
-
-typedef struct _USER_INFORMATION {
-	u_char *MORE_DATA;
-	u_char *USER_USER;
-} USER_INFORMATION_t;
-
-typedef struct _RESTART {
-	u_char *CHANNEL_ID;
-	u_char *DISPLAY;
-	u_char *RESTART_IND;
-} RESTART_t;
-
-typedef struct _FACILITY {
-	u_char *FACILITY;
-	u_char *DISPLAY;
-} FACILITY_t;
-
-
+#define L3_EXTRA_SIZE	sizeof(Q931_info_t)
 
 #ifdef __KERNEL__
 #include <linux/isdn_compat.h>

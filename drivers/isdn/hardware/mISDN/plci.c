@@ -1,8 +1,9 @@
-/* $Id: plci.c,v 1.2 2002/09/16 23:49:38 kkeil Exp $
+/* $Id: plci.c,v 1.3 2003/07/07 14:29:38 kkeil Exp $
  *
  */
 
 #include "hisax_capi.h"
+#include "dss1.h"
 #include "helper.h"
 #include "debug.h"
 
@@ -27,46 +28,55 @@ void plciDestr(Plci_t *plci)
 #endif
 }
 
-void plciHandleSetupInd(Plci_t *plci, int pr, SETUP_t *setup)
+void plciHandleSetupInd(Plci_t *plci, int pr, Q931_info_t *qi)
 {
-	int ApplId;
-	__u16 CIPValue;
-	Appl_t *appl;
-	Cplci_t *cplci;
+	int	ApplId;
+	__u16	CIPValue;
+	Appl_t	*appl;
+	Cplci_t	*cplci;
 
+	if (!qi) {
+		int_error();
+		return;
+	}
 	for (ApplId = 1; ApplId <= CAPI_MAXAPPL; ApplId++) {
 		appl = contrId2appl(plci->contr, ApplId);
 		if (appl) {
-			CIPValue = q931CIPValue(setup);
+			CIPValue = q931CIPValue(qi);
 			if (listenHandle(&appl->listen, CIPValue)) {
 				cplci = applNewCplci(appl, plci);
 				if (!cplci) {
 					int_error();
 					break;
 				}
-				cplci_l3l4(cplci, pr, setup);
+				cplci_l3l4(cplci, pr, qi);
 			}
 		}
 	}
 	if (plci->nAppl == 0) {
-		RELEASE_COMPLETE_t relcmpl;
-		u_char cause[3] = {2,0x80,0xd8}; /* incompatible destination */
+		struct sk_buff *skb = alloc_l3msg(10, MT_RELEASE_COMPLETE);
+		u_char cause[4] = {IE_CAUSE,2,0x80,0xd8}; /* incompatible destination */
 
-		memset(&relcmpl, 0, sizeof(RELEASE_COMPLETE_t));
-		relcmpl.CAUSE = cause;
-		plciL4L3(plci, CC_RELEASE_COMPLETE | REQUEST,
-			sizeof(RELEASE_COMPLETE_t), &relcmpl);
+		if (skb) {
+			AddvarIE(skb,cause);
+			plciL4L3(plci, CC_RELEASE_COMPLETE | REQUEST, skb);
+		}
 	}
 }
 
 int plci_l3l4(Plci_t *plci, int pr, struct sk_buff *skb)
 {
-	__u16 applId;
-	Cplci_t *cplci;
+	__u16		applId;
+	Cplci_t		*cplci;
+	Q931_info_t	*qi;
 
+	if (skb->len)
+		qi = (Q931_info_t *)skb->data;
+	else
+		qi = NULL;
 	switch (pr) {
 		case CC_SETUP | INDICATION:
-			plciHandleSetupInd(plci, pr, (SETUP_t *)skb->data);
+			plciHandleSetupInd(plci, pr, qi);
 			break;
 		case CC_RELEASE_CR | INDICATION:
 			if (plci->nAppl == 0) {
@@ -77,7 +87,7 @@ int plci_l3l4(Plci_t *plci, int pr, struct sk_buff *skb)
 			for (applId = 1; applId <= CAPI_MAXAPPL; applId++) {
 				cplci = plci->cplcis[applId - 1];
 				if (cplci) 
-					cplci_l3l4(cplci, pr, skb->data);
+					cplci_l3l4(cplci, pr, qi);
 			}
 			break;
 	}
@@ -123,23 +133,22 @@ void plciNewCrInd(Plci_t *plci, struct l3_process *l3_pc)
 
 void plciNewCrReq(Plci_t *plci)
 {
-	plciL4L3(plci, CC_NEW_CR | REQUEST, 0, NULL);
+	plciL4L3(plci, CC_NEW_CR | REQUEST, NULL);
 }
 
-int plciL4L3(Plci_t *plci, __u32 prim, int len, void *arg)
+int plciL4L3(Plci_t *plci, __u32 prim, struct sk_buff *skb)
 {
 #define	MY_RESERVE	8
 	int	err;
-	struct sk_buff *skb;
 
-	if (!(skb = alloc_skb(len + MY_RESERVE, GFP_ATOMIC))) {
-		printk(KERN_WARNING "%s: no skb size %d+%d\n",
-			__FUNCTION__, len, MY_RESERVE);
-		return(-ENOMEM);
-	} else
-		skb_reserve(skb, MY_RESERVE);
-	if (len)
-		memcpy(skb_put(skb, len), arg, len);
+	if (!skb) {
+		if (!(skb = alloc_skb(MY_RESERVE, GFP_ATOMIC))) {
+			printk(KERN_WARNING "%s: no skb size %d\n",
+				__FUNCTION__, MY_RESERVE);
+			return(-ENOMEM);
+		} else
+			skb_reserve(skb, MY_RESERVE);
+	}
 	err = contrL4L3(plci->contr, prim, plci->adrPLCI, skb);
 	if (err)
 		dev_kfree_skb(skb);

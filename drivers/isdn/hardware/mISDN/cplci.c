@@ -1,4 +1,4 @@
-/* $Id: cplci.c,v 1.5 2003/06/27 15:19:42 kkeil Exp $
+/* $Id: cplci.c,v 1.6 2003/07/07 14:29:38 kkeil Exp $
  *
  */
 
@@ -10,45 +10,160 @@
 #define cplciDebug(cplci, lev, fmt, args...) \
 	capidebug(lev, fmt, ## args)
 
-static u_char BEARER_SPEECH_64K_ALAW[4] = {3, 0x80, 0x90, 0xA3};
-static u_char BEARER_SPEECH_64K_ULAW[4] = {3, 0x80, 0x90, 0xA2};
-static u_char BEARER_UNRES_DIGITAL_64K[3] = {2, 0x88, 0x90};
-static u_char BEARER_RES_DIGITAL_64K[3] = {2, 0x89, 0x90};
-static u_char BEARER_31AUDIO_64K_ALAW[4] = {3, 0x90, 0x90, 0xA3};
-static u_char BEARER_31AUDIO_64K_ULAW[4] = {3, 0x90, 0x90, 0xA2};
-static u_char HLC_TELEPHONY[3] = {2, 0x91, 0x81};
-static u_char HLC_FACSIMILE[3] = {2, 0x91, 0x84};
+static u_char BEARER_SPEECH_64K_ALAW[] = {4, 3, 0x80, 0x90, 0xA3};
+static u_char BEARER_SPEECH_64K_ULAW[] = {4, 3, 0x80, 0x90, 0xA2};
+static u_char BEARER_UNRES_DIGITAL_64K[] = {4, 2, 0x88, 0x90};
+static u_char BEARER_RES_DIGITAL_64K[] = {4, 2, 0x89, 0x90};
+static u_char BEARER_31AUDIO_64K_ALAW[] = {4, 3, 0x90, 0x90, 0xA3};
+static u_char BEARER_31AUDIO_64K_ULAW[] = {4, 3, 0x90, 0x90, 0xA2};
+static u_char HLC_TELEPHONY[] = {0x7d, 2, 0x91, 0x81};
+static u_char HLC_FACSIMILE[] = {0x7d, 2, 0x91, 0x84};
+static signed char l3_ie2pos[128] = {
+			-1,-1,-1,-1, 0,-1,-1,-1, 1,-1,-1,-1,-1,-1,-1,-1,
+			 2,-1,-1,-1, 3,-1,-1,-1, 4,-1,-1,-1, 5,-1, 6,-1,
+			 7,-1,-1,-1,-1,-1,-1, 8, 9,10,-1,-1,11,-1,-1,-1,
+			-1,-1,-1,-1,12,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+			13,-1,14,15,16,17,18,19,-1,-1,-1,-1,20,21,-1,-1,
+			-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+			-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,22,23,-1,-1,
+			24,25,-1,-1,26,-1,-1,-1,27,28,-1,-1,29,30,31,-1
+};
+			
+static unsigned char l3_pos2ie[32] = {
+			0x04, 0x08, 0x10, 0x14, 0x18, 0x1c, 0x1e, 0x20,
+			0x27, 0x28, 0x29, 0x2c, 0x34, 0x40, 0x42, 0x43,
+			0x44, 0x45, 0x46, 0x47, 0x4c, 0x4d, 0x6c, 0x6d,
+			0x70, 0x71, 0x74, 0x78, 0x79, 0x7c, 0x7d, 0x7e
+};
 
-__u16 q931CIPValue(SETUP_t *setup)
+static void
+initQ931_info(Q931_info_t *qi) {
+	memset(qi, 0, sizeof(Q931_info_t));
+};
+
+struct sk_buff *
+alloc_l3msg(int len, u_char type)
 {
-	__u16 CIPValue = 0;
+	struct sk_buff	*skb;
+	Q931_info_t	*qi;
 
-	if (!setup)
+	if (!(skb = alloc_skb(len + MAX_HEADER_LEN + L3_EXTRA_SIZE, GFP_ATOMIC))) {
+		printk(KERN_WARNING "HiSax: No skb for L3\n");
+		return (NULL);
+	}
+	skb_reserve(skb, MAX_HEADER_LEN);
+	qi = (Q931_info_t *)skb_put(skb, L3_EXTRA_SIZE);
+	initQ931_info(qi);
+	qi->type = type;
+	return (skb);
+}
+
+void AddvarIE(struct sk_buff *skb, u_char *ie)
+{
+	u_char	*p, *ps;
+	u16	*ies;
+	int	l;
+	Q931_info_t *qi = (Q931_info_t *)skb->data;
+
+	ies = &qi->bearer_capability;
+	ps = (u_char *) qi;
+	ps += L3_EXTRA_SIZE;
+	if (*ie & 0x80) { /* one octett IE */
+		if (*ie == IE_MORE_DATA)
+			ies = &qi->more_data;
+		else if (*ie == IE_COMPLETE)
+			ies = &qi->sending_complete;
+		else if ((*ie & 0xf0) == IE_CONGESTION)
+			ies = &qi->congestion_level;
+		else {
+			int_error();
+			return;
+		}
+		l = 1;
+	} else {
+		if (l3_ie2pos[*ie]<0) {
+			int_error();
+			return;
+		}
+		ies += l3_ie2pos[*ie];
+		l = ie[1] + 2;
+	}
+	p = skb_put(skb, l);
+	*ies = (u16)(p - ps);
+	memcpy(p, ie, l);
+}
+
+void AddIE(struct sk_buff *skb, u_char ie, u_char *iep)
+{
+	u_char	*p, *ps;
+	u16	*ies;
+	int	l;
+	Q931_info_t *qi = (Q931_info_t *)skb->data;
+
+	ies = &qi->bearer_capability;
+	ps = (u_char *) qi;
+	ps += L3_EXTRA_SIZE;
+	if (ie & 0x80) { /* one octett IE */
+		if (ie == IE_MORE_DATA)
+			ies = &qi->more_data;
+		else if (ie == IE_COMPLETE)
+			ies = &qi->sending_complete;
+		else if ((ie & 0xf0) == IE_CONGESTION)
+			ies = &qi->congestion_level;
+		else {
+			int_error();
+			return;
+		}
+		l = 0;
+	} else {
+		if (l3_ie2pos[ie]<0) {
+			int_error();
+			return;
+		}
+		ies += l3_ie2pos[ie];
+		l = iep[0] + 1;
+	}
+	p = skb_put(skb, l+1);
+	*ies = (u16)(p - ps);
+	*p++ = ie;
+	if (l)
+		memcpy(p, iep, l);
+}
+
+__u16 q931CIPValue(Q931_info_t *qi)
+{
+	__u16	CIPValue = 0;
+	u_char	*p;
+
+	if (!qi)
 		return 0;
-	if (!setup->BEARER)
+	if (!qi->bearer_capability)
 		return 0;
-	if (memcmp(setup->BEARER, BEARER_SPEECH_64K_ALAW, 4) == 0
-	    || memcmp(setup->BEARER, BEARER_SPEECH_64K_ULAW, 4) == 0) {
+	p = (u_char *)qi;
+	p += L3_EXTRA_SIZE + qi->bearer_capability;
+	if (memcmp(p, BEARER_SPEECH_64K_ALAW, 5) == 0
+	    || memcmp(p, BEARER_SPEECH_64K_ULAW, 5) == 0) {
 		CIPValue = 1;
-	} else if (memcmp(setup->BEARER, BEARER_UNRES_DIGITAL_64K, 3) == 0) {
+	} else if (memcmp(p, BEARER_UNRES_DIGITAL_64K, 4) == 0) {
 		CIPValue = 2;
-	} else if (memcmp(setup->BEARER, BEARER_RES_DIGITAL_64K, 3) == 0) {
+	} else if (memcmp(p, BEARER_RES_DIGITAL_64K, 4) == 0) {
 		CIPValue = 3;
-	} else if (memcmp(setup->BEARER, BEARER_31AUDIO_64K_ALAW, 4) == 0
-		   || memcmp(setup->BEARER, BEARER_31AUDIO_64K_ULAW, 4) == 0) {
+	} else if (memcmp(p, BEARER_31AUDIO_64K_ALAW, 5) == 0
+		   || memcmp(p, BEARER_31AUDIO_64K_ULAW, 5) == 0) {
 		CIPValue = 4;
 	} else {
 		CIPValue = 0;
 	}
 
-	if (!setup->HLC) {
+	if (!qi->hlc)
 		return CIPValue;
-	}
 
+	p = (u_char *)qi;
+	p += L3_EXTRA_SIZE + qi->hlc;
 	if ((CIPValue == 1) || (CIPValue == 4)) {
-		if (memcmp(setup->HLC, HLC_TELEPHONY, 3) == 0) {
+		if (memcmp(p, HLC_TELEPHONY, 4) == 0) {
 			CIPValue = 16;
-		} else if (memcmp(setup->HLC, HLC_FACSIMILE, 3) == 0) {
+		} else if (memcmp(p, HLC_FACSIMILE, 4) == 0) {
 			CIPValue = 17;
 		}
 	}
@@ -61,6 +176,7 @@ u_int plci_parse_channel_id(u_char *p)
 	int	l;
 
 	if (p) {
+		p++;
 		printk(KERN_DEBUG "%s: l(%d) %x\n", __FUNCTION__, p[0], p[1]);
 		l = *p++;
 		if (l == 1) {
@@ -74,28 +190,28 @@ u_int plci_parse_channel_id(u_char *p)
 	return(cid);
 }
 
-__u16 CIPValue2setup(__u16 CIPValue, SETUP_t *setup)
+__u16 CIPValue2setup(__u16 CIPValue, struct sk_buff *skb)
 {
 	switch (CIPValue) {
 		case 16:
-			setup->HLC = HLC_TELEPHONY;
-			setup->BEARER = BEARER_31AUDIO_64K_ALAW;
+			AddvarIE(skb, BEARER_31AUDIO_64K_ALAW);
+			AddvarIE(skb, HLC_TELEPHONY);
 			break;
 		case 17:
-			setup->HLC = HLC_FACSIMILE;
-			setup->BEARER = BEARER_31AUDIO_64K_ALAW;
+			AddvarIE(skb, BEARER_31AUDIO_64K_ALAW);
+			AddvarIE(skb, HLC_FACSIMILE);
 			break;
 		case 1:
-			setup->BEARER = BEARER_SPEECH_64K_ALAW;
+			AddvarIE(skb, BEARER_SPEECH_64K_ALAW);
 			break;
 		case 2:
-			setup->BEARER = BEARER_UNRES_DIGITAL_64K;
+			AddvarIE(skb, BEARER_UNRES_DIGITAL_64K);
 			break;
 		case 3:
-			setup->BEARER = BEARER_RES_DIGITAL_64K;
+			AddvarIE(skb, BEARER_RES_DIGITAL_64K);
 			break;
 		case 4:
-			setup->BEARER = BEARER_31AUDIO_64K_ALAW;
+			AddvarIE(skb, BEARER_31AUDIO_64K_ALAW);
 			break;
 		default:
 			return CapiIllMessageParmCoding;
@@ -103,45 +219,32 @@ __u16 CIPValue2setup(__u16 CIPValue, SETUP_t *setup)
 	return 0;
 }
 
-__u16 cmsg2setup_req(_cmsg *cmsg, SETUP_t *setup)
+__u16 cmsg2setup_req(_cmsg *cmsg, struct sk_buff *skb)
 {
-	memset(setup, 0, sizeof(SETUP_t));
-	if (CIPValue2setup(cmsg->CIPValue, setup))
+	if (CIPValue2setup(cmsg->CIPValue, skb))
 		goto err;
-	if (cmsg->CalledPartyNumber && cmsg->CalledPartyNumber[0])
-		setup->CALLED_PN = cmsg->CalledPartyNumber;
-	if (cmsg->CalledPartySubaddress && cmsg->CalledPartySubaddress[0])
-		setup->CALLED_SUB = cmsg->CalledPartySubaddress;
-	if (cmsg->CallingPartyNumber && cmsg->CallingPartyNumber[0])
-		setup->CALLING_PN = cmsg->CallingPartyNumber;
-	if (cmsg->CallingPartySubaddress && cmsg->CallingPartySubaddress[0])
-		setup->CALLING_SUB = cmsg->CallingPartySubaddress;
-	if (cmsg->BC && cmsg->BC[0])
-		setup->BEARER = cmsg->BC;
-	if (cmsg->LLC && cmsg->LLC[0])
-		setup->LLC = cmsg->LLC;
-	if (cmsg->HLC && cmsg->HLC[0])
-		setup->HLC = cmsg->HLC;
+	AddIE(skb, IE_CALLING_PN, cmsg->CallingPartyNumber);
+	AddIE(skb, IE_CALLING_SUB, cmsg->CallingPartySubaddress);
+	AddIE(skb, IE_CALLED_PN, cmsg->CalledPartyNumber);
+	AddIE(skb, IE_CALLED_SUB, cmsg->CalledPartySubaddress);
+	AddIE(skb, IE_BEARER, cmsg->BC);
+	AddIE(skb, IE_LLC, cmsg->LLC);
+	AddIE(skb, IE_HLC, cmsg->HLC);
 	return 0;
  err:
 	return CapiIllMessageParmCoding;
 }
 
-__u16 cmsg2info_req(_cmsg *cmsg, INFORMATION_t *info)
+__u16 cmsg2info_req(_cmsg *cmsg, struct sk_buff *skb)
 {
-	memset(info, 0, sizeof(INFORMATION_t));
-	if (cmsg->Keypadfacility && cmsg->Keypadfacility[0])
-		info->KEYPAD = cmsg->Keypadfacility;
-	if (cmsg->CalledPartyNumber && cmsg->CalledPartyNumber[0])
-		info->CALLED_PN = cmsg->CalledPartyNumber;
+	AddIE(skb, IE_KEYPAD, cmsg->Keypadfacility);
+	AddIE(skb, IE_CALLED_PN, cmsg->CalledPartyNumber);
 	return 0;
 }
 
-__u16 cmsg2alerting_req(_cmsg *cmsg, ALERTING_t *alert)
+__u16 cmsg2alerting_req(_cmsg *cmsg, struct sk_buff *skb)
 {
-	memset(alert, 0, sizeof(ALERTING_t));
-	if (cmsg->Useruserdata && cmsg->Useruserdata[0])
-		alert->USER_USER = cmsg->Useruserdata;
+	AddIE(skb, IE_USER_USER, cmsg->Useruserdata);
 	return 0;
 }
 
@@ -300,16 +403,22 @@ inline void cplciCmsgHeader(Cplci_t *cplci, _cmsg *cmsg, __u8 cmd, __u8 subcmd)
 
 static void plci_connect_req(struct FsmInst *fi, int event, void *arg)
 {
-	Cplci_t *cplci = fi->userdata;
-	Plci_t *plci = cplci->plci;
-	SETUP_t setup_req;
-	_cmsg *cmsg = arg;
-	__u16 Info = 0;
+	Cplci_t		*cplci = fi->userdata;
+	Plci_t		*plci = cplci->plci;
+	struct sk_buff	*skb;
+	_cmsg		*cmsg = arg;
+	__u16		Info = 0;
 
 	FsmChangeState(fi, ST_PLCI_P_0_1);
 	test_and_set_bit(PLCI_FLAG_OUTGOING, &plci->flags);
 
-	if ((Info = cmsg2setup_req(cmsg, &setup_req))) {
+	skb = alloc_l3msg(260, MT_SETUP);
+	
+	if (!skb) {
+		Info = CapiNoPlciAvailable;
+		goto answer;
+	}
+	if ((Info = cmsg2setup_req(cmsg, skb))) {
 		goto answer;
 	}
 	if ((Info = cplciCheckBprotocol(cplci, cmsg))) {
@@ -317,7 +426,7 @@ static void plci_connect_req(struct FsmInst *fi, int event, void *arg)
 	}
 
 	plciNewCrReq(plci);
-	plciL4L3(plci, CC_SETUP | REQUEST, sizeof(SETUP_t), &setup_req);
+	plciL4L3(plci, CC_SETUP | REQUEST, skb);
 answer:
 	capi_cmsg_answer(cmsg);
 	cmsg->Info = Info;
@@ -329,8 +438,8 @@ answer:
 
 static void plci_connect_conf(struct FsmInst *fi, int event, void *arg)
 {
-	Cplci_t *cplci = fi->userdata;
-	_cmsg *cmsg = arg;
+	Cplci_t	*cplci = fi->userdata;
+	_cmsg	*cmsg = arg;
   
 	if (cmsg->Info == 0) {
 		FsmChangeState(fi, ST_PLCI_P_1);
@@ -347,52 +456,44 @@ static void plci_connect_ind(struct FsmInst *fi, int event, void *arg)
 
 static void plci_suspend_req(struct FsmInst *fi, int event, void *arg)
 {
-	Cplci_t *cplci = fi->userdata;
-	Plci_t *plci = cplci->plci;
-	int len;
+	Cplci_t	*cplci = fi->userdata;
+	Plci_t	*plci = cplci->plci;
 
-	if (arg)
-		len = sizeof(SUSPEND_t);
-	else
-		len = 0;
-	plciL4L3(plci, CC_SUSPEND | REQUEST, len, arg); 
+	plciL4L3(plci, CC_SUSPEND | REQUEST, arg); 
 }
 
 static void plci_resume_req(struct FsmInst *fi, int event, void *arg)
 {
-	Cplci_t *cplci = fi->userdata;
-	Plci_t *plci = cplci->plci;
-	int len;
-
-	if (arg)
-		len = sizeof(RESUME_t);
-	else
-		len = 0;
+	Cplci_t	*cplci = fi->userdata;
+	Plci_t	*plci = cplci->plci;
 
 	// we already sent CONF with Info = SuppInfo = 0
 	FsmChangeState(fi, ST_PLCI_P_RES);
 	plciNewCrReq(plci);
-	plciL4L3(plci, CC_RESUME | REQUEST, len, arg);
+	plciL4L3(plci, CC_RESUME | REQUEST, arg);
 }
 
 static void plci_alert_req(struct FsmInst *fi, int event, void *arg)
 {
-	Cplci_t *cplci = fi->userdata;
-	Plci_t *plci = cplci->plci;
-	ALERTING_t alerting_req;
-	_cmsg *cmsg = arg;
-	__u16 Info;
+	Cplci_t		*cplci = fi->userdata;
+	Plci_t		*plci = cplci->plci;
+	_cmsg		*cmsg = arg;
+	__u16		Info = 0;
 	
 	if (test_and_set_bit(PLCI_FLAG_ALERTING, &plci->flags)) {
 		Info = 0x0003; // other app is already alerting
 	} else {
-		Info = cmsg2alerting_req(cmsg, &alerting_req);
+		struct sk_buff	*skb = alloc_l3msg(10, MT_ALERTING);
+		if (!skb) {
+			int_error();
+			goto answer;
+		}
+		Info = cmsg2alerting_req(cmsg, skb);
 		if (Info == 0) {
-			plciL4L3(plci, CC_ALERTING | REQUEST,
-				sizeof(ALERTING_t), &alerting_req); 
+			plciL4L3(plci, CC_ALERTING | REQUEST, skb);
 		}
 	}
-	
+answer:	
 	capi_cmsg_answer(cmsg);
 	cmsg->Info = Info;
 	cplciRecvCmsg(cplci, cmsg);
@@ -400,11 +501,11 @@ static void plci_alert_req(struct FsmInst *fi, int event, void *arg)
 
 static void plci_connect_resp(struct FsmInst *fi, int event, void *arg)
 {
-	Cplci_t *cplci = fi->userdata;
-	Plci_t *plci = cplci->plci;
-	DISCONNECT_t disconnect_req;
-	unsigned char cause[4];
-	_cmsg *cmsg = arg;
+	Cplci_t		*cplci = fi->userdata;
+	Plci_t		*plci = cplci->plci;
+	unsigned char	cause[4];
+	_cmsg		*cmsg = arg;
+	struct sk_buff	*skb;
 
 	switch (cmsg->Reject) {
 		case 0 : // accept
@@ -412,7 +513,7 @@ static void plci_connect_resp(struct FsmInst *fi, int event, void *arg)
 				int_error();
 			}
 			cplciClearOtherApps(cplci);
-			plciL4L3(plci, CC_CONNECT | REQUEST, 0, NULL);
+			plciL4L3(plci, CC_CONNECT | REQUEST, NULL);
 			FsmChangeState(fi, ST_PLCI_P_4);
 			break;
 		default : // ignore, reject 
@@ -432,7 +533,6 @@ static void plci_connect_resp(struct FsmInst *fi, int event, void *arg)
 						cause[2] = 0x90; break; // normal call clearing
 					}
 			}
-
 			if (cmsg->Reject != 1) { // ignore
 				cplciClearOtherApps(cplci);
 			}
@@ -440,12 +540,15 @@ static void plci_connect_resp(struct FsmInst *fi, int event, void *arg)
 			if (plci->nAppl == 0) {
 				if (test_bit(PLCI_FLAG_ALERTING, &plci->flags)) { 
 				// if we already answered, we can't just ignore but must clear actively
-					memset(&disconnect_req, 0, sizeof(DISCONNECT_t));
-					disconnect_req.CAUSE = cause;
-					plciL4L3(plci, CC_DISCONNECT | REQUEST,
-						sizeof(DISCONNECT_t), &disconnect_req);
+					skb = alloc_l3msg(10, MT_DISCONNECT);
+					if (!skb) {
+						plciL4L3(plci, CC_DISCONNECT | REQUEST, NULL);
+					} else {
+						AddIE(skb, IE_CAUSE, cause);
+						plciL4L3(plci, CC_DISCONNECT | REQUEST, skb);
+					}
 				} else {
-					plciL4L3(plci, CC_RELEASE_COMPLETE | REQUEST, 0, NULL);
+					plciL4L3(plci, CC_RELEASE_COMPLETE | REQUEST, NULL);
 				}
 			}
 		
@@ -472,11 +575,10 @@ static void plci_connect_active_resp(struct FsmInst *fi, int event, void *arg)
 
 static void plci_disconnect_req(struct FsmInst *fi, int event, void *arg)
 {
-	Cplci_t *cplci = fi->userdata;
-	Plci_t *plci = cplci->plci;
-	DISCONNECT_t disconnect_req;
-	u_char cause[4];
-	_cmsg *cmsg = arg;
+	Cplci_t	*cplci = fi->userdata;
+	Plci_t	*plci = cplci->plci;
+	u_char	cause[4];
+	_cmsg	*cmsg = arg;
 
 	FsmChangeState(fi, ST_PLCI_P_5);
 	
@@ -491,19 +593,23 @@ static void plci_disconnect_req(struct FsmInst *fi, int event, void *arg)
 	cplciLinkDown(cplci);
 
 	if (!cplci->cause[0]) { // FIXME
-//		plciL4L3(cplci->plci, CC_STATUS_ENQUIRY | REQUEST, 0, NULL);
-		memset(&disconnect_req, 0, sizeof(DISCONNECT_t));
-		memcpy(cause, "\x02\x80\x90", 3); // normal call clearing
-		disconnect_req.CAUSE = cause;
-		plciL4L3(plci, CC_DISCONNECT | REQUEST, sizeof(DISCONNECT_t),
-			&disconnect_req);
-		
+		struct sk_buff	*skb;
+
+//		plciL4L3(cplci->plci, CC_STATUS_ENQUIRY | REQUEST, NULL);
+		skb = alloc_l3msg(10, MT_DISCONNECT);
+		if (!skb) {
+			plciL4L3(plci, CC_DISCONNECT | REQUEST, NULL);
+		} else {
+			memcpy(cause, "\x02\x80\x90", 3); // normal call clearing
+			AddIE(skb, IE_CAUSE, cause);
+			plciL4L3(plci, CC_DISCONNECT | REQUEST, skb);
+		}
 	} else {
 		/* release physical link */
 		// FIXME
-		plciL4L3(plci, CC_RELEASE | REQUEST, 0, NULL);
+		plciL4L3(plci, CC_RELEASE | REQUEST, NULL);
 	}
-//	plciL4L3(cplci->plci, CC_STATUS_ENQUIRY | REQUEST, 0, NULL);
+//	plciL4L3(cplci->plci, CC_STATUS_ENQUIRY | REQUEST, NULL);
 }
 
 static void plci_suspend_conf(struct FsmInst *fi, int event, void *arg)
@@ -535,19 +641,25 @@ static void plci_disconnect_resp(struct FsmInst *fi, int event, void *arg)
 
 static void plci_cc_setup_conf(struct FsmInst *fi, int event, void *arg)
 {
-	Cplci_t *cplci = fi->userdata;
-	_cmsg cmsg;
-	CONNECT_t *conn = arg;
+	Cplci_t		*cplci = fi->userdata;
+	_cmsg		cmsg;
+	Q931_info_t	*qi = arg;
+	u_char		*p;
 
 	if (cplci->bchannel == -1) {/* no valid channel set */
 		FsmEvent(fi, EV_PLCI_CHANNEL_ERR, NULL);
 		return;
 	}
 	cplciCmsgHeader(cplci, &cmsg, CAPI_CONNECT_ACTIVE, CAPI_IND);
-	if (arg) {
-		cmsg.ConnectedNumber        = conn->CONNECT_PN;
-		cmsg.ConnectedSubaddress    = conn->CONNECT_SUB;
-		cmsg.LLC                    = conn->LLC;
+	if (qi) {
+		p = (u_char *)qi;
+		p += L3_EXTRA_SIZE;
+		if (qi->connected_nr)
+			cmsg.ConnectedNumber = &p[qi->connected_nr + 1];
+		if (qi->connected_sub)
+			cmsg.ConnectedSubaddress = &p[qi->connected_sub + 1];
+		if (qi->llc)
+			cmsg.LLC = &p[qi->llc + 1];
 	}
 	FsmEvent(fi, EV_PLCI_CONNECT_ACTIVE_IND, &cmsg);
 	cplciRecvCmsg(cplci, &cmsg);
@@ -566,23 +678,25 @@ static void plci_cc_setup_conf_err(struct FsmInst *fi, int event, void *arg)
 
 static void plci_channel_err(struct FsmInst *fi, int event, void *arg)
 {
-	Cplci_t			*cplci = fi->userdata;
-	Plci_t			*plci = cplci->plci;
-	_cmsg			cmsg;
-	RELEASE_COMPLETE_t	relc;
-	unsigned char		cause[4];
+	Cplci_t		*cplci = fi->userdata;
+	Plci_t		*plci = cplci->plci;
+	_cmsg		cmsg;
+	unsigned char	cause[4];
+	struct sk_buff	*skb;
 
 	if (!plci) {
 		int_error();
 		return;
 	}
-	memset(&relc, 0, sizeof(RELEASE_COMPLETE_t));
-	cause[0] = 2;
-	cause[1] = 0x80;
-	cause[2] = 0x86; /* channel unacceptable */
-	relc.CAUSE = cause;
-	plciL4L3(plci, CC_RELEASE_COMPLETE | REQUEST, sizeof(RELEASE_COMPLETE_t),
-		&relc);
+	skb = alloc_l3msg(10, MT_RELEASE_COMPLETE);
+	if (skb) {
+		cause[0] = 2;
+		cause[1] = 0x80;
+		cause[2] = 0x86; /* channel unacceptable */
+		AddIE(skb, IE_CAUSE, cause);
+		plciL4L3(plci, CC_RELEASE_COMPLETE | REQUEST, skb);
+	} else
+		int_error();
 	cplciCmsgHeader(cplci, &cmsg, CAPI_DISCONNECT, CAPI_IND);
 	cmsg.Reason = CapiProtocolErrorLayer3;
 	FsmEvent(&cplci->plci_m, EV_PLCI_DISCONNECT_IND, &cmsg);
@@ -591,32 +705,42 @@ static void plci_channel_err(struct FsmInst *fi, int event, void *arg)
 
 static void plci_cc_setup_ind(struct FsmInst *fi, int event, void *arg)
 { 
-	Cplci_t *cplci = fi->userdata;
-	SETUP_t *setup = arg;
-	_cmsg cmsg;
+	Cplci_t		*cplci = fi->userdata;
+	Q931_info_t	*qi = arg;
+	_cmsg		cmsg;
+	u_char		*p;
 
 	cplciCmsgHeader(cplci, &cmsg, CAPI_CONNECT, CAPI_IND);
 	
 	// FIXME: CW
-
-	cmsg.CIPValue               = q931CIPValue(setup);
-	cmsg.CalledPartyNumber      = setup->CALLED_PN;
-	cmsg.CallingPartyNumber     = setup->CALLING_PN; // FIXME screen
-	cmsg.CalledPartySubaddress  = setup->CALLED_SUB;
-	cmsg.CallingPartySubaddress = setup->CALLING_SUB;
-	cmsg.BC                     = setup->BEARER;
-	cmsg.LLC                    = setup->LLC;
-	cmsg.HLC                    = setup->HLC;
-	// all else set to default
-	
+	if (qi) {
+		p = (u_char *)qi;
+		p += L3_EXTRA_SIZE;
+		cmsg.CIPValue = q931CIPValue(qi);
+		if (qi->called_nr)
+			cmsg.CalledPartyNumber = &p[qi->called_nr + 1];
+		if (qi->called_sub)
+			cmsg.CalledPartySubaddress = &p[qi->called_sub + 1];
+		if (qi->calling_nr)
+			cmsg.CallingPartyNumber = &p[qi->calling_nr + 1];
+		if (qi->calling_sub)
+			cmsg.CallingPartySubaddress = &p[qi->calling_sub + 1];
+		if (qi->bearer_capability)
+			cmsg.BC = &p[qi->bearer_capability + 1];
+		if (qi->llc)
+			cmsg.LLC = &p[qi->llc + 1];
+		if (qi->hlc)
+			cmsg.HLC = &p[qi->hlc + 1];
+		// all else set to default
+	}
 	FsmEvent(&cplci->plci_m, EV_PLCI_CONNECT_IND, &cmsg);
 	cplciRecvCmsg(cplci, &cmsg);
 }
 
 static void plci_cc_setup_compl_ind(struct FsmInst *fi, int event, void *arg)
 {
-	Cplci_t *cplci = fi->userdata;
-	_cmsg cmsg;
+	Cplci_t	*cplci = fi->userdata;
+	_cmsg	cmsg;
 
 	cplciCmsgHeader(cplci, &cmsg, CAPI_CONNECT_ACTIVE, CAPI_IND);
 	FsmEvent(&cplci->plci_m, EV_PLCI_CONNECT_ACTIVE_IND, &cmsg);
@@ -625,35 +749,42 @@ static void plci_cc_setup_compl_ind(struct FsmInst *fi, int event, void *arg)
 
 static void plci_cc_disconnect_ind(struct FsmInst *fi, int event, void *arg)
 {
-	Cplci_t *cplci = fi->userdata;
-	DISCONNECT_t *disc = arg;
+	Cplci_t		*cplci = fi->userdata;
+	Q931_info_t	*qi = arg;
+	u_char		*p;
 
-	if (disc && disc->CAUSE) 
-		memcpy(cplci->cause, disc->CAUSE, 3);
+	if (qi) {
+		p = (u_char *)qi;
+		p += L3_EXTRA_SIZE;
+		if (qi->cause)
+			memcpy(cplci->cause, &p[qi->cause + 1], 3);
+	}
 	if (!(cplci->appl->listen.InfoMask & CAPI_INFOMASK_EARLYB3)) {
 		cplciLinkDown(cplci);
-		plciL4L3(cplci->plci, CC_RELEASE | REQUEST, 0, NULL);
+		plciL4L3(cplci->plci, CC_RELEASE | REQUEST, NULL);
 	}
 }
 
 static void plci_cc_release_ind(struct FsmInst *fi, int event, void *arg)
 {
-	Cplci_t *cplci = fi->userdata;
-	RELEASE_t *rel = arg;
-	_cmsg cmsg;
+	Cplci_t		*cplci = fi->userdata;
+	Q931_info_t	*qi = arg;
+	u_char		*p;
+	_cmsg		cmsg;
 	
 	plciDetachCplci(cplci->plci, cplci);
 
 	cplciLinkDown(cplci);
 	cplciCmsgHeader(cplci, &cmsg, CAPI_DISCONNECT, CAPI_IND);
-	if (rel) {
-		if (rel->CAUSE) {
-			cmsg.Reason = 0x3400 | rel->CAUSE[2];
-		} else if (cplci->cause[0]) { // cause from CC_DISCONNECT IND
+	if (qi) {
+		p = (u_char *)qi;
+		p += L3_EXTRA_SIZE;
+		if (qi->cause)
+			cmsg.Reason = 0x3400 | p[qi->cause + 3];
+		else if (cplci->cause[0]) // cause from CC_DISCONNECT IND
 			cmsg.Reason = 0x3400 | cplci->cause[2];
-		} else {
+		else
 			cmsg.Reason = 0;
-		}
 	} else {
 		cmsg.Reason = CapiProtocolErrorLayer1;
 	}
@@ -663,25 +794,26 @@ static void plci_cc_release_ind(struct FsmInst *fi, int event, void *arg)
 
 static void plci_cc_notify_ind(struct FsmInst *fi, int event, void *arg)
 {
-	Cplci_t *cplci = fi->userdata;
-	NOTIFY_t *notify = arg;
-	_cmsg cmsg;
-	__u8 tmp[10], *p;
+	Cplci_t		*cplci = fi->userdata;
+	Q931_info_t	*qi = arg;
+	_cmsg		cmsg;
+	__u8		tmp[10], *p, *nf;
 
-	if (!arg || !notify->NOTIFY)
+	if (!qi || !qi->notify)
+		return;
+	nf = (u_char *)qi;
+	nf += L3_EXTRA_SIZE + qi->notify + 1;
+	if (nf[0] != 1) // len != 1
 		return;
 
-	if (notify->NOTIFY[0] != 1) // len != 1
-		return;
-
-	switch (notify->NOTIFY[1]) {
+	switch (nf[1]) {
 		case 0x80: // user suspended
 		case 0x81: // user resumed
 			if (!(cplci->appl->NotificationMask & SuppServiceTP))
 				break;
 			cplciCmsgHeader(cplci, &cmsg, CAPI_FACILITY, CAPI_IND);
 			p = &tmp[1];
-			p += capiEncodeWord(p, 0x8002 + (notify->NOTIFY[1] & 1)); // Suspend/Resume Notification
+			p += capiEncodeWord(p, 0x8002 + (nf[1] & 1)); // Suspend/Resume Notification
 			*p++ = 0; // empty struct
 			tmp[0] = p - &tmp[1];
 			cmsg.FacilitySelector = 0x0003;
@@ -693,8 +825,8 @@ static void plci_cc_notify_ind(struct FsmInst *fi, int event, void *arg)
 
 static void plci_suspend_reply(Cplci_t *cplci, __u16 SuppServiceReason)
 {
-	_cmsg cmsg;
-	__u8 tmp[10], *p;
+	_cmsg	cmsg;
+	__u8	tmp[10], *p;
 
 	cplciCmsgHeader(cplci, &cmsg, CAPI_FACILITY, CAPI_IND);
 	p = &tmp[1];
@@ -711,14 +843,17 @@ static void plci_suspend_reply(Cplci_t *cplci, __u16 SuppServiceReason)
 
 static void plci_cc_suspend_err(struct FsmInst *fi, int event, void *arg)
 {
-	Cplci_t *cplci = fi->userdata;
-	SUSPEND_REJECT_t *rej = arg;
-	__u16 SuppServiceReason;
+	Cplci_t		*cplci = fi->userdata;
+	Q931_info_t	*qi = arg;
+	u_char		*p;
+	__u16		SuppServiceReason;
 	
-	if (rej) { // reject from network
-		if (rej->CAUSE)
-			SuppServiceReason = 0x3400 | rej->CAUSE[2];
-		else
+	if (qi) { // reject from network
+		if (qi->cause) {
+			p = (u_char *)qi;
+			p += L3_EXTRA_SIZE + qi->cause;
+			SuppServiceReason = 0x3400 | p[3];
+		} else
 			SuppServiceReason = CapiProtocolErrorLayer3;
 	} else { // timeout
 		SuppServiceReason = CapiTimeOut;
@@ -728,8 +863,8 @@ static void plci_cc_suspend_err(struct FsmInst *fi, int event, void *arg)
 
 static void plci_cc_suspend_conf(struct FsmInst *fi, int event, void *arg)
 {
-	Cplci_t *cplci = fi->userdata;
-	_cmsg cmsg;
+	Cplci_t	*cplci = fi->userdata;
+	_cmsg	cmsg;
 
 	cplciLinkDown(cplci);
 
@@ -743,16 +878,19 @@ static void plci_cc_suspend_conf(struct FsmInst *fi, int event, void *arg)
 
 static void plci_cc_resume_err(struct FsmInst *fi, int event, void *arg)
 {
-	Cplci_t *cplci = fi->userdata;
-	RESUME_REJECT_t *rej = arg;
-	_cmsg cmsg;
+	Cplci_t		*cplci = fi->userdata;
+	Q931_info_t	*qi = arg;
+	u_char		*p;
+	_cmsg		cmsg;
 	
 	cplciCmsgHeader(cplci, &cmsg, CAPI_DISCONNECT, CAPI_IND);
-	if (rej) { // reject from network
+	if (qi) { // reject from network
 		plciDetachCplci(cplci->plci, cplci);
-		if (rej->CAUSE)
-			cmsg.Reason = 0x3400 | rej->CAUSE[2];
-		else
+		if (qi->cause) {
+			p = (u_char *)qi;
+			p += L3_EXTRA_SIZE + qi->cause;
+			cmsg.Reason = 0x3400 | p[3];
+		} else
 			cmsg.Reason = 0;
 	} else { // timeout
 		cmsg.Reason = CapiProtocolErrorLayer1;
@@ -763,16 +901,18 @@ static void plci_cc_resume_err(struct FsmInst *fi, int event, void *arg)
 
 static void plci_cc_resume_conf(struct FsmInst *fi, int event, void *arg)
 {
-	Cplci_t *cplci = fi->userdata;
-	RESUME_ACKNOWLEDGE_t *ack = arg;
-	_cmsg cmsg;
-	__u8 tmp[10], *p;
+	Cplci_t		*cplci = fi->userdata;
+	Q931_info_t	*qi = arg;
+	_cmsg		cmsg;
+	__u8		tmp[10], *p;
 	
-	if (!ack || !ack->CHANNEL_ID) {
+	if (!qi || !qi->channel_id) {
 		int_error();
 		return;
 	}
-	cplci->bchannel = plci_parse_channel_id(ack->CHANNEL_ID);
+	p = (u_char *)qi;
+	p += L3_EXTRA_SIZE + qi->channel_id;
+	cplci->bchannel = plci_parse_channel_id(p);
 	cplciCmsgHeader(cplci, &cmsg, CAPI_FACILITY, CAPI_IND);
 	p = &tmp[1];
 	p += capiEncodeWord(p, 0x0005); // Suspend
@@ -787,10 +927,10 @@ static void plci_cc_resume_conf(struct FsmInst *fi, int event, void *arg)
 
 static void plci_select_b_protocol_req(struct FsmInst *fi, int event, void *arg)
 {
-	Cplci_t *cplci = fi->userdata;
-	Ncci_t *ncci = cplci->ncci;
-	_cmsg *cmsg = arg;
-	__u16 Info;
+	Cplci_t	*cplci = fi->userdata;
+	Ncci_t	*ncci = cplci->ncci;
+	_cmsg	*cmsg = arg;
+	__u16	Info;
 
 	Info = cplciCheckBprotocol(cplci, cmsg);
 
@@ -808,16 +948,19 @@ static void plci_select_b_protocol_req(struct FsmInst *fi, int event, void *arg)
 
 static void plci_info_req_overlap(struct FsmInst *fi, int event, void *arg)
 {
-	Cplci_t *cplci = fi->userdata;
-	Plci_t *plci = cplci->plci;
-	_cmsg *cmsg = arg;
-	__u16 Info;
-	INFORMATION_t info_req;
+	Cplci_t		*cplci = fi->userdata;
+	Plci_t		*plci = cplci->plci;
+	_cmsg		*cmsg = arg;
+	__u16		Info = 0;
+	struct sk_buff	*skb;
 
-	Info = cmsg2info_req(cmsg, &info_req);
-	if (Info == CapiSuccess) {
-		plciL4L3(plci, CC_INFORMATION | REQUEST, sizeof(INFORMATION_t),
-			&info_req);
+	skb = alloc_l3msg(100, MT_INFORMATION);
+	if (skb) {
+		Info = cmsg2info_req(cmsg, skb);
+		if (Info == CapiSuccess)
+			plciL4L3(plci, CC_INFORMATION | REQUEST, skb);
+		else
+			kfree_skb(skb);
 	}
 	
 	capi_cmsg_answer(cmsg);
@@ -954,20 +1097,17 @@ void cplciConstr(Cplci_t *cplci, Appl_t *appl, Plci_t *plci)
 
 void cplciDestr(Cplci_t *cplci)
 {
-	RELEASE_COMPLETE_t	relc;
-	unsigned char		cause[4];
-
 	if (cplci->plci) {
 		printk(KERN_DEBUG "%s plci state %s\n", __FUNCTION__,
 			str_st_plci[cplci->plci_m.state]);
 		if (cplci->plci_m.state != ST_PLCI_P_0) {
-			memset(&relc, 0, sizeof(RELEASE_COMPLETE_t));
-			cause[0] = 2;
-			cause[1] = 0x80;
-			cause[2] = 0x80 | CAUSE_RESOURCES_UNAVAIL;
-			relc.CAUSE = cause;
-			plciL4L3(cplci->plci, CC_RELEASE_COMPLETE | REQUEST,
-				sizeof(RELEASE_COMPLETE_t), &relc);
+			struct sk_buff	*skb = alloc_l3msg(10, MT_RELEASE_COMPLETE);
+			unsigned char cause[] = {2,0x80,0x80| CAUSE_RESOURCES_UNAVAIL};
+
+			if (skb) {
+				AddIE(skb, IE_CAUSE, cause);
+				plciL4L3(cplci->plci, CC_RELEASE_COMPLETE | REQUEST, skb);
+			}
 		}
  		plciDetachCplci(cplci->plci, cplci);
 	}
@@ -980,110 +1120,84 @@ void cplciDestr(Cplci_t *cplci)
 
 void cplci_l3l4(Cplci_t *cplci, int pr, void *arg)
 {
-	union {
-		SETUP_t			*setup;
-		CONNECT_t		*conn;
-		CONNECT_ACKNOWLEDGE_t	*c_ack;
-		DISCONNECT_t		*disc;
-		RELEASE_t		*rel;
-		RELEASE_COMPLETE_t	*r_cmpl;
-		CALL_PROCEEDING_t	*proc;
-		SETUP_ACKNOWLEDGE_t	*s_ack;
-		ALERTING_t		*alert;
-		PROGRESS_t		*prog;
-	} p;
+	Q931_info_t	*qi = arg;
+	u_char		*ie;
 	
-	p.setup = arg;
 	printk(KERN_DEBUG "cplci_l3l4: cplci(%x) plci(%x) pr(%x) arg(%p)\n",
 		cplci->adrPLCI, cplci->plci->adrPLCI, pr, arg);
 	switch (pr) {
 		case CC_SETUP | INDICATION:
-			cplciInfoIndIE(cplci, IE_DISPLAY, CAPI_INFOMASK_DISPLAY,
-				p.setup->DISPLAY);
-			cplciInfoIndIE(cplci, IE_USER_USER, CAPI_INFOMASK_USERUSER,
-				p.setup->USER_USER);
-			cplciInfoIndIE(cplci, IE_PROGRESS, CAPI_INFOMASK_PROGRESS,
-				p.setup->PROGRESS);
-			cplciInfoIndIE(cplci, IE_FACILITY, CAPI_INFOMASK_FACILITY,
-				p.setup->FACILITY);
-			cplciInfoIndIE(cplci, IE_CHANNEL_ID, CAPI_INFOMASK_CHANNELID,
-				p.setup->CHANNEL_ID);
-			if (p.setup->CHANNEL_ID)
-				cplci->bchannel = plci_parse_channel_id(p.setup->CHANNEL_ID);
+			if (!qi)
+				return;
+			cplciInfoIndIE(cplci, IE_DISPLAY, CAPI_INFOMASK_DISPLAY, qi);
+			cplciInfoIndIE(cplci, IE_USER_USER, CAPI_INFOMASK_USERUSER, qi);
+			cplciInfoIndIE(cplci, IE_PROGRESS, CAPI_INFOMASK_PROGRESS, qi);
+			cplciInfoIndIE(cplci, IE_FACILITY, CAPI_INFOMASK_FACILITY, qi);
+			cplciInfoIndIE(cplci, IE_CHANNEL_ID, CAPI_INFOMASK_CHANNELID, qi);
+			if (qi->channel_id) {
+				ie = (u_char *)qi;
+				ie += L3_EXTRA_SIZE + qi->channel_id;
+				cplci->bchannel = plci_parse_channel_id(ie);
+			}
 			FsmEvent(&cplci->plci_m, EV_PLCI_CC_SETUP_IND, arg); 
 			break;
 		case CC_TIMEOUT | INDICATION:
 			FsmEvent(&cplci->plci_m, EV_PLCI_CC_SETUP_CONF_ERR, arg); 
 			break;
 		case CC_CONNECT | INDICATION:
-			if (p.conn) {	
-				cplciInfoIndIE(cplci, IE_DATE,
-					CAPI_INFOMASK_DISPLAY, p.conn->DATE);
-				cplciInfoIndIE(cplci, IE_DISPLAY,
-					CAPI_INFOMASK_DISPLAY, p.conn->DISPLAY);
-				cplciInfoIndIE(cplci, IE_USER_USER,
-					CAPI_INFOMASK_USERUSER, p.conn->USER_USER);
-				cplciInfoIndIE(cplci, IE_PROGRESS,
-					CAPI_INFOMASK_PROGRESS, p.conn->PROGRESS);
-				cplciInfoIndIE(cplci, IE_FACILITY,
-					CAPI_INFOMASK_FACILITY, p.conn->FACILITY);
-				cplciInfoIndIE(cplci, IE_CHANNEL_ID,
-					CAPI_INFOMASK_CHANNELID, p.conn->CHANNEL_ID);
-				if (p.conn->CHANNEL_ID)
-					cplci->bchannel = plci_parse_channel_id(p.conn->CHANNEL_ID);
+			if (qi) {	
+				cplciInfoIndIE(cplci, IE_DATE, CAPI_INFOMASK_DISPLAY, qi);
+				cplciInfoIndIE(cplci, IE_DISPLAY, CAPI_INFOMASK_DISPLAY, qi);
+				cplciInfoIndIE(cplci, IE_USER_USER, CAPI_INFOMASK_USERUSER, qi);
+				cplciInfoIndIE(cplci, IE_PROGRESS, CAPI_INFOMASK_PROGRESS, qi);
+				cplciInfoIndIE(cplci, IE_FACILITY, CAPI_INFOMASK_FACILITY, qi);
+				cplciInfoIndIE(cplci, IE_CHANNEL_ID, CAPI_INFOMASK_CHANNELID, qi);
+				if (qi->channel_id) {
+					ie = (u_char *)qi;
+					ie += L3_EXTRA_SIZE + qi->channel_id;
+					cplci->bchannel = plci_parse_channel_id(ie);
+				}
 			}
 			FsmEvent(&cplci->plci_m, EV_PLCI_CC_SETUP_CONF, arg); 
 			break;
 		case CC_CONNECT_ACKNOWLEDGE | INDICATION:
-			if (p.c_ack) {
-				cplciInfoIndIE(cplci, IE_DISPLAY,
-					CAPI_INFOMASK_DISPLAY, p.c_ack->DISPLAY);
-				cplciInfoIndIE(cplci, IE_CHANNEL_ID,
-					CAPI_INFOMASK_CHANNELID, p.c_ack->CHANNEL_ID);
-				if (p.c_ack->CHANNEL_ID)
-					cplci->bchannel = plci_parse_channel_id(p.c_ack->CHANNEL_ID);
+			if (qi) {
+				cplciInfoIndIE(cplci, IE_DISPLAY, CAPI_INFOMASK_DISPLAY, qi);
+				cplciInfoIndIE(cplci, IE_CHANNEL_ID, CAPI_INFOMASK_CHANNELID, qi);
+				if (qi->channel_id) {
+					ie = (u_char *)qi;
+					ie += L3_EXTRA_SIZE + qi->channel_id;
+					cplci->bchannel = plci_parse_channel_id(ie);
+				}
 			}
 			FsmEvent(&cplci->plci_m, EV_PLCI_CC_SETUP_COMPL_IND, arg); 
 			break;
 		case CC_DISCONNECT | INDICATION:
-			if (p.disc) {
+			if (qi) {
 				cplciInfoIndMsg(cplci, CAPI_INFOMASK_EARLYB3, MT_DISCONNECT);
-				cplciInfoIndIE(cplci, IE_CAUSE,
-					CAPI_INFOMASK_CAUSE, p.disc->CAUSE);
-				cplciInfoIndIE(cplci, IE_DISPLAY,
-					CAPI_INFOMASK_DISPLAY, p.disc->DISPLAY);
-				cplciInfoIndIE(cplci, IE_USER_USER,
-					CAPI_INFOMASK_USERUSER, p.disc->USER_USER);
-				cplciInfoIndIE(cplci, IE_PROGRESS,
-					CAPI_INFOMASK_PROGRESS, p.disc->PROGRESS);
-				cplciInfoIndIE(cplci, IE_FACILITY,
-					CAPI_INFOMASK_FACILITY, p.disc->FACILITY);
+				cplciInfoIndIE(cplci, IE_CAUSE, CAPI_INFOMASK_CAUSE, qi);
+				cplciInfoIndIE(cplci, IE_DISPLAY, CAPI_INFOMASK_DISPLAY, qi);
+				cplciInfoIndIE(cplci, IE_USER_USER, CAPI_INFOMASK_USERUSER, qi);
+				cplciInfoIndIE(cplci, IE_PROGRESS, CAPI_INFOMASK_PROGRESS, qi);
+				cplciInfoIndIE(cplci, IE_FACILITY, CAPI_INFOMASK_FACILITY, qi);
 			}
 		  	FsmEvent(&cplci->plci_m, EV_PLCI_CC_DISCONNECT_IND, arg); 
 			break;
 		case CC_RELEASE | INDICATION:
-			if (p.rel) {
-				cplciInfoIndIE(cplci, IE_CAUSE,
-					CAPI_INFOMASK_CAUSE, p.rel->CAUSE);
-				cplciInfoIndIE(cplci, IE_DISPLAY,
-					CAPI_INFOMASK_DISPLAY, p.rel->DISPLAY);
-				cplciInfoIndIE(cplci, IE_USER_USER,
-					CAPI_INFOMASK_USERUSER, p.rel->USER_USER);
-				cplciInfoIndIE(cplci, IE_FACILITY,
-					CAPI_INFOMASK_FACILITY, p.rel->FACILITY);
+			if (qi) {
+				cplciInfoIndIE(cplci, IE_CAUSE, CAPI_INFOMASK_CAUSE, qi);
+				cplciInfoIndIE(cplci, IE_DISPLAY, CAPI_INFOMASK_DISPLAY, qi);
+				cplciInfoIndIE(cplci, IE_USER_USER, CAPI_INFOMASK_USERUSER, qi);
+				cplciInfoIndIE(cplci, IE_FACILITY, CAPI_INFOMASK_FACILITY, qi);
 			}
 		        FsmEvent(&cplci->plci_m, EV_PLCI_CC_RELEASE_IND, arg); 
 			break;
 		case CC_RELEASE_COMPLETE | INDICATION:
-			if (p.r_cmpl) {
-				cplciInfoIndIE(cplci, IE_CAUSE,
-					CAPI_INFOMASK_CAUSE, p.r_cmpl->CAUSE);
-				cplciInfoIndIE(cplci, IE_DISPLAY,
-					CAPI_INFOMASK_DISPLAY, p.r_cmpl->DISPLAY);
-				cplciInfoIndIE(cplci, IE_USER_USER,
-					CAPI_INFOMASK_USERUSER, p.r_cmpl->USER_USER);
-				cplciInfoIndIE(cplci, IE_FACILITY,
-					CAPI_INFOMASK_FACILITY, p.r_cmpl->FACILITY);
+			if (qi) {
+				cplciInfoIndIE(cplci, IE_CAUSE, CAPI_INFOMASK_CAUSE, qi);
+				cplciInfoIndIE(cplci, IE_DISPLAY, CAPI_INFOMASK_DISPLAY, qi);
+				cplciInfoIndIE(cplci, IE_USER_USER, CAPI_INFOMASK_USERUSER, qi);
+				cplciInfoIndIE(cplci, IE_FACILITY, CAPI_INFOMASK_FACILITY, qi);
 			}
 			FsmEvent(&cplci->plci_m, EV_PLCI_CC_RELEASE_IND, arg);
 			break;
@@ -1091,67 +1205,57 @@ void cplci_l3l4(Cplci_t *cplci, int pr, void *arg)
 			FsmEvent(&cplci->plci_m, EV_PLCI_CC_RELEASE_PROC_IND, arg); 
 			break;
 		case CC_SETUP_ACKNOWLEDGE | INDICATION:
-			if (p.s_ack) {
-				cplciInfoIndMsg(cplci,
-					CAPI_INFOMASK_PROGRESS, MT_SETUP_ACKNOWLEDGE);
-				cplciInfoIndIE(cplci, IE_DISPLAY,
-					CAPI_INFOMASK_DISPLAY, p.s_ack->DISPLAY);
+			if (qi) {
+				cplciInfoIndMsg(cplci, CAPI_INFOMASK_PROGRESS, MT_SETUP_ACKNOWLEDGE);
+				cplciInfoIndIE(cplci, IE_DISPLAY, CAPI_INFOMASK_DISPLAY, qi);
 				cplciInfoIndIE(cplci, IE_PROGRESS,
-					CAPI_INFOMASK_PROGRESS | CAPI_INFOMASK_EARLYB3,
-					p.s_ack->PROGRESS);
-				cplciInfoIndIE(cplci, IE_CHANNEL_ID,
-					CAPI_INFOMASK_CHANNELID, p.s_ack->CHANNEL_ID);
-				if (p.s_ack->CHANNEL_ID)
-					cplci->bchannel = plci_parse_channel_id(p.s_ack->CHANNEL_ID);
+					CAPI_INFOMASK_PROGRESS | CAPI_INFOMASK_EARLYB3, qi);
+				cplciInfoIndIE(cplci, IE_CHANNEL_ID, CAPI_INFOMASK_CHANNELID, qi);
+				if (qi->channel_id) {
+					ie = (u_char *)qi;
+					ie += L3_EXTRA_SIZE + qi->channel_id;
+					cplci->bchannel = plci_parse_channel_id(ie);
+				}
 			}
 			break;
 		case CC_PROCEEDING | INDICATION:
-			if (p.proc) {
-				cplciInfoIndMsg(cplci,
-					CAPI_INFOMASK_PROGRESS, MT_CALL_PROCEEDING);
-				cplciInfoIndIE(cplci, IE_DISPLAY,
-					CAPI_INFOMASK_DISPLAY, p.proc->DISPLAY);
+			if (qi) {
+				cplciInfoIndMsg(cplci, CAPI_INFOMASK_PROGRESS, MT_CALL_PROCEEDING);
+				cplciInfoIndIE(cplci, IE_DISPLAY, CAPI_INFOMASK_DISPLAY, qi);
 				cplciInfoIndIE(cplci, IE_PROGRESS,
-					CAPI_INFOMASK_PROGRESS | CAPI_INFOMASK_EARLYB3,
-					p.proc->PROGRESS);
-				cplciInfoIndIE(cplci, IE_CHANNEL_ID,
-					CAPI_INFOMASK_CHANNELID, p.proc->CHANNEL_ID);
-				if (p.proc->CHANNEL_ID)
-					cplci->bchannel = plci_parse_channel_id(p.proc->CHANNEL_ID);
+					CAPI_INFOMASK_PROGRESS | CAPI_INFOMASK_EARLYB3, qi);
+				cplciInfoIndIE(cplci, IE_CHANNEL_ID, CAPI_INFOMASK_CHANNELID, qi);
+				if (qi->channel_id) {
+					ie = (u_char *)qi;
+					ie += L3_EXTRA_SIZE + qi->channel_id;
+					cplci->bchannel = plci_parse_channel_id(ie);
+				}
 			}
 			break;
 		case CC_ALERTING | INDICATION:
-			if (p.alert) {
-				cplciInfoIndMsg(cplci,
-					CAPI_INFOMASK_PROGRESS, MT_ALERTING);
-				cplciInfoIndIE(cplci, IE_DISPLAY,
-					CAPI_INFOMASK_DISPLAY, p.alert->DISPLAY);
-				cplciInfoIndIE(cplci, IE_USER_USER,
-					CAPI_INFOMASK_USERUSER, p.alert->USER_USER);	
+			if (qi) {
+				cplciInfoIndMsg(cplci, CAPI_INFOMASK_PROGRESS, MT_ALERTING);
+				cplciInfoIndIE(cplci, IE_DISPLAY, CAPI_INFOMASK_DISPLAY, qi);
+				cplciInfoIndIE(cplci, IE_USER_USER, CAPI_INFOMASK_USERUSER, qi);
 				cplciInfoIndIE(cplci, IE_PROGRESS,
-					CAPI_INFOMASK_PROGRESS | CAPI_INFOMASK_EARLYB3,
-					p.alert->PROGRESS);
-				cplciInfoIndIE(cplci, IE_FACILITY,
-					CAPI_INFOMASK_FACILITY, p.alert->FACILITY);
-				cplciInfoIndIE(cplci, IE_CHANNEL_ID,
-					CAPI_INFOMASK_CHANNELID, p.alert->CHANNEL_ID);
-				if (p.alert->CHANNEL_ID)
-					cplci->bchannel = plci_parse_channel_id(p.alert->CHANNEL_ID);
+					CAPI_INFOMASK_PROGRESS | CAPI_INFOMASK_EARLYB3, qi);
+				cplciInfoIndIE(cplci, IE_FACILITY, CAPI_INFOMASK_FACILITY, qi);
+				cplciInfoIndIE(cplci, IE_CHANNEL_ID, CAPI_INFOMASK_CHANNELID, qi);
+				if (qi->channel_id) {
+					ie = (u_char *)qi;
+					ie += L3_EXTRA_SIZE + qi->channel_id;
+					cplci->bchannel = plci_parse_channel_id(ie);
+				}
 			}
 			break;
 		case CC_PROGRESS | INDICATION:
-			if (p.prog) {
-				cplciInfoIndMsg(cplci,
-					CAPI_INFOMASK_PROGRESS, MT_PROGRESS);
-				cplciInfoIndIE(cplci, IE_CAUSE,
-					CAPI_INFOMASK_CAUSE, p.prog->CAUSE);
-				cplciInfoIndIE(cplci, IE_DISPLAY,
-					CAPI_INFOMASK_DISPLAY, p.prog->DISPLAY);
-				cplciInfoIndIE(cplci, IE_USER_USER,
-					CAPI_INFOMASK_USERUSER, p.prog->USER_USER);	
+			if (qi) {
+				cplciInfoIndMsg(cplci, CAPI_INFOMASK_PROGRESS, MT_PROGRESS);
+				cplciInfoIndIE(cplci, IE_CAUSE, CAPI_INFOMASK_CAUSE, qi);
+				cplciInfoIndIE(cplci, IE_DISPLAY, CAPI_INFOMASK_DISPLAY, qi);
+				cplciInfoIndIE(cplci, IE_USER_USER, CAPI_INFOMASK_USERUSER, qi);
 				cplciInfoIndIE(cplci, IE_PROGRESS,
-					CAPI_INFOMASK_PROGRESS | CAPI_INFOMASK_EARLYB3,
-						p.prog->PROGRESS);
+					CAPI_INFOMASK_PROGRESS | CAPI_INFOMASK_EARLYB3, qi);
 			}
 			break;
 		case CC_SUSPEND_ACKNOWLEDGE | INDICATION:
@@ -1253,20 +1357,25 @@ void cplciLinkDown(Cplci_t *cplci)
 int cplciFacSuspendReq(Cplci_t *cplci, struct FacReqParm *facReqParm,
 		     struct FacConfParm *facConfParm)
 {
-	SUSPEND_t suspend_req;
-	__u8 *CallIdentity;
+	__u8		*CallIdentity;
+	struct sk_buff	*skb;
 
-	memset(&suspend_req, 0, sizeof(SUSPEND_t));
 	CallIdentity = facReqParm->u.Suspend.CallIdentity;
 	if (CallIdentity && CallIdentity[0] > 8) 
 		return CapiIllMessageParmCoding;
+	skb = alloc_l3msg(20, MT_SUSPEND);
+	if (!skb) {
+		int_error();
+		return CapiIllMessageParmCoding;
+	}
 	if (CallIdentity && CallIdentity[0])
-		suspend_req.CALL_ID = CallIdentity;
+		AddIE(skb, IE_CALL_ID, CallIdentity);
 
-	if (FsmEvent(&cplci->plci_m, EV_PLCI_SUSPEND_REQ, &suspend_req)) {
+	if (FsmEvent(&cplci->plci_m, EV_PLCI_SUSPEND_REQ, skb)) {
 		// no routine
 		facConfParm->u.Info.SupplementaryServiceInfo = 
 			CapiRequestNotAllowedInThisState;
+		kfree(skb);
 	} else {
 		facConfParm->u.Info.SupplementaryServiceInfo = CapiSuccess;
 	}
@@ -1276,18 +1385,23 @@ int cplciFacSuspendReq(Cplci_t *cplci, struct FacReqParm *facReqParm,
 int cplciFacResumeReq(Cplci_t *cplci, struct FacReqParm *facReqParm,
 		     struct FacConfParm *facConfParm)
 {
-	RESUME_t resume_req;
-	__u8 *CallIdentity;
+	__u8		*CallIdentity;
+	struct sk_buff	*skb;
 
 	CallIdentity = facReqParm->u.Resume.CallIdentity;
-	memset(&resume_req, 0, sizeof(RESUME_t));
 	if (CallIdentity && CallIdentity[0] > 8) {
 		applDelCplci(cplci->appl, cplci);
 		return CapiIllMessageParmCoding;
 	}
+	skb = alloc_l3msg(20, MT_RESUME);
+	if (!skb) {
+		int_error();
+		return CapiIllMessageParmCoding;
+	}
 	if (CallIdentity && CallIdentity[0])
-		resume_req.CALL_ID = CallIdentity;
-	FsmEvent(&cplci->plci_m, EV_PLCI_RESUME_REQ, &resume_req);
+		AddIE(skb, IE_CALL_ID, CallIdentity);
+	if (FsmEvent(&cplci->plci_m, EV_PLCI_RESUME_REQ, skb))
+		kfree(skb);
 
 	facConfParm->u.Info.SupplementaryServiceInfo = CapiSuccess;
 	return CapiSuccess;
@@ -1324,14 +1438,30 @@ void cplciInfoIndMsg(Cplci_t *cplci,  __u32 mask, unsigned char mt)
 	cplciRecvCmsg(cplci, &cmsg);
 }
 
-void cplciInfoIndIE(Cplci_t *cplci, unsigned char ie, __u32 mask, u_char *iep)
+void cplciInfoIndIE(Cplci_t *cplci, unsigned char ie, __u32 mask, Q931_info_t *qi)
 {
-	_cmsg cmsg;
+	_cmsg		cmsg;
+	u_char		*iep = NULL;
+	u16		*ies;
+	
 
 	if (!(cplci->appl->listen.InfoMask & mask))
 		return;
-	if (!iep)
+	if (!qi)
 		return;
+	ies = &qi->bearer_capability;
+	if (ie & 0x80) { /* single octett */
+		int_error();
+		return;
+	} else {
+		if (l3_ie2pos[ie]<0)
+			return;
+		ies += l3_ie2pos[ie];
+		if (!*ies)
+			return;
+		iep = (u_char *)qi;
+		iep += L3_EXTRA_SIZE + *ies +1;
+	}
 	if (ie == IE_PROGRESS && cplci->appl->listen.InfoMask & CAPI_INFOMASK_EARLYB3) {
 		if (iep[0] == 0x02 && iep[2] == 0x88) { // in-band information available
 			cplciLinkUp(cplci);

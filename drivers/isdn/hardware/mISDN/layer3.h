@@ -1,4 +1,4 @@
-/* $Id: layer3.h,v 1.1 2001/11/14 10:41:26 kkeil Exp $
+/* $Id: layer3.h,v 1.2 2003/07/07 14:29:38 kkeil Exp $
  *
  * This file is (c) under GNU PUBLIC LICENSE
  *
@@ -26,6 +26,7 @@
 #define FLG_L2BLOCK	1
 #define FLG_PTP		2
 #define FLG_EXTCID	3
+#define FLG_CRLEN2	4
 
 typedef struct _L3Timer {
 	struct _l3_process	*pc;
@@ -41,35 +42,10 @@ typedef struct _l3_process {
 	int			state;
 	L3Timer_t		timer;
 	int			n303;
+	struct sk_buff		*t303skb;
 	u_int			id;
 	int			bc;
-	u_char			obuf[MAX_DFRAME_LEN];
-	u_char			*op;
 	int			err;
-	union {
-		ALERTING_t		ALERTING;
-		CALL_PROCEEDING_t	CALL_PROCEEDING;
-		CONGESTION_CONTROL_t	CONGESTION_CONTROL;
-		CONNECT_t		CONNECT;
-		CONNECT_ACKNOWLEDGE_t	CONNECT_ACKNOWLEDGE;
-		DISCONNECT_t		DISCONNECT;
-		FACILITY_t		FACILITY;
-		INFORMATION_t		INFORMATION;
-		NOTIFY_t		NOTIFY;
-		PROGRESS_t		PROGRESS;
-		RELEASE_t		RELEASE;
-		RELEASE_COMPLETE_t	RELEASE_COMPLETE;
-		RESTART_t		RESTART;
-		RESUME_ACKNOWLEDGE_t	RESUME_ACKNOWLEDGE;
-		RESUME_REJECT_t		RESUME_REJECT;
-		SETUP_t			SETUP;
-		SETUP_ACKNOWLEDGE_t	SETUP_ACKNOWLEDGE;
-		STATUS_t		STATUS;
-		STATUS_ENQUIRY_t	STATUS_ENQUIRY;
-		SUSPEND_ACKNOWLEDGE_t	SUSPEND_ACKNOWLEDGE;
-		SUSPEND_REJECT_t	SUSPEND_REJECT;
-		USER_INFORMATION_t	USER_INFORMATION;
-	} para;
 } l3_process_t;
 
 typedef struct _layer3 {
@@ -106,7 +82,7 @@ extern l3_process_t *getl3proc(layer3_t *, int);
 extern l3_process_t *getl3proc4id(layer3_t *, int);
 extern l3_process_t *new_l3_process(layer3_t *, int, int);
 extern u_char *findie(u_char *, int, u_char, int);
-extern int hisax_l3up(l3_process_t *, struct sk_buff *, u_int, int, void *);
+extern int hisax_l3up(l3_process_t *, u_int, struct sk_buff *);
 extern int getcallref(u_char * p);
 extern int newcallref(void);
 extern void init_l3(layer3_t *);

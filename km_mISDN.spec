@@ -1,14 +1,14 @@
 Vendor:       SuSE GmbH, Nuernberg, Germany
 Distribution: SuSE Linux 8.2 (i386)
 Name:         km_newhisax
-Release:      24
+Release:      1
 Packager:     feedback@suse.de
 
 Copyright:    Karsten Keil GPL
 Group:        unsorted
 Provides:     hisaxcapi_modules
 Autoreqprov:  on
-Version:      1.0
+Version:      1.1
 Summary:      capi driver for hisax
 Source:       newhisax-%{version}-%{release}.tar.bz2
 #Patch:       isdn4k-utils.dif

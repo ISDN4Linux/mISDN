@@ -1,4 +1,4 @@
-/* $Id: supp_serv.c,v 1.2 2002/09/16 23:49:38 kkeil Exp $
+/* $Id: supp_serv.c,v 1.3 2003/07/07 14:29:38 kkeil Exp $
  *
  */
 
@@ -273,20 +273,10 @@ void encodeInvokeComponentLength(__u8 *msg, __u8 *p)
 }
 
 
-static int dummy_L4L3(DummyProcess_t *dpc, __u32 prim, int len, void *arg) {
+static int dummy_L4L3(DummyProcess_t *dpc, __u32 prim, struct sk_buff *skb) {
 	Contr_t *contr = dpc->contr;
-#define	MY_RESERVE	8
 	int	err;
-	struct sk_buff *skb;
 
-	if (!(skb = alloc_skb(len + MY_RESERVE, GFP_ATOMIC))) {
-		printk(KERN_WARNING "%s: no skb size %d+%d\n",
-			__FUNCTION__, len, MY_RESERVE);
-		return(-ENOMEM);
-	} else
-		skb_reserve(skb, MY_RESERVE);
-	if (len)
-		memcpy(skb_put(skb, len), arg, len);
 	err = contrL4L3(contr, prim, contr->adrController | DUMMY_CR_FLAG,
 		skb);
 	if (err)
@@ -331,23 +321,24 @@ int applFacListen(Appl_t *appl, struct FacReqParm *facReqParm,
 int applFacCFActivate(Appl_t *appl, struct FacReqParm *facReqParm,
 		       struct FacConfParm *facConfParm)
 {
-	DummyProcess_t *dummy_pc;
-	FACILITY_t fac;
-	__u8 *p;
+	DummyProcess_t	*dummy_pc;
+	struct sk_buff	*skb = alloc_l3msg(260, MT_FACILITY);
+	__u8		*p;
 
-	memset(&fac, 0, sizeof(FACILITY_t));
-	dummy_pc = applNewDummyPc(appl, facReqParm->Function, facReqParm->u.CFActivate.Handle);
-	if (!dummy_pc)
+	if (!skb)
 		return CAPI_MSGOSRESOURCEERR;
-
+	dummy_pc = applNewDummyPc(appl, facReqParm->Function, facReqParm->u.CFActivate.Handle);
+	if (!dummy_pc) {
+		kfree_skb(skb);
+		return CAPI_MSGOSRESOURCEERR;
+	}
 	p = encodeInvokeComponentHead(dummy_pc->buf);
 	p += encodeInt(p, dummy_pc->invokeId);
 	p += encodeInt(p, 0x07); // activationDiversion
 	p += encodeActivationDiversion(p, &facReqParm->u.CFActivate);
 	encodeInvokeComponentLength(dummy_pc->buf, p);
-	fac.FACILITY = dummy_pc->buf;
-
-	dummy_L4L3(dummy_pc, CC_FACILITY | REQUEST, sizeof(FACILITY_t), &fac);
+	AddIE(skb, IE_FACILITY, dummy_pc->buf);
+	dummy_L4L3(dummy_pc, CC_FACILITY | REQUEST, skb);
 	dummyPcAddTimer(dummy_pc, T_ACTIVATE);
 
 	facConfParm->u.Info.SupplementaryServiceInfo = CapiSuccess;
@@ -357,23 +348,25 @@ int applFacCFActivate(Appl_t *appl, struct FacReqParm *facReqParm,
 int applFacCFDeactivate(Appl_t *appl, struct FacReqParm *facReqParm,
 			 struct FacConfParm *facConfParm)
 {
-	DummyProcess_t *dummy_pc;
-	FACILITY_t fac;
-	__u8 *p;
+	DummyProcess_t	*dummy_pc;
+	struct sk_buff	*skb = alloc_l3msg(260, MT_FACILITY);
+	__u8		*p;
 
-	memset(&fac, 0, sizeof(FACILITY_t));
-	dummy_pc = applNewDummyPc(appl, facReqParm->Function, facReqParm->u.CFDeactivate.Handle);
-	if (!dummy_pc) 
+	if (!skb)
 		return CAPI_MSGOSRESOURCEERR;
-
+	dummy_pc = applNewDummyPc(appl, facReqParm->Function, facReqParm->u.CFDeactivate.Handle);
+	if (!dummy_pc) {
+		kfree_skb(skb);
+		return CAPI_MSGOSRESOURCEERR;
+	}
 	p = encodeInvokeComponentHead(dummy_pc->buf);
 	p += encodeInt(p, dummy_pc->invokeId);
 	p += encodeInt(p, 0x08); // dectivationDiversion
 	p += encodeDeactivationDiversion(p, &facReqParm->u.CFDeactivate);
 	encodeInvokeComponentLength(dummy_pc->buf, p);
-	fac.FACILITY = dummy_pc->buf;
+	AddIE(skb, IE_FACILITY, dummy_pc->buf);
 
-	dummy_L4L3(dummy_pc, CC_FACILITY | REQUEST, sizeof(FACILITY_t), &fac);
+	dummy_L4L3(dummy_pc, CC_FACILITY | REQUEST, skb);
 	dummyPcAddTimer(dummy_pc, T_DEACTIVATE);
 
 	facConfParm->u.Info.SupplementaryServiceInfo = CapiSuccess;
@@ -383,24 +376,27 @@ int applFacCFDeactivate(Appl_t *appl, struct FacReqParm *facReqParm,
 int applFacCFInterrogateParameters(Appl_t *appl, struct FacReqParm *facReqParm,
 				    struct FacConfParm *facConfParm)
 {
-	DummyProcess_t *dummy_pc;
-	FACILITY_t fac;
-	__u8 *p;
+	DummyProcess_t	*dummy_pc;
+	struct sk_buff	*skb = alloc_l3msg(260, MT_FACILITY);
+	__u8		*p;
 
-	memset(&fac, 0, sizeof(FACILITY_t));
+	if (!skb)
+		return CAPI_MSGOSRESOURCEERR;
 	dummy_pc = applNewDummyPc(appl, facReqParm->Function, 
 				  facReqParm->u.CFInterrogateParameters.Handle);
-	if (!dummy_pc) 
+	if (!dummy_pc) {
+		kfree_skb(skb);
 		return CAPI_MSGOSRESOURCEERR;
+	}
 
 	p = encodeInvokeComponentHead(dummy_pc->buf);
 	p += encodeInt(p, dummy_pc->invokeId);
 	p += encodeInt(p, 0x0b); // interrogationDiversion
 	p += encodeInterrogationDiversion(p,  &facReqParm->u.CFInterrogateParameters);
 	encodeInvokeComponentLength(dummy_pc->buf, p);
-	fac.FACILITY = dummy_pc->buf;
+	AddIE(skb, IE_FACILITY, dummy_pc->buf);
 
-	dummy_L4L3(dummy_pc, CC_FACILITY | REQUEST, sizeof(FACILITY_t), &fac);
+	dummy_L4L3(dummy_pc, CC_FACILITY | REQUEST, skb);
 	dummyPcAddTimer(dummy_pc, T_INTERROGATE);
 
 	facConfParm->u.Info.SupplementaryServiceInfo = CapiSuccess;
@@ -410,22 +406,25 @@ int applFacCFInterrogateParameters(Appl_t *appl, struct FacReqParm *facReqParm,
 int applFacCFInterrogateNumbers(Appl_t *appl, struct FacReqParm *facReqParm,
 				 struct FacConfParm *facConfParm)
 {
-	DummyProcess_t *dummy_pc;
-	FACILITY_t fac;
-	__u8 *p;
+	DummyProcess_t	*dummy_pc;
+	struct sk_buff	*skb = alloc_l3msg(260, MT_FACILITY);
+	__u8		*p;
 
-	memset(&fac, 0, sizeof(FACILITY_t));
+	if (!skb)
+		return CAPI_MSGOSRESOURCEERR;
 	dummy_pc = applNewDummyPc(appl, facReqParm->Function, 
 				  facReqParm->u.CFInterrogateNumbers.Handle);
-	if (!dummy_pc) 
+	if (!dummy_pc) {
+		kfree_skb(skb);
 		return CAPI_MSGOSRESOURCEERR;
+	}
 
 	p = encodeInvokeComponentHead(dummy_pc->buf);
 	p += encodeInt(p, dummy_pc->invokeId);
 	p += encodeInt(p, 0x11); // InterrogateServedUserNumbers
 	encodeInvokeComponentLength(dummy_pc->buf, p);
-	fac.FACILITY = dummy_pc->buf;
-	dummy_L4L3(dummy_pc, CC_FACILITY | REQUEST, sizeof(FACILITY_t), &fac);
+	AddIE(skb, IE_FACILITY, dummy_pc->buf);
+	dummy_L4L3(dummy_pc, CC_FACILITY | REQUEST, skb);
 	dummyPcAddTimer(dummy_pc, T_INTERROGATE);
 
 	facConfParm->u.Info.SupplementaryServiceInfo = CapiSuccess;
@@ -571,22 +570,24 @@ void printAddress(struct Address *address)
 }
 #endif
 
-void contrDummyFacility(Contr_t *contr, FACILITY_t *fac)
+void contrDummyFacility(Contr_t *contr, Q931_info_t *qi)
 {
-	Appl_t *appl;
-        int ie_len;
-	struct asn1_parm parm;
-	DummyProcess_t *dummy_pc;
-	_cmsg cmsg;
-	__u8 tmp[255];
-        __u8 *p, *end;
-	__u16 ApplId;
+	Appl_t			*appl;
+        int			ie_len;
+	struct asn1_parm	parm;
+	DummyProcess_t		*dummy_pc;
+	_cmsg			cmsg;
+	__u8			tmp[255];
+        __u8			*p, *end;
+	__u16			ApplId;
 
-        if (!(p = fac->FACILITY)) {
+        if (!qi || !qi->facility) {
 		int_error();
                 return;
 	}
-	
+	p = (__u8 *)qi;
+	p += L3_EXTRA_SIZE + qi->facility;
+	p++;
         ie_len = *p++;
         end = p + ie_len;
 //        if (end > skb->data + skb->len) {
@@ -728,7 +729,8 @@ int contrDummyInd(Contr_t *contr, __u32 prim, struct sk_buff *skb)
 
 	switch (prim) {
 		case CC_FACILITY | INDICATION:
-			contrDummyFacility(contr, (FACILITY_t *)skb->data);
+			if (skb && skb->len)
+				contrDummyFacility(contr, (Q931_info_t *)skb->data);
 			dev_kfree_skb(skb);
 			ret = 0;
 			break;

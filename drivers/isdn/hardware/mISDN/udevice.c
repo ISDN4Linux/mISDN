@@ -1,4 +1,4 @@
-/* $Id: udevice.c,v 1.3 2002/09/16 23:49:38 kkeil Exp $
+/* $Id: udevice.c,v 1.4 2003/07/07 14:29:38 kkeil Exp $
  *
  * Copyright 2000  by Karsten Keil <kkeil@isdn4linux.de>
  *
@@ -1021,7 +1021,7 @@ wdata_frame(hisaxdevice_t *dev, iframe_t *iff) {
 			return(-EINVAL);
 		}
 		err = if_link(hif, iff->prim, iff->dinfo, iff->len,
-			&iff->data.b[0], UPLINK_HEADER_SPACE);
+			&iff->data.b[0], L3_EXTRA_SIZE);
 		if (device_debug & DEBUG_WDATA && err)
 			printk(KERN_DEBUG "%s: if_link ret(%x)\n",
 				__FUNCTION__, err);

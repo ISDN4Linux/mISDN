@@ -1,4 +1,4 @@
-/* $Id: isar.c,v 1.9 2003/06/27 15:19:42 kkeil Exp $
+/* $Id: isar.c,v 1.10 2003/07/07 14:29:38 kkeil Exp $
  *
  * isar.c   ISAR (Siemens PSB 7110) specific routines
  *
@@ -466,7 +466,7 @@ send_DLE_ETX(bchannel_t *bch)
 	u_char dleetx[2] = {DLE,ETX};
 	struct sk_buff *skb;
 	
-	if ((skb = alloc_uplink_skb(2))) {
+	if ((skb = dev_alloc_skb(2))) {
 		memcpy(skb_put(skb, 2), dleetx, 2);
 		skb_queue_tail(&bch->rqueue, skb);
 		bch_sched_event(bch, B_RCVBUFREADY);
@@ -519,7 +519,7 @@ isar_rcv_frame(bchannel_t *bch)
 	    case ISDN_PID_L1_B_64TRANS:
 	    case ISDN_PID_L2_B_TRANSDTMF:
 	    case ISDN_PID_L1_B_V32:
-		if ((skb = alloc_uplink_skb(ih->reg->clsb))) {
+		if ((skb = dev_alloc_skb(ih->reg->clsb))) {
 			rcv_mbox(bch, ih->reg, (u_char *)skb_put(skb, ih->reg->clsb));
 			skb_queue_tail(&bch->rqueue, skb);
 			bch_sched_event(bch, B_RCVBUFREADY);
@@ -557,7 +557,7 @@ isar_rcv_frame(bchannel_t *bch)
 					if (bch->debug & L1_DEB_WARN)
 						debugprint(&bch->inst, "isar frame to short %d",
 							bch->rx_idx);
-				} else if (!(skb = alloc_uplink_skb(bch->rx_idx-2))) {
+				} else if (!(skb = dev_alloc_skb(bch->rx_idx-2))) {
 					printk(KERN_WARNING "ISAR: receive out of memory\n");
 				} else {
 					memcpy(skb_put(skb, bch->rx_idx-2),
@@ -584,7 +584,7 @@ isar_rcv_frame(bchannel_t *bch)
 			if (bch->debug & L1_DEB_HSCX)
 				debugprint(&bch->inst, "isar_rcv_frame: raw(%d) dle(%d)",
 					ih->reg->clsb, bch->rx_idx);
-			if ((skb = alloc_uplink_skb(bch->rx_idx))) {
+			if ((skb = dev_alloc_skb(bch->rx_idx))) {
 				insert_dle((u_char *)skb_put(skb, bch->rx_idx),
 					bch->rx_buf, ih->reg->clsb);
 				skb_queue_tail(&bch->rqueue, skb);
@@ -640,7 +640,7 @@ isar_rcv_frame(bchannel_t *bch)
 					if (bch->debug & L1_DEB_WARN)
 						debugprint(&bch->inst, "isar frame to short %d",
 							bch->rx_idx);
-				} else if (!(skb = alloc_uplink_skb(bch->rx_idx))) {
+				} else if (!(skb = dev_alloc_skb(bch->rx_idx))) {
 					printk(KERN_WARNING "ISAR: receive out of memory\n");
 				} else {
 					insert_dle((u_char *)skb_put(skb, len),

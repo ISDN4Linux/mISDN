@@ -1,4 +1,4 @@
-/* $Id: isac.c,v 1.7 2003/06/25 16:44:48 kkeil Exp $
+/* $Id: isac.c,v 1.8 2003/07/07 14:29:38 kkeil Exp $
  *
  * isac.c   ISAC specific routines
  *
@@ -23,7 +23,7 @@
 #define DBUSY_TIMER_VALUE 80
 #define ARCOFI_USE 1
 
-const char *isac_revision = "$Revision: 1.7 $";
+const char *isac_revision = "$Revision: 1.8 $";
 
 #ifdef MODULE
 MODULE_AUTHOR("Karsten Keil");
@@ -134,7 +134,7 @@ isac_empty_fifo(dchannel_t *dch, int count)
 		debugprint(&dch->inst, "isac_empty_fifo");
 
 	if (!dch->rx_skb) {
-		if (!(dch->rx_skb = alloc_uplink_skb(MAX_DFRAME_LEN_L1))) {
+		if (!(dch->rx_skb = alloc_uplinkD_skb(MAX_DFRAME_LEN_L1))) {
 			printk(KERN_WARNING "HiSax: D receive out of memory\n");
 			dch->write_reg(dch->inst.data, ISAC_CMDR, 0x80);
 			return;
