@@ -1,4 +1,4 @@
-/* $Id: hfc_pci.c,v 1.29 2003/10/24 21:27:28 keil Exp $
+/* $Id: hfc_pci.c,v 1.30 2003/11/09 11:37:40 keil Exp $
 
  * hfc_pci.c     low level driver for CCD's hfc-pci based cards
  *
@@ -46,7 +46,7 @@
 
 extern const char *CardType[];
 
-static const char *hfcpci_revision = "$Revision: 1.29 $";
+static const char *hfcpci_revision = "$Revision: 1.30 $";
 
 /* table entry in the PCI devices list */
 typedef struct {
@@ -1500,10 +1500,12 @@ mode_hfcpci(bchannel_t *bch, int bc, int protocol)
 				hc->hw.fifo_en &= ~HFCPCI_FIFOEN_B1;
 				hc->hw.int_m1 &= ~(HFCPCI_INTS_B1TRANS + HFCPCI_INTS_B1REC);
 			}
+#ifdef REVERSE_BITORDER
 			if (bch->channel & 2)
 				hc->hw.cirm &= 0x7f;
 			else
 				hc->hw.cirm &= 0xbf;
+#endif
 			bch->protocol = ISDN_PID_NONE;
 			bch->channel = bc;
 			break;
@@ -1515,11 +1517,15 @@ mode_hfcpci(bchannel_t *bch, int bc, int protocol)
 			if (bc & 2) {
 				hc->hw.sctrl |= SCTRL_B2_ENA;
 				hc->hw.sctrl_r |= SCTRL_B2_ENA;
+#ifdef REVERSE_BITORDER
 				hc->hw.cirm |= 0x80;
+#endif
 			} else {
 				hc->hw.sctrl |= SCTRL_B1_ENA;
 				hc->hw.sctrl_r |= SCTRL_B1_ENA;
+#ifdef REVERSE_BITORDER
 				hc->hw.cirm |= 0x40;
+#endif
 			}
 			if (fifo2 & 2) {
 				hc->hw.fifo_en |= HFCPCI_FIFOEN_B2;
@@ -1621,7 +1627,9 @@ mode_hfcpci(bchannel_t *bch, int bc, int protocol)
 	Write_hfc(hc, HFCPCI_SCTRL_R, hc->hw.sctrl_r);
 	Write_hfc(hc, HFCPCI_CTMT, hc->hw.ctmt);
 	Write_hfc(hc, HFCPCI_CONNECT, hc->hw.conn);
+#ifdef REVERSE_BITORDER
 	Write_hfc(hc, HFCPCI_CIRM, hc->hw.cirm);
+#endif
 	if (bch->protocol)
 		bch_sched_event(bch, B_XMTBUFREADY);
 	return(0);
