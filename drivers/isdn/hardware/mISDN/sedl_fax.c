@@ -1,4 +1,4 @@
-/* $Id: sedl_fax.c,v 0.3 2001/02/13 10:42:55 kkeil Exp $
+/* $Id: sedl_fax.c,v 0.4 2001/02/20 00:34:55 kkeil Exp $
  *
  * sedl_fax.c  low level stuff for Sedlbauer Speedfax + cards
  *
@@ -40,7 +40,7 @@
 
 extern const char *CardType[];
 
-const char *Sedlfax_revision = "$Revision: 0.3 $";
+const char *Sedlfax_revision = "$Revision: 0.4 $";
 
 const char *Sedlbauer_Types[] =
 	{"None", "speed fax+", "speed fax+ pyramid", "speed fax+ pci"};
@@ -398,6 +398,8 @@ static sedl_fax	*cardlist;
 static int sedl_cnt;
 static hisaxobject_t	speedfax;
 static int debug;
+static u_int act_protocol;
+static u_int protocol[MAX_CARDS];
 static u_int io[MAX_CARDS];
 static u_int irq[MAX_CARDS];
 static int cfg_idx;
@@ -406,6 +408,7 @@ static int cfg_idx;
 MODULE_AUTHOR("Karsten Keil");
 MODULE_PARM(debug, "1i");
 MODULE_PARM(io, MODULE_PARM_T);
+MODULE_PARM(protocol, MODULE_PARM_T);
 MODULE_PARM(irq, MODULE_PARM_T);
 #define Speedfax_init init_module
 #endif
@@ -725,7 +728,10 @@ speedfax_manager(void *data, u_int prim, void *arg) {
 			card->dch.inst.st->protocols[0] = ISDN_PID_L0_TE_S0;
 			card->dch.inst.st->protocols[1] = ISDN_PID_L1_TE_S0;
 			card->dch.inst.st->protocols[2] = ISDN_PID_L2_LAPD;
-			card->dch.inst.st->protocols[3] = ISDN_PID_NONE;
+			if (act_protocol == 2)
+				card->dch.inst.st->protocols[3] = ISDN_PID_L3_DSS1USER;
+			else
+				card->dch.inst.st->protocols[3] = ISDN_PID_NONE;
 			card->dch.inst.st->protocols[4] = ISDN_PID_NONE;
 			return(0);
 		} else
@@ -799,6 +805,7 @@ Speedfax_init(void)
 		card->dch.inst.data = card;
 		card->dch.inst.layer = 0;
 		card->dch.inst.protocol = ISDN_PID_L0_TE_S0;
+		act_protocol = protocol[sedl_cnt];
 		sprintf(card->dch.inst.id, "SFax%d", sedl_cnt+1);
 		init_dchannel(&card->dch);
 		for (i=0; i<2; i++) {

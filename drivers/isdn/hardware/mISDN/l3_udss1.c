@@ -1,4 +1,4 @@
-/* $Id: l3_udss1.c,v 0.5 2001/02/19 22:25:31 kkeil Exp $
+/* $Id: l3_udss1.c,v 0.6 2001/02/20 00:34:55 kkeil Exp $
  *
  * EURO/DSS1 D-channel protocol
  *
@@ -26,7 +26,7 @@ static hisaxobject_t u_dss1;
 
 
 extern char *HiSax_getrev(const char *revision);
-const char *dss1_revision = "$Revision: 0.5 $";
+const char *dss1_revision = "$Revision: 0.6 $";
 
 static int dss1man(l3_process_t *, u_int, void *);
 
@@ -641,6 +641,7 @@ l3dss1_alert_req(l3_process_t *pc, u_char pr, void *arg)
 		newl3state(pc, 7);
 		l3dss1_message(pc, MT_ALERTING);
 	}
+	L3DelTimer(&pc->timer);
 }
 
 static void
@@ -665,6 +666,7 @@ l3dss1_proceed_req(l3_process_t *pc, u_char pr, void *arg)
 		newl3state(pc, 9);
 		l3dss1_message(pc, MT_CALL_PROCEEDING);
 	}
+	L3DelTimer(&pc->timer);
 }
 
 static void
@@ -1111,6 +1113,8 @@ l3dss1_setup(l3_process_t *pc, u_char pr, void *arg)
 	pc->para.SETUP.USER_USER =
 		findie(skb->data, skb->len, IE_USER_USER, 0);
 	newl3state(pc, 6);
+	L3DelTimer(&pc->timer);
+	L3AddTimer(&pc->timer, T_CTRL, CC_TCTRL);
 	if (err) /* STATUS for none mandatory IE errors after actions are taken */
 		l3dss1_std_ie_err(pc, err);
 	hisax_l3up(pc, CC_SETUP | INDICATION, &pc->para.SETUP);
@@ -1857,6 +1861,8 @@ static struct stateentry manstatelist[] =
 	 CC_T308_2, l3dss1_t308_2},
 	{SBIT(10),
 	 CC_T309, l3dss1_dl_release},
+	{SBIT(6),
+	 CC_TCTRL, l3dss1_reset},
 	{ALL_STATES,
 	 CC_RESTART | REQUEST, l3dss1_restart},
 };

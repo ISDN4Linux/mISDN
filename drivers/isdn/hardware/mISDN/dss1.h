@@ -1,4 +1,4 @@
-/* $Id: dss1.h,v 0.3 2001/02/13 10:42:55 kkeil Exp $
+/* $Id: dss1.h,v 0.4 2001/02/20 00:34:55 kkeil Exp $
  *
  *  DSS1 (Euro) D-channel protocol defines
  *
@@ -21,6 +21,7 @@
 #define T318	4000
 #define T319	4000
 #define N303	1
+#define T_CTRL	180000
 
 /* private TIMER events */
 #define CC_T302		0x030201
@@ -34,7 +35,7 @@
 #define CC_T313		0x031301
 #define CC_T318		0x031801
 #define CC_T319		0x031901
-
+#define CC_TCTRL	0x031f01
 /*
  * Message-Types
  */
