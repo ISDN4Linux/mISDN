@@ -1,4 +1,4 @@
-/* $Id: l3_udss1.c,v 1.16 2003/11/11 09:59:00 keil Exp $
+/* $Id: l3_udss1.c,v 1.17 2003/11/21 13:20:10 keil Exp $
  *
  * EURO/DSS1 D-channel protocol
  *
@@ -24,7 +24,7 @@ static int debug = 0;
 static mISDNobject_t u_dss1;
 
 
-const char *dss1_revision = "$Revision: 1.16 $";
+const char *dss1_revision = "$Revision: 1.17 $";
 
 static int dss1man(l3_process_t *, u_int, void *);
 
@@ -1955,8 +1955,8 @@ dss1_fromdown(mISDNif_t *hif, struct sk_buff *skb)
 		case (DL_ESTABLISH | INDICATION):
 		case (DL_RELEASE | INDICATION):
 		case (DL_RELEASE | CONFIRM):
-			if (l3_msg(l3, hh->prim, hh->dinfo, 0, skb))
-				dev_kfree_skb(skb);
+			l3_msg(l3, hh->prim, hh->dinfo, 0, NULL);
+			dev_kfree_skb(skb);
 			return(0);
 			break;
 		case (DL_DATA | CONFIRM):
