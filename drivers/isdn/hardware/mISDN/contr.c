@@ -1,4 +1,4 @@
-/* $Id: contr.c,v 0.7 2001/03/26 11:40:02 kkeil Exp $
+/* $Id: contr.c,v 0.8 2001/03/27 10:23:48 kkeil Exp $
  *
  */
 
@@ -36,8 +36,6 @@ int contrConstr(Contr_t *contr, hisaxstack_t *st, hisax_pid_t *pid, hisaxobject_
 		binst->inst.obj = ocapi;
 		binst->inst.pid.layermask |= ISDN_LAYER(4);
 		binst->inst.down.stat = IF_NOACTIV;
-		binst->inst.down.protocol = ISDN_PID_NONE;
-		binst->inst.down.layer = get_down_layer(binst->inst.pid.layermask);
 		APPEND_TO_LIST(binst, contr->binst);
 		cst = cst->next;
 	}
@@ -48,11 +46,7 @@ int contrConstr(Contr_t *contr, hisaxstack_t *st, hisax_pid_t *pid, hisaxobject_
 		return -ENODEV;
 	contr->inst.data = contr;
 	ocapi->ctrl(st, MGR_REGLAYER | INDICATION, &contr->inst);
-	contr->inst.up.protocol = ISDN_PID_NONE;
-	contr->inst.up.layer = 0;
 	contr->inst.up.stat = IF_DOWN;
-	contr->inst.down.layer = get_down_layer(contr->inst.pid.layermask);
-	contr->inst.down.protocol = get_protocol(st, contr->inst.down.layer);
 	return 0;
 }
 
@@ -404,9 +398,6 @@ BInst_t *contrSelChannel(Contr_t *contr, int channr)
 			binst->inst.obj = contr->inst.obj;
 			binst->inst.pid.layermask = ISDN_LAYER(4);
 			binst->inst.down.stat = IF_NOACTIV;
-			binst->inst.down.protocol = ISDN_PID_NONE;
-			binst->inst.down.layer = 
-				get_down_layer(binst->inst.pid.layermask);
 			APPEND_TO_LIST(binst, contr->binst);
 			cst = cst->next;
 		}

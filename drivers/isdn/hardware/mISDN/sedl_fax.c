@@ -1,4 +1,4 @@
-/* $Id: sedl_fax.c,v 0.16 2001/03/26 11:40:02 kkeil Exp $
+/* $Id: sedl_fax.c,v 0.17 2001/03/27 10:23:48 kkeil Exp $
  *
  * sedl_fax.c  low level stuff for Sedlbauer Speedfax + cards
  *
@@ -40,7 +40,7 @@
 
 extern const char *CardType[];
 
-const char *Sedlfax_revision = "$Revision: 0.16 $";
+const char *Sedlfax_revision = "$Revision: 0.17 $";
 
 const char *Sedlbauer_Types[] =
 	{"None", "speed fax+", "speed fax+ pyramid", "speed fax+ pci"};
@@ -763,7 +763,6 @@ Speedfax_init(void)
 			card->bch[i].inst.obj = &speedfax;
 			card->bch[i].inst.data = card;
 			card->bch[i].inst.pid.layermask = 0;
-			card->bch[i].inst.up.layer = 1;
 			card->bch[i].inst.up.owner = &card->bch[i].inst;
 			card->bch[i].inst.down.owner = &card->bch[i].inst;
 			card->bch[i].inst.down.fdata = &card->bch[i];

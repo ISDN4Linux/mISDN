@@ -1,4 +1,4 @@
-/* $Id: udevice.c,v 0.10 2001/03/26 11:40:02 kkeil Exp $
+/* $Id: udevice.c,v 0.11 2001/03/27 10:23:48 kkeil Exp $
  *
  * Copyright 2000  by Karsten Keil <kkeil@isdn4linux.de>
  */
@@ -167,10 +167,6 @@ del_layer(devicelayer_t *dl) {
 			dl, inst, inst->pid.layermask, dev, inst->next);
 		printk(KERN_DEBUG "del_layer iaddr %x inst %s\n",
 			dl->iaddr, inst->name);
-		printk(KERN_DEBUG "del_layer   up L%d p(%X)\n",
-			inst->up.layer, inst->up.protocol);
-		printk(KERN_DEBUG "del_layer down L%d p(%X)\n",
-			inst->down.layer,inst->down.protocol);
 	}
 	if (dl->lm_st && inst->st) {
 		for (i=0; i<= MAX_LAYER_NR; i++) {
@@ -205,7 +201,7 @@ static int
 add_if_req(hisaxdevice_t *dev, iframe_t *iff) {
 	hisaxif_t *hif = NULL;
 	devicelayer_t *dl;
-	int err=-ENXIO;
+	int layer,protocol,err=-ENXIO;
 
 	if (device_debug & DEBUG_MGR_FUNC)
 		printk(KERN_DEBUG __FUNCTION__": addr:%x\n", iff->addr);
@@ -215,10 +211,9 @@ add_if_req(hisaxdevice_t *dev, iframe_t *iff) {
 		hif = &dl->inst.up;
 		if (hif->stat == IF_NOACTIV) {
 			hif->stat = IF_DOWN;
-			hif->layer = get_up_layer(dl->inst.pid.layermask);
-			hif->protocol = get_protocol(dl->inst.st, hif->layer);
-			hif->peer = get_instance(dl->inst.st, hif->layer,
-				hif->protocol);
+			layer = get_up_layer(dl->inst.pid.layermask);
+			protocol = get_protocol(dl->inst.st, layer);
+			hif->peer = get_instance(dl->inst.st, layer, protocol);
 			err = udev_obj.ctrl(&dl->inst, MGR_CONNECT | REQUEST,
 				hif->peer);
 			if (err)
@@ -229,10 +224,9 @@ add_if_req(hisaxdevice_t *dev, iframe_t *iff) {
 		hif = &dl->inst.down;
 		if (hif->stat == IF_NOACTIV) {
 			hif->stat = IF_UP;
-			hif->layer = get_down_layer(dl->inst.pid.layermask);
-			hif->protocol = get_protocol(dl->inst.st, hif->layer);
-			hif->peer = get_instance(dl->inst.st, hif->layer,
-				hif->protocol);
+			layer = get_down_layer(dl->inst.pid.layermask);
+			protocol = get_protocol(dl->inst.st, layer);
+			hif->peer = get_instance(dl->inst.st, layer, protocol);
 			err = udev_obj.ctrl(&dl->inst, MGR_CONNECT | REQUEST,
 				hif->peer);
 			if (err)
@@ -251,7 +245,7 @@ set_if_req(hisaxdevice_t *dev, iframe_t *iff) {
 
 	if (device_debug & DEBUG_MGR_FUNC)
 		printk(KERN_DEBUG __FUNCTION__": addr:%x\n", iff->addr);
-	if (iff->len != 2*sizeof(int))
+	if (iff->len != sizeof(int))
 		return(-EINVAL);
 	if (!(dl=get_devlayer(dev, iff->addr)))
 		return(-ENXIO);
@@ -260,8 +254,7 @@ set_if_req(hisaxdevice_t *dev, iframe_t *iff) {
 		hif = &dl->inst.up;
 		if (hif->stat == IF_NOACTIV) {
 			hif->stat = IF_DOWN;
-			hif->layer = *ip++;
-			hif->protocol = *ip;
+			hif->extentions = *ip++;
 			err = udev_obj.ctrl(dl->inst.st, MGR_CONNECT | REQUEST, hif);
 			if (err)
 				hif->stat = IF_NOACTIV;
@@ -271,8 +264,7 @@ set_if_req(hisaxdevice_t *dev, iframe_t *iff) {
 		hif = &dl->inst.down;
 		if (hif->stat == IF_NOACTIV) {
 			hif->stat = IF_UP;
-			hif->layer = *ip++;
-			hif->protocol = *ip;
+			
 			err = udev_obj.ctrl(dl->inst.st, MGR_CONNECT | REQUEST, hif);
 			if (err)
 				hif->stat = IF_NOACTIV;
@@ -480,12 +472,10 @@ hisax_wdata(hisaxdevice_t *dev, void *dp, int len) {
 				while(inst) {
 					if (lay & IF_UP) {
 						*ip++ = inst->up.stat;
-						*ip++ = inst->up.layer;
-						*ip++ = inst->up.protocol;
+						*ip++ = inst->up.extentions;
 					} else if (lay & IF_DOWN) {
 						*ip++ = inst->down.stat;
-						*ip++ = inst->down.layer;
-						*ip++ = inst->down.protocol;
+						*ip++ = inst->down.extentions;
 					}
 					inst = inst->next;
 				}	
