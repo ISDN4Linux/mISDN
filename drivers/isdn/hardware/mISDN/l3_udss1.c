@@ -1,4 +1,4 @@
-/* $Id: l3_udss1.c,v 1.22 2004/01/29 00:53:13 keil Exp $
+/* $Id: l3_udss1.c,v 1.23 2004/02/15 23:02:41 jolly Exp $
  *
  * EURO/DSS1 D-channel protocol
  *
@@ -24,7 +24,7 @@ static int debug = 0;
 static mISDNobject_t u_dss1;
 
 
-const char *dss1_revision = "$Revision: 1.22 $";
+const char *dss1_revision = "$Revision: 1.23 $";
 
 static int dss1man(l3_process_t *, u_int, void *);
 
@@ -1708,9 +1708,6 @@ l3dss1_dl_reset(l3_process_t *pc, u_char pr, void *arg)
 	nskb = skb_clone(skb, GFP_ATOMIC);
 	l3dss1_disconnect_req(pc, pr, skb);
 	if (nskb) {
-// jolly patch start: frage
-#warning jolly asks: wieso verschicken wir ein REQUEST nach oben? wenn das nicht ok ist, dann schaue nach allen REQUESTS, da hier mehrere sind.
-// jolly patch stop
 		if (mISDN_l3up(pc, CC_DISCONNECT | REQUEST, nskb))
 			dev_kfree_skb(nskb);
 	}
@@ -1752,13 +1749,11 @@ static struct stateentry downstatelist[] =
 {
 	{SBIT(0),
 	 CC_SETUP | REQUEST, l3dss1_setup_req},
-// jolly patch start: wie soll ich sonst wählen :=)
 	{SBIT(2) | SBIT(3) | SBIT(4) | SBIT(7) | SBIT(8) | SBIT(9) |
 		SBIT(10) | SBIT(11) | SBIT(12) | SBIT(15) | SBIT(25),
 	 CC_INFORMATION | REQUEST, l3dss1_information_req},
 	{SBIT(10),
 	 CC_PROGRESS | REQUEST, l3dss1_progress_req},
-// jolly patch stop
 	{SBIT(0),
 	 CC_RESUME | REQUEST, l3dss1_resume_req},
 	{SBIT(1) | SBIT(2) | SBIT(3) | SBIT(4) | SBIT(6) | SBIT(7) |
@@ -2132,14 +2127,6 @@ dss1_fromup(mISDNif_t *hif, struct sk_buff *skb)
 		printk(KERN_DEBUG  "%s: prim(%x)\n", __FUNCTION__, hh->prim);
 	if (!l3)
 		return(ret);
-// jolly patch start: warum eingentlich nicht?
-// kke weil die user Seite kein DL_RELEASE kennt lt Q.920/921/931
-//	if ((DL_RELEASE | REQUEST) == hh->prim) {
-//		l3_msg(l3, hh->prim, 0, 0, NULL);
-//		dev_kfree_skb(skb);
-//		return(0);
-//	}
-// jolly patch stop
 	if ((DL_ESTABLISH | REQUEST) == hh->prim) {
 		l3_msg(l3, hh->prim, 0, 0, NULL);
 		dev_kfree_skb(skb);
