@@ -27,6 +27,7 @@ OBJ_capi := capi.o contr.o listen.o appl.o plci.o cplci.o ncci.o asn1.o \
             asn1_aoc.o asn1_comp.o asn1_generic.o asn1_diversion.o \
             asn1_basic_service.o asn1_address.o asn1_enc.o capi_enc.o \
             supp_serv.o helper.o debug.o fsm.o
+OBJ_dtmf := hisax_dtmf.o helper.o debug.o
 
 LX_OBJS += hisax_core.o
 
@@ -59,6 +60,7 @@ obj-$(CONFIG_ISDN_DRV_NEWHISAX) += hisaxl1.o
 obj-$(CONFIG_ISDN_DRV_NEWHISAX) += hisaxl2.o
 obj-$(CONFIG_ISDN_DRV_NEWHISAX) += l3udss1.o
 obj-$(CONFIG_ISDN_DRV_NEWHISAX) += hisaxcapi.o
+obj-$(CONFIG_ISDN_DRV_NEWHISAX) += hisaxdtmf.o
 
 M_OBJS := $(obj-m)
 
@@ -98,6 +100,10 @@ l3udss1.o: $(OBJ_l3udss1)
 	$(LD) -r -o $@ $(filter-out $(MODVERFILE) dummy ,$^)
 
 hisaxcapi.o: $(OBJ_capi)
+	$(RM) $@
+	$(LD) -r -o $@ $(filter-out $(MODVERFILE) dummy ,$^)
+
+hisaxdtmf.o: $(OBJ_dtmf)
 	$(RM) $@
 	$(LD) -r -o $@ $(filter-out $(MODVERFILE) dummy ,$^)
 

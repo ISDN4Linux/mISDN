@@ -1,4 +1,4 @@
-/* $Id: cplci.c,v 1.4 2002/09/17 10:43:35 kkeil Exp $
+/* $Id: cplci.c,v 1.5 2003/06/27 15:19:42 kkeil Exp $
  *
  */
 
@@ -228,9 +228,10 @@ enum {
 	EV_PLCI_CC_RESUME_ERR,
 	EV_PLCI_CC_RESUME_CONF,
 	EV_PLCI_CC_REJECT_IND,
+	EV_PLCI_CC_PH_CONTROL_IND,
 }
 
-const EV_PLCI_COUNT = EV_PLCI_CC_REJECT_IND + 1;
+const EV_PLCI_COUNT = EV_PLCI_CC_PH_CONTROL_IND + 1;
 
 static char* str_ev_plci[] = {
 	"EV_PLCI_CONNECT_REQ",
@@ -265,6 +266,7 @@ static char* str_ev_plci[] = {
 	"EV_PLCI_CC_RESUME_ERR",
 	"EV_PLCI_CC_RESUME_CONF",
 	"EV_PLCI_CC_REJECT_IND",
+	"EV_PLCI_CC_PH_CONTROL_IND",
 };
 
 static struct Fsm plci_fsm =
@@ -823,6 +825,28 @@ static void plci_info_req_overlap(struct FsmInst *fi, int event, void *arg)
 	cplciRecvCmsg(cplci, cmsg);
 }
 
+static void plci_cc_ph_control_ind(struct FsmInst *fi, int event, void *arg)
+{
+	Cplci_t	*cplci = fi->userdata;
+	int	*tt = arg;
+	_cmsg	cmsg;
+	__u8	tmp[2];
+
+	if (!arg)
+		return;
+
+	printk(KERN_DEBUG "%s: tt(%x)\n", __FUNCTION__, *tt);
+	if ((*tt & ~DTMF_TONE_MASK) != DTMF_TONE_VAL)
+		return;
+
+	cplciCmsgHeader(cplci, &cmsg, CAPI_FACILITY, CAPI_IND);
+	tmp[0] = 1;
+	tmp[1] = *tt & DTMF_TONE_MASK;
+	cmsg.FacilitySelector = 0x0001;
+	cmsg.FacilityIndicationParameter = tmp;
+	cplciRecvCmsg(cplci, &cmsg);
+}
+
 static void plci_info_req(struct FsmInst *fi, int event, void *arg)
 {
 }
@@ -875,6 +899,7 @@ static struct FsmNode fn_plci_list[] =
   {ST_PLCI_P_ACT,	EV_PLCI_CC_NOTIFY_IND,		plci_cc_notify_ind},
   {ST_PLCI_P_ACT,	EV_PLCI_CC_SUSPEND_ERR,		plci_cc_suspend_err},
   {ST_PLCI_P_ACT,	EV_PLCI_CC_SUSPEND_CONF,	plci_cc_suspend_conf},
+  {ST_PLCI_P_ACT,	EV_PLCI_CC_PH_CONTROL_IND,	plci_cc_ph_control_ind},
 
   {ST_PLCI_P_5,		EV_PLCI_DISCONNECT_IND,		plci_disconnect_ind},
   {ST_PLCI_P_5,		EV_PLCI_CC_RELEASE_IND,		plci_cc_release_ind},
@@ -1143,6 +1168,10 @@ void cplci_l3l4(Cplci_t *cplci, int pr, void *arg)
 			break;
 		case CC_NOTIFY | INDICATION:
 			FsmEvent(&cplci->plci_m, EV_PLCI_CC_NOTIFY_IND, arg); 
+			break;
+		case PH_CONTROL | INDICATION:
+			/* TOUCH TONE */
+			FsmEvent(&cplci->plci_m, EV_PLCI_CC_PH_CONTROL_IND, arg);
 			break;
 		default:
 			cplciDebug(cplci, LL_DEB_WARN, 

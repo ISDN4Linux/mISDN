@@ -1,4 +1,4 @@
-/* $Id: appl.c,v 1.0 2001/11/02 23:42:26 kkeil Exp $
+/* $Id: appl.c,v 1.1 2003/06/27 15:19:42 kkeil Exp $
  *
  */
 
@@ -135,17 +135,27 @@ void applSendMessage(Appl_t *appl, struct sk_buff *skb)
 
 void applFacilityReq(Appl_t *appl, struct sk_buff *skb)
 {
-	_cmsg cmsg;
-	capi_message2cmsg(&cmsg, skb->data);
+	_cmsg	cmsg;
+	Cplci_t	*cplci;
 
+	capi_message2cmsg(&cmsg, skb->data);
 	switch (cmsg.FacilitySelector) {
-	case 0x0003: // SupplementaryServices
-		applSuppFacilityReq(appl, &cmsg);
-		break;
-	default:
-		int_error();
+		case 0x0001: // DTMF
+			cplci = applAdr2cplci(appl, CAPIMSG_CONTROL(skb->data));
+			if (cplci && cplci->ncci) {
+				ncciSendMessage(cplci->ncci, skb);
+				return;
+			}
+			contrAnswerMessage(appl->contr, skb, CapiIllContrPlciNcci);
+			break;
+		case 0x0003: // SupplementaryServices
+			applSuppFacilityReq(appl, &cmsg);
+			break;
+		default:
+			int_error();
+			contrAnswerMessage(appl->contr, skb, CapiFacilityNotSupported);
+			break;
 	}
-	
 	dev_kfree_skb(skb);
 }
 

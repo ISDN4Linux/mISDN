@@ -1,4 +1,4 @@
-/* $Id: bchannel.h,v 1.2 2003/06/22 10:39:43 kkeil Exp $
+/* $Id: bchannel.h,v 1.3 2003/06/27 15:19:42 kkeil Exp $
  *
  *   Basic declarations, defines for Bchannel hardware
  *
@@ -37,6 +37,7 @@
 #define BC_FLG_LL_OK	14
 #define BC_FLG_LL_CONN	15
 #define BC_FLG_TX_NEXT	16
+#define BC_FLG_DTMFSEND	17
 
 typedef struct _bchannel_t {
 	int			channel;

@@ -1,4 +1,4 @@
-/* $Id: ncci.c,v 1.5 2002/09/16 23:49:38 kkeil Exp $
+/* $Id: ncci.c,v 1.6 2003/06/27 15:19:42 kkeil Exp $
  *
  */
 
@@ -50,6 +50,7 @@ enum {
 	EV_NCCI_DISCONNECT_B3_IND,
 	EV_NCCI_DISCONNECT_B3_CONF,
 	EV_NCCI_DISCONNECT_B3_RESP,
+	EV_NCCI_FACILITY_REQ,
 	EV_NCCI_SELECT_B_PROTOCOL,
 	EV_NCCI_DL_ESTABLISH_IND,
 	EV_NCCI_DL_ESTABLISH_CONF,
@@ -74,6 +75,7 @@ static char* str_ev_ncci[] = {
 	"EV_NCCI_DISCONNECT_B3_IND",
 	"EV_NCCI_DISCONNECT_B3_CONF",
 	"EV_NCCI_DISCONNECT_B3_RESP",
+	"EV_NCCI_FACILITY_REQ",
 	"EV_NCCI_SELECT_B_PROTOCOL",
 	"EV_NCCI_DL_ESTABLISH_IND",
 	"EV_NCCI_DL_ESTABLISH_CONF",
@@ -184,6 +186,41 @@ static void ncci_disconnect_b3_req(struct FsmInst *fi, int event, void *arg)
 	}
 }
 
+static void ncci_facility_req(struct FsmInst *fi, int event, void *arg)
+{
+	Ncci_t	*ncci = fi->userdata;
+	_cmsg	*cmsg = arg;
+	u_char	*p = cmsg->FacilityRequestParameter;
+	u16	func;
+	int	op;
+
+	capi_cmsg_answer(cmsg);
+	cmsg->Info = CAPI_NOERROR;
+	if (cmsg->FacilitySelector != 1) { // not DTMF
+		cmsg->Info = CapiIllMessageParmCoding;
+	} else if (p && p[0]) {
+		func = CAPIMSG_U16(p, 1);
+		printk(KERN_DEBUG "ncci_facility_req: p %02x %02x %02x func(%x)\n",
+			p[0], p[1], p[2], func);
+		switch (func) {
+			case 1:
+				op = DTMF_TONE_START;
+				ncciL4L3(ncci, PH_CONTROL | REQUEST, 0, sizeof(int), &op, NULL);
+				break;
+			case 2:
+				op = DTMF_TONE_STOP;
+				ncciL4L3(ncci, PH_CONTROL | REQUEST, 0, sizeof(int), &op, NULL);
+				break;
+			default:
+				cmsg->Info = CapiFacilityNotSupported;
+				break;
+		}
+	} else
+		cmsg->Info = CapiIllMessageParmCoding;
+		
+	ncciRecvCmsg(ncci, cmsg);
+}
+
 static void ncci_connect_b3_active_ind(struct FsmInst *fi, int event, void *arg)
 {
 	Ncci_t *ncci = fi->userdata;
@@ -284,6 +321,7 @@ static struct FsmNode fn_ncci_list[] =
   {ST_NCCI_N_ACT,     EV_NCCI_DISCONNECT_B3_IND,         ncci_disconnect_b3_ind},
   {ST_NCCI_N_ACT,     EV_NCCI_DL_RELEASE_IND,            ncci_dl_release_ind_conf},
   {ST_NCCI_N_ACT,     EV_NCCI_DL_DOWN_IND,               ncci_dl_down_ind},
+  {ST_NCCI_N_ACT,     EV_NCCI_FACILITY_REQ,              ncci_facility_req},
 
   {ST_NCCI_N_4,       EV_NCCI_DISCONNECT_B3_CONF,        ncci_disconnect_b3_conf},
   {ST_NCCI_N_4,       EV_NCCI_DISCONNECT_B3_IND,         ncci_disconnect_b3_ind},
@@ -355,6 +393,10 @@ void ncciInitSt(Ncci_t *ncci)
 		ncci->Flags = NCCI_FLG_FCTRL;
 	pid.protocol[2] = (1 << cplci->Bprotocol.B2protocol) |
 		ISDN_PID_LAYER(2) | ISDN_PID_BCHANNEL_BIT;
+	/* handle DTMF TODO */
+	if ((pid.protocol[2] == ISDN_PID_L2_B_TRANS) &&
+		(pid.protocol[1] == ISDN_PID_L1_B_64TRANS))
+		pid.protocol[2] = ISDN_PID_L2_B_TRANSDTMF;
 	if (cplci->Bprotocol.B3protocol > 23) {
 		int_errtxt("wrong B3 prot %x", cplci->Bprotocol.B3protocol);
 		return;
@@ -595,45 +637,49 @@ void ncciSendMessage(Ncci_t *ncci, struct sk_buff *skb)
 
 	// we're not using the Fsm for DATA_B3 for performance reasons
 	switch (CAPICMD(CAPIMSG_COMMAND(skb->data), CAPIMSG_SUBCOMMAND(skb->data))) {
-	case CAPI_DATA_B3_REQ:
-		if (ncci->ncci_m.state == ST_NCCI_N_ACT) {
-			ncciDataReq(ncci, skb);
-		} else {
-			contrAnswerMessage(ncci->cplci->contr, skb, 
-				CapiMessageNotSupportedInCurrentState);
-			dev_kfree_skb(skb);
-		}
-		goto out;
-	case CAPI_DATA_B3_RESP:
-		ncciDataResp(ncci, skb);
-		goto out;
+		case CAPI_DATA_B3_REQ:
+			if (ncci->ncci_m.state == ST_NCCI_N_ACT) {
+				ncciDataReq(ncci, skb);
+			} else {
+				contrAnswerMessage(ncci->cplci->contr, skb, 
+					CapiMessageNotSupportedInCurrentState);
+				dev_kfree_skb(skb);
+			}
+			goto out;
+		case CAPI_DATA_B3_RESP:
+			ncciDataResp(ncci, skb);
+			goto out;
 	}
 
 	capi_message2cmsg(&ncci->tmpmsg, skb->data);
 	switch (CMSGCMD(&ncci->tmpmsg)) {
-	case CAPI_CONNECT_B3_REQ:
-		retval = FsmEvent(&ncci->ncci_m, EV_NCCI_CONNECT_B3_REQ,
-			&ncci->tmpmsg);
-		break;
-	case CAPI_CONNECT_B3_RESP:
-		retval = FsmEvent(&ncci->ncci_m, EV_NCCI_CONNECT_B3_RESP,
-			&ncci->tmpmsg);
-		break;
-	case CAPI_CONNECT_B3_ACTIVE_RESP:
-		retval = FsmEvent(&ncci->ncci_m, EV_NCCI_CONNECT_B3_ACTIVE_RESP,
-			&ncci->tmpmsg);
-		break;
-	case CAPI_DISCONNECT_B3_REQ:
-		retval = FsmEvent(&ncci->ncci_m, EV_NCCI_DISCONNECT_B3_REQ,
-			&ncci->tmpmsg);
-		break;
-	case CAPI_DISCONNECT_B3_RESP:
-		retval = FsmEvent(&ncci->ncci_m, EV_NCCI_DISCONNECT_B3_RESP,
-			&ncci->tmpmsg);
-		break;
-	default:
-		int_error();
-		retval = -1;
+		case CAPI_CONNECT_B3_REQ:
+			retval = FsmEvent(&ncci->ncci_m, EV_NCCI_CONNECT_B3_REQ,
+				&ncci->tmpmsg);
+			break;
+		case CAPI_CONNECT_B3_RESP:
+			retval = FsmEvent(&ncci->ncci_m, EV_NCCI_CONNECT_B3_RESP,
+				&ncci->tmpmsg);
+			break;
+		case CAPI_CONNECT_B3_ACTIVE_RESP:
+			retval = FsmEvent(&ncci->ncci_m, EV_NCCI_CONNECT_B3_ACTIVE_RESP,
+				&ncci->tmpmsg);
+			break;
+		case CAPI_DISCONNECT_B3_REQ:
+			retval = FsmEvent(&ncci->ncci_m, EV_NCCI_DISCONNECT_B3_REQ,
+				&ncci->tmpmsg);
+			break;
+		case CAPI_DISCONNECT_B3_RESP:
+			retval = FsmEvent(&ncci->ncci_m, EV_NCCI_DISCONNECT_B3_RESP,
+				&ncci->tmpmsg);
+			break;
+		case CAPI_FACILITY_REQ:
+			retval = FsmEvent(&ncci->ncci_m, EV_NCCI_FACILITY_REQ,
+				&ncci->tmpmsg);
+			break;
+		default:
+			int_error();
+			retval = -1;
 	}
 	if (retval) { 
 		if (CAPIMSG_SUBCOMMAND(skb->data) == CAPI_REQ) {
@@ -680,6 +726,10 @@ int ncci_l3l4(hisaxif_t *hif, struct sk_buff *skb)
 			break;
 		case DL_RELEASE | CONFIRM:
 			FsmEvent(&ncci->ncci_m, EV_NCCI_DL_RELEASE_CONF, skb);
+			break;
+		case PH_CONTROL | INDICATION: /* e.g touch tones */
+			/* handled by cplci */
+			cplci_l3l4(ncci->cplci, hh->prim, skb->data);
 			break;
 		default:
 			printk(KERN_DEBUG "%s: unknown prim(%x) dinfo(%x) len(%d) skb(%p)\n",

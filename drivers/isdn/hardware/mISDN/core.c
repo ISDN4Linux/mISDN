@@ -1,4 +1,4 @@
-/* $Id: core.c,v 1.2 2002/09/16 23:49:38 kkeil Exp $
+/* $Id: core.c,v 1.3 2003/06/27 15:19:42 kkeil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -32,12 +32,92 @@ EXPORT_SYMBOL(HiSax_unregister);
 #define HiSaxInit init_module
 #endif
 
+typedef struct _hisax_thread {
+	/* thread */
+	struct task_struct	*thread;
+	wait_queue_head_t	wq;
+	struct semaphore	*notify;
+	u_int			Flags;
+	void			*data1;
+	void			*data2;
+} hisax_thread_t;
+
+#define	HISAX_TFLAGS_STARTED	1
+#define HISAX_TFLAGS_RMMOD	2
+#define HISAX_TFLAGS_ACTIV	3
+#define HISAX_TFLAGS_TEST	4
+#define HISAX_TFLAGS_SETSTACK	5
+
+static hisax_thread_t	hisax_thread;
+
 static moditem_t modlist[] = {
 	{"hisaxl1", ISDN_PID_L1_TE_S0},
 	{"hisaxl2", ISDN_PID_L2_LAPD},
 	{"hisaxl2", ISDN_PID_L2_B_X75SLP},
+	{"l3udss1", ISDN_PID_L3_DSS1USER},
+	{"hisaxdtmf", ISDN_PID_L2_B_TRANSDTMF},
 	{NULL, ISDN_PID_NONE}
 };
+
+/* 
+ * kernel thread to do work which cannot be done
+ *in interrupt context 
+ */
+
+static int
+hisaxd(void *data)
+{
+	hisax_thread_t	*hkt = data;
+	int		err;
+
+#ifdef CONFIG_SMP
+	lock_kernel();
+#endif
+	daemonize();
+	sigfillset(&current->blocked);
+	strcpy(current->comm,"hisaxd");
+	hkt->thread = current;
+#ifdef CONFIG_SMP
+	unlock_kernel();
+#endif
+	printk(KERN_DEBUG "hisaxd: daemon started\n");
+
+	test_and_set_bit(HISAX_TFLAGS_STARTED, &hkt->Flags);
+	if (hkt->notify != NULL)
+		up(hkt->notify);
+
+	for (;;) {
+		if (test_and_clear_bit(HISAX_TFLAGS_RMMOD, &hkt->Flags))
+			break;
+		interruptible_sleep_on(&hkt->wq);
+		if (test_and_clear_bit(HISAX_TFLAGS_RMMOD, &hkt->Flags))
+			break;
+		if (test_and_clear_bit(HISAX_TFLAGS_SETSTACK, &hkt->Flags)) {
+			printk(KERN_DEBUG "hisaxd: SETSTACK\n");
+			err = set_stack(hkt->data1, hkt->data2);
+			kfree(hkt->data2);
+			hkt->data2 = NULL;
+			hkt->data1 = NULL;
+			printk(KERN_DEBUG "hisaxd: SETSTACK return(%d)\n", err);
+		}
+		if (test_and_clear_bit(HISAX_TFLAGS_TEST, &hkt->Flags))
+			printk(KERN_DEBUG "hisaxd: test event done\n");
+	}
+	
+	printk(KERN_DEBUG "hisaxd: daemon exit now\n");
+	test_and_clear_bit(HISAX_TFLAGS_STARTED, &hkt->Flags);
+	test_and_clear_bit(HISAX_TFLAGS_ACTIV, &hkt->Flags);
+	if (test_and_clear_bit(HISAX_TFLAGS_SETSTACK, &hkt->Flags)) {
+		if (hkt->data2)
+			kfree(hkt->data2);
+		hkt->data2 = NULL;
+		hkt->data1 = NULL;
+	}
+	hkt->thread = NULL;
+	if (hkt->notify != NULL)
+		up(hkt->notify);
+	return(0);
+}
 
 hisaxobject_t *
 get_object(int id) {
@@ -71,17 +151,21 @@ find_object(int protocol) {
 
 static hisaxobject_t *
 find_object_module(int protocol) {
-	moditem_t *m = modlist;
-	hisaxobject_t *obj;
+	int		err;
+	moditem_t	*m = modlist;
+	hisaxobject_t	*obj;
 
 	while (m->name != NULL) {
 		if (m->protocol == protocol) {
 #ifdef CONFIG_KMOD
 			if (debug)
 				printk(KERN_DEBUG
-					"find_object_module %s - trying to load\n",
-					m->name);
-			request_module(m->name);
+					"find_object_module %s - trying to load in_irq(%d)\n",
+					m->name, in_interrupt());
+			err=request_module(m->name);
+			if (debug)
+				printk(KERN_DEBUG "find_object_module: request_module(%s) returns(%d)\n",
+					m->name, err);
 #else
 			printk(KERN_WARNING "not possible to autoload %s please try to load manually\n",
 				m->name);
@@ -304,7 +388,26 @@ static int central_manager(void *data, u_int prim, void *arg) {
 		return(-EINVAL);
 	switch(prim) {
 	    case MGR_SETSTACK | REQUEST:
-		return(set_stack(st, arg));
+	    	/* can sleep in case of module reload */
+	    	if (in_interrupt()) {
+	    		if (!test_and_set_bit(HISAX_TFLAGS_SETSTACK, &hisax_thread.Flags)) {
+	    			hisax_thread.data1 = st;
+	    			hisax_thread.data2 = kmalloc(sizeof(hisax_pid_t), GFP_ATOMIC);
+	    			if (!hisax_thread.data2) {
+	    				test_and_clear_bit(HISAX_TFLAGS_SETSTACK, &hisax_thread.Flags);
+	    				printk(KERN_WARNING "MGR_SETSTACK REQUEST no kmem\n");
+	    				return(-ENOMEM);
+	    			}
+	    			memcpy(hisax_thread.data2, arg, sizeof(hisax_pid_t));
+	    			wake_up_interruptible(&hisax_thread.wq);
+	    			return(0);
+	    		} else {
+	    			printk(KERN_WARNING "MGR_SETSTACK REQUEST: cannot submit to hisaxd\n");
+	    			int_error();
+	    			return(-EBUSY);
+	    		}
+	    	} else
+			return(set_stack(st, arg));
 	    case MGR_CLEARSTACK | REQUEST:
 		return(clear_stack(st));
 	    case MGR_DELSTACK | REQUEST:
@@ -374,17 +477,36 @@ int HiSax_unregister(hisaxobject_t *obj) {
 int
 HiSaxInit(void)
 {
+	DECLARE_MUTEX_LOCKED(sem);
 	int err;
 
 	core_debug = debug;
 	err = init_hisaxdev(debug);
+	if (err)
+		return(err);
+	init_waitqueue_head(&hisax_thread.wq);
+	hisax_thread.notify = &sem;
+	kernel_thread(hisaxd, (void *)&hisax_thread, 0);
+	down(&sem);
+	hisax_thread.notify = NULL;
+	test_and_set_bit(HISAX_TFLAGS_TEST, &hisax_thread.Flags);
+	wake_up_interruptible(&hisax_thread.wq);
 	return(err);
 }
 
 #ifdef MODULE
 void cleanup_module(void) {
+	DECLARE_MUTEX_LOCKED(sem);
 	hisaxstack_t *st;
 
+	if (hisax_thread.thread) {
+		/* abort hisaxd kernel thread */
+		hisax_thread.notify = &sem;
+		test_and_set_bit(HISAX_TFLAGS_TEST, &hisax_thread.Flags);
+		wake_up_interruptible(&hisax_thread.wq);
+		down(&sem);
+		hisax_thread.notify = NULL;
+	}
 	free_hisaxdev();
 	if (hisax_objects) {
 		printk(KERN_WARNING "hisaxcore hisax_objects not empty\n");

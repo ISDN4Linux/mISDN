@@ -1,4 +1,4 @@
-/* $Id: isar.c,v 1.8 2003/06/25 16:44:48 kkeil Exp $
+/* $Id: isar.c,v 1.9 2003/06/27 15:19:42 kkeil Exp $
  *
  * isar.c   ISAR (Siemens PSB 7110) specific routines
  *
@@ -447,8 +447,14 @@ isar_bh(bchannel_t *bch)
 	if (test_and_clear_bit(B_LL_FCERROR, &bch->event))
 		deliver_status(bch, HW_MOD_FCERROR);
 	if (test_and_clear_bit(B_TOUCH_TONE, &bch->event)) {
-		tt = bch->conmsg[0];
-		tt |= TOUCH_TONE_VAL;
+		tt = bch->conmsg[0] | 0x30;
+		if (tt == 0x3e)
+			tt = '*';
+		else if (tt == 0x3f)
+			tt = '#';
+		else if (tt > '9')
+			tt += 7;
+		tt |= DTMF_TONE_VAL;
 		if_link(&bch->inst.up, PH_CONTROL | INDICATION,
 			0, sizeof(int), &tt, 0);
 	}
@@ -511,9 +517,7 @@ isar_rcv_frame(bchannel_t *bch)
 		bch->Write_Reg(bch->inst.data, 1, ISAR_IIA, 0);
 		break;
 	    case ISDN_PID_L1_B_64TRANS:
-	    case ISDN_PID_L1_B_TRANS_TT:
-	    case ISDN_PID_L1_B_TRANS_TTR:
-	    case ISDN_PID_L1_B_TRANS_TTS:
+	    case ISDN_PID_L2_B_TRANSDTMF:
 	    case ISDN_PID_L1_B_V32:
 		if ((skb = alloc_uplink_skb(ih->reg->clsb))) {
 			rcv_mbox(bch, ih->reg, (u_char *)skb_put(skb, ih->reg->clsb));
@@ -710,8 +714,7 @@ isar_fill_fifo(bchannel_t *bch)
 			printk(KERN_ERR "%s: wrong protocol 0\n", __FUNCTION__);
 			break;
 		case ISDN_PID_L1_B_64TRANS:
-		case ISDN_PID_L1_B_TRANS_TTR:
-		case ISDN_PID_L1_B_TRANS_TTS:
+		case ISDN_PID_L2_B_TRANSDTMF:
 		case ISDN_PID_L1_B_V32:
 			sendmsg(bch, SET_DPS(ih->dpath) | ISAR_HIS_SDATA,
 				0, count, ptr);
@@ -1198,7 +1201,7 @@ isar_int_main(bchannel_t *bch)
 					isar_pump_statev_modem(bc, ih->reg->cmsb);
 				} else if (bc->protocol == ISDN_PID_L1_B_FAX) {
 					isar_pump_statev_fax(bc, ih->reg->cmsb);
-				} else if (bc->protocol == ISDN_PID_L1_B_TRANS_TTR) {
+				} else if (bc->protocol == ISDN_PID_L2_B_TRANSDTMF) {
 					ih->conmsg[0] = ih->reg->cmsb;
 					bch->conmsg = ih->conmsg;
 					bch_sched_event(bc, B_TOUCH_TONE);
@@ -1275,14 +1278,14 @@ setup_pump(bchannel_t *bch) {
 		case ISDN_PID_L1_B_64HDLC:
 			sendmsg(bch, dps | ISAR_HIS_PUMPCFG, PMOD_BYPASS, 0, NULL);
 			break;
-		case ISDN_PID_L1_B_TRANS_TTS:
-			param[0] = 5; /* TOA 5 db */
-			sendmsg(bch, dps | ISAR_HIS_PUMPCFG, PMOD_DTMF_TRANS, 1, param);
-			break;
-		case ISDN_PID_L1_B_TRANS_TTR:
-			param[0] = 40; /* REL -46 dbm */
-			sendmsg(bch, dps | ISAR_HIS_PUMPCFG, PMOD_DTMF, 1, param);
-			break;
+		case ISDN_PID_L2_B_TRANSDTMF:
+			if (test_bit(BC_FLG_DTMFSEND, &bch->Flag)) {
+				param[0] = 5; /* TOA 5 db */
+				sendmsg(bch, dps | ISAR_HIS_PUMPCFG, PMOD_DTMF_TRANS, 1, param);
+			} else {
+				param[0] = 40; /* REL -46 dbm */
+				sendmsg(bch, dps | ISAR_HIS_PUMPCFG, PMOD_DTMF, 1, param);
+			}
 		case ISDN_PID_L1_B_V32:
 			ctrl = PMOD_DATAMODEM;
 			if (test_bit(BC_FLG_ORIG, &bch->Flag)) {
@@ -1332,11 +1335,9 @@ setup_sart(bchannel_t *bch) {
 				NULL);
 			break;
 		case ISDN_PID_L1_B_64TRANS:
-		case ISDN_PID_L1_B_TRANS_TT:
-		case ISDN_PID_L1_B_TRANS_TTR:
-		case ISDN_PID_L1_B_TRANS_TTS:
+		case ISDN_PID_L2_B_TRANSDTMF:
 			sendmsg(bch, dps | ISAR_HIS_SARTCFG, SMODE_BINARY, 2,
-				"\1\0");
+				"\0\0");
 			break;
 		case ISDN_PID_L1_B_64HDLC:
 		case ISDN_PID_L1_B_FAX:
@@ -1376,9 +1377,10 @@ setup_iom2(bchannel_t *bch) {
 			break;
 		case ISDN_PID_L1_B_V32:
 		case ISDN_PID_L1_B_FAX:
-		case ISDN_PID_L1_B_TRANS_TTS:
 			cmsb |= IOM_CTRL_RCV;
-		case ISDN_PID_L1_B_TRANS_TTR:
+		case ISDN_PID_L2_B_TRANSDTMF:
+			if (test_bit(BC_FLG_DTMFSEND, &bch->Flag))
+				cmsb |= IOM_CTRL_RCV;
 			cmsb |= IOM_CTRL_ALAW;
 			break;
 	}
@@ -1418,9 +1420,7 @@ modeisar(bchannel_t *bch, int channel, u_int bprotocol, u_char *param)
 				break;
 			case ISDN_PID_L1_B_V32:
 			case ISDN_PID_L1_B_FAX:
-			case ISDN_PID_L1_B_TRANS_TT:
-			case ISDN_PID_L1_B_TRANS_TTR:
-			case ISDN_PID_L1_B_TRANS_TTS:
+			case ISDN_PID_L2_B_TRANSDTMF:
 				/* only datapath 1 */
 				if (!test_and_set_bit(ISAR_DP1_USE, 
 					&ih->reg->Flags))
@@ -1620,9 +1620,12 @@ isar_down(hisaxif_t *hif, struct sk_buff *skb)
 		if (test_and_set_bit(BC_FLG_ACTIV, &bch->Flag))
 			ret = 0;
 		else {
+			u_int	bp = bch->inst.pid.protocol[1];
+			if ((bp == ISDN_PID_L1_B_64TRANS) &&
+				(bch->inst.pid.protocol[2] == ISDN_PID_L2_B_TRANSDTMF))
+				bp = ISDN_PID_L2_B_TRANSDTMF;
 			bch->inst.lock(bch->inst.data, 0);
-			ret = modeisar(bch, bch->channel,
-				bch->inst.pid.protocol[1], NULL);
+			ret = modeisar(bch, bch->channel, bp, NULL);
 			bch->inst.unlock(bch->inst.data);
 		}
 		skb_trim(skb, 0);
@@ -1648,10 +1651,19 @@ isar_down(hisaxif_t *hif, struct sk_buff *skb)
 		int  len;
 
 		val = (int *)skb->data;
-		if ((*val & ~TOUCH_TONE_MASK)==TOUCH_TONE_VAL) {
-			if (bch->protocol == ISDN_PID_L1_B_TRANS_TTS) {
+		if ((*val & ~DTMF_TONE_MASK) == DTMF_TONE_VAL) {
+			if (bch->protocol == ISDN_PID_L2_B_TRANSDTMF) {
+				char tt = *val & DTMF_TONE_MASK;
+				
+				if (tt == '*')
+					tt = 0x1e;
+				else if (tt == '#')
+					tt = 0x1f;
+				else if (tt > '9')
+					tt -= 7;
+				tt &= 0x1f;
 				bch->inst.lock(bch->inst.data, 0);
-				isar_pump_cmd(bch, PCTRL_CMD_TDTMF, (*val & 0xff));
+				isar_pump_cmd(bch, PCTRL_CMD_TDTMF, tt);
 				bch->inst.unlock(bch->inst.data);
 				skb_trim(skb, 0);
 				if (!if_newhead(&bch->inst.up, PH_CONTROL |
