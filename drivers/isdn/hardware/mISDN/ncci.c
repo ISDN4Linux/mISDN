@@ -1,4 +1,4 @@
-/* $Id: ncci.c,v 1.12 2003/10/20 07:19:42 keil Exp $
+/* $Id: ncci.c,v 1.13 2003/11/09 09:14:24 keil Exp $
  *
  */
 
@@ -548,7 +548,13 @@ void ncciDataInd(Ncci_t *ncci, int pr, struct sk_buff *skb)
 	*((__u8*) (nskb->data+5)) = CAPI_IND;
 	*((__u16*)(nskb->data+6)) = ncci->appl->MsgId++;
 	*((__u32*)(nskb->data+8)) = ncci->adrNCCI;
-	*((__u32*)(nskb->data+12)) = (__u32)(nskb->data + CAPI_B3_DATA_IND_HEADER_SIZE);
+	if (sizeof(nskb) == 4) {
+		*((__u32*)(nskb->data+12)) = (__u32)(nskb->data + CAPI_B3_DATA_IND_HEADER_SIZE);
+		*((__u64*)(nskb->data+22)) = 0;
+	} else {
+		*((__u32*)(nskb->data+12)) = 0;
+		*((__u64*)(nskb->data+22)) = (u_long)(nskb->data + CAPI_B3_DATA_IND_HEADER_SIZE);
+	}
 	*((__u16*)(nskb->data+16)) = nskb->len - CAPI_B3_DATA_IND_HEADER_SIZE;
 	*((__u16*)(nskb->data+18)) = i;
 	// FIXME FLAGS
@@ -562,9 +568,12 @@ void ncciDataInd(Ncci_t *ncci, int pr, struct sk_buff *skb)
 
 void ncciDataReq(Ncci_t *ncci, struct sk_buff *skb)
 {
-	int i;
+	int	i, err;
+	__u16	len, capierr = 0;
 	
-	if (CAPIMSG_LEN(skb->data) != 22 && CAPIMSG_LEN(skb->data) != 30) {
+	len = CAPIMSG_LEN(skb->data);
+	if (len != 22 && len != 30) {
+		capierr = CapiIllMessageParmCoding;
 		int_error();
 		goto fail;
 	}
@@ -573,13 +582,18 @@ void ncciDataReq(Ncci_t *ncci, struct sk_buff *skb)
 			break;
 	}
 	if (i == ncci->window) {
+		int_error();
+		err = CAPI_SENDQUEUEFULL;
 		goto fail;
 	}
 	
 	ncci->xmit_skb_handles[i].skb = skb;
 	ncci->xmit_skb_handles[i].DataHandle = CAPIMSG_REQ_DATAHANDLE(skb->data);
 	ncci->xmit_skb_handles[i].MsgId = CAPIMSG_MSGID(skb->data);
-	skb_pull(skb, CAPIMSG_LEN(skb->data));
+
+	/* the data begins behind the header, we don't use Data32/Data64 here */
+	skb_pull(skb, len);
+
 	if (ncci->Flags & NCCI_FLG_FCTRL) {
 		if (test_and_set_bit(NCCI_FLG_BUSY, &ncci->Flags)) {
 			skb_queue_tail(&ncci->squeue, skb);
@@ -588,13 +602,34 @@ void ncciDataReq(Ncci_t *ncci, struct sk_buff *skb)
 		if (skb_queue_len(&ncci->squeue)) {
 			skb_queue_tail(&ncci->squeue, skb);
 			skb = skb_dequeue(&ncci->squeue);
+			i = -1;
 		}
 	}
-	if (!ncciL4L3(ncci, DL_DATA | REQUEST, DINFO_SKB, 0, NULL, skb))
+	
+	err = ncciL4L3(ncci, DL_DATA | REQUEST, DINFO_SKB, 0, NULL, skb);
+	if (!err)
 		return;
 
- fail: /* FIXME send error CONFIRM */
- 	int_error();
+	int_error();
+	skb_push(skb, len);
+	capierr = CAPI_MSGBUSY;
+	if (i == -1) {
+		for (i = 0; i < ncci->window; i++) {
+			if (ncci->xmit_skb_handles[i].skb == skb)
+				break;
+		}
+		if (i == ncci->window)
+			int_error();
+		else
+			ncci->xmit_skb_handles[i].skb = NULL;
+	}
+fail:
+	capi_cmsg_header(&ncci->tmpmsg, ncci->cplci->appl->ApplId, CAPI_DATA_B3, CAPI_CONF, 
+		CAPIMSG_MSGID(skb->data), ncci->adrNCCI);
+	/* illegal len (too short) ??? */
+	ncci->tmpmsg.DataHandle = CAPIMSG_REQ_DATAHANDLE(skb->data);
+	ncci->tmpmsg.Info = capierr;
+	ncciRecvCmsg(ncci, &ncci->tmpmsg);
 	dev_kfree_skb(skb);
 }
 
@@ -611,6 +646,8 @@ int ncciDataConf(Ncci_t *ncci, int pr, struct sk_buff *skb)
 		return(-EINVAL);
 	}
 	ncci->xmit_skb_handles[i].skb = NULL;
+	capidebug(CAPI_DBG_NCCI_L3, "%s: entry %d/%d handle (%x)",
+		__FUNCTION__, i, ncci->window, ncci->xmit_skb_handles[i].DataHandle);
 	dev_kfree_skb(skb);
 	capi_cmsg_header(&ncci->tmpmsg, ncci->cplci->appl->ApplId, CAPI_DATA_B3, CAPI_CONF, 
 			 ncci->xmit_skb_handles[i].MsgId, ncci->adrNCCI);
@@ -721,6 +758,8 @@ int ncci_l3l4(mISDNif_t *hif, struct sk_buff *skb)
 		return(ret);
 	hh = mISDN_HEAD_P(skb);
 	ncci = hif->fdata;
+	capidebug(CAPI_DBG_NCCI_L3, "%s: NCCI %x prim(%x) dinfo (%x) skb(%p)",
+		__FUNCTION__, ncci->adrNCCI, hh->prim, hh->dinfo, skb);
 	switch (hh->prim) {
 		// we're not using the Fsm for DL_DATA for performance reasons
 		case DL_DATA | INDICATION: 
@@ -763,8 +802,8 @@ int ncci_l3l4(mISDNif_t *hif, struct sk_buff *skb)
 static int ncciL4L3(Ncci_t *ncci, u_int prim, int dtyp, int len, void *arg,
 			struct sk_buff *skb)
 {
-	capidebug(CAPI_DBG_NCCI_L3, "%s: NCCI %x prim(%x)",
-		__FUNCTION__, ncci->adrNCCI, prim);
+	capidebug(CAPI_DBG_NCCI_L3, "%s: NCCI %x prim(%x) dtyp(%x) skb(%p)",
+		__FUNCTION__, ncci->adrNCCI, prim, dtyp, skb);
 	if (skb)
 		return(if_newhead(&ncci->binst->inst.down, prim, dtyp, skb));
 	else
