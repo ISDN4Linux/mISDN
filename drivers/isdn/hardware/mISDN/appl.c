@@ -1,4 +1,4 @@
-/* $Id: appl.c,v 1.9 2003/12/03 14:32:44 keil Exp $
+/* $Id: appl.c,v 1.10 2003/12/13 00:36:16 keil Exp $
  *
  *  Applications are owned by the controller and only
  *  handle this controller, multiplexing multiple
@@ -172,7 +172,6 @@ ApplicationSendMessage(Application_t *appl, struct sk_buff *skb)
 		// for NCCI state machine
 		case CAPI_DATA_B3_REQ:
 		case CAPI_DATA_B3_RESP:
-		case CAPI_CONNECT_B3_REQ:
 		case CAPI_CONNECT_B3_RESP:
 		case CAPI_CONNECT_B3_ACTIVE_RESP:
 		case CAPI_DISCONNECT_B3_REQ:
@@ -182,16 +181,22 @@ ApplicationSendMessage(Application_t *appl, struct sk_buff *skb)
 				AnswerMessage2Application(appl, skb, CapiIllContrPlciNcci);
 				goto free;
 			}
-			if (CAPI_CONNECT_B3_REQ == CAPICMD(CAPIMSG_COMMAND(skb->data), CAPIMSG_SUBCOMMAND(skb->data)))
-				ncci = getNCCI4addr(aplci, CAPIMSG_NCCI(skb->data), GET_NCCI_NEW);
-			else
-				ncci = getNCCI4addr(aplci, CAPIMSG_NCCI(skb->data), GET_NCCI_EXACT);
+			ncci = getNCCI4addr(aplci, CAPIMSG_NCCI(skb->data), GET_NCCI_EXACT);
 			if (!ncci) {
 				int_error();
 				AnswerMessage2Application(appl, skb, CapiIllContrPlciNcci);
 				goto free;
 			}
 			ncciSendMessage(ncci, skb);
+			break;
+		// new NCCI
+		case CAPI_CONNECT_B3_REQ:
+			aplci = getAppPlci4addr(appl, CAPIMSG_CONTROL(skb->data));
+			if (!aplci) {
+				AnswerMessage2Application(appl, skb, CapiIllContrPlciNcci);
+				goto free;
+			}
+			ConnectB3Request(aplci, skb);
 			break;
 		// for PLCI state machine
 		case CAPI_INFO_REQ:

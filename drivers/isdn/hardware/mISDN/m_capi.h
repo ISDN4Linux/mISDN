@@ -1,4 +1,4 @@
-/* $Id: m_capi.h,v 1.4 2003/12/10 23:01:16 keil Exp $
+/* $Id: m_capi.h,v 1.5 2003/12/13 00:36:16 keil Exp $
  *
  * Rewritten CAPI Layer (Layer4 in mISDN)
  * 
@@ -137,7 +137,7 @@ typedef struct _SSProcess	SSProcess_t;
 
 // some helper types
 typedef struct _ConfQueue	ConfQueue_t;
-typedef struct _BInst		BInst_t;
+typedef struct _PLInst		PLInst_t;
 
 // Facility types
 typedef struct FacReqParm	FacReqParm_t;
@@ -147,10 +147,11 @@ typedef struct FacConfParm	FacConfParm_t;
 // Helper structs
 // ---------------------------------------------------------------------------
 
-struct _BInst {
-	struct _BInst	*prev;
-	struct _BInst   *next;
-	mISDNstack_t	*bst;
+struct _PLInst {
+	PLInst_t	*prev;
+	PLInst_t	*next;
+	u_int		state;
+	mISDNstack_t	*st;
 	mISDNinstance_t	inst;
 };
 
@@ -175,7 +176,7 @@ struct _Controller {
 	struct _Controller	*next;
 	mISDNinstance_t		inst;
 	int			nr_bc;
-	BInst_t			*binst;
+	PLInst_t		*linklist;
 	struct capi_ctr		*ctrl;
 	__u32			addr;
 	int			entity;
@@ -244,9 +245,10 @@ struct _AppPlci {
 	__u32			addr;
 	Plci_t			*plci;
 	Application_t		*appl;
-	struct list_head	Nccis;
 	Controller_t		*contr;
-	struct	FsmInst		plci_m;
+	PLInst_t		*link;
+	struct list_head	Nccis;
+	struct FsmInst		plci_m;
 	u_char			cause[4];
 	int			channel;
 	struct Bprotocol	Bprotocol;
@@ -259,7 +261,7 @@ struct _AppPlci {
 struct _Ncci {
 	struct list_head	head;
 	__u32			addr;
-	BInst_t			*binst;
+	PLInst_t		*link;
 	Controller_t		*contr;
 	AppPlci_t		*AppPlci;
 	Application_t		*appl;
@@ -273,8 +275,8 @@ struct _Ncci {
 
 #define NCCI_STATE_FCTRL	1
 #define NCCI_STATE_BUSY		2
-#define NCCI_STATE_L3TRANS	4
-#define	NCCI_STATE_APPLRELEASED	0x80
+#define NCCI_STATE_L3TRANS	3
+#define	NCCI_STATE_APPLRELEASED	4
 
 // ---------------------------------------------------------------------------
 // struct SSProcess_t
@@ -308,7 +310,7 @@ Application_t	*getApplication4Id(Controller_t *, __u16);
 Plci_t		*getPlci4Addr(Controller_t *, __u32);
 int		ControllerL4L3(Controller_t *, u_int, int, struct sk_buff *);
 int		ControllerL3L4(mISDNif_t *, struct sk_buff *);
-BInst_t		*ControllerSelChannel(Controller_t *, u_int);
+PLInst_t	*ControllerSelChannel(Controller_t *, u_int);
 void		ControllerAddSSProcess(Controller_t *, SSProcess_t *);
 SSProcess_t	*getSSProcess4Id(Controller_t *, __u16);
 int		ControllerNextId(Controller_t *);
@@ -362,10 +364,12 @@ int	AppPlciFacSuspendReq(AppPlci_t *, FacReqParm_t *, FacConfParm_t *);
 int	AppPlciFacResumeReq(AppPlci_t *, FacReqParm_t *, FacConfParm_t *);
 void	AppPlciGetCmsg(AppPlci_t *, _cmsg *);
 Ncci_t	*getNCCI4addr(AppPlci_t *, __u32, int);
+int	ConnectB3Request(AppPlci_t *, struct sk_buff *);
+int	AppPlciSetIF(AppPlci_t *, u_int, void *);
 
-#define	GET_NCCI_EXACT	1
-#define GET_NCCI_PLCI	2
-#define GET_NCCI_NEW	3
+#define	GET_NCCI_EXACT		1
+#define GET_NCCI_ONLY_PLCI	2
+#define GET_NCCI_PLCI		3
 
 // ---------------------------------------------------------------------------
 // NCCI prototypes
@@ -373,14 +377,13 @@ Ncci_t	*getNCCI4addr(AppPlci_t *, __u32, int);
 
 Ncci_t	*ncciConstr(AppPlci_t *);
 void	ncciDestr(Ncci_t *);
-void	ncciLinkUp(Ncci_t *);
-void	ncciLinkDown(Ncci_t *);
 void	ncciApplRelease(Ncci_t *);
 void	ncciDelAppPlci(Ncci_t *);
 void	ncciSendMessage(Ncci_t *, struct sk_buff *);
-int	ncci_l3l4(mISDNif_t *, struct sk_buff *);
-__u16	ncciSelectBprotocol(Ncci_t *);
+int	ncci_l3l4(Ncci_t *, mISDN_head_t *, struct sk_buff *);
 void	ncciGetCmsg(Ncci_t *, _cmsg *);
+int	ncci_l3l4_direct(Ncci_t *, mISDN_head_t *, struct sk_buff *);
+void	ncciReleaseLink(Ncci_t *);
 
 // ---------------------------------------------------------------------------
 //  SSProcess prototypes

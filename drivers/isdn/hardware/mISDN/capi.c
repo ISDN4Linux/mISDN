@@ -1,4 +1,4 @@
-/* $Id: capi.c,v 1.10 2003/11/21 22:29:41 keil Exp $
+/* $Id: capi.c,v 1.11 2003/12/13 00:36:16 keil Exp $
  *
  */
 
@@ -7,7 +7,7 @@
 #include "helper.h"
 #include "debug.h"
 
-static char *capi_revision = "$Revision: 1.10 $";
+static char *capi_revision = "$Revision: 1.11 $";
 
 static int debug = 0;
 static mISDNobject_t capi_obj;
@@ -309,7 +309,7 @@ static int
 capi20_manager(void *data, u_int prim, void *arg) {
 	mISDNinstance_t	*inst = data;
 	int		found=0;
-	BInst_t		*binst = NULL;
+	PLInst_t	*plink = NULL;
 	Controller_t	*ctrl = (Controller_t *)capi_obj.ilist;
 
 	if (CAPI_DBG_INFO & debug)
@@ -321,17 +321,17 @@ capi20_manager(void *data, u_int prim, void *arg) {
 			found++;
 			break;
 		}
-		binst = ctrl->binst;
-		while(binst) {
-			if (&binst->inst == inst) {
+		plink = ctrl->linklist;
+		while(plink) {
+			if (&plink->inst == inst) {
 				found++;
 				break;
 			}
-			binst = binst->next;
+			plink = plink->next;
 		}
 		if (found)
 			break;
-		binst = NULL;
+		plink = NULL;
 		ctrl = ctrl->next;
 	}
 	if (prim == (MGR_NEWLAYER | REQUEST)) {
@@ -356,7 +356,7 @@ capi20_manager(void *data, u_int prim, void *arg) {
 		if (&ctrl->inst == inst)
 			return(SetIF(inst, arg, prim, NULL, ControllerL3L4, ctrl));
 		else
-			return(SetIF(inst, arg, prim, NULL, ncci_l3l4, inst->data));
+			return(AppPlciSetIF(inst->data, prim, arg));
 	    case MGR_DISCONNECT | REQUEST:
 	    case MGR_DISCONNECT | INDICATION:
 		return(DisConnectIF(inst, arg));
@@ -366,10 +366,10 @@ capi20_manager(void *data, u_int prim, void *arg) {
 		ControllerDestr(ctrl);
 	    	break;
 	    case MGR_UNREGLAYER | REQUEST:
-		if (binst) {
-			capi_obj.ctrl(binst->inst.down.peer, MGR_DISCONNECT | REQUEST,
-				&binst->inst.down);
-			capi_obj.ctrl(&binst->inst, MGR_UNREGLAYER | REQUEST, NULL);
+		if (plink) {
+			capi_obj.ctrl(plink->inst.down.peer, MGR_DISCONNECT | REQUEST,
+				&plink->inst.down);
+			capi_obj.ctrl(&plink->inst, MGR_UNREGLAYER | REQUEST, NULL);
 		}
 		break;
 	    case MGR_CTRLREADY | INDICATION:

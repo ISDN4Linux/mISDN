@@ -1,4 +1,4 @@
-/* $Id: contr.c,v 1.18 2003/12/03 14:32:44 keil Exp $
+/* $Id: contr.c,v 1.19 2003/12/13 00:36:16 keil Exp $
  *
  */
 
@@ -66,10 +66,10 @@ ControllerDestr(Controller_t *contr)
 		inst->down.peer->obj->ctrl(inst->down.peer,
 			MGR_DISCONNECT | REQUEST, &inst->down);
 	}
-	while (contr->binst) {
-		BInst_t *binst = contr->binst;
-		REMOVE_FROM_LISTBASE(binst, contr->binst);
-		kfree(binst);
+	while (contr->linklist) {
+		PLInst_t	*plink = contr->linklist;
+		REMOVE_FROM_LISTBASE(plink, contr->linklist);
+		kfree(plink);
 	}
 	if (contr->entity != MISDN_ENTITY_NONE)
 		inst->obj->ctrl(inst, MGR_DELENTITY | REQUEST, (void *)contr->entity);
@@ -82,8 +82,8 @@ ControllerDestr(Controller_t *contr)
 void
 ControllerRun(Controller_t *contr)
 {
-	BInst_t	*binst;
-	int	ret;
+	PLInst_t	*plink;
+	int		ret;
 
 	if (contr->inst.st && contr->inst.st->mgr)
 		sprintf(contr->ctrl->manu, "mISDN CAPI controller %s", contr->inst.st->mgr->name);
@@ -116,8 +116,8 @@ ControllerRun(Controller_t *contr)
 		pidmask.protocol[1] = 0x03ff;
 		pidmask.protocol[2] = 0x1fff;
 		pidmask.protocol[3] = 0x00ff;
-		binst = contr->binst;
-		ret = binst->inst.obj->ctrl(binst->bst, MGR_EVALSTACK | REQUEST, &pidmask);
+		plink = contr->linklist;
+		ret = plink->inst.obj->ctrl(plink->st, MGR_EVALSTACK | REQUEST, &pidmask);
 		if (ret) {
 			/* Fallback on error, minimum set */
 			int_error();
@@ -513,7 +513,7 @@ ControllerConstr(Controller_t **contr_p, mISDNstack_t *st, mISDN_pid_t *pid, mIS
 	Controller_t	*contr;
 	int		retval;
 	mISDNstack_t	*cst;
-	BInst_t		*binst;
+	PLInst_t	*plink;
 
 	if (!st)
 		return(-EINVAL);
@@ -573,19 +573,19 @@ ControllerConstr(Controller_t **contr_p, mISDNstack_t *st, mISDN_pid_t *pid, mIS
 	}
 	cst = st->child;
 	while(cst) {
-		if (!(binst = kmalloc(sizeof(BInst_t), GFP_KERNEL))) {
-			printk(KERN_ERR "no mem for Binst\n");
+		if (!(plink = kmalloc(sizeof(PLInst_t), GFP_KERNEL))) {
+			printk(KERN_ERR "no mem for PLinst\n");
 			int_error();
 			ControllerDestr(contr);
 			return -ENOMEM;
 		}
-		memset(binst, 0, sizeof(BInst_t));
-		binst->bst = cst;
-		binst->inst.st = cst;
-		init_mISDNinstance(&binst->inst, ocapi, binst);
-		binst->inst.pid.layermask |= ISDN_LAYER(4);
-		binst->inst.down.stat = IF_NOACTIV;
-		APPEND_TO_LIST(binst, contr->binst);
+		memset(plink, 0, sizeof(PLInst_t));
+		plink->st = cst;
+		plink->inst.st = cst;
+		init_mISDNinstance(&plink->inst, ocapi, plink);
+		plink->inst.pid.layermask |= ISDN_LAYER(4);
+		plink->inst.down.stat = IF_NOACTIV;
+		APPEND_TO_LIST(plink, contr->linklist);
 		cst = cst->next;
 	}
 	APPEND_TO_LIST(contr, ocapi->ilist);
@@ -631,16 +631,16 @@ ControllerConstr(Controller_t **contr_p, mISDNstack_t *st, mISDN_pid_t *pid, mIS
 	return retval;
 }
 
-BInst_t *
+PLInst_t *
 ControllerSelChannel(Controller_t *contr, u_int channel)
 { 
 	mISDNstack_t	*cst;
-	BInst_t		*binst;
+	PLInst_t	*plink;
 	channel_info_t	ci;
 	int		ret;
 
-	if (!contr->binst) {
-		int_errtxt("no binst for controller(%x)", contr->addr);
+	if (!contr->linklist) {
+		int_errtxt("no linklist for controller(%x)", contr->addr);
 		return(NULL);
 	}
 	ci.channel = channel;
@@ -652,13 +652,13 @@ ControllerSelChannel(Controller_t *contr, u_int channel)
 		return(NULL);
 	}
 	cst = ci.st.p;
-	binst = contr->binst;
-	while(binst) {
-		if (cst == binst->bst)
+	plink = contr->linklist;
+	while(plink) {
+		if (cst == plink->st)
 			break;
-		binst = binst->next;
+		plink = plink->next;
 	}
-	return(binst);
+	return(plink);
 }
 
 int

@@ -1,4 +1,4 @@
-/* $Id: x25_dte.c,v 1.1 2003/12/10 23:01:16 keil Exp $
+/* $Id: x25_dte.c,v 1.2 2003/12/13 00:36:16 keil Exp $
  *
  * Linux modular ISDN subsystem, mISDN
  * X.25/X.31 Layer3 for DTE mode   
@@ -22,7 +22,7 @@ static int debug = 0;
 
 static mISDNobject_t x25dte_obj;
 
-static char *mISDN_dte_revision = "$Revision: 1.1 $";
+static char *mISDN_dte_revision = "$Revision: 1.2 $";
 
 /* local prototypes */
 static x25_channel_t *	dte_create_channel(x25_l3_t *, int, u_char, __u16, int, u_char *);
@@ -61,6 +61,7 @@ r_r0_restart_l3(struct FsmInst *fi, int event, void *arg)
 	else
 		memset(l3->cause, 0, 2);
 	test_and_set_bit(X25_STATE_ESTABLISH, &l3->state);
+	FsmEvent(&l3->l2l3m, EV_L3_ESTABLISH_REQ, NULL);
 }
 
 static void

@@ -1,4 +1,4 @@
-/* $Id: app_plci.c,v 1.2 2003/12/03 14:32:44 keil Exp $
+/* $Id: app_plci.c,v 1.3 2003/12/13 00:36:15 keil Exp $
  *
  */
 
@@ -13,8 +13,8 @@
 static void 	AppPlciClearOtherApps(AppPlci_t *);
 static void 	AppPlciInfoIndMsg(AppPlci_t *,  __u32, unsigned char);
 static void 	AppPlciInfoIndIE(AppPlci_t *, unsigned char, __u32, Q931_info_t *);
-static void 	AppPlciLinkUp(AppPlci_t *);
-static void	AppPlciLinkDown(AppPlci_t *);
+static int 	AppPlciLinkUp(AppPlci_t *);
+static int	AppPlciLinkDown(AppPlci_t *);
 
 static u_char BEARER_SPEECH_64K_ALAW[] = {4, 3, 0x80, 0x90, 0xA3};
 static u_char BEARER_SPEECH_64K_ULAW[] = {4, 3, 0x80, 0x90, 0xA2};
@@ -912,20 +912,23 @@ plci_select_b_protocol_req(struct FsmInst *fi, int event, void *arg)
 {
 	AppPlci_t	*aplci = fi->userdata;
 	_cmsg		*cmsg = arg;
-	Ncci_t		*ncci;
 	__u16		Info;
+	int		ret;
 
 	Info = AppPlciCheckBprotocol(aplci, cmsg);
 	if (Info)
 		goto answer;
-	ncci = getNCCI4addr(aplci, cmsg->adr.adrNCCI, GET_NCCI_EXACT);
-	if (!ncci) {
-		int_error();
-		cmsg_free(cmsg);
-		return;
-	}
 
-	Info = ncciSelectBprotocol(ncci);
+	ret = AppPlciLinkDown(aplci);
+	if (ret) {
+		Info = 0x2001;
+		goto answer;
+	}
+	ret = AppPlciLinkUp(aplci);
+	if (ret < 0)
+		Info = 0x2001;
+	else
+		Info = ret;
 answer:
 	capi_cmsg_answer(cmsg);
 	cmsg->Info = Info;
@@ -1117,6 +1120,112 @@ AppPlciRelease(AppPlci_t *aplci)
 	FsmEvent(&aplci->plci_m, EV_AP_RELEASE, NULL);
 }
 
+static int
+AppPlciLinkUp(AppPlci_t *aplci)
+{
+	mISDN_pid_t	pid;
+	mISDN_stPara_t	stpara;
+	int		retval;
+
+	if (aplci->channel == -1) {/* no valid channel set */
+		int_error();
+		return(-EINVAL);
+	}
+	memset(&pid, 0, sizeof(mISDN_pid_t));
+	pid.layermask = ISDN_LAYER(1) | ISDN_LAYER(2) | ISDN_LAYER(3) |
+		ISDN_LAYER(4);
+	if (test_bit(PLCI_STATE_OUTGOING, &aplci->plci->state))
+		pid.global = 1; // DTE, orginate
+	else
+		pid.global = 2; // DCE, answer
+	if (aplci->Bprotocol.B1 > 23) {
+		int_errtxt("wrong B1 prot %x", aplci->Bprotocol.B1);
+		return(0x3001);
+	}
+	pid.protocol[1] = (1 << aplci->Bprotocol.B1) |
+		ISDN_PID_LAYER(1) | ISDN_PID_BCHANNEL_BIT;
+	if (aplci->Bprotocol.B2 > 23) {
+		int_errtxt("wrong B2 prot %x", aplci->Bprotocol.B2);
+		return(0x3002);
+	}
+	pid.protocol[2] = (1 << aplci->Bprotocol.B2) |
+		ISDN_PID_LAYER(2) | ISDN_PID_BCHANNEL_BIT;
+	/* handle DTMF TODO */
+	if ((pid.protocol[2] == ISDN_PID_L2_B_TRANS) &&
+		(pid.protocol[1] == ISDN_PID_L1_B_64TRANS))
+		pid.protocol[2] = ISDN_PID_L2_B_TRANSDTMF;
+	if (aplci->Bprotocol.B3 > 23) {
+		int_errtxt("wrong B3 prot %x", aplci->Bprotocol.B3);
+		return(0x3003);
+	}
+	pid.protocol[3] = (1 << aplci->Bprotocol.B3) |
+		ISDN_PID_LAYER(3) | ISDN_PID_BCHANNEL_BIT;
+	capidebug(CAPI_DBG_PLCI, "AppPlciLinkUp B1(%x) B2(%x) B3(%x) global(%d) ch(%x)",
+   		pid.protocol[1], pid.protocol[2], pid.protocol[3], pid.global, 
+		aplci->channel);
+	capidebug(CAPI_DBG_PLCI, "AppPlciLinkUp ch(%d) aplci->contr->linklist(%p)",
+		aplci->channel & 3, aplci->contr->linklist);
+	pid.protocol[4] = ISDN_PID_L4_B_CAPI20;
+	aplci->link = ControllerSelChannel(aplci->contr, aplci->channel);
+	if (!aplci->link) {
+		int_error();
+		return(-EBUSY);
+	}
+	capidebug(CAPI_DBG_NCCI, "AppPlciLinkUp aplci->link(%p)", aplci->link);
+	memset(&aplci->link->inst.pid, 0, sizeof(mISDN_pid_t));
+	aplci->link->inst.data = aplci;
+	aplci->link->inst.pid.layermask = ISDN_LAYER(4);
+	aplci->link->inst.pid.protocol[4] = ISDN_PID_L4_B_CAPI20;
+	if (pid.protocol[3] == ISDN_PID_L3_B_TRANS) {
+		aplci->link->inst.pid.protocol[3] = ISDN_PID_L3_B_TRANS;
+		aplci->link->inst.pid.layermask |= ISDN_LAYER(3);
+	}
+	retval = aplci->link->inst.obj->ctrl(aplci->link->st,
+		MGR_REGLAYER | INDICATION, &aplci->link->inst); 
+	if (retval) {
+		printk(KERN_WARNING "%s MGR_REGLAYER | INDICATION ret(%d)\n",
+			__FUNCTION__, retval);
+		return(retval);
+	}
+	stpara.maxdatalen = aplci->appl->reg_params.datablklen;
+	stpara.up_headerlen = CAPI_B3_DATA_IND_HEADER_SIZE;
+	stpara.down_headerlen = 0;
+                        
+	retval = aplci->link->inst.obj->ctrl(aplci->link->st,
+		MGR_ADDSTPARA | REQUEST, &stpara);
+	if (retval) {
+		printk(KERN_WARNING "%s MGR_SETSTACK | REQUEST ret(%d)\n",
+			__FUNCTION__, retval);
+	}
+	retval = aplci->link->inst.obj->ctrl(aplci->link->st,
+		MGR_SETSTACK | REQUEST, &pid);
+	if (retval) {
+		printk(KERN_WARNING "%s MGR_SETSTACK | REQUEST ret(%d)\n",
+			__FUNCTION__, retval);
+		return(retval);
+	}
+	return(0);
+}
+
+static int
+ReleaseLink(AppPlci_t *aplci)
+{
+	int retval = 0;
+
+	if (aplci->link) {
+#if 0
+		if (ncci->ncci_m.state != ST_NCCI_N_0)
+			ncciL4L3(ncci, DL_RELEASE | REQUEST, 0, 0, NULL, NULL);
+#endif
+		retval = aplci->link->inst.obj->ctrl(aplci->link->inst.st,
+			MGR_CLEARSTACK | REQUEST, NULL);
+		if (retval)
+			int_error();
+		aplci->link = NULL;
+	}
+	return(retval);
+}
+
 Ncci_t	*
 getNCCI4addr(AppPlci_t *aplci, __u32 addr, int mode)
 {
@@ -1129,38 +1238,139 @@ getNCCI4addr(AppPlci_t *aplci, __u32 addr, int mode)
 		ncci = (Ncci_t *)item;
 		if (ncci->addr == addr)
 			return(ncci);
+		if (mode == GET_NCCI_ONLY_PLCI) {
+			if (ncci->addr == (addr & 0xffff))
+				return(ncci);
+		}
 	}
 	if (!cnt) {
 		int_error();
 		return(NULL);
 	}
-	if (mode == GET_NCCI_EXACT)
+	if (mode != GET_NCCI_PLCI)
 		return(NULL);
 	if (1 == cnt) {
-		if (mode == GET_NCCI_NEW) {
-			if (0xffffffff == ncci->addr)
-				return(ncci);
-		} else {
-			if (!(addr & 0xffff0000))
-				return(ncci);
-		}
+		if (!(addr & 0xffff0000))
+			return(ncci);
 	}
-	if (mode == GET_NCCI_PLCI) {
-		int_error();
-		return(NULL);
-	}
-	ncci = ncciConstr(aplci);
-	if (!ncci) {
-		int_error();
-		return(NULL);
-	}
-	ncciLinkUp(ncci);
-	return(ncci);
+	int_error();
+	return(NULL);
 }
 
 void
 AppPlciDelNCCI(Ncci_t *ncci) {
 	list_del_init(&ncci->head);
+}
+
+static __inline__ Ncci_t *
+get_single_NCCI(AppPlci_t *aplci)
+{
+	struct list_head	*item = aplci->Nccis.next;
+
+	if (item == &aplci->Nccis)
+		return(NULL);
+	if (item->next != &aplci->Nccis)
+		return(NULL);	// more as one NCCI
+	return((Ncci_t *)item);	
+}
+
+static int
+PL_l3l4(mISDNif_t *hif, struct sk_buff *skb)
+{
+	AppPlci_t		*aplci;
+	Ncci_t 			*ncci;
+	int			ret = -EINVAL;
+	mISDN_head_t		*hh;
+
+	if (!hif || !skb)
+		return(ret);
+	hh = mISDN_HEAD_P(skb);
+	aplci = hif->fdata;
+	if (!aplci)
+		return(-EINVAL);
+	ncci = get_single_NCCI(aplci);
+	capidebug(CAPI_DBG_NCCI_L3, "%s: prim(%x) dinfo (%x) skb(%p) APLCI(%x) ncci(%p)",
+		__FUNCTION__, hh->prim, hh->dinfo, skb, aplci->addr, ncci);
+	if (!ncci) {
+		if (hh->prim != (DL_ESTABLISH | INDICATION)) {
+			int_error();
+			return(-ENODEV);
+		}
+		ncci = ncciConstr(aplci);
+		if (!ncci) {
+			int_error();
+			return(-ENOMEM);
+		}
+	}
+	return(ncci_l3l4(ncci, hh, skb));
+}
+
+static int
+PL_l3l4mux(mISDNif_t *hif, struct sk_buff *skb)
+{
+	AppPlci_t	*aplci;
+	Ncci_t 		*ncci;
+	int		ret = -EINVAL;
+	mISDN_head_t	*hh;
+	__u32		addr;
+
+	if (!hif || !skb)
+		return(ret);
+	hh = mISDN_HEAD_P(skb);
+	aplci = hif->fdata;
+	if (!aplci)
+		return(-EINVAL);
+	
+	capidebug(CAPI_DBG_NCCI_L3, "%s: prim(%x) dinfo (%x) skb->len(%d)",
+		__FUNCTION__, hh->prim, hh->dinfo, skb->len);
+	if (skb->len < 4) {
+		int_error();
+		return(-EINVAL);
+	}
+	addr = CAPIMSG_U32(skb->data, 0);
+	ncci = getNCCI4addr(aplci, addr, GET_NCCI_ONLY_PLCI);
+	if (hh->prim == CAPI_CONNECT_B3_IND) {
+		if (ncci) {
+			int_error();
+			return(-EBUSY);
+		}
+		ncci = ncciConstr(aplci);
+		if (!ncci) {
+			int_error();
+			return(-ENOMEM);
+		}
+		addr &= 0xffff0000;
+		addr |= aplci->addr;
+		ncci->addr = addr;
+		capimsg_setu32(skb->data, 0, addr);
+#ifdef OLDCAPI_DRIVER_INTERFACE
+		ncci->contr->ctrl->new_ncci(ncci->contr->ctrl, ncci->appl->ApplId, addr, ncci->window);
+#endif
+	} else if (hh->prim == CAPI_CONNECT_B3_CONF) {
+		if (ncci && ((addr & 0xffff0000) != 0)) {
+			if (ncci->addr != addr) {
+				ncci->addr = addr;
+#ifdef OLDCAPI_DRIVER_INTERFACE
+				ncci->contr->ctrl->new_ncci(ncci->contr->ctrl, ncci->appl->ApplId, addr, ncci->window);
+#endif
+			} else
+				int_error();
+		}
+	}
+	if (!ncci) {
+		int_error();
+		return(-ENODEV);
+	}
+	return(ncci_l3l4_direct(ncci, hh, skb));
+}
+
+int
+AppPlciSetIF(AppPlci_t *aplci, u_int prim, void *arg)
+{
+	if (aplci->Bprotocol.B3 == 0) // transparent
+		return(SetIF(&aplci->link->inst, arg, prim, NULL, PL_l3l4, aplci));
+	else
+		return(SetIF(&aplci->link->inst, arg, prim, NULL, PL_l3l4mux, aplci));
 }
 
 void
@@ -1390,31 +1600,29 @@ AppPlciSendMessage(AppPlci_t *aplci, struct sk_buff *skb)
 	dev_kfree_skb(skb);
 }
 
-static void
-AppPlciLinkUp(AppPlci_t *aplci)
+int
+ConnectB3Request(AppPlci_t *aplci, struct sk_buff *skb)
 {
-	Ncci_t	*ncci;
+	Ncci_t	*ncci = ncciConstr(aplci);
 
-	if (aplci->channel == -1) {/* no valid channel set */
-		int_error();
-		return;
-	}
-	ncci = ncciConstr(aplci);
 	if (!ncci) {
 		int_error();
-		return;
+		return(-ENOMEM);
 	}
-	ncciLinkUp(ncci);
+	ncciSendMessage(ncci, skb);
+	return(0);
 }
 
-static void
+static int
 AppPlciLinkDown(AppPlci_t *aplci)
 {
 	struct list_head	*item, *next;
 
 	list_for_each_safe(item, next, &aplci->Nccis) {
-		ncciLinkDown((Ncci_t *)item);
+		ncciReleaseLink((Ncci_t *)item);
 	}
+	ReleaseLink(aplci);
+	return(0);
 }
 
 int
