@@ -1,4 +1,4 @@
-/* $Id: dsp_core.c,v 1.1 2003/10/24 21:23:05 keil Exp $
+/* $Id: dsp_core.c,v 1.2 2003/11/09 09:20:41 keil Exp $
  *
  * Author       Andreas Eversberg (jolly@jolly.de)
  * Based on source code structure by
@@ -168,7 +168,7 @@ die daten der struktur
 	- loop
 #endif
 
-const char *dsp_revision = "$Revision: 1.1 $";
+const char *dsp_revision = "$Revision: 1.2 $";
 
 #include <linux/delay.h>
 #include <linux/config.h>
@@ -684,7 +684,6 @@ new_dsp(mISDNstack_t *st, mISDN_pid_t *pid)
 
 	if (!st || !pid)
 		return(-EINVAL);
-#warning KARSTEN: How can i prevent memory swapping AND if currently swapped, restore from swap?
 	if (!(ndsp = vmalloc(sizeof(dsp_t)))) {
 		printk(KERN_ERR "%s: vmalloc dsp_t failed\n", __FUNCTION__);
 		return(-ENOMEM);
@@ -818,7 +817,9 @@ static int dsp_init(void)
 
 	/* fill mISDN object (dsp_obj) */
 	memset(&dsp_obj, 0, sizeof(dsp_obj));
-	SET_MODULE_OWNER(dsp_obj);
+#ifdef MODULE
+	SET_MODULE_OWNER(&dsp_obj);
+#endif
 	dsp_obj.name = DSPName;
 	dsp_obj.BPROTO.protocol[3] = ISDN_PID_L3_B_DSP;
 	dsp_obj.own_ctrl = dsp_manager;
