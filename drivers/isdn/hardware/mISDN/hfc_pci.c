@@ -1,4 +1,4 @@
-/* $Id: hfc_pci.c,v 0.7 2001/10/31 23:06:07 kkeil Exp $
+/* $Id: hfc_pci.c,v 0.8 2001/11/02 23:28:21 kkeil Exp $
 
  * hfc_pci.c     low level driver for CCD´s hfc-pci based cards
  *
@@ -39,7 +39,7 @@
 
 extern const char *CardType[];
 
-static const char *hfcpci_revision = "$Revision: 0.7 $";
+static const char *hfcpci_revision = "$Revision: 0.8 $";
 
 /* table entry in the PCI devices list */
 typedef struct {
@@ -201,7 +201,6 @@ release_io_hfcpci(hfc_pci_t *hc)
 	Write_hfc(hc, HFCPCI_INT_M2, hc->hw.int_m2);
 	restore_flags(flags);
 	Write_hfc(hc, HFCPCI_CIRM, HFCPCI_RESET);	/* Reset On */
-	sti();
 	set_current_state(TASK_UNINTERRUPTIBLE);
 	schedule_timeout((30 * HZ) / 1000);	/* Timeout 30ms */
 	hc->hw.cirm = 0; /* Reset Off */
@@ -233,13 +232,18 @@ reset_hfcpci(hfc_pci_t *hc)
 	pcibios_write_config_word(hc->hw.pci_bus, hc->hw.pci_device_fn, PCI_COMMAND, PCI_ENA_MEMIO + PCI_ENA_MASTER);	/* enable memory ports + busmaster */
 	hc->hw.cirm = HFCPCI_RESET;		/* Reset On */
 	Write_hfc(hc, HFCPCI_CIRM, hc->hw.cirm);
-	sti();
+	restore_flags(flags);
 	set_current_state(TASK_UNINTERRUPTIBLE);
 	schedule_timeout((30 * HZ) / 1000);	/* Timeout 30ms */
+	save_flags(flags);
+	cli();
 	hc->hw.cirm = 0;			/* Reset Off */
 	Write_hfc(hc, HFCPCI_CIRM, hc->hw.cirm);
+	restore_flags(flags);
 	set_current_state(TASK_UNINTERRUPTIBLE);
 	schedule_timeout((20 * HZ) / 1000);	/* Timeout 20ms */
+	save_flags(flags);
+	cli();
 	if (Read_hfc(hc, HFCPCI_STATUS) & 2)
 		printk(KERN_WARNING "HFC-PCI init bit busy\n");
 
@@ -421,11 +425,9 @@ hfcpci_empty_fifo(bchannel_t *bch, bzfifo_type * bz, u_char * bdata, int count)
 {
 	u_char		*ptr, *ptr1, new_f2;
 	struct sk_buff	*skb;
-	int		flags, total, maxlen, new_z2;
+	int		total, maxlen, new_z2;
 	z_type		*zp;
 
-	save_flags(flags);
-	sti();
 	if ((bch->debug & L1_DEB_HSCX) && !(bch->debug & L1_DEB_HSCX_FIFO))
 		debugprint(&bch->inst, "hfcpci_empty_fifo");
 	zp = &bz->za[bz->f2];	/* point to Z-Regs */
@@ -468,7 +470,6 @@ hfcpci_empty_fifo(bchannel_t *bch, bzfifo_type * bz, u_char * bdata, int count)
 		bz->f2 = new_f2;	/* next buffer */
 
 	}
-	restore_flags(flags);
 	return (skb);
 }
 
@@ -596,9 +597,7 @@ hfcpci_empty_fifo_trans(bchannel_t *bch, bzfifo_type * bz, u_char * bdata)
 			ptr1 = bdata;	/* start of buffer */
 			memcpy(ptr, ptr1, fcnt);	/* rest */
 		}
-		cli();
 		skb_queue_tail(&bch->rqueue, skb);
-		sti();
 		hfcpci_sched_event(bch, B_RCVBUFREADY);
 	}
 
@@ -622,7 +621,6 @@ main_rec_hfcpci(bchannel_t *bch)
 	z_type		*zp;
 
 
-	save_flags(flags);
 	if ((bch->channel) && (!hc->hw.bswapped)) {
 		bz = &((fifo_area *) (hc->hw.fifos))->b_chans.rxbz_b2;
 		bdata = ((fifo_area *) (hc->hw.fifos))->b_chans.rxdat_b2;
@@ -634,13 +632,14 @@ main_rec_hfcpci(bchannel_t *bch)
 	}
       Begin:
 	count--;
+	save_flags(flags);
 	cli();
 	if (test_and_set_bit(FLG_LOCK_ATOMIC, &hc->dch.DFlags)) {
-		debugprint(&bch->inst, "rec_data %d blocked", bch->channel);
 		restore_flags(flags);
+		debugprint(&bch->inst, "rec_data %d blocked", bch->channel);
 		return;
 	}
-	sti();
+	restore_flags(flags);
 	if (bz->f1 != bz->f2) {
 		if (bch->debug & L1_DEB_HSCX)
 			debugprint(&bch->inst, "hfcpci rec %d f1(%d) f2(%d)",
@@ -655,9 +654,7 @@ main_rec_hfcpci(bchannel_t *bch)
 			debugprint(&bch->inst, "hfcpci rec %d z1(%x) z2(%x) cnt(%d)",
 				bch->channel, zp->z1, zp->z2, rcnt);
 		if ((skb = hfcpci_empty_fifo(bch, bz, bdata, rcnt))) {
-			cli();
 			skb_queue_tail(&bch->rqueue, skb);
-			sti();
 			hfcpci_sched_event(bch, B_RCVBUFREADY);
 		}
 		rcnt = bz->f1 - bz->f2;
@@ -679,7 +676,6 @@ main_rec_hfcpci(bchannel_t *bch)
 	test_and_clear_bit(FLG_LOCK_ATOMIC, &hc->dch.DFlags);
 	if (count && receive)
 		goto Begin;
-	restore_flags(flags);
 	return;
 }
 
@@ -800,9 +796,6 @@ hfcpci_fill_fifo(bchannel_t *bch)
 	if (bch->tx_len <= 0)
 		return;
 	
-	save_flags(flags);
-	sti();
-
 	if ((bch->channel) && (!hc->hw.bswapped)) {
 		bz = &((fifo_area *) (hc->hw.fifos))->b_chans.txbz_b2;
 		bdata = ((fifo_area *) (hc->hw.fifos))->b_chans.txdat_b2;
@@ -865,7 +858,6 @@ next_t_frame:
 			test_and_clear_bit(FLG_TX_BUSY, &bch->Flag);
 			bch->tx_idx = bch->tx_len;
 		}
-		restore_flags(flags);
 		return;
 	}
 	if (bch->debug & L1_DEB_HSCX)
@@ -877,7 +869,6 @@ next_t_frame:
 	if (fcnt > (MAX_B_FRAMES - 1)) {
 		if (bch->debug & L1_DEB_HSCX)
 			debugprint(&bch->inst, "hfcpci_fill_Bfifo more as 14 frames");
-		restore_flags(flags);
 		return;
 	}
 	/* now determine free bytes in FIFO buffer */
@@ -893,7 +884,6 @@ next_t_frame:
 	if (maxlen < count) {
 		if (bch->debug & L1_DEB_HSCX)
 			debugprint(&bch->inst, "hfcpci_fill_fifo no fifo mem");
-		restore_flags(flags);
 		return;
 	}
 	new_z1 = bz->za[bz->f1].z1 + count;	/* new buffer Position */
@@ -914,6 +904,7 @@ next_t_frame:
 		src += maxlen;	/* new position */
 		memcpy(dst, src, count);
 	}
+	save_flags(flags);
 	cli();
 	bz->za[new_f1].z1 = new_z1;	/* for next buffer */
 	bz->f1 = new_f1;	/* next frame */
@@ -1997,9 +1988,7 @@ hfcpci_card_msg(hfc_pci_t *hc, int mt, void *arg)
 static int init_card(hfc_pci_t *hc)
 {
 	int irq_cnt, cnt = 3;
-	long flags;
 
-	save_flags(flags);
 	irq_cnt = kstat_irqs(hc->irq);
 	printk(KERN_INFO "HFC PCI: IRQ %d count %d\n", hc->irq, irq_cnt);
 	lock_dev(hc);
@@ -2012,11 +2001,9 @@ static int init_card(hfc_pci_t *hc)
 	while (cnt) {
 		inithfcpci(hc);
 		unlock_dev(hc);
-		sti();
 		/* Timeout 80ms */
 		current->state = TASK_UNINTERRUPTIBLE;
 		schedule_timeout((80*HZ)/1000);
-		restore_flags(flags);
 		printk(KERN_INFO "HFC PCI: IRQ %d count %d\n",
 			hc->irq, kstat_irqs(hc->irq));
 		/* now switch timer interrupt off */
