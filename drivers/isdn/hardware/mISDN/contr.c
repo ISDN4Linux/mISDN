@@ -1,4 +1,4 @@
-/* $Id: contr.c,v 1.16 2003/11/21 22:29:41 keil Exp $
+/* $Id: contr.c,v 1.17 2003/11/25 11:28:32 keil Exp $
  *
  */
 
@@ -608,11 +608,11 @@ ControllerConstr(Controller_t **contr_p, mISDNstack_t *st, mISDN_pid_t *pid, mIS
 	sprintf(contr->ctrl->name, "mISDN%d", st->id);
 	contr->ctrl->driver_name = "mISDN";
 	contr->ctrl->driverdata = contr;
-	contr->ctrl->register_appl = RegisterAppl;
-	contr->ctrl->release_appl = ReleaseAppl;
+	contr->ctrl->register_appl = RegisterApplication;
+	contr->ctrl->release_appl = ReleaseApplication;
 	contr->ctrl->send_message = SendMessage;
 	contr->ctrl->load_firmware = LoadFirmware;
-	contr->ctrl->reset_ctr = ResetContr;
+	contr->ctrl->reset_ctr = ResetController;
 	contr->ctrl->procinfo = procinfo;
 	contr->ctrl->ctr_read_proc = read_proc;
 	retval = attach_capi_ctr(contr->ctrl);

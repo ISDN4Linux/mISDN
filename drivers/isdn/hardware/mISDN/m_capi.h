@@ -1,4 +1,4 @@
-/* $Id: m_capi.h,v 1.1 2003/11/21 22:29:41 keil Exp $
+/* $Id: m_capi.h,v 1.2 2003/11/25 11:28:32 keil Exp $
  *
  * Rewritten CAPI Layer (Layer4 in mISDN)
  * 
@@ -203,7 +203,7 @@ struct _Application {
 	__u32			CIPmask;
 	__u32			CIPmask2;
 	__u32			NotificationMask;
-	__u32			state;
+	u_long			state;
 	struct FsmInst		listen_m;
 	int			maxplci;
 	AppPlci_t		**AppPlcis;
@@ -224,7 +224,7 @@ struct _Plci {
 	Controller_t		*contr;
 	__u32			addr;
 	__u32			l3id;
-	__u32			state;
+	u_long			state;
 	int			nAppl;
 	struct list_head	AppPlcis;
 };
@@ -262,7 +262,7 @@ struct _Ncci {
 	Application_t		*appl;
 	struct FsmInst		ncci_m;
 	int			window;
-	__u32			state;
+	u_long			state;
 	ConfQueue_t		xmit_skb_handles[CAPI_MAXDATAWINDOW];
 	struct sk_buff		*recv_skb_handles[CAPI_MAXDATAWINDOW];
 	struct sk_buff_head	squeue;
