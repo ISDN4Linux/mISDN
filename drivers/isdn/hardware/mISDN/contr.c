@@ -1,4 +1,4 @@
-/* $Id: contr.c,v 1.13 2003/10/20 07:19:42 keil Exp $
+/* $Id: contr.c,v 1.14 2003/11/09 09:16:16 keil Exp $
  *
  */
 
@@ -90,7 +90,15 @@ contrRun(Contr_t *contr)
 	contrDebug(contr, CAPI_DBG_INFO, "%s: %s version(%s)",
 		__FUNCTION__, contr->ctrl->manu, contr->ctrl->serial);
 	// FIXME
-	contr->ctrl->profile.goptions = 0x19; // internal controller, supplementary services, DTMF 
+	ret = contr->inst.obj->ctrl(contr->inst.st, MGR_GLOBALOPT | REQUEST, &contr->ctrl->profile.goptions);
+	if (ret) {
+		/* Fallback on error, minimum set */
+		contr->ctrl->profile.goptions = GLOBALOPT_INTERNAL_CTRL;
+	}
+	/* add options we allways know about FIXME: DTMF */
+	contr->ctrl->profile.goptions |= GLOBALOPT_DTMF |
+					 GLOBALOPT_SUPPLEMENTARY_SERVICE;
+
 	if (nb) {
 		mISDN_pid_t	pidmask;
 
@@ -174,7 +182,7 @@ ReleaseAppl(struct capi_ctr *ctrl, __u16 ApplId)
 	Contr_t *contr = ctrl->driverdata;
 	Appl_t	*appl;
 
-	contrDebug(contr, CAPI_DBG_APPL, "%s: ApplId(%x)", __FUNCTION__, ApplId);
+	contrDebug(contr, CAPI_DBG_APPL, "%s: ApplId(%x) caller:%lx", __FUNCTION__, ApplId, __builtin_return_address(0));
 	appl = contrId2appl(contr, ApplId);
 	if (!appl) {
 		int_error();
@@ -338,7 +346,7 @@ contrRecvCmsg(Contr_t *contr, _cmsg *cmsg)
 	
 	capi_cmsg2message(cmsg, contr->msgbuf);
 	len = CAPIMSG_LEN(contr->msgbuf);
-	contrDebug(contr, CAPI_DBG_CONTR_MSG, "%s: len(%d) applid(%x) %s msgnr(%d) addr(%08x",
+	contrDebug(contr, CAPI_DBG_CONTR_MSG, "%s: len(%d) applid(%x) %s msgnr(%d) addr(%08x)",
 		__FUNCTION__, len, cmsg->ApplId, capi_cmd2str(cmsg->Command, cmsg->Subcommand),
 		cmsg->Messagenumber, cmsg->adr.adrController);
 	if (!(skb = alloc_skb(len, GFP_ATOMIC))) {

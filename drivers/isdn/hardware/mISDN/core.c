@@ -1,4 +1,4 @@
-/* $Id: core.c,v 1.16 2003/10/24 21:27:28 keil Exp $
+/* $Id: core.c,v 1.17 2003/11/09 09:16:16 keil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -18,7 +18,7 @@
 #include <linux/smp_lock.h>
 #endif
 
-static char *mISDN_core_revision = "$Revision: 1.16 $";
+static char *mISDN_core_revision = "$Revision: 1.17 $";
 
 mISDNobject_t	*mISDN_objects = NULL;
 int core_debug;
@@ -480,6 +480,7 @@ static int central_manager(void *data, u_int prim, void *arg) {
 		return(ConnectIF(data, arg));
 	    case MGR_EVALSTACK  | REQUEST:
 	    	return(evaluate_stack_pids(data, arg));
+	    case MGR_GLOBALOPT | REQUEST:
 	    case MGR_LOADFIRM | REQUEST:
 	    	if (st->mgr && st->mgr->obj && st->mgr->obj->own_ctrl)
 	    		return(st->mgr->obj->own_ctrl(st->mgr, prim, arg));
