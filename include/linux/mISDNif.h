@@ -1,4 +1,4 @@
-/* $Id: mISDNif.h,v 0.34 2001/10/30 13:01:59 kkeil Exp $
+/* $Id: mISDNif.h,v 0.35 2001/10/31 23:08:14 kkeil Exp $
  *
  */
 
@@ -50,6 +50,8 @@
 #define MGR_RELEASE	0x0f4500
 #define MGR_GETDEVICE	0x0f5100
 #define MGR_DELDEVICE	0x0f5200
+#define MGR_SETDEVOPT	0x0f5300
+#define MGR_GETDEVOPT	0x0f5400
 #define MGR_INITTIMER	0x0f8100
 #define MGR_ADDTIMER	0x0f8200
 #define MGR_DELTIMER	0x0f8300
@@ -231,6 +233,7 @@
 #define FLG_HISAXPORT_ENABLED	2
 #define FLG_HISAXPORT_BLOCK	3
 #define FLG_HISAXPORT_OPEN	4
+#define FLG_HISAXPORT_ONEFRAME	5
 
 #define MAX_LAYER_NR	7
 #define ISDN_LAYER(n)	(1<<n)
