@@ -1,4 +1,4 @@
-/* $Id: capi.c,v 0.5 2001/03/03 18:17:15 kkeil Exp $
+/* $Id: capi.c,v 0.6 2001/03/04 17:08:32 kkeil Exp $
  *
  */
 
@@ -9,19 +9,13 @@
 #include "helper.h"
 #include "debug.h"
 
-const char *capi_revision = "$Revision: 0.5 $";
+const char *capi_revision = "$Revision: 0.6 $";
 
 static int debug = 0;
 static hisaxobject_t capi_obj;
 
 
 static char MName[] = "HiSax Capi 2.0";
-
-static int Capi20Protocols[] = {ISDN_PID_L4_CAPI20,
-				ISDN_PID_L4_B_CAPI20,
-				ISDN_PID_L3_B_TRANS  
-};
-#define PROTOCOLCNT	(sizeof(Capi20Protocols)/sizeof(int))
 
 #ifdef MODULE
 MODULE_AUTHOR("Karsten Keil");
@@ -304,13 +298,13 @@ int Capi20Init(void)
 	int err;
 
 	capi_obj.name = MName;
-	capi_obj.protocols = Capi20Protocols;
-	capi_obj.protcnt = PROTOCOLCNT;
+	capi_obj.DPROTO.protocol[4] = ISDN_PID_L4_CAPI20;
+	capi_obj.BPROTO.protocol[4] = ISDN_PID_L4_B_CAPI20;
+	capi_obj.BPROTO.protocol[3] = ISDN_PID_L3_B_TRANS;
 	capi_obj.own_ctrl = capi20_manager;
 	capi_obj.prev = NULL;
 	capi_obj.next = NULL;
 	capi_obj.ilist = NULL;
-	capi_obj.layermask = ISDN_LAYER(4);
 	if ((err = CapiNew()))
 		return(err);
 	if ((err = HiSax_register(&capi_obj))) {

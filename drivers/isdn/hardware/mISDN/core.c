@@ -1,4 +1,4 @@
-/* $Id: core.c,v 0.9 2001/03/03 18:17:15 kkeil Exp $
+/* $Id: core.c,v 0.10 2001/03/04 17:08:33 kkeil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -29,58 +29,55 @@ EXPORT_SYMBOL(HiSax_unregister);
 #endif
 
 static moditem_t modlist[] = {
-	{"hisaxl1", 1, ISDN_PID_L1_TE_S0},
-	{"hisaxl2", 2, ISDN_PID_L2_LAPD},
-	{"hisaxl2", 2, ISDN_PID_L2_B_X75SLP},
-	{NULL, -1, ISDN_PID_NONE}
+	{"hisaxl1", ISDN_PID_L1_TE_S0},
+	{"hisaxl2", ISDN_PID_L2_LAPD},
+	{"hisaxl2", ISDN_PID_L2_B_X75SLP},
+	{NULL, ISDN_PID_NONE}
 };
 
 static hisaxobject_t *
-find_object(int layer, int protocol) {
+find_object(int protocol) {
 	hisaxobject_t *obj = hisax_objects;
-	int i, *pp;
+	int err;
 
 	while (obj) {
-		if (obj->layermask & layer) {
-			pp = obj->protocols;
-			for (i=0; i<obj->protcnt; i++) {
-				if (*pp == protocol)
-					return(obj);
-				pp++;
-			}
-		}
+		err = obj->own_ctrl(NULL, MGR_HASPROTOCOL | REQUEST, &protocol);
+		if (!err)
+			return(obj);
+		if (err != -ENOPROTOOPT) {
+			if (HasProtocol(obj, protocol))
+				return(obj);
+		}	
 		obj = obj->next;
 	}
 	return(NULL);
 }
 
 static hisaxobject_t *
-find_object_module(int layer, int protocol) {
+find_object_module(int protocol) {
 	moditem_t *m = modlist;
 	hisaxobject_t *obj;
 
 	while (m->name != NULL) {
-		if (m->layermask & layer) {
-			if (m->protocol == protocol) {
+		if (m->protocol == protocol) {
 #ifdef CONFIG_KMOD
-				if (debug)
-					printk(KERN_DEBUG
-						"find_object_module %s - trying to load\n",
-						m->name);
-				request_module(m->name);
-#else
-				printk(KERN_WARNING "not possible to autoload %s please try to load manually\n",
+			if (debug)
+				printk(KERN_DEBUG
+					"find_object_module %s - trying to load\n",
 					m->name);
+			request_module(m->name);
+#else
+			printk(KERN_WARNING "not possible to autoload %s please try to load manually\n",
+				m->name);
 #endif
-				if ((obj = find_object(layer, protocol)))
-					return(obj);
-			}
+			if ((obj = find_object(protocol)))
+				return(obj);
 		}
 		m++;
 	}
 	if (debug)
-		printk(KERN_DEBUG "find_object_module: no module l%d prot %x found\n",
-			layer, protocol);
+		printk(KERN_DEBUG __FUNCTION__": no module for protocol %x found\n",
+			protocol);
 	return(NULL);
 }
 
@@ -144,9 +141,9 @@ add_stack_if(hisaxstack_t *st, hisaxif_t *hif) {
 	if (inst)
 		obj = inst->obj;
 	if (!obj)
-		obj = find_object(hif->layermask, hif->protocol);
+		obj = find_object(hif->protocol);
 	if (!obj)
-		obj = find_object_module(hif->layermask, hif->protocol);
+		obj = find_object_module(hif->protocol);
 	if (!obj) {
 		printk(KERN_WARNING "add_stack_if: no object found\n");
 		return(-ENOPROTOOPT);
@@ -290,7 +287,7 @@ int HiSax_unregister(hisaxobject_t *obj) {
 	if (debug)
 		printk(KERN_DEBUG "HiSax_unregister %s %d refs\n",
 			obj->name, obj->refcnt);
-	if (obj->layermask == ISDN_LAYER(0))
+	if (obj->DPROTO.protocol[0])
 		release_stacks(obj);
 	else
 		remove_object(obj);

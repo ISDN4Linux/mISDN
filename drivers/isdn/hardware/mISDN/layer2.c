@@ -1,4 +1,4 @@
-/* $Id: layer2.c,v 0.8 2001/03/04 00:48:49 kkeil Exp $
+/* $Id: layer2.c,v 0.9 2001/03/04 17:08:33 kkeil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -12,7 +12,7 @@
 #include "helper.h"
 #include "debug.h"
 
-const char *l2_revision = "$Revision: 0.8 $";
+const char *l2_revision = "$Revision: 0.9 $";
 
 static void l2m_debug(struct FsmInst *fi, char *fmt, ...);
 
@@ -2127,11 +2127,6 @@ del_if(layer2_t *l2, hisaxif_t *hif) {
 }
 
 static char MName[] = "ISDNL2";
-
-static int L2Protocols[] = {	ISDN_PID_L2_LAPD,
-				ISDN_PID_L2_B_X75SLP
-			};
-#define PROTOCOLCNT	(sizeof(L2Protocols)/sizeof(int))
  
 #ifdef MODULE
 MODULE_AUTHOR("Karsten Keil");
@@ -2190,12 +2185,11 @@ int Isdnl2Init(void)
 	int err;
 
 	isdnl2.name = MName;
-	isdnl2.protocols = L2Protocols;
-	isdnl2.protcnt = PROTOCOLCNT;
+	isdnl2.DPROTO.protocol[2] = ISDN_PID_L2_LAPD;
+	isdnl2.BPROTO.protocol[2] = ISDN_PID_L2_B_X75SLP;
 	isdnl2.own_ctrl = l2_manager;
 	isdnl2.prev = NULL;
 	isdnl2.next = NULL;
-	isdnl2.layermask = ISDN_LAYER(2);
 	l2fsm.state_count = L2_STATE_COUNT;
 	l2fsm.event_count = L2_EVENT_COUNT;
 	l2fsm.strEvent = strL2Event;

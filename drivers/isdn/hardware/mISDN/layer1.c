@@ -1,4 +1,4 @@
-/* $Id: layer1.c,v 0.8 2001/03/04 00:48:49 kkeil Exp $
+/* $Id: layer1.c,v 0.9 2001/03/04 17:08:33 kkeil Exp $
  *
  * hisax_l1.c     common low level stuff for I.430 layer1
  *
@@ -10,7 +10,7 @@
  *
  */
 
-const char *l1_revision = "$Revision: 0.8 $";
+const char *l1_revision = "$Revision: 0.9 $";
 
 #include <linux/config.h>
 #include <linux/module.h>
@@ -719,13 +719,6 @@ del_if(layer1_t *l1, hisaxif_t *hif) {
 
 static char MName[] = "ISDNL1";
 
-static int L1Protocols[] = {	ISDN_PID_L1_TE_S0,
-#ifdef HISAX_UINTERFACE
-				ISDN_PID_L1_TE_U
-#endif
-			};
-#define PROTOCOLCNT	(sizeof(L1Protocols)/sizeof(int))
- 
 #ifdef MODULE
 MODULE_AUTHOR("Karsten Keil");
 MODULE_PARM(debug, "1i");
@@ -782,13 +775,12 @@ int Isdnl1Init(void)
 	int err;
 
 	isdnl1.name = MName;
-	isdnl1.protocols = L1Protocols;
-	isdnl1.protcnt = PROTOCOLCNT;
+	isdnl1.DPROTO.protocol[1] = ISDN_PID_L1_TE_S0;
 	isdnl1.own_ctrl = l1_manager;
 	isdnl1.prev = NULL;
 	isdnl1.next = NULL;
-	isdnl1.layermask = ISDN_LAYER(1);
 #ifdef HISAX_UINTERFACE
+	isdnl1.DPROTO.protocol[1] |= ISDN_PID_L1_TE_U;
 	l1fsm_u.state_count = L1U_STATE_COUNT;
 	l1fsm_u.event_count = L1_EVENT_COUNT;
 	l1fsm_u.strEvent = strL1Event;

@@ -1,4 +1,4 @@
-/* $Id: sedl_fax.c,v 0.9 2001/03/04 00:48:49 kkeil Exp $
+/* $Id: sedl_fax.c,v 0.10 2001/03/04 17:08:33 kkeil Exp $
  *
  * sedl_fax.c  low level stuff for Sedlbauer Speedfax + cards
  *
@@ -40,7 +40,7 @@
 
 extern const char *CardType[];
 
-const char *Sedlfax_revision = "$Revision: 0.9 $";
+const char *Sedlfax_revision = "$Revision: 0.10 $";
 
 const char *Sedlbauer_Types[] =
 	{"None", "speed fax+", "speed fax+ pyramid", "speed fax+ pci"};
@@ -413,16 +413,6 @@ MODULE_PARM(irq, MODULE_PARM_T);
 
 static char SpeedfaxName[] = "Speedfax";
 
-static int SpeedfaxProtocols[] = {	ISDN_PID_L0_TE_S0,
-					ISDN_PID_L1_B_64TRANS,
-					ISDN_PID_L1_B_TRANS_TT,
-					ISDN_PID_L1_B_TRANS_TTR,
-					ISDN_PID_L1_B_TRANS_TTS,
-					ISDN_PID_L1_B_64HDLC,
-					ISDN_PID_L2_B_TRANS,
-			};
-#define SPEEDFAX_PCNT	(sizeof(SpeedfaxProtocols)/sizeof(int))
-
 static	struct pci_dev *dev_sedl;
 static	int pci_finished_lookup;
 
@@ -682,18 +672,18 @@ set_stack(hisaxstack_t *st, hisaxinstance_t *inst, int chan, hisax_pid_t *pid) {
 #endif
 	memset(&inst->pid, 0, sizeof(hisax_pid_t));
 	if  (chan == 2) { /* D-channel */
-		if (!HasProtocol(inst, pid->protocol[0])) {
+		if (!HasProtocol(inst->obj, pid->protocol[0])) {
 			return(-EPROTONOSUPPORT);
 		} else 
 			layer = ISDN_LAYER(0);
 		inst->pid.protocol[0] = pid->protocol[0];
 	} else {
-		if (!HasProtocol(inst, pid->protocol[1])) {
+		if (!HasProtocol(inst->obj, pid->protocol[1])) {
 			return(-EPROTONOSUPPORT);
 		} else
 			layer = ISDN_LAYER(1);
 		inst->pid.protocol[1] = pid->protocol[1];
-		if (HasProtocol(inst, pid->protocol[2])) {
+		if (HasProtocol(inst->obj, pid->protocol[2])) {
 			layer |= ISDN_LAYER(2);
 			inst->pid.protocol[2] = pid->protocol[2];
 		}
@@ -841,9 +831,13 @@ Speedfax_init(void)
 
 	speedfax.name = SpeedfaxName;
 	speedfax.own_ctrl = speedfax_manager;
-	speedfax.layermask = ISDN_LAYER(0);
-	speedfax.protocols = SpeedfaxProtocols;
-	speedfax.protcnt = SPEEDFAX_PCNT;
+	speedfax.DPROTO.protocol[0] = ISDN_PID_L0_TE_S0;
+	speedfax.BPROTO.protocol[1] = ISDN_PID_L1_B_64TRANS |
+				      ISDN_PID_L1_B_TRANS_TT |
+				      ISDN_PID_L1_B_TRANS_TTR |
+				      ISDN_PID_L1_B_TRANS_TTS |
+				      ISDN_PID_L1_B_64HDLC;
+	speedfax.BPROTO.protocol[2] = ISDN_PID_L2_B_TRANS;
 	speedfax.prev = NULL;
 	speedfax.next = NULL;
 	

@@ -1,4 +1,4 @@
-/* $Id: mISDNif.h,v 0.13 2001/03/04 00:48:49 kkeil Exp $
+/* $Id: mISDNif.h,v 0.14 2001/03/04 17:08:33 kkeil Exp $
  *
  */
 
@@ -41,6 +41,7 @@
 #define MGR_RELEASE	0x0f2500
 #define MGR_CONTROL	0x0fe100
 #define MGR_STATUS	0x0fe200
+#define MGR_HASPROTOCOL 0x0fe300
 #define MGR_LOADFIRM	0x0ff000
 #define MGR_LOGDATA	0x0ff100
 #define MGR_DEBUGDATA	0x0ff200
@@ -202,6 +203,7 @@
 #define ISDN_PID_L4_B_CAPI20	0x44000001
 
 #define ISDN_PID_BCHANNEL_BIT	0x40000000
+#define ISDN_PID_LAYER_MASK	0x0f000000
 #define ISDN_PID_LAYER(n)	(n<<24)
 
 #define MAX_LAYER_NR	7
@@ -259,7 +261,6 @@ typedef struct _logdata {
 
 typedef struct _moditem {
 	char	*name;
-	int	layermask;
 	int	protocol;
 } moditem_t;
 
@@ -458,13 +459,12 @@ typedef struct _FACILITY {
 #ifdef __KERNEL__
 
 typedef struct _hisaxobject {
-	struct _hisaxobject *prev;
-	struct _hisaxobject *next;
-	char	*name;
-	int	layermask;
-	int	refcnt;
-	int     protcnt;
-	int	*protocols;
+	struct _hisaxobject	*prev;
+	struct _hisaxobject	*next;
+	char			*name;
+	int			refcnt;
+	hisax_pid_t		DPROTO;
+	hisax_pid_t		BPROTO;
 	int     (*own_ctrl)(void *, u_int, void *);
 	int     (*ctrl)(void *, u_int, void *);
 	void	*ilist;
@@ -516,7 +516,7 @@ typedef struct _hisaxstack {
 /* common helper functions */
 extern int bprotocol2pid(void *, hisax_pid_t *);
 extern int get_protocol(hisaxstack_t *, int);
-extern int HasProtocol(hisaxinstance_t *, int);
+extern int HasProtocol(hisaxobject_t *, int);
 extern int DelIF(hisaxinstance_t *, hisaxif_t *, void *, void *);
 
 /* global exported functions */

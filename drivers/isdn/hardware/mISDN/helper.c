@@ -1,4 +1,4 @@
-/* $Id: helper.c,v 0.6 2001/03/04 00:48:49 kkeil Exp $
+/* $Id: helper.c,v 0.7 2001/03/04 17:08:33 kkeil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -159,18 +159,29 @@ int bprotocol2pid(void *bp, hisax_pid_t *pid) {
 	return(0);
 }
 
-int HasProtocol(hisaxinstance_t *inst, int proto) {
-	int i;
+int HasProtocol(hisaxobject_t *obj, int protocol) {
+	int layer;
+	int pmask;
 
-	if (!inst || !inst->obj) {
+	if (!obj) {
 		int_error();
 		return(0);
 	}
-	for (i=0; i<inst->obj->protcnt; i++) {
-		if (proto == inst->obj->protocols[i])
-			return(1);
+	layer = (protocol & ISDN_PID_LAYER_MASK)>>24;
+	if (layer > MAX_LAYER_NR) {
+		int_errtxt("layer %d", layer);
+		return(0);
 	}
-	return(0); 
+	if (protocol & ISDN_PID_BCHANNEL_BIT)
+		pmask = obj->BPROTO.protocol[layer];
+	else
+		pmask = obj->DPROTO.protocol[layer];
+	if (pmask == ISDN_PID_ANY)
+		return(0);
+	if (protocol == (protocol & pmask))
+		return(1);
+	else
+		return(0); 
 }
 
 int
