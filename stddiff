@@ -1,0 +1,171 @@
+#!/bin/sh
+
+KERNELDIR=/usr/src/linux
+KERNFIRST=false
+PREPARSER="./preparser"
+DODIFF=dodiff
+UNIQUE=false
+
+dodiff() {
+  if $KERNFIRST ; then
+    diff -u $EXTRAOPT $2 $1
+  else
+    diff -u $EXTRAOPT $1 $2
+  fi
+}
+
+dodiffuni() {
+    echo -n "Processing $1 ... "
+    TMPNAME=/tmp/`basename $1`.$$ 
+    $PREPARSER -c $CTRLNAME $1 $TMPNAME
+    RES=$?
+    if [ "$RES" -eq "0" ] ; then 
+	echo diff original
+	dodiff $1 $2
+	rm $TMPNAME
+	return 0
+    fi
+    if [ "$RES" -eq "2" ] ; then
+	echo diff modified
+	dodiff $TMPNAME $2
+	rm $TMPNAME
+	return 0
+    fi
+    echo "problem with $PREPARSER retcode $RES"
+    exit 1
+}
+
+
+#
+# Print usage and exit
+#
+usage() {
+	cat<<EOM
+
+	stddiff is used for generating diffs of the cvs-tree
+		versus the kernel-tree.
+
+	stddiff [-r] [-h] [-k DIR] [-u] [-c FILE] [-w] [files ...]
+
+	Options:
+
+	-h      This Text.
+	-r      Reverse direction (kernel versus cvs).
+	-k DIR  Kerneltree is in DIR instead of /usr/src/linux
+	-u      Make a diff for a unique kernel-tree 
+                (preprocessing with $PREPARSER)
+	-c FILE	Use FILE as control file for $PREPARSER (only with -u)
+	-w      Ignore white space when comparing lines 
+
+	Without any files given, within the whole tree, the "right"
+	files are diffed. When any files are given in the commandline,
+	only those are diffed.
+
+EOM
+	exit
+}
+
+#
+# Check, if argument is a linux kernel dir
+#
+checkkernel() {
+	if [ -f $1/Makefile ] ; then
+#		if [ "`grep ^vmlinux: $1/Makefile | grep vmlinux`" != "" ] ; then
+			return 0
+#		fi
+	fi
+	echo "The given argument does not look like a kernel dir"
+	exit 1
+}
+
+#
+# Determine a control file name
+#
+calc_ctrl_file() {
+	eval `sed -n 's/^\([A-Z]*\) = \([0-9]*\)$/\1=\2/p' $KERNELDIR/Makefile`
+	echo "Current kernel version is $VERSION.$PATCHLEVEL.$SUBLEVEL"
+	if [ -z "$CTRLNAME" ] ; then
+		CTRLNAME=v$VERSION.$PATCHLEVEL.$SUBLEVEL.ctrl
+		if [ -f $CTRLNAME ] ; then
+			return 0
+		fi
+		CTRLNAME=v$VERSION.$PATCHLEVEL.ctrl
+		if [ -f $CTRLNAME ] ; then
+			return 0
+		fi
+		CTRLNAME=default.ctrl
+	fi
+	if [ -f $CTRLNAME ] ; then
+		return 0
+	fi
+	echo "No control file found"
+	exit 1
+}
+
+while getopts :rhk:uc:w a ; do
+	case $a in
+		\?) case $OPTARG in
+			k)  echo "-k requires Kernel directory parameter"
+					;;
+			*)  echo "Unknown option: -$OPTARG"
+				echo "Try stddiff -h"
+				;;
+			esac
+			exit 1
+			;;
+		k)  checkkernel $OPTARG
+			KERNELDIR=$OPTARG
+			;;
+		c)  CTRLNAME=$OPTARG
+			;;
+		u)  UNIQUE=true
+			;;
+		r)  KERNFIRST=true
+			;;
+		w)  EXTRAOPT=-w
+			;;
+		h)  usage
+			;;
+	esac
+done
+shift `expr $OPTIND - 1`
+
+if $UNIQUE ; then
+	DODIFF=dodiffuni
+	calc_ctrl_file
+fi
+
+echo -n "Using $DODIFF $EXTRAOPT"
+
+if $UNIQUE ; then
+	echo " with controlfile $CTRLNAME"
+else
+	echo
+fi
+
+if [ $# != 0 ]; then
+	for i in $* ; do
+		$DODIFF $i $KERNELDIR/$i
+	done
+else
+	for i in drivers/isdn/hisax/*.[ch] ; do
+		$DODIFF $i $KERNELDIR/$i
+	done
+	for i in include/linux/*.h ; do
+		if [ "$i" = "include/linux/isdn_compat.h" -a \
+		     "$UNIQUE" = "true" ] ; then
+			echo "$i skipped"
+		else
+			$DODIFF $i $KERNELDIR/$i
+		fi
+	done
+	for i in drivers/isdn/hisax/Makefile \
+                ; do
+		if [ -f $i.kernel ] ; then
+	    		dodiff $i.kernel $KERNELDIR/$i
+		else
+    			dodiff $i $KERNELDIR/$i
+		fi
+	done
+fi
+

@@ -1,0 +1,5 @@
+
+mod_list: $(obj-m)
+	rm -f $(TOPDIR)/files.mod
+	for i in $(obj-m) ; do echo $(MODLIB)/misc/$$i>>$(TOPDIR)/files.mod; done
+
