@@ -1,4 +1,4 @@
-/* $Id: app_plci.c,v 1.3 2003/12/13 00:36:15 keil Exp $
+/* $Id: app_plci.c,v 1.4 2003/12/14 15:20:38 keil Exp $
  *
  */
 
@@ -379,7 +379,7 @@ static void plci_suspend_req(struct FsmInst *fi, int event, void *arg)
 static void plci_resume_req(struct FsmInst *fi, int event, void *arg)
 {
 	AppPlci_t	*aplci = fi->userdata;
-	Plci_t	*plci = aplci->plci;
+	Plci_t		*plci = aplci->plci;
 
 	// we already sent CONF with Info = SuppInfo = 0
 	FsmChangeState(fi, ST_PLCI_P_RES);
@@ -390,7 +390,7 @@ static void plci_resume_req(struct FsmInst *fi, int event, void *arg)
 static void
 plci_alert_req(struct FsmInst *fi, int event, void *arg)
 {
-	AppPlci_t		*aplci = fi->userdata;
+	AppPlci_t	*aplci = fi->userdata;
 	Plci_t		*plci = aplci->plci;
 	_cmsg		*cmsg = arg;
 	__u16		Info = 0;
@@ -487,7 +487,15 @@ plci_connect_active_ind(struct FsmInst *fi, int event, void *arg)
 
 	FsmChangeState(fi, ST_PLCI_P_ACT);
 	AppPlciLinkUp(aplci);
-	Send2Application(aplci, arg);
+	if (test_bit(PLCI_STATE_STACKREADY, &aplci->plci->state)) {
+		Send2Application(aplci, arg);
+	} else {
+		if (aplci->pending) {
+			int_errtxt("overwrite pending cmsg");
+			cmsg_free(aplci->pending);
+		}
+		aplci->pending = arg;
+	}
 }
 
 static void plci_connect_active_resp(struct FsmInst *fi, int event, void *arg)
@@ -545,7 +553,15 @@ static void plci_resume_conf(struct FsmInst *fi, int event, void *arg)
 
 	FsmChangeState(fi, ST_PLCI_P_ACT);
 	AppPlciLinkUp(aplci);
-	Send2Application(aplci, arg);
+	if (test_bit(PLCI_STATE_STACKREADY, &aplci->plci->state)) {
+		Send2Application(aplci, arg);
+	} else {
+		if (aplci->pending) {
+			int_errtxt("overwrite pending cmsg");
+			cmsg_free(aplci->pending);
+		}
+		aplci->pending = arg;
+	}
 }
 
 static void
@@ -932,7 +948,15 @@ plci_select_b_protocol_req(struct FsmInst *fi, int event, void *arg)
 answer:
 	capi_cmsg_answer(cmsg);
 	cmsg->Info = Info;
-	Send2Application(aplci, cmsg);
+	if (test_bit(PLCI_STATE_STACKREADY, &aplci->plci->state)) {
+		Send2Application(aplci, arg);
+	} else {
+		if (aplci->pending) {
+			int_errtxt("overwrite pending cmsg");
+			cmsg_free(aplci->pending);
+		}
+		aplci->pending = cmsg;
+	}
 }
 
 static void
@@ -1106,6 +1130,10 @@ void AppPlciDestr(AppPlci_t *aplci)
 	}
 	if (aplci->appl)
 		ApplicationDelAppPlci(aplci->appl, aplci);
+	if (aplci->pending) {
+		cmsg_free(aplci->pending);
+		aplci->pending = NULL;
+	}
 	AppPlci_free(aplci);
 }
 
@@ -1222,6 +1250,11 @@ ReleaseLink(AppPlci_t *aplci)
 		if (retval)
 			int_error();
 		aplci->link = NULL;
+		test_and_clear_bit(PLCI_STATE_STACKREADY, &aplci->plci->state);
+		if (aplci->pending) {
+			cmsg_free(aplci->pending);
+			aplci->pending = NULL;
+		}
 	}
 	return(retval);
 }
@@ -1243,17 +1276,14 @@ getNCCI4addr(AppPlci_t *aplci, __u32 addr, int mode)
 				return(ncci);
 		}
 	}
-	if (!cnt) {
-		int_error();
+	if (!cnt)
 		return(NULL);
-	}
 	if (mode != GET_NCCI_PLCI)
 		return(NULL);
 	if (1 == cnt) {
 		if (!(addr & 0xffff0000))
 			return(ncci);
 	}
-	int_error();
 	return(NULL);
 }
 
@@ -1367,10 +1397,20 @@ PL_l3l4mux(mISDNif_t *hif, struct sk_buff *skb)
 int
 AppPlciSetIF(AppPlci_t *aplci, u_int prim, void *arg)
 {
+	int ret;
+
 	if (aplci->Bprotocol.B3 == 0) // transparent
-		return(SetIF(&aplci->link->inst, arg, prim, NULL, PL_l3l4, aplci));
+		ret = SetIF(&aplci->link->inst, arg, prim, NULL, PL_l3l4, aplci);
 	else
-		return(SetIF(&aplci->link->inst, arg, prim, NULL, PL_l3l4mux, aplci));
+		ret = SetIF(&aplci->link->inst, arg, prim, NULL, PL_l3l4mux, aplci);
+	if (ret)
+		return(ret);
+	test_and_set_bit(PLCI_STATE_STACKREADY, &aplci->plci->state);
+	if (aplci->pending) {
+		Send2Application(aplci, aplci->pending);
+		aplci->pending = NULL;
+	}
+	return(0);
 }
 
 void
@@ -1740,15 +1780,23 @@ AppPlciInfoIndIE(AppPlci_t *aplci, unsigned char ie, __u32 mask, Q931_info_t *qi
 		iep = (u_char *)qi;
 		iep += L3_EXTRA_SIZE + *ies +1;
 	}
-	if (ie == IE_PROGRESS && aplci->appl->InfoMask & CAPI_INFOMASK_EARLYB3) {
-		if (iep[0] == 0x02 && iep[2] == 0x88) { // in-band information available
-			AppPlciLinkUp(aplci);
-		}
-	}
 	CMSG_ALLOC(cmsg);
 	AppPlciCmsgHeader(aplci, cmsg, CAPI_INFO, CAPI_IND);
 	cmsg->InfoNumber = ie;
 	cmsg->InfoElement = iep;
+	if (ie == IE_PROGRESS && aplci->appl->InfoMask & CAPI_INFOMASK_EARLYB3) {
+		if (iep[0] == 0x02 && iep[2] == 0x88) { // in-band information available
+			AppPlciLinkUp(aplci);
+			if (!test_bit(PLCI_STATE_STACKREADY, &aplci->plci->state)) {
+				if (aplci->pending) {
+					int_errtxt("overwrite pending cmsg");
+					cmsg_free(aplci->pending);
+				}
+				aplci->pending = cmsg;
+				return;
+			}
+		}
+	}
 	Send2Application(aplci, cmsg);
 }
 

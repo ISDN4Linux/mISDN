@@ -1,4 +1,4 @@
-/* $Id: tei.c,v 1.6 2003/12/03 14:32:45 keil Exp $
+/* $Id: tei.c,v 1.7 2003/12/14 15:20:38 keil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -13,7 +13,7 @@
 #include "debug.h"
 #include <linux/random.h>
 
-const char *tei_revision = "$Revision: 1.6 $";
+const char *tei_revision = "$Revision: 1.7 $";
 
 #define ID_REQUEST	1
 #define ID_ASSIGNED	2
@@ -375,7 +375,8 @@ tei_ph_data_ind(teimgr_t *tm, int dtyp, struct sk_buff *skb)
 		return(ret);
 	} else {
 		mt = *(dp+2);
-		tm->tei_m.printdebug(&tm->tei_m, "tei handler mt %x", mt);
+		if (tm->debug)
+			tm->tei_m.printdebug(&tm->tei_m, "tei handler mt %x", mt);
 		if (mt == ID_ASSIGNED)
 			FsmEvent(&tm->tei_m, EV_ASSIGN, dp);
 		else if (mt == ID_DENIED)
@@ -406,7 +407,8 @@ l2_tei(teimgr_t *tm, struct sk_buff *skb)
 	if (!tm || !skb)
 		return(ret);
 	hh = mISDN_HEAD_P(skb);
-	printk(KERN_DEBUG "%s: prim(%x)\n", __FUNCTION__, hh->prim);
+	if (tm->debug)
+		printk(KERN_DEBUG "%s: prim(%x)\n", __FUNCTION__, hh->prim);
 	switch(hh->prim) {
 	    case (MDL_UNITDATA | INDICATION):
 	    	return(tei_ph_data_ind(tm, hh->dinfo, skb));

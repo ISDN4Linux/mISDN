@@ -1,4 +1,4 @@
-/* $Id: l3_udss1.c,v 1.18 2003/12/03 14:32:45 keil Exp $
+/* $Id: l3_udss1.c,v 1.19 2003/12/14 15:20:38 keil Exp $
  *
  * EURO/DSS1 D-channel protocol
  *
@@ -24,7 +24,7 @@ static int debug = 0;
 static mISDNobject_t u_dss1;
 
 
-const char *dss1_revision = "$Revision: 1.18 $";
+const char *dss1_revision = "$Revision: 1.19 $";
 
 static int dss1man(l3_process_t *, u_int, void *);
 
@@ -1097,7 +1097,8 @@ l3dss1_setup(l3_process_t *pc, u_char pr, void *arg)
 	L3AddTimer(&pc->timer, T_CTRL, CC_TCTRL);
 	if (err) /* STATUS for none mandatory IE errors after actions are taken */
 		l3dss1_std_ie_err(pc, err);
-	err = mISDN_l3up(pc, CC_NEW_CR | INDICATION, NULL);
+// already done
+//	err = mISDN_l3up(pc, CC_NEW_CR | INDICATION, NULL);
 	if (mISDN_l3up(pc, CC_SETUP | INDICATION, skb))
 		dev_kfree_skb(skb);
 }
@@ -1944,7 +1945,8 @@ dss1_fromdown(mISDNif_t *hif, struct sk_buff *skb)
 		return(ret);
 	l3 = hif->fdata;
 	hh = mISDN_HEAD_P(skb);
-	printk(KERN_DEBUG "%s: prim(%x)\n", __FUNCTION__, hh->prim);
+	if (debug)
+		printk(KERN_DEBUG "%s: prim(%x)\n", __FUNCTION__, hh->prim);
 	if (!l3)
 		return(ret);
 	switch (hh->prim) {
@@ -2126,7 +2128,8 @@ dss1_fromup(mISDNif_t *hif, struct sk_buff *skb)
 		return(ret);
 	l3 = hif->fdata;
 	hh = mISDN_HEAD_P(skb);
-	printk(KERN_DEBUG  "%s: prim(%x)\n", __FUNCTION__, hh->prim);
+	if (debug)
+		printk(KERN_DEBUG  "%s: prim(%x)\n", __FUNCTION__, hh->prim);
 	if (!l3)
 		return(ret);
 // jolly patch start: warum eingentlich nicht?
@@ -2173,6 +2176,7 @@ dss1_fromup(mISDNif_t *hif, struct sk_buff *skb)
 			l3_debug(l3, "dss1down state %d prim %#x unhandled",
 				proc->state, hh->prim);
 		}
+		dev_kfree_skb(skb);
 	} else {
 		if (l3->debug & L3_DEB_STATE) {
 			l3_debug(l3, "dss1down state %d prim %#x para len %d",

@@ -1,4 +1,4 @@
-/* $Id: ncci.c,v 1.19 2003/12/13 00:36:16 keil Exp $
+/* $Id: ncci.c,v 1.20 2003/12/14 15:20:38 keil Exp $
  *
  */
 
@@ -65,6 +65,8 @@ enum {
 	EV_AP_CONNECT_B3_ACTIVE_RESP,
 	EV_AP_RESET_B3_REQ,
 	EV_NC_RESET_B3_IND,
+	EV_NC_RESET_B3_CONF,
+	EV_AP_RESET_B3_RESP,
 	EV_NC_CONNECT_B3_T90_ACTIVE_IND,
 	EV_AP_DISCONNECT_B3_REQ,
 	EV_NC_DISCONNECT_B3_IND,
@@ -92,6 +94,8 @@ static char* str_ev_ncci[] = {
 	"EV_AP_CONNECT_B3_ACTIVE_RESP",
 	"EV_AP_RESET_B3_REQ",
 	"EV_NC_RESET_B3_IND",
+	"EV_NC_RESET_B3_CONF",
+	"EV_AP_RESET_B3_RESP",
 	"EV_NC_CONNECT_B3_T90_ACTIVE_IND",
 	"EV_AP_DISCONNECT_B3_REQ",
 	"EV_NC_DISCONNECT_B3_IND",
@@ -109,6 +113,7 @@ static char* str_ev_ncci[] = {
 };
 
 static struct Fsm ncci_fsm = { 0, 0, 0, 0, 0 };
+static struct Fsm ncciD_fsm = { 0, 0, 0, 0, 0 };
 
 
 static int
@@ -151,6 +156,26 @@ ncci_debug(struct FsmInst *fi, char *fmt, ...)
 	*p = 0;
 	printk(KERN_DEBUG "%s", tmp);
 	va_end(args);
+}
+
+static inline void
+SKB2Application(Ncci_t *ncci, struct sk_buff *skb)
+{
+	if (!test_bit(NCCI_STATE_APPLRELEASED, &ncci->state)) {
+#ifdef OLDCAPI_DRIVER_INTERFACE
+		ncci->contr->ctrl->handle_capimsg(ncci->contr->ctrl, ncci->appl->ApplId, skb);
+#else
+		capi_ctr_handle_message(ncci->contr->ctrl, ncci->appl->ApplId, skb);
+#endif
+	}
+}
+
+static inline int
+SKB_l4l3(Ncci_t *ncci, struct sk_buff *skb)
+{
+	if (!ncci->link || !ncci->link->inst.down.func)
+		return(-ENXIO);
+	return(ncci->link->inst.down.func(&ncci->link->inst.down, skb));
 }
 
 static inline void
@@ -505,6 +530,7 @@ ncci_dl_down_ind(struct FsmInst *fi, int event, void *arg)
 static void
 ncci_appl_release(struct FsmInst *fi, int event, void *arg)
 {
+	FsmChangeState(fi, ST_NCCI_N_0);
 	ncciDestr(fi->userdata);
 }
 
@@ -575,10 +601,215 @@ static struct FsmNode fn_ncci_list[] =
   {ST_NCCI_N_4,		EV_NC_LINKDOWN,			ncci_linkdown},
 
   {ST_NCCI_N_5,		EV_AP_DISCONNECT_B3_RESP,	ncci_disconnect_b3_resp},
-  {ST_NCCI_N_5,		EV_AP_RELEASE,			ncci_disconnect_b3_resp},
+  {ST_NCCI_N_5,		EV_AP_RELEASE,			ncci_appl_release},
 };
-
 const int FN_NCCI_COUNT = sizeof(fn_ncci_list)/sizeof(struct FsmNode);
+
+static void
+ncciD_connect_b3_req(struct FsmInst *fi, int event, void *arg)
+{
+	FsmChangeState(fi, ST_NCCI_N_0_1);
+	if (SKB_l4l3(fi->userdata, arg))
+		dev_kfree_skb(arg);
+}
+
+static void
+ncciD_connect_b3_conf(struct FsmInst *fi, int event, void *arg)
+{
+	struct sk_buff	*skb = arg;
+	__u16		info = CAPIMSG_U16(skb->data, 12);
+
+	if (info == 0)
+		FsmChangeState(fi, ST_NCCI_N_2);
+	else
+		FsmChangeState(fi, ST_NCCI_N_0);
+	SKB2Application(fi->userdata, skb);
+	if (info != 0)
+		ncciDestr(fi->userdata);
+}
+
+static void
+ncciD_connect_b3_ind(struct FsmInst *fi, int event, void *arg)
+{
+	FsmChangeState(fi, ST_NCCI_N_1);
+	SKB2Application(fi->userdata, arg);
+}
+
+static void
+ncciD_connect_b3_resp(struct FsmInst *fi, int event, void *arg)
+{
+	struct sk_buff	*skb = arg;
+	__u16		rej = CAPIMSG_U16(skb->data, 4);
+
+	if (rej)
+		FsmChangeState(fi, ST_NCCI_N_4);
+	else
+		FsmChangeState(fi, ST_NCCI_N_2);
+	if (SKB_l4l3(fi->userdata, arg))
+		dev_kfree_skb(arg);
+}
+
+static void
+ncciD_connect_b3_active_ind(struct FsmInst *fi, int event, void *arg)
+{
+	FsmChangeState(fi, ST_NCCI_N_ACT);
+	SKB2Application(fi->userdata, arg);
+}
+
+static void
+ncciD_connect_b3_active_resp(struct FsmInst *fi, int event, void *arg)
+{
+	if (SKB_l4l3(fi->userdata, arg))
+		dev_kfree_skb(arg);
+}
+
+static void
+ncciD_reset_b3_ind(struct FsmInst *fi, int event, void *arg)
+{
+	FsmChangeState(fi, ST_NCCI_N_ACT);
+	SKB2Application(fi->userdata, arg);
+}
+
+static void
+ncciD_reset_b3_resp(struct FsmInst *fi, int event, void *arg)
+{
+	if (SKB_l4l3(fi->userdata, arg))
+		dev_kfree_skb(arg);
+}
+
+static void
+ncciD_reset_b3_conf(struct FsmInst *fi, int event, void *arg)
+{
+	FsmChangeState(fi, ST_NCCI_N_3);
+	SKB2Application(fi->userdata, arg);
+}
+
+static void
+ncciD_reset_b3_req(struct FsmInst *fi, int event, void *arg)
+{
+	SKB2Application(fi->userdata, arg);
+}
+
+static void
+ncciD_disconnect_b3_req(struct FsmInst *fi, int event, void *arg)
+{
+	Ncci_t	*ncci = fi->userdata;
+
+	ncci->savedstate = fi->state;
+	FsmChangeState(fi, ST_NCCI_N_4);
+	if (SKB_l4l3(fi->userdata, arg))
+		dev_kfree_skb(arg);
+}
+
+static void
+ncciD_disconnect_b3_conf(struct FsmInst *fi, int event, void *arg)
+{
+	Ncci_t	*ncci = fi->userdata;
+	struct sk_buff	*skb = arg;
+	__u16		info = CAPIMSG_U16(skb->data, 12);
+
+	if (test_bit(NCCI_STATE_APPLRELEASED, &ncci->state))
+		return;
+	if (info != 0)
+		FsmChangeState(fi, ncci->savedstate);
+	SKB2Application(ncci, skb);
+}
+
+static void
+ncciD_disconnect_b3_ind(struct FsmInst *fi, int event, void *arg)
+{
+	Ncci_t	*ncci = fi->userdata;
+	struct sk_buff	*skb = arg;
+
+	FsmChangeState(fi, ST_NCCI_N_5);
+	if (test_bit(NCCI_STATE_APPLRELEASED, &ncci->state)) {
+		skb_pull(skb, CAPIMSG_BASELEN);
+		skb_trim(skb, 4);
+		if_newhead(&ncci->link->inst.down, CAPI_DISCONNECT_B3_RESP, 0, skb);
+		ncciDestr(ncci);
+	} else
+		SKB2Application(ncci, arg);
+}
+
+static void
+ncciD_disconnect_b3_resp(struct FsmInst *fi, int event, void *arg)
+{
+	FsmChangeState(fi, ST_NCCI_N_0);
+	if (SKB_l4l3(fi->userdata, arg))
+		dev_kfree_skb(arg);
+	ncciDestr(fi->userdata);
+}
+
+static void
+ncciD_linkdown(struct FsmInst *fi, int event, void *arg)
+{
+	Ncci_t	*ncci = fi->userdata;
+	_cmsg	*cmsg;
+
+	CMSG_ALLOC(cmsg);
+	ncciCmsgHeader(ncci, cmsg, CAPI_DISCONNECT_B3, CAPI_IND);
+	FsmChangeState(fi, ST_NCCI_N_5);
+	Send2Application(ncci, cmsg);
+}
+
+static void
+ncciD_appl_release_disc(struct FsmInst *fi, int event, void *arg)
+{
+	Ncci_t	*ncci = fi->userdata;
+	u_char	parm[5];
+
+	capimsg_setu32(parm, 0, ncci->addr);
+	parm[4] = 0;
+	FsmChangeState(fi, ST_NCCI_N_4);
+	if_link(&ncci->link->inst.down, CAPI_DISCONNECT_B3_REQ, 0, 5, parm, 0); 
+}
+
+static struct FsmNode fn_ncciD_list[] =
+{
+  {ST_NCCI_N_0,		EV_AP_CONNECT_B3_REQ,		ncciD_connect_b3_req},
+  {ST_NCCI_N_0,		EV_NC_CONNECT_B3_IND,		ncciD_connect_b3_ind},
+  {ST_NCCI_N_0,		EV_AP_RELEASE,			ncci_appl_release},
+
+  {ST_NCCI_N_0_1,	EV_NC_CONNECT_B3_CONF,		ncciD_connect_b3_conf},
+  {ST_NCCI_N_0_1,	EV_AP_RELEASE,			ncci_appl_release},
+
+  {ST_NCCI_N_1,		EV_AP_CONNECT_B3_RESP,		ncciD_connect_b3_resp},
+  {ST_NCCI_N_1,		EV_AP_DISCONNECT_B3_REQ,	ncciD_disconnect_b3_req},
+  {ST_NCCI_N_1,		EV_NC_DISCONNECT_B3_IND,	ncciD_disconnect_b3_ind},
+  {ST_NCCI_N_1,		EV_AP_RELEASE,			ncciD_appl_release_disc},
+  {ST_NCCI_N_1,		EV_NC_LINKDOWN,			ncciD_linkdown},
+
+  {ST_NCCI_N_2,		EV_NC_CONNECT_B3_ACTIVE_IND,	ncciD_connect_b3_active_ind},
+  {ST_NCCI_N_2,		EV_AP_DISCONNECT_B3_REQ,	ncciD_disconnect_b3_req},
+  {ST_NCCI_N_2,		EV_NC_DISCONNECT_B3_IND,	ncciD_disconnect_b3_ind},
+  {ST_NCCI_N_2,		EV_AP_RELEASE,			ncciD_appl_release_disc},
+  {ST_NCCI_N_2,		EV_NC_LINKDOWN,			ncciD_linkdown},
+     
+  {ST_NCCI_N_3,		EV_NC_RESET_B3_IND,		ncciD_reset_b3_ind},
+  {ST_NCCI_N_3,		EV_AP_DISCONNECT_B3_REQ,	ncciD_disconnect_b3_req},
+  {ST_NCCI_N_3,		EV_NC_DISCONNECT_B3_IND,	ncciD_disconnect_b3_ind},
+  {ST_NCCI_N_3,		EV_AP_RELEASE,			ncciD_appl_release_disc},
+  {ST_NCCI_N_3,		EV_NC_LINKDOWN,			ncciD_linkdown},
+
+  {ST_NCCI_N_ACT,	EV_AP_CONNECT_B3_ACTIVE_RESP,	ncciD_connect_b3_active_resp},
+  {ST_NCCI_N_ACT,	EV_AP_DISCONNECT_B3_REQ,	ncciD_disconnect_b3_req},
+  {ST_NCCI_N_ACT,	EV_NC_DISCONNECT_B3_IND,	ncciD_disconnect_b3_ind},
+  {ST_NCCI_N_ACT,	EV_AP_RELEASE,			ncciD_appl_release_disc},
+  {ST_NCCI_N_ACT,	EV_NC_LINKDOWN,			ncciD_linkdown},
+  {ST_NCCI_N_ACT,	EV_AP_RESET_B3_REQ,		ncciD_reset_b3_req},
+  {ST_NCCI_N_ACT,	EV_NC_RESET_B3_IND,		ncciD_reset_b3_ind},
+  {ST_NCCI_N_ACT,	EV_NC_RESET_B3_CONF,		ncciD_reset_b3_conf},
+  {ST_NCCI_N_ACT,	EV_AP_RESET_B3_RESP,		ncciD_reset_b3_resp},
+//{ST_NCCI_N_ACT,	EV_NC_CONNECT_B3_T90_ACTIVE_IND,ncciD_connect_b3_t90_active_ind},
+
+  {ST_NCCI_N_4,		EV_NC_DISCONNECT_B3_CONF,	ncciD_disconnect_b3_conf},
+  {ST_NCCI_N_4,		EV_NC_DISCONNECT_B3_IND,	ncciD_disconnect_b3_ind},
+  {ST_NCCI_N_4,		EV_NC_LINKDOWN,			ncciD_linkdown},
+
+  {ST_NCCI_N_5,		EV_AP_DISCONNECT_B3_RESP,	ncciD_disconnect_b3_resp},
+  {ST_NCCI_N_5,		EV_AP_RELEASE,			ncci_appl_release},
+};
+const int FN_NCCID_COUNT = sizeof(fn_ncciD_list)/sizeof(struct FsmNode);
 
 Ncci_t *
 ncciConstr(AppPlci_t *aplci)
@@ -589,7 +820,6 @@ ncciConstr(AppPlci_t *aplci)
 		return(NULL);
 
 	memset(ncci, 0, sizeof(Ncci_t));
-	ncci->ncci_m.fsm        = &ncci_fsm;
 	ncci->ncci_m.state      = ST_NCCI_N_0;
 	ncci->ncci_m.debug      = aplci->plci->contr->debug & CAPI_DBG_NCCI_STATE;
 	ncci->ncci_m.userdata   = ncci;
@@ -603,17 +833,20 @@ ncciConstr(AppPlci_t *aplci)
 	ncci->window = aplci->appl->reg_params.datablkcnt;
 	if (aplci->Bprotocol.B2 != 0) /* X.75 has own flowctrl */
 		test_and_set_bit(NCCI_STATE_FCTRL, &ncci->state);
-	if (aplci->link->inst.pid.protocol[3] == ISDN_PID_L3_B_TRANS) {
+	if (aplci->Bprotocol.B3 == 0) {
 		test_and_set_bit(NCCI_STATE_L3TRANS, &ncci->state);
-	}
+		ncci->ncci_m.fsm = &ncci_fsm;
+	} else
+		ncci->ncci_m.fsm = &ncciD_fsm;
 	skb_queue_head_init(&ncci->squeue);
 	if (ncci->window > CAPI_MAXDATAWINDOW) {
 		ncci->window = CAPI_MAXDATAWINDOW;
 	}
 	INIT_LIST_HEAD(&ncci->head);
 	list_add(&ncci->head, &aplci->Nccis);
-	printk(KERN_DEBUG "%s: ncci(%p) NCCI(%x) debug (%x/%x)\n",
-		__FUNCTION__, ncci, ncci->addr, aplci->plci->contr->debug, CAPI_DBG_NCCI_STATE); 
+	if (ncci->ncci_m.debug)
+		printk(KERN_DEBUG "%s: ncci(%p) NCCI(%x) debug (%x/%x)\n",
+			__FUNCTION__, ncci, ncci->addr, aplci->plci->contr->debug, CAPI_DBG_NCCI_STATE); 
 	return(ncci);
 }
 
@@ -622,8 +855,6 @@ ncciDestr(Ncci_t *ncci)
 {
 	int i;
 
-	printk(KERN_DEBUG "%s: ncci(%p) NCCI(%x)\n",
-		__FUNCTION__, ncci, ncci->addr); 
 	capidebug(CAPI_DBG_NCCI, "ncciDestr NCCI %x", ncci->addr);
 
 #ifdef OLDCAPI_DRIVER_INTERFACE
@@ -861,25 +1092,44 @@ ncciDataResp(Ncci_t *ncci, struct sk_buff *skb)
 
 int
 ncci_l4l3_direct(Ncci_t *ncci, struct sk_buff *skb) {
-	int		prim, dinfo, ret;
+	mISDN_head_t	*hh;
+	int		ret;
 
+	hh = mISDN_HEAD_P(skb);
 	if (ncci->ncci_m.debug)
 		log_skbdata(skb);
-	if (skb->len < CAPIMSG_BASELEN) {
-		int_error();
-		ret = -EINVAL;
-	} else {
-		prim = CAPIMSG_CMD(skb->data);
-		dinfo = CAPIMSG_MSGID(skb->data);
-// should use an other statemachine
-		skb_pull(skb, CAPIMSG_BASELEN);
-		if (ncci->ncci_m.debug)
-			log_skbdata(skb);
-		ret = if_newhead(&ncci->link->inst.down, prim, dinfo, skb);
-		if (prim == CAPI_DISCONNECT_B3_RESP) {
-			FsmChangeState(&ncci->ncci_m, ST_NCCI_N_0);
-			ncciDestr(ncci);
-		}
+	hh->prim = CAPIMSG_CMD(skb->data);
+	hh->dinfo = CAPIMSG_MSGID(skb->data);
+	skb_pull(skb, CAPIMSG_BASELEN);
+	if (ncci->ncci_m.debug)
+		log_skbdata(skb);
+	switch (hh->prim) {
+		case CAPI_DATA_B3_REQ:
+		case CAPI_DATA_B3_RESP:
+		case CAPI_FACILITY_REQ:
+		case CAPI_FACILITY_RESP:
+		case CAPI_MANUFACTURER_REQ:
+		case CAPI_MANUFACTURER_RESP:
+			ret = SKB_l4l3(ncci, skb);
+			break;
+		case CAPI_CONNECT_B3_REQ:
+			ret = FsmEvent(&ncci->ncci_m, EV_AP_CONNECT_B3_REQ, skb);
+			break;
+		case CAPI_CONNECT_B3_RESP:
+			ret = FsmEvent(&ncci->ncci_m, EV_AP_CONNECT_B3_RESP, skb);
+			break;
+		case CAPI_CONNECT_B3_ACTIVE_RESP:
+			ret = FsmEvent(&ncci->ncci_m, EV_AP_CONNECT_B3_ACTIVE_RESP, skb);
+			break;
+		case CAPI_DISCONNECT_B3_REQ:
+			ret = FsmEvent(&ncci->ncci_m, EV_AP_DISCONNECT_B3_REQ, skb);
+			break;
+		case CAPI_DISCONNECT_B3_RESP:
+			ret = FsmEvent(&ncci->ncci_m, EV_AP_DISCONNECT_B3_RESP, skb);
+			break;
+		default:
+			int_error();
+			ret = -1;
 	}
 	if (ret) {
 		int_error();
@@ -944,7 +1194,7 @@ ncciSendMessage(Ncci_t *ncci, struct sk_buff *skb)
 		return;
 	}
 	// we're not using the cmsg for DATA_B3 for performance reasons
-	switch (CAPICMD(CAPIMSG_COMMAND(skb->data), CAPIMSG_SUBCOMMAND(skb->data))) {
+	switch (CAPIMSG_CMD(skb->data)) {
 		case CAPI_DATA_B3_REQ:
 			if (ncci->ncci_m.state == ST_NCCI_N_ACT) {
 				ncciDataReq(ncci, skb);
@@ -972,27 +1222,18 @@ ncciSendMessage(Ncci_t *ncci, struct sk_buff *skb)
 int
 ncci_l3l4_direct(Ncci_t *ncci, mISDN_head_t *hh, struct sk_buff *skb)
 {
-	struct sk_buff	*nskb;
-	__u16		msgnr,tlen, prim = hh->prim;
+	__u16		msgnr;
+	int		event;
 
 	capidebug(CAPI_DBG_NCCI_L3, "%s: NCCI %x prim(%x) dinfo (%x) skb(%p) s(%x)",
 		__FUNCTION__, ncci->addr, hh->prim, hh->dinfo, skb, ncci->state);
 	if (ncci->ncci_m.debug)
 		log_skbdata(skb);
-	switch (hh->prim) {
-		case CAPI_CONNECT_B3_IND:
-		case CAPI_DATA_B3_IND:
-		case CAPI_CONNECT_B3_ACTIVE_IND:
-		case CAPI_DISCONNECT_B3_IND:
-		case CAPI_FACILITY_IND:
-		case CAPI_MANUFACTURER_IND:
+	switch (hh->prim & 0xFF) {
+		case CAPI_IND:
 			msgnr = ncci->appl->MsgId++;
 			break;
-		case CAPI_CONNECT_B3_CONF:
-		case CAPI_DATA_B3_CONF:
-		case CAPI_DISCONNECT_B3_CONF:
-		case CAPI_FACILITY_CONF:
-		case CAPI_MANUFACTURER_CONF:
+		case CAPI_CONF:
 			msgnr = hh->dinfo & 0xffff;
 			break;
 		default:
@@ -1002,33 +1243,56 @@ ncci_l3l4_direct(Ncci_t *ncci, mISDN_head_t *hh, struct sk_buff *skb)
 	if (skb_headroom(skb) < CAPIMSG_BASELEN) {
 		capidebug(CAPI_DBG_NCCI_L3, "%s: only %d bytes headroom, need %d",
 			__FUNCTION__, skb_headroom(skb), CAPIMSG_BASELEN);
-		nskb = skb_realloc_headroom(skb, CAPIMSG_BASELEN);
-		if (!nskb) {
-			int_error();
-			return(-ENOMEM);
-		}
-		dev_kfree_skb(skb);
-		#warning TODO adjust DATA_B3_IND data
-      	} else { 
-		nskb = skb;
+		int_error();
+		return(-ENOSPC);
 	}
-	skb_push(nskb, CAPIMSG_BASELEN);
-	if (prim == CAPI_DATA_B3_IND)
-		tlen = CAPI_B3_DATA_IND_HEADER_SIZE;
-	else
-		tlen = nskb->len + CAPIMSG_BASELEN;
-	CAPIMSG_SETLEN(nskb->data, tlen);
-	CAPIMSG_SETAPPID(nskb->data, ncci->appl->ApplId);
-	CAPIMSG_SETCOMMAND(nskb->data, (prim>>8) & 0xff);
-	CAPIMSG_SETSUBCOMMAND(nskb->data, prim & 0xff); 
-	CAPIMSG_SETMSGID(nskb->data, msgnr);
-	if (ncci->ncci_m.debug)
-		log_skbdata(nskb);
+	skb_push(skb, CAPIMSG_BASELEN);
+	CAPIMSG_SETLEN(skb->data, (hh->prim == CAPI_DATA_B3_IND) ?
+		CAPI_B3_DATA_IND_HEADER_SIZE : skb->len);
+	CAPIMSG_SETAPPID(skb->data, ncci->appl->ApplId);
+	CAPIMSG_SETCOMMAND(skb->data, (hh->prim>>8) & 0xff);
+	CAPIMSG_SETSUBCOMMAND(skb->data, hh->prim & 0xff); 
+	CAPIMSG_SETMSGID(skb->data, msgnr);
+	switch (hh->prim) {
+		case CAPI_DATA_B3_IND:
+		case CAPI_DATA_B3_CONF:
+		case CAPI_FACILITY_IND:
+		case CAPI_FACILITY_CONF:
+		case CAPI_MANUFACTURER_IND:
+		case CAPI_MANUFACTURER_CONF:
 #ifdef OLDCAPI_DRIVER_INTERFACE
-	ncci->contr->ctrl->handle_capimsg(ncci->contr->ctrl, ncci->appl->ApplId, nskb);
+			ncci->contr->ctrl->handle_capimsg(ncci->contr->ctrl, ncci->appl->ApplId, skb);
 #else
-	capi_ctr_handle_message(ncci->contr->ctrl, ncci->appl->ApplId, nskb);
+			capi_ctr_handle_message(ncci->contr->ctrl, ncci->appl->ApplId, skb);
 #endif
+			return(0);
+		case CAPI_CONNECT_B3_IND:
+			event = EV_NC_CONNECT_B3_IND;
+			break;
+		case CAPI_CONNECT_B3_ACTIVE_IND:
+			event = EV_NC_CONNECT_B3_ACTIVE_IND;
+			break;
+		case CAPI_DISCONNECT_B3_IND:
+			event = EV_NC_DISCONNECT_B3_IND;
+			break;
+		case CAPI_RESET_B3_IND:
+			event = EV_NC_RESET_B3_IND;
+			break;
+		case CAPI_CONNECT_B3_CONF:
+			event = EV_NC_CONNECT_B3_CONF;
+			break;
+		case CAPI_DISCONNECT_B3_CONF:
+			event = EV_NC_DISCONNECT_B3_CONF;
+			break;
+		case CAPI_RESET_B3_CONF:
+			event = EV_NC_RESET_B3_CONF;
+			break;
+		default:
+			int_error();
+			return(-EINVAL);
+	}
+	if (FsmEvent(&ncci->ncci_m, event, skb))
+		dev_kfree_skb(skb);
 	return(0);
 }
 
@@ -1095,12 +1359,18 @@ init_ncci(void)
 	ncci_fsm.event_count = EV_NCCI_COUNT;
 	ncci_fsm.strEvent = str_ev_ncci;
 	ncci_fsm.strState = str_st_ncci;
-	
 	FsmNew(&ncci_fsm, fn_ncci_list, FN_NCCI_COUNT);
+
+	ncciD_fsm.state_count = ST_NCCI_COUNT;
+	ncciD_fsm.event_count = EV_NCCI_COUNT;
+	ncciD_fsm.strEvent = str_ev_ncci;
+	ncciD_fsm.strState = str_st_ncci;
+	FsmNew(&ncciD_fsm, fn_ncciD_list, FN_NCCID_COUNT);
 }
 
 void
 free_ncci(void)
 {
 	FsmFree(&ncci_fsm);
+	FsmFree(&ncciD_fsm);
 }

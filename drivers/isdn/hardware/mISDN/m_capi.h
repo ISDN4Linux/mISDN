@@ -1,4 +1,4 @@
-/* $Id: m_capi.h,v 1.5 2003/12/13 00:36:16 keil Exp $
+/* $Id: m_capi.h,v 1.6 2003/12/14 15:20:38 keil Exp $
  *
  * Rewritten CAPI Layer (Layer4 in mISDN)
  * 
@@ -235,6 +235,7 @@ struct _Plci {
 #define PLCI_STATE_ACTIV	1
 #define PLCI_STATE_ALERTING	2
 #define PLCI_STATE_OUTGOING	3
+#define PLCI_STATE_STACKREADY	4
 
 // ---------------------------------------------------------------------------
 // struct AppPlci
@@ -247,6 +248,7 @@ struct _AppPlci {
 	Application_t		*appl;
 	Controller_t		*contr;
 	PLInst_t		*link;
+	_cmsg			*pending;
 	struct list_head	Nccis;
 	struct FsmInst		plci_m;
 	u_char			cause[4];
@@ -266,6 +268,7 @@ struct _Ncci {
 	AppPlci_t		*AppPlci;
 	Application_t		*appl;
 	struct FsmInst		ncci_m;
+	int			savedstate;
 	int			window;
 	u_long			state;
 	ConfQueue_t		xmit_skb_handles[CAPI_MAXDATAWINDOW];

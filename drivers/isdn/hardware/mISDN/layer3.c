@@ -1,4 +1,4 @@
-/* $Id: layer3.c,v 1.10 2003/12/03 14:32:45 keil Exp $
+/* $Id: layer3.c,v 1.11 2003/12/14 15:20:38 keil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -14,7 +14,7 @@
 #include "layer3.h"
 #include "helper.h"
 
-const char *l3_revision = "$Revision: 1.10 $";
+const char *l3_revision = "$Revision: 1.11 $";
 
 static
 struct Fsm l3fsm = {NULL, 0, 0, NULL, NULL};
@@ -565,7 +565,7 @@ init_l3(layer3_t *l3)
 	skb_queue_head_init(&l3->squeue);
 	l3->l3m.fsm = &l3fsm;
 	l3->l3m.state = ST_L3_LC_REL;
-	l3->l3m.debug = 1;
+	l3->l3m.debug = l3->debug;
 	l3->l3m.userdata = l3;
 	l3->l3m.userint = 0;
 	l3->l3m.printdebug = l3m_debug;
@@ -576,8 +576,9 @@ init_l3(layer3_t *l3)
 void
 release_l3(layer3_t *l3)
 {
-	printk(KERN_DEBUG "release_l3(%p) proc(%p) global(%p) dummy(%p)\n",
-		l3, l3->proc, l3->global, l3->dummy);
+	if (l3->l3m.debug)
+		printk(KERN_DEBUG "release_l3(%p) proc(%p) global(%p) dummy(%p)\n",
+			l3, l3->proc, l3->global, l3->dummy);
 	while (l3->proc)
 		release_l3_process(l3->proc);
 	if (l3->global) {

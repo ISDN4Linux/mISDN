@@ -1,4 +1,4 @@
-/* $Id: plci.c,v 1.9 2003/11/21 22:29:41 keil Exp $
+/* $Id: plci.c,v 1.10 2003/12/14 15:20:38 keil Exp $
  *
  */
 
@@ -22,8 +22,9 @@ void plciInit(Controller_t *contr)
 		plci->l3id = MISDN_ID_NONE;
 		INIT_LIST_HEAD(&plci->AppPlcis);
 		plci->contr = contr;
-		printk(KERN_WARNING "%s: %p PLCI(%x) l3id(%x)\n",
-			__FUNCTION__, plci, plci->addr, plci->l3id);
+		if (contr->debug & CAPI_DBG_PLCI)
+			printk(KERN_DEBUG "%s: %p PLCI(%x) l3id(%x)\n",
+				__FUNCTION__, plci, plci->addr, plci->l3id);
 		plci++;
 	}
 }
