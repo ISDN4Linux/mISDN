@@ -1,4 +1,4 @@
-/* $Id: mISDNif.h,v 1.1 2001/11/14 10:41:26 kkeil Exp $
+/* $Id: mISDNif.h,v 1.2 2002/05/01 01:00:40 kkeil Exp $
  *
  */
 
@@ -309,7 +309,6 @@
 #define MAX_DATA_MEM		2080
 #define MAX_HEADER_LEN		4
 #define UPLINK_HEADER_SPACE	22
-#define HISAX_FRAME_MIN		8
 #define IFRAME_HEAD_SIZE	16
 
 /* structure for information exchange between layer/entity boundaries */
@@ -584,7 +583,7 @@ typedef struct _hisax_head {
 	int	dinfo;
 } hisax_head_t;
 
-#define HISAX_HEAD_SIZE		sizeof(hisax_head_t)
+#define HISAX_HEAD_P(s)	((hisax_head_t *)&s->cb[0])
 
 typedef struct _hisaxobject {
 	struct _hisaxobject	*prev;

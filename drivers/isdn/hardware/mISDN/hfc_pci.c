@@ -1,4 +1,4 @@
-/* $Id: hfc_pci.c,v 1.6 2002/04/29 23:26:30 kkeil Exp $
+/* $Id: hfc_pci.c,v 1.7 2002/05/01 01:00:39 kkeil Exp $
 
  * hfc_pci.c     low level driver for CCD's hfc-pci based cards
  *
@@ -39,7 +39,7 @@
 
 extern const char *CardType[];
 
-static const char *hfcpci_revision = "$Revision: 1.6 $";
+static const char *hfcpci_revision = "$Revision: 1.7 $";
 
 /* table entry in the PCI devices list */
 typedef struct {
@@ -1347,9 +1347,7 @@ HFCD_l1hw(hisaxif_t *hif, struct sk_buff *skb)
 
 	if (!hif || !skb)
 		return(ret);
-	hh = (hisax_head_t *)skb->data;
-	if (skb->len < HISAX_FRAME_MIN)
-		return(ret);
+	hh = HISAX_HEAD_P(skb);
 	dch = hif->fdata;
 	hc = dch->inst.data;
 	ret = 0;
@@ -1358,7 +1356,6 @@ HFCD_l1hw(hisaxif_t *hif, struct sk_buff *skb)
 			printk(KERN_WARNING __FUNCTION__": next_skb exist ERROR");
 			return(-EBUSY);
 		}
-		skb_pull(skb, HISAX_HEAD_SIZE);
 		dch->inst.lock(dch->inst.data);
 		if (test_and_set_bit(FLG_TX_BUSY, &dch->DFlags)) {
 			test_and_set_bit(FLG_TX_NEXT, &dch->DFlags);
@@ -1371,7 +1368,8 @@ HFCD_l1hw(hisaxif_t *hif, struct sk_buff *skb)
 			dch->tx_idx = 0;
 			hfcD_send_fifo(dch);
 			dch->inst.unlock(dch->inst.data);
-			return(if_addhead(&dch->inst.up, PH_DATA_CNF,
+			skb_trim(skb, 0);
+			return(if_newhead(&dch->inst.up, PH_DATA_CNF,
 				hh->dinfo, skb));
 		}
 	} else if (hh->prim == (PH_SIGNAL | REQUEST)) {
@@ -1687,9 +1685,7 @@ hfcpci_l2l1(hisaxif_t *hif, struct sk_buff *skb)
 
 	if (!hif || !skb)
 		return(ret);
-	hh = (hisax_head_t *)skb->data;
-	if (skb->len < HISAX_FRAME_MIN)
-		return(ret);
+	hh = HISAX_HEAD_P(skb);
 	bch = hif->fdata;
 	if ((hh->prim == PH_DATA_REQ) ||
 		(hh->prim == (DL_DATA | REQUEST))) {
@@ -1697,7 +1693,6 @@ hfcpci_l2l1(hisaxif_t *hif, struct sk_buff *skb)
 			printk(KERN_WARNING __FUNCTION__": next_skb exist ERROR");
 			return(-EBUSY);
 		}
-		skb_pull(skb, HISAX_HEAD_SIZE);
 		bch->inst.lock(bch->inst.data);
 		if (test_and_set_bit(FLG_TX_BUSY, &bch->Flag)) {
 			test_and_set_bit(FLG_TX_NEXT, &bch->Flag);
@@ -1715,7 +1710,8 @@ hfcpci_l2l1(hisaxif_t *hif, struct sk_buff *skb)
 				hif = &bch->dev->rport.pif;
 			else
 				hif = &bch->inst.up;
-			return(if_addhead(hif, hh->prim | CONFIRM,
+			skb_trim(skb, 0);
+			return(if_newhead(hif, hh->prim | CONFIRM,
 				hh->dinfo, skb));
 		}
 	} else if ((hh->prim == (PH_ACTIVATE | REQUEST)) ||
@@ -1732,7 +1728,7 @@ hfcpci_l2l1(hisaxif_t *hif, struct sk_buff *skb)
 			if (bch->dev)
 				if_link(&bch->dev->rport.pif,
 					hh->prim | CONFIRM, 0, 0, NULL, 0);
-		skb_trim(skb, HISAX_HEAD_SIZE);
+		skb_trim(skb, 0);
 		return(if_newhead(&bch->inst.up, hh->prim | CONFIRM, ret, skb));
 	} else if ((hh->prim == (PH_DEACTIVATE | REQUEST)) ||
 		(hh->prim == (DL_RELEASE | REQUEST)) ||
@@ -1746,7 +1742,7 @@ hfcpci_l2l1(hisaxif_t *hif, struct sk_buff *skb)
 		mode_hfcpci(bch, bch->channel, 0);
 		test_and_clear_bit(BC_FLG_ACTIV, &bch->Flag);
 		bch->inst.unlock(bch->inst.data);
-		skb_trim(skb, HISAX_HEAD_SIZE);
+		skb_trim(skb, 0);
 		if (hh->prim != (MGR_DISCONNECT | REQUEST)) {
 			if (bch->inst.pid.protocol[2] == ISDN_PID_L2_B_RAWDEV)
 				if (bch->dev)
@@ -1863,7 +1859,7 @@ hfcD_rcv(dchannel_t *dch)
 	int		err;
 
 	while ((skb = skb_dequeue(&dch->rqueue))) {
-		err = if_addhead(&dch->inst.up, PH_DATA_IND, (int)skb, skb);
+		err = if_newhead(&dch->inst.up, PH_DATA_IND, (int)skb, skb);
 		if (err < 0) {
 			printk(KERN_WARNING "HiSax: hfcD deliver err %d\n", err);
 			dev_kfree_skb(skb);
@@ -1882,21 +1878,15 @@ hfcD_bh(dchannel_t *dch)
 	if (test_and_clear_bit(D_BLOCKEDATOMIC, &dch->event))
 		hfcD_send_fifo(dch);
 	if (test_and_clear_bit(D_XMTBUFREADY, &dch->event)) {
-		struct sk_buff *skb = dch->next_skb;
-		int	dinfo;
+		struct sk_buff	*skb = dch->next_skb;
+		hisax_head_t	*hh;
 
 		if (skb) {
+			hh = HISAX_HEAD_P(skb);
 			dch->next_skb = NULL;
 			skb_trim(skb, 0);
-			if (skb_headroom(skb) < HISAX_HEAD_SIZE) {
-				int_errtxt("skb %p %d/%d\n",
-					skb, skb_headroom(skb),
-					skb_tailroom(skb));
-				skb_reserve(skb, HISAX_HEAD_SIZE);
-			}
-			dinfo = *((int *)(skb->data - 4));
-			if (if_addhead(&dch->inst.up, PH_DATA_CNF, dinfo,
-				skb))
+			if (if_newhead(&dch->inst.up, PH_DATA_CNF,
+				hh->dinfo, skb))
 				dev_kfree_skb(skb);
 		}
 	}
@@ -1910,7 +1900,7 @@ hfcB_bh(bchannel_t *bch)
 	struct sk_buff	*skb;
 	u_int 		pr;
 	int		ret;
-	int		dinfo;
+	hisax_head_t	*hh;
 	hisaxif_t	*hif;
 
 	if (!bch)
@@ -1930,18 +1920,18 @@ hfcB_bh(bchannel_t *bch)
 	if (test_and_clear_bit(B_XMTBUFREADY, &bch->event)) {
 		skb = bch->next_skb;
 		if (skb) {
+			hh = HISAX_HEAD_P(skb);
 			bch->next_skb = NULL;
 			if (bch->inst.pid.protocol[2] == ISDN_PID_L2_B_TRANS)
 				pr = DL_DATA | CONFIRM;
 			else
 				pr = PH_DATA | CONFIRM;
-			dinfo = *((int *)(skb->data - 4));
 			if ((bch->inst.pid.protocol[2] == ISDN_PID_L2_B_RAWDEV)
 				&& bch->dev)
 				hif = &bch->dev->rport.pif;
 			else
 				hif = &bch->inst.up;
-			if (if_addhead(hif, pr, dinfo, skb))
+			if (if_newhead(hif, pr, hh->dinfo, skb))
 				dev_kfree_skb(skb);
 		}
 	}
@@ -1956,7 +1946,7 @@ hfcB_bh(bchannel_t *bch)
 				pr = DL_DATA | INDICATION;
 			else
 				pr = PH_DATA | INDICATION;
-			ret = if_addhead(hif, pr, DINFO_SKB, skb);
+			ret = if_newhead(hif, pr, DINFO_SKB, skb);
 			if (ret < 0) {
 				printk(KERN_WARNING "hdlc_bh deliver err %d\n",
 					ret);

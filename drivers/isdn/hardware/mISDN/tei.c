@@ -1,4 +1,4 @@
-/* $Id: tei.c,v 1.0 2001/11/02 23:42:27 kkeil Exp $
+/* $Id: tei.c,v 1.1 2002/05/01 01:00:40 kkeil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -13,7 +13,7 @@
 #include "debug.h"
 #include <linux/random.h>
 
-const char *tei_revision = "$Revision: 1.0 $";
+const char *tei_revision = "$Revision: 1.1 $";
 
 #define ID_REQUEST	1
 #define ID_ASSIGNED	2
@@ -355,7 +355,6 @@ tei_ph_data_ind(teimgr_t *tm, int dtyp, struct sk_buff *skb)
 	if (test_bit(FLG_FIXED_TEI, &tm->l2->flag) &&
 		!test_bit(FLG_LAPD_NET, &tm->l2->flag))
 		return(ret);
-	skb_pull(skb, HISAX_HEAD_SIZE);
 	if (skb->len < 8) {
 		tm->tei_m.printdebug(&tm->tei_m,
 			"short mgr frame %ld/8", skb->len);
@@ -406,10 +405,8 @@ l2_tei(teimgr_t *tm, struct sk_buff *skb)
 
 	if (!tm || !skb)
 		return(ret);
-	hh = (hisax_head_t *)skb->data;
+	hh = HISAX_HEAD_P(skb);
 	printk(KERN_DEBUG __FUNCTION__ ": prim(%x)\n", hh->prim);
-	if (skb->len < HISAX_FRAME_MIN)
-		return(ret);
 	switch(hh->prim) {
 	    case (MDL_UNITDATA | INDICATION):
 	    	return(tei_ph_data_ind(tm, hh->dinfo, skb));
@@ -418,8 +415,8 @@ l2_tei(teimgr_t *tm, struct sk_buff *skb)
 			if (tm->debug)
 				tm->tei_m.printdebug(&tm->tei_m,
 					"fixed assign tei %d", tm->l2->tei);
-			skb_trim(skb, HISAX_HEAD_SIZE);
-			hisax_newhead(MDL_ASSIGN | REQUEST, tm->l2->tei, skb);
+			skb_trim(skb, 0);
+			hisax_sethead(MDL_ASSIGN | REQUEST, tm->l2->tei, skb);
 			if (!tei_l2(tm->l2, skb))
 				return(0);
 //			cs->cardmsg(cs, MDL_ASSIGN | REQUEST, NULL);

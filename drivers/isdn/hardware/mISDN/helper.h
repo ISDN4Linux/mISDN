@@ -1,4 +1,4 @@
-/* $Id: helper.h,v 1.0 2001/11/02 23:42:26 kkeil Exp $
+/* $Id: helper.h,v 1.1 2002/05/01 01:00:39 kkeil Exp $
  *
  *   Basic declarations, defines and prototypes
  *
@@ -63,9 +63,9 @@ extern int get_up_layer(int);
 extern int get_down_layer(int);
 extern int layermask2layer(int);
 
-extern __inline__ void hisax_newhead(u_int prim, int dinfo, struct sk_buff *skb)
+extern __inline__ void hisax_sethead(u_int prim, int dinfo, struct sk_buff *skb)
 {
-	hisax_head_t *hh = (hisax_head_t *)skb->data;
+	hisax_head_t *hh = HISAX_HEAD_P(skb);
 
 	hh->prim = prim;
 	hh->dinfo = dinfo;
@@ -76,25 +76,7 @@ extern __inline__ int if_newhead(hisaxif_t *i, u_int prim, int dinfo,
 {
 	if (!i->func || !skb)
 		return(-ENXIO);
-	hisax_newhead(prim, dinfo, skb);
-	return(i->func(i, skb));
-}
-
-extern __inline__ void hisax_addhead(u_int prim, int dinfo, struct sk_buff *skb)
-{
-	hisax_head_t *hh = (hisax_head_t *)skb_push(skb, HISAX_HEAD_SIZE);
-
-	hh->prim = prim;
-	hh->dinfo = dinfo;
-}
-
-
-extern __inline__ int if_addhead(hisaxif_t *i, u_int prim, int dinfo,
-	struct sk_buff *skb)
-{
-	if (!i->func || !skb)
-		return(-ENXIO);
-	hisax_addhead(prim, dinfo, skb);
+	hisax_sethead(prim, dinfo, skb);
 	return(i->func(i, skb));
 }
 
@@ -104,15 +86,15 @@ extern __inline__ struct sk_buff *create_link_skb(u_int prim, int dinfo,
 {
 	struct sk_buff	*skb;
 
-	if (!(skb = alloc_skb(len + HISAX_HEAD_SIZE + reserve, GFP_ATOMIC))) {
-		printk(KERN_WARNING __FUNCTION__": no skb size %d+%d+%d\n",
-			len, HISAX_HEAD_SIZE, reserve);
+	if (!(skb = alloc_skb(len + reserve, GFP_ATOMIC))) {
+		printk(KERN_WARNING __FUNCTION__": no skb size %d+%d\n",
+			len, reserve);
 		return(NULL);
 	} else
-		skb_reserve(skb, reserve + HISAX_HEAD_SIZE);
+		skb_reserve(skb, reserve);
 	if (len)
 		memcpy(skb_put(skb, len), arg, len);
-	hisax_addhead(prim, dinfo, skb);
+	hisax_sethead(prim, dinfo, skb);
 	return(skb);
 }
 

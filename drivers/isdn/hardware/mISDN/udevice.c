@@ -1,4 +1,4 @@
-/* $Id: udevice.c,v 1.1 2001/11/14 10:41:26 kkeil Exp $
+/* $Id: udevice.c,v 1.2 2002/05/01 01:00:39 kkeil Exp $
  *
  * Copyright 2000  by Karsten Keil <kkeil@isdn4linux.de>
  *
@@ -178,17 +178,13 @@ hisax_rdata_raw(hisaxif_t *hif, struct sk_buff *skb) {
 	if (!hif || !hif->fdata || !skb)
 		return(-EINVAL);
 	dev = hif->fdata;
-	if (skb->len < HISAX_FRAME_MIN)
-		return(-EINVAL);
-	hh = (hisax_head_t *)skb->data;
+	hh = HISAX_HEAD_P(skb);
 	if (hh->prim == (PH_DATA | INDICATION)) {
 		if (test_bit(FLG_HISAXPORT_OPEN, &dev->rport.Flag)) {
-			skb_pull(skb, HISAX_HEAD_SIZE);
 			spin_lock_irqsave(&dev->rport.lock, flags);
 			if (skb->len < (dev->rport.size - dev->rport.cnt)) {
 				p_memcpy_i(&dev->rport, skb->data, skb->len);
 			} else {
-				skb_push(skb, HISAX_HEAD_SIZE);
 				retval = -ENOSPC;
 			}
 			spin_unlock_irqrestore(&dev->rport.lock, flags);
@@ -1429,16 +1425,14 @@ hisax_wdata(hisaxdevice_t *dev) {
 			if (test_bit(FLG_HISAXPORT_ENABLED, &dev->wport.Flag)) {
 				struct sk_buff	*skb;
 
-				skb = alloc_skb(used + HISAX_HEAD_SIZE,
-					GFP_ATOMIC);
+				skb = alloc_skb(used, GFP_ATOMIC);
 				if (skb) {
-					skb_reserve(skb, HISAX_HEAD_SIZE);
 					p_memcpy_o(&dev->wport, skb_put(skb,
 						used), used);
 					test_and_set_bit(FLG_HISAXPORT_BLOCK,
 						&dev->wport.Flag);
 					spin_unlock_irqrestore(&dev->wport.lock, flags);
-					used = if_addhead(&dev->wport.pif,
+					used = if_newhead(&dev->wport.pif,
 						PH_DATA | REQUEST, (int)skb, skb);
 					if (used) {
 						printk(KERN_WARNING __FUNCTION__
@@ -1450,7 +1444,7 @@ hisax_wdata(hisaxdevice_t *dev) {
 				} else {
 					printk(KERN_WARNING __FUNCTION__
 						": dev(%d) no skb(%d)\n",
-						dev->minor, used + HISAX_HEAD_SIZE);
+						dev->minor, used);
 					p_pull_o(&dev->wport, used);
 				}
 			} else {
@@ -1852,10 +1846,8 @@ from_up_down(hisaxif_t *hif, struct sk_buff *skb) {
 	if (!hif || !hif->fdata || !skb)
 		return(-EINVAL);
 	dl = hif->fdata;
-	if (skb->len < HISAX_FRAME_MIN)
-		return(-EINVAL);
-	hh = (hisax_head_t *)skb->data;
-	off.data.p = skb_pull(skb, sizeof(hisax_head_t));
+	hh = HISAX_HEAD_P(skb);
+	off.data.p = skb->data;
 	off.len = skb->len;
 	off.addr = dl->iaddr | IF_TYPE(hif);
 	off.prim = hh->prim;

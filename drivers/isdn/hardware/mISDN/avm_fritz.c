@@ -1,4 +1,4 @@
-/* $Id: avm_fritz.c,v 1.1 2001/12/02 13:08:08 kkeil Exp $
+/* $Id: avm_fritz.c,v 1.2 2002/05/01 01:00:39 kkeil Exp $
  *
  * fritz_pci.c    low level stuff for AVM Fritz!PCI and ISA PnP isdn cards
  *              Thanks to AVM, Berlin for informations
@@ -18,7 +18,7 @@
 #include "helper.h"
 #include "debug.h"
 
-static const char *avm_pci_rev = "$Revision: 1.1 $";
+static const char *avm_pci_rev = "$Revision: 1.2 $";
 
 #define ISDN_CTYPE_FRITZPCI 1
 
@@ -580,9 +580,7 @@ hdlc_down(hisaxif_t *hif, struct sk_buff *skb)
 
 	if (!hif || !skb)
 		return(ret);
-	hh = (hisax_head_t *)skb->data;
-	if (skb->len < HISAX_FRAME_MIN)
-		return(ret);
+	hh = HISAX_HEAD_P(skb);
 	bch = hif->fdata;
 	if ((hh->prim == PH_DATA_REQ) ||
 		(hh->prim == (DL_DATA | REQUEST))) {
@@ -590,7 +588,6 @@ hdlc_down(hisaxif_t *hif, struct sk_buff *skb)
 			debugprint(&bch->inst, " l2l1 next_skb exist this shouldn't happen");
 			return(-EBUSY);
 		}
-		skb_pull(skb, HISAX_HEAD_SIZE);
 		bch->inst.lock(bch->inst.data);
 		if (test_and_set_bit(FLG_TX_BUSY, &bch->Flag)) {
 			test_and_set_bit(FLG_TX_NEXT, &bch->Flag);
@@ -603,7 +600,8 @@ hdlc_down(hisaxif_t *hif, struct sk_buff *skb)
 			bch->tx_idx = 0;
 			hdlc_fill_fifo(bch);
 			bch->inst.unlock(bch->inst.data);
-			return(if_addhead(&bch->inst.up, hh->prim | CONFIRM,
+			skb_trim(skb, 0);
+			return(if_newhead(&bch->inst.up, hh->prim | CONFIRM,
 				DINFO_SKB, skb));
 		}
 	} else if ((hh->prim == (PH_ACTIVATE | REQUEST)) ||
@@ -616,7 +614,7 @@ hdlc_down(hisaxif_t *hif, struct sk_buff *skb)
 				bch->inst.pid.protocol[1]);
 			bch->inst.unlock(bch->inst.data);
 		}
-		skb_trim(skb, HISAX_HEAD_SIZE);
+		skb_trim(skb, 0);
 		return(if_newhead(&bch->inst.up, hh->prim | CONFIRM, ret, skb));
 	} else if ((hh->prim == (PH_DEACTIVATE | REQUEST)) ||
 		(hh->prim == (DL_RELEASE | REQUEST)) ||
@@ -630,7 +628,7 @@ hdlc_down(hisaxif_t *hif, struct sk_buff *skb)
 		modehdlc(bch, bch->channel, 0);
 		test_and_clear_bit(BC_FLG_ACTIV, &bch->Flag);
 		bch->inst.unlock(bch->inst.data);
-		skb_trim(skb, HISAX_HEAD_SIZE);
+		skb_trim(skb, 0);
 		if (hh->prim != (MGR_DISCONNECT | REQUEST))
 			if (!if_newhead(&bch->inst.up, hh->prim | CONFIRM, 0, skb))
 				return(0);
@@ -665,7 +663,7 @@ hdlc_bh(bchannel_t *bch)
 				pr = DL_DATA | CONFIRM;
 			else
 				pr = PH_DATA | CONFIRM;
-			if (if_addhead(&bch->inst.up, pr, DINFO_SKB, skb))
+			if (if_newhead(&bch->inst.up, pr, DINFO_SKB, skb))
 				dev_kfree_skb(skb);
 		}
 	}
@@ -675,7 +673,7 @@ hdlc_bh(bchannel_t *bch)
 				pr = DL_DATA | INDICATION;
 			else
 				pr = PH_DATA | INDICATION;
-			ret = if_addhead(&bch->inst.up, pr, DINFO_SKB, skb);
+			ret = if_newhead(&bch->inst.up, pr, DINFO_SKB, skb);
 			if (ret < 0) {
 				printk(KERN_WARNING "hdlc_bh deliver err %d\n",
 					ret);

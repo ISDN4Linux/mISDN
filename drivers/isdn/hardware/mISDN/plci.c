@@ -1,4 +1,4 @@
-/* $Id: plci.c,v 1.0 2001/11/02 23:42:27 kkeil Exp $
+/* $Id: plci.c,v 1.1 2002/05/01 01:00:40 kkeil Exp $
  *
  */
 
@@ -132,15 +132,14 @@ int plciL4L3(Plci_t *plci, __u32 prim, int len, void *arg)
 	int	err;
 	struct sk_buff *skb;
 
-	if (!(skb = alloc_skb(len + HISAX_HEAD_SIZE + MY_RESERVE, GFP_ATOMIC))) {
-		printk(KERN_WARNING __FUNCTION__": no skb size %d+%d+%d\n",
-			len, HISAX_HEAD_SIZE, MY_RESERVE);
+	if (!(skb = alloc_skb(len + MY_RESERVE, GFP_ATOMIC))) {
+		printk(KERN_WARNING __FUNCTION__": no skb size %d+%d\n",
+			len, MY_RESERVE);
 		return(-ENOMEM);
 	} else
-		skb_reserve(skb, MY_RESERVE + HISAX_HEAD_SIZE);
+		skb_reserve(skb, MY_RESERVE);
 	if (len)
 		memcpy(skb_put(skb, len), arg, len);
-	skb_push(skb, HISAX_HEAD_SIZE);
 	err = contrL4L3(plci->contr, prim, plci->adrPLCI, skb);
 	if (err)
 		dev_kfree_skb(skb);

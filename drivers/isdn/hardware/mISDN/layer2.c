@@ -1,4 +1,4 @@
-/* $Id: layer2.c,v 1.1 2001/11/14 10:41:26 kkeil Exp $
+/* $Id: layer2.c,v 1.2 2002/05/01 01:00:40 kkeil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -12,7 +12,7 @@
 #include "helper.h"
 #include "debug.h"
 
-const char *l2_revision = "$Revision: 1.1 $";
+const char *l2_revision = "$Revision: 1.2 $";
 
 static void l2m_debug(struct FsmInst *fi, char *fmt, ...);
 
@@ -129,7 +129,7 @@ l2down_skb(layer2_t *l2, struct sk_buff *skb) {
 static int
 l2down_raw(layer2_t *l2, struct sk_buff *skb)
 {
-	hisax_head_t *hh = (hisax_head_t *)skb->data;
+	hisax_head_t *hh = HISAX_HEAD_P(skb);
 
 	if (hh->prim == PH_DATA_REQ) {
 		if (test_and_set_bit(FLG_L1_BUSY, &l2->flag)) {
@@ -144,7 +144,7 @@ l2down_raw(layer2_t *l2, struct sk_buff *skb)
 static int
 l2down(layer2_t *l2, u_int prim, int dinfo, struct sk_buff *skb)
 {
-	hisax_newhead(prim, dinfo, skb);
+	hisax_sethead(prim, dinfo, skb);
 	return(l2down_raw(l2, skb));
 }
 
@@ -503,7 +503,7 @@ setva(layer2_t *l2, unsigned int nr)
 		else
 			l2->va %= 8;
 		if (l2->windowar[l2->sow]) {
-			skb_trim(l2->windowar[l2->sow], HISAX_HEAD_SIZE);
+			skb_trim(l2->windowar[l2->sow], 0);
 			if (l2up(l2, DL_DATA | CONFIRM, (int)l2->windowar[l2->sow],
 				l2->windowar[l2->sow]))
 				dev_kfree_skb(l2->windowar[l2->sow]);
@@ -523,14 +523,11 @@ send_uframe(layer2_t *l2, struct sk_buff *skb, u_char cmd, u_char cr)
 	tmp[i++] = cmd;
 	if (skb)
 		skb_trim(skb, 0);
-	else if ((skb = alloc_skb(i + HISAX_HEAD_SIZE, GFP_ATOMIC)))
-		skb_reserve(skb, HISAX_HEAD_SIZE);
-	else {
+	else if (!(skb = alloc_skb(i, GFP_ATOMIC))) {
 		printk(KERN_WARNING __FUNCTION__": can't alloc skbuff\n");
 		return;
 	}
 	memcpy(skb_put(skb, i), tmp, i);
-	skb_push(skb, HISAX_HEAD_SIZE);
 	enqueue_super(l2, skb);
 }
 
@@ -669,7 +666,7 @@ l2_mdl_assign(struct FsmInst *fi, int event, void *arg)
 
 	FsmChangeState(fi, ST_L2_3);
 	skb_trim(skb, 0);
-	hh = (hisax_head_t *)skb_put(skb, HISAX_HEAD_SIZE);
+	hh = HISAX_HEAD_P(skb);
 	hh->prim = MDL_ASSIGN | INDICATION;
 	hh->dinfo = 0;
 	if (l2_tei(l2->tm, skb))
@@ -711,9 +708,7 @@ tx_ui(layer2_t *l2)
 		header[1] = 0xff; /* tei 127 */
 	header[i++] = UI;
 	while ((skb = skb_dequeue(&l2->ui_queue))) {
-		skb_pull(skb, HISAX_HEAD_SIZE);
 		memcpy(skb_push(skb, i), header, i);
-		skb_push(skb, HISAX_HEAD_SIZE);
 		enqueue_ui(l2, skb);
 	}
 }
@@ -738,7 +733,6 @@ l2_got_ui(struct FsmInst *fi, int event, void *arg)
 /*
  *		in states 1-3 for broadcast
  */
-	skb_push(skb, HISAX_HEAD_SIZE);
 	if (l2up(l2, DL_UNITDATA | INDICATION, DINFO_SKB, skb))
 		dev_kfree_skb(skb);
 }
@@ -786,7 +780,7 @@ l2_release(struct FsmInst *fi, int event, void *arg)
 	layer2_t *l2 = fi->userdata;
 	struct sk_buff *skb = arg;
 
-	skb_trim(skb, HISAX_HEAD_SIZE);
+	skb_trim(skb, 0);
 	if (l2up(l2, DL_RELEASE | CONFIRM, 0, skb))
 		dev_kfree_skb(skb);
 }
@@ -834,7 +828,6 @@ l2_start_multi(struct FsmInst *fi, int event, void *arg)
 	FsmChangeState(fi, ST_L2_7);
 	FsmAddTimer(&l2->t203, l2->T203, EV_L2_T203, NULL, 3);
 	skb_trim(skb, 0);
-	skb_push(skb, HISAX_HEAD_SIZE);
 	if (l2up(l2, DL_ESTABLISH | INDICATION, 0, skb))
 		dev_kfree_skb(skb);
 }
@@ -1011,13 +1004,11 @@ enquiry_cr(layer2_t *l2, u_char typ, u_char cr, u_char pf)
 		tmp[i++] = (l2->vr << 1) | (pf ? 1 : 0);
 	} else
 		tmp[i++] = (l2->vr << 5) | typ | (pf ? 0x10 : 0);
-	if (!(skb = alloc_skb(i + HISAX_HEAD_SIZE, GFP_ATOMIC))) {
+	if (!(skb = alloc_skb(i, GFP_ATOMIC))) {
 		printk(KERN_WARNING "isdnl2 can't alloc sbbuff for enquiry_cr\n");
 		return;
-	} else
-		skb_reserve(skb, HISAX_HEAD_SIZE);
+	}
 	memcpy(skb_put(skb, i), tmp, i);
-	skb_push(skb, HISAX_HEAD_SIZE);
 	enqueue_super(l2, skb);
 }
 
@@ -1210,7 +1201,6 @@ l2_got_iframe(struct FsmInst *fi, int event, void *arg)
 		else
 			test_and_set_bit(FLG_ACK_PEND, &l2->flag);
 		skb_pull(skb, l2headersize(l2, 0));
-		skb_push(skb, HISAX_HEAD_SIZE);
 		if (l2up(l2, DL_DATA | INDICATION, DINFO_SKB, skb))
 			dev_kfree_skb(skb);
 	} else {
@@ -1249,7 +1239,7 @@ l2_got_tei(struct FsmInst *fi, int event, void *arg)
 {
 	layer2_t	*l2 = fi->userdata;
 	struct sk_buff	*skb = arg;
-	hisax_head_t	*hh = (hisax_head_t *)skb->data;
+	hisax_head_t	*hh = HISAX_HEAD_P(skb);
 
 	l2->tei = hh->dinfo;
 	dev_kfree_skb(skb);
@@ -1405,25 +1395,22 @@ l2_pull_iqueue(struct FsmInst *fi, int event, void *arg)
 	restore_flags(flags);
 
 	p1 = skb_headroom(skb);
-	skb_pull(skb, HISAX_HEAD_SIZE);
 	if (p1 >= i)
 		memcpy(skb_push(skb, i), header, i);
 	else {
 		printk(KERN_WARNING
 		"isdnl2 pull_iqueue skb header(%d/%d) too short\n", i, p1);
 		oskb = skb;
-		skb = alloc_skb(oskb->len + i + HISAX_HEAD_SIZE, GFP_ATOMIC);
+		skb = alloc_skb(oskb->len + i, GFP_ATOMIC);
 		if (!skb) {
 			dev_kfree_skb(oskb);
 			printk(KERN_WARNING __FUNCTION__": no skb mem\n");
 			return;
 		}
-		skb_reserve(skb, HISAX_HEAD_SIZE);
 		memcpy(skb_put(skb, i), header, i);
 		memcpy(skb_put(skb, oskb->len), oskb->data, oskb->len);
 		dev_kfree_skb(oskb);
 	}
-	skb_push(skb, HISAX_HEAD_SIZE);
 	l2down(l2, PH_DATA_REQ, DINFO_SKB, skb);
 	test_and_clear_bit(FLG_ACK_PEND, &l2->flag);
 	if (!test_and_set_bit(FLG_T200_RUN, &l2->flag)) {
@@ -1523,7 +1510,7 @@ l2_st3_tei_remove(struct FsmInst *fi, int event, void *arg)
 
 	discard_queue(&l2->ui_queue);
 	l2->tei = -1;
-	skb_trim(skb, HISAX_HEAD_SIZE);
+	skb_trim(skb, 0);
 	if (l2up(l2, DL_RELEASE | INDICATION, 0, skb))
 		dev_kfree_skb(skb);
 	FsmChangeState(fi, ST_L2_1);
@@ -1776,14 +1763,13 @@ static struct FsmNode L2FnList[] =
 
 static int
 ph_data_indication(layer2_t *l2, hisax_head_t *hh, struct sk_buff *skb) {
-	u_char *datap;
+	u_char *datap = skb->data;
 	int ret = -EINVAL;
 	int psapi, ptei;
 	int l;
 	int c = 0;
 
 	
-	datap = skb_pull(skb, HISAX_HEAD_SIZE);
 	l = l2addrsize(l2);
 	if (skb->len <= l) {
 		FsmEvent(&l2->l2m, EV_L2_FRAME_ERROR, (void *) 'N');
@@ -1802,7 +1788,6 @@ ph_data_indication(layer2_t *l2, hisax_head_t *hh, struct sk_buff *skb) {
 			return(ret);
 		if (ptei == GROUP_TEI) {
 			if (psapi == TEI_SAPI) {
-				skb_push(skb, HISAX_HEAD_SIZE);
 				hh->prim = MDL_UNITDATA | INDICATION;
 				return(l2_tei(l2->tm, skb));
 			}
@@ -1856,10 +1841,8 @@ l2from_down(hisaxif_t *hif, struct sk_buff *askb)
 	if (!hif || !askb)
 		return(-EINVAL);
 	l2 = hif->fdata;
-	hh = (hisax_head_t *)askb->data;
+	hh = HISAX_HEAD_P(askb);
 	printk(KERN_DEBUG __FUNCTION__ ": prim(%x)\n", hh->prim);
-	if (askb->len < HISAX_FRAME_MIN)
-		return(-EINVAL);
 	if (!l2) {
 		if (hif->next && hif->next->func)
 			ret = hif->next->func(hif->next, askb);
@@ -1870,7 +1853,7 @@ l2from_down(hisaxif_t *hif, struct sk_buff *askb)
 	if (hh->prim == (MDL_FINDTEI | REQUEST)) {
 		if (test_bit(FLG_LAPD, &l2->flag)) {
 			if (l2->tei == hh->dinfo) {
-				void *p = ((u_char *)askb->data + HISAX_HEAD_SIZE);
+				void *p = ((u_char *)askb->data);
 				teimgr_t **tp = p;
 				if (tp) {
 					*tp = l2->tm;
@@ -1940,10 +1923,8 @@ l2from_up(hisaxif_t *hif, struct sk_buff *skb) {
 	if (!hif || !skb)
 		return(ret);
 	l2 = hif->fdata;
-	hh = (hisax_head_t *)skb->data;
+	hh = HISAX_HEAD_P(skb);
 	printk(KERN_DEBUG __FUNCTION__ ": prim(%x)\n", hh->prim);
-	if (skb->len < HISAX_FRAME_MIN)
-		return(ret);
 	if (!l2)
 		return(ret);
 	switch (hh->prim) {
@@ -1996,14 +1977,13 @@ l2from_up(hisaxif_t *hif, struct sk_buff *skb) {
 int
 tei_l2(layer2_t *l2, struct sk_buff *skb)
 {
-	hisax_head_t	*hh = (hisax_head_t *)skb->data;
+	hisax_head_t	*hh;
 	int		ret = -EINVAL;
 
 	if (!l2 || !skb)
 		return(ret);
+	hh = HISAX_HEAD_P(skb);
 	printk(KERN_DEBUG __FUNCTION__ ": prim(%x)\n", hh->prim);
-	if (skb->len < HISAX_FRAME_MIN)
-		return(ret);
 	switch(hh->prim) {
 	    case (MDL_UNITDATA | REQUEST):
 		ret = l2down(l2, PH_DATA_REQ, hh->dinfo, skb);

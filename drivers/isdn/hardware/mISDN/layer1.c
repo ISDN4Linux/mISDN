@@ -1,4 +1,4 @@
-/* $Id: layer1.c,v 1.0 2001/11/02 23:42:26 kkeil Exp $
+/* $Id: layer1.c,v 1.1 2002/05/01 01:00:39 kkeil Exp $
  *
  * hisax_l1.c     common low level stuff for I.430 layer1
  *
@@ -10,7 +10,7 @@
  *
  */
 
-const char *l1_revision = "$Revision: 1.0 $";
+const char *l1_revision = "$Revision: 1.1 $";
 
 #include <linux/config.h>
 #include <linux/module.h>
@@ -501,9 +501,7 @@ l1from_up(hisaxif_t *hif, struct sk_buff *skb)
 	if (!hif || !hif->fdata || !skb)
 		return(-EINVAL);
 	l1 = hif->fdata;
-	if (skb->len < HISAX_FRAME_MIN)
-		return(-EINVAL);
-	hh = (hisax_head_t *)skb->data;
+	hh = HISAX_HEAD_P(skb);
 	switch(hh->prim) {
 		case (PH_DATA | REQUEST):
 		case (PH_CONTROL | REQUEST):
@@ -549,9 +547,7 @@ l1from_down(hisaxif_t *hif,  struct sk_buff *skb)
 	if (!hif || !hif->fdata || !skb)
 		return(-EINVAL);
 	l1 = hif->fdata;
-	if (skb->len < HISAX_FRAME_MIN)
-		return(-EINVAL);
-	hh = (hisax_head_t *)skb->data;
+	hh = HISAX_HEAD_P(skb);
 	if (hh->prim == PH_DATA_IND) {
 		if (test_bit(FLG_L1_ACTTIMER, &l1->Flags))
 			FsmEvent(&l1->l1m, EV_TIMER_ACT, NULL);

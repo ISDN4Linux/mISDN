@@ -1,4 +1,4 @@
-/* $Id: isac.c,v 1.0 2001/11/02 23:42:27 kkeil Exp $
+/* $Id: isac.c,v 1.1 2002/05/01 01:00:40 kkeil Exp $
  *
  * isac.c   ISAC specific routines
  *
@@ -97,7 +97,7 @@ isac_rcv(dchannel_t *dch)
 	int		err;
 
 	while ((skb = skb_dequeue(&dch->rqueue))) {
-		err = if_addhead(&dch->inst.up, PH_DATA_IND, DINFO_SKB, skb);
+		err = if_newhead(&dch->inst.up, PH_DATA_IND, DINFO_SKB, skb);
 		if (err < 0) {
 			printk(KERN_WARNING "HiSax: isac deliver err %d\n", err);
 			dev_kfree_skb(skb);
@@ -130,13 +130,7 @@ isac_bh(dchannel_t *dch)
 		if (skb) {
 			dch->next_skb = NULL;
 			skb_trim(skb, 0);
-			if (skb_headroom(skb) < HISAX_HEAD_SIZE) {
-				int_errtxt("skb %p %d/%d\n",
-					skb, skb_headroom(skb),
-					skb_tailroom(skb));
-				skb_reserve(skb, HISAX_HEAD_SIZE);
-			}
-			if (if_addhead(&dch->inst.up, PH_DATA_CNF, DINFO_SKB,
+			if (if_newhead(&dch->inst.up, PH_DATA_CNF, DINFO_SKB,
 				skb))
 				dev_kfree_skb(skb);
 		}
@@ -504,9 +498,7 @@ ISAC_l1hw(hisaxif_t *hif, struct sk_buff *skb)
 
 	if (!hif || !skb)
 		return(ret);
-	hh = (hisax_head_t *)skb->data;
-	if (skb->len < HISAX_FRAME_MIN)
-		return(ret);
+	hh = HISAX_HEAD_P(skb);
 	dch = hif->fdata;
 	ret = 0;
 	if (hh->prim == PH_DATA_REQ) {
@@ -514,7 +506,6 @@ ISAC_l1hw(hisaxif_t *hif, struct sk_buff *skb)
 			debugprint(&dch->inst, " l2l1 next_skb exist this shouldn't happen");
 			return(-EBUSY);
 		}
-		skb_pull(skb, HISAX_HEAD_SIZE);
 		dch->inst.lock(dch->inst.data);
 		if (test_and_set_bit(FLG_TX_BUSY, &dch->DFlags)) {
 			test_and_set_bit(FLG_TX_NEXT, &dch->DFlags);
@@ -527,7 +518,7 @@ ISAC_l1hw(hisaxif_t *hif, struct sk_buff *skb)
 			dch->tx_idx = 0;
 			isac_fill_fifo(dch);
 			dch->inst.unlock(dch->inst.data);
-			return(if_addhead(&dch->inst.up, PH_DATA_CNF,
+			return(if_newhead(&dch->inst.up, PH_DATA_CNF,
 				DINFO_SKB, skb));
 		}
 	} else if (hh->prim == (PH_SIGNAL | REQUEST)) {

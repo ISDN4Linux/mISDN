@@ -1,4 +1,4 @@
-/* $Id: isar.c,v 1.0 2001/11/02 23:42:27 kkeil Exp $
+/* $Id: isar.c,v 1.1 2002/05/01 01:00:40 kkeil Exp $
  *
  * isar.c   ISAR (Siemens PSB 7110) specific routines
  *
@@ -438,7 +438,7 @@ isar_bh(bchannel_t *bch)
 				pr = DL_DATA | CONFIRM;
 			else
 				pr = PH_DATA | CONFIRM;
-			if (if_addhead(&bch->inst.up, pr, DINFO_SKB, skb))
+			if (if_newhead(&bch->inst.up, pr, DINFO_SKB, skb))
 				dev_kfree_skb(skb);
 		}
 	}
@@ -448,7 +448,7 @@ isar_bh(bchannel_t *bch)
 				pr = DL_DATA | INDICATION;
 			else
 				pr = PH_DATA | INDICATION;
-			ret = if_addhead(&bch->inst.up, pr, DINFO_SKB, skb);
+			ret = if_newhead(&bch->inst.up, pr, DINFO_SKB, skb);
 			if (ret < 0) {
 				printk(KERN_WARNING "HiSax: isar deliver err %d\n",
 					ret);
@@ -1606,9 +1606,7 @@ isar_down(hisaxif_t *hif, struct sk_buff *skb)
 
 	if (!hif || !skb)
 		return(ret);
-	hh = (hisax_head_t *)skb->data;
-	if (skb->len < HISAX_FRAME_MIN)
-		return(ret);
+	hh = HISAX_HEAD_P(skb);
 	bch = hif->fdata;
 	ret = 0;
 	if ((hh->prim == PH_DATA_REQ) ||
@@ -1617,7 +1615,6 @@ isar_down(hisaxif_t *hif, struct sk_buff *skb)
 			debugprint(&bch->inst, " l2l1 next_skb exist this shouldn't happen");
 			return(-EBUSY);
 		}
-		skb_pull(skb, HISAX_HEAD_SIZE);
 		bch->inst.lock(bch->inst.data);
 		if (test_and_set_bit(FLG_TX_BUSY, &bch->Flag)) {
 			test_and_set_bit(FLG_TX_NEXT, &bch->Flag);
@@ -1630,7 +1627,8 @@ isar_down(hisaxif_t *hif, struct sk_buff *skb)
 			bch->tx_idx = 0;
 			isar_fill_fifo(bch);
 			bch->inst.unlock(bch->inst.data);
-			return(if_addhead(&bch->inst.up, hh->prim | CONFIRM,
+			skb_trim(skb, 0);
+			return(if_newhead(&bch->inst.up, hh->prim | CONFIRM,
 				DINFO_SKB, skb));
 		}
 	} else if ((hh->prim == (PH_ACTIVATE | REQUEST)) ||
@@ -1643,7 +1641,7 @@ isar_down(hisaxif_t *hif, struct sk_buff *skb)
 				bch->inst.pid.protocol[1], NULL);
 			bch->inst.unlock(bch->inst.data);
 		}
-		skb_trim(skb, HISAX_HEAD_SIZE);
+		skb_trim(skb, 0);
 		return(if_newhead(&bch->inst.up, hh->prim | CONFIRM, ret, skb));
 	} else if ((hh->prim == (PH_DEACTIVATE | REQUEST)) ||
 		(hh->prim == (DL_RELEASE | REQUEST)) ||
@@ -1657,7 +1655,7 @@ isar_down(hisaxif_t *hif, struct sk_buff *skb)
 		modeisar(bch, bch->channel, 0, NULL);
 		test_and_clear_bit(BC_FLG_ACTIV, &bch->Flag);
 		bch->inst.unlock(bch->inst.data);
-		skb_trim(skb, HISAX_HEAD_SIZE);
+		skb_trim(skb, 0);
 		if (hh->prim != (MGR_DISCONNECT | REQUEST))
 			if (!if_newhead(&bch->inst.up, hh->prim | CONFIRM, 0, skb))
 				return(0);
@@ -1665,7 +1663,6 @@ isar_down(hisaxif_t *hif, struct sk_buff *skb)
 		int  *val;
 		int  len;
 
-		skb_pull(skb, HISAX_HEAD_SIZE);
 		val = (int *)skb->data;
 		if ((*val & ~TOUCH_TONE_MASK)==TOUCH_TONE_VAL) {
 			if (bch->protocol == ISDN_PID_L1_B_TRANS_TTS) {
@@ -1673,7 +1670,7 @@ isar_down(hisaxif_t *hif, struct sk_buff *skb)
 				isar_pump_cmd(bch, PCTRL_CMD_TDTMF, (*val & 0xff));
 				bch->inst.unlock(bch->inst.data);
 				skb_trim(skb, 0);
-				if (!if_addhead(&bch->inst.up, PH_CONTROL |
+				if (!if_newhead(&bch->inst.up, PH_CONTROL |
 					CONFIRM, 0, skb))
 					return(0);
 			} else {
@@ -1689,7 +1686,7 @@ isar_down(hisaxif_t *hif, struct sk_buff *skb)
 			}
 			fw_p = firmware;
 			skb_trim(skb, 0);
-			if(!if_addhead(&bch->inst.up, PH_CONTROL | CONFIRM,
+			if(!if_newhead(&bch->inst.up, PH_CONTROL | CONFIRM,
 				0, skb))
 				return(0);
 		} else if (hh->dinfo == HW_FIRM_DATA) {
@@ -1697,7 +1694,7 @@ isar_down(hisaxif_t *hif, struct sk_buff *skb)
 			memcpy(fw_p, val, len);
 			fw_p += len;
 			skb_trim(skb, 0);
-			if(!if_addhead(&bch->inst.up, PH_CONTROL | CONFIRM,
+			if(!if_newhead(&bch->inst.up, PH_CONTROL | CONFIRM,
 				0, skb))
 				return(0);
 		} else if (hh->dinfo == HW_FIRM_END) {
@@ -1712,7 +1709,7 @@ isar_down(hisaxif_t *hif, struct sk_buff *skb)
 			fw_p = firmware = NULL;
 			firmwaresize = 0;
 			skb_trim(skb, 0);
-			if(!if_addhead(&bch->inst.up, PH_CONTROL | CONFIRM,
+			if(!if_newhead(&bch->inst.up, PH_CONTROL | CONFIRM,
 				0, skb))
 				return(0);
 		}

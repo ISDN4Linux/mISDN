@@ -1,4 +1,4 @@
-/* $Id: ncci.c,v 1.3 2002/04/29 23:26:30 kkeil Exp $
+/* $Id: ncci.c,v 1.4 2002/05/01 01:00:40 kkeil Exp $
  *
  */
 
@@ -654,10 +654,7 @@ int ncci_l3l4(hisaxif_t *hif, struct sk_buff *skb)
 
 	if (!hif || !skb)
 		return(ret);
-	if (skb->len < HISAX_FRAME_MIN)
-		return(ret);
-	hh = (hisax_head_t *)skb->data;
-	skb_pull(skb, HISAX_HEAD_SIZE);
+	hh = HISAX_HEAD_P(skb);
 	ncci = hif->fdata;
 	switch (hh->prim) {
 		// we're not using the Fsm for DL_DATA for performance reasons
@@ -700,7 +697,7 @@ static int ncciL4L3(Ncci_t *ncci, u_int prim, int dtyp, int len, void *arg,
 	printk(KERN_DEBUG __FUNCTION__ ": NCCI %x prim(%x)\n",
 		ncci->adrNCCI, prim);
 	if (skb)
-		return(if_addhead(&ncci->binst->inst.down, prim, dtyp, skb));
+		return(if_newhead(&ncci->binst->inst.down, prim, dtyp, skb));
 	else
 		return(if_link(&ncci->binst->inst.down, prim, dtyp,
 			len, arg, 8));

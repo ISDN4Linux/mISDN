@@ -1,4 +1,4 @@
-/* $Id: layer3.c,v 1.0 2001/11/02 23:42:26 kkeil Exp $
+/* $Id: layer3.c,v 1.1 2002/05/01 01:00:40 kkeil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -14,7 +14,7 @@
 #include "hisaxl3.h"
 #include "helper.h"
 
-const char *l3_revision = "$Revision: 1.0 $";
+const char *l3_revision = "$Revision: 1.1 $";
 
 static
 struct Fsm l3fsm = {NULL, 0, 0, NULL, NULL};
@@ -352,7 +352,7 @@ l3down(layer3_t *l3, u_int prim, int dinfo, struct sk_buff *skb) {
 	if (!skb)
 		err = if_link(&l3->inst.down, prim, dinfo, 0, NULL, 0);
 	else
-		err = if_addhead(&l3->inst.down, prim, dinfo, skb);
+		err = if_newhead(&l3->inst.down, prim, dinfo, skb);
 	return(err);
 }
 
