@@ -1,4 +1,4 @@
-/* $Id: l3_udss1.c,v 1.13 2003/08/01 22:15:53 kkeil Exp $
+/* $Id: l3_udss1.c,v 1.14 2003/11/09 09:22:17 keil Exp $
  *
  * EURO/DSS1 D-channel protocol
  *
@@ -24,7 +24,7 @@ static int debug = 0;
 static mISDNobject_t u_dss1;
 
 
-const char *dss1_revision = "$Revision: 1.13 $";
+const char *dss1_revision = "$Revision: 1.14 $";
 
 static int dss1man(l3_process_t *, u_int, void *);
 
@@ -1531,7 +1531,6 @@ l3dss1_global_restart(l3_process_t *pc, u_char pr, void *arg)
 		if (pc->l3->debug)
 			l3_debug(pc->l3, "Restart for channel %d", chan);
 	}
-	newl3state(pc, 2);
 	up = pc->l3->proc;
 	while (up) {
 		if ((ri & 7) == 7)
@@ -1900,6 +1899,7 @@ global_handler(layer3_t *l3, u_int mt, struct sk_buff *skb)
 				proc->state, mt);
 		}
 		l3dss1_status_send(proc, CAUSE_INVALID_CALLREF);
+		dev_kfree_skb(skb);
 	} else {
 		if (l3->debug & L3_DEB_STATE) {
 			l3_debug(l3, "dss1 global %d mt %x",
@@ -1988,7 +1988,6 @@ dss1_fromdown(mISDNif_t *hif, struct sk_buff *skb)
 		if (l3->debug & L3_DEB_STATE)
 			l3_debug(l3, "dss1up Global CallRef");
 		global_handler(l3, qi->type, skb);
-		dev_kfree_skb(skb);
 		return(0);
 	} else if (!(proc = getl3proc(l3, qi->cr))) {
 		/* No transaction process exist, that means no call with
