@@ -1,10 +1,10 @@
-/* $Id: core.h,v 1.0 2001/11/02 23:42:26 kkeil Exp $
+/* $Id: core.h,v 1.1 2001/12/05 14:23:39 kkeil Exp $
  * 
  * This file is (c) under GNU PUBLIC LICENSE
  *
  */
 
-#include <linux/malloc.h>
+#include <linux/slab.h>
 #include <linux/string.h>
 #include <linux/hisaxif.h>
 #include "helper.h"
