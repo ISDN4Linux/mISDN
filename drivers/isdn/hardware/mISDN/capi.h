@@ -1,4 +1,4 @@
-/* $Id: capi.h,v 0.8 2001/10/31 23:04:42 kkeil Exp $
+/* $Id: capi.h,v 0.9 2001/11/02 23:27:54 kkeil Exp $
  *
  */
 
@@ -335,6 +335,7 @@ typedef struct _Ncci {
 	} xmit_skb_handles[CAPI_MAXDATAWINDOW];
 	struct sk_buff *recv_skb_handles[CAPI_MAXDATAWINDOW];
 	struct sk_buff_head squeue;
+	_cmsg		tmpmsg;
 } Ncci_t;
 
 #define NCCI_FLG_FCTRL	1

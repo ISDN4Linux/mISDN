@@ -1,4 +1,4 @@
-/* $Id: ncci.c,v 0.9 2001/10/31 23:04:42 kkeil Exp $
+/* $Id: ncci.c,v 0.10 2001/11/02 23:27:54 kkeil Exp $
  *
  */
 
@@ -217,42 +217,38 @@ static void ncci_disconnect_b3_resp(struct FsmInst *fi, int event, void *arg)
 static void ncci_n0_dl_establish_ind_conf(struct FsmInst *fi, int event, void *arg)
 {
 	Ncci_t *ncci = fi->userdata;
-	_cmsg cmsg;
 
-	ncciCmsgHeader(ncci, &cmsg, CAPI_CONNECT_B3, CAPI_IND);
-	FsmEvent(&ncci->ncci_m, EV_NCCI_CONNECT_B3_IND, &cmsg);
-	ncciRecvCmsg(ncci, &cmsg);
+	ncciCmsgHeader(ncci, &ncci->tmpmsg, CAPI_CONNECT_B3, CAPI_IND);
+	FsmEvent(&ncci->ncci_m, EV_NCCI_CONNECT_B3_IND, &ncci->tmpmsg);
+	ncciRecvCmsg(ncci, &ncci->tmpmsg);
 }
 
 static void ncci_dl_establish_conf(struct FsmInst *fi, int event, void *arg)
 {
 	Ncci_t *ncci = fi->userdata;
-	_cmsg cmsg;
 
-	ncciCmsgHeader(ncci, &cmsg, CAPI_CONNECT_B3_ACTIVE, CAPI_IND);
-	FsmEvent(&ncci->ncci_m, EV_NCCI_CONNECT_B3_ACTIVE_IND, &cmsg);
-	ncciRecvCmsg(ncci, &cmsg);
+	ncciCmsgHeader(ncci, &ncci->tmpmsg, CAPI_CONNECT_B3_ACTIVE, CAPI_IND);
+	FsmEvent(&ncci->ncci_m, EV_NCCI_CONNECT_B3_ACTIVE_IND, &ncci->tmpmsg);
+	ncciRecvCmsg(ncci, &ncci->tmpmsg);
 }
 
 static void ncci_dl_release_ind_conf(struct FsmInst *fi, int event, void *arg)
 {
 	Ncci_t *ncci = fi->userdata;
-	_cmsg cmsg;
 
-	ncciCmsgHeader(ncci, &cmsg, CAPI_DISCONNECT_B3, CAPI_IND);
-	FsmEvent(&ncci->ncci_m, EV_NCCI_DISCONNECT_B3_IND, &cmsg);
-	ncciRecvCmsg(ncci, &cmsg);
+	ncciCmsgHeader(ncci, &ncci->tmpmsg, CAPI_DISCONNECT_B3, CAPI_IND);
+	FsmEvent(&ncci->ncci_m, EV_NCCI_DISCONNECT_B3_IND, &ncci->tmpmsg);
+	ncciRecvCmsg(ncci, &ncci->tmpmsg);
 }
 
 static void ncci_dl_down_ind(struct FsmInst *fi, int event, void *arg)
 {
 	Ncci_t *ncci = fi->userdata;
-	_cmsg cmsg;
 
-	ncciCmsgHeader(ncci, &cmsg, CAPI_DISCONNECT_B3, CAPI_IND);
-	cmsg.Reason_B3 = CapiProtocolErrorLayer1;
-	FsmEvent(&ncci->ncci_m, EV_NCCI_DISCONNECT_B3_IND, &cmsg);
-	ncciRecvCmsg(ncci, &cmsg);
+	ncciCmsgHeader(ncci, &ncci->tmpmsg, CAPI_DISCONNECT_B3, CAPI_IND);
+	ncci->tmpmsg.Reason_B3 = CapiProtocolErrorLayer1;
+	FsmEvent(&ncci->ncci_m, EV_NCCI_DISCONNECT_B3_IND, &ncci->tmpmsg);
+	ncciRecvCmsg(ncci, &ncci->tmpmsg);
 }
 
 static void ncci_select_b_protocol(struct FsmInst *fi, int event, void *arg)
@@ -545,7 +541,6 @@ void ncciDataReq(Ncci_t *ncci, struct sk_buff *skb)
 
 int ncciDataConf(Ncci_t *ncci, int pr, struct sk_buff *skb)
 {
-	_cmsg cmsg;
 	int i;
 
 	for (i = 0; i < ncci->window; i++) {
@@ -558,11 +553,11 @@ int ncciDataConf(Ncci_t *ncci, int pr, struct sk_buff *skb)
 	}
 	ncci->xmit_skb_handles[i].skb = NULL;
 	dev_kfree_skb(skb);
-	capi_cmsg_header(&cmsg, ncci->cplci->appl->ApplId, CAPI_DATA_B3, CAPI_CONF, 
+	capi_cmsg_header(&ncci->tmpmsg, ncci->cplci->appl->ApplId, CAPI_DATA_B3, CAPI_CONF, 
 			 ncci->xmit_skb_handles[i].MsgId, ncci->adrNCCI);
-	cmsg.DataHandle = ncci->xmit_skb_handles[i].DataHandle;
-	cmsg.Info = 0;
-	ncciRecvCmsg(ncci, &cmsg);
+	ncci->tmpmsg.DataHandle = ncci->xmit_skb_handles[i].DataHandle;
+	ncci->tmpmsg.Info = 0;
+	ncciRecvCmsg(ncci, &ncci->tmpmsg);
 	if (ncci->Flags & NCCI_FLG_FCTRL) {
 		if (skb_queue_len(&ncci->squeue)) {
 			skb = skb_dequeue(&ncci->squeue);
@@ -600,7 +595,6 @@ void ncciDataResp(Ncci_t *ncci, struct sk_buff *skb)
 void ncciSendMessage(Ncci_t *ncci, struct sk_buff *skb)
 {
 	int retval = 0;
-	_cmsg cmsg;
 
 	// we're not using the Fsm for DATA_B3 for performance reasons
 	switch (CAPICMD(CAPIMSG_COMMAND(skb->data), CAPIMSG_SUBCOMMAND(skb->data))) {
@@ -609,7 +603,7 @@ void ncciSendMessage(Ncci_t *ncci, struct sk_buff *skb)
 			ncciDataReq(ncci, skb);
 		} else {
 			contrAnswerMessage(ncci->cplci->contr, skb, 
-					   CapiMessageNotSupportedInCurrentState);
+				CapiMessageNotSupportedInCurrentState);
 			dev_kfree_skb(skb);
 		}
 		goto out;
@@ -618,22 +612,27 @@ void ncciSendMessage(Ncci_t *ncci, struct sk_buff *skb)
 		goto out;
 	}
 
-	capi_message2cmsg(&cmsg, skb->data);
-	switch (CMSGCMD(&cmsg)) {
+	capi_message2cmsg(&ncci->tmpmsg, skb->data);
+	switch (CMSGCMD(&ncci->tmpmsg)) {
 	case CAPI_CONNECT_B3_REQ:
-		retval = FsmEvent(&ncci->ncci_m, EV_NCCI_CONNECT_B3_REQ, &cmsg);
+		retval = FsmEvent(&ncci->ncci_m, EV_NCCI_CONNECT_B3_REQ,
+			&ncci->tmpmsg);
 		break;
 	case CAPI_CONNECT_B3_RESP:
-		retval = FsmEvent(&ncci->ncci_m, EV_NCCI_CONNECT_B3_RESP, &cmsg);
+		retval = FsmEvent(&ncci->ncci_m, EV_NCCI_CONNECT_B3_RESP,
+			&ncci->tmpmsg);
 		break;
 	case CAPI_CONNECT_B3_ACTIVE_RESP:
-		retval = FsmEvent(&ncci->ncci_m, EV_NCCI_CONNECT_B3_ACTIVE_RESP, &cmsg);
+		retval = FsmEvent(&ncci->ncci_m, EV_NCCI_CONNECT_B3_ACTIVE_RESP,
+			&ncci->tmpmsg);
 		break;
 	case CAPI_DISCONNECT_B3_REQ:
-		retval = FsmEvent(&ncci->ncci_m, EV_NCCI_DISCONNECT_B3_REQ, &cmsg);
+		retval = FsmEvent(&ncci->ncci_m, EV_NCCI_DISCONNECT_B3_REQ,
+			&ncci->tmpmsg);
 		break;
 	case CAPI_DISCONNECT_B3_RESP:
-		retval = FsmEvent(&ncci->ncci_m, EV_NCCI_DISCONNECT_B3_RESP, &cmsg);
+		retval = FsmEvent(&ncci->ncci_m, EV_NCCI_DISCONNECT_B3_RESP,
+			&ncci->tmpmsg);
 		break;
 	default:
 		int_error();
@@ -642,7 +641,7 @@ void ncciSendMessage(Ncci_t *ncci, struct sk_buff *skb)
 	if (retval) { 
 		if (CAPIMSG_SUBCOMMAND(skb->data) == CAPI_REQ) {
 			contrAnswerMessage(ncci->cplci->contr, skb, 
-					   CapiMessageNotSupportedInCurrentState);
+				CapiMessageNotSupportedInCurrentState);
 		}
 	}
 	dev_kfree_skb(skb);
