@@ -1,4 +1,4 @@
-/* $Id: w6692.c,v 1.10 2004/01/26 22:21:31 keil Exp $
+/* $Id: w6692.c,v 1.11 2004/01/27 12:55:55 keil Exp $
 
  * w6692.c     low level driver for CCD's hfc-pci based cards
  *
@@ -41,7 +41,7 @@
 
 extern const char *CardType[];
 
-const char *w6692_rev = "$Revision: 1.10 $";
+const char *w6692_rev = "$Revision: 1.11 $";
 
 #define DBUSY_TIMER_VALUE	80
 
@@ -58,6 +58,7 @@ typedef struct _w6692pci {
 	u_int			irqcnt;
 	u_int			addr;
 	int			pots;
+	int			led;
 	mISDN_HWlock_t		lock;
 	u_char			imask;
 	u_char			pctl;
@@ -68,6 +69,8 @@ typedef struct _w6692pci {
 	bchannel_t		bch[2];
 } w6692pci;
 
+#define W_LED1_ON	1
+#define W_LED1_S0STATUS	2
 
 static int lock_dev(void *data, int nowait)
 {
@@ -118,6 +121,20 @@ W6692Version(w6692pci *card, char *s)
 
 	val = ReadW6692(card, W_D_RBCH);
 	printk(KERN_INFO "%s Winbond W6692 version (%x): %s\n", s, val, W6692Ver[(val >> 6) & 3]);
+}
+
+static void
+w6692_led_handler(w6692pci *card, int on)
+{
+	if (!card->led)
+		return;
+	if (on) {
+		card->xdata &= 0xfb;	/*  LED ON */
+		WriteW6692(card, W_XDATA, card->xdata);
+	} else {
+		card->xdata |= 0x04;	/*  LED OFF */
+		WriteW6692(card, W_XDATA, card->xdata);
+	}
 }
 
 static void
@@ -404,6 +421,17 @@ handle_statusD(w6692pci *card) {
 				mISDN_debugprint(&card->dch.inst, "ph_state_change %x -> %x",
 					dch->ph_state, v1);
 			dch->ph_state = v1;
+			if (card->led & W_LED1_S0STATUS) {
+				switch (v1) {
+					case W_L1IND_AI8:
+					case W_L1IND_AI10:
+						w6692_led_handler(card, 1);
+						break;
+					default:
+						w6692_led_handler(card, 0);
+						break;
+				}
+			}
 			dchannel_sched_event(dch, D_L1STATECHANGE);
 		}
 		if (cir & W_CIR_SCC) {
@@ -921,13 +949,17 @@ void initW6692(w6692pci *card)
 	card->pctl = W_PCTL_OE5 | W_PCTL_OE4 | W_PCTL_OE2 | W_PCTL_OE1 | W_PCTL_OE0;
 	if (card->pots) {
 		card->xaddr = 0x00; /* all sw off */
-		card->xdata = 0x06;  /* LED off / POWER UP / ALAW */
+		card->xdata = 0x06;  /*  LED OFF / POWER UP / ALAW */
 		WriteW6692(card, W_PCTL, card->pctl);
 		WriteW6692(card, W_XADDR, card->xaddr);
 		WriteW6692(card, W_XDATA, card->xdata);
 		val = ReadW6692(card, W_XADDR);
 		if (card->dch.debug & L1_DEB_ISAC)
 			mISDN_debugprint(&card->dch.inst, "W_XADDR: %02x", val);
+		if (card->led & W_LED1_ON)
+			w6692_led_handler(card, 1);
+		else
+			w6692_led_handler(card, 0);
 	}
 }
 
@@ -987,6 +1019,7 @@ static int layermask[MAX_CARDS];
 static mISDNobject_t	w6692;
 static int debug;
 static int pots[MAX_CARDS];
+static int led[MAX_CARDS];
 
 #ifdef MODULE
 MODULE_AUTHOR("Karsten Keil");
@@ -994,6 +1027,7 @@ MODULE_AUTHOR("Karsten Keil");
 MODULE_LICENSE("GPL");
 #endif
 MODULE_PARM(debug, "1i");
+MODULE_PARM(led, MODULE_PARM_T);
 MODULE_PARM(pots, MODULE_PARM_T);
 MODULE_PARM(protocol, MODULE_PARM_T);
 MODULE_PARM(layermask, MODULE_PARM_T);
@@ -1234,6 +1268,10 @@ release_card(w6692pci *card)
 	free_irq(card->irq, card);
 	mode_w6692(&card->bch[0], 0, ISDN_PID_NONE);
 	mode_w6692(&card->bch[1], 1, ISDN_PID_NONE);
+	if (card->led) {
+		card->xdata |= 0x04;	/*  LED OFF */
+		WriteW6692(card, W_XDATA, card->xdata);
+	}
 	release_region(card->addr, 256);
 	mISDN_free_bch(&card->bch[1]);
 	mISDN_free_bch(&card->bch[0]);
@@ -1418,6 +1456,7 @@ static int __devinit setup_instance(w6692pci *card)
 		return(err);
 	}
 	card->pots = pots[w6692_cnt];
+	card->led = led[w6692_cnt];
 	w6692_cnt++;
 	err = w6692.ctrl(NULL, MGR_NEWSTACK | REQUEST, &card->dch.inst);
 	if (err) {
