@@ -1,4 +1,4 @@
-/* $Id: hfc_pci.c,v 1.28 2003/08/01 22:15:52 kkeil Exp $
+/* $Id: hfc_pci.c,v 1.29 2003/10/24 21:27:28 keil Exp $
 
  * hfc_pci.c     low level driver for CCD's hfc-pci based cards
  *
@@ -46,7 +46,7 @@
 
 extern const char *CardType[];
 
-static const char *hfcpci_revision = "$Revision: 1.28 $";
+static const char *hfcpci_revision = "$Revision: 1.29 $";
 
 /* table entry in the PCI devices list */
 typedef struct {
@@ -1288,7 +1288,7 @@ HFCD_l1hw(mISDNif_t *hif, struct sk_buff *skb)
 	ret = 0;
 	if (hh->prim == PH_DATA_REQ) {
 		if (dch->next_skb) {
-			printk(KERN_WARNING "%s: next_skb exist ERROR",	__FUNCTION__);
+			printk(KERN_WARNING "%s: next_skb exist ERROR\n", __FUNCTION__);
 			return(-EBUSY);
 		}
 		dch->inst.lock(dch->inst.data, 0);
@@ -1643,8 +1643,9 @@ hfcpci_l2l1(mISDNif_t *hif, struct sk_buff *skb)
 	bch = hif->fdata;
 	if ((hh->prim == PH_DATA_REQ) ||
 		(hh->prim == (DL_DATA | REQUEST))) {
+#warning TODO: hier muss abgefragt werden, ob skb->len <= 0 ist, und ggf. ein -EINVAL zurückliefern, sonst wird zwar einmal confirmed, aber es regt sich nichts mehr. dies bitte auch für den d-kanal überdenken, sowie für alle andere kartentreiber.
 		if (bch->next_skb) {
-			printk(KERN_WARNING "%s: next_skb exist ERROR",
+			printk(KERN_WARNING "%s: next_skb exist ERROR\n",
 				__FUNCTION__);
 			return(-EBUSY);
 		}
@@ -2066,7 +2067,7 @@ setup_hfcpci(hfc_pci_t *hc)
 		hc->hw.pci_io = (char *) get_pcibase(dev_hfcpci, 1);
 		printk(KERN_INFO "mISDN: HFC-PCI card manufacturer: %s card name: %s\n", id_list[i].vendor_name, id_list[i].card_name);
 	} else {
-		printk(KERN_WARNING "HFC-PCI: No PCI card found\n");
+		printk(KERN_WARNING "HFC-PCI: No more PCI cards found\n");
 		return (1);
 	}
 	if (!hc->hw.pci_io) {

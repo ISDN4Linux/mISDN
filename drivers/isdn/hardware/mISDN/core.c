@@ -1,4 +1,4 @@
-/* $Id: core.c,v 1.15 2003/08/02 21:17:58 kkeil Exp $
+/* $Id: core.c,v 1.16 2003/10/24 21:27:28 keil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -18,7 +18,7 @@
 #include <linux/smp_lock.h>
 #endif
 
-static char *mISDN_core_revision = "$Revision: 1.15 $";
+static char *mISDN_core_revision = "$Revision: 1.16 $";
 
 mISDNobject_t	*mISDN_objects = NULL;
 int core_debug;
@@ -177,7 +177,9 @@ find_object(int protocol) {
 
 static mISDNobject_t *
 find_object_module(int protocol) {
+#ifdef CONFIG_KMOD
 	int		err;
+#endif
 	moditem_t	*m = modlist;
 	mISDNobject_t	*obj;
 
