@@ -12,6 +12,8 @@
 
 static struct list_head mISDN_memdbg_list = LIST_HEAD_INIT(mISDN_memdbg_list);
 static struct list_head mISDN_skbdbg_list = LIST_HEAD_INIT(mISDN_skbdbg_list);
+static spinlock_t	memdbg_lock = SPIN_LOCK_UNLOCKED;
+static spinlock_t	skbdbg_lock = SPIN_LOCK_UNLOCKED;
 static kmem_cache_t	*mid_sitem_cache;
 
 #define MAX_FILE_STRLEN		(64 - 3*sizeof(u_int) - sizeof(struct list_head))
@@ -39,6 +41,7 @@ void *
 __mid_kmalloc(size_t size, int ord, char *fn, int line)
 {
 	_mid_item_t	*mid;
+	u_long		flags;
 
 	mid = kmalloc(size + sizeof(_mid_item_t), ord);
 	if (mid) {
@@ -47,8 +50,10 @@ __mid_kmalloc(size_t size, int ord, char *fn, int line)
 		mid->size = size;
 		mid->line = line;
 		memcpy(mid->file, fn, MAX_FILE_STRLEN);
-		mid->file[MAX_FILE_STRLEN-1] = 0; 
+		mid->file[MAX_FILE_STRLEN-1] = 0;
+		spin_lock_irqsave(&memdbg_lock, flags);
 		list_add_tail(&mid->head, &mISDN_memdbg_list);
+		spin_unlock_irqrestore(&memdbg_lock, flags);
 		return((void *)&mid->file[MAX_FILE_STRLEN]);
 	} else
 		return(NULL);
@@ -58,13 +63,16 @@ void
 __mid_kfree(const void *p)
 {
 	_mid_item_t	*mid;
+	u_long		flags;
 
 	if (!p) {
 		printk(KERN_ERR "zero pointer kfree at %p", __builtin_return_address(0));
 		return;
 	}
 	mid = (_mid_item_t *)((u_char *)p - sizeof(_mid_item_t));
+	spin_lock_irqsave(&memdbg_lock, flags);
 	list_del(&mid->head);
+	spin_unlock_irqrestore(&memdbg_lock, flags);
 	kfree(mid);
 }
 
@@ -72,6 +80,7 @@ void *
 __mid_vmalloc(size_t size, char *fn, int line)
 {
 	_mid_item_t	*mid;
+	u_long		flags;
 
 	mid = vmalloc(size + sizeof(_mid_item_t));
 	if (mid) {
@@ -81,7 +90,9 @@ __mid_vmalloc(size_t size, char *fn, int line)
 		mid->line = line;
 		memcpy(mid->file, fn, MAX_FILE_STRLEN);
 		mid->file[MAX_FILE_STRLEN-1] = 0; 
+		spin_lock_irqsave(&memdbg_lock, flags);
 		list_add_tail(&mid->head, &mISDN_memdbg_list);
+		spin_unlock_irqrestore(&memdbg_lock, flags);
 		return((void *)&mid->file[MAX_FILE_STRLEN]);
 	} else
 		return(NULL);
@@ -91,30 +102,37 @@ void
 __mid_vfree(const void *p)
 {
 	_mid_item_t	*mid;
+	u_long		flags;
 
 	if (!p) {
 		printk(KERN_ERR "zero pointer vfree at %p", __builtin_return_address(0));
 		return;
 	}
 	mid = (_mid_item_t *)((u_char *)p - sizeof(_mid_item_t));
+	spin_lock_irqsave(&memdbg_lock, flags);
 	list_del(&mid->head);
+	spin_unlock_irqrestore(&memdbg_lock, flags);
 	vfree(mid);
 }
 
 static void
 __mid_skb_destructor(struct sk_buff *skb)
 {
-	struct list_head	*item, *next;
+	struct list_head	*item;
 	_mid_sitem_t		*sid;
+	u_long		flags;
 
-	list_for_each_safe(item, next, &mISDN_skbdbg_list) {
+	spin_lock_irqsave(&skbdbg_lock, flags);
+	list_for_each(item, &mISDN_skbdbg_list) {
 		sid = (_mid_sitem_t *)item;
 		if (sid->skb == skb) {
 			list_del(&sid->head);
+			spin_unlock_irqrestore(&skbdbg_lock, flags);
 			kmem_cache_free(mid_sitem_cache, sid);
 			return;
 		}
 	}
+	spin_unlock_irqrestore(&skbdbg_lock, flags);
 	printk(KERN_DEBUG "%s: item(%p) not in list\n", __FUNCTION__, skb);
 }
 
@@ -122,10 +140,14 @@ static __inline__ void
 __mid_sitem_setup(struct sk_buff *skb, unsigned int size, char *fn, int line)
 {
 	_mid_sitem_t	*sid;
+	u_long		flags;
 
 	sid = kmem_cache_alloc(mid_sitem_cache, GFP_ATOMIC);
-	if (!sid)
+	if (!sid) {
+		printk(KERN_DEBUG "%s: no memory for sitem skb %p %s:%d\n",
+			__FUNCTION__, skb, fn, line);
 		return;
+	}
 	INIT_LIST_HEAD(&sid->head);
 	sid->skb = skb;
 	sid->size = size;
@@ -133,7 +155,9 @@ __mid_sitem_setup(struct sk_buff *skb, unsigned int size, char *fn, int line)
 	memcpy(sid->file, fn, MAX_FILE_STRLEN);
 	sid->file[MAX_FILE_STRLEN-1] = 0; 
 	skb->destructor = __mid_skb_destructor;
+	spin_lock_irqsave(&skbdbg_lock, flags);
 	list_add_tail(&sid->head, &mISDN_skbdbg_list);
+	spin_unlock_irqrestore(&skbdbg_lock, flags);
 }
 
 struct sk_buff *
@@ -199,7 +223,9 @@ __mid_cleanup(void)
 	_mid_sitem_t		*sid;
 	mISDN_head_t		*hh;
 	int			n = 0;
+	u_long			flags;
 
+	spin_lock_irqsave(&memdbg_lock, flags);
 	list_for_each_safe(item, next, &mISDN_memdbg_list) {
 		mid = (_mid_item_t *)item;
 		switch(mid->typ) {
@@ -220,8 +246,10 @@ __mid_cleanup(void)
 		}
 		n++;
 	}
+	spin_unlock_irqrestore(&memdbg_lock, flags);
 	printk(KERN_DEBUG "%s: %d kmalloc item(s) freed\n", __FUNCTION__, n);
 	n = 0;
+	spin_lock_irqsave(&skbdbg_lock, flags);
 	list_for_each_safe(item, next, &mISDN_skbdbg_list) {
 		sid = (_mid_sitem_t *)item;
 		hh = mISDN_HEAD_P(sid->skb);
@@ -233,7 +261,7 @@ __mid_cleanup(void)
 		kmem_cache_free(mid_sitem_cache, sid);
 		n++;
 	}
-
+	spin_unlock_irqrestore(&skbdbg_lock, flags);
 	if (mid_sitem_cache)
 		kmem_cache_destroy(mid_sitem_cache);
 	printk(KERN_DEBUG "%s: %d sk_buff item(s) freed\n", __FUNCTION__, n);
