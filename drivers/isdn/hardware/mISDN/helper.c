@@ -1,4 +1,4 @@
-/* $Id: helper.c,v 0.14 2001/09/29 20:05:00 kkeil Exp $
+/* $Id: helper.c,v 1.0 2001/11/02 23:42:26 kkeil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *

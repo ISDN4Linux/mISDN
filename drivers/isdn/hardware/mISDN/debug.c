@@ -1,4 +1,4 @@
-/* $Id: debug.c,v 0.4 2001/03/11 21:23:39 kkeil Exp $
+/* $Id: debug.c,v 1.0 2001/11/02 23:42:26 kkeil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *

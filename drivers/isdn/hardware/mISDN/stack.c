@@ -1,4 +1,4 @@
-/* $Id: stack.c,v 0.17 2001/10/31 23:06:07 kkeil Exp $
+/* $Id: stack.c,v 1.0 2001/11/02 23:42:26 kkeil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *

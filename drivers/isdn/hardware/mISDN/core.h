@@ -1,4 +1,4 @@
-/* $Id: core.h,v 0.9 2001/09/29 20:05:01 kkeil Exp $
+/* $Id: core.h,v 1.0 2001/11/02 23:42:26 kkeil Exp $
  * 
  * This file is (c) under GNU PUBLIC LICENSE
  *

@@ -1,4 +1,4 @@
-/* $Id: layer1.c,v 0.14 2001/08/02 14:51:56 kkeil Exp $
+/* $Id: layer1.c,v 1.0 2001/11/02 23:42:26 kkeil Exp $
  *
  * hisax_l1.c     common low level stuff for I.430 layer1
  *
@@ -10,7 +10,7 @@
  *
  */
 
-const char *l1_revision = "$Revision: 0.14 $";
+const char *l1_revision = "$Revision: 1.0 $";
 
 #include <linux/config.h>
 #include <linux/module.h>

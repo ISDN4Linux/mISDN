@@ -1,4 +1,4 @@
-/* $Id: fsm.h,v 0.1 2001/02/13 10:41:32 kkeil Exp $
+/* $Id: fsm.h,v 1.0 2001/11/02 23:42:26 kkeil Exp $
  *
  * This file is (c) under GNU PUBLIC LICENSE
  *

@@ -1,4 +1,4 @@
-/* $Id: hisax_hw.h,v 0.8 2001/10/01 23:22:43 kkeil Exp $
+/* $Id: hisax_hw.h,v 1.0 2001/11/02 23:42:26 kkeil Exp $
  *
  *   Basic declarations, defines for HiSax hardware drivers
  *

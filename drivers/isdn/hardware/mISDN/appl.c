@@ -1,4 +1,4 @@
-/* $Id: appl.c,v 0.3 2001/02/27 17:45:44 kkeil Exp $
+/* $Id: appl.c,v 1.0 2001/11/02 23:42:26 kkeil Exp $
  *
  */
 

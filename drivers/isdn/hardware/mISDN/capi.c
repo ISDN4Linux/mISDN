@@ -1,4 +1,4 @@
-/* $Id: capi.c,v 0.9 2001/10/31 23:04:42 kkeil Exp $
+/* $Id: capi.c,v 1.0 2001/11/02 23:42:26 kkeil Exp $
  *
  */
 
@@ -9,7 +9,7 @@
 #include "helper.h"
 #include "debug.h"
 
-const char *capi_revision = "$Revision: 0.9 $";
+const char *capi_revision = "$Revision: 1.0 $";
 
 static int debug = 0;
 static hisaxobject_t capi_obj;

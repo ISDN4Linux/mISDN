@@ -1,4 +1,4 @@
-/* $Id: l3_udss1.c,v 0.19 2001/11/02 23:41:26 kkeil Exp $
+/* $Id: l3_udss1.c,v 1.0 2001/11/02 23:42:27 kkeil Exp $
  *
  * EURO/DSS1 D-channel protocol
  *
@@ -24,7 +24,7 @@ static int debug = 0;
 static hisaxobject_t u_dss1;
 
 
-const char *dss1_revision = "$Revision: 0.19 $";
+const char *dss1_revision = "$Revision: 1.0 $";
 
 static int dss1man(l3_process_t *, u_int, void *);
 

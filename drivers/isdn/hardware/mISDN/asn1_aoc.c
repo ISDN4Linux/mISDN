@@ -1,4 +1,4 @@
-/* $Id: asn1_aoc.c,v 0.1 2001/02/21 19:22:35 kkeil Exp $
+/* $Id: asn1_aoc.c,v 1.0 2001/11/02 23:42:26 kkeil Exp $
  *
  */
 

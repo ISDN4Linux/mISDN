@@ -1,4 +1,4 @@
-/* $Id: core.c,v 0.20 2001/11/02 23:41:26 kkeil Exp $
+/* $Id: core.c,v 1.0 2001/11/02 23:42:26 kkeil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *

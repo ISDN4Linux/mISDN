@@ -1,4 +1,4 @@
-/* $Id: fsm.c,v 0.3 2001/02/13 10:42:55 kkeil Exp $
+/* $Id: fsm.c,v 1.0 2001/11/02 23:42:26 kkeil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *

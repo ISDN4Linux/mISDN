@@ -1,4 +1,4 @@
-/* $Id: avm_fritz.c,v 0.18 2001/09/30 17:09:23 kkeil Exp $
+/* $Id: avm_fritz.c,v 1.0 2001/11/02 23:42:26 kkeil Exp $
  *
  * fritz_pci.c    low level stuff for AVM Fritz!PCI and ISA PnP isdn cards
  *              Thanks to AVM, Berlin for informations
@@ -18,7 +18,7 @@
 #include "helper.h"
 #include "debug.h"
 
-static const char *avm_pci_rev = "$Revision: 0.18 $";
+static const char *avm_pci_rev = "$Revision: 1.0 $";
 
 #define ISDN_CTYPE_FRITZPCI 1
 

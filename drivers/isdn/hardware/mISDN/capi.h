@@ -1,4 +1,4 @@
-/* $Id: capi.h,v 0.9 2001/11/02 23:27:54 kkeil Exp $
+/* $Id: capi.h,v 1.0 2001/11/02 23:42:26 kkeil Exp $
  *
  */
 
