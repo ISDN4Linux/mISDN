@@ -1,4 +1,4 @@
-/* $Id: core.c,v 1.14 2003/08/01 22:15:52 kkeil Exp $
+/* $Id: core.c,v 1.15 2003/08/02 21:17:58 kkeil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -18,7 +18,7 @@
 #include <linux/smp_lock.h>
 #endif
 
-static char *mISDN_core_revision = "$Revision: 1.14 $";
+static char *mISDN_core_revision = "$Revision: 1.15 $";
 
 mISDNobject_t	*mISDN_objects = NULL;
 int core_debug;
@@ -476,6 +476,8 @@ static int central_manager(void *data, u_int prim, void *arg) {
 		return(change_stack_para(st, prim, arg));
 	    case MGR_CONNECT | REQUEST:
 		return(ConnectIF(data, arg));
+	    case MGR_EVALSTACK  | REQUEST:
+	    	return(evaluate_stack_pids(data, arg));
 	    case MGR_LOADFIRM | REQUEST:
 	    	if (st->mgr && st->mgr->obj && st->mgr->obj->own_ctrl)
 	    		return(st->mgr->obj->own_ctrl(st->mgr, prim, arg));
@@ -488,20 +490,6 @@ static int central_manager(void *data, u_int prim, void *arg) {
 		break;
 	}
 	return(-EINVAL);
-}
-
-void
-mISDNlock_core(void) {
-#ifdef MODULE
-	MOD_INC_USE_COUNT;
-#endif
-}
-
-void
-mISDNunlock_core(void) {
-#ifdef MODULE
-	MOD_DEC_USE_COUNT;
-#endif
 }
 
 int mISDN_register(mISDNobject_t *obj) {

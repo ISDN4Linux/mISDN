@@ -1,4 +1,4 @@
-/* $Id: udevice.c,v 1.7 2003/07/27 11:14:19 kkeil Exp $
+/* $Id: udevice.c,v 1.8 2003/08/02 21:17:58 kkeil Exp $
  *
  * Copyright 2000  by Karsten Keil <kkeil@isdn4linux.de>
  *
@@ -1600,7 +1600,6 @@ mISDN_open(struct inode *ino, struct file *filep)
 		dev->wport.ip = dev->wport.op = dev->wport.buf;
 		dev->wport.cnt = 0;
 	}
-	mISDNlock_core();
 	filep->private_data = dev;
 	if (device_debug & DEBUG_DEV_OP)
 		printk(KERN_DEBUG "mISDN_open out: %p %p\n", filep, filep->private_data);
@@ -1633,7 +1632,6 @@ mISDN_close(struct inode *ino, struct file *filep)
 			filep->private_data = NULL;
 			if (!dev->minor)
 				free_device(dev);
-			mISDNunlock_core();
 			return 0;
 		}
 		dev = dev->next;

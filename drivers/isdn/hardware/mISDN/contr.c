@@ -1,4 +1,4 @@
-/* $Id: contr.c,v 1.11 2003/08/01 22:15:52 kkeil Exp $
+/* $Id: contr.c,v 1.12 2003/08/02 21:17:58 kkeil Exp $
  *
  */
 
@@ -66,8 +66,8 @@ contrDestr(Contr_t *contr)
 void
 contrRun(Contr_t *contr)
 {
-	BInst_t		*binst;
-	int		nb;
+	BInst_t	*binst;
+	int	nb, ret;
 
 	nb = 0;
 	binst = contr->binst;
@@ -75,23 +75,46 @@ contrRun(Contr_t *contr)
 		nb++;
 		binst = binst->next;
 	}
-	strncpy(contr->ctrl->manu, "mISDN CAPI (C) Kai Germaschewski, Karsten Keil", CAPI_MANUFACTURER_LEN);
+	if (contr->inst.st && contr->inst.st->mgr)
+		sprintf(contr->ctrl->manu, "mISDN CAPI controller %s", contr->inst.st->mgr->name);
+	else
+		sprintf(contr->ctrl->manu, "mISDN CAPI");
 	strncpy(contr->ctrl->serial, "0002", CAPI_SERIAL_LEN);
 	contr->ctrl->version.majorversion = 2; 
 	contr->ctrl->version.minorversion = 0;
 	contr->ctrl->version.majormanuversion = 1;
-	contr->ctrl->version.minormanuversion = 1;
+	contr->ctrl->version.minormanuversion = 0;
 	memset(&contr->ctrl->profile, 0, sizeof(struct capi_profile));
 	contr->ctrl->profile.ncontroller = 1;
 	contr->ctrl->profile.nbchannel = nb;
-	// FIXME
 	contrDebug(contr, CAPI_DBG_INFO, "%s: %s version(%s)",
 		__FUNCTION__, contr->ctrl->manu, contr->ctrl->serial);
-	contr->ctrl->profile.goptions = 0x11; // internal controller, supplementary services
-	contr->ctrl->profile.support1 = 3; // HDLC, TRANS
-	contr->ctrl->profile.support2 = 3; // X75SLP, TRANS
-	contr->ctrl->profile.support3 = 1; // TRANS
-	
+	// FIXME
+	contr->ctrl->profile.goptions = 0x19; // internal controller, supplementary services, DTMF 
+	if (nb) {
+		mISDN_pid_t	pidmask;
+
+		memset(&pidmask, 0, sizeof(mISDN_pid_t));
+		pidmask.protocol[1] = 0x03ff;
+		pidmask.protocol[2] = 0x1fff;
+		pidmask.protocol[3] = 0x00ff;
+		binst = contr->binst;
+		ret = binst->inst.obj->ctrl(binst->bst, MGR_EVALSTACK | REQUEST, &pidmask);
+		if (ret) {
+			/* Fallback on error, minimum set */
+			int_error();
+			contr->ctrl->profile.support1 = 3; // HDLC, TRANS
+			contr->ctrl->profile.support2 = 3; // X75SLP, TRANS
+			contr->ctrl->profile.support3 = 1; // TRANS
+		} else {
+			contr->ctrl->profile.support1 = pidmask.protocol[1];
+			contr->ctrl->profile.support2 = pidmask.protocol[2];
+			contr->ctrl->profile.support3 = pidmask.protocol[3];
+		}
+	}
+	contrDebug(contr, CAPI_DBG_INFO, "%s: GLOBAL(%08X) B1(%08X) B2(%08X) B3(%08X)",
+		__FUNCTION__, contr->ctrl->profile.goptions, contr->ctrl->profile.support1,
+		contr->ctrl->profile.support2, contr->ctrl->profile.support2);
 #ifdef OLDCAPI_DRIVER_INTERFACE
 	contr->ctrl->ready(contr->ctrl);
 #else

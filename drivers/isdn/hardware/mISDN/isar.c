@@ -1,4 +1,4 @@
-/* $Id: isar.c,v 1.14 2003/08/01 22:15:53 kkeil Exp $
+/* $Id: isar.c,v 1.15 2003/08/02 21:17:58 kkeil Exp $
  *
  * isar.c   ISAR (Siemens PSB 7110) specific routines
  *
@@ -521,7 +521,7 @@ isar_rcv_frame(bchannel_t *bch)
 		break;
 	    case ISDN_PID_L1_B_64TRANS:
 	    case ISDN_PID_L2_B_TRANSDTMF:
-	    case ISDN_PID_L1_B_V32:
+	    case ISDN_PID_L1_B_MODEM_ASYNC:
 		if ((skb = alloc_stack_skb(ih->reg->clsb, bch->up_headerlen))) {
 			rcv_mbox(bch, ih->reg, (u_char *)skb_put(skb, ih->reg->clsb));
 			skb_queue_tail(&bch->rqueue, skb);
@@ -572,7 +572,7 @@ isar_rcv_frame(bchannel_t *bch)
 			}
 		}
 		break;
-	case ISDN_PID_L1_B_FAX:
+	case ISDN_PID_L1_B_T30FAX:
 		if (ih->state != STFAX_ACTIV) {
 			if (bch->debug & L1_DEB_WARN)
 				debugprint(&bch->inst, "isar_rcv_frame: not ACTIV");
@@ -701,7 +701,7 @@ isar_fill_fifo(bchannel_t *bch)
 	ptr = bch->tx_buf + bch->tx_idx;
 	if (!bch->tx_idx) {
 		msb |= HDLC_FST;
-		if ((bch->protocol == ISDN_PID_L1_B_FAX) &&
+		if ((bch->protocol == ISDN_PID_L1_B_T30FAX) &&
 			(ih->cmd == PCTRL_CMD_FTH)) {
 			if (count > 1) {
 				if ((ptr[0]== 0xff) && (ptr[1] == 0x13))
@@ -718,7 +718,7 @@ isar_fill_fifo(bchannel_t *bch)
 			break;
 		case ISDN_PID_L1_B_64TRANS:
 		case ISDN_PID_L2_B_TRANSDTMF:
-		case ISDN_PID_L1_B_V32:
+		case ISDN_PID_L1_B_MODEM_ASYNC:
 			sendmsg(bch, SET_DPS(ih->dpath) | ISAR_HIS_SDATA,
 				0, count, ptr);
 			break;
@@ -726,7 +726,7 @@ isar_fill_fifo(bchannel_t *bch)
 			sendmsg(bch, SET_DPS(ih->dpath) | ISAR_HIS_SDATA,
 				msb, count, ptr);
 			break;
-		case ISDN_PID_L1_B_FAX:
+		case ISDN_PID_L1_B_T30FAX:
 			if (ih->state != STFAX_ACTIV) {
 				if (bch->debug & L1_DEB_WARN)
 					debugprint(&bch->inst, "%s: not ACTIV",
@@ -776,7 +776,7 @@ send_frames(bchannel_t *bch)
 		isar_fill_fifo(bch);
 	} else {
 		bch->tx_idx = 0;
-		if (bch->protocol == ISDN_PID_L1_B_FAX) {
+		if (bch->protocol == ISDN_PID_L1_B_T30FAX) {
 			if (ih->cmd == PCTRL_CMD_FTH) {
 				if (test_bit(BC_FLG_LASTDATA, &bch->Flag)) {
 					test_and_set_bit(BC_FLG_NMD_DATA, &bch->Flag);
@@ -1200,9 +1200,9 @@ isar_int_main(bchannel_t *bch)
 		case ISAR_IIS_PSTEV:
 			if ((bc = sel_bch_isar(bch, ih->reg->iis >> 6))) {
 				rcv_mbox(bc, ih->reg, (u_char *)ih->reg->par);
-				if (bc->protocol == ISDN_PID_L1_B_V32) {
+				if (bc->protocol == ISDN_PID_L1_B_MODEM_ASYNC) {
 					isar_pump_statev_modem(bc, ih->reg->cmsb);
-				} else if (bc->protocol == ISDN_PID_L1_B_FAX) {
+				} else if (bc->protocol == ISDN_PID_L1_B_T30FAX) {
 					isar_pump_statev_fax(bc, ih->reg->cmsb);
 				} else if (bc->protocol == ISDN_PID_L2_B_TRANSDTMF) {
 					ih->conmsg[0] = ih->reg->cmsb;
@@ -1289,7 +1289,7 @@ setup_pump(bchannel_t *bch) {
 				param[0] = 40; /* REL -46 dbm */
 				sendmsg(bch, dps | ISAR_HIS_PUMPCFG, PMOD_DTMF, 1, param);
 			}
-		case ISDN_PID_L1_B_V32:
+		case ISDN_PID_L1_B_MODEM_ASYNC:
 			ctrl = PMOD_DATAMODEM;
 			if (test_bit(BC_FLG_ORIG, &bch->Flag)) {
 				ctrl |= PCTRL_ORIG;
@@ -1305,7 +1305,7 @@ setup_pump(bchannel_t *bch) {
 			param[4] = PV32P5_UT144;
 			sendmsg(bch, dps | ISAR_HIS_PUMPCFG, ctrl, 6, param);
 			break;
-		case ISDN_PID_L1_B_FAX:
+		case ISDN_PID_L1_B_T30FAX:
 			ctrl = PMOD_FAX;
 			if (test_bit(BC_FLG_ORIG, &bch->Flag)) {
 				ctrl |= PCTRL_ORIG;
@@ -1343,12 +1343,12 @@ setup_sart(bchannel_t *bch) {
 				"\0\0");
 			break;
 		case ISDN_PID_L1_B_64HDLC:
-		case ISDN_PID_L1_B_FAX:
+		case ISDN_PID_L1_B_T30FAX:
 			param[0] = 0;
 			sendmsg(bch, dps | ISAR_HIS_SARTCFG, SMODE_HDLC, 1,
 				param);
 			break;
-		case ISDN_PID_L1_B_V32:
+		case ISDN_PID_L1_B_MODEM_ASYNC:
 			ctrl = SMODE_V14 | SCTRL_HDMC_BOTH;
 			param[0] = S_P1_CHS_8;
 			param[1] = S_P2_BFT_DEF;
@@ -1378,8 +1378,8 @@ setup_iom2(bchannel_t *bch) {
 		case ISDN_PID_L1_B_64TRANS:
 		case ISDN_PID_L1_B_64HDLC:
 			break;
-		case ISDN_PID_L1_B_V32:
-		case ISDN_PID_L1_B_FAX:
+		case ISDN_PID_L1_B_MODEM_ASYNC:
+		case ISDN_PID_L1_B_T30FAX:
 			cmsb |= IOM_CTRL_RCV;
 		case ISDN_PID_L2_B_TRANSDTMF:
 			if (test_bit(BC_FLG_DTMFSEND, &bch->Flag))
@@ -1420,8 +1420,8 @@ modeisar(bchannel_t *bch, int channel, u_int bprotocol, u_char *param)
 					return(-EINVAL);
 				}
 				break;
-			case ISDN_PID_L1_B_V32:
-			case ISDN_PID_L1_B_FAX:
+			case ISDN_PID_L1_B_MODEM_ASYNC:
+			case ISDN_PID_L1_B_T30FAX:
 			case ISDN_PID_L2_B_TRANSDTMF:
 				/* only datapath 1 */
 				if (!test_and_set_bit(ISAR_DP1_USE, 

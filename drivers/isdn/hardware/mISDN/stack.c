@@ -1,4 +1,4 @@
-/* $Id: stack.c,v 1.6 2003/08/01 22:15:53 kkeil Exp $
+/* $Id: stack.c,v 1.7 2003/08/02 21:17:58 kkeil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -660,3 +660,128 @@ clear_stack(mISDNstack_t *st) {
 	return(release_layers(st, MGR_UNREGLAYER | REQUEST));
 }
 
+static int
+test_stack_protocol(mISDNstack_t *st, u_int l1prot, u_int l2prot, u_int l3prot)
+{
+	int		cnt = MAX_LAYER_NR + 1, ret = 1;
+	mISDN_pid_t	pid;
+	mISDNinstance_t	*inst;
+	
+	clear_stack(st);
+	memset(&pid, 0, sizeof(mISDN_pid_t));
+	pid.layermask = ISDN_LAYER(1);
+	if (!(((l2prot == 2) || (l2prot == 0x40)) && (l3prot == 1)))
+		pid.layermask |= ISDN_LAYER(2);
+	if (!(l3prot == 1))
+		pid.layermask |= ISDN_LAYER(3);
+	
+	pid.protocol[1] = l1prot | ISDN_PID_LAYER(1) | ISDN_PID_BCHANNEL_BIT;
+	if (pid.layermask & ISDN_LAYER(2))
+		pid.protocol[2] = l2prot | ISDN_PID_LAYER(2) | ISDN_PID_BCHANNEL_BIT;
+	if (pid.layermask & ISDN_LAYER(3))
+		pid.protocol[3] = l3prot | ISDN_PID_LAYER(3) | ISDN_PID_BCHANNEL_BIT;
+	copy_pid(&st->pid, &pid, NULL);
+	memcpy(&st->mgr->pid, &pid, sizeof(mISDN_pid_t));
+	if (!SetHandledPID(st->mgr->obj, &st->mgr->pid)) {
+		int_error();
+		return(-ENOPROTOOPT);
+	} else {
+		RemoveUsedPID(&pid, &st->mgr->pid);
+	}
+	if (!pid.layermask) {
+		memset(&st->pid, 0, sizeof(mISDN_pid_t));
+		return(0);
+	}
+	ret = st->mgr->obj->ctrl(st, MGR_REGLAYER | REQUEST, st->mgr);
+	if (ret) {
+		clear_stack(st);
+		return(ret);
+	}
+	while (pid.layermask && cnt--) {
+		inst = get_next_instance(st, &pid);
+		if (!inst) {
+			st->mgr->obj->ctrl(st, MGR_CLEARSTACK| REQUEST, NULL);
+			return(-ENOPROTOOPT);
+		}
+		RemoveUsedPID(&pid, &inst->pid);
+	}
+	if (!cnt)
+		ret = -ENOPROTOOPT;
+	clear_stack(st);
+	return(ret);
+}
+
+static u_int	validL1pid4L2[ISDN_PID_IDX_MAX + 1] = {
+			0x022d,
+			0x03ff,
+			0x0000,
+			0x0000,
+			0x0010,
+			0x022d,
+			0x03ff,
+			0x0380,
+			0x022d,
+			0x022d,
+			0x022d,
+			0x01c6,
+			0x0000,
+};
+
+static u_int	validL2pid4L3[ISDN_PID_IDX_MAX + 1] = {
+			0x1fff,
+			0x0000,
+			0x0101,
+			0x0101,
+			0x0010,
+			0x0010,
+			0x0000,
+			0x00c0,
+			0x0000,
+};
+
+int
+evaluate_stack_pids(mISDNstack_t *st, mISDN_pid_t *pid)
+{
+	int 		err;
+	mISDN_pid_t	pidmask;
+	u_int		l1bitm, l2bitm, l3bitm;
+	u_int		l1idx, l2idx, l3idx;
+
+	if (!st || !pid) {
+		int_error();
+		return(-EINVAL);
+	}
+	if (!st->mgr || !st->mgr->obj || !st->mgr->obj->ctrl) {
+		int_error();
+		return(-EINVAL);
+	}
+	copy_pid(&pidmask, pid, NULL);
+	memset(pid, 0, sizeof(mISDN_pid_t));
+	for (l1idx=0; l1idx <= ISDN_PID_IDX_MAX; l1idx++) {
+		l1bitm = 1 << l1idx;
+		if (!(pidmask.protocol[1] & l1bitm))
+			continue;
+		for (l2idx=0; l2idx <= ISDN_PID_IDX_MAX; l2idx++) {
+			l2bitm = 1 << l2idx;
+			if (!(pidmask.protocol[2] & l2bitm))
+				continue;
+			if (!(validL1pid4L2[l2idx] & l1bitm))
+				continue;
+			for (l3idx=0; l3idx <= ISDN_PID_IDX_MAX; l3idx++) {
+				err = 1;
+				l3bitm = 1 << l3idx;
+				if (!(pidmask.protocol[3] & l3bitm))
+					continue;
+				if (!(validL2pid4L3[l3idx] & l2bitm))
+					continue;
+				err = test_stack_protocol(st, l1bitm, l2bitm, l3bitm);
+				if (!err) {
+					pid->protocol[3] |= l3bitm;
+					pid->protocol[2] |= l2bitm;
+					pid->protocol[1] |= l1bitm;
+				}
+			}
+		}
+	}
+	return(0);
+}
