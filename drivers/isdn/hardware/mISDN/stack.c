@@ -1,4 +1,4 @@
-/* $Id: stack.c,v 0.12 2001/07/10 16:01:03 kkeil Exp $
+/* $Id: stack.c,v 0.13 2001/07/19 21:52:39 kkeil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -476,6 +476,7 @@ unregister_instance(hisaxinstance_t *inst) {
 		inst->st = NULL;
 	}
 	REMOVE_FROM_LISTBASE(inst, hisax_instlist);
+	inst->prev = inst->next = NULL;
 	inst->id = 0;
 	inst->obj->refcnt--;
 	return(0);
