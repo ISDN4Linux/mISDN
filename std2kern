@@ -1,0 +1,297 @@
+#!/bin/sh
+
+KERNELDIR=/usr/src/linux
+PREPARSER="./preparser"
+UNIQUE=false
+VERBOSE=false
+NOTEST=true
+DODIFF=false
+DIFFREV=false
+ALLOW_ANY_DIR=true
+
+docp() {
+
+    SRCNAME=$1;
+    if $VERBOSE; then
+	echo -n "$SRCNAME... "
+    fi
+
+    # special cases
+    
+    TMPNAME=/tmp/`basename $1`.$$
+    
+    # Makefiles
+    BASENAME=`basename $2`; 
+    if [ "$BASENAME" = "Makefile" ]; then
+	if [ $VERSION -gt 3 -o \( $VERSION -eq 2 -a $PATCHLEVEL -gt 3 \) ]; then
+	    sed -e "s/drivers\/isdn\/Rules\.make/Rules\.make/" < $SRCNAME > $TMPNAME
+	    if $VERBOSE ; then
+		echo -n "processing... modified..."
+	    fi
+	    SRCNAME=$TMPNAME
+	fi
+    fi
+
+    # Rules.make
+    if [ "$BASENAME" = "Rules.make" ]; then
+	if ! [ $VERSION -gt 3 -o \( $VERSION -eq 2 -a $PATCHLEVEL -gt 3 \) ]; then
+	    if $VERBOSE; then
+		echo "skipped"
+	    fi
+	    return
+	fi
+    fi
+
+    # *.[hc] : preparse if selected
+    if $UNIQUE ; then
+        if echo $SRCNAME | egrep -q '.[hc]$'; then
+	    # only copy isdn_compat.h if we don't have a
+	    # delete #include <linux/isdn_compat.h> in the ctrlfile
+	    if [ "$1" = "include/linux/isdn_compat.h" ]; then
+		if grep -q isdn_compat.h $CTRLNAME; then
+		    if $VERBOSE; then
+			echo "skipped"
+		    fi
+		    return
+		fi;
+	    fi
+	    if $VERBOSE; then
+		echo -n "processing... "
+	    fi
+	    $PREPARSER -c $CTRLNAME $SRCNAME $TMPNAME
+	    RETVAL=$?
+	    if [ $RETVAL -ne 2 -a $RETVAL -ne 0 ] ; then 
+		echo "Problem with preparser retval $RETVAL"
+		exit 1
+	    fi
+	    if [ $RETVAL -eq 2 ] ; then
+		if $VERBOSE; then
+		    echo -n "modified... "
+		fi
+		SRCNAME=$TMPNAME
+	    fi
+	fi
+    fi
+
+    if $DODIFF; then
+	if $VERBOSE; then
+	    echo
+	fi
+	if $DIFFREV; then
+	    diff -u $2 $SRCNAME
+        else
+	    diff -u $SRCNAME $2
+	fi
+    else
+	# do the actual copy, if necessary
+	if ! cmp -s $SRCNAME $2 ; then
+	    if $VERBOSE; then
+		echo "copying"
+	    else
+		echo "$1... copying"
+	    fi
+	    if $NOTEST ; then
+		    mkdir -p `dirname $2`
+		    rm -f $2 # unlink first
+		    cp $SRCNAME $2
+	    fi
+	else
+	    if $VERBOSE; then
+		echo "up to date"
+	    fi
+	fi
+    fi
+	
+    if [ -f $TMPNAME ]; then
+	rm -f $TMPNAME
+    fi
+}
+
+#
+# Print usage and exit
+#
+usage() {
+	cat<<EOM
+
+	std2kern is used for updating your kernel-tree from within
+	this directory.
+
+	std2kern [-h] [-k DIR] [-v] [-u] [-c FILE] [files ...]
+
+	Options:
+
+	-h	This Text.
+	-k DIR	Kerneltree is in DIR instead of /usr/src/linux
+        -v      More mesages about processing
+	-u      preprocessing with $PREPARSER
+	-d      don't copy but do a unified diff instead
+	-r      reverse directions of diff
+	-c FILE	Use FILE as control file for $PREPARSER (only with -u)
+	-t      Test, don't really copy files
+
+	Without any files given, within the whole tree, the "right"
+	files are copied. When any files are given in the commandline,
+	only those are copied.
+
+EOM
+	exit
+}
+
+#
+# Check, if argument is a linux kernel dir
+#
+checkkernel() {
+	if [ -f $1/Makefile ] ; then
+		if [ "`grep ^vmlinux: $1/Makefile | grep vmlinux`" != "" ] ; then
+			return 0
+		fi
+	fi
+	echo "The given argument does not look like a kernel dir"
+	if ! $ALLOW_ANY_DIR; then
+	    exit 1
+	fi
+}
+
+#
+# Determine a control file name
+#
+calc_ctrl_file() {
+	if [ -z "$CTRLNAME" ] ; then
+		CTRLNAME=v$VERSION.$PATCHLEVEL.$SUBLEVEL.ctrl
+		if [ -f $CTRLNAME ] ; then
+			return 0
+		fi
+		CTRLNAME=v$VERSION.$PATCHLEVEL.ctrl
+		if [ -f $CTRLNAME ] ; then
+			return 0
+		fi
+		CTRLNAME=default.ctrl
+	fi
+	if [ -f $CTRLNAME ] ; then
+		return 0
+	fi
+	echo "No control file found"
+	exit 1
+}
+
+#
+# Determine a version depend file name
+#
+calc_version_file() {
+	VERSION_NAME=$1.v$VERSION.$PATCHLEVEL.$SUBLEVEL
+	if [ -f $VERSION_NAME ] ; then
+		return 0
+	fi
+	VERSION_NAME=$1.v$VERSION.$PATCHLEVEL
+	if [ -f $VERSION_NAME ] ; then
+		return 0
+	fi
+	VERSION_NAME=""
+	return 1
+}
+
+while getopts :dhk:uc:vtidr a ; do
+	case $a in
+		\?)	case $OPTARG in
+				k)	echo "-k requires Kernel directory parameter"
+					;;
+				*)  echo "Unknown option: -$OPTARG"
+					echo "Try std2kern -h"
+					;;
+			esac
+			exit 1
+			;;
+		k)	checkkernel $OPTARG
+			KERNELDIR=$OPTARG
+			;;
+		c)	CTRLNAME=$OPTARG
+			;;
+		u)	UNIQUE=true
+			;;
+		v)	VERBOSE=true
+			;;
+		t)	NOTEST=false
+			;;
+		i)      ALLOW_ANY_DIR=true;
+			;;
+		d)      DODIFF=true;
+			;;
+		r)      DIFFREV=true;
+			;;
+		h)	usage
+			;;
+	esac
+done
+shift `expr $OPTIND - 1`
+
+if [ -z "$VERSION" -o -z "$PATCHLEVEL" ] ; then
+    if ! [ -f $KERNELDIR/Makefile ] ; then
+	echo "VERSION/PATCHLEVEL not set and no Makefile to read from"
+	exit 1
+    fi
+    eval `sed -n 's/^\([A-Z]*\) = \([0-9]*\)$/\1=\2/p' $KERNELDIR/Makefile`
+fi
+echo "Current kernel version is $VERSION.$PATCHLEVEL.$SUBLEVEL"
+
+if $UNIQUE ; then
+    calc_ctrl_file
+    echo "Controlfile $CTRLNAME"
+fi
+
+if [ $# != 0 ]; then
+    for i in $* ; do
+	docp $i $KERNELDIR/$i
+    done
+else
+    for i in `find drivers -type f -name '*.[hc]'`; do
+	docp $i $KERNELDIR/$i
+    done
+    for i in `find include -type f -name '*.h'`; do
+	docp $i $KERNELDIR/$i
+    done
+    for i in drivers/isdn/hardware/Makefile \
+	drivers/isdn/hardware/Kconfig \
+	drivers/isdn/hardware/mISDN/Makefile \
+	drivers/isdn/hardware/mISDN/Rules.make \
+	drivers/isdn/hardware/mISDN/Kconfig; do
+	calc_version_file $i 
+	if [ -n "$VERSION_NAME" ] ; then
+	    docp $VERSION_NAME $KERNELDIR/$i
+	else
+	    if [ -f $i ] ; then
+		echo "use version independ $i for version v$VERSION.$PATCHLEVEL.$SUBLEVEL"
+		docp $i $KERNELDIR/$i
+	    else
+		echo "no $i for version v$VERSION.$PATCHLEVEL.$SUBLEVEL found -- skipped"
+	    fi
+	fi
+    done
+#    for i in `find Documentation -type f | grep -v CVS`; do
+#	docp $i $KERNELDIR/$i
+#    done
+fi
+exit 0
+
+  if [ -f $KERNELDIR/Documentation/Configure.help ] ; then
+    grep -q CONFIG_ISDN_DIVERSION $KERNELDIR/Documentation/Configure.help
+    if [ $? != 0 ] ; then
+      patch -d $KERNELDIR/Documentation < Documentation/Configure.help.divert.diff
+    fi
+  fi
+  if [ -f $KERNELDIR/Documentation/Configure.help ] ; then
+    grep -q CONFIG_ISDN_DRV_EICON $KERNELDIR/Documentation/Configure.help
+    if [ $? != 0 ] ; then
+      patch -d $KERNELDIR/Documentation < Documentation/Configure.help.eicon.diff
+    fi
+  fi
+  if $NOTEST ; then
+    if [ -f $KERNELDIR/Documentation/Configure.help ] ; then
+      grep -q CONFIG_ISDN_WITH_ABC $KERNELDIR/Documentation/Configure.help
+      if [ $? != 0 ] ; then
+	  if [ -f  Documentation/Configure.help.dwabc.diff ] ; then
+            patch -d $KERNELDIR/Documentation < Documentation/Configure.help.dwabc.diff
+	  fi
+      fi
+    fi
+  fi
+fi

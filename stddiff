@@ -102,6 +102,22 @@ calc_ctrl_file() {
 	exit 1
 }
 
+#
+# Determine a version depend file name
+#
+calc_version_file() {
+	VERSION_NAME=$1.v$VERSION.$PATCHLEVEL.$SUBLEVEL
+	if [ -f $VERSION_NAME ] ; then
+		return 0
+	fi
+	VERSION_NAME=$1.v$VERSION.$PATCHLEVEL
+	if [ -f $VERSION_NAME ] ; then
+		return 0
+	fi
+	VERSION_NAME=""
+	return 1
+}
+
 while getopts :rhk:uc:w a ; do
 	case $a in
 		\?) case $OPTARG in
@@ -129,6 +145,15 @@ while getopts :rhk:uc:w a ; do
 	esac
 done
 shift `expr $OPTIND - 1`
+
+if [ -z "$VERSION" -o -z "$PATCHLEVEL" ] ; then
+    if ! [ -f $KERNELDIR/Makefile ] ; then
+	echo "VERSION/PATCHLEVEL not set and no Makefile to read from"
+	exit 1
+    fi
+    eval `sed -n 's/^\([A-Z]*\) = \([0-9]*\)$/\1=\2/p' $KERNELDIR/Makefile`
+fi
+echo "Current kernel version is $VERSION.$PATCHLEVEL.$SUBLEVEL"
 
 if $UNIQUE ; then
 	DODIFF=dodiffuni
@@ -159,12 +184,22 @@ else
 			$DODIFF $i $KERNELDIR/$i
 		fi
 	done
-	for i in drivers/isdn/hardware/mISDN/Makefile \
-                ; do
-		if [ -f $i.kernel ] ; then
-	    		dodiff $i.kernel $KERNELDIR/$i
+	
+	for i in drivers/isdn/hardware/Makefile \
+		drivers/isdn/hardware/Kconfig \
+		drivers/isdn/hardware/mISDN/Makefile \
+		drivers/isdn/hardware/mISDN/Rules.make \
+		drivers/isdn/hardware/mISDN/Kconfig ; do
+		calc_version_file $i 
+		if [ -n "$VERSION_NAME" ] ; then
+	    		dodiff $VERSION_NAME $KERNELDIR/$i
 		else
-    			dodiff $i $KERNELDIR/$i
+			if [ -f $i ] ; then
+				echo "use version independ $i for version v$VERSION.$PATCHLEVEL.$SUBLEVEL"
+				$DODIFF $i $KERNELDIR/$i
+			else
+				echo "no $i for version v$VERSION.$PATCHLEVEL.$SUBLEVEL found -- skipped"
+			fi
 		fi
 	done
 fi
