@@ -108,7 +108,7 @@
 
 extern const char *CardType[];
 
-static const char *hfcmulti_revision = "$Revision: 1.8 $";
+static const char *hfcmulti_revision = "$Revision: 1.9 $";
 
 static int HFC_cnt;
 
@@ -3362,6 +3362,10 @@ HFCmulti_init(void)
 			if (debug & DEBUG_HFCMULTI_INIT)
 				printk(KERN_DEBUG "%s: (after MGR_SETSTACK REQUEST)\n", __FUNCTION__);
 
+			/* delay some time */
+			schedule_timeout((100*HZ)/1000); /* Timeout 100ms */
+
+			/* tell stack, that we are ready */
 			HFCM_obj.ctrl(dst, MGR_CTRLREADY | INDICATION, NULL);
 
 			pt++;
