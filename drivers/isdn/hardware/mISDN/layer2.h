@@ -1,4 +1,4 @@
-/* $Id: layer2.h,v 1.5 2003/12/03 14:32:45 keil Exp $
+/* $Id: layer2.h,v 1.6 2004/06/17 12:31:12 keil Exp $
  *
  * Layer 2 defines
  *
@@ -30,8 +30,7 @@ typedef struct _laddr {
 } laddr_t;
 
 typedef struct _layer2 {
-	struct _layer2		*prev;
-	struct _layer2		*next;
+	struct list_head	list;
 	int			sapi;
 	int			tei;
 	laddr_t			addr;

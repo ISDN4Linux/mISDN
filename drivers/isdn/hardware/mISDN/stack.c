@@ -1,4 +1,4 @@
-/* $Id: stack.c,v 1.9 2004/01/26 22:21:30 keil Exp $
+/* $Id: stack.c,v 1.10 2004/06/17 12:31:12 keil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -8,18 +8,16 @@
 
 #include "core.h"
 
-mISDNstack_t	*mISDN_stacklist = NULL;
-mISDNinstance_t	*mISDN_instlist = NULL;
+LIST_HEAD(mISDN_stacklist);
+LIST_HEAD(mISDN_instlist);
 
 int
 get_stack_cnt(void) {
 	int cnt = 0;
-	mISDNstack_t *st = mISDN_stacklist;
+	mISDNstack_t *st;
 
-	while(st) {
+	list_for_each_entry(st, &mISDN_stacklist, list)
 		cnt++;
-		st = st->next;
-	}
 	return(cnt);
 }
 
@@ -44,20 +42,16 @@ get_stack_info(iframe_t *frm) {
 		memcpy(&si->pid, &st->pid, sizeof(mISDN_pid_t));
 		memcpy(&si->para, &st->para, sizeof(mISDN_stPara_t));
 		si->instcnt = 0;
-		lay = st->lstack;
-		while(lay) {
+		list_for_each_entry(lay, &st->layerlist, list) {
 			if (lay->inst) {
 				si->inst[si->instcnt] = lay->inst->id;
 				si->instcnt++;
 			}
-			lay = lay->next;
 		}
 		si->childcnt = 0;
-		cst = st->child;
-		while(cst) {
+		list_for_each_entry(cst, &st->childlist, list) {
 			si->child[si->childcnt] = cst->id;
 			si->childcnt++;
-			cst = cst->next;
 		}
 		frm->len = sizeof(stack_info_t);
 		if (si->childcnt>2)
@@ -67,18 +61,19 @@ get_stack_info(iframe_t *frm) {
 
 static int
 get_free_stackid(mISDNstack_t *mst, int flag) {
-	u_int		id=1;
+	u_int		id=1, found;
 	mISDNstack_t	*st;
 
 	if (!mst) {
 		while(id<127) {
-			st = mISDN_stacklist;
-			while (st) {
-				if (st->id == id)
+			found = 0;
+			list_for_each_entry(st, &mISDN_stacklist, list) {
+				if (st->id == id) {
+					found++;
 					break;
-				st = st->next;
+				}
 			}
-			if (st)
+			if (found)
 				id++;
 			else
 				return(id);
@@ -86,27 +81,29 @@ get_free_stackid(mISDNstack_t *mst, int flag) {
 	} else if (flag & FLG_CLONE_STACK) {
 		id = mst->id | FLG_CLONE_STACK;
 		while(id < CLONE_ID_MAX) {
+			found = 0;
 			id += CLONE_ID_INC;
-			st = mISDN_stacklist;
-			while (st) {
-				if (st->id == id)
+			list_for_each_entry(st, &mISDN_stacklist, list) {
+				if (st->id == id) {
+					found++;
 					break;
-				st = st->next;
+				}
 			}
-			if (!st)
+			if (!found)
 				return(id);
 		}
 	} else if (flag & FLG_CHILD_STACK) {
 		id = mst->id | FLG_CHILD_STACK;
 		while(id < CHILD_ID_MAX) {
 			id += CHILD_ID_INC;
-			st = mst->child;
-			while (st) {
-				if (st->id == id)
+			found = 0;
+			list_for_each_entry(st, &mst->childlist, list) {
+				if (st->id == id) {
+					found++;
 					break;
-				st = st->next;
+				}
 			}
-			if (!st)
+			if (!found)
 				return(id);
 		}
 	}
@@ -116,22 +113,19 @@ get_free_stackid(mISDNstack_t *mst, int flag) {
 mISDNstack_t *
 get_stack4id(u_int id)
 {
-	mISDNstack_t *cst, *st = mISDN_stacklist;
+	mISDNstack_t *cst, *st;
 
 	if (core_debug & DEBUG_CORE_FUNC)
 		printk(KERN_DEBUG "get_stack4id(%x)\n", id);
 	if (!id) /* 0 isn't a valid id */
 		return(NULL);
-	while(st) {
+	list_for_each_entry(st, &mISDN_stacklist, list) {	
 		if (id == st->id)
 			return(st);
-		cst = st->child;
-		while (cst) {
+		list_for_each_entry(cst, &st->childlist, list) {
 			if (cst->id == id)
 				return(cst);
-			cst = cst->next;
 		}
-		st = st->next;
 	}
 	return(NULL);
 }
@@ -146,14 +140,12 @@ getlayer4lay(mISDNstack_t *st, int layermask)
 		int_error();
 		return(NULL);
 	}
-	layer = st->lstack;
-	while(layer) {
+	list_for_each_entry(layer, &st->layerlist, list) {
 		inst = layer->inst;
 		if(inst && (inst->pid.layermask & layermask))
-			break;
-		layer = layer->next;
+			return(layer);
 	}
-	return(layer);
+	return(NULL);
 }
 
 mISDNinstance_t *
@@ -173,8 +165,7 @@ get_instance(mISDNstack_t *st, int layer_nr, int protocol)
 		int_errtxt("lnr %d", layer_nr);
 		return(NULL);
 	}
-	layer = st->lstack;
-	while(layer) {
+	list_for_each_entry(layer, &st->layerlist, list) {
 		inst = layer->inst;
 		if (inst) {
 			if (core_debug & DEBUG_CORE_FUNC)
@@ -186,11 +177,10 @@ get_instance(mISDNstack_t *st, int layer_nr, int protocol)
 				goto out;
 			inst = NULL;
 		}
-		if (layer == layer->next) {
+		if (list_empty(&layer->list)) {
 			int_errtxt("deadloop layer %p", layer);
 			return(NULL);
 		}
-		layer = layer->next;
 	}
 out:
 	return(inst);
@@ -199,13 +189,11 @@ out:
 mISDNinstance_t *
 get_instance4id(u_int id)
 {
-	mISDNinstance_t *inst = mISDN_instlist;
+	mISDNinstance_t *inst;
 
-	while(inst) {
+	list_for_each_entry(inst, &mISDN_instlist, list)
 		if (inst->id == id)
 			return(inst);
-		inst = inst->next;
-	}
 	return(NULL);
 }
 
@@ -231,22 +219,16 @@ insertlayer(mISDNstack_t *st, mISDNlayer_t *layer, int layermask)
 		int_error();
 		return(-EINVAL);
 	}
-	item = st->lstack;
-	if (!item) {
-		st->lstack = layer;
+	if (list_empty(&st->layerlist)) {
+		list_add(&layer->list, &st->layerlist);
 	} else {
-		while(item) {
+		list_for_each_entry(item, &st->layerlist, list) {
 			if (layermask < get_layermask(item)) {
-				INSERT_INTO_LIST(layer, item, st->lstack);
+				list_add_tail(&layer->list, &item->list); 
 				return(0);
-			} else {
-				if (!item->next)
-					break;
 			}
-			item = item->next;
 		}
-		item->next = layer;
-		layer->prev = item;
+		list_add_tail(&layer->list, &st->layerlist);
 	}
 	return(0);
 }
@@ -264,6 +246,8 @@ new_stack(mISDNstack_t *master, mISDNinstance_t *inst)
 		return(NULL);
 	}
 	memset(newst, 0, sizeof(mISDNstack_t));
+	INIT_LIST_HEAD(&newst->layerlist);
+	INIT_LIST_HEAD(&newst->childlist);
 	if (!master) {
 		if (inst && inst->st) {
 			newst->id = get_free_stackid(inst->st, FLG_CLONE_STACK);
@@ -275,9 +259,9 @@ new_stack(mISDNstack_t *master, mISDNinstance_t *inst)
 	}
 	newst->mgr = inst;
 	if (master) {
-		APPEND_TO_LIST(newst, master->child);
+		list_add_tail(&newst->list, &master->childlist);
 	} else {
-		APPEND_TO_LIST(newst, mISDN_stacklist);
+		list_add_tail(&newst->list, &mISDN_stacklist);
 	}
 	if (core_debug & DEBUG_CORE_FUNC)
 		printk(KERN_DEBUG "Stack id %x added\n", newst->id);
@@ -291,10 +275,10 @@ static int
 release_layers(mISDNstack_t *st, u_int prim)
 {
 	mISDNinstance_t *inst;
-	mISDNlayer_t    *layer;
+	mISDNlayer_t    *layer, *nl;
 	int		cnt = 0;
 
-	while((layer = st->lstack)) {
+	list_for_each_entry_safe(layer, nl, &st->layerlist, list) {
 		inst = layer->inst;
 		if (inst) {
 			if (core_debug & DEBUG_CORE_FUNC)
@@ -303,10 +287,10 @@ release_layers(mISDNstack_t *st, u_int prim)
 					inst->name, inst->pid.layermask);
 			inst->obj->own_ctrl(inst, prim, NULL);
 		}
-		REMOVE_FROM_LISTBASE(layer, st->lstack);
+		list_del(&layer->list);
 		kfree(layer);
 		if (cnt++ > 1000) {
-			int_errtxt("release_layers st(%p)", st);
+			int_errtxt("release_layers endless loop st(%p)", st);
 			return(-EINVAL);
 		}
 	}
@@ -317,17 +301,15 @@ int
 do_for_all_layers(mISDNstack_t *st, u_int prim, void *arg)
 {
 	mISDNinstance_t *inst;
-	mISDNlayer_t    *layer;
+	mISDNlayer_t    *layer, *nl;
 	int		cnt = 0;
 
 	if (!st) {
 		int_error();
 		return(-EINVAL);
 	}
-	layer = st->lstack;
-	while(layer) {
+	list_for_each_entry_safe(layer, nl, &st->layerlist, list) {
 		inst = layer->inst;
-		layer = layer->next;
 		if (inst) {
 			if (core_debug & DEBUG_CORE_FUNC)
 				printk(KERN_DEBUG  "%s: st(%p) inst(%p):%x %s prim(%x) arg(%p)\n",
@@ -335,7 +317,7 @@ do_for_all_layers(mISDNstack_t *st, u_int prim, void *arg)
 			inst->obj->own_ctrl(inst, prim, arg);
 		}
 		if (cnt++ > 1000) {
-			int_errtxt("release_layers st(%p)", st);
+			int_errtxt("do_for_all_layers endless loop st(%p)", st);
 			return(-EINVAL);
 		}
 	}
@@ -382,66 +364,55 @@ change_stack_para(mISDNstack_t *st, u_int prim, mISDN_stPara_t *stpara)
 int
 release_stack(mISDNstack_t *st) {
 	int err;
-	mISDNstack_t *cst;
+	mISDNstack_t *cst, *nst;
 
 	if (core_debug & DEBUG_CORE_FUNC)
 		printk(KERN_DEBUG "%s: st(%p)\n", __FUNCTION__, st);
-	while (st->child) {
-		cst = st->child;
+	list_for_each_entry_safe(cst, nst, &st->childlist, list) {
 		if (core_debug & DEBUG_CORE_FUNC)
 			printk(KERN_DEBUG "%s: cst(%p)\n", __FUNCTION__, cst);
 		if ((err = release_layers(cst, MGR_RELEASE | INDICATION))) {
 			printk(KERN_WARNING "release_stack child err(%d)\n", err);
 			return(err);
 		}
-		REMOVE_FROM_LISTBASE(cst, st->child);
+		list_del(&cst->list);
 		kfree(cst);
 	}
 	if ((err = release_layers(st, MGR_RELEASE | INDICATION))) {
 		printk(KERN_WARNING "release_stack err(%d)\n", err);
 		return(err);
 	}
-	REMOVE_FROM_LISTBASE(st, mISDN_stacklist);
+	list_del(&st->list);
 	kfree(st);
 	if (core_debug & DEBUG_CORE_FUNC)
-		printk(KERN_DEBUG "%s: mISDN_stacklist(%p)\n", __FUNCTION__, mISDN_stacklist);
+		printk(KERN_DEBUG "%s: mISDN_stacklist(%p<-%p->%p)\n", __FUNCTION__,
+			mISDN_stacklist.prev, &mISDN_stacklist, mISDN_stacklist.next);
 	return(0);
 }
 
 void
 release_stacks(mISDNobject_t *obj) {
 	mISDNstack_t *st, *tmp;
-	mISDNlayer_t *layer;
-	mISDNinstance_t *inst;
+	mISDNlayer_t *layer, *ltmp;
 	int rel;
 
-	st = mISDN_stacklist;
 	if (core_debug & DEBUG_CORE_FUNC)
 		printk(KERN_DEBUG "%s: obj(%p) %s\n",
 			__FUNCTION__, obj, obj->name);
-	while (st) {
+	list_for_each_entry_safe(st, tmp, &mISDN_stacklist, list) {
 		rel = 0;
-		layer = st->lstack;
 		if (core_debug & DEBUG_CORE_FUNC)
-			printk(KERN_DEBUG "%s: st(%p) l(%p)\n",
-				__FUNCTION__, st, layer);
-		while(layer) {
-			inst = layer->inst;
-			if (inst) {
-				if (core_debug & DEBUG_CORE_FUNC)
-					printk(KERN_DEBUG "%s: inst(%p)\n",
-						__FUNCTION__, inst);
-				if (inst->obj == obj)
-					rel++;
-			}
-			layer = layer->next;
+			printk(KERN_DEBUG "%s: st(%p)\n",
+				__FUNCTION__, st);
+		list_for_each_entry_safe(layer, ltmp, &st->layerlist, list) {
+			if (core_debug & DEBUG_CORE_FUNC)
+				printk(KERN_DEBUG "%s: layer(%p) inst(%p)\n",
+					__FUNCTION__, layer, layer->inst);
+			if (layer->inst && layer->inst->obj == obj)
+				rel++;
 		}		
-		if (rel) {
-			tmp = st->next;
+		if (rel)
 			release_stack(st);
-			st = tmp;
-		} else
-			st = st->next;
 	}
 	if (obj->refcnt)
 		printk(KERN_WARNING "release_stacks obj %s refcnt is %d\n",
@@ -451,24 +422,22 @@ release_stacks(mISDNobject_t *obj) {
 
 static void
 get_free_instid(mISDNstack_t *st, mISDNinstance_t *inst) {
-	mISDNinstance_t *il = mISDN_instlist;
+	mISDNinstance_t *il;
 
 	inst->id = mISDN_get_lowlayer(inst->pid.layermask)<<20;
 	inst->id |= FLG_INSTANCE;
 	if (st) {
 		inst->id |= st->id;
 	} else {
-		while(il) {
+		list_for_each_entry(il, &mISDN_instlist, list) {
 			if (il->id == inst->id) {
 				if ((inst->id & IF_INSTMASK) >= INST_ID_MAX) {
 					inst->id = 0;
 					return;
 				}
 				inst->id += INST_ID_INC;
-				il = mISDN_instlist;
-				continue;
+				il = list_entry(mISDN_instlist.next, mISDNinstance_t, list);
 			}
-			il = il->next;
 		}
 	}
 }
@@ -515,7 +484,7 @@ register_layer(mISDNstack_t *st, mISDNinstance_t *inst) {
 	if (!inst->id) {
 		int_errtxt("no free inst->id for layer %x", inst->pid.layermask);
 		if (st && layer) {
-			REMOVE_FROM_LISTBASE(layer, st->lstack);
+			list_del(&layer->list);
 			kfree(layer);
 		}
 		return(-EINVAL);
@@ -523,7 +492,7 @@ register_layer(mISDNstack_t *st, mISDNinstance_t *inst) {
 	inst->st = st;
 	if (refinc)
 		inst->obj->refcnt++;
-	APPEND_TO_LIST(inst, mISDN_instlist);
+	list_add_tail(&inst->list, &mISDN_instlist);
 	return(0);
 }
 
@@ -550,12 +519,12 @@ unregister_instance(mISDNinstance_t *inst) {
 		if (inst->st && (inst->st->mgr != inst))
 			inst->st = NULL;
 	}
-	REMOVE_FROM_LISTBASE(inst, mISDN_instlist);
-	inst->prev = inst->next = NULL;
+	list_del_init(&inst->list);
 	inst->id = 0;
 	inst->obj->refcnt--;
 	if (core_debug & DEBUG_CORE_FUNC)
-		printk(KERN_DEBUG "%s: mISDN_instlist(%p)\n", __FUNCTION__, mISDN_instlist);
+		printk(KERN_DEBUG "%s: mISDN_instlist(%p<-%p->%p)\n", __FUNCTION__,
+			mISDN_instlist.prev, &mISDN_instlist, mISDN_instlist.next);
 	return(0);
 }
 
@@ -588,7 +557,7 @@ set_stack(mISDNstack_t *st, mISDN_pid_t *pid)
 	int 		err;
 	u_char		*pbuf = NULL;
 	mISDNinstance_t	*inst;
-	mISDNlayer_t	*hl;
+	mISDNlayer_t	*hl, *hln;
 
 	if (!st || !pid) {
 		int_error();
@@ -624,8 +593,10 @@ set_stack(mISDNstack_t *st, mISDN_pid_t *pid)
 		}
 		mISDN_RemoveUsedPID(pid, &inst->pid);
 	}
-	hl = st->lstack;
-	while(hl && hl->next) {
+	
+	list_for_each_entry_safe(hl, hln, &st->layerlist, list) {
+		if (hl->list.next == &st->layerlist)
+			break;
 		if (!hl->inst) {
 			int_error();
 			return(-EINVAL);
@@ -639,8 +610,7 @@ set_stack(mISDNstack_t *st, mISDN_pid_t *pid)
 			return(-EINVAL);
 		}
 		hl->inst->obj->own_ctrl(hl->inst, MGR_CONNECT | REQUEST,
-			hl->next->inst);
-		hl = hl->next;
+			hln->inst);
 	}
 	st->mgr->obj->own_ctrl(st->mgr, MGR_SETSTACK |CONFIRM, NULL);
 	return(0);

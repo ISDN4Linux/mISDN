@@ -1,4 +1,4 @@
-/* $Id: hfc_pci.c,v 1.37 2004/01/29 00:53:13 keil Exp $
+/* $Id: hfc_pci.c,v 1.38 2004/06/17 12:31:12 keil Exp $
 
  * hfc_pci.c     low level driver for CCD's hfc-pci based cards
  *
@@ -46,7 +46,7 @@
 
 extern const char *CardType[];
 
-static const char *hfcpci_revision = "$Revision: 1.37 $";
+static const char *hfcpci_revision = "$Revision: 1.38 $";
 
 /* table entry in the PCI devices list */
 typedef struct {
@@ -158,17 +158,16 @@ typedef struct hfcPCI_hw	hfcPCI_hw_t;
 #define HFC_CFG_SW_DD_DU	7
 
 typedef struct _hfc_pci {
-	struct _hfc_pci	*prev;
-	struct _hfc_pci	*next;
-	u_char		subtyp;
-	u_char		chanlimit;
-	u_long		cfg;
-	u_int		irq;
-	u_int		irqcnt;
-	hfcPCI_hw_t	hw;
-	mISDN_HWlock_t	lock;
-	dchannel_t	dch;
-	bchannel_t	bch[2];
+	struct list_head	list;
+	u_char			subtyp;
+	u_char			chanlimit;
+	u_long			cfg;
+	u_int			irq;
+	u_int			irqcnt;
+	hfcPCI_hw_t		hw;
+	mISDN_HWlock_t		lock;
+	dchannel_t		dch;
+	bchannel_t		bch[2];
 } hfc_pci_t;
 
 
@@ -1915,7 +1914,7 @@ HW_hfcD_bh(dchannel_t *dch)
 		}
 		while(upif) {
 			if_link(upif, prim, para, 0, NULL, 0);
-			upif = upif->next;
+			upif = upif->clone;
 		}
 	}
 }
@@ -2034,17 +2033,29 @@ static int init_card(hfc_pci_t *hc)
 static int
 SelFreeBChannel(hfc_pci_t *hc, channel_info_t *ci)
 {
-	bchannel_t	*bch;
-	hfc_pci_t	*hfc;
-	mISDNstack_t	*bst;
-	u_int		cnr;
+	bchannel_t		*bch;
+	hfc_pci_t		*hfc;
+	mISDNstack_t		*bst;
+	u_int			cnr;
+	struct list_head	*head;
 	
 	if (!ci)
 		return(-EINVAL);
 	ci->st.p = NULL;
-	bst = hc->dch.inst.st->child;
 	cnr=0;
-	while(bst) {
+	bst = hc->dch.inst.st;
+	if (list_empty(&bst->childlist)) {
+		if ((bst->id & FLG_CLONE_STACK) &&
+			(bst->childlist.prev != &bst->childlist)) {
+			head = bst->childlist.prev;
+		} else {
+			printk(KERN_ERR "%s: invalid empty childlist (no clone) stid(%x) childlist(%p<-%p->%p)\n",
+				__FUNCTION__, bst->id, bst->childlist.prev, &bst->childlist, bst->childlist.next);
+			return(-EINVAL);
+		}
+	} else
+		head = &bst->childlist;
+	list_for_each_entry(bst, head, list) {
 		if(!bst->mgr) {
 			int_errtxt("no mgr st(%p)", bst);
 			return(-EINVAL);
@@ -2076,7 +2087,6 @@ SelFreeBChannel(hfc_pci_t *hc, channel_info_t *ci)
 			}
 		}
 		cnr++;
-		bst = bst->next;
 	}
 	return(-EBUSY);
 }
@@ -2178,12 +2188,12 @@ setup_hfcpci(hfc_pci_t *hc)
 	/* Allocate memory for FIFOS */
 	/* Because the HFC-PCI needs a 32K physical alignment, we */
 	/* need to allocate the double mem and align the address */
-	if (!((void *) hc->hw.share_start = kmalloc(65536, GFP_KERNEL))) {
+	if (!(hc->hw.share_start = kmalloc(65536, GFP_KERNEL))) {
 		printk(KERN_WARNING "HFC-PCI: Error allocating memory for FIFO!\n");
 		return 1;
 	}
-	(ulong) hc->hw.fifos =
-		(((ulong) hc->hw.share_start) & ~0x7FFF) + 0x8000;
+	hc->hw.fifos = (void *)
+		((((ulong) hc->hw.share_start) & ~0x7FFF) + 0x8000);
 	pci_write_config_dword(hc->hw.dev, 0x80, (u_int) virt_to_bus(hc->hw.fifos));
 	hc->hw.pci_io = ioremap((ulong) hc->hw.pci_io, 256);
 	printk(KERN_INFO
@@ -2234,14 +2244,14 @@ release_card(hfc_pci_t *hc) {
 	mISDN_free_dch(&hc->dch);
 	HFC_obj.ctrl(hc->dch.inst.up.peer, MGR_DISCONNECT | REQUEST, &hc->dch.inst.up);
 	HFC_obj.ctrl(&hc->dch.inst, MGR_UNREGLAYER | REQUEST, NULL);
-	REMOVE_FROM_LISTBASE(hc, ((hfc_pci_t *)HFC_obj.ilist));
+	list_del(&hc->list);
 	unlock_dev(hc);
 	kfree(hc);
 }
 
 static int
 HFC_manager(void *data, u_int prim, void *arg) {
-	hfc_pci_t	*card = HFC_obj.ilist;
+	hfc_pci_t	*card;
 	mISDNinstance_t	*inst = data;
 	struct sk_buff	*skb;
 	int		channel = -1;
@@ -2252,7 +2262,7 @@ HFC_manager(void *data, u_int prim, void *arg) {
 			__FUNCTION__, prim, arg);
 		return(-EINVAL);
 	}
-	while(card) {
+	list_for_each_entry(card, &HFC_obj.ilist, list) {
 		if (&card->dch.inst == inst) {
 			channel = 2;
 			break;
@@ -2266,7 +2276,6 @@ HFC_manager(void *data, u_int prim, void *arg) {
 			channel = 1;
 			break;
 		}
-		card = card->next;
 	}
 	if (channel<0) {
 		printk(KERN_ERR "%s: no channel data %p prim %x arg %p\n",
@@ -2371,6 +2380,7 @@ static int __init HFC_init(void)
 #ifdef MODULE
 	HFC_obj.owner = THIS_MODULE;
 #endif
+	INIT_LIST_HEAD(&HFC_obj.ilist);
 	HFC_obj.name = HFCName;
 	HFC_obj.own_ctrl = HFC_manager;
 	HFC_obj.DPROTO.protocol[0] = ISDN_PID_L0_TE_S0 |
@@ -2380,8 +2390,6 @@ static int __init HFC_init(void)
 				     ISDN_PID_L1_B_64HDLC;
 	HFC_obj.BPROTO.protocol[2] = ISDN_PID_L2_B_TRANS |
 				     ISDN_PID_L2_B_RAWDEV;
-	HFC_obj.prev = NULL;
-	HFC_obj.next = NULL;
 	if ((err = mISDN_register(&HFC_obj))) {
 		printk(KERN_ERR "Can't register HFC PCI error(%d)\n", err);
 		return(err);
@@ -2393,7 +2401,7 @@ static int __init HFC_init(void)
 			return(-ENOMEM);
 		}
 		memset(card, 0, sizeof(hfc_pci_t));
-		APPEND_TO_LIST(card, ((hfc_pci_t *)HFC_obj.ilist));
+		list_add_tail(&card->list, &HFC_obj.ilist);
 		card->dch.debug = debug;
 		lock_HW_init(&card->lock);
 		card->dch.inst.lock = lock_dev;
@@ -2420,7 +2428,10 @@ static int __init HFC_init(void)
 			}
 		}
 		if (protocol[HFC_cnt] == 0x100) {
-			prev = card->prev;
+			if (card->list.prev == &HFC_obj.ilist)
+				prev = NULL;
+			else
+				prev = list_entry(card->list.prev, hfc_pci_t, list);
 
 			if (!prev) {
 				int_errtxt("card(%d) no previous HFC",
@@ -2475,7 +2486,7 @@ static int __init HFC_init(void)
 			mISDN_free_dch(&card->dch);
 			mISDN_free_bch(&card->bch[1]);
 			mISDN_free_bch(&card->bch[0]);
-			REMOVE_FROM_LISTBASE(card, ((hfc_pci_t *)HFC_obj.ilist));
+			list_del(&card->list);
 			kfree(card);
 			if (!HFC_cnt) {
 				mISDN_unregister(&HFC_obj);
@@ -2545,14 +2556,16 @@ static int __init HFC_init(void)
 #ifdef MODULE
 static void __exit HFC_cleanup(void)
 {
-	int err;
+	hfc_pci_t	*card, *next;
+	int		err;
+
 	if ((err = mISDN_unregister(&HFC_obj))) {
 		printk(KERN_ERR "Can't unregister HFC PCI error(%d)\n", err);
 	}
-	while(HFC_obj.ilist) {
+	list_for_each_entry_safe(card, next, &HFC_obj.ilist, list) {
 		printk(KERN_ERR "HFC PCI card struct not empty refs %d\n",
 			HFC_obj.refcnt);
-		release_card(HFC_obj.ilist);
+		release_card(card);
 	}
 	return;
 }

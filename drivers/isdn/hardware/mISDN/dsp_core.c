@@ -1,4 +1,4 @@
-/* $Id: dsp_core.c,v 1.8 2004/03/28 17:13:06 jolly Exp $
+/* $Id: dsp_core.c,v 1.9 2004/06/17 12:31:11 keil Exp $
  *
  * Author       Andreas Eversberg (jolly@jolly.de)
  * Based on source code structure by
@@ -161,7 +161,7 @@ or if cmx is currently using software.
  
  */
 
-const char *dsp_revision = "$Revision: 1.8 $";
+const char *dsp_revision = "$Revision: 1.9 $";
 
 #include <linux/delay.h>
 #include <linux/config.h>
@@ -677,7 +677,7 @@ release_dsp(dsp_t *dsp)
 	conf = dsp->conf;
 	if (conf) {
 		dsp_cmx_del_conf_member(dsp);
-		if (!conf->mlist) {
+		if (!list_empty(&conf->mlist)) {
 			dsp_cmx_del_conf(conf);
 		}
 	}
@@ -695,7 +695,7 @@ release_dsp(dsp_t *dsp)
 
 	if (dsp_debug & DEBUG_DSP_MGR)
 		printk(KERN_DEBUG "%s: remove & destroy object %s\n", __FUNCTION__, dsp->inst.name);
-	REMOVE_FROM_LISTBASE(dsp, ((dsp_t *)dsp_obj.ilist));
+	list_del(&dsp->list);
 	dsp_obj.ctrl(inst, MGR_UNREGLAYER | REQUEST, NULL);
 	unlock_HW(&dsp_lock);
 	vfree(dsp);
@@ -757,11 +757,11 @@ new_dsp(mISDNstack_t *st, mISDN_pid_t *pid)
 	INIT_WORK(&ndsp->sendwork, (void *)(void *)sendevent, ndsp);
 	lock_HW(&dsp_lock, 0);
 	/* append and register */
-	APPEND_TO_LIST(ndsp, ((dsp_t *)dsp_obj.ilist));
+	list_add_tail(&ndsp->list, &dsp_obj.ilist);
 	err = dsp_obj.ctrl(st, MGR_REGLAYER | INDICATION, &ndsp->inst);
 	if (err) {
 		printk(KERN_ERR "%s: failed to register layer %s\n", __FUNCTION__, ndsp->inst.name);
-		REMOVE_FROM_LISTBASE(ndsp, ((dsp_t *)dsp_obj.ilist));
+		list_del(&ndsp->list);
 		unlock_HW(&dsp_lock);
 		goto free_mem;
 	}
@@ -811,17 +811,22 @@ dsp_feat(dsp_t *dsp)
 static int
 dsp_manager(void *data, u_int prim, void *arg) {
 	mISDNinstance_t *inst = data;
-	dsp_t *dspl = (dsp_t *)dsp_obj.ilist;
-	int ret = 0;
+	dsp_t *dspl;
+	int ret = -EINVAL;
 
 	if (dsp_debug & DEBUG_DSP_MGR)
 		printk(KERN_DEBUG "%s: data:%p prim:%x arg:%p\n", __FUNCTION__, data, prim, arg);
 	if (!data)
-		return(-EINVAL);
-	while(dspl) {
-		if (&dspl->inst == inst)
+		return(ret);
+	list_for_each_entry(dspl, &dsp_obj.ilist, list) {
+		if (&dspl->inst == inst) {
+			ret = 0;
 			break;
-		dspl = dspl->next;
+		}
+	}
+	if (ret && (prim != (MGR_NEWLAYER | REQUEST))) {
+		printk(KERN_WARNING "%s: given instance(%p) not in ilist.\n", __FUNCTION__, data);
+		return(ret);
 	}
 
 	switch(prim) {
@@ -829,39 +834,19 @@ dsp_manager(void *data, u_int prim, void *arg) {
 		ret = new_dsp(data, arg);
 		break;
 	    case MGR_CONNECT | REQUEST:
-		if (!dspl) {
-			printk(KERN_WARNING "%s: given instance(%p) not in ilist.\n", __FUNCTION__, data);
-			ret = -EINVAL;
-			break;
-		}
 		ret = mISDN_ConnectIF(inst, arg);
 		dsp_feat(dspl);
 		break;
 	    case MGR_SETIF | REQUEST:
 	    case MGR_SETIF | INDICATION:
-		if (!dspl) {
-			printk(KERN_WARNING "%s: given instance(%p) not in ilist.\n", __FUNCTION__, data);
-			ret = -EINVAL;
-			break;
-		}
 		ret = mISDN_SetIF(inst, arg, prim, dsp_from_up, dsp_from_down, dspl);
 		break;
 	    case MGR_DISCONNECT | REQUEST:
 	    case MGR_DISCONNECT | INDICATION:
-		if (!dspl) {
-			printk(KERN_WARNING "%s: given instance(%p) not in ilist.\n", __FUNCTION__, data);
-			ret = -EINVAL;
-			break;
-		}
 		ret = mISDN_DisConnectIF(inst, arg);
 		break;
 	    case MGR_UNREGLAYER | REQUEST:
 	    case MGR_RELEASE | INDICATION:
-		if (!dspl) {
-			printk(KERN_WARNING "%s: given instance(%p) not in ilist.\n", __FUNCTION__, data);
-			ret = -EINVAL;
-			break;
-		}
 		if (dsp_debug & DEBUG_DSP_MGR)
 			printk(KERN_DEBUG "%s: release_dsp id %x\n", __FUNCTION__, dspl->inst.st->id);
 
@@ -922,9 +907,7 @@ static int dsp_init(void)
 	dsp_obj.name = DSPName;
 	dsp_obj.BPROTO.protocol[3] = ISDN_PID_L3_B_DSP;
 	dsp_obj.own_ctrl = dsp_manager;
-	dsp_obj.prev = NULL;
-	dsp_obj.next = NULL;
-	dsp_obj.ilist = NULL;
+	INIT_LIST_HEAD(&dsp_obj.ilist);
 
 	/* initialize audio tables */
 	silence = (dsp_options&DSP_OPT_ULAW)?0xff:0x2a;
@@ -954,7 +937,8 @@ static int dsp_init(void)
  */
 static void dsp_cleanup(void)
 {
-	int err;
+	dsp_t	*dspl, *nd;	
+	int	err;
 
 	if (dsp_debug & DEBUG_DSP_MGR)
 		printk(KERN_DEBUG "%s: removing module\n", __FUNCTION__);
@@ -963,12 +947,12 @@ static void dsp_cleanup(void)
 		printk(KERN_ERR "mISDN_dsp: Can't unregister Audio DSP error(%d)\n", 
 			err);
 	}
-	if(dsp_obj.ilist) {
+	if (!list_empty(&dsp_obj.ilist)) {
 		printk(KERN_WARNING "mISDN_dsp: Audio DSP object inst list not empty.\n");
-		while(dsp_obj.ilist)
-			release_dsp(dsp_obj.ilist);
+		list_for_each_entry_safe(dspl, nd, &dsp_obj.ilist, list)
+			release_dsp(dspl);
 	}
-	if (Conf_list) {
+	if (!list_empty(&Conf_list)) {
 		printk(KERN_ERR "mISDN_dsp: Conference list not empty. Not all memory freed.\n");
 	}
 }

@@ -1,4 +1,4 @@
-/* $Id: udevice.c,v 1.11 2004/01/26 22:21:31 keil Exp $
+/* $Id: udevice.c,v 1.12 2004/06/17 12:31:12 keil Exp $
  *
  * Copyright 2000  by Karsten Keil <kkeil@isdn4linux.de>
  *
@@ -10,7 +10,6 @@
 #include <linux/vmalloc.h>
 #include <linux/config.h>
 #include <linux/timer.h>
-#include <linux/list.h>
 #include "core.h"
 
 #define MAX_HEADER_LEN	4
@@ -23,8 +22,7 @@
 
 
 typedef struct _devicelayer {
-	struct _devicelayer	*prev;
-	struct _devicelayer	*next;
+	struct list_head	list;
 	mISDNdevice_t		*dev;
 	mISDNinstance_t		inst;
 	mISDNinstance_t		*slave;
@@ -36,16 +34,14 @@ typedef struct _devicelayer {
 } devicelayer_t;
 
 typedef struct _devicestack {
-	struct _devicestack	*prev;
-	struct _devicestack	*next;
+	struct list_head	list;
 	mISDNdevice_t		*dev;
 	mISDNstack_t		*st;
 	int			extentions;
 } devicestack_t;
 
 typedef struct _mISDNtimer {
-	struct _mISDNtimer	*prev;
-	struct _mISDNtimer	*next;
+	struct list_head	list;
 	struct _mISDNdevice	*dev;
 	struct timer_list	tl;
 	int			id;
@@ -57,7 +53,7 @@ typedef struct entity_item {
 	int			entity;
 } entity_item_t;
 
-static mISDNdevice_t	*mISDN_devicelist = NULL;
+static LIST_HEAD(mISDN_devicelist);
 static rwlock_t	mISDN_device_lock = RW_LOCK_UNLOCKED;
 
 static mISDNobject_t	udev_obj;
@@ -76,14 +72,17 @@ static int mISDN_wdata(mISDNdevice_t *dev);
 static mISDNdevice_t *
 get_mISDNdevice4minor(int minor)
 {
-	mISDNdevice_t	*dev = mISDN_devicelist;
+	mISDNdevice_t	*dev;
 
-	while(dev) {
-		if (dev->minor == minor)
-			break;
-		dev = dev->next;
+	read_lock(&mISDN_device_lock);
+	list_for_each_entry(dev, &mISDN_devicelist, list) {
+		if (dev->minor == minor) {
+			read_unlock(&mISDN_device_lock);
+			return(dev);
+		}
 	}
-	return(dev);
+	read_unlock(&mISDN_device_lock);
+	return(NULL);
 }
 
 static __inline__ void
@@ -252,69 +251,65 @@ mISDN_rdata(mISDNdevice_t *dev, iframe_t *iff, int use_value) {
 }
 
 static devicelayer_t
-*get_devlayer(mISDNdevice_t   *dev, int addr) {
-	devicelayer_t *dl = dev->layer;
+*get_devlayer(mISDNdevice_t *dev, int addr) {
+	devicelayer_t *dl;
 
 	if (device_debug & DEBUG_MGR_FUNC)
 		printk(KERN_DEBUG "%s: addr:%x\n", __FUNCTION__, addr);
-	while(dl) {
+	list_for_each_entry(dl, &dev->layerlist, list) {
 //		if (device_debug & DEBUG_MGR_FUNC)
 //			printk(KERN_DEBUG "%s: dl(%p) iaddr:%x\n",
 //				__FUNCTION__, dl, dl->iaddr);
 		if ((u_int)dl->iaddr == (IF_IADDRMASK & addr))
-			break;
-		dl = dl->next;
+			return(dl);
 	}
-	return(dl);
+	return(NULL);
 }
 
 static devicestack_t
 *get_devstack(mISDNdevice_t *dev, int addr)
 {
-	devicestack_t *ds = dev->stack;
+	devicestack_t *ds;
 
 	if (device_debug & DEBUG_MGR_FUNC)
 		printk(KERN_DEBUG "%s: addr:%x\n", __FUNCTION__, addr);
-	while(ds) {
+	list_for_each_entry(ds, &dev->stacklist, list) {
 		if (ds->st && (ds->st->id == (u_int)addr))
-			break;
-		ds = ds->next;
+			return(ds);
 	}
-	return(ds);
+	return(NULL);
 }
 
 static mISDNtimer_t
-*get_devtimer(mISDNdevice_t   *dev, int id)
+*get_devtimer(mISDNdevice_t *dev, int id)
 {
-	mISDNtimer_t	*ht = dev->timer;
+	mISDNtimer_t	*ht;
 
 	if (device_debug & DEBUG_DEV_TIMER)
 		printk(KERN_DEBUG "%s: dev:%p id:%x\n", __FUNCTION__, dev, id);
-	while(ht) {
+	list_for_each_entry(ht, &dev->timerlist, list) {
 		if (ht->id == id)
-			break;
-		ht = ht->next;
+			return(ht);
 	}
-	return(ht);
+	return(NULL);
 }
 
 static int
 stack_inst_flg(mISDNdevice_t *dev, mISDNstack_t *st, int bit, int clear)
 {
-	int ret = -1;
-	devicelayer_t *dl = dev->layer;
+	int ret;
+	devicelayer_t *dl;
 
-	while(dl) {
+	list_for_each_entry(dl, &dev->layerlist, list) {
 		if (dl->inst.st == st) {
 			if (clear)
 				ret = test_and_clear_bit(bit, &dl->Flags);
 			else
 				ret = test_and_set_bit(bit, &dl->Flags);
-			break;
+			return(ret);
 		}
-		dl = dl->next;
 	}
-	return(ret);
+	return(-1);
 }
 
 static int
@@ -349,7 +344,8 @@ new_devstack(mISDNdevice_t *dev, stack_info_t *si)
 	nds->dev = dev;
 	if (si->extentions & EXT_STACK_CLONE) {
 //		memcpy(&inst.st->pid, &st->pid, sizeof(mISDN_pid_t));
-		inst.st->child = st->child;
+		// FIXME that is a ugly idea, but I don't have a better one 
+		inst.st->childlist.prev = &st->childlist;
 	} else {
 		memcpy(&inst.st->pid, &si->pid, sizeof(mISDN_pid_t));
 	}
@@ -357,7 +353,7 @@ new_devstack(mISDNdevice_t *dev, stack_info_t *si)
 	inst.st->extentions |= si->extentions;
 	inst.st->mgr = get_instance4id(si->mgr);
 	nds->st = inst.st;
-	APPEND_TO_LIST(nds, dev->stack);
+	list_add_tail(&nds->list, &dev->stacklist);
 	return(inst.st->id);
 }
 
@@ -453,7 +449,7 @@ create_layer(mISDNdevice_t *dev, layer_info_t *linfo, int *adr)
 	nl->inst.up.owner = &nl->inst;
 	nl->inst.obj = &udev_obj;
 	nl->inst.data = nl;
-	APPEND_TO_LIST(nl, dev->layer);
+	list_add_tail(&nl->list, &dev->layerlist);
 	nl->inst.obj->ctrl(st, MGR_REGLAYER | INDICATION, &nl->inst);
 	nl->iaddr = nl->inst.id;
 	*adr++ = nl->iaddr;
@@ -492,7 +488,10 @@ remove_if(devicelayer_t *dl, int stat) {
 		memcpy(phif, shif, sizeof(mISDNif_t));
 		memset(shif, 0, sizeof(mISDNif_t));
 	}
-	REMOVE_FROM_LIST(hif);
+	if (hif->predecessor)
+		hif->predecessor->clone = hif->clone;
+	if (hif->clone)
+		hif->clone->predecessor = hif->predecessor;
 	return(err);
 }
 
@@ -514,10 +513,10 @@ del_stack(devicestack_t *ds)
 		return(-EINVAL);
 	if (ds->st) {
 		if (ds->extentions & EXT_STACK_CLONE)
-			ds->st->child = NULL;
+			INIT_LIST_HEAD(&ds->st->childlist);
 		udev_obj.ctrl(ds->st, MGR_DELSTACK | REQUEST, NULL);
 	}
-	REMOVE_FROM_LISTBASE(ds, dev->stack);
+	list_del(&ds->list);
 	kfree(ds);
 	return(0);
 }
@@ -529,8 +528,8 @@ del_layer(devicelayer_t *dl) {
 	int		i;
 
 	if (device_debug & DEBUG_MGR_FUNC) {
-		printk(KERN_DEBUG "%s: dl(%p) inst(%p) LM(%x) dev(%p) nexti(%p)\n", 
-			__FUNCTION__, dl, inst, inst->pid.layermask, dev, inst->next);
+		printk(KERN_DEBUG "%s: dl(%p) inst(%p) LM(%x) dev(%p)\n", 
+			__FUNCTION__, dl, inst, inst->pid.layermask, dev);
 		printk(KERN_DEBUG "%s: iaddr %x inst %s slave %p\n",
 			__FUNCTION__, dl->iaddr, inst->name, dl->slave);
 	}
@@ -566,7 +565,7 @@ del_layer(devicelayer_t *dl) {
 			MGR_DISCONNECT | REQUEST, &inst->down);
 	}
 	dl->iaddr = 0;
-	REMOVE_FROM_LISTBASE(dl, dev->layer);
+	list_del(&dl->list);
 	udev_obj.ctrl(inst, MGR_UNREGLAYER | REQUEST, NULL);
 	if (test_and_clear_bit(FLG_MGR_OWNSTACK, &dl->Flags)) {
 		if (dl->inst.st) {
@@ -859,14 +858,12 @@ dev_init_timer(mISDNdevice_t *dev, iframe_t *iff)
 		ht = kmalloc(sizeof(mISDNtimer_t), GFP_ATOMIC);
 		if (!ht)
 			return(-ENOMEM);
-		ht->prev = NULL;
-		ht->next = NULL;
 		ht->dev = dev;
 		ht->id = iff->addr;
 		ht->tl.data = (long) ht;
 		ht->tl.function = (void *) dev_expire_timer;
 		init_timer(&ht->tl);
-		APPEND_TO_LIST(ht, dev->timer);
+		list_add_tail(&ht->list, &dev->timerlist);
 		if (device_debug & DEBUG_DEV_TIMER)
 			printk(KERN_DEBUG "%s: new(%x)\n", __FUNCTION__, ht->id);
 	} else if (device_debug & DEBUG_DEV_TIMER)
@@ -933,6 +930,16 @@ dev_del_timer(mISDNdevice_t *dev, iframe_t *iff)
 	return(0);
 }
 
+static void
+dev_free_timer(mISDNtimer_t *ht)
+{
+	if (device_debug & DEBUG_DEV_TIMER)
+		printk(KERN_DEBUG "%s: timer(%x)\n", __FUNCTION__, ht->id);
+	del_timer(&ht->tl);
+	list_del(&ht->list);
+	kfree(ht);
+}
+
 static int
 dev_remove_timer(mISDNdevice_t *dev, int id)
 {
@@ -943,11 +950,7 @@ dev_remove_timer(mISDNdevice_t *dev, int id)
 		printk(KERN_WARNING "%s: no timer(%x)\n", __FUNCTION__, id);
 		return(-ENODEV);
 	}
-	if (device_debug & DEBUG_DEV_TIMER)
-		printk(KERN_DEBUG "%s: timer(%x)\n", __FUNCTION__, ht->id);
-	del_timer(&ht->tl);
-	REMOVE_FROM_LISTBASE(ht, dev->timer);
-	kfree(ht);
+	dev_free_timer(ht);
 	return(0);
 }
 
@@ -1532,9 +1535,12 @@ init_device(u_int minor) {
 		init_waitqueue_head(&dev->rport.procq);
 		init_waitqueue_head(&dev->wport.procq);
 		init_MUTEX(&dev->io_sema);
+		INIT_LIST_HEAD(&dev->layerlist);
+		INIT_LIST_HEAD(&dev->stacklist);
+		INIT_LIST_HEAD(&dev->timerlist);
 		INIT_LIST_HEAD(&dev->entitylist);
 		write_lock_irqsave(&mISDN_device_lock, flags);
-		APPEND_TO_LIST(dev, mISDN_devicelist);
+		list_add_tail(&dev->list, &mISDN_devicelist);
 		write_unlock_irqrestore(&mISDN_device_lock, flags);
 	}
 	return(dev);
@@ -1568,6 +1574,7 @@ get_free_rawdevice(void)
 int
 free_device(mISDNdevice_t *dev)
 {
+	struct list_head *item, *ni;
 	u_long	flags;
 
 	if (!dev)
@@ -1575,25 +1582,24 @@ free_device(mISDNdevice_t *dev)
 	if (device_debug & DEBUG_MGR_FUNC)
 		printk(KERN_DEBUG "%s: dev(%d)\n", __FUNCTION__, dev->minor);
 	/* release related stuff */
-	while(dev->layer)
-		del_layer(dev->layer);
-	while(dev->stack)
-		del_stack(dev->stack);
-	while(dev->timer)
-		dev_remove_timer(dev, dev->timer->id);
+	list_for_each_safe(item, ni, &dev->layerlist)
+		del_layer(list_entry(item, devicelayer_t, list));
+	list_for_each_safe(item, ni, &dev->stacklist)
+		del_stack(list_entry(item, devicestack_t, list));
+	list_for_each_safe(item, ni, &dev->timerlist)
+		dev_free_timer(list_entry(item, mISDNtimer_t, list));
 	if (dev->rport.buf)
 		vfree(dev->rport.buf);
 	if (dev->wport.buf)
 		vfree(dev->wport.buf);
 	write_lock_irqsave(&mISDN_device_lock, flags);
-	REMOVE_FROM_LISTBASE(dev, mISDN_devicelist);
+	list_del(&dev->list);
 	write_unlock_irqrestore(&mISDN_device_lock, flags);
 	if (!list_empty(&dev->entitylist)) {
 		printk(KERN_WARNING "MISDN %s: entitylist not empty\n", __FUNCTION__);
-		while(!list_empty(&dev->entitylist)) {
-			struct entity_item	*ei;
-			ei = (struct entity_item *)dev->entitylist.next;
-			list_del((struct list_head *)ei);
+		list_for_each_safe(item, ni, &dev->entitylist) {
+			struct entity_item *ei = list_entry(item, struct entity_item, head);
+			list_del(item);
 			mISDN_delete_entity(ei->entity);
 			kfree(ei);
 		}
@@ -1631,7 +1637,7 @@ mISDN_open(struct inode *ino, struct file *filep)
 			if (!dev->rport.buf) {
 				if (isnew) {
 					write_lock_irqsave(&mISDN_device_lock, flags);
-					REMOVE_FROM_LISTBASE(dev, mISDN_devicelist);
+					list_del(&dev->list);
 					write_unlock_irqrestore(&mISDN_device_lock, flags);
 					kfree(dev);
 				}
@@ -1652,7 +1658,7 @@ mISDN_open(struct inode *ino, struct file *filep)
 					if (dev->rport.buf)
 						vfree(dev->rport.buf);
 					write_lock_irqsave(&mISDN_device_lock, flags);
-					REMOVE_FROM_LISTBASE(dev, mISDN_devicelist);
+					list_del(&dev->list);
 					write_unlock_irqrestore(&mISDN_device_lock, flags);
 					kfree(dev);
 				}
@@ -1674,12 +1680,12 @@ mISDN_open(struct inode *ino, struct file *filep)
 static int
 mISDN_close(struct inode *ino, struct file *filep)
 {
-	mISDNdevice_t	*dev = mISDN_devicelist;
+	mISDNdevice_t	*dev, *nd;
 
 	if (device_debug & DEBUG_DEV_OP)
 		printk(KERN_DEBUG "mISDN: mISDN_close %p %p\n", filep, filep->private_data);
 	read_lock(&mISDN_device_lock);
-	while (dev) {
+	list_for_each_entry_safe(dev, nd, &mISDN_devicelist, list) {
 		if (dev == filep->private_data) {
 			if (device_debug & DEBUG_DEV_OP)
 				printk(KERN_DEBUG "mISDN: dev(%d) %p mode %x/%x\n",
@@ -1699,7 +1705,6 @@ mISDN_close(struct inode *ino, struct file *filep)
 				free_device(dev);
 			return 0;
 		}
-		dev = dev->next;
 	}
 	read_unlock(&mISDN_device_lock);
 	printk(KERN_WARNING "mISDN: No private data while closing device\n");
@@ -1941,9 +1946,9 @@ set_if(devicelayer_t *dl, u_int prim, mISDNif_t *hif)
 static int
 udev_manager(void *data, u_int prim, void *arg) {
 	mISDNinstance_t *inst = data;
-	mISDNdevice_t	*dev = mISDN_devicelist;
-	devicelayer_t	*dl = NULL;
-	int err = -EINVAL;
+	mISDNdevice_t	*dev;
+	devicelayer_t	*dl;
+	int		err = -EINVAL;
 
 	if (device_debug & DEBUG_MGR_FUNC)
 		printk(KERN_DEBUG "udev_manager data:%p prim:%x arg:%p\n",
@@ -1951,18 +1956,17 @@ udev_manager(void *data, u_int prim, void *arg) {
 	if (!data)
 		return(-EINVAL);
 	read_lock(&mISDN_device_lock);
-	while(dev) {
-		dl = dev->layer;
-		while(dl) {
-			if (&dl->inst == inst)
+	list_for_each_entry(dev, &mISDN_devicelist, list) {
+		list_for_each_entry(dl, &dev->layerlist, list) {
+			if (&dl->inst == inst) {
+				err = 0;
 				break;
-			dl = dl->next;
+			}
 		}
-		if (dl)
+		if (!err)
 			break;
-		dev = dev->next;
 	}
-	if (!dl) {
+	if (err) {
 		printk(KERN_WARNING "dev_manager prim %x without device layer\n", prim);
 		goto out;
 	}
@@ -1987,6 +1991,7 @@ udev_manager(void *data, u_int prim, void *arg) {
 	    	break;
 	    default:
 		printk(KERN_WARNING "dev_manager prim %x not handled\n", prim);
+		err = -EINVAL;
 		break;
 	}
 out:
@@ -2002,9 +2007,8 @@ int init_mISDNdev (int debug) {
 		udev_obj.DPROTO.protocol[i] = ISDN_PID_ANY;
 		udev_obj.BPROTO.protocol[i] = ISDN_PID_ANY;
 	}
+	INIT_LIST_HEAD(&udev_obj.ilist);
 	udev_obj.own_ctrl = udev_manager;
-	udev_obj.prev = NULL;
-	udev_obj.next = NULL;
 	device_debug = debug;
 	if (register_chrdev(mISDN_MAJOR, "mISDN", &mISDN_fops)) {
 		printk(KERN_WARNING "mISDN: Could not register devices\n");
@@ -2018,13 +2022,12 @@ int init_mISDNdev (int debug) {
 
 int free_mISDNdev(void) {
 	int 		err = 0;
-	mISDNdevice_t	*dev = mISDN_devicelist;
+	mISDNdevice_t	*dev, *nd;
 
-	if (mISDN_devicelist) {
+	if (!list_empty(&mISDN_devicelist)) {
 		printk(KERN_WARNING "mISDN: devices open on remove\n");
-		while (dev) {
+		list_for_each_entry_safe(dev, nd, &mISDN_devicelist, list) {
 			free_device(dev);
-			dev = mISDN_devicelist;
 		}
 		err = -EBUSY;
 	}

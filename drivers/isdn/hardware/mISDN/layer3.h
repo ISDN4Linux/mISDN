@@ -1,4 +1,4 @@
-/* $Id: layer3.h,v 1.9 2004/03/28 17:13:06 jolly Exp $
+/* $Id: layer3.h,v 1.10 2004/06/17 12:31:12 keil Exp $
  *
  * This file is (c) under GNU PUBLIC LICENSE
  *
@@ -35,8 +35,7 @@ typedef struct _L3Timer {
 } L3Timer_t;
 
 typedef struct _l3_process {
-	struct _l3_process	*prev;
-	struct _l3_process	*next;
+	struct list_head	list;
 	struct _layer3		*l3;
 	int			callref;
 	int			state;
@@ -49,14 +48,13 @@ typedef struct _l3_process {
 } l3_process_t;
 
 typedef struct _layer3 {
-	struct _layer3		*prev;
-	struct _layer3		*next;
+	struct list_head	list;
 	struct FsmInst		l3m;
 	struct FsmTimer		l3m_timer;
 	int			entity;
 	int			pid_cnt;
 	int			next_id;
-	l3_process_t		*proc;
+	struct list_head	plist;
 	l3_process_t		*global;
 	l3_process_t		*dummy;
 	int			(*p_mgr)(l3_process_t *, u_int, void *);

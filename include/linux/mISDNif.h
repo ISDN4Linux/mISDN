@@ -1,4 +1,4 @@
-/* $Id: mISDNif.h,v 1.28 2004/03/28 17:13:08 jolly Exp $
+/* $Id: mISDNif.h,v 1.29 2004/06/17 12:31:14 keil Exp $
  *
  */
 
@@ -596,6 +596,7 @@ typedef struct _Q931_info {
 
 #ifdef __KERNEL__
 #include <linux/isdn_compat.h>
+#include <linux/list.h>
 #include <linux/skbuff.h>
 
 typedef struct _mISDNobject	mISDNobject_t;
@@ -635,8 +636,7 @@ typedef struct _mISDN_headext {
 
 /* Basic struct of a mISDN component */
 struct _mISDNobject {
-	mISDNobject_t		*prev;
-	mISDNobject_t		*next;
+	struct list_head	list;
 	char			*name;
 	int			id;
 	int			refcnt;
@@ -644,27 +644,26 @@ struct _mISDNobject {
 	mISDN_pid_t		BPROTO;
 	ctrl_func_t		*own_ctrl;
 	ctrl_func_t		*ctrl;
-	void			*ilist;
+	struct list_head	ilist;
 	struct module		*owner;
 };
 
 /* the interface between two mISDNinstances */
 struct _mISDNif {
-	mISDNif_t		*prev;
-	mISDNif_t		*next;
+	if_func_t		*func;
+	void			*fdata;
+	mISDNif_t		*clone;
+	mISDNif_t		*predecessor;
 	int			extentions;
 	int			stat;
 	mISDNstack_t		*st;
 	mISDNinstance_t		*owner;
 	mISDNinstance_t		*peer;
-	if_func_t		*func;
-	void			*fdata;
 };
 
 /* a instance of a mISDNobject */
 struct _mISDNinstance {
-	mISDNinstance_t		*prev;
-	mISDNinstance_t		*next;
+	struct list_head	list;
 	char			name[mISDN_MAX_IDLEN];
 	int			extentions;
 	u_int			id;
@@ -682,23 +681,21 @@ struct _mISDNinstance {
  * normally here is only one instance per layer only if the information
  * will be splitted here are more instances */
 struct _mISDNlayer {
-	mISDNlayer_t		*prev;
-	mISDNlayer_t		*next;
+	struct list_head	list;
 	mISDNinstance_t		*inst;
 };
 
 /* the STACK; a (vertical) chain of layers */
  
 struct _mISDNstack {
-	mISDNstack_t		*prev;
-	mISDNstack_t		*next;
+	struct list_head	list;
 	u_int			id;
 	u_int			extentions;
 	mISDN_pid_t		pid;
 	mISDN_stPara_t		para;
-	mISDNlayer_t		*lstack;
+	struct list_head	layerlist;
 	mISDNinstance_t		*mgr;
-	mISDNstack_t		*child;
+	struct list_head	childlist;
 };
 
 /* lowlevel read/write struct for the mISDNdevice */
@@ -716,16 +713,15 @@ struct _mISDNport {
 
 /* the user interface to handle /dev/mISDN */
 struct _mISDNdevice {
-	mISDNdevice_t		*prev;
-	mISDNdevice_t		*next;
+	struct list_head	list;
 	int			minor;
 	struct semaphore	io_sema;
 	int			open_mode;
 	mISDNport_t		rport;
 	mISDNport_t		wport;
-	struct _devicelayer	*layer;
-	struct _devicestack	*stack;
-	struct _mISDNtimer	*timer;
+	struct list_head	layerlist;
+	struct list_head	stacklist;
+	struct list_head	timerlist;
 	struct list_head	entitylist;
 };
 

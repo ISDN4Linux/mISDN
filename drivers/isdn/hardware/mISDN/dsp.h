@@ -1,4 +1,4 @@
-/* $Id: dsp.h,v 1.4 2004/03/28 17:13:06 jolly Exp $
+/* $Id: dsp.h,v 1.5 2004/06/17 12:31:11 keil Exp $
  *
  * Audio support data for ISDN4Linux.
  *
@@ -78,24 +78,22 @@ extern u8 silence;
 /* all members within a conference (this is linked 1:1 with the dsp) */
 struct _dsp;
 typedef struct _conf_member {
-	struct _conf_member *prev;
-	struct _conf_member *next;
-	struct _dsp	*dsp;
+	struct list_head	list;
+	struct _dsp		*dsp;
 } conf_member_t;
 
 /* the list of all conferences */
 typedef struct _conference {
-	struct _conference *prev;
-	struct _conference *next;
-	u32		id; /* all cmx stacks with the same ID are connected */
-	conf_member_t	*mlist;
-	int		software; /* conf is processed by software */
-	int		hardware; /* conf is processed by hardware */
+	struct list_head	list;
+	u32			id; /* all cmx stacks with the same ID are connected */
+	struct list_head	mlist;
+	int			software; /* conf is processed by software */
+	int			hardware; /* conf is processed by hardware */
 //#ifndef AUTOJITTER
-	int		largest; /* largest frame received in conf's life. */
+	int			largest; /* largest frame received in conf's life. */
 //#endif
-	int		W_min, W_max; /* min/maximum rx-write pointer of members */
-	s32		conf_buff[CMX_BUFF_SIZE];
+	int			W_min, W_max; /* min/maximum rx-write pointer of members */
+	s32			conf_buff[CMX_BUFF_SIZE];
 } conference_t;
 
 extern mISDNobject_t dsp_obj;
@@ -148,8 +146,7 @@ struct dsp_features {
 };		
 
 typedef struct _dsp {
-	struct _dsp	*prev;
-	struct _dsp	*next;
+	struct list_head list;
 	mISDNinstance_t	inst;
 	int		b_active;
 	int		echo; /* echo is done by software */
@@ -205,7 +202,7 @@ typedef struct _dsp {
 
 extern void dsp_change_volume(struct sk_buff *skb, int volume);
 
-extern conference_t *Conf_list;
+extern struct list_head Conf_list;
 extern void dsp_cmx_debug(dsp_t *dsp);
 extern void dsp_cmx_hardware(conference_t *conf, dsp_t *dsp);
 extern int dsp_cmx_conf(dsp_t *dsp, u32 conf_id);

@@ -1,4 +1,4 @@
-/* $Id: x25_l3.c,v 1.2 2004/01/26 22:21:31 keil Exp $
+/* $Id: x25_l3.c,v 1.3 2004/06/17 12:31:12 keil Exp $
  *
  * Linux modular ISDN subsystem, mISDN
  * X.25/X.31 common Layer3 functions 
@@ -273,13 +273,12 @@ X25_reset_channel(x25_channel_t *l3c, struct sk_buff *skb)
 int
 X25_restart(x25_l3_t *l3)
 {
-	x25_channel_t	*l3c = l3->channels;
+	x25_channel_t	*l3c;
 
-	while(l3c) {
+	list_for_each_entry(l3c, &l3->channellist, list) {
 		memcpy(l3c->cause, l3->cause, 2);
 		X25_reset_channel(l3c, NULL);
 		mISDN_FsmEvent(&l3c->x25p, EV_L3_READY, NULL);
-		l3c = l3c->next;
 	}
 	return(0);
 }
@@ -539,9 +538,7 @@ X25_get_and_test_ps(x25_channel_t *chan, u_char ptype, struct sk_buff *skb)
 void
 X25_release_channel(x25_channel_t *l3c)
 {
-	x25_l3_t	*l3 = l3c->l3;
-
-	REMOVE_FROM_LISTBASE(l3c, l3->channels);
+	list_del(&l3c->list);
 	if (l3c->ncpi_data)
 		kfree(l3c->ncpi_data);
 	l3c->ncpi_data = NULL;
@@ -561,6 +558,7 @@ X25_release_channel(x25_channel_t *l3c)
 void
 X25_release_l3(x25_l3_t *l3) {
 	mISDNinstance_t	*inst = &l3->inst;
+	x25_channel_t	*ch, *nch;
 
 	if (inst->up.peer) {
 		inst->up.peer->obj->ctrl(inst->up.peer,
@@ -571,11 +569,11 @@ X25_release_l3(x25_l3_t *l3) {
 			MGR_DISCONNECT | REQUEST, &inst->down);
 	}
 	if (inst->obj) {
-		REMOVE_FROM_LISTBASE(l3, ((x25_l3_t *)inst->obj->ilist));
+		list_del_init(&l3->list);
 	}
 	discard_queue(&l3->downq);
-	while(l3->channels)
-		X25_release_channel(l3->channels);
+	list_for_each_entry_safe(ch, nch, &l3->channellist, list)
+		X25_release_channel(ch);
 	mISDN_FsmDelTimer(&l3->TR, 3);
 	if (inst->obj) {
 		if (l3->entity != MISDN_ENTITY_NONE)
@@ -654,7 +652,7 @@ new_x25_channel(x25_l3_t *l3, x25_channel_t **ch_p, __u16 ch, int dlen, u_char *
 	mISDN_FsmInitTimer(&l3c->x25d, &l3c->TD);
 	skb_queue_head_init(&l3c->dataq);
 
-	APPEND_TO_LIST(l3c, l3->channels);
+	list_add_tail(&l3c->list, &l3->channellist);
 	*ch_p = l3c;
 	return(0);
 }
@@ -671,6 +669,7 @@ new_x25_l3(x25_l3_t **l3_p, mISDNstack_t *st, mISDN_pid_t *pid, mISDNobject_t *o
 		return(-ENOMEM);
 	}
 	memset(n_l3, 0, sizeof(x25_l3_t));
+	INIT_LIST_HEAD(&n_l3->channellist);
 	n_l3->entity = MISDN_ENTITY_NONE;
 	n_l3->next_id = 1;
 	spin_lock_init(&n_l3->lock);
@@ -706,7 +705,7 @@ new_x25_l3(x25_l3_t **l3_p, mISDNstack_t *st, mISDN_pid_t *pid, mISDNobject_t *o
 	mISDN_FsmInitTimer(&n_l3->x25r, &n_l3->TR);
 	skb_queue_head_init(&n_l3->downq);
 
-	APPEND_TO_LIST(n_l3, ((x25_l3_t *)obj->ilist));
+	list_add_tail(&n_l3->list, &obj->ilist);
 	err = obj->ctrl(&n_l3->inst, MGR_NEWENTITY | REQUEST, NULL);
 	if (err) {
 		printk(KERN_WARNING "mISDN %s: MGR_NEWENTITY REQUEST failed err(%x)\n",
@@ -714,7 +713,7 @@ new_x25_l3(x25_l3_t **l3_p, mISDNstack_t *st, mISDN_pid_t *pid, mISDNobject_t *o
 	}
 	err = obj->ctrl(st, MGR_REGLAYER | INDICATION, &n_l3->inst);
 	if (err) {
-		REMOVE_FROM_LISTBASE(n_l3, ((x25_l3_t *)obj->ilist));
+		list_del(&n_l3->list);
 		kfree(n_l3);
 		n_l3 = NULL;
 	} else {
@@ -923,27 +922,25 @@ X25_send_diagnostic(x25_l3_t *l3, struct sk_buff *skb, int err, int channel)
 x25_channel_t *
 X25_get_channel(x25_l3_t *l3, __u16 ch)
 {
-	x25_channel_t	*l3c = l3->channels;
+	x25_channel_t	*l3c;
 
-	while(l3c) {
+	list_for_each_entry(l3c, &l3->channellist, list) {
 		if (l3c->lchan == ch)
-			break;
-		l3c = l3c->next;
+			return(l3c);
 	}
-	return(l3c);
+	return(NULL);
 }
 
 x25_channel_t *
 X25_get_channel4NCCI(x25_l3_t *l3, __u32 addr)
 {
-	x25_channel_t	*l3c = l3->channels;
+	x25_channel_t	*l3c;
 
-	while(l3c) {
+	list_for_each_entry(l3c, &l3->channellist, list) {
 		if ((l3c->ncci & 0xffff0000) == (addr & 0xffff0000))
-			break;
-		l3c = l3c->next;
+			return(l3c);
 	}
-	return(l3c);
+	return(NULL);
 }
 
 int

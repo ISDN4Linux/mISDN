@@ -1,4 +1,4 @@
-/* $Id: contr.c,v 1.21 2004/01/26 22:21:30 keil Exp $
+/* $Id: contr.c,v 1.22 2004/06/17 12:31:11 keil Exp $
  *
  */
 
@@ -20,7 +20,7 @@ ControllerDestr(Controller_t *contr)
 
 	spin_lock_irqsave(&contr->list_lock, flags);
 	list_for_each_safe(item, next, &contr->Applications) {
-		ApplicationDestr((Application_t *)item, 3);
+		ApplicationDestr(list_entry(item, Application_t, head), 3);
 	}
 	if (contr->plcis) {
 		Plci_t	*plci = contr->plcis;
@@ -46,7 +46,7 @@ ControllerDestr(Controller_t *contr)
 		contr->plcis = NULL;
 	}
 	list_for_each_safe(item, next, &contr->SSProcesse) {
-		SSProcessDestr((SSProcess_t *)item);
+		SSProcessDestr(list_entry(item, SSProcess_t, head));
 	}
 #ifdef OLDCAPI_DRIVER_INTERFACE
 	if (contr->ctrl)
@@ -66,15 +66,15 @@ ControllerDestr(Controller_t *contr)
 		inst->down.peer->obj->ctrl(inst->down.peer,
 			MGR_DISCONNECT | REQUEST, &inst->down);
 	}
-	while (contr->linklist) {
-		PLInst_t	*plink = contr->linklist;
-		REMOVE_FROM_LISTBASE(plink, contr->linklist);
+	list_for_each_safe(item, next, &contr->linklist) {
+		PLInst_t	*plink = list_entry(item, PLInst_t, list);
+		list_del(&plink->list);
 		kfree(plink);
 	}
 	if (contr->entity != MISDN_ENTITY_NONE)
 		inst->obj->ctrl(inst, MGR_DELENTITY | REQUEST, (void *)contr->entity);
 	inst->obj->ctrl(inst, MGR_UNREGLAYER | REQUEST, NULL);
-	REMOVE_FROM_LISTBASE(contr, ((Controller_t *)inst->obj->ilist));
+	list_del(&contr->list);
 	spin_unlock_irqrestore(&contr->list_lock, flags);
 	kfree(contr);
 }
@@ -116,8 +116,13 @@ ControllerRun(Controller_t *contr)
 		pidmask.protocol[1] = 0x03ff;
 		pidmask.protocol[2] = 0x1fff;
 		pidmask.protocol[3] = 0x00ff;
-		plink = contr->linklist;
-		ret = plink->inst.obj->ctrl(plink->st, MGR_EVALSTACK | REQUEST, &pidmask);
+		if (list_empty(&contr->linklist)) {
+			int_error();
+			ret = -EINVAL;
+		} else {
+			plink = list_entry(contr->linklist.next, PLInst_t, list);
+			ret = plink->inst.obj->ctrl(plink->st, MGR_EVALSTACK | REQUEST, &pidmask);
+		}
 		if (ret) {
 			/* Fallback on error, minimum set */
 			int_error();
@@ -510,13 +515,25 @@ ControllerPutStatus(Controller_t *contr, char *msg)
 int
 ControllerConstr(Controller_t **contr_p, mISDNstack_t *st, mISDN_pid_t *pid, mISDNobject_t *ocapi)
 {
-	Controller_t	*contr;
-	int		retval;
-	mISDNstack_t	*cst;
-	PLInst_t	*plink;
+	struct list_head	*head;
+	Controller_t		*contr;
+	int			retval;
+	mISDNstack_t		*cst;
+	PLInst_t		*plink;
 
 	if (!st)
 		return(-EINVAL);
+	if (list_empty(&st->childlist)) {
+		if ((st->id & FLG_CLONE_STACK) &&
+			(st->childlist.prev != &st->childlist)) {
+			head = st->childlist.prev;
+		} else {
+			printk(KERN_ERR "%s: invalid empty childlist (no clone) stid(%x) childlist(%p<-%p->%p)\n",
+				__FUNCTION__, st->id, st->childlist.prev, &st->childlist, st->childlist.next);
+			return(-EINVAL);
+		}
+	} else
+		head = &st->childlist;
 	if (!pid)
 		return(-EINVAL);
 	contr = kmalloc(sizeof(Controller_t), GFP_KERNEL);
@@ -525,6 +542,7 @@ ControllerConstr(Controller_t **contr_p, mISDNstack_t *st, mISDN_pid_t *pid, mIS
 	memset(contr, 0, sizeof(Controller_t));
 	INIT_LIST_HEAD(&contr->Applications);
 	INIT_LIST_HEAD(&contr->SSProcesse);
+	INIT_LIST_HEAD(&contr->linklist);
 	spin_lock_init(&contr->list_lock);
 	spin_lock_init(&contr->id_lock);
 	contr->next_id = 1;
@@ -538,11 +556,8 @@ ControllerConstr(Controller_t **contr_p, mISDNstack_t *st, mISDN_pid_t *pid, mIS
 	}
 	memset(contr->ctrl, 0, sizeof(struct capi_ctr));
 #endif
-	cst = st->child;
-	while(cst) {
+	list_for_each_entry(cst, head, list)
 		contr->nr_bc++;
-		cst = cst->next;
-	}
 	if (!contr->nr_bc) {
 		printk(KERN_ERR "no bchannels\n");
 		ControllerDestr(contr);
@@ -571,8 +586,7 @@ ControllerConstr(Controller_t **contr_p, mISDNstack_t *st, mISDN_pid_t *pid, mIS
 		ControllerDestr(contr);
 		return(-ENOPROTOOPT);
 	}
-	cst = st->child;
-	while(cst) {
+	list_for_each_entry(cst, head, list) {
 		if (!(plink = kmalloc(sizeof(PLInst_t), GFP_KERNEL))) {
 			printk(KERN_ERR "no mem for PLinst\n");
 			int_error();
@@ -585,10 +599,9 @@ ControllerConstr(Controller_t **contr_p, mISDNstack_t *st, mISDN_pid_t *pid, mIS
 		mISDN_init_instance(&plink->inst, ocapi, plink);
 		plink->inst.pid.layermask |= ISDN_LAYER(4);
 		plink->inst.down.stat = IF_NOACTIV;
-		APPEND_TO_LIST(plink, contr->linklist);
-		cst = cst->next;
+		list_add_tail(&plink->list, &contr->linklist);
 	}
-	APPEND_TO_LIST(contr, ocapi->ilist);
+	list_add_tail(&contr->list, &ocapi->ilist);
 	contr->entity = MISDN_ENTITY_NONE;
 	retval = ocapi->ctrl(&contr->inst, MGR_NEWENTITY | REQUEST, NULL);
 	if (retval) {
@@ -639,26 +652,23 @@ ControllerSelChannel(Controller_t *contr, u_int channel)
 	channel_info_t	ci;
 	int		ret;
 
-	if (!contr->linklist) {
+	if (list_empty(&contr->linklist)) {
 		int_errtxt("no linklist for controller(%x)", contr->addr);
 		return(NULL);
 	}
 	ci.channel = channel;
 	ci.st.p = NULL;
-	ret = contr->inst.obj->ctrl(contr->inst.st, MGR_SELCHANNEL | REQUEST,
-		&ci);
+	ret = contr->inst.obj->ctrl(contr->inst.st, MGR_SELCHANNEL | REQUEST, &ci);
 	if (ret) {
 		int_errtxt("MGR_SELCHANNEL ret(%d)", ret);
 		return(NULL);
 	}
 	cst = ci.st.p;
-	plink = contr->linklist;
-	while(plink) {
+	list_for_each_entry(plink, &contr->linklist, list) {
 		if (cst == plink->st)
-			break;
-		plink = plink->next;
+			return(plink);
 	}
-	return(plink);
+	return(NULL);
 }
 
 int

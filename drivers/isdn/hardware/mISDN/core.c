@@ -1,4 +1,4 @@
-/* $Id: core.c,v 1.21 2004/01/26 22:21:30 keil Exp $
+/* $Id: core.c,v 1.22 2004/06/17 12:31:11 keil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -19,10 +19,11 @@
 #include <linux/smp_lock.h>
 #endif
 
-static char	*mISDN_core_revision = "$Revision: 1.21 $";
+static char		*mISDN_core_revision = "$Revision: 1.22 $";
 
-mISDNobject_t	*mISDN_objects = NULL;
-rwlock_t	mISDN_objects_lock = RW_LOCK_UNLOCKED;
+LIST_HEAD(mISDN_objectlist);
+rwlock_t		mISDN_objects_lock = RW_LOCK_UNLOCKED;
+
 int core_debug;
 
 static u_char		entityarray[MISDN_MAX_ENTITY/8];
@@ -153,14 +154,13 @@ get_object(int id) {
 	mISDNobject_t	*obj;
 
 	read_lock(&mISDN_objects_lock);
-	obj = mISDN_objects;
-	while(obj) {
-		if (obj->id == id)
-			break;
-		obj = obj->next;
-	}
+	list_for_each_entry(obj, &mISDN_objectlist, list)
+		if (obj->id == id) {
+			read_unlock(&mISDN_objects_lock);
+			return(obj);
+		}
 	read_unlock(&mISDN_objects_lock);
-	return(obj);
+	return(NULL);
 }
 
 static mISDNobject_t *
@@ -169,17 +169,17 @@ find_object(int protocol) {
 	int		err;
 
 	read_lock(&mISDN_objects_lock);
-	obj = mISDN_objects;
-	while (obj) {
+	list_for_each_entry(obj, &mISDN_objectlist, list) {
 		err = obj->own_ctrl(NULL, MGR_HASPROTOCOL | REQUEST, &protocol);
 		if (!err)
-			break;
+			goto unlock;
 		if (err != -ENOPROTOOPT) {
 			if (0 == mISDN_HasProtocol(obj, protocol))
-				break;
+				goto unlock;
 		}	
-		obj = obj->next;
 	}
+	obj = NULL;
+unlock:
 	read_unlock(&mISDN_objects_lock);
 	return(obj);
 }
@@ -220,26 +220,16 @@ find_object_module(int protocol) {
 
 static void
 remove_object(mISDNobject_t *obj) {
-	mISDNstack_t *st = mISDN_stacklist;
-	mISDNlayer_t *layer;
-	mISDNinstance_t *inst, *tmp;
+	mISDNstack_t *st, *nst;
+	mISDNlayer_t *layer, *nl;
+	mISDNinstance_t *inst;
 
-	while (st) {
-		layer = st->lstack;
-		while(layer) {
+	list_for_each_entry_safe(st, nst, &mISDN_stacklist, list) {
+		list_for_each_entry_safe(layer, nl, &st->layerlist, list) {
 			inst = layer->inst;
-			while (inst) {
-				if (inst->obj == obj) {
-					tmp = inst->next;
-					inst->obj->own_ctrl(st, MGR_RELEASE
-						| INDICATION, inst);
-					inst = tmp;
-				} else
-					inst = inst->next;
-			}
-			layer = layer->next;
+			if (inst && inst->obj == obj)
+				inst->obj->own_ctrl(st, MGR_RELEASE | INDICATION, inst);
 		}
-		st = st->next;
 	}
 }
 
@@ -296,7 +286,7 @@ get_next_instance(mISDNstack_t *st, mISDN_pid_t *pid)
 static int
 sel_channel(mISDNstack_t *st, channel_info_t *ci)
 {
-	int		err = -EINVAL;
+	int	err = -EINVAL;
 
 	if (!ci)
 		return(err);
@@ -314,20 +304,30 @@ sel_channel(mISDNstack_t *st, channel_info_t *ci)
 		printk(KERN_WARNING "%s: no mgr st(%p)\n", __FUNCTION__, st);
 	}
 	if (err) {
-		mISDNstack_t	*cst = st->child;
+		mISDNstack_t	*cst;
 		u_int		nr = 0;
 
 		ci->st.p = NULL;
 		if (!(ci->channel & (~CHANNEL_NUMBER))) {
 			/* only number is set */
-			while(cst) {
+			struct list_head	*head;
+			if (list_empty(&st->childlist)) {
+				if ((st->id & FLG_CLONE_STACK) &&
+					(st->childlist.prev != &st->childlist)) {
+					head = st->childlist.prev;
+				} else {
+					printk(KERN_WARNING "%s: invalid empty childlist (no clone) stid(%x) childlist(%p<-%p->%p)\n",
+						__FUNCTION__, st->id, st->childlist.prev, &st->childlist, st->childlist.next);
+					return(err);
+				}
+			} else
+				head = &st->childlist;
+			list_for_each_entry(cst, head, list) {
 				nr++;
 				if (nr == (ci->channel & 3)) {
 					ci->st.p = cst;
-					err = 0;
-					break;
+					return(0);
 				}
-				cst = cst->next;
 			}
 		}
 	}
@@ -363,7 +363,10 @@ add_if(mISDNinstance_t *inst, u_int prim, mISDNif_t *hif) {
 		myif = &inst->up;
 	} else
 		return(-EINVAL);
-	APPEND_TO_LIST(hif, myif);
+	while(myif->clone)
+		myif = myif->clone;
+	myif->clone = hif;
+	hif->predecessor = myif;
 	inst->obj->own_ctrl(inst, prim, hif);
 	return(0);
 }
@@ -567,7 +570,7 @@ int mISDN_register(mISDNobject_t *obj) {
 		return(-EINVAL);
 	write_lock_irqsave(&mISDN_objects_lock, flags);
 	obj->id = obj_id++;
-	APPEND_TO_LIST(obj, mISDN_objects);
+	list_add_tail(&obj->list, &mISDN_objectlist);
 	write_unlock_irqrestore(&mISDN_objects_lock, flags);
 	obj->ctrl = central_manager;
 	// register_prop
@@ -592,10 +595,11 @@ int mISDN_unregister(mISDNobject_t *obj) {
 	else
 		remove_object(obj);
 	write_lock_irqsave(&mISDN_objects_lock, flags);
-	REMOVE_FROM_LISTBASE(obj, mISDN_objects);
+	list_del(&obj->list);
 	write_unlock_irqrestore(&mISDN_objects_lock, flags);
 	if (core_debug & DEBUG_CORE_FUNC)
-		printk(KERN_DEBUG "mISDN_unregister: mISDN_objects(%p)\n", mISDN_objects);
+		printk(KERN_DEBUG "mISDN_unregister: mISDN_objectlist(%p<-%p->%p)\n",
+			mISDN_objectlist.prev, &mISDN_objectlist, mISDN_objectlist.next);
 	return(0);
 }
 
@@ -628,23 +632,21 @@ mISDNInit(void)
 
 void mISDN_cleanup(void) {
 	DECLARE_MUTEX_LOCKED(sem);
-	mISDNstack_t *st;
+	mISDNstack_t *st, *nst;
 
 	free_mISDNdev();
-	if (mISDN_objects) {
+	if (!list_empty(&mISDN_objectlist)) {
 		printk(KERN_WARNING "mISDNcore mISDN_objects not empty\n");
 	}
-	if (mISDN_stacklist) {
+	if (!list_empty(&mISDN_stacklist)) {
 		printk(KERN_WARNING "mISDNcore mISDN_stacklist not empty\n");
-		st = mISDN_stacklist;
-		while (st) {
-			printk(KERN_WARNING "mISDNcore st %x in list\n",
+		list_for_each_entry_safe(st, nst, &mISDN_stacklist, list) {
+			printk(KERN_WARNING "mISDNcore st %x still in list\n",
 				st->id);
-			if (st == st->next) {
+			if (list_empty(&st->list)) {
 				printk(KERN_WARNING "mISDNcore st == next\n");
 				break;
 			}
-			st = st->next;
 		}
 	}
 	if (mISDN_thread.thread) {

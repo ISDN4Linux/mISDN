@@ -1,4 +1,4 @@
-/* $Id: layer2.c,v 1.18 2004/01/26 22:21:30 keil Exp $
+/* $Id: layer2.c,v 1.19 2004/06/17 12:31:12 keil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -12,7 +12,7 @@
 #include "helper.h"
 #include "debug.h"
 
-static char *l2_revision = "$Revision: 1.18 $";
+static char *l2_revision = "$Revision: 1.19 $";
 
 static void l2m_debug(struct FsmInst *fi, char *fmt, ...);
 
@@ -200,7 +200,7 @@ static int
 ph_data_confirm(mISDNif_t *up, mISDN_head_t *hh, struct sk_buff *skb) {
 	layer2_t *l2 = up->fdata;
 	struct sk_buff *nskb = skb; 
-	mISDNif_t *next = up->next;
+	mISDNif_t *next = up->clone;
 	int ret = -EAGAIN;
 
 	if (test_bit(FLG_L1_BUSY, &l2->flag)) {
@@ -1885,16 +1885,18 @@ l2from_down(mISDNif_t *hif, struct sk_buff *askb)
 	layer2_t	*l2;
 	int 		ret = -EINVAL;
 	struct sk_buff	*cskb = askb;
+	mISDNif_t	*next;
 	mISDN_head_t	*hh, sh;
 
 	if (!hif || !askb)
 		return(-EINVAL);
 	l2 = hif->fdata;
 	hh = mISDN_HEAD_P(askb);
+	next = hif->clone;
 //	printk(KERN_DEBUG "%s: prim(%x)\n", __FUNCTION__, hh->prim);
 	if (!l2) {
-		if (hif->next && hif->next->func)
-			ret = hif->next->func(hif->next, askb);
+		if (next && next->func)
+			ret = next->func(next, askb);
 		return(ret);
 	}
 	if (hh->prim == (PH_DATA | CONFIRM))
@@ -1912,14 +1914,14 @@ l2from_down(mISDNif_t *hif, struct sk_buff *askb)
 				}
 			}
 		}
-		if (hif->next && hif->next->func)
-			ret = hif->next->func(hif->next, askb);
+		if (next && next->func)
+			ret = next->func(next, askb);
 		return(ret);
 	}
-	if (hif->next) {
-		if (hif->next->func) {
+	if (next) {
+		if (next->func) {
 			if (!(cskb = skb_clone(askb, GFP_ATOMIC)))
-				return(hif->next->func(hif->next, askb));
+				return(next->func(next, askb));
 			else
 				sh = *hh;
 		}
@@ -1960,9 +1962,9 @@ l2from_down(mISDNif_t *hif, struct sk_buff *askb)
 		dev_kfree_skb(cskb);
 		ret = 0;
 	}
-	if (hif->next && hif->next->func) {
+	if (next && next->func) {
 		*hh = sh;
-		ret = hif->next->func(hif->next, askb);
+		ret = next->func(next, askb);
 	}
 	return(ret);
 }
@@ -2096,14 +2098,17 @@ release_l2(layer2_t *l2)
 	if (l2->cloneif) {
 		printk(KERN_DEBUG "%s: cloneif(%p) owner(%p) peer(%p)\n",
 			__FUNCTION__, l2->cloneif, l2->cloneif->owner, l2->cloneif->peer);
-		REMOVE_FROM_LIST(l2->cloneif);
+		if (l2->cloneif->predecessor)
+			l2->cloneif->predecessor->clone = l2->cloneif->clone;
+		if (l2->cloneif->clone)
+			l2->cloneif->clone->predecessor = l2->cloneif->predecessor;
 		if (l2->cloneif->owner &&
-			(l2->cloneif->owner->up.next == l2->cloneif))
-			l2->cloneif->owner->up.next = l2->cloneif->next;
+			(l2->cloneif->owner->up.clone == l2->cloneif))
+			l2->cloneif->owner->up.clone = l2->cloneif->clone;
 		kfree(l2->cloneif);
 		l2->cloneif = NULL;
 	}
-	REMOVE_FROM_LISTBASE(l2, ((layer2_t *)isdnl2.ilist));
+	list_del(&l2->list);
 	isdnl2.ctrl(inst, MGR_UNREGLAYER | REQUEST, NULL);
 	if (l2->entity != MISDN_ENTITY_NONE)
 		isdnl2.ctrl(inst, MGR_DELENTITY | REQUEST, (void *)l2->entity);
@@ -2225,7 +2230,7 @@ new_l2(mISDNstack_t *st, mISDN_pid_t *pid, layer2_t **newl2) {
 
 	mISDN_FsmInitTimer(&nl2->l2m, &nl2->t200);
 	mISDN_FsmInitTimer(&nl2->l2m, &nl2->t203);
-	APPEND_TO_LIST(nl2, ((layer2_t *)isdnl2.ilist));
+	list_add_tail(&nl2->list, &isdnl2.ilist);
 	err = isdnl2.ctrl(&nl2->inst, MGR_NEWENTITY | REQUEST, NULL);
 	if (err) {
 		printk(KERN_WARNING "mISDN %s: MGR_NEWENTITY REQUEST failed err(%x)\n",
@@ -2235,7 +2240,7 @@ new_l2(mISDNstack_t *st, mISDN_pid_t *pid, layer2_t **newl2) {
 	if (err) {
 		mISDN_FsmDelTimer(&nl2->t200, 0);
 		mISDN_FsmDelTimer(&nl2->t203, 0);
-		REMOVE_FROM_LISTBASE(nl2, ((layer2_t *)isdnl2.ilist));
+		list_del(&nl2->list);
 		kfree(nl2);
 		nl2 = NULL;
 	} else {
@@ -2286,7 +2291,10 @@ clone_l2(layer2_t *l2, mISDNinstance_t **new_ip) {
 	nif->owner = l2->inst.down.peer;
 	nif->peer = &nl2->inst;
 	nif->stat = IF_DOWN;
-	APPEND_TO_LIST(nif, nif->owner->up.next);
+	nif->predecessor = &nif->owner->up;
+	while(nif->predecessor->clone)
+		nif->predecessor = nif->predecessor->clone;
+	nif->predecessor->clone = nif;
 	nl2->inst.down.owner = &nl2->inst;
 	nl2->inst.down.peer = &l2->inst;
 	nl2->inst.down.func = l2_chain_down;
@@ -2347,25 +2355,27 @@ MODULE_PARM(debug, "1i");
 
 static int
 l2_manager(void *data, u_int prim, void *arg) {
-	mISDNinstance_t *inst = data;
-	layer2_t *l2l = isdnl2.ilist;;
+	mISDNinstance_t	*inst = data;
+	layer2_t	*l2l;
+	int		err = -EINVAL;
 
 	if (debug & 0x1000)
 		printk(KERN_DEBUG "%s: data:%p prim:%x arg:%p\n", __FUNCTION__,
 			data, prim, arg);
 	if (!data)
-		return(-EINVAL);
-	while(l2l) {
-		if (&l2l->inst == inst)
+		return(err);
+	list_for_each_entry(l2l, &isdnl2.ilist, list) {
+		if (&l2l->inst == inst) {
+			err = 0;
 			break;
-		l2l = l2l->next;
+		}
 	}
 	if (prim == (MGR_NEWLAYER | REQUEST))
 		return(new_l2(data, arg, NULL));
-	if (!l2l) {
+	if (err) {
 		if (debug & 0x1)
 			printk(KERN_WARNING "l2_manager prim(%x) l2 no instance\n", prim);
-		return(-EINVAL);
+		return(err);
 	}
 	switch(prim) {
 	    case MGR_NEWENTITY | CONFIRM:
@@ -2423,8 +2433,7 @@ int Isdnl2_Init(void)
 		ISDN_PID_L2_DF_PTP;
 	isdnl2.BPROTO.protocol[2] = ISDN_PID_L2_B_X75SLP;
 	isdnl2.own_ctrl = l2_manager;
-	isdnl2.prev = NULL;
-	isdnl2.next = NULL;
+	INIT_LIST_HEAD(&isdnl2.ilist);
 	l2fsm.state_count = L2_STATE_COUNT;
 	l2fsm.event_count = L2_EVENT_COUNT;
 	l2fsm.strEvent = strL2Event;
@@ -2440,15 +2449,16 @@ int Isdnl2_Init(void)
 
 void Isdnl2_cleanup(void)
 {
-	int err;
+	int		err;
+	layer2_t	*l2, *nl2;
 
 	if ((err = mISDN_unregister(&isdnl2))) {
 		printk(KERN_ERR "Can't unregister ISDN layer 2 error(%d)\n", err);
 	}
-	if(isdnl2.ilist) {
+	if(!list_empty(&isdnl2.ilist)) {
 		printk(KERN_WARNING "mISDNl2 l2 list not empty\n");
-		while(isdnl2.ilist)
-			release_l2(isdnl2.ilist);
+		list_for_each_entry_safe(l2, nl2, &isdnl2.ilist, list)
+			release_l2(l2);
 	}
 	TEIFree();
 	mISDN_FsmFree(&l2fsm);

@@ -1,4 +1,4 @@
-/* $Id: w6692.c,v 1.11 2004/01/27 12:55:55 keil Exp $
+/* $Id: w6692.c,v 1.12 2004/06/17 12:31:12 keil Exp $
 
  * w6692.c     low level driver for CCD's hfc-pci based cards
  *
@@ -41,7 +41,7 @@
 
 extern const char *CardType[];
 
-const char *w6692_rev = "$Revision: 1.11 $";
+const char *w6692_rev = "$Revision: 1.12 $";
 
 #define DBUSY_TIMER_VALUE	80
 
@@ -51,8 +51,7 @@ typedef struct _w6692_bc {
 } w6692_bc;
 
 typedef struct _w6692pci {
-	struct _w6692pci	*prev;
-	struct _w6692pci	*next;
+	struct list_head	list;
 	void			*pdev;
 	u_int			irq;
 	u_int			irqcnt;
@@ -165,7 +164,7 @@ W6692_new_ph(dchannel_t *dch)
 			para = HW_RESET;
 			while(upif) {
 				if_link(upif, prim, para, 0, NULL, 0);
-					upif = upif->next;
+				upif = upif->clone;
 			}
 			upif = &dch->inst.up;
 			/* fall trough */
@@ -198,7 +197,7 @@ W6692_new_ph(dchannel_t *dch)
 	}
 	while(upif) {
 		if_link(upif, prim, para, 0, NULL, 0);
-		upif = upif->next;
+		upif = upif->clone;
 	}
 }
 
@@ -1278,7 +1277,7 @@ release_card(w6692pci *card)
 	mISDN_free_dch(&card->dch);
 	w6692.ctrl(card->dch.inst.up.peer, MGR_DISCONNECT | REQUEST, &card->dch.inst.up);
 	w6692.ctrl(&card->dch.inst, MGR_UNREGLAYER | REQUEST, NULL);
-	REMOVE_FROM_LISTBASE(card, ((w6692pci *)w6692.ilist));
+	list_del(&card->list);
 	unlock_dev(card);
 	pci_disable_device(card->pdev);
 	pci_set_drvdata(card->pdev, NULL);
@@ -1287,7 +1286,7 @@ release_card(w6692pci *card)
 
 static int
 w6692_manager(void *data, u_int prim, void *arg) {
-	w6692pci	*card = w6692.ilist;
+	w6692pci	*card;
 	mISDNinstance_t	*inst = data;
 	struct sk_buff	*skb;
 	int		channel = -1;
@@ -1301,7 +1300,7 @@ w6692_manager(void *data, u_int prim, void *arg) {
 			__FUNCTION__, prim, arg);
 		return(-EINVAL);
 	}
-	while(card) {
+	list_for_each_entry(card, &w6692.ilist, list) {
 		if (&card->dch.inst == inst) {
 			channel = 2;
 			break;
@@ -1314,7 +1313,6 @@ w6692_manager(void *data, u_int prim, void *arg) {
 			channel = 1;
 			break;
 		}
-		card = card->next;
 	}
 	if (channel<0) {
 		printk(KERN_WARNING "%s: no channel data %p prim %x arg %p\n",
@@ -1420,7 +1418,7 @@ static int __devinit setup_instance(w6692pci *card)
 	int		i, err;
 	mISDN_pid_t	pid;
 	
-	APPEND_TO_LIST(card, ((w6692pci *)w6692.ilist));
+	list_add_tail(&card->list, &w6692.ilist);
 	card->dch.debug = debug;
 	lock_HW_init(&card->lock);
 	card->dch.inst.lock = lock_dev;
@@ -1451,7 +1449,7 @@ static int __devinit setup_instance(w6692pci *card)
 		mISDN_free_dch(&card->dch);
 		mISDN_free_bch(&card->bch[1]);
 		mISDN_free_bch(&card->bch[0]);
-		REMOVE_FROM_LISTBASE(card, ((w6692pci *)w6692.ilist));
+		list_del(&card->list);
 		kfree(card);
 		return(err);
 	}
@@ -1567,14 +1565,13 @@ static int __init w6692_init(void)
 #ifdef MODULE
 	w6692.owner = THIS_MODULE;
 #endif
+	INIT_LIST_HEAD(&w6692.ilist);
 	w6692.name = W6692Name;
 	w6692.own_ctrl = w6692_manager;
 	w6692.DPROTO.protocol[0] = ISDN_PID_L0_TE_S0;
 	w6692.BPROTO.protocol[1] = ISDN_PID_L1_B_64TRANS |
 				    ISDN_PID_L1_B_64HDLC;
 	w6692.BPROTO.protocol[2] = ISDN_PID_L2_B_TRANS;
-	w6692.prev = NULL;
-	w6692.next = NULL;
 	if ((err = mISDN_register(&w6692))) {
 		printk(KERN_ERR "Can't register Winbond W6692 PCI error(%d)\n", err);
 		return(err);
@@ -1597,15 +1594,16 @@ static int __init w6692_init(void)
 
 static void __exit w6692_cleanup(void)
 {
-	int err;
+	int		err;
+	w6692pci	*card, *next;
 
 	if ((err = mISDN_unregister(&w6692))) {
 		printk(KERN_ERR "Can't unregister Winbond W6692 PCI error(%d)\n", err);
 	}
-	while(w6692.ilist) {
+	list_for_each_entry_safe(card, next, &w6692.ilist, list) {
 		printk(KERN_ERR "Winbond W6692 PCI card struct not empty refs %d\n",
 			w6692.refcnt);
-		release_card(w6692.ilist);
+		release_card(card);
 	}
 	pci_unregister_driver(&w6692_driver);
 }

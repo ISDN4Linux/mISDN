@@ -1,4 +1,4 @@
-/* $Id: layer1.c,v 1.10 2004/01/26 22:21:30 keil Exp $
+/* $Id: layer1.c,v 1.11 2004/06/17 12:31:12 keil Exp $
  *
  * mISDN_l1.c     common low level stuff for I.430 layer1
  *
@@ -10,7 +10,7 @@
  *
  */
 
-static char *l1_revision = "$Revision: 1.10 $";
+static char *l1_revision = "$Revision: 1.11 $";
 
 #include <linux/config.h>
 #include <linux/module.h>
@@ -19,14 +19,13 @@ static char *l1_revision = "$Revision: 1.10 $";
 #include "debug.h"
 
 typedef struct _layer1 {
-	struct _layer1	*prev;
-	struct _layer1	*next;
-	u_long		Flags;
-	struct FsmInst	l1m;
-	struct FsmTimer timer;
-	int		debug;
-	int		delay;
-	mISDNinstance_t	inst;
+	struct list_head	list;
+	u_long			Flags;
+	struct FsmInst		l1m;
+	struct FsmTimer 	timer;
+	int			debug;
+	int			delay;
+	mISDNinstance_t		inst;
 } layer1_t;
 
 /* l1 status_info */
@@ -614,7 +613,7 @@ release_l1(layer1_t *l1) {
 		inst->down.peer->obj->ctrl(inst->down.peer,
 			MGR_DISCONNECT | REQUEST, &inst->down);
 	}
-	REMOVE_FROM_LISTBASE(l1, ((layer1_t *)isdnl1.ilist));
+	list_del(&l1->list);
 	isdnl1.ctrl(inst, MGR_UNREGLAYER | REQUEST, NULL);
 	kfree(l1);
 }
@@ -656,11 +655,11 @@ new_l1(mISDNstack_t *st, mISDN_pid_t *pid) {
 	nl1->l1m.userint = 0;
 	nl1->l1m.printdebug = l1m_debug;
 	mISDN_FsmInitTimer(&nl1->l1m, &nl1->timer);
-	APPEND_TO_LIST(nl1, ((layer1_t *)isdnl1.ilist));
+	list_add_tail(&nl1->list, &isdnl1.ilist);
 	err = isdnl1.ctrl(st, MGR_REGLAYER | INDICATION, &nl1->inst);
 	if (err) {
 		mISDN_FsmDelTimer(&nl1->timer, 0);
-		REMOVE_FROM_LISTBASE(nl1, ((layer1_t *)isdnl1.ilist));
+		list_del(&nl1->list);
 		kfree(nl1);
 	}
 	return(err);
@@ -699,66 +698,57 @@ MODULE_LICENSE("GPL");
 
 static int
 l1_manager(void *data, u_int prim, void *arg) {
-	mISDNinstance_t *inst = data;
-	layer1_t *l1l = isdnl1.ilist;
+	mISDNinstance_t	*inst = data;
+	layer1_t	*l1l;
+	int		err = -EINVAL;
 
 	if (debug & 0x10000)
 		printk(KERN_DEBUG "%s: data(%p) prim(%x) arg(%p)\n",
 			__FUNCTION__, data, prim, arg);
 	if (!data)
-		return(-EINVAL);
-	while(l1l) {
-		if (&l1l->inst == inst)
+		return(err);
+	list_for_each_entry(l1l, &isdnl1.ilist, list) {
+		if (&l1l->inst == inst) {
+			err = 0;
 			break;
-		l1l = l1l->next;
+		}
 	}
+	if (err && (prim != (MGR_NEWLAYER | REQUEST))) {
+		printk(KERN_WARNING "l1_manager connect no instance\n");
+		return(err);
+	}
+	
 	switch(prim) {
 	    case MGR_NEWLAYER | REQUEST:
-		return(new_l1(data, arg));
+		err = new_l1(data, arg);
+		break;
 	    case MGR_CONNECT | REQUEST:
-		if (!l1l) {
-			printk(KERN_WARNING "l1_manager connect no instance\n");
-			return(-EINVAL);
-		}
-		return(mISDN_ConnectIF(inst, arg));
+		err = mISDN_ConnectIF(inst, arg);
 		break;
 	    case MGR_SETIF | REQUEST:
 	    case MGR_SETIF | INDICATION:
-		if (!l1l) {
-			printk(KERN_WARNING "l1_manager setif no instance\n");
-			return(-EINVAL);
-		}
-		return(mISDN_SetIF(inst, arg, prim, l1from_up, l1from_down, l1l));
+		err = mISDN_SetIF(inst, arg, prim, l1from_up, l1from_down, l1l);
 		break;
 	    case MGR_DISCONNECT | REQUEST:
 	    case MGR_DISCONNECT | INDICATION:
-		if (!l1l) {
-			printk(KERN_WARNING "l1_manager disconnect no instance\n");
-			return(-EINVAL);
-		}
-		return(mISDN_DisConnectIF(inst, arg));
+		err = mISDN_DisConnectIF(inst, arg);
 		break;
 	    case MGR_UNREGLAYER | REQUEST:
 	    case MGR_RELEASE | INDICATION:
-	    	if (l1l) {
-			printk(KERN_DEBUG "release_l1 id %x\n", l1l->inst.st->id);
-	    		release_l1(l1l);
-	    	} else 
-	    		printk(KERN_WARNING "l1_manager release no instance\n");
-	    	break;
+		printk(KERN_DEBUG "release_l1 id %x\n", l1l->inst.st->id);
+		release_l1(l1l);
+		break;
 	    case MGR_STATUS | REQUEST:
-		if (!l1l) {
-			printk(KERN_WARNING "l1_manager status l1 no instance\n");
-			return(-EINVAL);
-		}
-		return(l1_status(l1l, arg));
+		err = l1_status(l1l, arg);
+		break;
 	    PRIM_NOT_HANDLED(MGR_CTRLREADY|INDICATION);
 	    PRIM_NOT_HANDLED(MGR_ADDSTPARA|INDICATION);
 	    default:
 		printk(KERN_WARNING "l1_manager prim %x not handled\n", prim);
-		return(-EINVAL);
+		err = -EINVAL;
+		break;
 	}
-	return(0);
+	return(err);
 }
 
 int Isdnl1Init(void)
@@ -772,9 +762,7 @@ int Isdnl1Init(void)
 	isdnl1.name = MName;
 	isdnl1.DPROTO.protocol[1] = ISDN_PID_L1_TE_S0;
 	isdnl1.own_ctrl = l1_manager;
-	isdnl1.prev = NULL;
-	isdnl1.next = NULL;
-	isdnl1.ilist = NULL;
+	INIT_LIST_HEAD(&isdnl1.ilist);
 #ifdef mISDN_UINTERFACE
 	isdnl1.DPROTO.protocol[1] |= ISDN_PID_L1_TE_U;
 	l1fsm_u.state_count = L1U_STATE_COUNT;
@@ -807,15 +795,16 @@ int Isdnl1Init(void)
 #ifdef MODULE
 void cleanup_module(void)
 {
-	int err;
+	int 		err;
+	layer1_t	*l1, *nl1;
 
 	if ((err = mISDN_unregister(&isdnl1))) {
 		printk(KERN_ERR "Can't unregister ISDN layer 1 error(%d)\n", err);
 	}
-	if(isdnl1.ilist) {
+	if(!list_empty(&isdnl1.ilist)) {
 		printk(KERN_WARNING "mISDNl1 inst list not empty\n");
-		while(isdnl1.ilist)
-			release_l1(isdnl1.ilist);
+		list_for_each_entry_safe(l1, nl1, &isdnl1.ilist, list)
+			release_l1(l1);
 	}
 #ifdef mISDN_UINTERFACE
 	mISDN_FsmFree(&l1fsm_u);

@@ -1,4 +1,4 @@
-/* $Id: sedl_fax.c,v 1.20 2004/01/31 00:04:36 keil Exp $
+/* $Id: sedl_fax.c,v 1.21 2004/06/17 12:31:12 keil Exp $
  *
  * sedl_fax.c  low level stuff for Sedlbauer Speedfax + cards
  *
@@ -50,7 +50,7 @@
 
 extern const char *CardType[];
 
-const char *Sedlfax_revision = "$Revision: 1.20 $";
+const char *Sedlfax_revision = "$Revision: 1.21 $";
 
 const char *Sedlbauer_Types[] =
 	{"None", "speed fax+", "speed fax+ pyramid", "speed fax+ pci"};
@@ -109,8 +109,7 @@ const char *Sedlbauer_Types[] =
 /* data struct */
 
 typedef struct _sedl_fax {
-	struct _sedl_fax	*prev;
-	struct _sedl_fax	*next;
+	struct list_head	list;
 	void			*pdev;
 	u_int			subtyp;
 	u_int			irq;
@@ -582,7 +581,7 @@ release_card(sedl_fax *card) {
 	mISDN_free_dch(&card->dch);
 	speedfax.ctrl(card->dch.inst.up.peer, MGR_DISCONNECT | REQUEST, &card->dch.inst.up);
 	speedfax.ctrl(&card->dch.inst, MGR_UNREGLAYER | REQUEST, NULL);
-	REMOVE_FROM_LISTBASE(card, ((sedl_fax *)speedfax.ilist));
+	list_del(&card->list);
 	unlock_dev(card);
 	if (card->subtyp == SEDL_SPEEDFAX_ISA) {
 		pnp_disable_dev(card->pdev);
@@ -597,7 +596,7 @@ release_card(sedl_fax *card) {
 
 static int
 speedfax_manager(void *data, u_int prim, void *arg) {
-	sedl_fax	*card = speedfax.ilist;
+	sedl_fax	*card;
 	mISDNinstance_t	*inst=data;
 	int		channel = -1;
 	struct sk_buff	*skb;
@@ -610,7 +609,7 @@ speedfax_manager(void *data, u_int prim, void *arg) {
 			prim, arg);
 		return(-EINVAL);
 	}
-	while(card) {
+	list_for_each_entry(card, &speedfax.ilist, list) {
 		if (&card->dch.inst == inst) {
 			channel = 2;
 			break;
@@ -623,7 +622,6 @@ speedfax_manager(void *data, u_int prim, void *arg) {
 			channel = 1;
 			break;
 		}
-		card = card->next;
 	}
 	if (channel<0) {
 		printk(KERN_ERR "speedfax_manager no channel data %p prim %x arg %p\n",
@@ -731,7 +729,7 @@ static int __devinit setup_instance(sedl_fax *card)
 		kfree(card);
 		return(-EINVAL);
 	}
-	APPEND_TO_LIST(card, ((sedl_fax *)speedfax.ilist));
+	list_add_tail(&card->list, &speedfax.ilist);
 	card->dch.debug = debug;
 	lock_HW_init(&card->lock);
 	card->dch.inst.lock = lock_dev;
@@ -759,7 +757,7 @@ static int __devinit setup_instance(sedl_fax *card)
 		mISDN_free_dch(&card->dch);
 		mISDN_free_bch(&card->bch[1]);
 		mISDN_free_bch(&card->bch[0]);
-		REMOVE_FROM_LISTBASE(card, ((sedl_fax *)speedfax.ilist));
+		list_del(&card->list);
 		kfree(card);
 		return(err);
 	}
@@ -825,6 +823,7 @@ static int __devinit sedlpci_probe(struct pci_dev *pdev, const struct pci_device
 	return(err);
 }
 
+#if defined(CONFIG_PNP)
 #ifdef NEW_ISAPNP
 static int __devinit sedlpnp_probe(struct pnp_dev *pdev, const struct pnp_device_id *dev_id)
 #else
@@ -864,6 +863,7 @@ static int __devinit sedlpnp_probe(struct pci_dev *pdev, const struct isapnp_dev
 		pnp_set_drvdata(pdev, NULL);
 	return(err);
 }
+#endif /* CONFIG_PNP */
 
 static void __devexit sedl_remove_pci(struct pci_dev *pdev)
 {
@@ -875,6 +875,7 @@ static void __devexit sedl_remove_pci(struct pci_dev *pdev)
 		printk(KERN_WARNING "%s: drvdata allready removed\n", __FUNCTION__);
 }
 
+#if defined(CONFIG_PNP)
 #ifdef NEW_ISAPNP
 static void __devexit sedl_remove_pnp(struct pnp_dev *pdev)
 #else
@@ -888,6 +889,7 @@ static void __devexit sedl_remove_pnp(struct pci_dev *pdev)
 	else
 		printk(KERN_WARNING "%s: drvdata allready removed\n", __FUNCTION__);
 }
+#endif
 
 static struct pci_device_id sedlpci_ids[] __devinitdata = {
 	{ PCI_VENDOR_ID_TIGERJET, PCI_DEVICE_ID_TIGERJET_100, PCI_SUBVENDOR_SPEEDFAX_PYRAMID, PCI_SUB_ID_SEDLBAUER,
@@ -905,6 +907,7 @@ static struct pci_driver sedlpci_driver = {
 	id_table: sedlpci_ids,
 };
 
+#if defined(CONFIG_PNP)
 #ifdef NEW_ISAPNP
 static struct pnp_device_id sedlpnp_ids[] __devinitdata = {
 	{ 
@@ -930,6 +933,7 @@ static struct isapnp_driver sedlpnp_driver = {
 	remove:   __devexit_p(sedl_remove_pnp),
 	id_table: sedlpnp_ids,
 };
+#endif /* CONFIG_PNP */
 
 static int __init Speedfax_init(void)
 {
@@ -938,6 +942,7 @@ static int __init Speedfax_init(void)
 #ifdef MODULE
 	speedfax.owner = THIS_MODULE;
 #endif
+	INIT_LIST_HEAD(&speedfax.ilist);
 	speedfax.name = SpeedfaxName;
 	speedfax.own_ctrl = speedfax_manager;
 	speedfax.DPROTO.protocol[0] = ISDN_PID_L0_TE_S0;
@@ -948,9 +953,6 @@ static int __init Speedfax_init(void)
 	speedfax.BPROTO.protocol[2] = ISDN_PID_L2_B_TRANS |
 				      ISDN_PID_L2_B_T30;
 
-	speedfax.prev = NULL;
-	speedfax.next = NULL;
-	
 	if ((err = mISDN_register(&speedfax))) {
 		printk(KERN_ERR "Can't register Speedfax error(%d)\n", err);
 		return(err);
@@ -959,11 +961,11 @@ static int __init Speedfax_init(void)
 	if (err < 0)
 		goto out;
 	pci_nr_found = err;
-
+#if defined(CONFIG_PNP)
 	err = pnp_register_driver(&sedlpnp_driver);
 	if (err < 0)
 		goto out_unregister_pci;
-
+#endif
 #if !defined(CONFIG_HOTPLUG) || defined(MODULE)
 	if (pci_nr_found + err == 0) {
 		err = -ENODEV;
@@ -974,7 +976,9 @@ static int __init Speedfax_init(void)
 
 #if !defined(CONFIG_HOTPLUG) || defined(MODULE)
  out_unregister_isapnp:
+#if defined(CONFIG_PNP)
 	pnp_unregister_driver(&sedlpnp_driver);
+#endif
 #endif
  out_unregister_pci:
 	pci_unregister_driver(&sedlpci_driver);
@@ -984,16 +988,20 @@ static int __init Speedfax_init(void)
 
 static void __exit Speedfax_cleanup(void)
 {
-	int err;
+	int		err;
+	sedl_fax	*card, *next;
+
 	if ((err = mISDN_unregister(&speedfax))) {
 		printk(KERN_ERR "Can't unregister Speedfax PCI error(%d)\n", err);
 	}
-	while(speedfax.ilist) {
+	list_for_each_entry_safe(card, next, &speedfax.ilist, list) {
 		printk(KERN_ERR "Speedfax PCI card struct not empty refs %d\n",
 			speedfax.refcnt);
-		release_card(speedfax.ilist);
+		release_card(card);
 	}
+#if defined(CONFIG_PNP)
 	pnp_unregister_driver(&sedlpnp_driver);
+#endif
 	pci_unregister_driver(&sedlpci_driver);
 }
 

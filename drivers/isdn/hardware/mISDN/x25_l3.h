@@ -1,4 +1,4 @@
-/* $Id: x25_l3.h,v 1.3 2004/01/30 23:46:37 keil Exp $
+/* $Id: x25_l3.h,v 1.4 2004/06/17 12:31:12 keil Exp $
  *
  * Layer 3 X.25 defines
  *
@@ -47,10 +47,9 @@ struct _x25_ConfQueue {
 };
 
 struct _x25_l3 {
-	x25_l3_t		*prev;
-	x25_l3_t		*next;
+	struct list_head	list;
 	mISDNinstance_t		inst;
-	x25_channel_t		*channels;
+	struct list_head	channellist;
 	struct FsmInst		l2l3m;
 	struct FsmInst		x25r;
 	struct FsmTimer		TR;
@@ -70,8 +69,7 @@ struct _x25_l3 {
 };
 
 struct _x25_channel {
-	x25_channel_t		*prev;
-	x25_channel_t		*next;
+	struct list_head	list;
 	x25_l3_t		*l3;
 	struct FsmInst		x25p;
 	struct FsmInst		x25d;

@@ -1,4 +1,4 @@
-/* $Id: m_capi.h,v 1.10 2004/01/30 23:46:37 keil Exp $
+/* $Id: m_capi.h,v 1.11 2004/06/17 12:31:12 keil Exp $
  *
  * Rewritten CAPI Layer (Layer4 in mISDN)
  * 
@@ -148,11 +148,10 @@ typedef struct FacConfParm	FacConfParm_t;
 // ---------------------------------------------------------------------------
 
 struct _PLInst {
-	PLInst_t	*prev;
-	PLInst_t	*next;
-	u_int		state;
-	mISDNstack_t	*st;
-	mISDNinstance_t	inst;
+	struct list_head	list;
+	u_int			state;
+	mISDNstack_t		*st;
+	mISDNinstance_t		inst;
 };
 
 struct _ConfQueue { 
@@ -175,11 +174,10 @@ struct Bprotocol {
 // ---------------------------------------------------------------------------
 
 struct _Controller {
-	struct _Controller	*prev;
-	struct _Controller	*next;
+	struct list_head	list;
 	mISDNinstance_t		inst;
 	int			nr_bc;
-	PLInst_t		*linklist;
+	struct list_head	linklist;
 	struct capi_ctr		*ctrl;
 	__u32			addr;
 	int			entity;

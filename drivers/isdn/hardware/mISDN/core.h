@@ -1,4 +1,4 @@
-/* $Id: core.h,v 1.7 2003/11/21 22:57:08 keil Exp $
+/* $Id: core.h,v 1.8 2004/06/17 12:31:11 keil Exp $
  * 
  * This file is (c) under GNU PUBLIC LICENSE
  *
@@ -37,8 +37,8 @@ extern int		free_device(mISDNdevice_t *dev);
 
 /* from mISDN_stack.c */
 
-extern mISDNstack_t	*mISDN_stacklist;
-extern mISDNinstance_t	*mISDN_instlist;
+extern struct list_head	mISDN_stacklist;
+extern struct list_head	mISDN_instlist;
 
 extern void		get_stack_info(iframe_t *);
 extern int		get_stack_cnt(void);
@@ -57,7 +57,7 @@ extern mISDNinstance_t	*get_instance(mISDNstack_t *, int, int);
 
 /* from mISDN_core.c */
 
-extern mISDNobject_t	*mISDN_objects;
+extern struct list_head	mISDN_objectlist;
 extern int core_debug;
 
 extern int		register_layer(mISDNstack_t *, mISDNinstance_t *);

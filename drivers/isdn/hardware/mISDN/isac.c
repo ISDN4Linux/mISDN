@@ -1,4 +1,4 @@
-/* $Id: isac.c,v 1.15 2004/01/26 22:21:30 keil Exp $
+/* $Id: isac.c,v 1.16 2004/06/17 12:31:12 keil Exp $
  *
  * isac.c   ISAC specific routines
  *
@@ -22,7 +22,7 @@
 #define DBUSY_TIMER_VALUE 80
 #define ARCOFI_USE 1
 
-const char *isac_revision = "$Revision: 1.15 $";
+const char *isac_revision = "$Revision: 1.16 $";
 
 #ifdef MODULE
 MODULE_AUTHOR("Karsten Keil");
@@ -92,7 +92,7 @@ isac_new_ph(dchannel_t *dch)
 	}
 	while(upif) {
 		if_link(upif, prim, para, 0, NULL, 0);
-		upif = upif->next;
+		upif = upif->clone;
 	}
 }
 

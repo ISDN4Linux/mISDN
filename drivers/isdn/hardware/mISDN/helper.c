@@ -1,4 +1,4 @@
-/* $Id: helper.c,v 1.12 2004/01/27 01:50:20 keil Exp $
+/* $Id: helper.c,v 1.13 2004/06/17 12:31:12 keil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -321,9 +321,10 @@ mISDN_ConnectIF(mISDNinstance_t *owner, mISDNinstance_t *peer)
 int
 mISDN_DisConnectIF(mISDNinstance_t *inst, mISDNif_t *hif) {
 	if (hif) {
-		if (hif->next && hif->next->owner) {
-			hif->next->owner->obj->ctrl(hif->next->owner,
-				MGR_DISCONNECT | REQUEST, hif->next);
+		if (hif->clone) {
+			if (hif->clone->owner)
+				hif->clone->owner->obj->ctrl(hif->clone->owner,
+					MGR_DISCONNECT | REQUEST, hif->clone);
 		}	
 		if (inst->up.peer) {
 			if (inst->up.peer == hif->owner)
@@ -354,6 +355,10 @@ mISDN_init_instance(mISDNinstance_t *inst, mISDNobject_t *obj, void *data)
 	inst->data = data;
 	inst->up.owner = inst;
 	inst->down.owner = inst;
+	inst->up.clone = NULL;
+	inst->up.predecessor = NULL;
+	inst->down.clone = NULL;
+	inst->down.predecessor = NULL;
 	obj->ctrl(NULL, MGR_DISCONNECT | REQUEST, &inst->down);
 	obj->ctrl(NULL, MGR_DISCONNECT | REQUEST, &inst->up);
 }

@@ -1,4 +1,4 @@
-/* $Id: layer3.c,v 1.14 2004/03/28 17:52:36 jolly Exp $
+/* $Id: layer3.c,v 1.15 2004/06/17 12:31:12 keil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -13,7 +13,7 @@
 #include "layer3.h"
 #include "helper.h"
 
-const char *l3_revision = "$Revision: 1.14 $";
+const char *l3_revision = "$Revision: 1.15 $";
 
 static
 struct Fsm l3fsm = {NULL, 0, 0, NULL, NULL};
@@ -254,26 +254,22 @@ no_l3_proto_spec(struct PStack *st, isdn_ctrl *ic)
 l3_process_t
 *getl3proc(layer3_t *l3, int cr)
 {
-	l3_process_t *p = l3->proc;
-
-	while (p)
+	l3_process_t *p;
+	
+	list_for_each_entry(p, &l3->plist, list)
 		if (p->callref == cr)
 			return (p);
-		else
-			p = p->next;
 	return (NULL);
 }
 
 l3_process_t
 *getl3proc4id(layer3_t *l3, u_int id)
 {
-	l3_process_t *p = l3->proc;
+	l3_process_t *p;
 
-	while (p)
+	list_for_each_entry(p, &l3->plist, list)
 		if (p->id == id)
 			return (p);
-		else
-			p = p->next;
 	return (NULL);
 }
 
@@ -324,7 +320,7 @@ l3_process_t
 	p->callref = cr;
 	p->n303 = n303;
 	L3InitTimer(p, &p->timer);
-	APPEND_TO_LIST(p, l3->proc);
+	list_add_tail(&p->list, &l3->plist);
 	return (p);
 };
 
@@ -337,10 +333,10 @@ release_l3_process(l3_process_t *p)
 		return;
 	l3 = p->l3;
 	mISDN_l3up(p, CC_RELEASE_CR | INDICATION, NULL);
-	REMOVE_FROM_LISTBASE(p, l3->proc);
+	list_del(&p->list);
 	StopAllL3Timer(p);
 	kfree(p);
-	if (!l3->proc && !test_bit(FLG_PTP, &l3->Flag)) {
+	if (list_empty(&l3->plist) && !test_bit(FLG_PTP, &l3->Flag)) {
 		if (l3->debug)
 			l3_debug(l3, "release_l3_process: last process");
 		if (!skb_queue_len(&l3->squeue)) {
@@ -357,15 +353,10 @@ release_l3_process(l3_process_t *p)
 static void
 l3ml3p(layer3_t *l3, int pr)
 {
-	l3_process_t *p = l3->proc;
-	l3_process_t *np;
+	l3_process_t *p, *np;
 
-	while (p) {
-		/* p might be kfreed under us, so we need to save where we want to go on */
-		np = p->next;
+	list_for_each_entry_safe(p, np, &l3->plist, list) 
 		l3->p_mgr(p, pr, NULL);
-		p = np;
-	}
 }
 
 int
@@ -419,7 +410,7 @@ lc_connect(struct FsmInst *fi, int event, void *arg)
 			dev_kfree_skb(skb);
 		dequeued++;
 	}
-	if ((!l3->proc) &&  dequeued) {
+	if (list_empty(&l3->plist) &&  dequeued) {
 		if (l3->debug)
 			l3m_debug(fi, "lc_connect: release link");
 		mISDN_FsmEvent(&l3->l3m, EV_RELEASE_REQ, NULL);
@@ -441,7 +432,7 @@ lc_connected(struct FsmInst *fi, int event, void *arg)
 			dev_kfree_skb(skb);
 		dequeued++;
 	}
-	if ((!l3->proc) &&  dequeued) {
+	if (list_empty(&l3->plist) &&  dequeued) {
 		if (l3->debug)
 			l3m_debug(fi, "lc_connected: release link");
 		mISDN_FsmEvent(&l3->l3m, EV_RELEASE_REQ, NULL);
@@ -558,7 +549,7 @@ l3_msg(layer3_t *l3, u_int pr, int dinfo, int len, void *arg)
 void
 init_l3(layer3_t *l3)
 {
-	l3->proc   = NULL;
+	INIT_LIST_HEAD(&l3->plist);
 	l3->global = NULL;
 	l3->dummy = NULL;
 	l3->entity = MISDN_ENTITY_NONE;
@@ -578,11 +569,13 @@ init_l3(layer3_t *l3)
 void
 release_l3(layer3_t *l3)
 {
+	l3_process_t *p, *np;
+
 	if (l3->l3m.debug)
-		printk(KERN_DEBUG "release_l3(%p) proc(%p) global(%p) dummy(%p)\n",
-			l3, l3->proc, l3->global, l3->dummy);
-	while (l3->proc)
-		release_l3_process(l3->proc);
+		printk(KERN_DEBUG "release_l3(%p) plist(%s) global(%p) dummy(%p)\n",
+			l3, list_empty(&l3->plist) ? "no" : "yes", l3->global, l3->dummy);
+	list_for_each_entry_safe(p, np, &l3->plist, list)
+		release_l3_process(p);
 	if (l3->global) {
 		StopAllL3Timer(l3->global);
 		kfree(l3->global);

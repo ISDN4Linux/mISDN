@@ -108,7 +108,7 @@
 
 extern const char *CardType[];
 
-static const char *hfcmulti_revision = "$Revision: 1.9 $";
+static const char *hfcmulti_revision = "$Revision: 1.10 $";
 
 static int HFC_cnt;
 
@@ -2191,7 +2191,7 @@ hfcmulti_dch_bh(dchannel_t *dch)
 		if (hc->created[hc->chan[ch].port]) {
 			while(upif) {
 				if_link(upif, prim, para, 0, NULL, 0);
-				upif = upif->next;
+				upif = upif->clone;
 			}
 		}
 	}
@@ -2479,11 +2479,12 @@ init_card(hfc_multi_t *hc)
 static int
 SelFreeBChannel(hfc_multi_t *hc, int ch, channel_info_t *ci)
 {
-	bchannel_t	*bch;
-	hfc_multi_t	*hfc;
-	mISDNstack_t	*bst;
-	int		cnr;
-	int		port = hc->chan[ch].port;
+	bchannel_t		*bch;
+	hfc_multi_t		*hfc;
+	mISDNstack_t		*bst;
+	struct list_head	*head;
+	int			cnr;
+	int			port = hc->chan[ch].port;
 
 	if (port < 0 || port>=hc->type) {
 		printk(KERN_WARNING "%s: port(%d) out of range", __FUNCTION__, port);
@@ -2493,9 +2494,20 @@ SelFreeBChannel(hfc_multi_t *hc, int ch, channel_info_t *ci)
 	if (!ci)
 		return(-EINVAL);
 	ci->st.p = NULL;
-	bst = hc->chan[ch].dch->inst.st->child;
 	cnr=0;
-	while(bst) {
+	bst = hc->chan[ch].dch->inst.st;
+	if (list_empty(&bst->childlist)) {
+		if ((bst->id & FLG_CLONE_STACK) &&
+			(bst->childlist.prev != &bst->childlist)) {
+			head = bst->childlist.prev;
+		} else {
+			printk(KERN_ERR "%s: invalid empty childlist (no clone) stid(%x) childlist(%p<-%p->%p)\n",
+				__FUNCTION__, bst->id, bst->childlist.prev, &bst->childlist, bst->childlist.next);
+			return(-EINVAL);
+		}
+	} else
+		head = &bst->childlist;
+	list_for_each_entry(bst, head, list) {
 		if (cnr == ((hc->type==1)?30:2)) /* 30 or 2 B-channels */ {
 			printk(KERN_WARNING "%s: fatal error: more b-stacks than ports", __FUNCTION__);
 			return(-EINVAL);
@@ -2529,7 +2541,6 @@ SelFreeBChannel(hfc_multi_t *hc, int ch, channel_info_t *ci)
 			}
 		}
 		cnr++;
-		bst = bst->next;
 	}
 	return(-EBUSY);
 }
@@ -2783,7 +2794,7 @@ release_port(hfc_multi_t *hc, int port)
 
 		if (debug & DEBUG_HFCMULTI_INIT)
 			printk(KERN_DEBUG "%s: removing object from listbase\n", __FUNCTION__);
-		REMOVE_FROM_LISTBASE(hc, ((hfc_multi_t *)HFCM_obj.ilist));
+		list_del(&hc->list);
 		kfree(hc);
 	}
  
@@ -2793,7 +2804,7 @@ release_port(hfc_multi_t *hc, int port)
 static int
 HFC_manager(void *data, u_int prim, void *arg)
 {
-	hfc_multi_t *hc = HFCM_obj.ilist;
+	hfc_multi_t *hc;
 	mISDNinstance_t *inst = data;
 	struct sk_buff *skb;
 	dchannel_t *dch = NULL;
@@ -2808,7 +2819,7 @@ HFC_manager(void *data, u_int prim, void *arg)
 	}
 
 	/* find channel and card */
-	while(hc) {
+	list_for_each_entry(hc, &HFCM_obj.ilist, list) {
 		i = 0;
 		while(i < 32) {
 //printk(KERN_DEBUG "comparing (D-channel) card=%08x inst=%08x with inst=%08x\n", hc, &hc->dch[i].inst, inst);
@@ -2828,8 +2839,6 @@ HFC_manager(void *data, u_int prim, void *arg)
 		}
 		if (ch >= 0)
 			break;
-
-		hc = hc->next;
 	}
 	if (ch < 0) {
 		printk(KERN_ERR "%s: no card/channel found  data %p prim %x arg %p\n", __FUNCTION__, data, prim, arg);
@@ -2955,7 +2964,7 @@ static int __init
 HFCmulti_init(void)
 {
 	int err, err2, i;
-	hfc_multi_t *hc;
+	hfc_multi_t *hc,*next;
 	mISDN_pid_t pid, pids[MAX_CARDS];
 	mISDNstack_t *dst = NULL; /* make gcc happy */
 	int port_cnt;
@@ -3004,6 +3013,7 @@ HFCmulti_init(void)
 #ifdef MODULE
 	HFCM_obj.owner = THIS_MODULE;
 #endif
+	INIT_LIST_HEAD(&HFCM_obj.ilist);
 	HFCM_obj.name = HFCName;
 	HFCM_obj.own_ctrl = HFC_manager;
 	HFCM_obj.DPROTO.protocol[0] = ISDN_PID_L0_TE_S0 | ISDN_PID_L0_NT_S0
@@ -3087,7 +3097,7 @@ HFCmulti_init(void)
 
 		if (debug & DEBUG_HFCMULTI_INIT)
 			printk(KERN_DEBUG "%s: (after APPEND_TO_LIST)\n", __FUNCTION__);
-		APPEND_TO_LIST(hc, ((hfc_multi_t *)HFCM_obj.ilist));
+		list_add_tail(&hc->list, &HFCM_obj.ilist);
 		if (debug & DEBUG_HFCMULTI_INIT)
 			printk(KERN_DEBUG "%s: (after APPEND_TO_LIST)\n", __FUNCTION__);
 		
@@ -3415,7 +3425,7 @@ HFCmulti_init(void)
 	}
 	if (debug & DEBUG_HFCMULTI_INIT)
 		printk(KERN_DEBUG "%s: before REMOVE_FROM_LIST (refcnt = %d)\n", __FUNCTION__, HFCM_obj.refcnt);
-	REMOVE_FROM_LISTBASE(hc, ((hfc_multi_t *)HFCM_obj.ilist));
+	list_del(&hc->list);
 	if (debug & DEBUG_HFCMULTI_INIT)
 		printk(KERN_DEBUG "%s: after REMOVE_FROM_LIST (refcnt = %d)\n", __FUNCTION__, HFCM_obj.refcnt);
 	kfree(hc);
@@ -3426,9 +3436,9 @@ HFCmulti_init(void)
 	if ((err2 = mISDN_unregister(&HFCM_obj))) {
 		printk(KERN_ERR "Can't unregister HFC-Multi cards error(%d)\n", err);
 	}
-	while(HFCM_obj.ilist) {
+	list_for_each_entry_safe(hc, next, &HFCM_obj.ilist, list) {
 		printk(KERN_ERR "HFC PCI card struct not empty refs %d\n", HFCM_obj.refcnt);
-		release_port(HFCM_obj.ilist, -1); /* all ports */
+		release_port(hc, -1); /* all ports */
 	}
 	if (debug & DEBUG_HFCMULTI_INIT)
 		printk(KERN_DEBUG "%s: after mISDN_unregister (refcnt = %d)\n", __FUNCTION__, HFCM_obj.refcnt);
@@ -3443,6 +3453,7 @@ HFCmulti_init(void)
 static void __exit
 HFCmulti_cleanup(void)
 {
+	hfc_multi_t *hc,*next;
 	int err;
 
 	if (debug & DEBUG_HFCMULTI_INIT)
@@ -3452,9 +3463,10 @@ HFCmulti_cleanup(void)
 	}
 	if (debug & DEBUG_HFCMULTI_INIT)
 		printk(KERN_DEBUG "%s: now checking ilist (refcnt = %d)\n", __FUNCTION__, HFCM_obj.refcnt);
-	while(HFCM_obj.ilist) {
+	
+	list_for_each_entry_safe(hc, next, &HFCM_obj.ilist, list) {
 		printk(KERN_ERR "HFC PCI card struct not empty refs %d\n", HFCM_obj.refcnt);
-		release_port(HFCM_obj.ilist, -1); /* all ports */
+		release_port(hc, -1); /* all ports */
 	}
 	if (debug & DEBUG_HFCMULTI_INIT)
 		printk(KERN_DEBUG "%s: done (refcnt = %d)\n", __FUNCTION__, HFCM_obj.refcnt);

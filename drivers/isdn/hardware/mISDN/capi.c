@@ -1,4 +1,4 @@
-/* $Id: capi.c,v 1.13 2004/01/26 22:21:30 keil Exp $
+/* $Id: capi.c,v 1.14 2004/06/17 12:31:11 keil Exp $
  *
  */
 
@@ -7,7 +7,7 @@
 #include "helper.h"
 #include "debug.h"
 
-static char *capi_revision = "$Revision: 1.13 $";
+static char *capi_revision = "$Revision: 1.14 $";
 
 static int debug = 0;
 static mISDNobject_t capi_obj;
@@ -193,7 +193,7 @@ free_garbage(void)
 				kmem_cache_free(mISDN_AppPlci_cp, item);
 				break;
 			case KM_DBG_TYP_NI:
-				printk(KERN_DEBUG "Ncci: NCCI(%x) state(%x) m.state(%x) aplci(%p)\n",
+				printk(KERN_DEBUG "Ncci: NCCI(%x) state(%lx) m.state(%x) aplci(%p)\n",
 					kda->a.ni.addr,
 					kda->a.ni.state,
 					kda->a.ni.ncci_m.state,
@@ -310,30 +310,29 @@ capi20_manager(void *data, u_int prim, void *arg) {
 	mISDNinstance_t	*inst = data;
 	int		found=0;
 	PLInst_t	*plink = NULL;
-	Controller_t	*ctrl = (Controller_t *)capi_obj.ilist;
+	Controller_t	*ctrl;
 
 	if (CAPI_DBG_INFO & debug)
 		printk(KERN_DEBUG "capi20_manager data:%p prim:%x arg:%p\n", data, prim, arg);
 	if (!data)
 		return(-EINVAL);
-	while(ctrl) {
+	list_for_each_entry(ctrl, &capi_obj.ilist, list) {
 		if (&ctrl->inst == inst) {
 			found++;
 			break;
 		}
-		plink = ctrl->linklist;
-		while(plink) {
+		list_for_each_entry(plink, &ctrl->linklist, list) {
 			if (&plink->inst == inst) {
 				found++;
 				break;
 			}
-			plink = plink->next;
 		}
 		if (found)
 			break;
 		plink = NULL;
-		ctrl = ctrl->next;
 	}
+	if (&ctrl->list == &capi_obj.ilist)
+		ctrl = NULL;
 	if (prim == (MGR_NEWLAYER | REQUEST)) {
 		int ret = ControllerConstr(&ctrl, data, arg, &capi_obj);
 		if (!ret)
@@ -398,9 +397,7 @@ int Capi20Init(void)
 	capi_obj.BPROTO.protocol[4] = ISDN_PID_L4_B_CAPI20;
 	capi_obj.BPROTO.protocol[3] = ISDN_PID_L3_B_TRANS;
 	capi_obj.own_ctrl = capi20_manager;
-	capi_obj.prev = NULL;
-	capi_obj.next = NULL;
-	capi_obj.ilist = NULL;
+	INIT_LIST_HEAD(&capi_obj.ilist);
 	if ((err = CapiNew()))
 		return(err);
 	if ((err = mISDN_register(&capi_obj))) {
@@ -421,14 +418,14 @@ int Capi20Init(void)
 static void Capi20cleanup(void)
 {
 	int		err;
-	Controller_t	*contr;
+	Controller_t	*contr, *next;
 
 	if ((err = mISDN_unregister(&capi_obj))) {
 		printk(KERN_ERR "Can't unregister CAPI20 error(%d)\n", err);
 	}
-	if (capi_obj.ilist) {
+	if (!list_empty(&capi_obj.ilist)) {
 		printk(KERN_WARNING "mISDN controller list not empty\n");
-		while((contr = capi_obj.ilist))
+		list_for_each_entry_safe(contr, next, &capi_obj.ilist, list)
 			ControllerDestr(contr);
 	}
 #ifdef OLDCAPI_DRIVER_INTERFACE

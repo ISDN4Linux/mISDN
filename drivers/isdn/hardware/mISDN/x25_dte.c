@@ -1,4 +1,4 @@
-/* $Id: x25_dte.c,v 1.5 2004/01/26 22:21:31 keil Exp $
+/* $Id: x25_dte.c,v 1.6 2004/06/17 12:31:12 keil Exp $
  *
  * Linux modular ISDN subsystem, mISDN
  * X.25/X.31 Layer3 for DTE mode   
@@ -22,7 +22,7 @@ static int debug = 0;
 
 static mISDNobject_t x25dte_obj;
 
-static char *mISDN_dte_revision = "$Revision: 1.5 $";
+static char *mISDN_dte_revision = "$Revision: 1.6 $";
 
 /* local prototypes */
 static x25_channel_t *	dte_create_channel(x25_l3_t *, int, u_char, __u16, int, u_char *);
@@ -1248,22 +1248,24 @@ MODULE_LICENSE("GPL");
 static int
 dte_manager(void *data, u_int prim, void *arg) {
 	mISDNinstance_t	*inst = data;
-	x25_l3_t	*l3_l = x25dte_obj.ilist;
+	x25_l3_t	*l3_l;
+	int		err = -EINVAL;
 
 	if (debug & DEBUG_L3X25_MGR)
 		printk(KERN_DEBUG "l3x25_manager data:%p prim:%x arg:%p\n", data, prim, arg);
 	if (!data)
-		return(-EINVAL);
-	while(l3_l) {
-		if (&l3_l->inst == inst)
+		return(err);
+	list_for_each_entry(l3_l, &x25dte_obj.ilist, list) {
+		if (&l3_l->inst == inst) {
+			err = 0;
 			break;
-		l3_l = l3_l->next;
+		}
 	}
 	if (prim == (MGR_NEWLAYER | REQUEST))
 		return(new_l3(data, arg));
-	if (!l3_l) {
+	if (err) {
 		printk(KERN_WARNING "l3x25_manager prim(%x) no instance\n", prim);
-		return(-EINVAL);
+		return(err);
 	}
 	switch(prim) {
 	    case MGR_NEWENTITY | CONFIRM:
@@ -1320,9 +1322,7 @@ x25_dte_init(void)
 	x25dte_obj.name = MName;
 	x25dte_obj.BPROTO.protocol[3] = ISDN_PID_L3_B_X25DTE;
 	x25dte_obj.own_ctrl = dte_manager;
-	x25dte_obj.prev = NULL;
-	x25dte_obj.next = NULL;
-	x25dte_obj.ilist = NULL;
+	INIT_LIST_HEAD(&x25dte_obj.ilist);
 	if ((err = mISDN_register(&x25dte_obj))) {
 		printk(KERN_ERR "Can't register %s error(%d)\n", MName, err);
 	} else {
@@ -1349,15 +1349,16 @@ x25_dte_init(void)
 static void
 x25_dte_cleanup(void)
 {
-	int err;
+	x25_l3_t	*l3, *nl3;
+	int		err;
 
 	if ((err = mISDN_unregister(&x25dte_obj))) {
 		printk(KERN_ERR "Can't unregister l3x25 error(%d)\n", err);
 	}
-	if(x25dte_obj.ilist) {
+	if(!list_empty(&x25dte_obj.ilist)) {
 		printk(KERN_WARNING "l3x25 inst list not empty\n");
-		while(x25dte_obj.ilist)
-			X25_release_l3(x25dte_obj.ilist);
+		list_for_each_entry_safe(l3, nl3, &x25dte_obj.ilist, list)
+			X25_release_l3(l3);
 	}
 	X25_l3_cleanup();
 	mISDN_FsmFree(&dte_rfsm);

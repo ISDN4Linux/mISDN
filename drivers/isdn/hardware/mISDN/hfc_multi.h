@@ -86,9 +86,7 @@ typedef struct hfcmulti_hw	hfcmulti_hw_t;
 #define HFC_CHIP_CLOCK2		6 /* double clock mode */
 
 struct hfc_multi {
-	struct hfc_multi *prev;
-	struct hfc_multi *next;
-
+	struct list_head	list;
 	char		name[32];
 	int		id;	/* chip number starting with 1 */
 	int		pcm;	/* id of pcm bus */

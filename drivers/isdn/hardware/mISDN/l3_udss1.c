@@ -1,4 +1,4 @@
-/* $Id: l3_udss1.c,v 1.25 2004/05/31 14:02:51 jolly Exp $
+/* $Id: l3_udss1.c,v 1.26 2004/06/17 12:31:12 keil Exp $
  *
  * EURO/DSS1 D-channel protocol
  *
@@ -24,7 +24,7 @@ static int debug = 0;
 static mISDNobject_t u_dss1;
 
 
-const char *dss1_revision = "$Revision: 1.25 $";
+const char *dss1_revision = "$Revision: 1.26 $";
 
 static int dss1man(l3_process_t *, u_int, void *);
 
@@ -1516,7 +1516,7 @@ l3dss1_global_restart(l3_process_t *pc, u_char pr, void *arg)
 	u_char		*p, ri, ch = 0, chan = 0;
 	struct sk_buff	*skb = arg;
 	Q931_info_t	*qi = (Q931_info_t *)skb->data;
-	l3_process_t	*up;
+	l3_process_t	*up, *n;
 
 //	newl3state(pc, 2);
 	L3DelTimer(&pc->timer);
@@ -1539,13 +1539,11 @@ l3dss1_global_restart(l3_process_t *pc, u_char pr, void *arg)
 		if (pc->l3->debug)
 			l3_debug(pc->l3, "Restart for channel %d", chan);
 	}
-	up = pc->l3->proc;
-	while (up) {
+	list_for_each_entry_safe(up, n, &pc->l3->plist, list) {
 		if ((ri & 7) == 7)
 			dss1man(up, CC_RESTART | REQUEST, NULL);
 		else if (up->bc == chan)
 			mISDN_l3up(up, CC_RESTART | REQUEST, NULL);
-		up = up->next;
 	}
 	dev_kfree_skb(skb);
 	skb = MsgStart(pc, MT_RESTART_ACKNOWLEDGE, chan ? 6 : 3);
@@ -2221,7 +2219,7 @@ release_udss1(layer3_t *l3)
 		inst->down.peer->obj->ctrl(inst->down.peer,
 			MGR_DISCONNECT | REQUEST, &inst->down);
 	}
-	REMOVE_FROM_LISTBASE(l3, ((layer3_t *)u_dss1.ilist));
+	list_del(&l3->list);
 	u_dss1.ctrl(inst, MGR_UNREGLAYER | REQUEST, NULL);
 	if (l3->entity != MISDN_ENTITY_NONE)
 		u_dss1.ctrl(inst, MGR_DELENTITY | REQUEST, (void *)l3->entity);
@@ -2270,7 +2268,7 @@ new_udss1(mISDNstack_t *st, mISDN_pid_t *pid)
 	nl3->global->state = 0;
 	nl3->global->callref = 0;
 	nl3->global->id = MISDN_ID_GLOBAL;
-	nl3->global->next = NULL;
+	INIT_LIST_HEAD(&nl3->global->list);
 	nl3->global->n303 = N303;
 	nl3->global->l3 = nl3;
 	nl3->global->t303skb = NULL;
@@ -2284,14 +2282,14 @@ new_udss1(mISDNstack_t *st, mISDN_pid_t *pid)
 	nl3->dummy->state = 0;
 	nl3->dummy->callref = -1;
 	nl3->dummy->id = MISDN_ID_DUMMY;
-	nl3->dummy->next = NULL;
+	INIT_LIST_HEAD(&nl3->dummy->list);
 	nl3->dummy->n303 = N303;
 	nl3->dummy->l3 = nl3;
 	nl3->dummy->t303skb = NULL;
 	L3InitTimer(nl3->dummy, &nl3->dummy->timer);
 	sprintf(nl3->inst.name, "DSS1 %d", st->id);
 	nl3->p_mgr = dss1man;
-	APPEND_TO_LIST(nl3, ((layer3_t *)u_dss1.ilist));
+	list_add_tail(&nl3->list, &u_dss1.ilist);
 	err = u_dss1.ctrl(&nl3->inst, MGR_NEWENTITY | REQUEST, NULL);
 	if (err) {
 		printk(KERN_WARNING "mISDN %s: MGR_NEWENTITY REQUEST failed err(%x)\n",
@@ -2300,7 +2298,7 @@ new_udss1(mISDNstack_t *st, mISDN_pid_t *pid)
 	err = u_dss1.ctrl(st, MGR_REGLAYER | INDICATION, &nl3->inst);
 	if (err) {
 		release_l3(nl3);
-		REMOVE_FROM_LISTBASE(nl3, ((layer3_t *)u_dss1.ilist));
+		list_del(&nl3->list);
 		kfree(nl3);
 	} else {
 		mISDN_stPara_t	stp;
@@ -2328,17 +2326,18 @@ MODULE_PARM(debug, "1i");
 static int
 udss1_manager(void *data, u_int prim, void *arg) {
 	mISDNinstance_t *inst = data;
-	layer3_t *l3l = u_dss1.ilist;
+	layer3_t *l3l;
 
 	if (debug & 0x1000)
 		printk(KERN_DEBUG "udss1_manager data:%p prim:%x arg:%p\n", data, prim, arg);
 	if (!data)
 		return(-EINVAL);
-	while(l3l) {
+	list_for_each_entry(l3l, &u_dss1.ilist, list) {
 		if (&l3l->inst == inst)
 			break;
-		l3l = l3l->next;
 	}
+	if (&l3l->list == &u_dss1.ilist)
+		l3l = NULL;
 	if (prim == (MGR_NEWLAYER | REQUEST))
 		return(new_udss1(data, arg));
 	if (!l3l) {
@@ -2387,14 +2386,13 @@ int UDSS1Init(void)
 #ifdef MODULE
 	u_dss1.owner = THIS_MODULE;
 #endif
+	INIT_LIST_HEAD(&u_dss1.ilist);
 	u_dss1.name = MName;
 	u_dss1.DPROTO.protocol[3] = ISDN_PID_L3_DSS1USER |
 		ISDN_PID_L3_DF_PTP |
 		ISDN_PID_L3_DF_EXTCID |
 		ISDN_PID_L3_DF_CRLEN2;
 	u_dss1.own_ctrl = udss1_manager;
-	u_dss1.prev = NULL;
-	u_dss1.next = NULL;
 	mISDNl3New();
 	if ((err = mISDN_register(&u_dss1))) {
 		printk(KERN_ERR "Can't register %s error(%d)\n", MName, err);
@@ -2407,14 +2405,15 @@ int UDSS1Init(void)
 void UDSS1_cleanup(void)
 {
 	int err;
+	layer3_t	*l3, *next;
 
 	if ((err = mISDN_unregister(&u_dss1))) {
 		printk(KERN_ERR "Can't unregister User DSS1 error(%d)\n", err);
 	}
-	if (u_dss1.ilist) {
+	if (!list_empty(&u_dss1.ilist)) {
 		printk(KERN_WARNING "mISDNl3 u_dss1 list not empty\n");
-		while(u_dss1.ilist)
-			release_udss1(u_dss1.ilist);
+		list_for_each_entry_safe(l3, next, &u_dss1.ilist, list)
+			release_udss1(l3);
 	}
 	mISDNl3Free();
 }

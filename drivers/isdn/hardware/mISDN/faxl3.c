@@ -1,4 +1,4 @@
-/* $Id: faxl3.c,v 1.1 2004/02/05 21:21:16 keil Exp $
+/* $Id: faxl3.c,v 1.2 2004/06/17 12:31:12 keil Exp $
  *
  * Linux ISDN subsystem, Fax Layer 3
  *
@@ -21,8 +21,7 @@
 static int ttt=180;
 
 typedef struct _faxl3 {
-	struct _faxl3		*prev;
-	struct _faxl3		*next;
+	struct list_head	list;
 	spinlock_t		lock;
 	u_long 			state;
 	int			debug;
@@ -117,7 +116,7 @@ static int debug = 0;
 
 static mISDNobject_t faxl3_obj;
 
-static char *mISDN_faxl3_revision = "$Revision: 1.1 $";
+static char *mISDN_faxl3_revision = "$Revision: 1.2 $";
 
 static u_char FaxModulation[] = {24,48,72,74,96,98,122,146};
 static u_char FaxModulationTrain[] = {24,48,72,73,96,97,121,145};
@@ -1953,7 +1952,7 @@ release_faxl3(faxl3_t *faxl3) {
 		inst->down.peer->obj->ctrl(inst->down.peer,
 			MGR_DISCONNECT | REQUEST, &inst->down);
 	}
-	REMOVE_FROM_LISTBASE(faxl3, ((faxl3_t *)faxl3_obj.ilist));
+	list_del(&faxl3->list);
 	discard_queue(&faxl3->downq);
 	discard_queue(&faxl3->dataq);
 	discard_queue(&faxl3->pageq);
@@ -2048,7 +2047,7 @@ new_faxl3(mISDNstack_t *st, mISDN_pid_t *pid) {
 	skb_queue_head_init(&n_faxl3->pageq);
 	skb_queue_head_init(&n_faxl3->saveq);
 
-	APPEND_TO_LIST(n_faxl3, ((faxl3_t *)faxl3_obj.ilist));
+	list_add_tail(&n_faxl3->list, &faxl3_obj.ilist);
 	n_faxl3->entity = MISDN_ENTITY_NONE;
 	err = faxl3_obj.ctrl(&n_faxl3->inst, MGR_NEWENTITY | REQUEST, NULL);
 	if (err) {
@@ -2057,7 +2056,7 @@ new_faxl3(mISDNstack_t *st, mISDN_pid_t *pid) {
 	}
 	err = faxl3_obj.ctrl(st, MGR_REGLAYER | INDICATION, &n_faxl3->inst);
 	if (err) {
-		REMOVE_FROM_LISTBASE(n_faxl3, ((faxl3_t *)faxl3_obj.ilist));
+		list_del(&n_faxl3->list);
 		kfree(n_faxl3);
 	} else {
 		if (st->para.maxdatalen)
@@ -2075,23 +2074,25 @@ new_faxl3(mISDNstack_t *st, mISDN_pid_t *pid) {
 
 static int
 faxl3_manager(void *data, u_int prim, void *arg) {
-	mISDNinstance_t *inst = data;
-	faxl3_t *faxl3_l = faxl3_obj.ilist;
+	mISDNinstance_t	*inst = data;
+	faxl3_t		*faxl3_l;
+	int		err = -EINVAL;
 
 	if (debug & DEBUG_FAXL3_MGR)
 		printk(KERN_DEBUG "faxl3_manager data:%p prim:%x arg:%p\n", data, prim, arg);
 	if (!data)
-		return(-EINVAL);
-	while(faxl3_l) {
-		if (&faxl3_l->inst == inst)
+		return(err);
+	list_for_each_entry(faxl3_l, &faxl3_obj.ilist, list) {
+		if (&faxl3_l->inst == inst) {
+			err = 0;
 			break;
-		faxl3_l = faxl3_l->next;
+		}
 	}
 	if (prim == (MGR_NEWLAYER | REQUEST))
 		return(new_faxl3(data, arg));
-	if (!faxl3_l) {
+	if (err) {
 		printk(KERN_WARNING "faxl3_manager prim(%x) no instance\n", prim);
-		return(-EINVAL);
+		return(err);
 	}
 	switch(prim) {
 	    case MGR_CLRSTPARA | INDICATION:
@@ -2145,9 +2146,7 @@ static int faxl3_init(void)
 	faxl3_obj.name = MName;
 	faxl3_obj.BPROTO.protocol[3] = ISDN_PID_L3_B_T30;
 	faxl3_obj.own_ctrl = faxl3_manager;
-	faxl3_obj.prev = NULL;
-	faxl3_obj.next = NULL;
-	faxl3_obj.ilist = NULL;
+	INIT_LIST_HEAD(&faxl3_obj.ilist);
 	if ((err = mISDN_register(&faxl3_obj))) {
 		printk(KERN_ERR "Can't register %s error(%d)\n", MName, err);
 		return(err);
@@ -2167,15 +2166,16 @@ static int faxl3_init(void)
 
 static void faxl3_cleanup(void)
 {
-	int err;
+	faxl3_t	*l3, *nl3;
+	int	err;
 
 	if ((err = mISDN_unregister(&faxl3_obj))) {
 		printk(KERN_ERR "Can't unregister DTMF error(%d)\n", err);
 	}
-	if(faxl3_obj.ilist) {
+	if(!list_empty(&faxl3_obj.ilist)) {
 		printk(KERN_WARNING "faxl3 inst list not empty\n");
-		while(faxl3_obj.ilist)
-			release_faxl3(faxl3_obj.ilist);
+		list_for_each_entry_safe(l3, nl3, &faxl3_obj.ilist, list)
+			release_faxl3(l3);
 	}
 	mISDN_FsmFree(&faxl3fsm);
 	mISDN_FsmFree(&modfsm);

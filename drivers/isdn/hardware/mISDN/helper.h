@@ -1,4 +1,4 @@
-/* $Id: helper.h,v 1.12 2004/01/26 22:21:30 keil Exp $
+/* $Id: helper.h,v 1.13 2004/06/17 12:31:12 keil Exp $
  *
  *   Basic declarations, defines and prototypes
  *
@@ -20,42 +20,6 @@
         printk(KERN_ERR "mISDN: INTERNAL ERROR in %s:%d " fmt "\n", \
                        __FILE__, __LINE__, ## arg)
                        
-#define APPEND_TO_LIST(item,base) \
-	if (item->prev || item->next) \
-		int_errtxt("APPEND not clean %p<-%p->%p", \
-			item->prev, item, item->next); \
-	item->next = NULL; \
-	item->prev = base; \
-	while (item->prev && item->prev->next) \
-		item->prev = item->prev->next; \
-	if (item->prev == item) { \
-		int_errtxt("APPEND DUP %p", item); \
-	} else \
-		if (base) { \
-			item->prev->next = item; \
-		} else \
-			base = item
-
-#define INSERT_INTO_LIST(newi,nexti,base) \
-	newi->next = nexti; \
-	newi->prev = nexti->prev; \
-	if (newi->prev) \
-		newi->prev->next = newi; \
-	nexti->prev = newi; \
-	if (base == nexti) \
-		base = newi
-
-#define REMOVE_FROM_LIST(item) \
-	if (item->prev) \
-		item->prev->next = item->next; \
-	if (item->next) \
-		item->next->prev = item->prev
-
-#define REMOVE_FROM_LISTBASE(item,base) \
-	REMOVE_FROM_LIST(item); \
-	if (item == base) \
-		base = item->next
-
 static inline int
 discard_queue(struct sk_buff_head *q)
 {
@@ -102,6 +66,17 @@ extern int	mISDN_HasProtocol(mISDNobject_t *, u_int);
 extern int	mISDN_SetHandledPID(mISDNobject_t *, mISDN_pid_t *);
 extern void	mISDN_RemoveUsedPID(mISDN_pid_t *, mISDN_pid_t *);
 extern void	mISDN_init_instance(mISDNinstance_t *, mISDNobject_t *, void *);
+
+static inline int
+count_list_member(struct list_head *head)
+{
+	int			cnt = 0;
+	struct list_head	*m;
+
+	list_for_each(m, head)
+		cnt++;
+	return(cnt);
+}
 
 static inline int
 mISDN_HasProtocolP(mISDNobject_t *obj, int *PP)

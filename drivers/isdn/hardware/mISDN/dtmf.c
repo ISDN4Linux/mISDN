@@ -1,4 +1,4 @@
-/* $Id: dtmf.c,v 1.10 2004/01/26 22:21:30 keil Exp $
+/* $Id: dtmf.c,v 1.11 2004/06/17 12:31:12 keil Exp $
  *
  * Linux ISDN subsystem, DTMF tone module
  *
@@ -24,14 +24,13 @@
 #define DTMF_NPOINTS 205        /* Number of samples for DTMF recognition */
 
 typedef struct _dtmf {
-	struct _dtmf	*prev;
-	struct _dtmf	*next;
-	u_long 		Flags;
-	int		debug;
-	char		last;
-	int		idx;
-	int		buf[DTMF_NPOINTS];
-	mISDNinstance_t	inst;
+	struct list_head	list;
+	u_long 			Flags;
+	int			debug;
+	char			last;
+	int			idx;
+	int			buf[DTMF_NPOINTS];
+	mISDNinstance_t		inst;
 } dtmf_t;
 
 #define	FLG_DTMF_ULAW	1
@@ -47,7 +46,7 @@ static int debug = 0;
 
 static mISDNobject_t dtmf_obj;
 
-static char *mISDN_dtmf_revision = "$Revision: 1.10 $";
+static char *mISDN_dtmf_revision = "$Revision: 1.11 $";
 
 /*
  * Misc. lookup-tables.
@@ -490,7 +489,7 @@ release_dtmf(dtmf_t *dtmf) {
 		inst->down.peer->obj->ctrl(inst->down.peer,
 			MGR_DISCONNECT | REQUEST, &inst->down);
 	}
-	REMOVE_FROM_LISTBASE(dtmf, ((dtmf_t *)dtmf_obj.ilist));
+	list_del(&dtmf->list);
 	dtmf_obj.ctrl(inst, MGR_UNREGLAYER | REQUEST, NULL);
 	kfree(dtmf);
 }
@@ -515,10 +514,10 @@ new_dtmf(mISDNstack_t *st, mISDN_pid_t *pid) {
 		return(-ENOPROTOOPT);
 	}
 	n_dtmf->debug = debug;
-	APPEND_TO_LIST(n_dtmf, ((dtmf_t *)dtmf_obj.ilist));
+	list_add_tail(&n_dtmf->list, &dtmf_obj.ilist);
 	err = dtmf_obj.ctrl(st, MGR_REGLAYER | INDICATION, &n_dtmf->inst);
 	if (err) {
-		REMOVE_FROM_LISTBASE(n_dtmf, ((dtmf_t *)dtmf_obj.ilist));
+		list_del(&n_dtmf->list);
 		kfree(n_dtmf);
 	}
 	return(err);
@@ -559,23 +558,25 @@ MODULE_LICENSE("GPL");
 
 static int
 dtmf_manager(void *data, u_int prim, void *arg) {
-	mISDNinstance_t *inst = data;
-	dtmf_t *dtmf_l = dtmf_obj.ilist;
+	mISDNinstance_t	*inst = data;
+	dtmf_t		*dtmf_l;
+	int		ret = -EINVAL;
 
 	if (debug & DEBUG_DTMF_MGR)
 		printk(KERN_DEBUG "dtmf_manager data:%p prim:%x arg:%p\n", data, prim, arg);
 	if (!data)
-		return(-EINVAL);
-	while(dtmf_l) {
-		if (&dtmf_l->inst == inst)
+		return(ret);
+	list_for_each_entry(dtmf_l, &dtmf_obj.ilist, list) {
+		if (&dtmf_l->inst == inst) {
+			ret = 0;
 			break;
-		dtmf_l = dtmf_l->next;
+		}
 	}
 	if (prim == (MGR_NEWLAYER | REQUEST))
 		return(new_dtmf(data, arg));
-	if (!dtmf_l) {
+	if (ret) {
 		printk(KERN_WARNING "dtmf_manager prim(%x) no instance\n", prim);
-		return(-EINVAL);
+		return(ret);
 	}
 	switch(prim) {
 	    case MGR_CLRSTPARA | INDICATION:
@@ -616,9 +617,7 @@ static int dtmf_init(void)
 	dtmf_obj.name = MName;
 	dtmf_obj.BPROTO.protocol[2] = ISDN_PID_L2_B_TRANSDTMF;
 	dtmf_obj.own_ctrl = dtmf_manager;
-	dtmf_obj.prev = NULL;
-	dtmf_obj.next = NULL;
-	dtmf_obj.ilist = NULL;
+	INIT_LIST_HEAD(&dtmf_obj.ilist);
 	if ((err = mISDN_register(&dtmf_obj))) {
 		printk(KERN_ERR "Can't register %s error(%d)\n", MName, err);
 	}
@@ -627,15 +626,16 @@ static int dtmf_init(void)
 
 static void dtmf_cleanup(void)
 {
-	int err;
+	int	err;
+	dtmf_t	*dtmf, *nd;
 
 	if ((err = mISDN_unregister(&dtmf_obj))) {
 		printk(KERN_ERR "Can't unregister DTMF error(%d)\n", err);
 	}
-	if(dtmf_obj.ilist) {
+	if (!list_empty(&dtmf_obj.ilist)) {
 		printk(KERN_WARNING "dtmf inst list not empty\n");
-		while(dtmf_obj.ilist)
-			release_dtmf(dtmf_obj.ilist);
+		list_for_each_entry_safe(dtmf, nd, &dtmf_obj.ilist, list)
+			release_dtmf(dtmf);
 	}
 }
 

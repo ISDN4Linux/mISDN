@@ -1,4 +1,4 @@
-/* $Id: avm_fritz.c,v 1.28 2004/05/28 23:00:20 keil Exp $
+/* $Id: avm_fritz.c,v 1.29 2004/06/17 12:31:11 keil Exp $
  *
  * fritz_pci.c    low level stuff for AVM Fritz!PCI and ISA PnP isdn cards
  *              Thanks to AVM, Berlin for informations
@@ -28,7 +28,7 @@
 #define LOCK_STATISTIC
 #include "hw_lock.h"
 
-static const char *avm_fritz_rev = "$Revision: 1.28 $";
+static const char *avm_fritz_rev = "$Revision: 1.29 $";
 
 enum {
 	AVM_FRITZ_PCI,
@@ -130,8 +130,7 @@ typedef struct hdlc_hw {
 
 
 typedef struct _fritzpnppci {
-	struct _fritzpnppci	*prev;
-	struct _fritzpnppci	*next;
+	struct list_head	list;
 	void			*pdev;
 	u_int			type;
 	u_int			irq;
@@ -410,7 +409,8 @@ hdlc_empty_fifo(bchannel_t *bch, int count)
 			mISDN_debugprint(&bch->inst, "hdlc_empty_fifo: incoming packet too large");
 		return;
 	}
-	ptr = (u_int *) p = bch->rx_buf + bch->rx_idx;
+	p = bch->rx_buf + bch->rx_idx;
+	ptr = (u_int *)p;
 	bch->rx_idx += count;
 	if (fc->type == AVM_FRITZ_PCIV2) {
 		while (cnt < count) {
@@ -1110,7 +1110,7 @@ release_card(fritzpnppci *card)
 	mISDN_free_dch(&card->dch);
 	fritz.ctrl(card->dch.inst.up.peer, MGR_DISCONNECT | REQUEST, &card->dch.inst.up);
 	fritz.ctrl(&card->dch.inst, MGR_UNREGLAYER | REQUEST, NULL);
-	REMOVE_FROM_LISTBASE(card, ((fritzpnppci *)fritz.ilist));
+	list_del(&card->list);
 	unlock_dev(card);
 	if (card->type == AVM_FRITZ_PNP) {
 		pnp_disable_dev(card->pdev);
@@ -1124,7 +1124,7 @@ release_card(fritzpnppci *card)
 
 static int
 fritz_manager(void *data, u_int prim, void *arg) {
-	fritzpnppci	*card = fritz.ilist;
+	fritzpnppci	*card;
 	mISDNinstance_t	*inst = data;
 	struct sk_buff	*skb;
 	int		channel = -1;
@@ -1138,7 +1138,7 @@ fritz_manager(void *data, u_int prim, void *arg) {
 			__FUNCTION__, prim, arg);
 		return(-EINVAL);
 	}
-	while(card) {
+	list_for_each_entry(card, &fritz.ilist, list) {
 		if (&card->dch.inst == inst) {
 			channel = 2;
 			break;
@@ -1151,7 +1151,6 @@ fritz_manager(void *data, u_int prim, void *arg) {
 			channel = 1;
 			break;
 		}
-		card = card->next;
 	}
 	if (channel<0) {
 		printk(KERN_WARNING "%s: no channel data %p prim %x arg %p\n",
@@ -1245,7 +1244,7 @@ static int __devinit setup_instance(fritzpnppci *card)
 	int		i, err;
 	mISDN_pid_t	pid;
 	
-	APPEND_TO_LIST(card, ((fritzpnppci *)fritz.ilist));
+	list_add_tail(&card->list, &fritz.ilist);
 	card->dch.debug = debug;
 	lock_HW_init(&card->lock);
 	card->dch.inst.lock = lock_dev;
@@ -1274,7 +1273,7 @@ static int __devinit setup_instance(fritzpnppci *card)
 		mISDN_free_dch(&card->dch);
 		mISDN_free_bch(&card->bch[1]);
 		mISDN_free_bch(&card->bch[0]);
-		REMOVE_FROM_LISTBASE(card, ((fritzpnppci *)fritz.ilist));
+		list_del(&card->list);
 		kfree(card);
 		return(err);
 	}
@@ -1460,18 +1459,16 @@ static int __init Fritz_init(void)
 	int	err, pci_nr_found;
 
 	printk(KERN_INFO "AVM Fritz PCI/PnP driver Rev. %s\n", mISDN_getrev(avm_fritz_rev));
-
 #ifdef MODULE
 	fritz.owner = THIS_MODULE;
 #endif
+	INIT_LIST_HEAD(&fritz.ilist);
 	fritz.name = FritzName;
 	fritz.own_ctrl = fritz_manager;
 	fritz.DPROTO.protocol[0] = ISDN_PID_L0_TE_S0;
 	fritz.BPROTO.protocol[1] = ISDN_PID_L1_B_64TRANS |
 				    ISDN_PID_L1_B_64HDLC;
 	fritz.BPROTO.protocol[2] = ISDN_PID_L2_B_TRANS;
-	fritz.prev = NULL;
-	fritz.next = NULL;
 	if ((err = mISDN_register(&fritz))) {
 		printk(KERN_ERR "Can't register Fritz PCI error(%d)\n", err);
 		return(err);
@@ -1507,14 +1504,16 @@ static int __init Fritz_init(void)
 
 static void __exit Fritz_cleanup(void)
 {
+	fritzpnppci *card, *next;
 	int err;
+
 	if ((err = mISDN_unregister(&fritz))) {
 		printk(KERN_ERR "Can't unregister Fritz PCI error(%d)\n", err);
 	}
-	while(fritz.ilist) {
+	list_for_each_entry_safe(card, next, &fritz.ilist, list) {
 		printk(KERN_ERR "Fritz PCI card struct not empty refs %d\n",
 			fritz.refcnt);
-		release_card(fritz.ilist);
+		release_card(card);
 	}
 #if defined(CONFIG_PNP)
 	pnp_unregister_driver(&fcpnp_driver);
