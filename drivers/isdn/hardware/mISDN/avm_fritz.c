@@ -1,4 +1,4 @@
-/* $Id: avm_fritz.c,v 0.8 2001/03/04 17:08:33 kkeil Exp $
+/* $Id: avm_fritz.c,v 0.9 2001/03/05 18:46:18 kkeil Exp $
  *
  * fritz_pci.c    low level stuff for AVM Fritz!PCI and ISA PnP isdn cards
  *              Thanks to AVM, Berlin for informations
@@ -18,7 +18,7 @@
 #include "helper.h"
 #include "debug.h"
 
-static const char *avm_pci_rev = "$Revision: 0.8 $";
+static const char *avm_pci_rev = "$Revision: 0.9 $";
 
 #define ISDN_CTYPE_FRITZPCI 1
 
@@ -126,13 +126,9 @@ ReadISAC(void *fc, u_char offset)
 	register u_char idx = (offset > 0x2f) ? AVM_ISAC_REG_HIGH : AVM_ISAC_REG_LOW;
 	register long addr = ((fritzpnppci *)fc)->addr;
 	register u_char val;
-	register long flags;
 
-	save_flags(flags);
-	cli();
 	outb(idx, addr + HDLC_STATUS);
 	val = inb(addr + CHIP_WINDOW + (offset & 0xf));
-	restore_flags(flags);
 	return (val);
 }
 
@@ -141,13 +137,9 @@ WriteISAC(void *fc, u_char offset, u_char value)
 {
 	register u_char idx = (offset > 0x2f) ? AVM_ISAC_REG_HIGH : AVM_ISAC_REG_LOW;
 	register long addr = ((fritzpnppci *)fc)->addr;
-	register long flags;
 
-	save_flags(flags);
-	cli();
 	outb(idx, addr + HDLC_STATUS);
 	outb(value, addr + CHIP_WINDOW + (offset & 0xf));
-	restore_flags(flags);
 }
 
 static void
@@ -174,13 +166,9 @@ ReadHDLCPCI(void *fc, int chan, u_char offset)
 	register u_int idx = chan ? AVM_HDLC_2 : AVM_HDLC_1;
 	register u_int val;
 	register long addr = ((fritzpnppci *)fc)->addr;
-	register long flags;
 
-	save_flags(flags);
-	cli();
 	outl(idx, addr + HDLC_STATUS);
 	val = inl(addr + CHIP_WINDOW + offset);
-	restore_flags(flags);
 	return (val);
 }
 
@@ -189,13 +177,9 @@ WriteHDLCPCI(void *fc, int chan, u_char offset, u_int value)
 {
 	register u_int idx = chan ? AVM_HDLC_2 : AVM_HDLC_1;
 	register long addr = ((fritzpnppci *)fc)->addr;
-	register long flags;
 
-	save_flags(flags);
-	cli();
 	outl(idx, addr + HDLC_STATUS);
 	outl(value, addr + CHIP_WINDOW + offset);
-	restore_flags(flags);
 }
 
 static inline u_char
@@ -204,13 +188,9 @@ ReadHDLCPnP(void *fc, int chan, u_char offset)
 	register u_char idx = chan ? AVM_HDLC_2 : AVM_HDLC_1;
 	register u_char val;
 	register long addr = ((fritzpnppci *)fc)->addr;
-	register long flags;
 
-	save_flags(flags);
-	cli();
 	outb(idx, addr + HDLC_STATUS);
 	val = inb(addr + CHIP_WINDOW + offset);
-	restore_flags(flags);
 	return (val);
 }
 
@@ -219,13 +199,9 @@ WriteHDLCPnP(void *fc, int chan, u_char offset, u_char value)
 {
 	register u_char idx = chan ? AVM_HDLC_2 : AVM_HDLC_1;
 	register long addr = ((fritzpnppci *)fc)->addr;
-	register long flags;
 
-	save_flags(flags);
-	cli();
 	outb(idx, addr + HDLC_STATUS);
 	outb(value, addr + CHIP_WINDOW + offset);
-	restore_flags(flags);
 }
 
 static u_char
@@ -281,7 +257,7 @@ write_ctrl(bchannel_t *bch, int which) {
 	}
 }
 
-void
+static int
 modehdlc(bchannel_t *bch, int protocol, int bc)
 {
 	fritzpnppci *fc = bch->inst.data;
@@ -293,12 +269,12 @@ modehdlc(bchannel_t *bch, int protocol, int bc)
 	bch->hw.hdlc.ctrl.ctrl = 0;
 	switch (protocol) {
 		case (-1): /* used for init */
-			bch->protocol = 1;
+			bch->protocol = -1;
 			bch->channel = bc;
 			bc = 0;
 		case (ISDN_PID_NONE):
 			if (bch->protocol == ISDN_PID_NONE)
-				return;
+				break;
 			bch->hw.hdlc.ctrl.sr.cmd  = HDLC_CMD_XRS | HDLC_CMD_RRS;
 			bch->hw.hdlc.ctrl.sr.mode = HDLC_MODE_TRANS;
 			write_ctrl(bch, 5);
@@ -327,7 +303,11 @@ modehdlc(bchannel_t *bch, int protocol, int bc)
 			bch->hw.hdlc.ctrl.sr.cmd = 0;
 			hdlc_sched_event(bch, B_XMTBUFREADY);
 			break;
+		default:
+			debugprint(&bch->inst, "prot not known %x", protocol);
+			return(-ENOPROTOOPT);
 	}
+	return(0);
 }
 
 static inline void
@@ -381,36 +361,34 @@ hdlc_empty_fifo(bchannel_t *bch, int count)
 	}
 }
 
+#define HDLC_FIFO_SIZE	32
+
 static inline void
 hdlc_fill_fifo(bchannel_t *bch)
 {
 	fritzpnppci *fc = bch->inst.data;
 	int count, cnt =0;
-	int fifo_size = 32;
 	u_char *p;
 	u_int *ptr;
 
-	if ((fc->dch.debug & L1_DEB_HSCX) && !(fc->dch.debug & L1_DEB_HSCX_FIFO))
-		debugprint(&bch->inst, "hdlc_fill_fifo");
-	if (!bch->tx_buf)
-		return;
+	if ((bch->debug & L1_DEB_HSCX) && !(bch->debug & L1_DEB_HSCX_FIFO))
+		debugprint(&bch->inst, __FUNCTION__);
 	count = bch->tx_len - bch->tx_idx;
 	if (count <= 0)
 		return;
-
+	p = bch->tx_buf + bch->tx_idx;
 	bch->hw.hdlc.ctrl.sr.cmd &= ~HDLC_CMD_XME;
-	if (count > fifo_size) {
-		count = fifo_size;
+	if (count > HDLC_FIFO_SIZE) {
+		count = HDLC_FIFO_SIZE;
 	} else {
 		if (bch->protocol != ISDN_PID_L1_B_64TRANS)
 			bch->hw.hdlc.ctrl.sr.cmd |= HDLC_CMD_XME;
 	}
-	if ((fc->dch.debug & L1_DEB_HSCX) && !(fc->dch.debug & L1_DEB_HSCX_FIFO))
-		debugprint(&bch->inst, "hdlc_fill_fifo %d/%ld", count, bch->tx_idx);
-	ptr = (u_int *) p = bch->tx_buf + bch->tx_idx;
+	if ((bch->debug & L1_DEB_HSCX) && !(bch->debug & L1_DEB_HSCX_FIFO))
+		debugprint(&bch->inst, __FUNCTION__": %d/%d", count, bch->tx_idx);
+	ptr = (u_int *) p;
 	bch->tx_idx += count;
-	bch->hw.hdlc.count += count;
-	bch->hw.hdlc.ctrl.sr.xml = ((count == fifo_size) ? 0 : count);
+	bch->hw.hdlc.ctrl.sr.xml = ((count == HDLC_FIFO_SIZE) ? 0 : count);
 	write_ctrl(bch, 3);  /* sets the correct index too */
 	if (fc->subtyp == AVM_FRITZ_PCI) {
 		while (cnt<count) {
@@ -431,7 +409,7 @@ hdlc_fill_fifo(bchannel_t *bch)
 			cnt++;
 		}
 	}
-	if (fc->dch.debug & L1_DEB_HSCX_FIFO) {
+	if (bch->debug & L1_DEB_HSCX_FIFO) {
 		char *t = bch->blog;
 
 		if (fc->subtyp == AVM_FRITZ_PNP)
@@ -443,27 +421,16 @@ hdlc_fill_fifo(bchannel_t *bch)
 	}
 }
 
-static void
-fill_hdlc(bchannel_t *bch)
-{
-	long flags;
-	save_flags(flags);
-	cli();
-	hdlc_fill_fifo(bch);
-	restore_flags(flags);
-}
-
 static inline void
 HDLC_irq(bchannel_t *bch, u_int stat) {
 	int len;
 	struct sk_buff *skb;
-	fritzpnppci *fc = bch->inst.data;
 
-	if (fc->dch.debug & L1_DEB_HSCX)
+	if (bch->debug & L1_DEB_HSCX)
 		debugprint(&bch->inst, "ch%d stat %#x", bch->channel, stat);
 	if (stat & HDLC_INT_RPR) {
 		if (stat & HDLC_STAT_RDO) {
-			if (fc->dch.debug & L1_DEB_HSCX)
+			if (bch->debug & L1_DEB_HSCX)
 				debugprint(&bch->inst, "RDO");
 			else
 				debugprint(&bch->inst, "ch%d stat %#x", bch->channel, stat);
@@ -480,7 +447,7 @@ HDLC_irq(bchannel_t *bch, u_int stat) {
 			if ((stat & HDLC_STAT_RME) || (bch->protocol == ISDN_PID_L1_B_64TRANS)) {
 				if (((stat & HDLC_STAT_CRCVFRRAB)==HDLC_STAT_CRCVFR) ||
 					(bch->protocol == ISDN_PID_L1_B_64TRANS)) {
-					if (!(skb = dev_alloc_skb(bch->rx_idx)))
+					if (!(skb = alloc_uplink_skb(bch->rx_idx)))
 						printk(KERN_WARNING "HDLC: receive out of memory\n");
 					else {
 						memcpy(skb_put(skb, bch->rx_idx),
@@ -490,7 +457,7 @@ HDLC_irq(bchannel_t *bch, u_int stat) {
 					bch->rx_idx = 0;
 					hdlc_sched_event(bch, B_RCVBUFREADY);
 				} else {
-					if (fc->dch.debug & L1_DEB_HSCX)
+					if (bch->debug & L1_DEB_HSCX)
 						debugprint(&bch->inst, "invalid frame");
 					else
 						debugprint(&bch->inst, "ch%d invalid frame %#x", bch->channel, stat);
@@ -504,12 +471,10 @@ HDLC_irq(bchannel_t *bch, u_int stat) {
 		 * restart transmitting the whole frame.
 		 */
 		if (bch->tx_len) {
-			bch->hw.hdlc.count = 0;
 			bch->tx_idx = 0;
-//			hdlc_sched_event(bch, B_XMTBUFREADY);
-			if (fc->dch.debug & L1_DEB_WARN)
+			if (bch->debug & L1_DEB_WARN)
 				debugprint(&bch->inst, "ch%d XDU", bch->channel);
-		} else if (fc->dch.debug & L1_DEB_WARN)
+		} else if (bch->debug & L1_DEB_WARN)
 			debugprint(&bch->inst, "ch%d XDU without data", bch->channel);
 		bch->hw.hdlc.ctrl.sr.xml = 0;
 		bch->hw.hdlc.ctrl.sr.cmd |= HDLC_CMD_XRS;
@@ -521,16 +486,22 @@ HDLC_irq(bchannel_t *bch, u_int stat) {
 		if (bch->tx_idx < bch->tx_len) {
 			hdlc_fill_fifo(bch);
 		} else {
-#if 0
-			if (bch->st->lli.l1writewakeup &&
-				(PACKET_NOACK != bch->tx_skb->pkt_type))
-				bch->st->lli.l1writewakeup(bch->st, bch->hw.hdlc.count);
-			dev_kfree_skb(bch->tx_skb);
-			bch->hw.hdlc.count = 0;
-			bch->tx_skb = NULL;
-#endif
-			test_and_clear_bit(BC_FLG_BUSY, &bch->Flag);
-			hdlc_sched_event(bch, B_XMTBUFREADY);
+			bch->tx_idx = 0;
+			if (test_and_clear_bit(FLG_TX_NEXT, &bch->Flag)) {
+				if (bch->next_skb) {
+					bch->tx_len = bch->next_skb->len;
+					memcpy(bch->tx_buf,
+						bch->next_skb->data, bch->tx_len);
+					hdlc_fill_fifo(bch);
+					hdlc_sched_event(bch, B_XMTBUFREADY);
+				} else {
+					printk(KERN_WARNING "hdlc tx irq TX_NEXT without skb\n");
+					test_and_clear_bit(FLG_TX_BUSY, &bch->Flag);
+				}
+			} else {
+				test_and_clear_bit(FLG_TX_BUSY, &bch->Flag);
+				hdlc_sched_event(bch, B_XMTBUFREADY);
+			}
 		}
 	}
 }
@@ -539,11 +510,8 @@ inline void
 HDLC_irq_main(fritzpnppci *fc)
 {
 	u_int stat;
-	long  flags;
 	bchannel_t *bch;
 
-	save_flags(flags);
-	cli();
 	if (fc->subtyp == AVM_FRITZ_PCI) {
 		stat = ReadHDLCPCI(fc, 0, HDLC_STATUS);
 	} else {
@@ -553,7 +521,7 @@ HDLC_irq_main(fritzpnppci *fc)
 	}
 	if (stat & HDLC_INT_MASK) {
 		if (!(bch = Sel_BCS(fc, 0))) {
-			if (fc->dch.debug)
+			if (bch->debug)
 				debugprint(&bch->inst, "hdlc spurious channel 0 IRQ");
 		} else
 			HDLC_irq(bch, stat);
@@ -567,125 +535,126 @@ HDLC_irq_main(fritzpnppci *fc)
 	}
 	if (stat & HDLC_INT_MASK) {
 		if (!(bch = Sel_BCS(fc, 1))) {
-			if (fc->dch.debug)
+			if (bch->debug)
 				debugprint(&bch->inst, "hdlc spurious channel 1 IRQ");
 		} else
 			HDLC_irq(bch, stat);
 	}
-	restore_flags(flags);
 }
 
 static int
 hdlc_down(hisaxif_t *hif, u_int prim, int dinfo, int len, void *arg)
 {
 	bchannel_t	*bch;
-	fritzpnppci	*fc;
 	struct sk_buff	*skb = arg;
-	long flags;
+	int ret = 0;
 
 	if (!hif || !hif->fdata)
 		return(-EINVAL);
 	bch = hif->fdata;
-	fc = bch->inst.data;
-	switch (prim) {
-		case (PH_DATA | REQUEST):
-			save_flags(flags);
-			cli();
-			if (bch->next_skb) {
-				restore_flags(flags);
-			} else {
-				bch->next_skb = skb;
-				test_and_set_bit(BC_FLG_BUSY, &bch->Flag);
-				bch->hw.hdlc.count = 0;
-				restore_flags(flags);
-				fill_hdlc(bch);
-			}
-			break;
-#if 0
-		case (PH_PULL | REQUEST):
-			if (!bch->tx_skb) {
-				test_and_clear_bit(FLG_L1_PULL_REQ, &st->l1.Flags);
-				st->l1.l1l2(st, PH_PULL | CONFIRM, NULL);
-			} else
-				test_and_set_bit(FLG_L1_PULL_REQ, &st->l1.Flags);
-			break;
-#endif
-		case (PH_ACTIVATE | REQUEST):
-			test_and_set_bit(BC_FLG_ACTIV, &bch->Flag);
-			modehdlc(bch, len, (int)arg);
-//			l1_msg_b(st, pr, arg);
-			break;
-		case (PH_DEACTIVATE | REQUEST):
-//			l1_msg_b(st, pr, arg);
-			break;
-		case (PH_DEACTIVATE | CONFIRM):
-			test_and_clear_bit(BC_FLG_ACTIV, &bch->Flag);
-			test_and_clear_bit(BC_FLG_BUSY, &bch->Flag);
-			modehdlc(bch, 0, bch->channel);
-			bch->inst.up.func(&bch->inst.up,
-				PH_DEACTIVATE | CONFIRM, 0, 0, NULL);
-			break;
+	if ((prim == PH_DATA_REQ) ||
+		(prim == (DL_DATA | REQUEST))) {
+
+		if (bch->next_skb) {
+			debugprint(&bch->inst, " l2l1 next_skb exist this shouldn't happen");
+			return(-EBUSY);
+		}
+		bch->inst.lock(bch->inst.data);
+		if (test_and_set_bit(FLG_TX_BUSY, &bch->Flag)) {
+			test_and_set_bit(FLG_TX_NEXT, &bch->Flag);
+			bch->next_skb = skb;
+			bch->inst.unlock(bch->inst.data);
+		} else {
+			bch->tx_len = skb->len;
+			memcpy(bch->tx_buf, skb->data, bch->tx_len);
+			bch->tx_idx = 0;
+			hdlc_fill_fifo(bch);
+			bch->inst.unlock(bch->inst.data);
+			bch->inst.up.func(&bch->inst.up, prim | CONFIRM,
+				DINFO_SKB, 0, skb);
+		}
+	} else if ((prim == (PH_ACTIVATE | REQUEST)) ||
+		(prim == (DL_ESTABLISH  | REQUEST))) {
+		if (test_and_set_bit(BC_FLG_ACTIV, &bch->Flag))
+			ret = 0;
+		else {
+			bch->inst.lock(bch->inst.data);
+			ret = modehdlc(bch, bch->channel,
+				bch->inst.pid.protocol[1]);
+			bch->inst.unlock(bch->inst.data);
+		}
+		bch->inst.up.func(&bch->inst.up, prim | CONFIRM, 0,
+			ret, NULL);
+	} else if ((prim == (PH_DEACTIVATE | REQUEST)) ||
+		(prim == (DL_RELEASE | REQUEST)) ||
+		(prim == (MGR_DELIF | REQUEST))) {
+		bch->inst.lock(bch->inst.data);
+		if (test_and_clear_bit(FLG_TX_NEXT, &bch->Flag)) {
+			dev_kfree_skb(bch->next_skb);
+			bch->next_skb = NULL;
+		}
+		test_and_clear_bit(FLG_TX_BUSY, &bch->Flag);
+		modehdlc(bch, bch->channel, 0);
+		test_and_clear_bit(BC_FLG_ACTIV, &bch->Flag);
+		bch->inst.unlock(bch->inst.data);
+		if (prim != (MGR_DELIF | REQUEST))
+			bch->inst.up.func(&bch->inst.up, prim | CONFIRM, 0,
+				0, NULL);
+	} else {
+		printk(KERN_WARNING "hdlc_down unknown prim(%x)\n", prim);
+		ret = -EINVAL;
 	}
-	return(0);
+	return(ret);
 }
 
 void
-close_hdlcstate(bchannel_t *bch)
+hdlc_bh(bchannel_t *bch)
 {
-	modehdlc(bch, 0, 0);
-	if (test_and_clear_bit(BC_FLG_INIT, &bch->Flag)) {
-		if (bch->rx_buf) {
-			kfree(bch->rx_buf);
-			bch->rx_buf = NULL;
-		}
-		if (bch->blog) {
-			kfree(bch->blog);
-			bch->blog = NULL;
-		}
-		discard_queue(&bch->rqueue);
-		if (bch->next_skb) {
-			dev_kfree_skb(bch->next_skb);
+	struct sk_buff	*skb;
+	u_int 		pr;
+	int		ret;
+
+	if (!bch)
+		return;
+	if (!bch->inst.up.func) {
+		printk(KERN_WARNING "HiSax: hdlc_bh without up.func\n");
+		return;
+	}
+	if (test_and_clear_bit(B_XMTBUFREADY, &bch->event)) {
+		skb = bch->next_skb;
+		if (skb) {
 			bch->next_skb = NULL;
-			test_and_clear_bit(BC_FLG_BUSY, &bch->Flag);
+			if (bch->inst.pid.protocol[2] == ISDN_PID_L2_B_TRANS)
+				pr = DL_DATA | CONFIRM;
+			else
+				pr = PH_DATA | CONFIRM;
+			bch->inst.up.func(&bch->inst.up, pr, DINFO_SKB, 0, skb);
+		}
+	}
+	if (test_and_clear_bit(B_RCVBUFREADY, &bch->event)) {
+		while ((skb = skb_dequeue(&bch->rqueue))) {
+			if (bch->inst.pid.protocol[2] == ISDN_PID_L2_B_TRANS)
+				pr = DL_DATA | INDICATION;
+			else
+				pr = PH_DATA | INDICATION;
+			ret = bch->inst.up.func(&bch->inst.up, pr, DINFO_SKB,
+				0, skb);
+			if (ret < 0) {
+				printk(KERN_WARNING "hdlc_bh deliver err %d\n",
+					ret);
+				dev_kfree_skb(skb);
+			}
 		}
 	}
 }
 
-int
-open_hdlcstate(fritzpnppci *fc, bchannel_t *bch)
+static void
+inithdlc(fritzpnppci *fc)
 {
-	if (!test_and_set_bit(BC_FLG_INIT, &bch->Flag)) {
-		if (!(bch->rx_buf = kmalloc(MAX_DATA_MEM, GFP_ATOMIC))) {
-			printk(KERN_WARNING
-			       "HiSax: No memory for hdlc.rx_buf\n");
-			return (1);
-		}
-		if (!(bch->blog = kmalloc(MAX_BLOG_SPACE, GFP_ATOMIC))) {
-			printk(KERN_WARNING
-				"HiSax: No memory for bch->blog\n");
-			test_and_clear_bit(BC_FLG_INIT, &bch->Flag);
-			kfree(bch->rx_buf);
-			bch->rx_buf = NULL;
-			return (2);
-		}
-		skb_queue_head_init(&bch->rqueue);
-	}
-	bch->next_skb = NULL;
-	test_and_clear_bit(BC_FLG_BUSY, &bch->Flag);
-	bch->event = 0;
-	bch->rx_idx = 0;
-	return (0);
-}
-
-int
-setstack_hdlc(fritzpnppci *fc, bchannel_t *bch)
-{
-	bch->inst.data = fc;
-	if (open_hdlcstate(fc, bch))
-		return (-1);
-	bch->inst.up.fdata = bch;
-	bch->inst.up.func = hdlc_down;
-	return (0);
+	fc->bch[0].tqueue.routine = (void *) (void *) hdlc_bh;
+	fc->bch[1].tqueue.routine = (void *) (void *) hdlc_bh;
+	modehdlc(&fc->bch[0], -1, 0);
+	modehdlc(&fc->bch[1], -1, 1);
 }
 
 void
@@ -719,13 +688,6 @@ clear_pending_hdlc_ints(fritzpnppci *fc)
 }
 
 static void
-inithdlc(fritzpnppci *fc)
-{
-	modehdlc(fc->bch, -1, 0);
-	modehdlc(fc->bch + 1, -1, 1);
-}
-
-static void
 avm_pcipnp_interrupt(int intno, void *dev_id, struct pt_regs *regs)
 {
 	fritzpnppci *fc = dev_id;
@@ -736,6 +698,7 @@ avm_pcipnp_interrupt(int intno, void *dev_id, struct pt_regs *regs)
 		printk(KERN_WARNING "AVM PCI: Spurious interrupt!\n");
 		return;
 	}
+	lock_dev(fc);
 	sval = inb(fc->addr + 2);
 	if ((sval & AVM_STATUS0_IRQ_MASK) == AVM_STATUS0_IRQ_MASK)
 		/* possible a shared  IRQ reqest */
@@ -749,6 +712,7 @@ avm_pcipnp_interrupt(int intno, void *dev_id, struct pt_regs *regs)
 	}
 	WriteISAC(fc, ISAC_MASK, 0xFF);
 	WriteISAC(fc, ISAC_MASK, 0x0);
+	unlock_dev(fc);
 }
 
 static void
@@ -767,6 +731,7 @@ reset_avmpcipnp(fritzpnppci *fc)
 	current->state = TASK_UNINTERRUPTIBLE;
 	schedule_timeout((10*HZ)/1000); /* Timeout 10ms */
 	printk(KERN_INFO "AVM PCI/PnP: S1 %x\n", inb(fc->addr + 3));
+	restore_flags(flags);
 }
 
 static int init_card(fritzpnppci *fc)
@@ -825,26 +790,6 @@ static int init_card(fritzpnppci *fc)
 	}
 	unlock_dev(fc);
 	return(-EIO);
-}
-
-void
-BChannel_bh(bchannel_t *bch)
-{
-}
-
-void
-init_bch(fritzpnppci *fc,
-	     int bc)
-{
-	bchannel_t *bch = fc->bch + bc;
-
-	bch->inst.data = fc;
-	bch->channel = bc;
-	bch->tqueue.next = 0;
-	bch->tqueue.sync = 0;
-	bch->tqueue.routine = (void *) (void *) BChannel_bh;
-	bch->tqueue.data = bch;
-	bch->Flag = 0;
 }
 
 #define MAX_CARDS	4
@@ -1072,8 +1017,8 @@ release_card(fritzpnppci *card) {
 	lock_dev(card);
 	outb(0, card->addr + 2);
 	free_irq(card->irq, card);
-	close_hdlcstate(card->bch + 1);
-	close_hdlcstate(card->bch);
+	modehdlc(&card->bch[0], ISDN_PID_NONE, 0);
+	modehdlc(&card->bch[1], ISDN_PID_NONE, 1);
 	free_isac(&card->dch);
 	release_region(card->addr, 32);
 	free_bchannel(&card->bch[1]);
@@ -1095,16 +1040,24 @@ set_stack(hisaxstack_t *st, hisaxinstance_t *inst, int chan, hisax_pid_t *pid) {
 	}
 #endif
 	memset(&inst->pid, 0, sizeof(hisax_pid_t));
-	if (!HasProtocol(inst->obj, pid->protocol[1])) {
-		return(-EPROTONOSUPPORT);
-	} else
-		layer = ISDN_LAYER(1);
-	if (HasProtocol(inst->obj, pid->protocol[2])) {
-		layer |= ISDN_LAYER(2);
-		inst->pid.protocol[2] = pid->protocol[2];
+	if  (chan == 2) { /* D-channel */
+		if (!HasProtocol(inst->obj, pid->protocol[0])) {
+			return(-EPROTONOSUPPORT);
+		} else 
+			layer = ISDN_LAYER(0);
+		inst->pid.protocol[0] = pid->protocol[0];
+	} else {
+		if (!HasProtocol(inst->obj, pid->protocol[1])) {
+			return(-EPROTONOSUPPORT);
+		} else
+			layer = ISDN_LAYER(1);
+		inst->pid.protocol[1] = pid->protocol[1];
+		if (HasProtocol(inst->obj, pid->protocol[2])) {
+			layer |= ISDN_LAYER(2);
+			inst->pid.protocol[2] = pid->protocol[2];
+		}
 	}
 	inst->layermask = layer;
-	inst->pid.protocol[1] = pid->protocol[1];
 	if ((err = fritz.ctrl(st, MGR_ADDLAYER | REQUEST, inst))) {
 		printk(KERN_WARNING "set_stack MGR_ADDLAYER err(%d)\n", err);
 		return(err);
@@ -1116,6 +1069,16 @@ set_stack(hisaxstack_t *st, hisaxinstance_t *inst, int chan, hisax_pid_t *pid) {
 	if ((err = fritz.ctrl(st, MGR_ADDIF | REQUEST, &inst->up))) {
 		printk(KERN_WARNING "set_stack MGR_ADDIF err(%d)\n", err);
 		return(err);
+	}
+	if  (chan != 2) { /* B-channel */
+		u_int pr;
+
+		if (inst->pid.protocol[2] == ISDN_PID_L2_B_TRANS)
+			pr = DL_ESTABLISH | REQUEST;
+		else
+			pr = PH_ACTIVATE | REQUEST;
+		
+		hdlc_down(&inst->down, pr, 0, 0, NULL);
 	}
 	return(0);	                                    
 }
@@ -1270,6 +1233,7 @@ Fritz_init(void)
 		sprintf(card->dch.inst.id, "Fritz%d", fritz_cnt+1);
 		init_dchannel(&card->dch);
 		for (i=0; i<2; i++) {
+			card->bch[i].channel = i;
 			card->bch[i].inst.obj = &fritz;
 			card->bch[i].inst.data = card;
 			card->bch[i].inst.layermask = ISDN_LAYER(0);
