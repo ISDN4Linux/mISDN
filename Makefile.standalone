@@ -1,0 +1,49 @@
+# ipppcomp slave Makefile
+# (c) 03/2001 Karsten Keil <kkeil@suse.de>
+# adapted from Kurt Garloffs <garloff@suse.de> SecuMod package
+KDIR = /usr/src/linux
+
+DESTDIR =
+TARGET = newhisax
+TARGETS := Rules.make arch $(TARGET)
+TARGETMODDIR = misc
+
+default: $(TARGETS)
+
+all: $(TARGETS)
+
+Rules.make: $(KDIR)/Rules.make
+	cp -pf $(KDIR)/Rules.make .
+
+arch: $(KDIR)/arch
+	rm -f arch
+	ln -s $(KDIR)/arch .
+	
+MYDIR := `pwd`
+
+TOPDIR := $(KDIR)
+include $(KDIR)/.config
+include $(KDIR)/Makefile
+TOPDIR := $(KDIR)
+
+CFLAGS := -I. -I $(MYDIR)/include/linux -I $(KDIR)/drivers/isdn/avmb1 -I $(KDIR)/include  $(CFLAGS) -DMODULE -DLINUX
+
+ifdef CONFIG_MODVERSIONS
+CFLAGS += -DMODVERSIONS -include $(KDIR)/include/linux/modversions.h
+endif
+
+
+MODLIB := $(DESTDIR)$(INSTALL_MOD_PATH)/lib/modules/$(KERNELRELEASE)
+
+newhisax: drivers/isdn/hisax
+	$(MAKE) -C drivers/isdn/hisax CFLAGS="$(CFLAGS) $(MODFLAGS)" MAKING_MODULES=1 modules
+
+install: install_mod
+
+install_mod: $(MODLIB)/$(TARGETMODDIR)/$(TARGET)
+
+$(MODLIB)/$(TARGETMODDIR)/$(TARGET): $(TARGET)
+	echo "Install $(TARGET)"; install -o root -g root -d $(MODLIB)/$(TARGETMODDIR); \
+	install -o root -g root -m 0644 $(TARGET) $(MODLIB)/$(TARGETMODDIR)/; \
+	#echo "depmod -a $(KERNELRELEASE)"; depmod -a $(KERNELRELEASE); \
+

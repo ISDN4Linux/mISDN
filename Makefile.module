@@ -1,0 +1,32 @@
+# Master Makefile for the ipppcomp
+# (c) 03/2001 Karsten Keil <kkeil@suse.de>
+# adapted from Kurt Garloffs <garloff@suse.de> SecuMod package
+
+DESTDIR = 
+KDIR := /usr/src/linux
+
+TARGET := newhisax
+TARGETS := Rules.make arch $(TARGET)
+TARGETDIR := drivers/isdn/hisax
+
+default: $(TARGETS)
+
+all: $(TARGETS)
+
+Rules.make: $(KDIR)/Rules.make
+	cp -pf $(KDIR)/Rules.make .
+
+arch: $(KDIR)/arch
+	rm -f arch
+	ln -s $(KDIR)/arch .
+
+clean:
+	rm -f $(TARGETS) $(TARGETDIR)/.*.flags $(TARGETDIR)/*.o
+	rm -f $(TARGETDIR)/*~ *~
+	
+$(TARGET):
+	$(MAKE) -f Makefile KDIR=$(KDIR) $(TARGET)
+
+install: $(TARGETS)
+	$(MAKE) -f Makefile KDIR=$(KDIR) install_mod
+
