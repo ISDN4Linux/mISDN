@@ -1,4 +1,4 @@
-/* $Id: mISDNif.h,v 0.28 2001/08/02 15:02:06 kkeil Exp $
+/* $Id: mISDNif.h,v 0.29 2001/08/03 09:04:55 kkeil Exp $
  *
  */
 
@@ -8,6 +8,7 @@
 #include <stdarg.h>
 #include <linux/types.h>
 #include <linux/errno.h>
+#include <linux/isdn_compat.h>
 
 /* primitives for information exchange
  * generell format
