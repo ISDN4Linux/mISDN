@@ -15,6 +15,8 @@
 #define __devinit
 #define __devinitdata
 
+#else
+#define COMPAT_HAS_NEW_WAITQ
 #endif
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,4,0)
@@ -33,7 +35,6 @@
 #define get_pcibase(ps, nr) ps->resource[nr].start
 #define pci_get_sub_system(pdev, id)	id = pdev->subsystem_device
 #define pci_get_sub_vendor(pdev, id)	id = pdev->subsystem_vendor
-#define COMPAT_HAS_NEW_WAITQ
 
 #endif /* 2,4,0 */
 

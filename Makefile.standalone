@@ -18,12 +18,13 @@ TOPDIR := $(KDIR)
 include $(KDIR)/.config
 include $(KDIR)/Makefile
 
-CFLAGS := -I. -I $(MYDIR)/newinclude -I $(KDIR)/drivers/isdn/avmb1 $(CFLAGS) -DLINUX
+CFLAGS := -I. -I $(KDIR)/drivers/isdn/avmb1 $(CFLAGS) -DLINUX
+CC := $(filter-out -I$(HPATH), $(CC)) -I $(MYDIR)/newinclude -I $(HPATH)
 
 ifdef CONFIG_MODVERSIONS
-CFLAGS += -DMODULE -DMODVERSIONS -include $(MODVERFILE)
+CFLAGS := -DMODULE -DMODVERSIONS -include $(MODVERFILE) $(CFLAGS)
 else
-CFLAGS += -DMODULE
+CFLAGS := -DMODULE $(CFLAGS)
 endif
 
 
