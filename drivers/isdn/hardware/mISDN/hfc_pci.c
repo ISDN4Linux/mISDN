@@ -1,4 +1,4 @@
-/* $Id: hfc_pci.c,v 1.8 2002/07/07 21:20:16 kkeil Exp $
+/* $Id: hfc_pci.c,v 1.9 2002/07/07 21:23:11 kkeil Exp $
 
  * hfc_pci.c     low level driver for CCD's hfc-pci based cards
  *
@@ -46,12 +46,12 @@ extern const char *CardType[];
 
 #ifdef HFC_TENOVIS
 	#ifdef HFC_TENOVIS_LOOP
-		static const char *hfcpci_revision = "$Revision: 1.8 $";
+		static const char *hfcpci_revision = "$Revision: 1.9 $ , Tenovis loop mod.";
 	#else
-		static const char *hfcpci_revision = "$Revision: 1.8 $";
+		static const char *hfcpci_revision = "$Revision: 1.9 $ , Tenovis mod.";
 	#endif
 #else
-	static const char *hfcpci_revision = "$Revision: 1.8 $";
+	static const char *hfcpci_revision = "$Revision: 1.9 $";
 #endif
 
 /* table entry in the PCI devices list */
