@@ -1,4 +1,4 @@
-/* $Id: stack.c,v 1.10 2004/06/17 12:31:12 keil Exp $
+/* $Id: stack.c,v 1.11 2004/06/30 15:13:18 keil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -12,7 +12,8 @@ LIST_HEAD(mISDN_stacklist);
 LIST_HEAD(mISDN_instlist);
 
 int
-get_stack_cnt(void) {
+get_stack_cnt(void)
+{
 	int cnt = 0;
 	mISDNstack_t *st;
 
@@ -22,16 +23,19 @@ get_stack_cnt(void) {
 }
 
 void
-get_stack_info(iframe_t *frm) {
-	mISDNstack_t *cst, *st;
-	stack_info_t *si;
-	mISDNlayer_t *lay;
+get_stack_info(struct sk_buff *skb)
+{
+	mISDN_head_t	*hp;
+	mISDNstack_t	*cst, *st;
+	stack_info_t	*si;
+	mISDNlayer_t	*lay;
 
-	st = get_stack4id(frm->addr);
+	hp = mISDN_HEAD_P(skb);
+	st = get_stack4id(hp->addr);
 	if (!st)
-		frm->len = 0;
+		hp->len = 0;
 	else {
-		si = (stack_info_t *)frm->data.p;
+		si = (stack_info_t *)skb->data;
 		memset(si, 0, sizeof(stack_info_t));
 		si->id = st->id;
 		si->extentions = st->extentions;
@@ -53,10 +57,11 @@ get_stack_info(iframe_t *frm) {
 			si->child[si->childcnt] = cst->id;
 			si->childcnt++;
 		}
-		frm->len = sizeof(stack_info_t);
+		hp->len = sizeof(stack_info_t);
 		if (si->childcnt>2)
-			frm->len += (si->childcnt-2)*sizeof(int);
+			hp->len += (si->childcnt-2)*sizeof(int);
 	}
+	skb_put(skb, hp->len);
 }
 
 static int

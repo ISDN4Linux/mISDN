@@ -1,4 +1,4 @@
-/* $Id: mISDNif.h,v 1.29 2004/06/17 12:31:14 keil Exp $
+/* $Id: mISDNif.h,v 1.30 2004/06/30 15:13:20 keil Exp $
  *
  */
 
@@ -18,6 +18,23 @@
  * <8 bit subcommand>
  *
  */
+ 
+/*
+ * ABI Version 32 bit
+ *
+ * <16 bit> Major version
+ *		- changed if any interface become backwards incompatible
+ *
+ * <16 bit> Minor version
+ *              - changed if any interface is extended but backwards compatible
+ *
+ */
+#define	MISDN_MAJOR_VERSION	1
+#define	MISDN_MINOR_VERSION	0
+#define	MISDN_VERSION		((MISDN_MAJOR_VERSION<<16) | MISDN_MINOR_VERSION)
+
+#define MISDN_REVISION		"$Revision: 1.30 $"
+#define MISDN_DATE		"$Date: 2004/06/30 15:13:20 $"
 
 /* SUBCOMMANDS */
 #define REQUEST		0x80
@@ -74,6 +91,7 @@
 #define MGR_LOADFIRM	0x0ff000
 #define MGR_LOGDATA	0x0ff100
 #define MGR_DEBUGDATA	0x0ff200
+#define MGR_VERSION	0x0fff00
 
 /* layer 1 <-> hardware */
 #define PH_SIGNAL	0x000100
@@ -460,21 +478,11 @@
 #define MAX_DATA_MEM		2080
 #define MAX_HEADER_LEN		4
 #define IFRAME_HEAD_SIZE	16
+#define	DEFAULT_PORT_QUEUELEN	256
+#define PORT_SKB_RESERVE	L3_EXTRA_SIZE
+#define PORT_SKB_MINIMUM	128
 
 /* structure for information exchange between layer/entity boundaries */
-
-typedef struct _iframe {
-	u_int	addr;
-	u_int	prim;
-	int	dinfo;
-	int	len;
-	union {
-		u_char	b[4];
-		void	*p;
-		int	i;
-	} data;
-} iframe_t;
-
 
 #define STATUS_INFO_L1	1
 #define STATUS_INFO_L2	2
@@ -520,7 +528,7 @@ typedef struct _stack_info {
 	int		instcnt;
 	int		inst[MAX_LAYER_NR +1];
 	int		childcnt;
-	u_int		child[30];
+	u_int		child[2]; /* this is correct handled for PRI see get_stack_info() */
 } stack_info_t;
 
 typedef struct _layer_info {
@@ -612,8 +620,10 @@ typedef int	(lock_func_t)(void *, int);
 typedef void	(unlock_func_t)(void *);
 
 typedef struct _mISDN_head {
+	u_int	addr;
 	u_int	prim;
 	int	dinfo;
+	int	len;
 } mISDN_head_t;
 
 #define mISDN_HEAD_P(s)		((mISDN_head_t *)&s->cb[0])
@@ -621,16 +631,25 @@ typedef struct _mISDN_head {
 #define mISDN_HEAD_DINFO(s)	((mISDN_head_t *)&s->cb[0])->dinfo
 
 typedef struct _mISDN_headext {
+	u_int	addr;
 	u_int	prim;
 	int	dinfo;
-	u_int	what;
-	void	*data[4];
+	void	*data[3];
 	union {
 		ctrl_func_t	*ctrl;
 		if_func_t	*iff;
 		void		*func;
 	} func;
 } mISDN_headext_t;
+
+#define mISDN_HEADEXT_P(s) ((mISDN_headext_t *)&s->cb[0])
+
+typedef struct _mISDN_headifrm {
+	u_int	prim;
+	int	dinfo;
+	int	len;
+	u_int	addr;
+} mISDN_headifrm_t;
 
 #define mISDN_HEADEXT_P(s) ((mISDN_headext_t *)&s->cb[0])
 
@@ -704,11 +723,8 @@ struct _mISDNport {
 	spinlock_t		lock;
 	mISDNif_t		pif;
 	u_long			Flag;
-	int			size;
-	int			cnt;
-	u_char			*buf;
-	u_char			*ip;
-	u_char			*op;
+	struct sk_buff_head	queue;
+	u_int			maxqlen;
 };
 
 /* the user interface to handle /dev/mISDN */

@@ -1,4 +1,4 @@
-/* $Id: core.c,v 1.22 2004/06/17 12:31:11 keil Exp $
+/* $Id: core.c,v 1.23 2004/06/30 15:13:18 keil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -19,7 +19,7 @@
 #include <linux/smp_lock.h>
 #endif
 
-static char		*mISDN_core_revision = "$Revision: 1.22 $";
+static char		*mISDN_core_revision = "$Revision: 1.23 $";
 
 LIST_HEAD(mISDN_objectlist);
 rwlock_t		mISDN_objects_lock = RW_LOCK_UNLOCKED;
@@ -104,30 +104,30 @@ mISDNd(void *data)
 			test_and_set_bit(mISDN_TFLAGS_ACTIV, &hkt->Flags);
 			err = -EINVAL;
 			hhe=mISDN_HEADEXT_P(skb);
-			switch (hhe->what) {
+			switch (hhe->addr) {
 				case MGR_FUNCTION:
 					err=hhe->func.ctrl(hhe->data[0], hhe->prim, skb->data);
 					if (err) {
-						printk(KERN_WARNING "mISDNd: what(%x) prim(%x) failed err(%x)\n",
-							hhe->what, hhe->prim, err);
+						printk(KERN_WARNING "mISDNd: addr(%x) prim(%x) failed err(%x)\n",
+							hhe->addr, hhe->prim, err);
 					} else {
 						if (debug)
-							printk(KERN_DEBUG "mISDNd: what(%x) prim(%x) success\n",
-								hhe->what, hhe->prim);
+							printk(KERN_DEBUG "mISDNd: addr(%x) prim(%x) success\n",
+								hhe->addr, hhe->prim);
 						err--; /* to free skb */
 					}
 					break;
 				case MGR_QUEUEIF:
 					err = hhe->func.iff(hhe->data[0], skb);
 					if (err) {
-						printk(KERN_WARNING "mISDNd: what(%x) prim(%x) failed err(%x)\n",
-							hhe->what, hhe->prim, err);
+						printk(KERN_WARNING "mISDNd: addr(%x) prim(%x) failed err(%x)\n",
+							hhe->addr, hhe->prim, err);
 					}
 					break;
 				default:
 					int_error();
-					printk(KERN_WARNING "mISDNd: what(%x) prim(%x) unknown\n",
-						hhe->what, hhe->prim);
+					printk(KERN_WARNING "mISDNd: addr(%x) prim(%x) unknown\n",
+						hhe->addr, hhe->prim);
 					err = -EINVAL;
 					break;
 			}
@@ -407,7 +407,7 @@ mgr_queue(void *data, u_int prim, struct sk_buff *skb)
 {
 	mISDN_headext_t *hhe = mISDN_HEADEXT_P(skb);
 
-	hhe->what = prim;
+	hhe->addr = prim;
 	skb_queue_tail(&mISDN_thread.workq, skb);
 	wake_up_interruptible(&mISDN_thread.waitq);
 	return(0);
@@ -426,7 +426,7 @@ set_stack_req(mISDNstack_t *st, mISDN_pid_t *pid)
 	skb = alloc_skb(sizeof(mISDN_pid_t) + pid->maxplen, GFP_ATOMIC);
 	hhe = mISDN_HEADEXT_P(skb);
 	hhe->prim = MGR_SETSTACK_NW | REQUEST;
-	hhe->what = MGR_FUNCTION;
+	hhe->addr = MGR_FUNCTION;
 	hhe->data[0] = st;
 	npid = (mISDN_pid_t *)skb_put(skb, sizeof(mISDN_pid_t));
 	if (pid->pbuf)
