@@ -1,4 +1,4 @@
-/* $Id: hfc_pci.c,v 1.5 2001/12/02 13:08:08 kkeil Exp $
+/* $Id: hfc_pci.c,v 1.6 2002/04/29 23:26:30 kkeil Exp $
 
  * hfc_pci.c     low level driver for CCD's hfc-pci based cards
  *
@@ -39,7 +39,7 @@
 
 extern const char *CardType[];
 
-static const char *hfcpci_revision = "$Revision: 1.5 $";
+static const char *hfcpci_revision = "$Revision: 1.6 $";
 
 /* table entry in the PCI devices list */
 typedef struct {
@@ -128,8 +128,6 @@ struct hfcPCI_hw {
 	unsigned char	sctrl_r;
 	unsigned char	sctrl_e;
 	unsigned char	trm;
-	unsigned char	stat;
-	unsigned char	fifo;
 	unsigned char	fifo_en;
 	unsigned char	bswapped;
 	unsigned char	nt_mode;
@@ -159,7 +157,6 @@ typedef struct _hfc_pci {
 	u_char		chanlimit;
 	u_int		cfg;
 	u_int		irq;
-	u_int		addr;
 	hfcPCI_hw_t	hw;
 	spinlock_t	devlock;
 	u_long		flags;
@@ -230,15 +227,18 @@ reset_hfcpci(hfc_pci_t *hc)
 {
 	long	flags;
 	u_char	val;
+	int	cnt = 0;
 
+	val = Read_hfc(hc, HFCPCI_CHIP_ID);
+	printk(KERN_INFO "HFC_PCI: resetting HFC ChipId(%x)\n", val);
 	save_flags(flags);
 	cli();
 	pcibios_write_config_word(hc->hw.pci_bus, hc->hw.pci_device_fn, PCI_COMMAND, PCI_ENA_MEMIO);	/* enable memory mapped ports, disable busmaster */
 	hc->hw.int_m2 = 0;	/* interrupt output off ! */
 	Write_hfc(hc, HFCPCI_INT_M2, hc->hw.int_m2);
-
-	printk(KERN_INFO "HFC_PCI: resetting card\n");
 	pcibios_write_config_word(hc->hw.pci_bus, hc->hw.pci_device_fn, PCI_COMMAND, PCI_ENA_MEMIO + PCI_ENA_MASTER);	/* enable memory ports + busmaster */
+	val = Read_hfc(hc, HFCPCI_STATUS);
+	printk(KERN_DEBUG "HFC-PCI status(%x) before reset\n", val);
 	hc->hw.cirm = HFCPCI_RESET;		/* Reset On */
 	Write_hfc(hc, HFCPCI_CIRM, hc->hw.cirm);
 	restore_flags(flags);
@@ -248,14 +248,16 @@ reset_hfcpci(hfc_pci_t *hc)
 	cli();
 	hc->hw.cirm = 0;			/* Reset Off */
 	Write_hfc(hc, HFCPCI_CIRM, hc->hw.cirm);
-	restore_flags(flags);
-	set_current_state(TASK_UNINTERRUPTIBLE);
-	schedule_timeout((20 * HZ) / 1000);	/* Timeout 20ms */
-	save_flags(flags);
-	cli();
 	val = Read_hfc(hc, HFCPCI_STATUS);
-	if (val & 2)
-		printk(KERN_WARNING "HFC-PCI init bit busy\n");
+	printk(KERN_DEBUG "HFC-PCI status(%x) after reset\n", val);
+	while (cnt < 50000) { /* max 50000 us */
+ 		udelay(5);
+		cnt += 5;
+		val = Read_hfc(hc, HFCPCI_STATUS);
+		if (!(val & 2))
+			break;
+	}
+	printk(KERN_DEBUG "HFC-PCI status(%x) after %dus\n", val, cnt);
 
 	hc->hw.fifo_en = 0x30;	/* only D fifos enabled */
 
@@ -2161,7 +2163,6 @@ setup_hfcpci(hfc_pci_t *hc)
 	hc->hw.int_s1 = 0;
 	hc->hw.cirm = 0;
 	hc->dch.hw.hfcpci.ph_state = 0;
-	hc->hw.fifo = 255;
 	while (id_list[i].vendor_id) {
 		tmp_hfcpci = pci_find_device(id_list[i].vendor_id,
 				id_list[i].device_id, dev_hfcpci);

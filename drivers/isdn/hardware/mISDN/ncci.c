@@ -1,4 +1,4 @@
-/* $Id: ncci.c,v 1.2 2001/12/05 13:13:37 kkeil Exp $
+/* $Id: ncci.c,v 1.3 2002/04/29 23:26:30 kkeil Exp $
  *
  */
 
@@ -447,7 +447,7 @@ void ncciDestr(Ncci_t *ncci)
 	discard_queue(&ncci->squeue);
 	for (i = 0; i < ncci->window; i++) {
 		if (ncci->xmit_skb_handles[i].skb)
-			dev_kfree_skb(ncci->xmit_skb_handles[i].skb);
+			ncci->xmit_skb_handles[i].skb = NULL;
 	}
 }
 

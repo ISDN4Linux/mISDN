@@ -1,4 +1,4 @@
-/* $Id: l3_udss1.c,v 1.2 2001/12/05 13:49:17 kkeil Exp $
+/* $Id: l3_udss1.c,v 1.3 2002/04/29 23:26:30 kkeil Exp $
  *
  * EURO/DSS1 D-channel protocol
  *
@@ -24,7 +24,7 @@ static int debug = 0;
 static hisaxobject_t u_dss1;
 
 
-const char *dss1_revision = "$Revision: 1.2 $";
+const char *dss1_revision = "$Revision: 1.3 $";
 
 static int dss1man(l3_process_t *, u_int, void *);
 
@@ -732,6 +732,12 @@ l3dss1_resume_req(l3_process_t *pc, u_char pr, void *arg)
 		l3dss1_message(pc, MT_RESUME);
 	}
 	L3AddTimer(&pc->timer, T318, CC_T318);
+}
+
+static void
+l3dss1_status_enq_req(l3_process_t *pc, u_char pr, void *arg)
+{
+	l3dss1_message(pc, MT_STATUS_ENQUIRY);
 }
 
 static void
@@ -1782,7 +1788,7 @@ static struct stateentry downstatelist[] =
 	{SBIT(1) | SBIT(2) | SBIT(3) | SBIT(4) | SBIT(6) | SBIT(7) |
 		SBIT(8) | SBIT(9) | SBIT(10) | SBIT(25),
 	 CC_DISCONNECT | REQUEST, l3dss1_disconnect_req},
-	{SBIT(12),
+	{SBIT(11) | SBIT(12),
 	 CC_RELEASE | REQUEST, l3dss1_release_req},
 	{ALL_STATES,
 	 CC_RESTART | REQUEST, l3dss1_restart},
@@ -1802,6 +1808,8 @@ static struct stateentry downstatelist[] =
 	 CC_CONNECT | REQUEST, l3dss1_connect_req},
 	{SBIT(10),
 	 CC_SUSPEND | REQUEST, l3dss1_suspend_req},
+	{ALL_STATES,
+	 CC_STATUS_ENQUIRY | REQUEST, l3dss1_status_enq_req},
 };
 
 #define DOWNSLLEN \
@@ -2148,19 +2156,24 @@ dss1_fromup(hisaxif_t *hif, struct sk_buff *skb)
 		dev_kfree_skb(skb);
 		return(0);
 	}
+	proc = getl3proc4id(l3, hh->dinfo);
 	if ((CC_NEW_CR | REQUEST) == hh->prim) {
-		cr = newcallref();
-		cr |= 0x80;
-		ret = -ENOMEM;
-		if ((proc = new_l3_process(l3, cr, N303))) {
-			proc->id = hh->dinfo;
-			ret = 0;
-			dev_kfree_skb(skb);
+		if (proc) {
+			printk(KERN_WARNING __FUNCTION__
+				": proc(%x) allready exist\n", hh->dinfo);
+			ret = -EBUSY;
+		} else {
+			cr = newcallref();
+			cr |= 0x80;
+			ret = -ENOMEM;
+			if ((proc = new_l3_process(l3, cr, N303))) {
+				proc->id = hh->dinfo;
+				ret = 0;
+				dev_kfree_skb(skb);
+			}
 		}
 		return(ret);
-	} else {
-		proc = getl3proc4id(l3, hh->dinfo);
-	}
+	} 
 	if (!proc) {
 		printk(KERN_ERR "HiSax dss1 fromup without proc pr=%04x\n",
 			hh->prim);

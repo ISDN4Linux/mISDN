@@ -1,4 +1,4 @@
-/* $Id: cplci.c,v 1.1 2001/11/14 10:41:26 kkeil Exp $
+/* $Id: cplci.c,v 1.2 2002/04/29 23:26:30 kkeil Exp $
  *
  */
 
@@ -488,15 +488,20 @@ static void plci_disconnect_req(struct FsmInst *fi, int event, void *arg)
 
 	cplciLinkDown(cplci);
 
-	if (cplci->cause[0]) { // FIXME
-		plciL4L3(plci, CC_RELEASE | REQUEST, 0, NULL);
-	} else {
+	if (!cplci->cause[0]) { // FIXME
+//		plciL4L3(cplci->plci, CC_STATUS_ENQUIRY | REQUEST, 0, NULL);
 		memset(&disconnect_req, 0, sizeof(DISCONNECT_t));
 		memcpy(cause, "\x02\x80\x90", 3); // normal call clearing
 		disconnect_req.CAUSE = cause;
 		plciL4L3(plci, CC_DISCONNECT | REQUEST, sizeof(DISCONNECT_t),
 			&disconnect_req);
+		
+	} else {
+		/* release physical link */
+		// FIXME
+		plciL4L3(plci, CC_RELEASE | REQUEST, 0, NULL);
 	}
+//	plciL4L3(cplci->plci, CC_STATUS_ENQUIRY | REQUEST, 0, NULL);
 }
 
 static void plci_suspend_conf(struct FsmInst *fi, int event, void *arg)
@@ -924,7 +929,20 @@ void cplciConstr(Cplci_t *cplci, Appl_t *appl, Plci_t *plci)
 
 void cplciDestr(Cplci_t *cplci)
 {
+	RELEASE_t	rel;
+	unsigned char	cause[4];
+
 	if (cplci->plci) {
+		if (cplci->plci_m.state != ST_PLCI_P_0) {
+//			plciL4L3(cplci->plci, CC_STATUS_ENQUIRY | REQUEST, 0, NULL);
+			memset(&rel, 0, sizeof(RELEASE_t));
+			cause[0] = 2;
+			cause[1] = 0x80;
+			cause[2] = 0x80 | CAUSE_NORMALUNSPECIFIED;
+			rel.CAUSE = cause;
+			plciL4L3(cplci->plci, CC_RELEASE | REQUEST,
+				sizeof(RELEASE_t), &rel);
+		}
  		plciDetachCplci(cplci->plci, cplci);
 	}
 	if (cplci->ncci) {
