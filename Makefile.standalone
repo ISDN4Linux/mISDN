@@ -1,12 +1,12 @@
-# ipppcomp slave Makefile
-# (c) 03/2001 Karsten Keil <kkeil@suse.de>
-# adapted from Kurt Garloffs <garloff@suse.de> SecuMod package
+# km_newhisax slave Makefile
+# (c) 10/2001 Karsten Keil <kkeil@suse.de>
+#
 KDIR = /usr/src/linux
 
 DESTDIR =
-TARGET = newhisax
+TARGET = 
 TARGETS := Rules.make arch $(TARGET)
-TARGETMODDIR = misc
+TARGETMODDIR = "../misc"
 
 default: $(TARGETS)
 
@@ -35,15 +35,14 @@ endif
 
 MODLIB := $(DESTDIR)$(INSTALL_MOD_PATH)/lib/modules/$(KERNELRELEASE)
 
-newhisax: drivers/isdn/hisax
-	$(MAKE) -C drivers/isdn/hisax CFLAGS="$(CFLAGS) $(MODFLAGS)" MAKING_MODULES=1 modules
+newhisax: $(TARGETDIR)
+	$(MAKE) -C $(TARGETDIR) CFLAGS="$(CFLAGS) $(MODFLAGS)" MAKING_MODULES=1 modules
 
 install: install_mod
 
-install_mod: $(MODLIB)/$(TARGETMODDIR)/$(TARGET)
+install_mod: $(MODLIB)/$(TARGETMODDIR)
+	$(MAKE) -C $(TARGETDIR) MOD_DESTDIR=$(TARGETMODDIR) modules_install
 
-$(MODLIB)/$(TARGETMODDIR)/$(TARGET): $(TARGET)
-	echo "Install $(TARGET)"; install -o root -g root -d $(MODLIB)/$(TARGETMODDIR); \
-	install -o root -g root -m 0644 $(TARGET) $(MODLIB)/$(TARGETMODDIR)/; \
-	#echo "depmod -a $(KERNELRELEASE)"; depmod -a $(KERNELRELEASE); \
+$(MODLIB)/$(TARGETMODDIR):
+	mkdir -p $(MODLIB)/$(TARGETMODDIR) 
 

@@ -22,11 +22,11 @@ arch: $(KDIR)/arch
 
 clean:
 	rm -f $(TARGETS) $(TARGETDIR)/.*.flags $(TARGETDIR)/*.o
-	rm -f $(TARGETDIR)/*~ *~
+	rm -f $(TARGETDIR)/*~ include/linux/*~ *~ .kversion
 	
 $(TARGET):
-	$(MAKE) -f Makefile KDIR=$(KDIR) $(TARGET)
+	$(MAKE) -f Makefile KDIR=$(KDIR) TARGETDIR=$(TARGETDIR) $(TARGET)
 
 install: $(TARGETS)
-	$(MAKE) -f Makefile KDIR=$(KDIR) install_mod
+	$(MAKE) -f Makefile KDIR=$(KDIR) TARGETDIR=$(TARGETDIR) install_mod
 
