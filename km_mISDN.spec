@@ -1,7 +1,7 @@
 Vendor:       SuSE GmbH, Nuernberg, Germany
 Distribution: SuSE Linux 8.2 (i386)
 Name:         km_mISDN
-Release:      3
+Release:      4
 Packager:     feedback@suse.de
 
 Copyright:    Karsten Keil GPL
@@ -43,7 +43,7 @@ install -p include/linux/*.h $DESTDIR/newinclude/linux
 mkdir -p $DESTDIR/drivers/isdn/hardware/mISDN
 install -p drivers/isdn/hardware/mISDN/Makefile $DESTDIR/drivers/isdn/hardware/mISDN
 install -p drivers/isdn/hardware/mISDN/*.[ch] $DESTDIR/drivers/isdn/hardware/mISDN
-install -p drivers/isdn/hardware/mISDN/Rules.mISDN $DESTDIR/drivers/isdn/hardware/mISDN
+install -p drivers/isdn/hardware/mISDN/Rules.mISDN.v2.4 $DESTDIR/drivers/isdn/hardware/mISDN/Rules.mISDN
 
 #
 %{?suse_check}
