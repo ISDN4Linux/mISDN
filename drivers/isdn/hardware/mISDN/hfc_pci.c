@@ -1,4 +1,4 @@
-/* $Id: hfc_pci.c,v 1.30 2003/11/09 11:37:40 keil Exp $
+/* $Id: hfc_pci.c,v 1.31 2003/11/11 21:06:34 keil Exp $
 
  * hfc_pci.c     low level driver for CCD's hfc-pci based cards
  *
@@ -46,7 +46,7 @@
 
 extern const char *CardType[];
 
-static const char *hfcpci_revision = "$Revision: 1.30 $";
+static const char *hfcpci_revision = "$Revision: 1.31 $";
 
 /* table entry in the PCI devices list */
 typedef struct {
@@ -686,7 +686,7 @@ hfcpci_fill_dfifo(hfc_pci_t *hc)
 		return;
 	}
 	/* now determine free bytes in FIFO buffer */
-	maxlen = df->za[df->f1 & D_FREG_MASK].z2 - df->za[df->f1 & D_FREG_MASK].z1;
+	maxlen = df->za[df->f2 & D_FREG_MASK].z2 - df->za[df->f1 & D_FREG_MASK].z1 - 1;
 	if (maxlen <= 0)
 		maxlen += D_FIFO_SIZE;	/* count now contains available bytes */
 
@@ -826,7 +826,7 @@ next_t_frame:
 		return;
 	}
 	/* now determine free bytes in FIFO buffer */
-	maxlen = bz->za[bz->f1].z2 - bz->za[bz->f1].z1;
+	maxlen = bz->za[bz->f2].z2 - bz->za[bz->f1].z1 - 1;
 	if (maxlen <= 0)
 		maxlen += B_FIFO_SIZE;	/* count now contains available bytes */
 
@@ -2340,8 +2340,7 @@ static int __init HFC_init(void)
 			prev = NULL;
 			i = HFC_cnt;
 		}
-		set_dchannel_pid(&pid, protocol[i] & 0xf,
-			layermask[i]);
+		set_dchannel_pid(&pid, protocol[i], layermask[i]);
 		test_and_set_bit(HFC_CFG_MASTER, &card->cfg);
 		if (protocol[i] & 0x10) {
 			card->dch.inst.pid.protocol[0] = ISDN_PID_L0_NT_S0;
@@ -2356,12 +2355,6 @@ static int __init HFC_init(void)
 		} else {
 			card->dch.inst.pid.protocol[0] = ISDN_PID_L0_TE_S0;
 			card->hw.nt_mode = 0;
-		}
-		if (protocol[i] & 0x20) {
-			if (pid.layermask & ISDN_LAYER(2))
-				pid.protocol[2] |= ISDN_PID_L2_DF_PTP;
-			if (pid.layermask & ISDN_LAYER(3))
-				pid.protocol[3] |= ISDN_PID_L3_DF_PTP;
 		}
 		if (protocol[i] & 0x40) {
 			if (pid.layermask & ISDN_LAYER(3))
