@@ -1,4 +1,4 @@
-/* $Id: core.c,v 1.3 2003/06/27 15:19:42 kkeil Exp $
+/* $Id: core.c,v 1.4 2003/06/27 15:26:39 kkeil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -13,6 +13,9 @@
 #include "hisax_core.h"
 #ifdef CONFIG_KMOD
 #include <linux/kmod.h>
+#endif
+#ifdef CONFIG_SMP
+#include <linux/smp_lock.h>
 #endif
 
 hisaxobject_t	*hisax_objects = NULL;
