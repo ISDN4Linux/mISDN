@@ -1,4 +1,4 @@
-/* $Id: avm_fritz.c,v 1.3 2002/09/16 23:49:38 kkeil Exp $
+/* $Id: avm_fritz.c,v 1.4 2003/06/20 10:06:14 kkeil Exp $
  *
  * fritz_pci.c    low level stuff for AVM Fritz!PCI and ISA PnP isdn cards
  *              Thanks to AVM, Berlin for informations
@@ -18,7 +18,7 @@
 #include "helper.h"
 #include "debug.h"
 
-static const char *avm_pci_rev = "$Revision: 1.3 $";
+static const char *avm_pci_rev = "$Revision: 1.4 $";
 
 #define ISDN_CTYPE_FRITZPCI 1
 
@@ -562,7 +562,7 @@ avm_pcipnp_interrupt(int intno, void *dev_id, struct pt_regs *regs)
 	}
 	if (!(sval & AVM_STATUS0_IRQ_ISAC)) {
 		val = ReadISAC(fc, ISAC_ISTA);
-		isac_interrupt(&fc->dch, val);
+		ISAC_interrupt(&fc->dch, val);
 	}
 	if (!(sval & AVM_STATUS0_IRQ_HDLC)) {
 		HDLC_irq_main(fc);
@@ -762,8 +762,12 @@ static int init_card(fritzpnppci *fc)
 		return(-EIO);
 	}
 	while (cnt) {
-		clear_pending_isac_ints(&fc->dch);
-		init_isac(&fc->dch);
+		int	ret;
+		ISAC_clear_pending_ints(&fc->dch);
+		if ((ret=ISAC_init(&fc->dch))) {
+			printk(KERN_WARNING "HiSax: ISAC_init failed with %d\n", ret);
+			break;
+		}
 		clear_pending_hdlc_ints(fc);
 		inithdlc(fc);
 		outb(AVM_STATUS0_DIS_TIMER | AVM_STATUS0_RES_TIMER,
@@ -918,15 +922,14 @@ setup_fritz(fritzpnppci *fc, u_int io_cfg, u_int irq_cfg)
 		(fc->subtyp == AVM_FRITZ_PCI) ? "AVM Fritz!PCI" : "AVM Fritz!PnP",
 		fc->irq, fc->addr);
 
-	fc->dch.readisac = &ReadISAC;
-	fc->dch.writeisac = &WriteISAC;
-	fc->dch.readisacfifo = &ReadISACfifo;
-	fc->dch.writeisacfifo = &WriteISACfifo;
+	fc->dch.read_reg = &ReadISAC;
+	fc->dch.write_reg = &WriteISAC;
+	fc->dch.read_fifo = &ReadISACfifo;
+	fc->dch.write_fifo = &WriteISACfifo;
 	lock_dev(fc);
 #ifdef SPIN_DEBUG
 	printk(KERN_ERR "lock_adr=%p now(%p)\n", &fc->lock_adr, fc->lock_adr);
 #endif
-	ISACVersion(&fc->dch, (fc->subtyp == AVM_FRITZ_PCI) ? "AVM PCI:" : "AVM PnP:");
 	unlock_dev(fc);
 	return(0);
 }
@@ -939,7 +942,7 @@ release_card(fritzpnppci *card) {
 	free_irq(card->irq, card);
 	modehdlc(&card->bch[0], 0, ISDN_PID_NONE);
 	modehdlc(&card->bch[1], 1, ISDN_PID_NONE);
-	free_isac(&card->dch);
+	ISAC_free(&card->dch);
 	release_region(card->addr, 32);
 	free_bchannel(&card->bch[1]);
 	free_bchannel(&card->bch[0]);

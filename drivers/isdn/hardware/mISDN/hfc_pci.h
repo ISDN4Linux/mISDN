@@ -1,4 +1,4 @@
-/* $Id: hfc_pci.h,v 1.1 2002/07/07 21:20:17 kkeil Exp $
+/* $Id: hfc_pci.h,v 1.2 2003/06/20 10:06:14 kkeil Exp $
  *
  *  specific defines for CCD's HFC 2BDS0 PCI chips
  *
@@ -198,49 +198,45 @@
 #define D_FREG_MASK  0xF
 
 typedef struct {
-    unsigned short z1;  /* Z1 pointer 16 Bit */
-    unsigned short z2;  /* Z2 pointer 16 Bit */
-  } z_type;
+	unsigned short z1;  /* Z1 pointer 16 Bit */
+	unsigned short z2;  /* Z2 pointer 16 Bit */
+} z_type;
 
 typedef struct {
-    u_char data[D_FIFO_SIZE]; /* FIFO data space */
-    u_char fill1[0x20A0-D_FIFO_SIZE]; /* reserved, do not use */
-    u_char f1,f2; /* f pointers */
-    u_char fill2[0x20C0-0x20A2]; /* reserved, do not use */
-    z_type za[MAX_D_FRAMES+1]; /* mask index with D_FREG_MASK for access */
-    u_char fill3[0x4000-0x2100]; /* align 16K */  
-  } dfifo_type;
+	u_char data[D_FIFO_SIZE]; /* FIFO data space */
+	u_char fill1[0x20A0-D_FIFO_SIZE]; /* reserved, do not use */
+	u_char f1,f2; /* f pointers */
+	u_char fill2[0x20C0-0x20A2]; /* reserved, do not use */
+	z_type za[MAX_D_FRAMES+1]; /* mask index with D_FREG_MASK for access */
+	u_char fill3[0x4000-0x2100]; /* align 16K */  
+} dfifo_type;
 
 typedef struct {
-    z_type za[MAX_B_FRAMES+1]; /* only range 0x0..0x1F allowed */ 
-    u_char f1,f2; /* f pointers */
-    u_char fill[0x2100-0x2082]; /* alignment */
-  } bzfifo_type;
+	z_type za[MAX_B_FRAMES+1]; /* only range 0x0..0x1F allowed */ 
+	u_char f1,f2; /* f pointers */
+	u_char fill[0x2100-0x2082]; /* alignment */
+} bzfifo_type;
 
 
 typedef union {
-    struct { 
-      dfifo_type d_tx; /* D-send channel */
-      dfifo_type d_rx; /* D-receive channel */
-    } d_chan; 
-    struct {
-      u_char fill1[0x200];
-      u_char txdat_b1[B_FIFO_SIZE];
-      bzfifo_type txbz_b1;
-
-      bzfifo_type txbz_b2;
-      u_char txdat_b2[B_FIFO_SIZE];
-
-      u_char fill2[D_FIFO_SIZE];
-
-      u_char rxdat_b1[B_FIFO_SIZE];
-      bzfifo_type rxbz_b1;
-
-      bzfifo_type rxbz_b2;
-      u_char rxdat_b2[B_FIFO_SIZE];
-    } b_chans;  
-    u_char fill[32768]; 
-  } fifo_area;
+	struct { 
+		dfifo_type d_tx; /* D-send channel */
+		dfifo_type d_rx; /* D-receive channel */
+	} d_chan; 
+	struct {
+		u_char fill1[0x200];
+		u_char txdat_b1[B_FIFO_SIZE];
+		bzfifo_type txbz_b1;
+		bzfifo_type txbz_b2;
+		u_char txdat_b2[B_FIFO_SIZE];
+		u_char fill2[D_FIFO_SIZE];
+		u_char rxdat_b1[B_FIFO_SIZE];
+		bzfifo_type rxbz_b1;
+		bzfifo_type rxbz_b2;
+		u_char rxdat_b2[B_FIFO_SIZE];
+	} b_chans;  
+	u_char fill[32768]; 
+} fifo_area;
 
 
 #define Write_hfc(a,b,c) (*(((u_char *)a->hw.pci_io)+b) = c) 

@@ -1,4 +1,4 @@
-/* $Id: hfc_pci.c,v 1.16 2002/09/17 12:17:21 kkeil Exp $
+/* $Id: hfc_pci.c,v 1.17 2003/06/20 10:06:14 kkeil Exp $
 
  * hfc_pci.c     low level driver for CCD's hfc-pci based cards
  *
@@ -42,7 +42,7 @@
 
 extern const char *CardType[];
 
-static const char *hfcpci_revision = "$Revision: 1.16 $";
+static const char *hfcpci_revision = "$Revision: 1.17 $";
 
 /* table entry in the PCI devices list */
 typedef struct {
@@ -1204,8 +1204,8 @@ hfcpci_interrupt(int intno, void *dev_id, struct pt_regs *regs)
 		exval = Read_hfc(hc, HFCPCI_STATES) & 0xf;
 		if (hc->dch.debug & L1_DEB_ISAC)
 			debugprint(&hc->dch.inst, "ph_state chg %d->%d",
-				hc->dch.hw.hfcpci.ph_state, exval);
-		hc->dch.hw.hfcpci.ph_state = exval;
+				hc->dch.ph_state, exval);
+		hc->dch.ph_state = exval;
 		sched_event_D_pci(hc, D_L1STATECHANGE);
 		val &= ~0x40;
 	}
@@ -1831,8 +1831,8 @@ hfcD_newstate(dchannel_t *dch)
 
 	if (!hc->hw.nt_mode) {
 		printk(KERN_DEBUG "%s: TE newstate %x\n",
-			__FUNCTION__, dch->hw.hfcpci.ph_state);
-		switch (dch->hw.hfcpci.ph_state) {
+			__FUNCTION__, dch->ph_state);
+		switch (dch->ph_state) {
 			case (0):
 				prim = PH_CONTROL | INDICATION;
 				para = HW_RESET;
@@ -1856,8 +1856,8 @@ hfcD_newstate(dchannel_t *dch)
 		}
 	} else { 
 		printk(KERN_DEBUG "%s: NT newstate %x\n",
-			__FUNCTION__, dch->hw.hfcpci.ph_state);
-		switch (dch->hw.hfcpci.ph_state) {
+			__FUNCTION__, dch->ph_state);
+		switch (dch->ph_state) {
 			case (2):
 				if (hc->hw.nt_timer < 0) {
 					hc->hw.nt_timer = 0;
@@ -1869,7 +1869,7 @@ hfcD_newstate(dchannel_t *dch)
 					Write_hfc(hc, HFCPCI_STATES, 4 | HFCPCI_LOAD_STATE);
 					udelay(10);
 					Write_hfc(hc, HFCPCI_STATES, 4);
-					dch->hw.hfcpci.ph_state = 4;
+					dch->ph_state = 4;
 				} else {
 					hc->hw.int_m1 |= HFCPCI_INTS_TIMER;
 					Write_hfc(hc, HFCPCI_INT_M1, hc->hw.int_m1);
@@ -2245,7 +2245,7 @@ setup_hfcpci(hfc_pci_t *hc)
 	printk(KERN_INFO "HiSax: HFC-PCI driver Rev. %s\n", HiSax_getrev(tmp));
 	hc->hw.int_s1 = 0;
 	hc->hw.cirm = 0;
-	hc->dch.hw.hfcpci.ph_state = 0;
+	hc->dch.ph_state = 0;
 	while (id_list[i].vendor_id) {
 		tmp_hfcpci = pci_find_device(id_list[i].vendor_id,
 				id_list[i].device_id, dev_hfcpci);

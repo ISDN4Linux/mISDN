@@ -1,4 +1,4 @@
-/* $Id: helper.c,v 1.1 2002/09/16 23:49:38 kkeil Exp $
+/* $Id: helper.c,v 1.2 2003/06/20 10:06:14 kkeil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -12,55 +12,21 @@
 #include "hisax_hw.h"
 
 int
-discard_queue(struct sk_buff_head *q)
-{
-	struct sk_buff *skb;
-	int ret=0;
-
-	while ((skb = skb_dequeue(q))) {
-		dev_kfree_skb(skb);
-		ret++;
-	}
-	return(ret);
-}
-
-struct sk_buff *
-alloc_uplink_skb(size_t size)
-{
-	struct sk_buff *skb;
-
-	if (!(skb = alloc_skb(size + UPLINK_HEADER_SPACE, GFP_ATOMIC)))
-		printk(KERN_WARNING "%s(%d): no skb size\n", __FUNCTION__,
-			size);
-	else
-		skb_reserve(skb, UPLINK_HEADER_SPACE);
-	return(skb);
-}
-
-int
 init_dchannel(dchannel_t *dch) {
 	if (!(dch->dlog = kmalloc(MAX_DLOG_SPACE, GFP_ATOMIC))) {
 		printk(KERN_WARNING
 			"HiSax: No memory for dlog\n");
 		return(-ENOMEM);
 	}
-	if (!(dch->rx_buf = kmalloc(MAX_DFRAME_LEN_L1, GFP_ATOMIC))) {
-		printk(KERN_WARNING
-			"HiSax: No memory for dchannel rx_buf\n");
-		kfree(dch->dlog);
-		dch->dlog = NULL;
-		return(-ENOMEM);
-	}
-	dch->rx_idx = 0;
 	if (!(dch->tx_buf = kmalloc(MAX_DFRAME_LEN_L1, GFP_ATOMIC))) {
 		printk(KERN_WARNING
 			"HiSax: No memory for dchannel tx_buf\n");
 		kfree(dch->dlog);
 		dch->dlog = NULL;
-		kfree(dch->rx_buf);
-		dch->rx_buf = NULL;
 		return(-ENOMEM);
 	}
+	dch->hw = NULL;
+	dch->rx_skb = NULL;
 	dch->tx_idx = 0;
 	dch->next_skb = NULL;
 	dch->event = 0;
@@ -75,9 +41,9 @@ free_dchannel(dchannel_t *dch) {
 	if (dch->tqueue.sync)
 		printk(KERN_ERR"free_dchannel tqueue.sync\n");
 	discard_queue(&dch->rqueue);
-	if (dch->rx_buf) {
-		kfree(dch->rx_buf);
-		dch->rx_buf = NULL;
+	if (dch->rx_skb) {
+		dev_kfree_skb(dch->rx_skb);
+		dch->rx_skb = NULL;
 	}
 	if (dch->tx_buf) {
 		kfree(dch->tx_buf);

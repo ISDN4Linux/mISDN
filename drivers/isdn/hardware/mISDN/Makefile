@@ -11,13 +11,13 @@ O_TARGET := vmlinux-obj.o
 
 # multi objects
 
-SEDLFAXOBJ := sedl_fax.o debug.o helper.o
-SEDLFAXOBJ += isac.o arcofi.o fsm.o isar.o
+SEDLFAXOBJ := sedl_fax.o debug.o helper.o fsm.o isar.o
 
-FRITZOBJ := fritz_pci.o debug.o helper.o
-FRITZOBJ += isac.o arcofi.o fsm.o
+FRITZOBJ := fritz_pci.o debug.o helper.o fsm.o
 
 HFC_PCIOBJ := hfc_pci.o debug.o helper.o
+
+hisaxisac-objs := isac.o arcofi.o debug.o
 
 OBJ_core := hisax_core.o hisax_stack.o hisax_dev.o helper.o
 OBJ_l1 := hisax_l1.o helper.o debug.o fsm.o
@@ -44,14 +44,17 @@ endif
 #  endif
 #endif
 
-export-objs       := hisax_core.o
+export-objs := hisax_core.o isac.o
 
 obj-$(CONFIG_ISDN_DRV_NEWHISAX) :=
 obj-$(CONFIG_ISDN_DRV_NEWHISAX) += hisaxcore.o
 
+obj-$(CONFIG_ISDN_DRV_NEWHISAX) += hisaxisac.o
+
 obj-$(CONFIG_ISDN_DRV_NEWHISAX) += fritzpci.o
 obj-$(CONFIG_ISDN_DRV_NEWHISAX) += sedlfax.o
 obj-$(CONFIG_ISDN_DRV_NEWHISAX) += hfcpci.o
+
 obj-$(CONFIG_ISDN_DRV_NEWHISAX) += hisaxl1.o
 obj-$(CONFIG_ISDN_DRV_NEWHISAX) += hisaxl2.o
 obj-$(CONFIG_ISDN_DRV_NEWHISAX) += l3udss1.o
@@ -61,16 +64,12 @@ M_OBJS := $(obj-m)
 
 include $(TOPDIR)/Rules.make
 
-MD5FILES += isac.c isdnl1.c isdnl2.c isdnl3.c \
-	    tei.c callc.c cert.c l3dss1.c l3_1tr6.c
-#	    elsa.c diva.c sedlbauer.c
-
-CERT = $(shell md5sum -c md5sums.asc >> /dev/null;echo $$?)
-
-#cert.o:	$(MD5FILES) md5sums.asc
-#	$(CC) $(CFLAGS) $(EXTRA_CFLAGS) -D CERTIFICATION=$(CERT) -c -o cert.o cert.c
 
 hisaxcore.o: $(OBJ_core)
+	$(RM) $@
+	$(LD) -r -o $@ $(filter-out $(MODVERFILE) dummy ,$^)
+
+hisaxisac.o: $(hisaxisac-objs)
 	$(RM) $@
 	$(LD) -r -o $@ $(filter-out $(MODVERFILE) dummy ,$^)
 
@@ -101,3 +100,4 @@ l3udss1.o: $(OBJ_l3udss1)
 hisaxcapi.o: $(OBJ_capi)
 	$(RM) $@
 	$(LD) -r -o $@ $(filter-out $(MODVERFILE) dummy ,$^)
+

@@ -1,4 +1,4 @@
-/* $Id: arcofi.c,v 1.0 2001/11/02 23:42:26 kkeil Exp $
+/* $Id: arcofi.c,v 1.1 2003/06/20 10:06:14 kkeil Exp $
  *
  * arcofi.c   Ansteuerung ARCOFI 2165
  *
@@ -19,94 +19,99 @@
 
 static void
 add_arcofi_timer(dchannel_t *dch) {
+	isac_chip_t	*isac = dch->hw;
+
 	if (test_and_set_bit(FLG_ARCOFI_TIMER, &dch->DFlags)) {
-		del_timer(&dch->hw.isac.arcofitimer);
+		del_timer(&isac->arcofitimer);
 	}	
-	init_timer(&dch->hw.isac.arcofitimer);
-	dch->hw.isac.arcofitimer.expires = jiffies + ((ARCOFI_TIMER_VALUE * HZ)/1000);
-	add_timer(&dch->hw.isac.arcofitimer);
+	init_timer(&isac->arcofitimer);
+	isac->arcofitimer.expires = jiffies + ((ARCOFI_TIMER_VALUE * HZ)/1000);
+	add_timer(&isac->arcofitimer);
 }
 
 static void
 send_arcofi(dchannel_t *dch) {
-	u_char val;
+	u_char		val;
+	isac_chip_t	*isac = dch->hw;
 	
 	add_arcofi_timer(dch);
-	dch->hw.isac.mon_txp = 0;
-	dch->hw.isac.mon_txc = dch->hw.isac.arcofi_list->len;
-	memcpy(dch->hw.isac.mon_tx, dch->hw.isac.arcofi_list->msg, dch->hw.isac.mon_txc);
-	switch(dch->hw.isac.arcofi_bc) {
+	isac->mon_txp = 0;
+	isac->mon_txc = isac->arcofi_list->len;
+	memcpy(isac->mon_tx, isac->arcofi_list->msg, isac->mon_txc);
+	switch(isac->arcofi_bc) {
 		case 0: break;
-		case 1: dch->hw.isac.mon_tx[1] |= 0x40;
+		case 1: isac->mon_tx[1] |= 0x40;
 			break;
 		default: break;
 	}
-	dch->hw.isac.mocr &= 0x0f;
-	dch->hw.isac.mocr |= 0xa0;
-	dch->writeisac(dch->inst.data, ISAC_MOCR, dch->hw.isac.mocr);
-	val = dch->readisac(dch->inst.data, ISAC_MOSR);
-	dch->writeisac(dch->inst.data, ISAC_MOX1, dch->hw.isac.mon_tx[dch->hw.isac.mon_txp++]);
-	dch->hw.isac.mocr |= 0x10;
-	dch->writeisac(dch->inst.data, ISAC_MOCR, dch->hw.isac.mocr);
+	isac->mocr &= 0x0f;
+	isac->mocr |= 0xa0;
+	dch->write_reg(dch->inst.data, ISAC_MOCR, isac->mocr);
+	val = dch->read_reg(dch->inst.data, ISAC_MOSR);
+	dch->write_reg(dch->inst.data, ISAC_MOX1, isac->mon_tx[isac->mon_txp++]);
+	isac->mocr |= 0x10;
+	dch->write_reg(dch->inst.data, ISAC_MOCR, isac->mocr);
 }
 
 int
 arcofi_fsm(dchannel_t *dch, int event, void *data) {
+	isac_chip_t	*isac = dch->hw;
+
 	if (dch->debug & L1_DEB_MONITOR) {
-		debugprint(&dch->inst, "arcofi state %d event %d", dch->hw.isac.arcofi_state, event);
+		debugprint(&dch->inst, "arcofi state %d event %d", isac->arcofi_state, event);
 	}
 	if (event == ARCOFI_TIMEOUT) {
-		dch->hw.isac.arcofi_state = ARCOFI_NOP;
+		isac->arcofi_state = ARCOFI_NOP;
 		test_and_set_bit(FLG_ARCOFI_ERROR, &dch->DFlags);
-		wake_up(&dch->hw.isac.arcofi_wait);
+		wake_up(&isac->arcofi_wait);
  		return(1);
 	}
-	switch (dch->hw.isac.arcofi_state) {
+	switch (isac->arcofi_state) {
 		case ARCOFI_NOP:
 			if (event == ARCOFI_START) {
-				dch->hw.isac.arcofi_list = data;
-				dch->hw.isac.arcofi_state = ARCOFI_TRANSMIT;
+				isac->arcofi_list = data;
+				isac->arcofi_state = ARCOFI_TRANSMIT;
 				send_arcofi(dch);
 			}
 			break;
 		case ARCOFI_TRANSMIT:
 			if (event == ARCOFI_TX_END) {
-				if (dch->hw.isac.arcofi_list->receive) {
+				if (isac->arcofi_list->receive) {
 					add_arcofi_timer(dch);
-					dch->hw.isac.arcofi_state = ARCOFI_RECEIVE;
+					isac->arcofi_state = ARCOFI_RECEIVE;
 				} else {
-					if (dch->hw.isac.arcofi_list->next) {
-						dch->hw.isac.arcofi_list =
-							dch->hw.isac.arcofi_list->next;
+					if (isac->arcofi_list->next) {
+						isac->arcofi_list =
+							isac->arcofi_list->next;
 						send_arcofi(dch);
 					} else {
 						if (test_and_clear_bit(FLG_ARCOFI_TIMER, &dch->DFlags)) {
-							del_timer(&dch->hw.isac.arcofitimer);
+							del_timer(&isac->arcofitimer);
 						}
-						dch->hw.isac.arcofi_state = ARCOFI_NOP;
-						wake_up(&dch->hw.isac.arcofi_wait);
+						isac->arcofi_state = ARCOFI_NOP;
+						wake_up(&isac->arcofi_wait);
 					}
 				}
 			}
 			break;
 		case ARCOFI_RECEIVE:
 			if (event == ARCOFI_RX_END) {
-				if (dch->hw.isac.arcofi_list->next) {
-					dch->hw.isac.arcofi_list =
-						dch->hw.isac.arcofi_list->next;
-					dch->hw.isac.arcofi_state = ARCOFI_TRANSMIT;
+				if (isac->arcofi_list->next) {
+					isac->arcofi_list =
+						isac->arcofi_list->next;
+					isac->arcofi_state = ARCOFI_TRANSMIT;
 					send_arcofi(dch);
 				} else {
 					if (test_and_clear_bit(FLG_ARCOFI_TIMER, &dch->DFlags)) {
-						del_timer(&dch->hw.isac.arcofitimer);
+						del_timer(&isac->arcofitimer);
 					}
-					dch->hw.isac.arcofi_state = ARCOFI_NOP;
-					wake_up(&dch->hw.isac.arcofi_wait);
+					isac->arcofi_state = ARCOFI_NOP;
+					wake_up(&isac->arcofi_wait);
 				}
 			}
 			break;
 		default:
-			debugprint(&dch->inst, "Arcofi unknown state %x", dch->hw.isac.arcofi_state);
+			debugprint(&dch->inst, "Arcofi unknown state %x", isac->arcofi_state);
 			return(2);
 	}
 	return(0);
@@ -119,15 +124,19 @@ arcofi_timer(dchannel_t *dch) {
 
 void
 clear_arcofi(dchannel_t *dch) {
+	isac_chip_t	*isac = dch->hw;
+
 	if (test_and_clear_bit(FLG_ARCOFI_TIMER, &dch->DFlags)) {
-		del_timer(&dch->hw.isac.arcofitimer);
+		del_timer(&isac->arcofitimer);
 	}
 }
 
 void
 init_arcofi(dchannel_t *dch) {
-	dch->hw.isac.arcofitimer.function = (void *) arcofi_timer;
-	dch->hw.isac.arcofitimer.data = (long) dch;
-	init_timer(&dch->hw.isac.arcofitimer);
+	isac_chip_t	*isac = dch->hw;
+
+	isac->arcofitimer.function = (void *) arcofi_timer;
+	isac->arcofitimer.data = (long) dch;
+	init_timer(&isac->arcofitimer);
 	test_and_set_bit(HW_ARCOFI, &dch->DFlags);
 }

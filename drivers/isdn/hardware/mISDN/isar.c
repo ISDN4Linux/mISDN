@@ -1,4 +1,4 @@
-/* $Id: isar.c,v 1.2 2002/09/16 23:49:38 kkeil Exp $
+/* $Id: isar.c,v 1.3 2003/06/20 10:06:14 kkeil Exp $
  *
  * isar.c   ISAR (Siemens PSB 7110) specific routines
  *
@@ -319,9 +319,10 @@ isar_load_firmware(bchannel_t *bch, u_char *buf, int size)
 		printk(KERN_DEBUG"isar start dsp success\n");
 	/* NORMAL mode entered */
 	/* Enable IRQs of ISAR */
+	save_flags(flags);
+	cli();
 	bch->BC_Write_Reg(bch->inst.data, 0, ISAR_IRQBIT, ISAR_IRQSTA);
 	bch->inst.unlock(bch->inst.data);
-	save_flags(flags);
 	sti();
 	cnt = 1000; /* max 1s */
 	while ((!ireg->bstat) && cnt) {
@@ -341,12 +342,14 @@ isar_load_firmware(bchannel_t *bch, u_char *buf, int size)
 	while (cnt--)
 		mdelay(1);
 	ireg->iis = 0;
+	cli();
 	bch->inst.lock(bch->inst.data);
 	if (!sendmsg(bch, ISAR_HIS_DIAG, ISAR_CTRL_STST, 0, NULL)) {
 		printk(KERN_ERR"isar sendmsg self tst failed\n");
 		ret = 1;goto reterrflg_l;
 	}
 	bch->inst.unlock(bch->inst.data);
+	sti();
 	cnt = 10000; /* max 100 ms */
 	while ((ireg->iis != ISAR_IIS_DIAG) && cnt) {
 		udelay(10);
@@ -365,6 +368,7 @@ isar_load_firmware(bchannel_t *bch, u_char *buf, int size)
 			ireg->cmsb, ireg->clsb, ireg->par[0]);
 		ret = 1;goto reterrflg;
 	}
+	cli();
 	bch->inst.lock(bch->inst.data);
 	ireg->iis = 0;
 	if (!sendmsg(bch, ISAR_HIS_DIAG, ISAR_CTRL_SWVER, 0, NULL)) {
@@ -372,6 +376,7 @@ isar_load_firmware(bchannel_t *bch, u_char *buf, int size)
 		ret = 1;goto reterrflg_l;
 	}
 	bch->inst.unlock(bch->inst.data);
+	sti();
 	cnt = 30000; /* max 300 ms */
 	while ((ireg->iis != ISAR_IIS_DIAG) && cnt) {
 		udelay(10);
@@ -386,17 +391,20 @@ isar_load_firmware(bchannel_t *bch, u_char *buf, int size)
 			printk(KERN_DEBUG"isar software version %#x\n",
 				ireg->par[0]);
 		else {
+			
 			printk(KERN_ERR"isar wrong swver response (%x,%x) cnt(%d)\n",
 				ireg->cmsb, ireg->clsb, cnt);
 			ret = 1;goto reterrflg;
 		}
 	}
 	bch->debug = debug;
+	cli();
 	bch->inst.lock(bch->inst.data);
 	isar_setup(bch);
 	ret = 0;
 reterrflg_l:
 	bch->inst.unlock(bch->inst.data);
+	sti();
 reterrflg:
 	restore_flags(flags);
 	bch->inst.lock(bch->inst.data);
