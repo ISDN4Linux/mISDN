@@ -40,10 +40,12 @@ typedef	struct timer_list		timer_t;
 #endif /* 2,4,0 */
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,5,0)
+#ifndef IRQ_HANDLED /* maybe these are also defined in include/linux/interrupt.h */
 typedef void irqreturn_t;
 #define IRQ_NONE
 #define IRQ_HANDLED
 #define IRQ_RETVAL(x)
+#endif
 #define CAPI_SendMessage_void
 #define OLDCAPI_DRIVER_INTERFACE
 #undef  HAS_WORKQUEUE
