@@ -1,4 +1,4 @@
-/* $Id: avm_fritz.c,v 1.11 2003/07/21 12:00:04 kkeil Exp $
+/* $Id: avm_fritz.c,v 1.12 2003/07/21 12:44:45 kkeil Exp $
  *
  * fritz_pci.c    low level stuff for AVM Fritz!PCI and ISA PnP isdn cards
  *              Thanks to AVM, Berlin for informations
@@ -14,10 +14,10 @@
 #include <linux/isapnp.h>
 #include <linux/kernel_stat.h>
 #include <linux/delay.h>
-#include "mISDN_dch.h"
-#include "mISDN_bch.h"
+#include "dchannel.h"
+#include "bchannel.h"
 #include "isac.h"
-#include "mISDNl1.h"
+#include "layer1.h"
 #include "helper.h"
 #include "debug.h"
 
@@ -25,7 +25,7 @@
 #define LOCK_STATISTIC
 #include "hw_lock.h"
 
-static const char *avm_pci_rev = "$Revision: 1.11 $";
+static const char *avm_fritz_rev = "$Revision: 1.12 $";
 
 enum {
 	AVM_FRITZ_PCI,
@@ -646,7 +646,7 @@ HDLC_irq_main(fritzpnppci *fc)
 }
 
 static void
-avm_pcipnp_interrupt(int intno, void *dev_id, struct pt_regs *regs)
+avm_fritz_interrupt(int intno, void *dev_id, struct pt_regs *regs)
 {
 	fritzpnppci	*fc = dev_id;
 	u_long		flags;
@@ -681,7 +681,7 @@ avm_pcipnp_interrupt(int intno, void *dev_id, struct pt_regs *regs)
 		fc->lock.irq_ok++;
 #endif
 #ifdef SPIN_DEBUG
-		fc->lock.busy_adr = avm_pcipnp_interrupt;
+		fc->lock.busy_adr = avm_fritz_interrupt;
 #endif
 	}
 
@@ -838,7 +838,7 @@ static int init_card(fritzpnppci *fc)
 	irq_cnt = kstat_irqs(fc->irq);
 	printk(KERN_INFO "AVM Fritz!PCI: IRQ %d count %d\n", fc->irq, irq_cnt);
 	lock_dev(fc, 0);
-	if (request_irq(fc->irq, avm_pcipnp_interrupt, SA_SHIRQ,
+	if (request_irq(fc->irq, avm_fritz_interrupt, SA_SHIRQ,
 		"AVM Fritz!PCI", fc)) {
 		printk(KERN_WARNING "mISDN: couldn't get interrupt %d\n",
 			fc->irq);
@@ -1335,7 +1335,7 @@ static int __init Fritz_init(void)
 	int	err, pci_nr_found;
 	char tmp[64];
 
-	strcpy(tmp, avm_pci_rev);
+	strcpy(tmp, avm_fritz_rev);
 	printk(KERN_INFO "AVM Fritz PCI/PnP driver Rev. %s\n", mISDN_getrev(tmp));
 
 	SET_MODULE_OWNER(&fritz);

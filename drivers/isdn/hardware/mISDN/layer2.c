@@ -1,4 +1,4 @@
-/* $Id: layer2.c,v 1.8 2003/07/21 12:00:04 kkeil Exp $
+/* $Id: layer2.c,v 1.9 2003/07/21 12:44:46 kkeil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -8,11 +8,11 @@
  *
  */
 #include <linux/module.h>
-#include "mISDNl2.h"
+#include "layer2.h"
 #include "helper.h"
 #include "debug.h"
 
-static char *l2_revision = "$Revision: 1.8 $";
+static char *l2_revision = "$Revision: 1.9 $";
 
 static void l2m_debug(struct FsmInst *fi, char *fmt, ...);
 

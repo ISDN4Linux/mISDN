@@ -1,4 +1,4 @@
-/* $Id: layer1.c,v 1.4 2003/07/21 12:00:04 kkeil Exp $
+/* $Id: layer1.c,v 1.5 2003/07/21 12:44:46 kkeil Exp $
  *
  * mISDN_l1.c     common low level stuff for I.430 layer1
  *
@@ -10,11 +10,11 @@
  *
  */
 
-static char *l1_revision = "$Revision: 1.4 $";
+static char *l1_revision = "$Revision: 1.5 $";
 
 #include <linux/config.h>
 #include <linux/module.h>
-#include "mISDNl1.h"
+#include "layer1.h"
 #include "helper.h"
 #include "debug.h"
 

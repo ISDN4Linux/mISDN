@@ -1,4 +1,4 @@
-/* $Id: sedl_fax.c,v 1.10 2003/07/21 12:00:05 kkeil Exp $
+/* $Id: sedl_fax.c,v 1.11 2003/07/21 12:44:46 kkeil Exp $
  *
  * sedl_fax.c  low level stuff for Sedlbauer Speedfax + cards
  *
@@ -32,11 +32,11 @@
 #include <linux/kernel_stat.h>
 #include <linux/delay.h>
 #include <asm/semaphore.h>
-#include "mISDN_dch.h"
-#include "mISDN_bch.h"
+#include "dchannel.h"
+#include "bchannel.h"
 #include "isac.h"
 #include "isar.h"
-#include "mISDNl1.h"
+#include "layer1.h"
 #include "helper.h"
 #include "debug.h"
 
@@ -46,7 +46,7 @@
 
 extern const char *CardType[];
 
-const char *Sedlfax_revision = "$Revision: 1.10 $";
+const char *Sedlfax_revision = "$Revision: 1.11 $";
 
 const char *Sedlbauer_Types[] =
 	{"None", "speed fax+", "speed fax+ pyramid", "speed fax+ pci"};

@@ -1,4 +1,4 @@
-/* $Id: bchannel.c,v 1.2 2003/07/21 12:00:04 kkeil Exp $
+/* $Id: bchannel.c,v 1.3 2003/07/21 12:44:45 kkeil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -8,8 +8,8 @@
 
 #define __NO_VERSION__
 #include <linux/mISDNif.h>
-#include "mISDNl1.h"
-#include "mISDN_bch.h"
+#include "layer1.h"
+#include "bchannel.h"
 #include "helper.h"
 
 static void

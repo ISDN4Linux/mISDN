@@ -1,4 +1,4 @@
-/* $Id: hfc_pci.c,v 1.25 2003/07/21 12:00:04 kkeil Exp $
+/* $Id: hfc_pci.c,v 1.26 2003/07/21 12:44:45 kkeil Exp $
 
  * hfc_pci.c     low level driver for CCD's hfc-pci based cards
  *
@@ -31,10 +31,10 @@
 #include <linux/kernel_stat.h>
 #include <linux/delay.h>
 
-#include "mISDN_dch.h"
-#include "mISDN_bch.h"
+#include "dchannel.h"
+#include "bchannel.h"
 #include "hfc_pci.h"
-#include "mISDNl1.h"
+#include "layer1.h"
 #include "helper.h"
 #include "debug.h"
 #include <linux/isdn_compat.h>
@@ -47,7 +47,7 @@
 
 extern const char *CardType[];
 
-static const char *hfcpci_revision = "$Revision: 1.25 $";
+static const char *hfcpci_revision = "$Revision: 1.26 $";
 
 /* table entry in the PCI devices list */
 typedef struct {

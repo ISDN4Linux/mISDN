@@ -1,8 +1,8 @@
-/* $Id: supp_serv.c,v 1.4 2003/07/21 12:00:05 kkeil Exp $
+/* $Id: supp_serv.c,v 1.5 2003/07/21 12:44:46 kkeil Exp $
  *
  */
 
-#include "mISDN_capi.h"
+#include "capi.h"
 #include "asn1_comp.h"
 #include "asn1_enc.h"
 #include "dss1.h"

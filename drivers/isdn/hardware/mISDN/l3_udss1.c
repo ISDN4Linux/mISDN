@@ -1,4 +1,4 @@
-/* $Id: l3_udss1.c,v 1.10 2003/07/21 12:00:04 kkeil Exp $
+/* $Id: l3_udss1.c,v 1.11 2003/07/21 12:44:45 kkeil Exp $
  *
  * EURO/DSS1 D-channel protocol
  *
@@ -15,7 +15,7 @@
 
 #include <linux/module.h>
 
-#include "mISDNl3.h"
+#include "layer3.h"
 #include "helper.h"
 #include "debug.h"
 #include "dss1.h"
@@ -24,7 +24,7 @@ static int debug = 0;
 static mISDNobject_t u_dss1;
 
 
-const char *dss1_revision = "$Revision: 1.10 $";
+const char *dss1_revision = "$Revision: 1.11 $";
 
 static int dss1man(l3_process_t *, u_int, void *);
 

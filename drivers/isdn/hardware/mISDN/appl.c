@@ -1,8 +1,8 @@
-/* $Id: appl.c,v 1.3 2003/07/21 12:00:04 kkeil Exp $
+/* $Id: appl.c,v 1.4 2003/07/21 12:44:45 kkeil Exp $
  *
  */
 
-#include "mISDN_capi.h"
+#include "capi.h"
 #include "helper.h"
 #include "debug.h"
 

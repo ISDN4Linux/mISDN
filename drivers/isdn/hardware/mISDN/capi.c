@@ -1,15 +1,15 @@
-/* $Id: capi.c,v 1.4 2003/07/21 12:00:04 kkeil Exp $
+/* $Id: capi.c,v 1.5 2003/07/21 12:44:45 kkeil Exp $
  *
  */
 
 #include <linux/module.h>
 #include <linux/vmalloc.h>
 #include <asm/uaccess.h>
-#include "mISDN_capi.h"
+#include "capi.h"
 #include "helper.h"
 #include "debug.h"
 
-static char *capi_revision = "$Revision: 1.4 $";
+static char *capi_revision = "$Revision: 1.5 $";
 
 static int debug = 0;
 static mISDNobject_t capi_obj;

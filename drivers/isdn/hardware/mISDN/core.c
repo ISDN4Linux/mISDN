@@ -1,4 +1,4 @@
-/* $Id: core.c,v 1.9 2003/07/21 12:00:04 kkeil Exp $
+/* $Id: core.c,v 1.10 2003/07/21 12:44:45 kkeil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -10,7 +10,7 @@
 #include <linux/stddef.h>
 #include <linux/config.h>
 #include <linux/module.h>
-#include "mISDN_core.h"
+#include "core.h"
 #ifdef CONFIG_KMOD
 #include <linux/kmod.h>
 #endif
@@ -18,7 +18,7 @@
 #include <linux/smp_lock.h>
 #endif
 
-static char *mISDN_core_revision = "$Revision: 1.9 $";
+static char *mISDN_core_revision = "$Revision: 1.10 $";
 
 mISDNobject_t	*mISDN_objects = NULL;
 int core_debug;

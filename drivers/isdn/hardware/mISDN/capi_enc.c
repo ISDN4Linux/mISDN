@@ -1,8 +1,8 @@
-/* $Id: capi_enc.c,v 1.1 2003/07/21 12:00:04 kkeil Exp $
+/* $Id: capi_enc.c,v 1.2 2003/07/21 12:44:45 kkeil Exp $
  *
  */
 
-#include "mISDN_capi.h"
+#include "capi.h"
 #include "asn1.h"
 
 int capiEncodeWord(__u8 *p, __u16 i)

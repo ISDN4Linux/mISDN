@@ -1,4 +1,4 @@
-/* $Id: tei.c,v 1.3 2003/07/21 12:00:05 kkeil Exp $
+/* $Id: tei.c,v 1.4 2003/07/21 12:44:46 kkeil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -8,12 +8,12 @@
  *
  */
 #define __NO_VERSION__
-#include "mISDNl2.h"
+#include "layer2.h"
 #include "helper.h"
 #include "debug.h"
 #include <linux/random.h>
 
-const char *tei_revision = "$Revision: 1.3 $";
+const char *tei_revision = "$Revision: 1.4 $";
 
 #define ID_REQUEST	1
 #define ID_ASSIGNED	2

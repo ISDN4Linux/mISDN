@@ -1,4 +1,4 @@
-/* $Id: isac.c,v 1.9 2003/07/21 12:00:04 kkeil Exp $
+/* $Id: isac.c,v 1.10 2003/07/21 12:44:45 kkeil Exp $
  *
  * isac.c   ISAC specific routines
  *
@@ -9,10 +9,10 @@
 
 #define __NO_VERSION__
 #include <linux/module.h>
-#include "mISDN_dch.h"
+#include "dchannel.h"
 #include "isac.h"
 #include "arcofi.h"
-#include "mISDNl1.h"
+#include "layer1.h"
 #include "helper.h"
 #include "debug.h"
 #ifdef CONFIG_KMOD
@@ -23,7 +23,7 @@
 #define DBUSY_TIMER_VALUE 80
 #define ARCOFI_USE 1
 
-const char *isac_revision = "$Revision: 1.9 $";
+const char *isac_revision = "$Revision: 1.10 $";
 
 #ifdef MODULE
 MODULE_AUTHOR("Karsten Keil");

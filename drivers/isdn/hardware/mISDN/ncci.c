@@ -1,8 +1,8 @@
-/* $Id: ncci.c,v 1.8 2003/07/21 12:00:05 kkeil Exp $
+/* $Id: ncci.c,v 1.9 2003/07/21 12:44:46 kkeil Exp $
  *
  */
 
-#include "mISDN_capi.h"
+#include "capi.h"
 #include "helper.h"
 #include "debug.h"
 #include "dss1.h"

@@ -1,4 +1,4 @@
-/* $Id: layer3.c,v 1.4 2003/07/21 12:00:04 kkeil Exp $
+/* $Id: layer3.c,v 1.5 2003/07/21 12:44:46 kkeil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -11,10 +11,10 @@
  *
  */
 #define __NO_VERSION__
-#include "mISDNl3.h"
+#include "layer3.h"
 #include "helper.h"
 
-const char *l3_revision = "$Revision: 1.4 $";
+const char *l3_revision = "$Revision: 1.5 $";
 
 static
 struct Fsm l3fsm = {NULL, 0, 0, NULL, NULL};

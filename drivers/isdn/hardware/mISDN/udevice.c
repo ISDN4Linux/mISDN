@@ -1,4 +1,4 @@
-/* $Id: udevice.c,v 1.5 2003/07/21 12:00:05 kkeil Exp $
+/* $Id: udevice.c,v 1.6 2003/07/21 12:44:46 kkeil Exp $
  *
  * Copyright 2000  by Karsten Keil <kkeil@isdn4linux.de>
  *
@@ -10,7 +10,7 @@
 #include <linux/vmalloc.h>
 #include <linux/config.h>
 #include <linux/timer.h>
-#include "mISDN_core.h"
+#include "core.h"
 
 #define MAX_HEADER_LEN	4
 

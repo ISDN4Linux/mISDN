@@ -1,4 +1,4 @@
-/* $Id: arcofi.c,v 1.4 2003/07/21 12:00:04 kkeil Exp $
+/* $Id: arcofi.c,v 1.5 2003/07/21 12:44:45 kkeil Exp $
  *
  * arcofi.c   Ansteuerung ARCOFI 2165
  *
@@ -9,8 +9,8 @@
  */
  
 #define __NO_VERSION__
-#include "mISDN_dch.h"
-#include "mISDNl1.h"
+#include "dchannel.h"
+#include "layer1.h"
 #include "isac.h"
 #include "arcofi.h"
 #include "debug.h"

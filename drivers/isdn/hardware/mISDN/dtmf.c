@@ -1,4 +1,4 @@
-/* $Id: dtmf.c,v 1.3 2003/07/21 12:00:04 kkeil Exp $
+/* $Id: dtmf.c,v 1.4 2003/07/21 12:44:45 kkeil Exp $
  *
  * Linux ISDN subsystem, DTMF tone module
  *
@@ -17,7 +17,7 @@
 
 #include <linux/config.h>
 #include <linux/module.h>
-#include "mISDNl1.h"
+#include "layer1.h"
 #include "helper.h"
 #include "debug.h"
 
@@ -47,7 +47,7 @@ static int debug = 0;
 
 static mISDNobject_t dtmf_obj;
 
-static char *mISDN_dtmf_revision = "$Revision: 1.3 $";
+static char *mISDN_dtmf_revision = "$Revision: 1.4 $";
 
 /*
  * Misc. lookup-tables.

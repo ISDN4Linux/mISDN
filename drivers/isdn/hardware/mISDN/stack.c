@@ -1,4 +1,4 @@
-/* $Id: stack.c,v 1.3 2003/07/21 12:00:05 kkeil Exp $
+/* $Id: stack.c,v 1.4 2003/07/21 12:44:46 kkeil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -6,7 +6,7 @@
  *
  */
 
-#include "mISDN_core.h"
+#include "core.h"
 
 mISDNstack_t	*mISDN_stacklist = NULL;
 mISDNinstance_t	*mISDN_instlist = NULL;

@@ -1,4 +1,4 @@
-/* $Id: dchannel.c,v 1.4 2003/07/21 12:00:04 kkeil Exp $
+/* $Id: dchannel.c,v 1.5 2003/07/21 12:44:45 kkeil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -8,9 +8,9 @@
 
 #define __NO_VERSION__
 #include <linux/mISDNif.h>
-#include "mISDNl1.h"
+#include "layer1.h"
 #include "helper.h"
-#include "mISDN_dch.h"
+#include "dchannel.h"
 
 static void
 dchannel_bh(dchannel_t *dch)

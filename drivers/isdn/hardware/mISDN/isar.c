@@ -1,4 +1,4 @@
-/* $Id: isar.c,v 1.11 2003/07/21 12:00:04 kkeil Exp $
+/* $Id: isar.c,v 1.12 2003/07/21 12:44:45 kkeil Exp $
  *
  * isar.c   ISAR (Siemens PSB 7110) specific routines
  *
@@ -10,9 +10,9 @@
 
 #define __NO_VERSION__
 #include <linux/delay.h>
-#include "mISDNl1.h"
+#include "layer1.h"
 #include "helper.h"
-#include "mISDN_bch.h"
+#include "bchannel.h"
 #include "isar.h"
 #include "debug.h"
 
