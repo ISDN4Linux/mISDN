@@ -1,4 +1,4 @@
-/* $Id: sedl_fax.c,v 0.14 2001/03/13 02:04:37 kkeil Exp $
+/* $Id: sedl_fax.c,v 0.15 2001/03/13 02:34:02 kkeil Exp $
  *
  * sedl_fax.c  low level stuff for Sedlbauer Speedfax + cards
  *
@@ -40,7 +40,7 @@
 
 extern const char *CardType[];
 
-const char *Sedlfax_revision = "$Revision: 0.14 $";
+const char *Sedlfax_revision = "$Revision: 0.15 $";
 
 const char *Sedlbauer_Types[] =
 	{"None", "speed fax+", "speed fax+ pyramid", "speed fax+ pci"};
@@ -704,7 +704,7 @@ set_stack(hisaxstack_t *st, hisaxinstance_t *inst, int chan, hisax_pid_t *pid) {
 		printk(KERN_WARNING "set_stack MGR_ADDIF err(%d)\n", err);
 		return(err);
 	}
-	if  (chan != 2) { /* B-channel */
+	if  ((chan != 2) && (pid->global == 2)) { /* B-channel */
 		u_int pr;
 
 		if (inst->pid.protocol[2] == ISDN_PID_L2_B_TRANS)

@@ -1,4 +1,4 @@
-/* $Id: mISDNif.h,v 0.18 2001/03/11 21:23:39 kkeil Exp $
+/* $Id: mISDNif.h,v 0.19 2001/03/13 02:34:02 kkeil Exp $
  *
  */
 
@@ -272,6 +272,14 @@ typedef struct _hisax_pid {
 	void	*param[MAX_LAYER_NR +1];
 	__u16	global;
 } hisax_pid_t;
+
+typedef struct _layer_info {
+	char		name[HISAX_MAX_IDLEN];
+	int		object_id;
+	int		extentions;
+	int		layermask;
+	hisax_pid_t	pid;
+} layer_info_t;
 
 
 /* l3 pointer arrays */

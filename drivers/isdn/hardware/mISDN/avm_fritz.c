@@ -1,4 +1,4 @@
-/* $Id: avm_fritz.c,v 0.12 2001/03/11 21:23:39 kkeil Exp $
+/* $Id: avm_fritz.c,v 0.13 2001/03/13 02:34:02 kkeil Exp $
  *
  * fritz_pci.c    low level stuff for AVM Fritz!PCI and ISA PnP isdn cards
  *              Thanks to AVM, Berlin for informations
@@ -18,7 +18,7 @@
 #include "helper.h"
 #include "debug.h"
 
-static const char *avm_pci_rev = "$Revision: 0.12 $";
+static const char *avm_pci_rev = "$Revision: 0.13 $";
 
 #define ISDN_CTYPE_FRITZPCI 1
 
@@ -1073,7 +1073,7 @@ set_stack(hisaxstack_t *st, hisaxinstance_t *inst, int chan, hisax_pid_t *pid) {
 		printk(KERN_WARNING "set_stack MGR_ADDIF err(%d)\n", err);
 		return(err);
 	}
-	if  (chan != 2) { /* B-channel */
+	if  ((chan != 2) && (pid->global == 2)) { /* B-channel */
 		u_int pr;
 
 		if (inst->pid.protocol[2] == ISDN_PID_L2_B_TRANS)
