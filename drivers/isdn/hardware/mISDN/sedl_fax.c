@@ -1,4 +1,4 @@
-/* $Id: sedl_fax.c,v 1.1 2001/11/19 14:54:00 kkeil Exp $
+/* $Id: sedl_fax.c,v 1.2 2001/11/22 17:28:44 kkeil Exp $
  *
  * sedl_fax.c  low level stuff for Sedlbauer Speedfax + cards
  *
@@ -40,7 +40,7 @@
 
 extern const char *CardType[];
 
-const char *Sedlfax_revision = "$Revision: 1.1 $";
+const char *Sedlfax_revision = "$Revision: 1.2 $";
 
 const char *Sedlbauer_Types[] =
 	{"None", "speed fax+", "speed fax+ pyramid", "speed fax+ pci"};
@@ -306,6 +306,8 @@ release_sedlbauer(sedl_fax *sf)
 
 	if (sf->subtyp == SEDL_SPEEDFAX_ISA)
 		bytecnt = 16;
+	else
+		byteout(sf->cfg + TIGER_AUX_IRQMASK, 0);
 	if (sf->cfg)
 		release_region(sf->cfg, bytecnt);
 }
@@ -360,11 +362,13 @@ static int init_card(sedl_fax *sf)
 		init_isar(&sf->bch[0]);
 		init_isar(&sf->bch[1]);
 		sf->in_irq = 0;
+		if (sf->subtyp != SEDL_SPEEDFAX_ISA)
+			byteout(sf->cfg + TIGER_AUX_IRQMASK, SEDL_TIGER_IRQ_BIT);
 		WriteISAC(sf, ISAC_MASK, 0);
+		WriteISAR(sf, 0, ISAR_IRQBIT, ISAR_IRQMSK);
 		/* RESET Receiver and Transmitter */
 		WriteISAC(sf, ISAC_CMDR, 0x41);
 		unlock_dev(sf);
-		sti();
 		current->state = TASK_UNINTERRUPTIBLE;
 		/* Timeout 10ms */
 		schedule_timeout((10*HZ)/1000);
@@ -518,7 +522,7 @@ setup_speedfax(sedl_fax *sf, u_int io_cfg, u_int irq_cfg)
 		byteout(sf->cfg + TIGER_RESET_ADDR, 0x00);
 		mdelay(1);
 		byteout(sf->cfg + TIGER_AUX_CTRL, SEDL_AUX_IOMASK);
-		byteout(sf->cfg + TIGER_AUX_IRQMASK, SEDL_TIGER_IRQ_BIT);
+		byteout(sf->cfg + TIGER_AUX_IRQMASK, 0);
 		byteout(sf->cfg + TIGER_AUX_DATA, SEDL_PCI_RESET_ON);
 		mdelay(1);
 		byteout(sf->cfg + TIGER_AUX_DATA, SEDL_PCI_RESET_OFF);
@@ -542,6 +546,8 @@ setup_speedfax(sedl_fax *sf, u_int io_cfg, u_int irq_cfg)
 	sf->bch[1].BC_Read_Reg = &ReadISAR;
 	sf->bch[1].BC_Write_Reg = &WriteISAR;
 	lock_dev(sf);
+	writereg(sf->addr, sf->isar, ISAR_IRQBIT, 0);
+	writereg(sf->addr, sf->isac, ISAC_MASK, 0xFF);
 	ver = ISARVersion(&sf->bch[0], "Sedlbauer:");
 	unlock_dev(sf);
 	if (ver < 0) {
