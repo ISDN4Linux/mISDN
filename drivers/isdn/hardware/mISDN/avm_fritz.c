@@ -1,4 +1,4 @@
-/* $Id: avm_fritz.c,v 1.2 2002/05/01 01:00:39 kkeil Exp $
+/* $Id: avm_fritz.c,v 1.3 2002/09/16 23:49:38 kkeil Exp $
  *
  * fritz_pci.c    low level stuff for AVM Fritz!PCI and ISA PnP isdn cards
  *              Thanks to AVM, Berlin for informations
@@ -18,7 +18,7 @@
 #include "helper.h"
 #include "debug.h"
 
-static const char *avm_pci_rev = "$Revision: 1.2 $";
+static const char *avm_pci_rev = "$Revision: 1.3 $";
 
 #define ISDN_CTYPE_FRITZPCI 1
 
@@ -384,7 +384,8 @@ hdlc_fill_fifo(bchannel_t *bch)
 			bch->hw.hdlc.ctrl.sr.cmd |= HDLC_CMD_XME;
 	}
 	if ((bch->debug & L1_DEB_HSCX) && !(bch->debug & L1_DEB_HSCX_FIFO))
-		debugprint(&bch->inst, __FUNCTION__": %d/%d", count, bch->tx_idx);
+		debugprint(&bch->inst, "%s: %d/%d", __FUNCTION__,
+			count, bch->tx_idx);
 	ptr = (u_int *) p;
 	bch->tx_idx += count;
 	bch->hw.hdlc.ctrl.sr.xml = ((count == HDLC_FIFO_SIZE) ? 0 : count);
@@ -813,6 +814,9 @@ static int debug;
 
 #ifdef MODULE
 MODULE_AUTHOR("Karsten Keil");
+#ifdef MODULE_LICENSE
+MODULE_LICENSE("GPL");
+#endif
 MODULE_PARM(debug, "1i");
 MODULE_PARM(io, MODULE_PARM_T);
 MODULE_PARM(protocol, MODULE_PARM_T);
@@ -954,8 +958,8 @@ fritz_manager(void *data, u_int prim, void *arg) {
 	int		channel = -1;
 
 	if (!data) {
-		printk(KERN_ERR __FUNCTION__": no data prim %x arg %p\n",
-			prim, arg);
+		printk(KERN_ERR "%s: no data prim %x arg %p\n",
+			__FUNCTION__, prim, arg);
 		return(-EINVAL);
 	}
 	while(card) {
@@ -975,21 +979,22 @@ fritz_manager(void *data, u_int prim, void *arg) {
 		card = card->next;
 	}
 	if (channel<0) {
-		printk(KERN_ERR __FUNCTION__": no channel data %p prim %x arg %p\n",
-			data, prim, arg);
+		printk(KERN_ERR "%s: no channel data %p prim %x arg %p\n",
+			__FUNCTION__, data, prim, arg);
 		return(-EINVAL);
 	}
 
 	switch(prim) {
 	    case MGR_REGLAYER | CONFIRM:
 		if (!card) {
-			printk(KERN_WARNING __FUNCTION__": no card found\n");
+			printk(KERN_WARNING "%s: no card found\n", __FUNCTION__);
 			return(-ENODEV);
 		}
 		break;
 	    case MGR_UNREGLAYER | REQUEST:
 		if (!card) {
-			printk(KERN_WARNING __FUNCTION__": no card found\n");
+			printk(KERN_WARNING "%s: no card found\n",
+				__FUNCTION__);
 			return(-ENODEV);
 		} else {
 			if (channel == 2) {
@@ -1014,7 +1019,8 @@ fritz_manager(void *data, u_int prim, void *arg) {
 		break;
 	    case MGR_RELEASE | INDICATION:
 		if (!card) {
-			printk(KERN_WARNING __FUNCTION__": no card found\n");
+			printk(KERN_WARNING "%s: no card found\n",
+				__FUNCTION__);
 			return(-ENODEV);
 		} else {
 			if (channel == 2) {
@@ -1026,7 +1032,8 @@ fritz_manager(void *data, u_int prim, void *arg) {
 		break;
 	    case MGR_CONNECT | REQUEST:
 		if (!card) {
-			printk(KERN_WARNING __FUNCTION__": connect request failed\n");
+			printk(KERN_WARNING "%s: connect request failed\n",
+				__FUNCTION__);
 			return(-ENODEV);
 		}
 		return(ConnectIF(inst, arg));
@@ -1034,7 +1041,7 @@ fritz_manager(void *data, u_int prim, void *arg) {
 	    case MGR_SETIF | REQUEST:
 	    case MGR_SETIF | INDICATION:
 		if (!card) {
-			printk(KERN_WARNING __FUNCTION__": setif failed\n");
+			printk(KERN_WARNING "%s: setif failed\n", __FUNCTION__);
 			return(-ENODEV);
 		}
 		if (channel==2)
@@ -1047,14 +1054,15 @@ fritz_manager(void *data, u_int prim, void *arg) {
 	    case MGR_DISCONNECT | REQUEST:
 	    case MGR_DISCONNECT | INDICATION:
 		if (!card) {
-			printk(KERN_WARNING __FUNCTION__": del interface request failed\n");
+			printk(KERN_WARNING "%s: del interface request failed\n",
+				__FUNCTION__);
 			return(-ENODEV);
 		}
 		return(DisConnectIF(inst, arg));
 		break;
 	    case MGR_SETSTACK | CONFIRM:
 		if (!card) {
-			printk(KERN_WARNING __FUNCTION__": setstack failed\n");
+			printk(KERN_WARNING "%s: setstack failed\n", __FUNCTION__);
 			return(-ENODEV);
 		}
 		if ((channel!=2) && (inst->pid.global == 2)) {
@@ -1073,7 +1081,8 @@ fritz_manager(void *data, u_int prim, void *arg) {
 		}
 		break;
 	    default:
-		printk(KERN_WARNING __FUNCTION__": prim %x not handled\n", prim);
+		printk(KERN_WARNING "%s: prim %x not handled\n",
+			__FUNCTION__, prim);
 		return(-EINVAL);
 	}
 	return(0);

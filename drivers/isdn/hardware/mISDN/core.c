@@ -1,4 +1,4 @@
-/* $Id: core.c,v 1.1 2001/11/14 10:41:26 kkeil Exp $
+/* $Id: core.c,v 1.2 2002/09/16 23:49:38 kkeil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -23,6 +23,9 @@ static int obj_id;
 
 #ifdef MODULE
 MODULE_AUTHOR("Karsten Keil");
+#ifdef MODULE_LICENSE
+MODULE_LICENSE("GPL");
+#endif
 MODULE_PARM(debug, "1i");
 EXPORT_SYMBOL(HiSax_register);
 EXPORT_SYMBOL(HiSax_unregister);
@@ -89,8 +92,8 @@ find_object_module(int protocol) {
 		m++;
 	}
 	if (debug)
-		printk(KERN_DEBUG __FUNCTION__": no module for protocol %x found\n",
-			protocol);
+		printk(KERN_DEBUG "%s: no module for protocol %x found\n",
+			__FUNCTION__, protocol);
 	return(NULL);
 }
 
@@ -123,13 +126,13 @@ static int
 dummy_if(hisaxif_t *hif, struct sk_buff *skb)
 {
 	if (!skb) {
-		printk(KERN_WARNING __FUNCTION__": hif(%p) without skb\n",
-			hif);
+		printk(KERN_WARNING "%s: hif(%p) without skb\n",
+			__FUNCTION__, hif);
 		return(-EINVAL);
 	}
 	if (debug & DEBUG_DUMMY_FUNC)
-		printk(KERN_DEBUG __FUNCTION__": hif(%p) skb(%p) len(%d) prim(%x)\n",
-			hif, skb, skb->len, *((u_int *)skb->data));
+		printk(KERN_DEBUG "%s: hif(%p) skb(%p) len(%d) prim(%x)\n",
+			__FUNCTION__, hif, skb, skb->len, *((u_int *)skb->data));
 	dev_kfree_skb_any(skb);
 	return(0);
 }
@@ -150,13 +153,14 @@ get_next_instance(hisaxstack_t *st, hisax_pid_t *pid)
 		if (!obj)
 			obj = find_object_module(proto);
 		if (!obj) {
-			printk(KERN_WARNING __FUNCTION__": no object found\n");
+			printk(KERN_WARNING "%s: no object found\n",
+				__FUNCTION__);
 			return(NULL);
 		}
 		err = obj->own_ctrl(st, MGR_NEWLAYER | REQUEST, pid);
 		if (err) {
-			printk(KERN_WARNING __FUNCTION__": newlayer err(%d)\n",
-				err);
+			printk(KERN_WARNING "%s: newlayer err(%d)\n",
+				__FUNCTION__, err);
 			return(NULL);
 		}
 		next = get_instance(st, layer, proto);
@@ -171,18 +175,18 @@ sel_channel(hisaxstack_t *st, channel_info_t *ci)
 
 	if (!ci)
 		return(err);
-	printk(KERN_DEBUG __FUNCTION__": st(%p) st->mgr(%p)\n",
-		st, st->mgr);
+	printk(KERN_DEBUG "%s: st(%p) st->mgr(%p)\n",
+		__FUNCTION__, st, st->mgr);
 	if (st->mgr) {
 		if (st->mgr->obj && st->mgr->obj->own_ctrl) {
 			err = st->mgr->obj->own_ctrl(st->mgr,
 				MGR_SELCHANNEL | REQUEST, ci);
-			printk(KERN_DEBUG __FUNCTION__": MGR_SELCHANNEL(%d)\n",
-				err);
+			printk(KERN_DEBUG "%s: MGR_SELCHANNEL(%d)\n",
+				__FUNCTION__, err);
 		} else
 			int_error();
 	} else {
-		printk(KERN_WARNING __FUNCTION__": no mgr st(%p)\n", st);
+		printk(KERN_WARNING "%s: no mgr st(%p)\n", __FUNCTION__, st);
 	}
 	if (err) {
 		hisaxstack_t	*cst = st->child;

@@ -1,4 +1,4 @@
-/* $Id: cplci.c,v 1.2 2002/04/29 23:26:30 kkeil Exp $
+/* $Id: cplci.c,v 1.3 2002/09/16 23:49:38 kkeil Exp $
  *
  */
 
@@ -61,7 +61,7 @@ u_int plci_parse_channel_id(u_char *p)
 	int	l;
 
 	if (p) {
-		printk(KERN_DEBUG __FUNCTION__": l(%d) %x\n",p[0],p[1]);
+		printk(KERN_DEBUG "%s: l(%d) %x\n", __FUNCTION__, p[0], p[1]);
 		l = *p++;
 		if (l == 1) {
 			cid = *p;

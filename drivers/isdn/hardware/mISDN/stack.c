@@ -1,4 +1,4 @@
-/* $Id: stack.c,v 1.1 2001/11/14 10:41:26 kkeil Exp $
+/* $Id: stack.c,v 1.2 2002/09/16 23:49:38 kkeil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -225,8 +225,8 @@ insertlayer(hisaxstack_t *st, hisaxlayer_t *layer, int layermask)
 	hisaxlayer_t *item;
 	
 	if (core_debug & DEBUG_CORE_FUNC)
-		printk(KERN_DEBUG __FUNCTION__"(%p, %p, %x)\n",
-			st, layer, layermask);  
+		printk(KERN_DEBUG "%s(%p, %p, %x)\n",
+			__FUNCTION__, st, layer, layermask);  
 	if (!st || !layer) {
 		int_error();
 		return(-EINVAL);
@@ -297,9 +297,9 @@ release_layers(hisaxstack_t *st, u_int prim) {
 		inst = layer->inst;
 		if (inst) {
 			if (core_debug & DEBUG_CORE_FUNC)
-				printk(KERN_DEBUG __FUNCTION__ ": st(%p) inst(%p):%x %s lm(%x)\n",
-					st, inst, inst->id, inst->name,
-					inst->pid.layermask);
+				printk(KERN_DEBUG  "%s: st(%p) inst(%p):%x %s lm(%x)\n",
+					__FUNCTION__, st, inst, inst->id,
+					inst->name, inst->pid.layermask);
 			inst->obj->own_ctrl(inst, prim, NULL);
 		}
 		REMOVE_FROM_LISTBASE(layer, st->lstack);
@@ -318,11 +318,11 @@ release_stack(hisaxstack_t *st) {
 	hisaxstack_t *cst;
 
 	if (core_debug & DEBUG_CORE_FUNC)
-		printk(KERN_DEBUG __FUNCTION__ ": st(%p)\n", st);
+		printk(KERN_DEBUG "%s: st(%p)\n", __FUNCTION__, st);
 	while (st->child) {
 		cst = st->child;
 		if (core_debug & DEBUG_CORE_FUNC)
-			printk(KERN_DEBUG __FUNCTION__ ": cst(%p)\n", cst);
+			printk(KERN_DEBUG "%s: cst(%p)\n", __FUNCTION__, cst);
 		if ((err = release_layers(cst, MGR_RELEASE | INDICATION))) {
 			printk(KERN_WARNING "release_stack child err(%d)\n", err);
 			return(err);
@@ -348,20 +348,20 @@ release_stacks(hisaxobject_t *obj) {
 
 	st = hisax_stacklist;
 	if (core_debug & DEBUG_CORE_FUNC)
-		printk(KERN_DEBUG __FUNCTION__ ": obj(%p) %s\n",
-			obj, obj->name);
+		printk(KERN_DEBUG "%s: obj(%p) %s\n",
+			__FUNCTION__, obj, obj->name);
 	while (st) {
 		rel = 0;
 		layer = st->lstack;
 		if (core_debug & DEBUG_CORE_FUNC)
-			printk(KERN_DEBUG __FUNCTION__ ": st(%p) l(%p)\n",
-				st, layer);
+			printk(KERN_DEBUG "%s: st(%p) l(%p)\n",
+				__FUNCTION__, st, layer);
 		while(layer) {
 			inst = layer->inst;
 			if (inst) {
 				if (core_debug & DEBUG_CORE_FUNC)
-					printk(KERN_DEBUG __FUNCTION__ ": inst(%p)\n",
-						inst);
+					printk(KERN_DEBUG "%s: inst(%p)\n",
+						__FUNCTION__, inst);
 				if (inst->obj == obj)
 					rel++;
 			}
@@ -412,8 +412,9 @@ register_layer(hisaxstack_t *st, hisaxinstance_t *inst) {
 	if (!inst)
 		return(-EINVAL);
 	if (core_debug & DEBUG_CORE_FUNC)
-		printk(KERN_DEBUG __FUNCTION__":st(%p) inst(%p/%p) lmask(%x) id(%x)\n",
-			st, inst, inst->obj, inst->pid.layermask, inst->id);
+		printk(KERN_DEBUG "%s:st(%p) inst(%p/%p) lmask(%x) id(%x)\n",
+			__FUNCTION__, st, inst, inst->obj,
+			inst->pid.layermask, inst->id);
 	if (inst->id) { /* allready registered */
 		if (inst->st || !st) {
 			int_errtxt("register duplicate %08x %p %p",
@@ -440,7 +441,7 @@ register_layer(hisaxstack_t *st, hisaxinstance_t *inst) {
 		refinc++;
 	get_free_instid(st, inst);
 	if (core_debug & DEBUG_CORE_FUNC)
-		printk(KERN_DEBUG __FUNCTION__":inst(%p/%p) id(%x)%s\n",
+		printk(KERN_DEBUG "%s: inst(%p/%p) id(%x)%s\n", __FUNCTION__,
 			inst, inst->obj, inst->id, refinc ? " changed" : "");
 	if (!inst->id) {
 		int_errtxt("no free inst->id for layer %x", inst->pid.layermask);
@@ -465,16 +466,16 @@ unregister_instance(hisaxinstance_t *inst) {
 	if (!inst)
 		return(-EINVAL);
 	if (core_debug & DEBUG_CORE_FUNC)
-		printk(KERN_DEBUG __FUNCTION__": st(%p) inst(%p):%x lay(%x)\n",
-			inst->st, inst, inst->id, inst->pid.layermask);
+		printk(KERN_DEBUG "%s: st(%p) inst(%p):%x lay(%x)\n",
+			__FUNCTION__, inst->st, inst, inst->id, inst->pid.layermask);
 	if (inst->st) {
 		if ((layer = getlayer4lay(inst->st, inst->pid.layermask))) {
 			if (core_debug & DEBUG_CORE_FUNC)
-				printk(KERN_DEBUG __FUNCTION__
-					":layer(%p)->inst(%p)\n", layer, layer->inst);
+				printk(KERN_DEBUG "%s: layer(%p)->inst(%p)\n",
+					__FUNCTION__, layer, layer->inst);
 			layer->inst = NULL;
 		} else {
-			printk(KERN_WARNING __FUNCTION__": no layer found\n");
+			printk(KERN_WARNING "%s: no layer found\n", __FUNCTION__);
 			err = -ENODEV;
 		}
 		if (inst->st && (inst->st->mgr != inst))
@@ -551,7 +552,7 @@ clear_stack(hisaxstack_t *st) {
 	if (!st)
 		return(-EINVAL);
 	if (core_debug & DEBUG_CORE_FUNC)
-		printk(KERN_DEBUG __FUNCTION__": st(%p)\n", st);
+		printk(KERN_DEBUG "%s: st(%p)\n", __FUNCTION__, st);
 	memset(&st->pid, 0, sizeof(hisax_pid_t));
 	return(release_layers(st, MGR_UNREGLAYER | REQUEST));
 }

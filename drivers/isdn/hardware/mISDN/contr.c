@@ -1,4 +1,4 @@
-/* $Id: contr.c,v 1.3 2002/05/01 01:00:39 kkeil Exp $
+/* $Id: contr.c,v 1.4 2002/09/16 23:49:38 kkeil Exp $
  *
  */
 
@@ -292,7 +292,7 @@ void contrDelPlci(Contr_t *contr, Plci_t *plci)
 {
 	int i = plci->adrPLCI >> 8;
 
-	contrDebug(contr, LL_DEB_INFO, __FUNCTION__ ": PLCI(%x)", plci->adrPLCI);
+	contrDebug(contr, LL_DEB_INFO, "%s: PLCI(%x)", __FUNCTION__, plci->adrPLCI);
 	if ((i < 1) || (i > CAPI_MAXPLCI)) {
 		int_error();
 		return;
@@ -347,9 +347,8 @@ contrL3L4(hisaxif_t *hif, struct sk_buff *skb)
 		ret = contrDummyInd(contr, hh->prim, skb);
 	} else {
 		if (!(plci = contrGetPLCI4addr(contr, hh->dinfo))) {
-			contrDebug(contr, LL_DEB_WARN, __FUNCTION__
-				": unknown plci prim(%x) id(%x)",
-				hh->prim, hh->dinfo);
+			contrDebug(contr, LL_DEB_WARN, ": unknown plci prim(%x) id(%x)",
+				__FUNCTION__, hh->prim, hh->dinfo);
 			return(-ENODEV);
 		}
 		ret = plci_l3l4(plci, hh->prim, skb);

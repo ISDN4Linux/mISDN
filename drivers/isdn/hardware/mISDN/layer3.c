@@ -1,4 +1,4 @@
-/* $Id: layer3.c,v 1.1 2002/05/01 01:00:40 kkeil Exp $
+/* $Id: layer3.c,v 1.2 2002/09/16 23:49:38 kkeil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -14,7 +14,7 @@
 #include "hisaxl3.h"
 #include "helper.h"
 
-const char *l3_revision = "$Revision: 1.1 $";
+const char *l3_revision = "$Revision: 1.2 $";
 
 static
 struct Fsm l3fsm = {NULL, 0, 0, NULL, NULL};
@@ -488,8 +488,8 @@ l3_msg(layer3_t *l3, u_int pr, int dinfo, int len, void *arg)
 			} else {
 				struct sk_buff *skb = arg;
 
-//				printk(KERN_DEBUG __FUNCTION__ "queue skb %p len(%d)\n",
-//					skb, skb->len);
+//				printk(KERN_DEBUG "%s: queue skb %p len(%d)\n",
+//					__FUNCTION__, skb, skb->len);
 				skb_queue_tail(&l3->squeue, skb);
 				FsmEvent(&l3->l3m, EV_ESTABLISH_REQ, NULL); 
 			}
@@ -569,4 +569,3 @@ HiSaxl3Free(void)
 {
 	FsmFree(&l3fsm);
 }
- 

@@ -1,4 +1,4 @@
-/* $Id: helper.h,v 1.1 2002/05/01 01:00:39 kkeil Exp $
+/* $Id: helper.h,v 1.2 2002/09/16 23:49:38 kkeil Exp $
  *
  *   Basic declarations, defines and prototypes
  *
@@ -87,8 +87,8 @@ extern __inline__ struct sk_buff *create_link_skb(u_int prim, int dinfo,
 	struct sk_buff	*skb;
 
 	if (!(skb = alloc_skb(len + reserve, GFP_ATOMIC))) {
-		printk(KERN_WARNING __FUNCTION__": no skb size %d+%d\n",
-			len, reserve);
+		printk(KERN_WARNING "%s: no skb size %d+%d\n",
+			__FUNCTION__, len, reserve);
 		return(NULL);
 	} else
 		skb_reserve(skb, reserve);

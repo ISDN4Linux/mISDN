@@ -1,4 +1,4 @@
-/* $Id: isar.c,v 1.1 2002/05/01 01:00:40 kkeil Exp $
+/* $Id: isar.c,v 1.2 2002/09/16 23:49:38 kkeil Exp $
  *
  * isar.c   ISAR (Siemens PSB 7110) specific routines
  *
@@ -735,7 +735,7 @@ isar_fill_fifo(bchannel_t *bch)
 	bch->tx_idx += count;
 	switch (bch->protocol) {
 		case ISDN_PID_NONE:
-			printk(KERN_ERR __FUNCTION__" wrong protocol 0\n");
+			printk(KERN_ERR "%s: wrong protocol 0\n", __FUNCTION__);
 			break;
 		case ISDN_PID_L1_B_64TRANS:
 		case ISDN_PID_L1_B_TRANS_TTR:
@@ -751,7 +751,8 @@ isar_fill_fifo(bchannel_t *bch)
 		case ISDN_PID_L1_B_FAX:
 			if (bch->hw.isar.state != STFAX_ACTIV) {
 				if (bch->debug & L1_DEB_WARN)
-					debugprint(&bch->inst, __FUNCTION__": not ACTIV");
+					debugprint(&bch->inst, "%s: not ACTIV",
+						__FUNCTION__);
 			} else if (bch->hw.isar.cmd == PCTRL_CMD_FTH) { 
 				sendmsg(bch, SET_DPS(bch->hw.isar.dpath) | ISAR_HIS_SDATA,
 					msb, count, ptr);
@@ -760,13 +761,16 @@ isar_fill_fifo(bchannel_t *bch)
 					0, count, ptr);
 			} else {
 				if (bch->debug & L1_DEB_WARN)
-					debugprint(&bch->inst, __FUNCTION__": not FTH/FTM");
+					debugprint(&bch->inst, "%s: not FTH/FTM",
+						__FUNCTION__);
 			}
 			break;
 		default:
 			if (bch->debug)
-				debugprint(&bch->inst, __FUNCTION__": protocol(%x) error", bch->protocol);
-			printk(KERN_ERR __FUNCTION__" protocol(%x) error\n", bch->protocol);
+				debugprint(&bch->inst, "%s: protocol(%x) error",
+					__FUNCTION__, bch->protocol);
+			printk(KERN_ERR "%s: protocol(%x) error\n",
+				__FUNCTION__, bch->protocol);
 			break;
 	}
 }

@@ -1,4 +1,4 @@
-/* $Id: layer2.c,v 1.3 2002/07/10 09:20:02 kkeil Exp $
+/* $Id: layer2.c,v 1.4 2002/09/16 23:49:38 kkeil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -12,7 +12,7 @@
 #include "helper.h"
 #include "debug.h"
 
-const char *l2_revision = "$Revision: 1.3 $";
+const char *l2_revision = "$Revision: 1.4 $";
 
 static void l2m_debug(struct FsmInst *fi, char *fmt, ...);
 
@@ -524,7 +524,7 @@ send_uframe(layer2_t *l2, struct sk_buff *skb, u_char cmd, u_char cr)
 	if (skb)
 		skb_trim(skb, 0);
 	else if (!(skb = alloc_skb(i, GFP_ATOMIC))) {
-		printk(KERN_WARNING __FUNCTION__": can't alloc skbuff\n");
+		printk(KERN_WARNING "%s: can't alloc skbuff\n", __FUNCTION__);
 		return;
 	}
 	memcpy(skb_put(skb, i), tmp, i);
@@ -1404,7 +1404,7 @@ l2_pull_iqueue(struct FsmInst *fi, int event, void *arg)
 		skb = alloc_skb(oskb->len + i, GFP_ATOMIC);
 		if (!skb) {
 			dev_kfree_skb(oskb);
-			printk(KERN_WARNING __FUNCTION__": no skb mem\n");
+			printk(KERN_WARNING "%s: no skb mem\n", __FUNCTION__);
 			return;
 		}
 		memcpy(skb_put(skb, i), header, i);
@@ -1842,7 +1842,7 @@ l2from_down(hisaxif_t *hif, struct sk_buff *askb)
 		return(-EINVAL);
 	l2 = hif->fdata;
 	hh = HISAX_HEAD_P(askb);
-	printk(KERN_DEBUG __FUNCTION__ ": prim(%x)\n", hh->prim);
+	printk(KERN_DEBUG "%s: prim(%x)\n", __FUNCTION__, hh->prim);
 	if (!l2) {
 		if (hif->next && hif->next->func)
 			ret = hif->next->func(hif->next, askb);
@@ -1926,7 +1926,7 @@ l2from_up(hisaxif_t *hif, struct sk_buff *skb) {
 		return(ret);
 	l2 = hif->fdata;
 	hh = HISAX_HEAD_P(skb);
-	printk(KERN_DEBUG __FUNCTION__ ": prim(%x)\n", hh->prim);
+	printk(KERN_DEBUG "%s: prim(%x)\n", __FUNCTION__, hh->prim);
 	if (!l2)
 		return(ret);
 	switch (hh->prim) {
@@ -1986,7 +1986,7 @@ tei_l2(layer2_t *l2, struct sk_buff *skb)
 	if (!l2 || !skb)
 		return(ret);
 	hh = HISAX_HEAD_P(skb);
-	printk(KERN_DEBUG __FUNCTION__ ": prim(%x)\n", hh->prim);
+	printk(KERN_DEBUG "%s: prim(%x)\n", __FUNCTION__, hh->prim);
 	switch(hh->prim) {
 	    case (MDL_UNITDATA | REQUEST):
 		ret = l2down(l2, PH_DATA_REQ, hh->dinfo, skb);
@@ -2044,8 +2044,8 @@ release_l2(layer2_t *l2)
 			MGR_DISCONNECT | REQUEST, &inst->down);
 	}
 	if (l2->cloneif) {
-		printk(KERN_DEBUG __FUNCTION__ "cloneif(%p) owner(%p) peer(%p)\n",
-			l2->cloneif, l2->cloneif->owner, l2->cloneif->peer);
+		printk(KERN_DEBUG "%s: cloneif(%p) owner(%p) peer(%p)\n",
+			__FUNCTION__, l2->cloneif, l2->cloneif->owner, l2->cloneif->peer);
 		REMOVE_FROM_LIST(l2->cloneif);
 		if (l2->cloneif->owner &&
 			(l2->cloneif->owner->up.next == l2->cloneif))
@@ -2271,6 +2271,9 @@ static char MName[] = "ISDNL2";
  
 #ifdef MODULE
 MODULE_AUTHOR("Karsten Keil");
+#ifdef MODULE_LICENSE
+MODULE_LICENSE("GPL");
+#endif
 MODULE_PARM(debug, "1i");
 #define Isdnl2Init init_module
 #endif
@@ -2280,7 +2283,8 @@ l2_manager(void *data, u_int prim, void *arg) {
 	hisaxinstance_t *inst = data;
 	layer2_t *l2l = isdnl2.ilist;;
 
-	printk(KERN_DEBUG __FUNCTION__": data:%p prim:%x arg:%p\n", data, prim, arg);
+	printk(KERN_DEBUG "%s: data:%p prim:%x arg:%p\n", __FUNCTION__,
+		data, prim, arg);
 	if (!data)
 		return(-EINVAL);
 	while(l2l) {

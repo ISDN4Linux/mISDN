@@ -1,4 +1,4 @@
-/* $Id: hfc_pci.c,v 1.14 2002/09/16 22:03:51 kkeil Exp $
+/* $Id: hfc_pci.c,v 1.15 2002/09/16 23:49:38 kkeil Exp $
 
  * hfc_pci.c     low level driver for CCD's hfc-pci based cards
  *
@@ -42,7 +42,7 @@
 
 extern const char *CardType[];
 
-static const char *hfcpci_revision = "$Revision: 1.14 $";
+static const char *hfcpci_revision = "$Revision: 1.15 $";
 
 /* table entry in the PCI devices list */
 typedef struct {
@@ -891,8 +891,8 @@ next_t_frame:
 		return;
 	}
 	if (bch->debug & L1_DEB_HSCX)
-		debugprint(&bch->inst, __FUNCTION__": ch(%x) f1(%d) f2(%d) z1(f1)(%x)",
-			bch->channel, bz->f1, bz->f2, bz->za[bz->f1].z1);
+		debugprint(&bch->inst, "%s: ch(%x) f1(%d) f2(%d) z1(f1)(%x)",
+			__FUNCTION__, bch->channel, bz->f1, bz->f2, bz->za[bz->f1].z1);
 	fcnt = bz->f1 - bz->f2;	/* frame count actually buffered */
 	if (fcnt < 0)
 		fcnt += (MAX_B_FRAMES + 1);	/* if wrap around */
@@ -1374,7 +1374,7 @@ HFCD_l1hw(hisaxif_t *hif, struct sk_buff *skb)
 	ret = 0;
 	if (hh->prim == PH_DATA_REQ) {
 		if (dch->next_skb) {
-			printk(KERN_WARNING __FUNCTION__": next_skb exist ERROR");
+			printk(KERN_WARNING "%s: next_skb exist ERROR",	__FUNCTION__);
 			return(-EBUSY);
 		}
 		dch->inst.lock(dch->inst.data);
@@ -1436,8 +1436,8 @@ HFCD_l1hw(hisaxif_t *hif, struct sk_buff *skb)
 					slot = 0xC0;
 				else
 					slot = 0x80;
-				printk(KERN_DEBUG __FUNCTION__ 
-					": Write_hfc: B1_SSL/RSL 0x%x\n", slot);
+				printk(KERN_DEBUG  "%s: Write_hfc: B1_SSL/RSL 0x%x\n",
+					__FUNCTION__, slot);
 				Write_hfc(hc, HFCPCI_B1_SSL, slot);
 				Write_hfc(hc, HFCPCI_B1_RSL, slot);
 				save_flags(flags);
@@ -1451,8 +1451,8 @@ HFCD_l1hw(hisaxif_t *hif, struct sk_buff *skb)
 					slot = 0xC1;
 				else
 					slot = 0x81;
-				printk(KERN_DEBUG __FUNCTION__ 
-					": Write_hfc: B2_SSL/RSL 0x%x\n", slot);
+				printk(KERN_DEBUG "%s: Write_hfc: B2_SSL/RSL 0x%x\n",
+					__FUNCTION__, slot);
 				Write_hfc(hc, HFCPCI_B2_SSL, slot);
 				Write_hfc(hc, HFCPCI_B2_RSL, slot);
 				save_flags(flags);
@@ -1471,8 +1471,8 @@ HFCD_l1hw(hisaxif_t *hif, struct sk_buff *skb)
 			restore_flags(flags);
 		} else {
 			if (dch->debug & L1_DEB_WARN)
-				debugprint(&dch->inst, __FUNCTION__": unknown ctrl %x",
-					hh->dinfo);
+				debugprint(&dch->inst, "%s: unknown ctrl %x",
+					__FUNCTION__, hh->dinfo);
 			ret = -EINVAL;
 		}
 		dch->inst.unlock(dch->inst.data);
@@ -1491,7 +1491,8 @@ HFCD_l1hw(hisaxif_t *hif, struct sk_buff *skb)
 			dch->inst.unlock(dch->inst.data);
 		} else {
 			if (dch->debug & L1_DEB_WARN)
-				debugprint(&dch->inst, __FUNCTION__": PH_ACTIVATE none NT mode");
+				debugprint(&dch->inst, "%s: PH_ACTIVATE none NT mode",
+					__FUNCTION__);
 			ret = -EINVAL;
 		}
 	} else if (hh->prim == (PH_DEACTIVATE | REQUEST)) {
@@ -1513,13 +1514,14 @@ HFCD_l1hw(hisaxif_t *hif, struct sk_buff *skb)
 			dch->inst.unlock(dch->inst.data);
 		} else {
 			if (dch->debug & L1_DEB_WARN)
-				debugprint(&dch->inst, __FUNCTION__": PH_DEACTIVATE none NT mode");
+				debugprint(&dch->inst, "%s: PH_DEACTIVATE none NT mode",
+					__FUNCTION__);
 			ret = -EINVAL;
 		}
 	} else {
 		if (dch->debug & L1_DEB_WARN)
-			debugprint(&dch->inst, __FUNCTION__": unknown prim %x",
-				hh->prim);
+			debugprint(&dch->inst, "%s: unknown prim %x",
+				__FUNCTION__, hh->prim);
 		ret = -EINVAL;
 	}
 	if (!ret)
@@ -1546,14 +1548,14 @@ mode_hfcpci(bchannel_t *bch, int bc, int protocol)
 	pcm_mode = (bc>>24) & 0xff;
 	if (pcm_mode) { /* PCM SLOT USE */
 		if (!test_bit(HFC_CFG_PCM, &hc->cfg))
-			printk(KERN_WARNING __FUNCTION__
-				": pcm channel id without HFC_CFG_PCM\n");
+			printk(KERN_WARNING "%s: pcm channel id without HFC_CFG_PCM\n",
+				__FUNCTION__);
 		rx_slot = (bc>>8) & 0xff;
 		tx_slot = (bc>>16) & 0xff;
 		bc = bc & 0xff;
 	} else if (test_bit(HFC_CFG_PCM, &hc->cfg) && (protocol > ISDN_PID_NONE))
-		printk(KERN_WARNING __FUNCTION__
-			": no pcm channel id but HFC_CFG_PCM\n");
+		printk(KERN_WARNING "%s: no pcm channel id but HFC_CFG_PCM\n",
+				__FUNCTION__);
 	save_flags(flags);
 	cli();
 	if (hc->chanlimit > 1) {
@@ -1695,19 +1697,19 @@ mode_hfcpci(bchannel_t *bch, int bc, int protocol)
 		if (bc & 2) {
 			hc->hw.conn &= 0xc7;
 			hc->hw.conn |= 0x08;
-			printk(KERN_DEBUG __FUNCTION__
-				": Write_hfc: B2_SSL 0x%x\n", tx_slot);
-			printk(KERN_DEBUG __FUNCTION__
-				": Write_hfc: B2_RSL 0x%x\n", rx_slot);
+			printk(KERN_DEBUG "%s: Write_hfc: B2_SSL 0x%x\n",
+				__FUNCTION__, tx_slot);
+			printk(KERN_DEBUG "%s: Write_hfc: B2_RSL 0x%x\n",
+				__FUNCTION__, rx_slot);
 			Write_hfc(hc, HFCPCI_B2_SSL, tx_slot);
 			Write_hfc(hc, HFCPCI_B2_RSL, rx_slot);
 		} else {
 			hc->hw.conn &= 0xf8;
 			hc->hw.conn |= 0x01;
-			printk(KERN_DEBUG __FUNCTION__
-				": Write_hfc: B1_SSL 0x%x\n", tx_slot);
-			printk(KERN_DEBUG __FUNCTION__
-				": Write_hfc: B1_RSL 0x%x\n", rx_slot);
+			printk(KERN_DEBUG "%s: Write_hfc: B1_SSL 0x%x\n",
+				__FUNCTION__, tx_slot);
+			printk(KERN_DEBUG "%s: Write_hfc: B1_RSL 0x%x\n",
+				__FUNCTION__, rx_slot);
 			Write_hfc(hc, HFCPCI_B1_SSL, tx_slot);
 			Write_hfc(hc, HFCPCI_B1_RSL, rx_slot);
 		}
@@ -1743,7 +1745,8 @@ hfcpci_l2l1(hisaxif_t *hif, struct sk_buff *skb)
 	if ((hh->prim == PH_DATA_REQ) ||
 		(hh->prim == (DL_DATA | REQUEST))) {
 		if (bch->next_skb) {
-			printk(KERN_WARNING __FUNCTION__": next_skb exist ERROR");
+			printk(KERN_WARNING "%s: next_skb exist ERROR",
+				__FUNCTION__);
 			return(-EBUSY);
 		}
 		bch->inst.lock(bch->inst.data);
@@ -1806,8 +1809,8 @@ hfcpci_l2l1(hisaxif_t *hif, struct sk_buff *skb)
 		}
 		ret = 0;
 	} else {
-		printk(KERN_WARNING __FUNCTION__" unknown prim(%x)\n",
-			hh->prim);
+		printk(KERN_WARNING "%s: unknown prim(%x)\n",
+			__FUNCTION__, hh->prim);
 		ret = -EINVAL;
 	}
 	if (!ret)
@@ -1827,7 +1830,8 @@ hfcD_newstate(dchannel_t *dch)
 	hisaxif_t	*upif = &dch->inst.up;
 
 	if (!hc->hw.nt_mode) {
-		printk(KERN_DEBUG __FUNCTION__": TE newstate %x\n", dch->hw.hfcpci.ph_state);
+		printk(KERN_DEBUG "%s: TE newstate %x\n",
+			__FUNCTION__, dch->hw.hfcpci.ph_state);
 		switch (dch->hw.hfcpci.ph_state) {
 			case (0):
 				prim = PH_CONTROL | INDICATION;
@@ -1851,7 +1855,8 @@ hfcD_newstate(dchannel_t *dch)
 				return;
 		}
 	} else { 
-		printk(KERN_DEBUG __FUNCTION__": NT newstate %x\n", dch->hw.hfcpci.ph_state);
+		printk(KERN_DEBUG "%s: NT newstate %x\n",
+			__FUNCTION__, dch->hw.hfcpci.ph_state);
 		switch (dch->hw.hfcpci.ph_state) {
 			case (2):
 				if (hc->hw.nt_timer < 0) {
@@ -1925,7 +1930,7 @@ hfcD_bh(dchannel_t *dch)
 {
 	if (!dch)
 		return;
-//	printk(KERN_DEBUG __FUNCTION__": event %x\n", dch->event);
+//	printk(KERN_DEBUG "%s: event %x\n", __FUNCTION__, dch->event);
 	if (test_and_clear_bit(D_L1STATECHANGE, &dch->event))
 		hfcD_newstate(dch);
 	if (test_and_clear_bit(D_BLOCKEDATOMIC, &dch->event))
@@ -1963,9 +1968,9 @@ hfcB_bh(bchannel_t *bch)
 		return;
 	}
 #if 0
-	printk(KERN_DEBUG __FUNCTION__": event %x\n", bch->event);
+	printk(KERN_DEBUG "%s: event %x\n", __FUNCTION__, bch->event);
 	if (bch->dev)
-		printk(KERN_DEBUG __FUNCTION__": rpflg(%x) wpflg(%x)\n",
+		printk(KERN_DEBUG "%s: rpflg(%x) wpflg(%x)\n", __FUNCTION__,
 			bch->dev->rport.Flag, bch->dev->wport.Flag);
 #endif
 	if (test_and_clear_bit(B_BLOCKEDATOMIC, &bch->event))
@@ -2186,6 +2191,9 @@ static int debug;
 
 #ifdef MODULE
 MODULE_AUTHOR("Karsten Keil");
+#ifdef MODULE_LICENSE
+MODULE_LICENSE("GPL");
+#endif
 MODULE_PARM(debug, "1i");
 MODULE_PARM(protocol, MODULE_PARM_T);
 
@@ -2335,8 +2343,8 @@ HFC_manager(void *data, u_int prim, void *arg) {
 	int		channel = -1;
 
 	if (!data) {
-		printk(KERN_ERR __FUNCTION__": no data prim %x arg %p\n",
-			prim, arg);
+		printk(KERN_ERR "%s: no data prim %x arg %p\n",
+			__FUNCTION__, prim, arg);
 		return(-EINVAL);
 	}
 	while(card) {
@@ -2356,21 +2364,21 @@ HFC_manager(void *data, u_int prim, void *arg) {
 		card = card->next;
 	}
 	if (channel<0) {
-		printk(KERN_ERR __FUNCTION__": no channel data %p prim %x arg %p\n",
-			data, prim, arg);
+		printk(KERN_ERR "%s: no channel data %p prim %x arg %p\n",
+			__FUNCTION__, data, prim, arg);
 		return(-EINVAL);
 	}
 
 	switch(prim) {
 	    case MGR_REGLAYER | CONFIRM:
 		if (!card) {
-			printk(KERN_WARNING __FUNCTION__": no card found\n");
+			printk(KERN_WARNING "%s: no card found\n", __FUNCTION__);
 			return(-ENODEV);
 		}
 		break;
 	    case MGR_UNREGLAYER | REQUEST:
 		if (!card) {
-			printk(KERN_WARNING __FUNCTION__": no card found\n");
+			printk(KERN_WARNING "%s: no card found\n", __FUNCTION__);
 			return(-ENODEV);
 		} else {
 			if (channel == 2) {
@@ -2395,7 +2403,7 @@ HFC_manager(void *data, u_int prim, void *arg) {
 		break;
 	    case MGR_RELEASE | INDICATION:
 		if (!card) {
-			printk(KERN_WARNING __FUNCTION__": no card found\n");
+			printk(KERN_WARNING "%s: no card found\n", __FUNCTION__);
 			return(-ENODEV);
 		} else {
 			if (channel == 2) {
@@ -2407,7 +2415,8 @@ HFC_manager(void *data, u_int prim, void *arg) {
 		break;
 	    case MGR_CONNECT | REQUEST:
 		if (!card) {
-			printk(KERN_WARNING __FUNCTION__": connect request failed\n");
+			printk(KERN_WARNING "%s: connect request failed\n",
+				__FUNCTION__);
 			return(-ENODEV);
 		}
 		return(ConnectIF(inst, arg));
@@ -2415,7 +2424,7 @@ HFC_manager(void *data, u_int prim, void *arg) {
 	    case MGR_SETIF | REQUEST:
 	    case MGR_SETIF | INDICATION:
 		if (!card) {
-			printk(KERN_WARNING __FUNCTION__": setif failed\n");
+			printk(KERN_WARNING "%s: setif failed\n", __FUNCTION__);
 			return(-ENODEV);
 		}
 		if (channel==2)
@@ -2428,21 +2437,23 @@ HFC_manager(void *data, u_int prim, void *arg) {
 	    case MGR_DISCONNECT | REQUEST:
 	    case MGR_DISCONNECT | INDICATION:
 		if (!card) {
-			printk(KERN_WARNING __FUNCTION__": del interface request failed\n");
+			printk(KERN_WARNING "%s: del interface request failed\n",
+				__FUNCTION__);
 			return(-ENODEV);
 		}
 		return(DisConnectIF(inst, arg));
 		break;
 	    case MGR_SELCHANNEL | REQUEST:
 		if (channel != 2) {
-			printk(KERN_WARNING __FUNCTION__": selchannel not dinst\n");
+			printk(KERN_WARNING "%s: selchannel not dinst\n",
+				__FUNCTION__);
 			return(-EINVAL);
 		}
 		return(SelFreeBChannel(card, arg));
 		break;
 	    case MGR_SETSTACK | CONFIRM:
 		if (!card) {
-			printk(KERN_WARNING __FUNCTION__": setstack failed\n");
+			printk(KERN_WARNING "%s: setstack failed\n", __FUNCTION__);
 			return(-ENODEV);
 		}
 		
@@ -2462,7 +2473,8 @@ HFC_manager(void *data, u_int prim, void *arg) {
 		}
 		break;
 	    default:
-		printk(KERN_WARNING __FUNCTION__": prim %x not handled\n", prim);
+		printk(KERN_WARNING "%s: prim %x not handled\n",
+			__FUNCTION__, prim);
 		return(-EINVAL);
 	}
 	return(0);

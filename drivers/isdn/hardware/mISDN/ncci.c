@@ -1,4 +1,4 @@
-/* $Id: ncci.c,v 1.4 2002/05/01 01:00:40 kkeil Exp $
+/* $Id: ncci.c,v 1.5 2002/09/16 23:49:38 kkeil Exp $
  *
  */
 
@@ -682,8 +682,8 @@ int ncci_l3l4(hisaxif_t *hif, struct sk_buff *skb)
 			FsmEvent(&ncci->ncci_m, EV_NCCI_DL_RELEASE_CONF, skb);
 			break;
 		default:
-			printk(KERN_DEBUG __FUNCTION__ ": unknown prim(%x) dinfo(%x) len(%d) skb(%p)\n",
-				hh->prim, hh->dinfo, skb->len, skb);
+			printk(KERN_DEBUG "%s: unknown prim(%x) dinfo(%x) len(%d) skb(%p)\n",
+				__FUNCTION__, hh->prim, hh->dinfo, skb->len, skb);
 			int_error();
 			return(-EINVAL);
 	}
@@ -694,8 +694,8 @@ int ncci_l3l4(hisaxif_t *hif, struct sk_buff *skb)
 static int ncciL4L3(Ncci_t *ncci, u_int prim, int dtyp, int len, void *arg,
 			struct sk_buff *skb)
 {
-	printk(KERN_DEBUG __FUNCTION__ ": NCCI %x prim(%x)\n",
-		ncci->adrNCCI, prim);
+	printk(KERN_DEBUG "%s: NCCI %x prim(%x)\n",
+		__FUNCTION__, ncci->adrNCCI, prim);
 	if (skb)
 		return(if_newhead(&ncci->binst->inst.down, prim, dtyp, skb));
 	else

@@ -1,4 +1,4 @@
-/* $Id: udevice.c,v 1.2 2002/05/01 01:00:39 kkeil Exp $
+/* $Id: udevice.c,v 1.3 2002/09/16 23:49:38 kkeil Exp $
  *
  * Copyright 2000  by Karsten Keil <kkeil@isdn4linux.de>
  *
@@ -190,9 +190,8 @@ hisax_rdata_raw(hisaxif_t *hif, struct sk_buff *skb) {
 			spin_unlock_irqrestore(&dev->rport.lock, flags);
 			wake_up_interruptible(&dev->rport.procq);
 		} else {
-			printk(KERN_WARNING __FUNCTION__
-				": PH_DATA_IND device(%d) not read open\n",
-				dev->minor);
+			printk(KERN_WARNING "%s: PH_DATA_IND device(%d) not read open\n",
+				__FUNCTION__, dev->minor);
 			retval = -ENOENT;
 		}
 	} else if (hh->prim == (PH_DATA | CONFIRM)) {
@@ -209,9 +208,8 @@ hisax_rdata_raw(hisaxif_t *hif, struct sk_buff *skb) {
 			test_and_clear_bit(FLG_HISAXPORT_ENABLED,
 				&dev->wport.Flag);
 	} else {
-		printk(KERN_WARNING __FUNCTION__
-			": prim(%x) dinfo(%x) not supported\n",
-			hh->prim, hh->dinfo);
+		printk(KERN_WARNING "%s: prim(%x) dinfo(%x) not supported\n",
+			__FUNCTION__, hh->prim, hh->dinfo);
 		retval = -EINVAL;
 	}
 	if (!retval)
@@ -239,8 +237,8 @@ hisax_rdata(hisaxdevice_t *dev, iframe_t *iff, int use_value) {
 		spin_unlock_irqrestore(&port->lock, flags);
 	} else {
 		spin_unlock_irqrestore(&port->lock, flags);
-		printk(KERN_WARNING __FUNCTION__ ":no rport space for %d\n",
-			len);
+		printk(KERN_WARNING "%s: no rport space for %d\n",
+			__FUNCTION__, len);
 		len = -ENOSPC;
 	}
 	wake_up_interruptible(&port->procq);
@@ -252,11 +250,11 @@ static devicelayer_t
 	devicelayer_t *dl = dev->layer;
 
 	if (device_debug & DEBUG_MGR_FUNC)
-		printk(KERN_DEBUG __FUNCTION__ ": addr:%x\n", addr);
+		printk(KERN_DEBUG "%s: addr:%x\n", __FUNCTION__, addr);
 	while(dl) {
 //		if (device_debug & DEBUG_MGR_FUNC)
-//			printk(KERN_DEBUG __FUNCTION__ ": dl(%p) iaddr:%x\n",
-//				dl, dl->iaddr);
+//			printk(KERN_DEBUG "%s: dl(%p) iaddr:%x\n",
+//				__FUNCTION__, dl, dl->iaddr);
 		if (dl->iaddr == (IF_IADDRMASK & addr))
 			break;
 		dl = dl->next;
@@ -270,7 +268,7 @@ static devicestack_t
 	devicestack_t *ds = dev->stack;
 
 	if (device_debug & DEBUG_MGR_FUNC)
-		printk(KERN_DEBUG __FUNCTION__ ": addr:%x\n", addr);
+		printk(KERN_DEBUG "%s: addr:%x\n", __FUNCTION__, addr);
 	while(ds) {
 		if (ds->st && (ds->st->id == addr))
 			break;
@@ -285,7 +283,7 @@ static hisaxtimer_t
 	hisaxtimer_t	*ht = dev->timer;
 
 	if (device_debug & DEBUG_DEV_TIMER)
-		printk(KERN_DEBUG __FUNCTION__ ": dev:%p id:%x\n", dev, id);
+		printk(KERN_DEBUG "%s: dev:%p id:%x\n", __FUNCTION__, dev, id);
 	while(ht) {
 		if (ht->id == id)
 			break;
@@ -390,26 +388,26 @@ create_layer(hisaxdevice_t *dev, layer_info_t *linfo, int *adr)
 	if (linfo->object_id != -1) {
 		obj = get_object(linfo->object_id);
 		if (!obj) {
-			printk(KERN_WARNING __FUNCTION__ ": no object %x found\n",
-				linfo->object_id);
+			printk(KERN_WARNING "%s: no object %x found\n",
+				__FUNCTION__, linfo->object_id);
 			return(-ENODEV);
 		}
 		ret = obj->own_ctrl(st, MGR_NEWLAYER | REQUEST, &linfo->pid);
 		if (ret) {
-			printk(KERN_WARNING __FUNCTION__ ": error nl req %d\n",
-				ret);
+			printk(KERN_WARNING "%s: error nl req %d\n",
+				__FUNCTION__, ret);
 			return(ret);
 		}
 		layer = getlayer4lay(st, linfo->pid.layermask);
 		if (!layer) {
-			printk(KERN_WARNING __FUNCTION__ ": no layer for lm(%x)\n",
-				linfo->pid.layermask);
+			printk(KERN_WARNING "%s: no layer for lm(%x)\n",
+				__FUNCTION__, linfo->pid.layermask);
 			return(-EINVAL);
 		}
 		inst = layer->inst;
 		if (!inst) {
-			printk(KERN_WARNING __FUNCTION__ ": no inst in layer(%p)\n",
-				layer);
+			printk(KERN_WARNING "%s: no inst in layer(%p)\n",
+				__FUNCTION__, layer);
 			return(-EINVAL);
 		}
 	} else if ((layer = getlayer4lay(st, linfo->pid.layermask))) {
@@ -466,7 +464,8 @@ remove_if(devicelayer_t *dl, int stat) {
 	int err;
 
 	if (device_debug & DEBUG_MGR_FUNC)
-		printk(KERN_DEBUG __FUNCTION__":dl(%p) stat(%x)\n", dl, stat);
+		printk(KERN_DEBUG "%s: dl(%p) stat(%x)\n", __FUNCTION__,
+			dl, stat);
 	phif = NULL;
 	if (stat & IF_UP) {
 		hif = &dl->inst.up;
@@ -479,7 +478,7 @@ remove_if(devicelayer_t *dl, int stat) {
 		if (shif->owner)
 			phif = &shif->owner->up;
 	} else {
-		printk(KERN_WARNING __FUNCTION__": stat not UP/DOWN\n");
+		printk(KERN_WARNING "%s: stat not UP/DOWN\n", __FUNCTION__);
 		return(-EINVAL);
 	}
 	err = udev_obj.ctrl(hif->peer, MGR_DISCONNECT | REQUEST, hif);
@@ -502,8 +501,8 @@ del_stack(devicestack_t *ds)
 	}
 	dev = ds->dev;
 	if (device_debug & DEBUG_MGR_FUNC) {
-		printk(KERN_DEBUG __FUNCTION__": ds(%p) dev(%p)\n", 
-			ds, dev);
+		printk(KERN_DEBUG "%s: ds(%p) dev(%p)\n", 
+			__FUNCTION__, ds, dev);
 	}
 	if (!dev)
 		return(-EINVAL);
@@ -524,10 +523,10 @@ del_layer(devicelayer_t *dl) {
 	int		i;
 
 	if (device_debug & DEBUG_MGR_FUNC) {
-		printk(KERN_DEBUG __FUNCTION__": dl(%p) inst(%p) LM(%x) dev(%p) nexti(%p)\n", 
-			dl, inst, inst->pid.layermask, dev, inst->next);
-		printk(KERN_DEBUG __FUNCTION__": iaddr %x inst %s slave %p\n",
-			dl->iaddr, inst->name, dl->slave);
+		printk(KERN_DEBUG "%s: dl(%p) inst(%p) LM(%x) dev(%p) nexti(%p)\n", 
+			__FUNCTION__, dl, inst, inst->pid.layermask, dev, inst->next);
+		printk(KERN_DEBUG "%s: iaddr %x inst %s slave %p\n",
+			__FUNCTION__, dl->iaddr, inst->name, dl->slave);
 	}
 	remove_if(dl, IF_UP);
 	remove_if(dl, IF_DOWN);
@@ -577,18 +576,20 @@ clone_instance(devicelayer_t *dl, hisaxstack_t  *st, hisaxinstance_t *peer) {
 	int		err;
 
 	if (dl->slave) {
-		printk(KERN_WARNING __FUNCTION__": layer has slave, cannot clone\n");
+		printk(KERN_WARNING "%s: layer has slave, cannot clone\n",
+			__FUNCTION__);
 		return(NULL);
 	}
 	if (!(peer->extentions & EXT_INST_CLONE)) {
-		printk(KERN_WARNING __FUNCTION__": peer cannot clone\n");
+		printk(KERN_WARNING "%s: peer cannot clone\n", __FUNCTION__);
 		return(NULL);
 	}
 	dl->slave = (hisaxinstance_t *)st;
 	if ((err = peer->obj->own_ctrl(peer, MGR_CLONELAYER | REQUEST,
 		&dl->slave))) {
 		dl->slave = NULL;
-		printk(KERN_WARNING __FUNCTION__": peer clone error %d\n", err);
+		printk(KERN_WARNING "%s: peer clone error %d\n",
+			__FUNCTION__, err);
 		return(NULL);
 	}
 	return(dl->slave);
@@ -605,20 +606,20 @@ connect_if_req(hisaxdevice_t *dev, iframe_t *iff) {
 	int		stat;
 
 	if (device_debug & DEBUG_MGR_FUNC)
-		printk(KERN_DEBUG __FUNCTION__": addr:%x own(%x) peer(%x)\n",
-			iff->addr, ifi->owner, ifi->peer);
+		printk(KERN_DEBUG "%s: addr:%x own(%x) peer(%x)\n",
+			__FUNCTION__, iff->addr, ifi->owner, ifi->peer);
 	if (!(dl=get_devlayer(dev, ifi->owner))) {
 		int_errtxt("no devive_layer for %08x", ifi->owner);
 		return(-ENXIO);
 	}
 	if (!(owner = get_instance4id(ifi->owner))) {
-		printk(KERN_WARNING __FUNCTION__": owner(%x) not found\n",
-			ifi->owner);
+		printk(KERN_WARNING "%s: owner(%x) not found\n",
+			__FUNCTION__, ifi->owner);
 		return(-ENODEV);
 	}
 	if (!(peer = get_instance4id(ifi->peer))) {
-		printk(KERN_WARNING __FUNCTION__": peer(%x) not found\n",
-			ifi->peer);
+		printk(KERN_WARNING "%s: peer(%x) not found\n",
+			__FUNCTION__, ifi->peer);
 		return(-ENODEV);
 	}
 	if (owner->pid.layermask < peer->pid.layermask) {
@@ -633,7 +634,8 @@ connect_if_req(hisaxdevice_t *dev, iframe_t *iff) {
 	}
 	if (ifi->extentions == EXT_IF_CHAIN) {
 		if (!(pp = hifp->peer)) {
-			printk(KERN_WARNING __FUNCTION__": peer if has no peer\n");
+			printk(KERN_WARNING "%s: peer if has no peer\n",
+				__FUNCTION__);
 			return(-EINVAL);
 		}
 		if (stat == IF_UP) {
@@ -676,14 +678,16 @@ connect_if_req(hisaxdevice_t *dev, iframe_t *iff) {
 				else
 					hifp = &peer->down;
 			} else {
-				printk(KERN_WARNING __FUNCTION__": cannot create new peer instance\n");
+				printk(KERN_WARNING "%s: cannot create new peer instance\n",
+					__FUNCTION__);
 				return(-EBUSY);
 			}
 		}
 	}
 	if (ifi->extentions & EXT_IF_EXCLUSIV) {
 		if (hifp->stat != IF_NOACTIV) {
-			printk(KERN_WARNING __FUNCTION__": peer if is in use\n");
+			printk(KERN_WARNING "%s: peer if is in use\n",
+				__FUNCTION__);
 			return(-EBUSY);
 		}
 	}			
@@ -699,18 +703,18 @@ set_if_req(hisaxdevice_t *dev, iframe_t *iff) {
 	hisaxinstance_t *inst, *peer;
 
 	if (device_debug & DEBUG_MGR_FUNC)
-		printk(KERN_DEBUG __FUNCTION__": addr:%x own(%x) peer(%x)\n",
-			iff->addr, ifi->owner, ifi->peer);
+		printk(KERN_DEBUG "%s: addr:%x own(%x) peer(%x)\n",
+			__FUNCTION__, iff->addr, ifi->owner, ifi->peer);
 	if (!(dl=get_devlayer(dev, iff->addr)))
 		return(-ENXIO);
 	if (!(inst = get_instance4id(ifi->owner))) {
-		printk(KERN_WARNING __FUNCTION__": owner(%x) not found\n",
-			ifi->owner);
+		printk(KERN_WARNING "%s: owner(%x) not found\n",
+			__FUNCTION__, ifi->owner);
 		return(-ENODEV);
 	}
 	if (!(peer = get_instance4id(ifi->peer))) {
-		printk(KERN_WARNING __FUNCTION__": peer(%x) not found\n",
-			ifi->peer);
+		printk(KERN_WARNING "%s: peer(%x) not found\n",
+			__FUNCTION__, ifi->peer);
 		return(-ENODEV);
 	}
 
@@ -725,17 +729,17 @@ set_if_req(hisaxdevice_t *dev, iframe_t *iff) {
 		phif = &peer->up;
 		stat = IF_UP;
 	} else {
-		printk(KERN_WARNING __FUNCTION__": if not UP/DOWN\n");
+		printk(KERN_WARNING "%s: if not UP/DOWN\n", __FUNCTION__);
 		return(-EINVAL);
 	}
 
 	
 	if (shif->stat != IF_NOACTIV) {
-		printk(KERN_WARNING __FUNCTION__": save if busy\n");
+		printk(KERN_WARNING "%s: save if busy\n", __FUNCTION__);
 		return(-EBUSY);
 	}
 	if (hif->stat != IF_NOACTIV) {
-		printk(KERN_WARNING __FUNCTION__": own if busy\n");
+		printk(KERN_WARNING "%s: own if busy\n", __FUNCTION__);
 		return(-EBUSY);
 	}
 	hif->stat = stat;
@@ -752,16 +756,16 @@ add_if_req(hisaxdevice_t *dev, iframe_t *iff) {
 	hisaxinstance_t *inst, *peer;
 
 	if (device_debug & DEBUG_MGR_FUNC)
-		printk(KERN_DEBUG __FUNCTION__": addr:%x own(%x) peer(%x)\n",
-			iff->addr, ifi->owner, ifi->peer);
+		printk(KERN_DEBUG "%s: addr:%x own(%x) peer(%x)\n",
+			__FUNCTION__, iff->addr, ifi->owner, ifi->peer);
 	if (!(inst = get_instance4id(ifi->owner))) {
-		printk(KERN_WARNING __FUNCTION__": owner(%x) not found\n",
-			ifi->owner);
+		printk(KERN_WARNING "%s: owner(%x) not found\n",
+			__FUNCTION__, ifi->owner);
 		return(-ENODEV);
 	}
 	if (!(peer = get_instance4id(ifi->peer))) {
-		printk(KERN_WARNING __FUNCTION__": peer(%x) not found\n",
-			ifi->peer);
+		printk(KERN_WARNING "%s: peer(%x) not found\n",
+			__FUNCTION__, ifi->peer);
 		return(-ENODEV);
 	}
 
@@ -770,7 +774,7 @@ add_if_req(hisaxdevice_t *dev, iframe_t *iff) {
 	} else if (ifi->stat == IF_UP) {
 		hif = &inst->down;
 	} else {
-		printk(KERN_WARNING __FUNCTION__": if not UP/DOWN\n");
+		printk(KERN_WARNING "%s: if not UP/DOWN\n", __FUNCTION__);
 		return(-EINVAL);
 	}
 	return(peer->obj->ctrl(peer, iff->prim, hif));
@@ -782,7 +786,7 @@ del_if_req(hisaxdevice_t *dev, iframe_t *iff)
 	devicelayer_t *dl;
 
 	if (device_debug & DEBUG_MGR_FUNC)
-		printk(KERN_DEBUG __FUNCTION__": addr:%x\n", iff->addr);
+		printk(KERN_DEBUG "%s: addr:%x\n", __FUNCTION__, iff->addr);
 	if (!(dl=get_devlayer(dev, iff->addr)))
 		return(-ENXIO);
 	return(remove_if(dl, iff->addr));
@@ -794,8 +798,7 @@ dev_expire_timer(hisaxtimer_t *ht)
 	iframe_t off;
 
 	if (device_debug & DEBUG_DEV_TIMER)
-		printk(KERN_DEBUG __FUNCTION__": timer(%x)\n",
-			ht->id);
+		printk(KERN_DEBUG "%s: timer(%x)\n", __FUNCTION__, ht->id);
 	if (test_and_clear_bit(FLG_MGR_TIMER_RUNING, &ht->Flags)) {
 		off.dinfo = 0;
 		off.prim = MGR_TIMER | INDICATION;
@@ -803,8 +806,8 @@ dev_expire_timer(hisaxtimer_t *ht)
 		off.len = 0;
 		hisax_rdata(ht->dev, &off, 0);
 	} else
-		printk(KERN_WARNING __FUNCTION__": timer(%x) not active\n",
-			ht->id);
+		printk(KERN_WARNING "%s: timer(%x) not active\n",
+			__FUNCTION__, ht->id);
 }
 
 static int
@@ -826,13 +829,11 @@ dev_init_timer(hisaxdevice_t *dev, iframe_t *iff)
 		init_timer(&ht->tl);
 		APPEND_TO_LIST(ht, dev->timer);
 		if (device_debug & DEBUG_DEV_TIMER)
-			printk(KERN_DEBUG __FUNCTION__": new(%x)\n",
-				ht->id);
+			printk(KERN_DEBUG "%s: new(%x)\n", __FUNCTION__, ht->id);
 	} else if (device_debug & DEBUG_DEV_TIMER)
-		printk(KERN_DEBUG __FUNCTION__": old(%x)\n",
-			ht->id);
+		printk(KERN_DEBUG "%s: old(%x)\n", __FUNCTION__, ht->id);
 	if (timer_pending(&ht->tl)) {
-		printk(KERN_WARNING __FUNCTION__": timer(%x) pending\n",
+		printk(KERN_WARNING "%s: timer(%x) pending\n", __FUNCTION__,
 			ht->id);
 		del_timer(&ht->tl);
 	}
@@ -848,22 +849,23 @@ dev_add_timer(hisaxdevice_t *dev, iframe_t *iff)
 
 	ht = get_devtimer(dev, iff->addr);
 	if (!ht) {
-		printk(KERN_WARNING __FUNCTION__": no timer(%x)\n", iff->addr);
+		printk(KERN_WARNING "%s: no timer(%x)\n", __FUNCTION__,
+			iff->addr);
 		return(-ENODEV);
 	}
 	if (timer_pending(&ht->tl)) {
-		printk(KERN_WARNING __FUNCTION__": timer(%x) pending\n",
-			ht->id);
+		printk(KERN_WARNING "%s: timer(%x) pending\n",
+			__FUNCTION__, ht->id);
 		return(-EBUSY);
 	}
 	if (iff->dinfo < 10) {
-		printk(KERN_WARNING __FUNCTION__": timer(%x): %d ms too short\n",
-			ht->id, iff->dinfo);
+		printk(KERN_WARNING "%s: timer(%x): %d ms too short\n",
+			__FUNCTION__, ht->id, iff->dinfo);
 		return(-EINVAL);
 	}
 	if (device_debug & DEBUG_DEV_TIMER)
-		printk(KERN_DEBUG __FUNCTION__": timer(%x) %d ms\n",
-			ht->id, iff->dinfo);
+		printk(KERN_DEBUG "%s: timer(%x) %d ms\n",
+			__FUNCTION__, ht->id, iff->dinfo);
 	init_timer(&ht->tl);
 	ht->tl.expires = jiffies + (iff->dinfo * HZ) / 1000;
 	test_and_set_bit(FLG_MGR_TIMER_RUNING, &ht->Flags);
@@ -878,16 +880,17 @@ dev_del_timer(hisaxdevice_t *dev, iframe_t *iff)
 
 	ht = get_devtimer(dev, iff->addr);
 	if (!ht) {
-		printk(KERN_WARNING __FUNCTION__": no timer(%x)\n", iff->addr);
+		printk(KERN_WARNING "%s: no timer(%x)\n", __FUNCTION__,
+			iff->addr);
 		return(-ENODEV);
 	}
 	if (device_debug & DEBUG_DEV_TIMER)
-		printk(KERN_DEBUG __FUNCTION__": timer(%x)\n",
-			ht->id);
+		printk(KERN_DEBUG "%s: timer(%x)\n",
+			__FUNCTION__, ht->id);
 	del_timer(&ht->tl);
 	if (!test_and_clear_bit(FLG_MGR_TIMER_RUNING, &ht->Flags))
-		printk(KERN_WARNING __FUNCTION__": timer(%x) not running\n",
-			ht->id);
+		printk(KERN_WARNING "%s: timer(%x) not running\n",
+			__FUNCTION__, ht->id);
 	return(0);
 }
 
@@ -898,12 +901,11 @@ dev_remove_timer(hisaxdevice_t *dev, int id)
 
 	ht = get_devtimer(dev, id);
 	if (!ht)  {
-		printk(KERN_WARNING __FUNCTION__": no timer(%x)\n", id);
+		printk(KERN_WARNING "%s: no timer(%x)\n", __FUNCTION__, id);
 		return(-ENODEV);
 	}
 	if (device_debug & DEBUG_DEV_TIMER)
-		printk(KERN_DEBUG __FUNCTION__": timer(%x)\n",
-			ht->id);
+		printk(KERN_DEBUG "%s: timer(%x)\n", __FUNCTION__, ht->id);
 	del_timer(&ht->tl);
 	REMOVE_FROM_LISTBASE(ht, dev->timer);
 	kfree(ht);
@@ -918,7 +920,7 @@ get_status(iframe_t *off)
 	int err;
 
 	if (!(inst = get_instance4id(off->addr & IF_ADDRMASK))) {
-		printk(KERN_WARNING __FUNCTION__": no instance\n");
+		printk(KERN_WARNING "%s: no instance\n", __FUNCTION__);
 		err = -ENODEV;
 	} else {
 		err = inst->obj->own_ctrl(inst, MGR_STATUS | REQUEST, si);
@@ -937,7 +939,7 @@ get_layer_info(iframe_t *frm)
 	layer_info_t	*li = (layer_info_t *)frm->data.p;
 	
 	if (!(inst = get_instance4id(frm->addr & IF_ADDRMASK))) {
-		printk(KERN_WARNING __FUNCTION__": no instance\n");
+		printk(KERN_WARNING "%s: no instance\n", __FUNCTION__);
 		frm->len = -ENODEV;
 		return;
 	}
@@ -961,7 +963,7 @@ get_if_info(iframe_t *frm)
 	interface_info_t	*ii = (interface_info_t *)frm->data.p;
 	
 	if (!(inst = get_instance4id(frm->addr & IF_ADDRMASK))) {
-		printk(KERN_WARNING __FUNCTION__": no instance\n");
+		printk(KERN_WARNING "%s: no instance\n", __FUNCTION__);
 		frm->len = -ENODEV;
 		return;
 	}
@@ -970,8 +972,8 @@ get_if_info(iframe_t *frm)
 	else if (frm->dinfo == IF_UP)
 		hif = &inst->up;
 	else {
-		printk(KERN_WARNING __FUNCTION__": wrong interface %x\n",
-			frm->dinfo);
+		printk(KERN_WARNING "%s: wrong interface %x\n",
+			__FUNCTION__, frm->dinfo);
 		frm->len = -EINVAL;
 		return;
 	}
@@ -993,37 +995,36 @@ wdata_frame(hisaxdevice_t *dev, iframe_t *iff) {
 	int err=-ENXIO;
 
 	if (device_debug & DEBUG_WDATA)
-		printk(KERN_DEBUG __FUNCTION__": addr:%x\n", iff->addr);
+		printk(KERN_DEBUG "%s: addr:%x\n", __FUNCTION__, iff->addr);
 	if (!(dl=get_devlayer(dev, iff->addr)))
 		return(-ENXIO);
 	if (iff->addr & IF_UP) {
 		hif = &dl->inst.up;
 		if (IF_TYPE(hif) != IF_DOWN) {
-			printk(KERN_WARNING __FUNCTION__": inst.up no down\n");
+			printk(KERN_WARNING "%s: inst.up no down\n", __FUNCTION__);
 			hif = NULL;
 		}
 	} else if (iff->addr & IF_DOWN) {
 		hif = &dl->inst.down;
 		if (IF_TYPE(hif) != IF_UP) {
-			printk(KERN_WARNING __FUNCTION__": inst.down no up\n");
+			printk(KERN_WARNING "%s: inst.down no up\n", __FUNCTION__);
 			hif = NULL;
 		}
 	}
 	if (hif) {
 		if (device_debug & DEBUG_WDATA)
-			printk(KERN_DEBUG __FUNCTION__": pr(%x) di(%x) l(%d)\n",
-				iff->prim, iff->dinfo, iff->len);
+			printk(KERN_DEBUG "%s: pr(%x) di(%x) l(%d)\n",
+				__FUNCTION__, iff->prim, iff->dinfo, iff->len);
 		if (iff->len < 0) {
-			printk(KERN_WARNING
-				__FUNCTION__":data negativ(%d)\n",
-				iff->len);
+			printk(KERN_WARNING "%s: data negativ(%d)\n",
+				__FUNCTION__, iff->len);
 			return(-EINVAL);
 		}
 		err = if_link(hif, iff->prim, iff->dinfo, iff->len,
 			&iff->data.b[0], UPLINK_HEADER_SPACE);
 		if (device_debug & DEBUG_WDATA && err)
-			printk(KERN_DEBUG __FUNCTION__": if_link ret(%x)\n",
-				err);
+			printk(KERN_DEBUG "%s: if_link ret(%x)\n",
+				__FUNCTION__, err);
 	} else {
 		if (device_debug & DEBUG_WDATA)
 			printk(KERN_DEBUG "hisax: no matching interface\n");
@@ -1043,8 +1044,8 @@ hisax_wdata_if(hisaxdevice_t *dev, iframe_t *iff, int len) {
 	int		head = 4*sizeof(u_int);
 
 	if (len < head) {
-		printk(KERN_WARNING __FUNCTION__": frame(%d) too short\n",
-			len);
+		printk(KERN_WARNING "%s: frame(%d) too short\n",
+			__FUNCTION__, len);
 		return(len);
 	}
 	if (device_debug & DEBUG_WDATA)
@@ -1347,8 +1348,8 @@ hisax_wdata(hisaxdevice_t *dev) {
 			frag = dev->wport.buf + dev->wport.size
 				- dev->wport.op;
 			if (dev->wport.cnt < IFRAME_HEAD_SIZE) {
-				printk(KERN_WARNING __FUNCTION__": frame(%d,%d) too short\n",
-					dev->wport.cnt, IFRAME_HEAD_SIZE);
+				printk(KERN_WARNING "%s: frame(%d,%d) too short\n",
+					__FUNCTION__, dev->wport.cnt, IFRAME_HEAD_SIZE);
 				p_pull_o(&dev->wport, dev->wport.cnt);
 				wake_up(&dev->wport.procq);
 				break;
@@ -1358,8 +1359,9 @@ hisax_wdata(hisaxdevice_t *dev) {
 				p_memcpy_o(&dev->wport, &hlp, IFRAME_HEAD_SIZE);
 				if (hlp.len >0) {
 					if (hlp.len < dev->wport.cnt) {
-						printk(KERN_WARNING __FUNCTION__": framedata(%d/%d)too short\n",
-							dev->wport.cnt, hlp.len);
+						printk(KERN_WARNING
+							"%s: framedata(%d/%d)too short\n",
+							__FUNCTION__, dev->wport.cnt, hlp.len);
 						p_pull_o(&dev->wport, dev->wport.cnt);
 						wake_up(&dev->wport.procq);
 						break;
@@ -1370,8 +1372,8 @@ hisax_wdata(hisaxdevice_t *dev) {
 				iff = (iframe_t *)dev->wport.op;
 				if (iff->len > 0) {
 					if (dev->wport.cnt < (iff->len + IFRAME_HEAD_SIZE)) {
-						printk(KERN_WARNING __FUNCTION__": frame(%d,%d) too short\n",
-							dev->wport.cnt, IFRAME_HEAD_SIZE + iff->len);
+						printk(KERN_WARNING "%s: frame(%d,%d) too short\n",
+							__FUNCTION__, dev->wport.cnt, IFRAME_HEAD_SIZE + iff->len);
 						p_pull_o(&dev->wport, dev->wport.cnt);
 						wake_up(&dev->wport.procq);
 						break;
@@ -1386,8 +1388,8 @@ hisax_wdata(hisaxdevice_t *dev) {
 				if (hlp.len > 0) {
 					iff = vmalloc(IFRAME_HEAD_SIZE + hlp.len);
 					if (!iff) {
-						printk(KERN_WARNING __FUNCTION__": no %d vmem for iff\n",
-							IFRAME_HEAD_SIZE + hlp.len);
+						printk(KERN_WARNING "%s: no %d vmem for iff\n",
+							__FUNCTION__, IFRAME_HEAD_SIZE + hlp.len);
 						p_pull_o(&dev->wport, hlp.len);
 						wake_up(&dev->wport.procq);
 						continue;
@@ -1413,15 +1415,15 @@ hisax_wdata(hisaxdevice_t *dev) {
 				p_pull_o(&dev->wport, used);
 			}
 		} else { /* RAW DEVICES */
-			printk(KERN_DEBUG __FUNCTION__": wflg(%x)\n",
-				dev->wport.Flag);
+			printk(KERN_DEBUG "%s: wflg(%x)\n",
+				__FUNCTION__, dev->wport.Flag);
 			if (test_bit(FLG_HISAXPORT_BLOCK, &dev->wport.Flag))
 				break;
 			used = dev->wport.cnt;
 			if (used > MAX_DATA_SIZE)
 				used = MAX_DATA_SIZE;
-			printk(KERN_DEBUG __FUNCTION__": cnt %d/%d\n",
-				used, dev->wport.cnt);
+			printk(KERN_DEBUG "%s: cnt %d/%d\n",
+				__FUNCTION__, used, dev->wport.cnt);
 			if (test_bit(FLG_HISAXPORT_ENABLED, &dev->wport.Flag)) {
 				struct sk_buff	*skb;
 
@@ -1435,22 +1437,22 @@ hisax_wdata(hisaxdevice_t *dev) {
 					used = if_newhead(&dev->wport.pif,
 						PH_DATA | REQUEST, (int)skb, skb);
 					if (used) {
-						printk(KERN_WARNING __FUNCTION__
-							": dev(%d) down err(%d)\n",
-							dev->minor, used);
+						printk(KERN_WARNING 
+							"%s: dev(%d) down err(%d)\n",
+							__FUNCTION__, dev->minor, used);
 						kfree_skb(skb);
 					}
 					spin_lock_irqsave(&dev->wport.lock, flags);
 				} else {
-					printk(KERN_WARNING __FUNCTION__
-						": dev(%d) no skb(%d)\n",
-						dev->minor, used);
+					printk(KERN_WARNING
+						"%s: dev(%d) no skb(%d)\n",
+						__FUNCTION__, dev->minor, used);
 					p_pull_o(&dev->wport, used);
 				}
 			} else {
-				printk(KERN_WARNING __FUNCTION__
-					": dev(%d) wport not enabled\n",
-					dev->minor);
+				printk(KERN_WARNING
+					"%s: dev(%d) wport not enabled\n",
+					__FUNCTION__, dev->minor);
 				p_pull_o(&dev->wport, used);
 			}
 		}
@@ -1468,8 +1470,8 @@ init_device(u_int minor) {
 
 	dev = kmalloc(sizeof(hisaxdevice_t), GFP_KERNEL);
 	if (device_debug & DEBUG_MGR_FUNC)
-		printk(KERN_DEBUG __FUNCTION__": dev(%d) %p\n",
-			minor, dev); 
+		printk(KERN_DEBUG "%s: dev(%d) %p\n",
+			__FUNCTION__, minor, dev); 
 	if (dev) {
 		memset(dev, 0, sizeof(hisaxdevice_t));
 		dev->minor = minor;
@@ -1490,12 +1492,12 @@ get_free_rawdevice(void)
 	u_int		minor;
 
 	if (device_debug & DEBUG_MGR_FUNC)
-		printk(KERN_DEBUG __FUNCTION__":\n");
+		printk(KERN_DEBUG "%s:\n", __FUNCTION__);
 	for (minor=HISAX_MINOR_RAW_MIN; minor<=HISAX_MINOR_RAW_MAX; minor++) {
 		dev = get_hisaxdevice4minor(minor);
 		if (device_debug & DEBUG_MGR_FUNC)
-			printk(KERN_DEBUG __FUNCTION__": dev(%d) %p\n",
-				minor, dev); 
+			printk(KERN_DEBUG "%s: dev(%d) %p\n",
+				__FUNCTION__, minor, dev); 
 		if (!dev) {
 			dev = init_device(minor);
 			if (!dev)
@@ -1516,8 +1518,7 @@ free_device(hisaxdevice_t *dev)
 	if (!dev)
 		return(-ENODEV);
 	if (device_debug & DEBUG_MGR_FUNC)
-		printk(KERN_DEBUG __FUNCTION__": dev(%d)\n",
-			dev->minor);
+		printk(KERN_DEBUG "%s: dev(%d)\n", __FUNCTION__, dev->minor);
 	/* release related stuff */
 	while(dev->layer)
 		del_layer(dev->layer);

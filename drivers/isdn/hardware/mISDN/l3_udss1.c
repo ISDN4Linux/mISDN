@@ -1,4 +1,4 @@
-/* $Id: l3_udss1.c,v 1.5 2002/06/26 08:38:24 kkeil Exp $
+/* $Id: l3_udss1.c,v 1.6 2002/09/16 23:49:38 kkeil Exp $
  *
  * EURO/DSS1 D-channel protocol
  *
@@ -24,7 +24,7 @@ static int debug = 0;
 static hisaxobject_t u_dss1;
 
 
-const char *dss1_revision = "$Revision: 1.5 $";
+const char *dss1_revision = "$Revision: 1.6 $";
 
 static int dss1man(l3_process_t *, u_int, void *);
 
@@ -1966,7 +1966,7 @@ dss1_fromdown(hisaxif_t *hif, struct sk_buff *skb)
 		return(ret);
 	l3 = hif->fdata;
 	hh = HISAX_HEAD_P(skb);
-	printk(KERN_DEBUG __FUNCTION__ ": prim(%x)\n", hh->prim);
+	printk(KERN_DEBUG "%s: prim(%x)\n", __FUNCTION__, hh->prim);
 	if (!l3)
 		return(ret);
 	switch (hh->prim) {
@@ -1987,8 +1987,8 @@ dss1_fromdown(hisaxif_t *hif, struct sk_buff *skb)
 			return(0);
 			break;
                 default:
-                        printk(KERN_WARNING __FUNCTION__
-                        	": unknown pr=%04x\n", hh->prim);
+                        printk(KERN_WARNING "%s: unknown pr=%04x\n",
+                        	__FUNCTION__, hh->prim);
                         return(-EINVAL);
 	}
 	if (skb->len < 3) {
@@ -2143,7 +2143,7 @@ dss1_fromup(hisaxif_t *hif, struct sk_buff *skb)
 		return(ret);
 	l3 = hif->fdata;
 	hh = HISAX_HEAD_P(skb);
-	printk(KERN_DEBUG __FUNCTION__ ": prim(%x)\n", hh->prim);
+	printk(KERN_DEBUG  "%s: prim(%x)\n", __FUNCTION__, hh->prim);
 	if (!l3)
 		return(ret);
 	if ((DL_ESTABLISH | REQUEST) == hh->prim) {
@@ -2154,8 +2154,8 @@ dss1_fromup(hisaxif_t *hif, struct sk_buff *skb)
 	proc = getl3proc4id(l3, hh->dinfo);
 	if ((CC_NEW_CR | REQUEST) == hh->prim) {
 		if (proc) {
-			printk(KERN_WARNING __FUNCTION__
-				": proc(%x) allready exist\n", hh->dinfo);
+			printk(KERN_WARNING "%s: proc(%x) allready exist\n",
+				__FUNCTION__, hh->dinfo);
 			ret = -EBUSY;
 		} else {
 			cr = newcallref();
@@ -2322,6 +2322,9 @@ static char MName[] = "UDSS1";
 
 #ifdef MODULE
 MODULE_AUTHOR("Karsten Keil");
+#ifdef MODULE_LICENSE
+MODULE_LICENSE("GPL");
+#endif
 MODULE_PARM(debug, "1i");
 #define UDSS1Init init_module
 #endif

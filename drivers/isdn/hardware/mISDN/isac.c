@@ -1,4 +1,4 @@
-/* $Id: isac.c,v 1.1 2002/05/01 01:00:40 kkeil Exp $
+/* $Id: isac.c,v 1.2 2002/09/16 23:49:38 kkeil Exp $
  *
  * isac.c   ISAC specific routines
  *
@@ -110,7 +110,7 @@ isac_bh(dchannel_t *dch)
 {
 	if (!dch)
 		return;
-	printk(KERN_DEBUG __FUNCTION__": event %x\n", dch->event);
+	printk(KERN_DEBUG "%s: event %x\n", __FUNCTION__, dch->event);
 #if 0
 	if (test_and_clear_bit(D_CLEARBUSY, &dch->event)) {
 		if (dch->debug)

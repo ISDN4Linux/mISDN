@@ -1,4 +1,4 @@
-/* $Id: tei.c,v 1.1 2002/05/01 01:00:40 kkeil Exp $
+/* $Id: tei.c,v 1.2 2002/09/16 23:49:38 kkeil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -13,7 +13,7 @@
 #include "debug.h"
 #include <linux/random.h>
 
-const char *tei_revision = "$Revision: 1.1 $";
+const char *tei_revision = "$Revision: 1.2 $";
 
 #define ID_REQUEST	1
 #define ID_ASSIGNED	2
@@ -406,7 +406,7 @@ l2_tei(teimgr_t *tm, struct sk_buff *skb)
 	if (!tm || !skb)
 		return(ret);
 	hh = HISAX_HEAD_P(skb);
-	printk(KERN_DEBUG __FUNCTION__ ": prim(%x)\n", hh->prim);
+	printk(KERN_DEBUG "%s: prim(%x)\n", __FUNCTION__, hh->prim);
 	switch(hh->prim) {
 	    case (MDL_UNITDATA | INDICATION):
 	    	return(tei_ph_data_ind(tm, hh->dinfo, skb));

@@ -1,4 +1,4 @@
-/* $Id: capi.c,v 1.0 2001/11/02 23:42:26 kkeil Exp $
+/* $Id: capi.c,v 1.1 2002/09/16 23:49:38 kkeil Exp $
  *
  */
 
@@ -9,7 +9,7 @@
 #include "helper.h"
 #include "debug.h"
 
-const char *capi_revision = "$Revision: 1.0 $";
+const char *capi_revision = "$Revision: 1.1 $";
 
 static int debug = 0;
 static hisaxobject_t capi_obj;
@@ -19,6 +19,9 @@ static char MName[] = "HiSax Capi 2.0";
 
 #ifdef MODULE
 MODULE_AUTHOR("Karsten Keil");
+#ifdef MODULE_LICENSE
+MODULE_LICENSE("GPL");
+#endif
 MODULE_PARM(debug, "1i");
 #define Capi20Init init_module
 #endif
@@ -46,9 +49,9 @@ int hisax_load_firmware(struct capi_ctr *ctrl, capiloaddata *data)
 	u_char *tmp;
 	int retval;
 
-	printk(KERN_INFO __FUNCTION__ " firm user(%d) len(%d)\n",
+	printk(KERN_INFO "%s: firm user(%d) len(%d)\n", __FUNCTION__,
 		data->firmware.user, data->firmware.len);
-	printk(KERN_INFO __FUNCTION__ "  cfg user(%d) len(%d)\n",
+	printk(KERN_INFO "%s: cfg user(%d) len(%d)\n", __FUNCTION__,
 		data->configuration.user, data->configuration.len);
 	if (data->firmware.user) {
 		tmp = vmalloc(data->firmware.len);
@@ -70,13 +73,13 @@ void hisax_reset_ctr(struct capi_ctr *ctrl)
 {
 	Contr_t *contr = ctrl->driverdata;
 
-	printk(KERN_INFO __FUNCTION__ "\n");
+	printk(KERN_DEBUG "%s\n", __FUNCTION__);
 	contrReset(contr);
 }
 
 void hisax_remove_ctr(struct capi_ctr *ctrl)
 {
-	printk(KERN_INFO __FUNCTION__ "\n");
+	printk(KERN_DEBUG "%s\n", __FUNCTION__);
 //	int_error();
 }
 
@@ -84,7 +87,7 @@ static char *hisax_procinfo(struct capi_ctr *ctrl)
 {
 	Contr_t *contr = (ctrl->driverdata);
 
-	printk(KERN_INFO __FUNCTION__ "\n");
+	printk(KERN_DEBUG "%s\n", __FUNCTION__);
 	if (!contr)
 		return "";
 	sprintf(contr->infobuf, "-");
@@ -96,7 +99,7 @@ void hisax_register_appl(struct capi_ctr *ctrl,
 {
 	Contr_t *contr = ctrl->driverdata;
 
-	printk(KERN_INFO __FUNCTION__ "\n");
+	printk(KERN_DEBUG "%s\n", __FUNCTION__);
 	contrRegisterAppl(contr, ApplId, rp);
 }
 
@@ -104,7 +107,7 @@ void hisax_release_appl(struct capi_ctr *ctrl, __u16 ApplId)
 {
 	Contr_t *contr = ctrl->driverdata;
 
-	printk(KERN_INFO __FUNCTION__ "\n");
+	printk(KERN_DEBUG "%s\n", __FUNCTION__);
 	contrReleaseAppl(contr, ApplId);
 }
 

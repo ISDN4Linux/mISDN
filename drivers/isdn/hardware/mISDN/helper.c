@@ -1,4 +1,4 @@
-/* $Id: helper.c,v 1.0 2001/11/02 23:42:26 kkeil Exp $
+/* $Id: helper.c,v 1.1 2002/09/16 23:49:38 kkeil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -30,7 +30,7 @@ alloc_uplink_skb(size_t size)
 	struct sk_buff *skb;
 
 	if (!(skb = alloc_skb(size + UPLINK_HEADER_SPACE, GFP_ATOMIC)))
-		printk(KERN_WARNING __FUNCTION__"(%d): no skb size\n",
+		printk(KERN_WARNING "%s(%d): no skb size\n", __FUNCTION__,
 			size);
 	else
 		skb_reserve(skb, UPLINK_HEADER_SPACE);
@@ -259,13 +259,14 @@ SetHandledPID(hisaxobject_t *obj, hisax_pid_t *pid)
 		int_error();
 		return(0);
 	}
-	printk(KERN_DEBUG __FUNCTION__": %s LM(%x)\n", obj->name,
+	printk(KERN_DEBUG "%s: %s LM(%x)\n", __FUNCTION__, obj->name,
 		pid->layermask);
 	memcpy(&sav, pid, sizeof(hisax_pid_t));
 	memset(pid, 0, sizeof(hisax_pid_t));
 	pid->global = sav.global;
 	if (!sav.layermask) {
-		printk(KERN_WARNING __FUNCTION__": no layermask in pid\n");
+		printk(KERN_WARNING "%s: no layermask in pid\n",
+			__FUNCTION__);
 		return(0);
 	}
 	for (layer=0; layer<=MAX_LAYER_NR; layer++) {
@@ -402,13 +403,13 @@ SetIF(hisaxinstance_t *owner, hisaxif_t *hif, u_int prim, void *upfunc,
 	if (IF_TYPE(hif) == IF_UP) {
 		hif->func = upfunc;
 		own_hif = &owner->up;
-		printk(KERN_DEBUG __FUNCTION__": IF_UP: func:%p(%p)\n",
-			hif->func, owner->data);
+		printk(KERN_DEBUG "%s: IF_UP: func:%p(%p)\n",
+			__FUNCTION__, hif->func, owner->data);
 	} else if (IF_TYPE(hif) == IF_DOWN) {
 		hif->func = downfunc;
 		own_hif = &owner->down;
-		printk(KERN_DEBUG __FUNCTION__": IF_DOWN: func:%p(%p)\n",
-			hif->func, owner->data);
+		printk(KERN_DEBUG "%s: IF_DOWN: func:%p(%p)\n",
+			__FUNCTION__, hif->func, owner->data);
 	} else {
 		int_errtxt("stat(%x)", hif->stat);
 		return(-EINVAL);

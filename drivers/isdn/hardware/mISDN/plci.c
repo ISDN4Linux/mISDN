@@ -1,4 +1,4 @@
-/* $Id: plci.c,v 1.1 2002/05/01 01:00:40 kkeil Exp $
+/* $Id: plci.c,v 1.2 2002/09/16 23:49:38 kkeil Exp $
  *
  */
 
@@ -133,8 +133,8 @@ int plciL4L3(Plci_t *plci, __u32 prim, int len, void *arg)
 	struct sk_buff *skb;
 
 	if (!(skb = alloc_skb(len + MY_RESERVE, GFP_ATOMIC))) {
-		printk(KERN_WARNING __FUNCTION__": no skb size %d+%d\n",
-			len, MY_RESERVE);
+		printk(KERN_WARNING "%s: no skb size %d+%d\n",
+			__FUNCTION__, len, MY_RESERVE);
 		return(-ENOMEM);
 	} else
 		skb_reserve(skb, MY_RESERVE);
