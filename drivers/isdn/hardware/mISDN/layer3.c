@@ -1,4 +1,4 @@
-/* $Id: layer3.c,v 0.1 2001/02/11 22:46:19 kkeil Exp $
+/* $Id: layer3.c,v 0.2 2001/02/11 22:57:23 kkeil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -14,7 +14,7 @@
 #include "hisax.h"
 #include "hisaxl3.h"
 
-const char *l3_revision = "$Revision: 0.1 $";
+const char *l3_revision = "$Revision: 0.2 $";
 
 static
 struct Fsm l3fsm = {NULL, 0, 0, NULL, NULL};

@@ -1,4 +1,4 @@
-/* $Id: layer2.c,v 0.1 2001/02/11 22:46:19 kkeil Exp $
+/* $Id: layer2.c,v 0.2 2001/02/11 22:57:23 kkeil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -12,7 +12,7 @@
 #include "hisaxl2.h"
 #include "debug.h"
 
-const char *l2_revision = "$Revision: 0.1 $";
+const char *l2_revision = "$Revision: 0.2 $";
 
 static void l2m_debug(struct FsmInst *fi, char *fmt, ...);
 

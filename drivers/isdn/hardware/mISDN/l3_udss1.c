@@ -1,4 +1,4 @@
-/* $Id: l3_udss1.c,v 0.1 2001/02/11 22:46:19 kkeil Exp $
+/* $Id: l3_udss1.c,v 0.2 2001/02/11 22:57:24 kkeil Exp $
  *
  * EURO/DSS1 D-channel protocol
  *
@@ -25,7 +25,7 @@ static hisaxobject_t u_dss1;
 
 
 extern char *HiSax_getrev(const char *revision);
-const char *dss1_revision = "$Revision: 0.1 $";
+const char *dss1_revision = "$Revision: 0.2 $";
 
 #define EXT_BEARER_CAPS 1
 

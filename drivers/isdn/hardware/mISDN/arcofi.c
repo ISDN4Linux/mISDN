@@ -1,4 +1,4 @@
-/* $Id: arcofi.c,v 0.1 2001/02/11 22:46:18 kkeil Exp $
+/* $Id: arcofi.c,v 0.2 2001/02/11 22:57:23 kkeil Exp $
  *
  * arcofi.c   Ansteuerung ARCOFI 2165
  *

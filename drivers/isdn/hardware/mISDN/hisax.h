@@ -1,4 +1,4 @@
-/* $Id: hisax.h,v 0.1 2001/02/11 22:46:19 kkeil Exp $
+/* $Id: hisax.h,v 0.2 2001/02/11 22:54:20 kkeil Exp $
  *
  *   Basic declarations, defines and prototypes
  *
@@ -299,6 +299,7 @@ struct isac_chip {
 #define FLG_ARCOFI_TIMER	10
 #define FLG_ARCOFI_ERROR	11
 #define FLG_HW_L1_UINT		12
+#define FLG_HW_INIT		13
 
 typedef struct _dchannel_t {
 	hisaxinstance_t	inst;

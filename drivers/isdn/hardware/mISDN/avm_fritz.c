@@ -1,4 +1,4 @@
-/* $Id: avm_fritz.c,v 0.1 2001/02/11 22:46:19 kkeil Exp $
+/* $Id: avm_fritz.c,v 0.2 2001/02/11 22:57:23 kkeil Exp $
  *
  * fritz_pci.c    low level stuff for AVM Fritz!PCI and ISA PnP isdn cards
  *              Thanks to AVM, Berlin for informations
@@ -18,7 +18,7 @@
 #include <linux/kernel_stat.h>
 #include <linux/interrupt.h>
 
-static const char *avm_pci_rev = "$Revision: 0.1 $";
+static const char *avm_pci_rev = "$Revision: 0.2 $";
 
 #define  AVM_FRITZ_PCI		1
 #define  AVM_FRITZ_PNP		2

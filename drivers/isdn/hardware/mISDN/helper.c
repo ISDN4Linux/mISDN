@@ -1,4 +1,4 @@
-/* $Id: helper.c,v 0.1 2001/02/11 22:46:19 kkeil Exp $
+/* $Id: helper.c,v 0.2 2001/02/11 22:57:23 kkeil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -21,6 +21,7 @@ discard_queue(struct sk_buff_head *q)
 	}
 	return(ret);
 }
+
 
 int
 init_dchannel(dchannel_t *dch) {
@@ -46,8 +47,6 @@ init_dchannel(dchannel_t *dch) {
 	dch->tx_idx = 0;
 	dch->next_skb = NULL;
 	dch->event = 0;
-	dch->tqueue.next = 0;
-	dch->tqueue.sync = 0;
 	dch->tqueue.data = dch;
 	skb_queue_head_init(&dch->rqueue);
 	return(0);
@@ -55,6 +54,9 @@ init_dchannel(dchannel_t *dch) {
 
 int
 free_dchannel(dchannel_t *dch) {
+
+	if (dch->tqueue.sync)
+		printk(KERN_ERR"free_dchannel tqueue.sync\n");
 	discard_queue(&dch->rqueue);
 	if (dch->rx_buf) {
 		kfree(dch->rx_buf);
@@ -102,6 +104,9 @@ init_bchannel(bchannel_t *bch) {
 
 int
 free_bchannel(bchannel_t *bch) {
+
+	if (bch->tqueue.sync)
+		printk(KERN_ERR"free_bchannel tqueue.sync\n");
 	discard_queue(&bch->rqueue);
 	if (bch->rx_buf) {
 		kfree(bch->rx_buf);

@@ -1,4 +1,4 @@
-/* $Id: isac.c,v 0.1 2001/02/11 22:46:19 kkeil Exp $
+/* $Id: isac.c,v 0.2 2001/02/11 22:57:24 kkeil Exp $
  *
  * isac.c   ISAC specific routines
  *
@@ -653,13 +653,13 @@ dbusy_timer_handler(dchannel_t *dch)
 void
 init_isac(dchannel_t *dch)
 {
+  	dch->writeisac(dch->inst.data, ISAC_MASK, 0xff);
 	dch->tqueue.routine = (void *) (void *) isac_bh;
 	dch->hw.isac.mon_tx = NULL;
 	dch->hw.isac.mon_rx = NULL;
 	dch->dbusytimer.function = (void *) dbusy_timer_handler;
 	dch->dbusytimer.data = (long) dch;
 	init_timer(&dch->dbusytimer);
-  	dch->writeisac(dch->inst.data, ISAC_MASK, 0xff);
   	dch->hw.isac.mocr = 0xaa;
 	if (test_bit(HW_IOM1, &dch->DFlags)) {
 		/* IOM 1 Mode */
@@ -680,6 +680,7 @@ init_isac(dchannel_t *dch)
 		dch->writeisac(dch->inst.data, ISAC_TIMR, 0x00);
 		dch->writeisac(dch->inst.data, ISAC_ADF1, 0x00);
 	}
+	isac_sched_event(dch, D_L1STATECHANGE);
 	ph_command(dch, ISAC_CMD_RS);
 	dch->writeisac(dch->inst.data, ISAC_MASK, 0x0);
 }
@@ -689,6 +690,8 @@ clear_pending_isac_ints(dchannel_t *dch)
 {
 	int val, eval;
 
+	/* Disable all IRQ */
+	dch->writeisac(dch->inst.data, ISAC_MASK, 0xFF);
 	val = dch->readisac(dch->inst.data, ISAC_STAR);
 	debugprint(&dch->inst, "ISAC STAR %x", val);
 	val = dch->readisac(dch->inst.data, ISAC_MODE);
@@ -704,7 +707,4 @@ clear_pending_isac_ints(dchannel_t *dch)
 	val = dch->readisac(dch->inst.data, ISAC_CIR0);
 	debugprint(&dch->inst, "ISAC CIR0 %x", val);
 	dch->hw.isac.ph_state = (val >> 2) & 0xf;
-	isac_sched_event(dch, D_L1STATECHANGE);
-	/* Disable all IRQ */
-	dch->writeisac(dch->inst.data, ISAC_MASK, 0xFF);
 }

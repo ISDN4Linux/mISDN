@@ -1,4 +1,4 @@
-/* $Id: layer2.h,v 0.1 2001/02/11 22:46:19 kkeil Exp $
+/* $Id: layer2.h,v 0.2 2001/02/11 22:54:20 kkeil Exp $
  *
  * Layer 2 defines
  *

@@ -1,4 +1,4 @@
-/* $Id: layer3.h,v 0.1 2001/02/11 22:46:19 kkeil Exp $
+/* $Id: layer3.h,v 0.2 2001/02/11 22:54:20 kkeil Exp $
  *
  * This file is (c) under GNU PUBLIC LICENSE
  *

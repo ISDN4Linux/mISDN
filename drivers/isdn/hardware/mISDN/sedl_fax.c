@@ -1,15 +1,14 @@
-/* $Id: sedl_fax.c,v 0.1 2001/02/11 22:46:19 kkeil Exp $
+/* $Id: sedl_fax.c,v 0.2 2001/02/11 22:57:24 kkeil Exp $
  *
  * sedl_fax.c  low level stuff for Sedlbauer Speedfax + cards
  *
- * Copyright (C) 1997,1998 Marcus Niemann (for the modifications to
- *                                         the original file asuscom.c)
- *           (C) 2000 Karsten Keil (kkeil@suse.de)
+ * Copyright  (C) 2000,2001 Karsten Keil (kkeil@suse.de)
  *
- * Author     Marcus Niemann (niemann@www-bib.fh-bielefeld.de)
- *            Karsten Keil (kkeil@suse.de)
+ * Author     Karsten Keil (kkeil@suse.de)
+ *
  *
  * Thanks to  Sedlbauer AG for informations
+ *            Marcus Niemann
  *            Edgar Toernig
  *
  * This file is (c) under GNU PUBLIC LICENSE
@@ -25,8 +24,7 @@
  * Important:
  * For the sedlbauer speed fax+ to work properly you have to download 
  * the firmware onto the card.
- * For example: hisaxctrl <DriverID> 9 ISAR.BIN
-*/
+ */
 
 #include <linux/config.h>
 #include "hisax.h"
@@ -40,7 +38,7 @@
 
 extern const char *CardType[];
 
-const char *Sedlfax_revision = "$Revision: 0.1 $";
+const char *Sedlfax_revision = "$Revision: 0.2 $";
 
 const char *Sedlbauer_Types[] =
 	{"None", "speed fax+", "speed fax+ pyramid", "speed fax+ pci"};
@@ -112,7 +110,7 @@ typedef struct _sedl_fax {
 #ifdef SPIN_DEBUG
 	void			*lock_adr;
 #endif
-	u_int			in_irq;
+	volatile u_int		in_irq;
 	struct isar_reg		ir;
 	dchannel_t		dch;
 	bchannel_t		bch[2];
@@ -245,15 +243,19 @@ do_sedl_interrupt(sedl_fax *sf)
 	if (val)
 		isac_interrupt(&sf->dch, val);
 	val = readreg(sf->addr, sf->isar, ISAR_IRQBIT);
-	if ((val & ISAR_IRQSTA) && --cnt) {
+	if ((val & ISAR_IRQSTA) && cnt) {
+		cnt--;
 		if (sf->dch.debug & L1_DEB_HSCX)
-			printk(KERN_DEBUG "ISAR IntStat after IntRoutine\n");
+			printk(KERN_DEBUG "ISAR IntStat after IntRoutine cpu%d\n",
+				smp_processor_id());
 		goto Start_ISAR;
 	}
 	val = readreg(sf->addr, sf->isac, ISAC_ISTA);
-	if (val && --cnt) {
+	if (val && cnt) {
+		cnt--;
 		if (sf->dch.debug & L1_DEB_ISAC)
-			printk(KERN_DEBUG "ISAC IntStat after IntRoutine\n");
+			printk(KERN_DEBUG "ISAC IntStat after IntRoutine cpu%d\n",
+				smp_processor_id());
 		goto Start_ISAC;
 	}
 	if (!cnt)
@@ -304,7 +306,6 @@ release_sedlbauer(sedl_fax *sf)
 		bytecnt = 16;
 	if (sf->cfg)
 		release_region(sf->cfg, bytecnt);
-	free_irq(sf->irq, sf);
 }
 
 static void
@@ -332,16 +333,31 @@ static int init_card(sedl_fax *sf)
 {
 	int irq_cnt, cnt = 3;
 	long flags;
+	u_int shared = SA_SHIRQ;
+	void *irq_func = speedfax_pci_interrupt;
 
-	irq_cnt = kstat_irqs(sf->irq);
-	printk(KERN_INFO "Sedlbauer speedfax: IRQ %d count %d\n", sf->irq, irq_cnt);
+	if (sf->subtyp == SEDL_SPEEDFAX_ISA) {
+		irq_func = speedfax_isa_interrupt;
+		shared = 0;
+	}
 	save_flags(flags);
+	irq_cnt = kstat_irqs(sf->irq);
+	printk(KERN_INFO "%s: IRQ %d count %d cpu%d\n",
+		sf->dch.inst.id, sf->irq, irq_cnt, smp_processor_id());
+	lock_dev(sf);
+	sf->in_irq = 1;
+	if (request_irq(sf->irq, irq_func, shared, "speedfax", sf)) {
+		printk(KERN_WARNING "HiSax: couldn't get interrupt %d\n",
+			sf->irq);
+		unlock_dev(sf);
+		return(-EIO);
+	}
 	while (cnt) {
-		lock_dev(sf);
 		clear_pending_isac_ints(&sf->dch);
 		init_isac(&sf->dch);
 		init_isar(&sf->bch[0]);
 		init_isar(&sf->bch[1]);
+		sf->in_irq = 0;
 		WriteISAC(sf, ISAC_MASK, 0);
 		/* RESET Receiver and Transmitter */
 		WriteISAC(sf, ISAC_CMDR, 0x41);
@@ -351,8 +367,9 @@ static int init_card(sedl_fax *sf)
 		/* Timeout 10ms */
 		schedule_timeout((10*HZ)/1000);
 		restore_flags(flags);
-		printk(KERN_INFO "Sedlbauer speedfax: IRQ %d count %d\n",
-			sf->irq, kstat_irqs(sf->irq));
+		printk(KERN_INFO "%s: IRQ %d count %d cpu%d\n",
+			sf->dch.inst.id, sf->irq, kstat_irqs(sf->irq), smp_processor_id());
+//		irq_cnt = kstat_irqs(sf->irq);
 		if (kstat_irqs(sf->irq) == irq_cnt) {
 			printk(KERN_WARNING
 			       "Sedlbauer speedfax: IRQ(%d) getting no interrupts during init %d\n",
@@ -366,8 +383,9 @@ static int init_card(sedl_fax *sf)
 		} else {
 			return(0);
 		}
+		lock_dev(sf);
 	}
-	restore_flags(flags);
+	unlock_dev(sf);
 	return(-EIO);
 }
 
@@ -500,14 +518,6 @@ setup_speedfax(sedl_fax *sf, u_int io_cfg, u_int irq_cfg)
 		sf->addr = sf->cfg + SEDL_PCI_ADR;
 		sf->isac = sf->cfg + SEDL_PCI_ISAC;
 		sf->isar = sf->cfg + SEDL_PCI_ISAR;
-		if (request_irq(sf->irq, speedfax_pci_interrupt, SA_SHIRQ,
-			"speedfax", sf)) {
-			printk(KERN_WARNING "HiSax: couldn't get interrupt %d\n",
-				sf->irq);
-			sf->irq = 0;
-			release_sedlbauer(sf);
-			return(-EIO);
-		}
 		byteout(sf->cfg + TIGER_RESET_ADDR, 0xff);
 		mdelay(1);
 		byteout(sf->cfg + TIGER_RESET_ADDR, 0x00);
@@ -522,14 +532,6 @@ setup_speedfax(sedl_fax *sf, u_int io_cfg, u_int irq_cfg)
 		sf->addr = sf->cfg + SEDL_ISA_ADR;
 		sf->isac = sf->cfg + SEDL_ISA_ISAC;
 		sf->isar = sf->cfg + SEDL_ISA_ISAR;
-		if (request_irq(sf->irq, speedfax_isa_interrupt, 0,
-			"speedfax", sf)) {
-			printk(KERN_WARNING "HiSax: couldn't get interrupt %d\n",
-				sf->irq);
-			sf->irq = 0;
-			release_sedlbauer(sf);
-			return(-EIO);
-		}
 	}
 	sf->bch[0].hw.isar.reg = &sf->ir;
 	sf->bch[1].hw.isar.reg = &sf->ir;
@@ -623,15 +625,28 @@ add_if(hisaxinstance_t *inst, int channel, hisaxif_t *hif) {
 }
 
 static int
-del_if(hisaxinstance_t *inst, hisaxif_t *hif) {
+del_if(hisaxinstance_t *inst, int channel, hisaxif_t *hif) {
 	int err;
+	sedl_fax *card = inst->data;
+	hisaxif_t ohif;
 
 	printk(KERN_DEBUG "speedfax del_if lay %d/%d %p/%p\n", hif->layer,
 		hif->stat, hif->func, hif->fdata);
 	if ((hif->func == inst->up.func) && (hif->fdata == inst->up.fdata)) {
+		ohif.protocol = inst->up.protocol;
+		ohif.layer = inst->up.layer;
 		inst->up.stat = IF_NOACTIV;
 		inst->up.protocol = ISDN_PID_NONE;
 		err = speedfax.ctrl(inst->st, MGR_ADDIF | REQUEST, &inst->up);
+		if (channel == 2) {
+			ohif.fdata = &card->dch;
+			ohif.func = ISAC_l1hw;
+			
+		} else {
+			ohif.fdata = &card->bch[channel];
+			ohif.fdata = isar_down;
+		}
+		err = speedfax.ctrl(inst->st, MGR_DELIF | REQUEST, &ohif);
 	} else {
 		printk(KERN_DEBUG "speedfax del_if no if found\n");
 		return(-EINVAL);
@@ -641,8 +656,9 @@ del_if(hisaxinstance_t *inst, hisaxif_t *hif) {
 
 static void
 release_card(sedl_fax *card) {
-
 	lock_dev(card);
+	card->in_irq = 1;
+	free_irq(card->irq, card);
 	free_isar(&card->bch[1]);
 	free_isar(&card->bch[0]);
 	free_isac(&card->dch);
@@ -651,13 +667,13 @@ release_card(sedl_fax *card) {
 	reset_speedfax(card);
 	WriteISAR(card, 0, ISAR_IRQBIT, 0);
 	WriteISAC(card, ISAC_MASK, 0xFF);
-	unlock_dev(card);
 	release_sedlbauer(card);
 	free_bchannel(&card->bch[1]);
 	free_bchannel(&card->bch[0]);
 	free_dchannel(&card->dch);
 	REMOVE_FROM_LISTBASE(card, cardlist);
 	kfree(card);
+	unlock_dev(card);
 	sedl_cnt--;
 	speedfax.refcnt--;
 }
@@ -669,8 +685,11 @@ speedfax_manager(void *data, u_int prim, void *arg) {
 	int i,channel = -1;
 	hisaxstack_t *st = data;
 
-	if (!data)
+	if (!data) {
+		printk(KERN_ERR "speedfax_manager no data prim %x arg %p\n",
+			prim, arg);
 		return(-EINVAL);
+	}
 	while(card) {
 		if (card->dch.inst.st == st) {
 			inst = &card->dch.inst;
@@ -689,8 +708,11 @@ speedfax_manager(void *data, u_int prim, void *arg) {
 		}
 		card = card->next;
 	}
-	if (channel<0)
+	if (channel<0) {
+		printk(KERN_ERR "speedfax_manager no channel data %p prim %x arg %p\n",
+			data, prim, arg);
 		return(-EINVAL);
+	}
 	switch(prim) {
 	    case MGR_ADDLAYER | CONFIRM:
 		if (!card) {
@@ -704,9 +726,9 @@ speedfax_manager(void *data, u_int prim, void *arg) {
 			card->dch.inst.st->protocols[3] = ISDN_PID_NONE;
 			card->dch.inst.st->protocols[4] = ISDN_PID_NONE;
 			return(0);
-		}
-		for (i=0;i<=MAX_LAYER;i++)
-			card->bch[channel].inst.st->protocols[i] = ISDN_PID_NONE;
+		} else
+			for (i=0;i<=MAX_LAYER;i++)
+				card->bch[channel].inst.st->protocols[i] = ISDN_PID_NONE;
 		break;
 	    case MGR_RELEASE | INDICATION:
 		if (!card) {
@@ -732,7 +754,7 @@ speedfax_manager(void *data, u_int prim, void *arg) {
 			printk(KERN_WARNING "speedfax_manager del interface request failed\n");
 			return(-ENODEV);
 		}
-		return(del_if(inst, arg));
+		return(del_if(inst, channel, arg));
 		break;
 	    default:
 		printk(KERN_WARNING "speedfax_manager prim %x not handled\n", prim);
