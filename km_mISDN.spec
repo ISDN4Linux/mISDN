@@ -9,9 +9,9 @@ Group:        unsorted
 Autoreqprov:  on
 Version:      1.0
 Summary:      modular ISDN driver architecture
-Source:       newmISDN-%{version}-%{release}.tar.bz2
+Source:       mISDN-%{version}-%{release}.tar.bz2
 #Patch:       isdn4k-utils.dif
-Buildroot:    /var/tmp/newmISDN.build
+Buildroot:    /var/tmp/mISDN.build
 
 %description
 This package provides the mISDN sourcecode for kernelmodules
