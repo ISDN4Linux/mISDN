@@ -1,4 +1,4 @@
-/* $Id: hisax_hw.h,v 0.4 2001/03/05 01:48:27 kkeil Exp $
+/* $Id: hisax_hw.h,v 0.5 2001/03/11 21:09:07 kkeil Exp $
  *
  *   Basic declarations, defines for HiSax hardware drivers
  *
@@ -225,6 +225,8 @@ int init_dchannel(dchannel_t *);
 int free_dchannel(dchannel_t *);
 int init_bchannel(bchannel_t *);
 int free_bchannel(bchannel_t *);
+
+void set_dchannel_pid(hisax_pid_t *, int, int);
 
 #ifdef __powerpc__
 #include <linux/pci.h>

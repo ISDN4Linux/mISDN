@@ -1,4 +1,4 @@
-/* $Id: helper.c,v 0.9 2001/03/05 23:13:19 kkeil Exp $
+/* $Id: helper.c,v 0.10 2001/03/11 21:09:07 kkeil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -182,6 +182,28 @@ int bprotocol2pid(void *bp, hisax_pid_t *pid) {
 		pid->global = *w;
 	}
 	return(0);
+}
+
+void
+set_dchannel_pid(hisax_pid_t *pid, int protocol, int layermask) {
+
+	if (!layermask)
+		layermask = ISDN_LAYER(0)| ISDN_LAYER(1) | ISDN_LAYER(2) |
+			ISDN_LAYER(3) | ISDN_LAYER(4);
+	
+	memset(pid, 0, sizeof(hisax_pid_t));
+	if (layermask & ISDN_LAYER(0))
+		pid->protocol[0] = ISDN_PID_L0_TE_S0;
+	if (layermask & ISDN_LAYER(1))
+		pid->protocol[1] = ISDN_PID_L1_TE_S0;
+	if (layermask & ISDN_LAYER(2))
+		pid->protocol[2] = ISDN_PID_L2_LAPD;
+	if (layermask & ISDN_LAYER(3)) {
+		if (protocol == 2)
+			pid->protocol[3] = ISDN_PID_L3_DSS1USER;
+	}
+	if (layermask & ISDN_LAYER(4))
+		pid->protocol[4] = ISDN_PID_L4_CAPI20;
 }
 
 int HasProtocol(hisaxobject_t *obj, int protocol) {

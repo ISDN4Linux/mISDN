@@ -1,4 +1,4 @@
-/* $Id: mISDNif.h,v 0.16 2001/03/11 21:05:21 kkeil Exp $
+/* $Id: mISDNif.h,v 0.17 2001/03/11 21:09:07 kkeil Exp $
  *
  */
 
@@ -465,6 +465,7 @@ typedef struct _hisaxobject {
 	struct _hisaxobject	*prev;
 	struct _hisaxobject	*next;
 	char			*name;
+	int			id;
 	int			refcnt;
 	hisax_pid_t		DPROTO;
 	hisax_pid_t		BPROTO;
