@@ -6,7 +6,7 @@ DESTDIR =
 KDIR := /usr/src/linux
 
 TARGET := newhisax
-TARGETS := Rules.make arch $(TARGET)
+TARGETS := Rules.make arch scripts .config include $(TARGET)
 TARGETDIR := drivers/isdn/hisax
 
 default: $(TARGETS)
@@ -16,17 +16,29 @@ all: $(TARGETS)
 Rules.make: $(KDIR)/Rules.make
 	cp -pf $(KDIR)/Rules.make .
 
+.config: $(KDIR)/.config
+	cp -pf $(KDIR)/.config .
+
 arch: $(KDIR)/arch
 	rm -f arch
 	ln -s $(KDIR)/arch .
 
+scripts: $(KDIR)/scripts
+	rm -f scripts
+	ln -s $(KDIR)/scripts
+
+include: $(KDIR)/include
+	rm -f include
+	ln -s $(KDIR)/include
+
 clean:
 	rm -f $(TARGETS) $(TARGETDIR)/.*.flags $(TARGETDIR)/*.o
-	rm -f $(TARGETDIR)/*~ include/linux/*~ *~ .kversion
+	rm -f $(TARGETDIR)/*~ newinclude/linux/*~ *~ .kversion
+	rm -f -r modules
 	
 $(TARGET):
 	$(MAKE) -f Makefile KDIR=$(KDIR) TARGETDIR=$(TARGETDIR) $(TARGET)
 
 install: $(TARGETS)
 	$(MAKE) -f Makefile KDIR=$(KDIR) TARGETDIR=$(TARGETDIR) install_mod
-
+	install newinclude/linux/hisaxif.h /usr/include/linux

@@ -55,7 +55,7 @@ obj-$(CONFIG_ISDN_DRV_HISAX) += hisaxl2.o
 obj-$(CONFIG_ISDN_DRV_HISAX) += l3udss1.o
 obj-$(CONFIG_ISDN_DRV_HISAX) += hisaxcapi.o
 
-
+M_OBJS := $(obj-m)
 
 include $(TOPDIR)/Rules.make
 
@@ -70,32 +70,32 @@ CERT = $(shell md5sum -c md5sums.asc >> /dev/null;echo $$?)
 
 hisaxcore.o: $(OBJ_core)
 	$(RM) $@
-	$(LD) -r -o $@ $(^:dummy=)
+	$(LD) -r -o $@ $(filter-out $(MODVERFILE) dummy ,$^)
 
 fritzpci.o: $(FRITZOBJ)
 	$(RM) $@
-	$(LD) -r -o $@ $(^:dummy=)
+	$(LD) -r -o $@ $(filter-out $(MODVERFILE) dummy ,$^)
 
 sedlfax.o: $(SEDLFAXOBJ)
 	$(RM) $@
-	$(LD) -r -o $@ $(^:dummy=)
+	$(LD) -r -o $@ $(filter-out $(MODVERFILE) dummy ,$^)
 
 hfcpci.o: $(HFC_PCIOBJ)
 	$(RM) $@
-	$(LD) -r -o $@ $(^:dummy=)
+	$(LD) -r -o $@ $(filter-out $(MODVERFILE) dummy ,$^)
 
 hisaxl1.o: $(OBJ_l1)
 	$(RM) $@
-	$(LD) -r -o $@ $(^:dummy=)
+	$(LD) -r -o $@ $(filter-out $(MODVERFILE) dummy ,$^)
 
 hisaxl2.o: $(OBJ_l2)
 	$(RM) $@
-	$(LD) -r -o $@ $(^:dummy=)
+	$(LD) -r -o $@ $(filter-out $(MODVERFILE) dummy ,$^)
 
 l3udss1.o: $(OBJ_l3udss1)
 	$(RM) $@
-	$(LD) -r -o $@ $(^:dummy=)
+	$(LD) -r -o $@ $(filter-out $(MODVERFILE) dummy ,$^)
 
 hisaxcapi.o: $(OBJ_capi)
 	$(RM) $@
-	$(LD) -r -o $@ $(^:dummy=)
+	$(LD) -r -o $@ $(filter-out $(MODVERFILE) dummy ,$^)

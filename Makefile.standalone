@@ -5,38 +5,45 @@ KDIR = /usr/src/linux
 
 DESTDIR =
 TARGET = 
-TARGETS := Rules.make arch $(TARGET)
+TARGETS := $(TARGET)
 TARGETMODDIR = "../misc"
 
 default: $(TARGETS)
 
 all: $(TARGETS)
 
-Rules.make: $(KDIR)/Rules.make
-	cp -pf $(KDIR)/Rules.make .
-
-arch: $(KDIR)/arch
-	rm -f arch
-	ln -s $(KDIR)/arch .
-	
-MYDIR := `pwd`
+MYDIR := $(PWD)
 
 TOPDIR := $(KDIR)
 include $(KDIR)/.config
 include $(KDIR)/Makefile
-TOPDIR := $(KDIR)
 
-CFLAGS := -I. -I $(MYDIR)/include/linux -I $(KDIR)/drivers/isdn/avmb1 -I $(KDIR)/include  $(CFLAGS) -DMODULE -DLINUX
+CFLAGS := -I. -I $(MYDIR)/newinclude -I $(KDIR)/drivers/isdn/avmb1 $(CFLAGS) -DLINUX
 
 ifdef CONFIG_MODVERSIONS
-CFLAGS += -DMODVERSIONS -include $(KDIR)/include/linux/modversions.h
+CFLAGS += -DMODULE -DMODVERSIONS -include $(MODVERFILE)
+else
+CFLAGS += -DMODULE
 endif
 
 
 MODLIB := $(DESTDIR)$(INSTALL_MOD_PATH)/lib/modules/$(KERNELRELEASE)
 
-newhisax: $(TARGETDIR)
-	$(MAKE) -C $(TARGETDIR) CFLAGS="$(CFLAGS) $(MODFLAGS)" MAKING_MODULES=1 modules
+newhisax: $(TARGETDIR) newhisax_mod
+	$(MAKE) -C $(TARGETDIR) CFLAGS="$(CFLAGS)" MAKING_MODULES=1 modules
+
+ifeq ($(PATCHLEVEL), 2)
+install: install_mod
+
+install_mod: modules_install
+
+newhisax_mod:
+	echo patchlevel $(PATCHLEVEL)
+	mkdir -p modules
+
+else
+newhisax_mod:
+	echo patchlevel $(PATCHLEVEL)
 
 install: install_mod
 
@@ -46,3 +53,4 @@ install_mod: $(MODLIB)/$(TARGETMODDIR)
 $(MODLIB)/$(TARGETMODDIR):
 	mkdir -p $(MODLIB)/$(TARGETMODDIR) 
 
+endif

@@ -1,4 +1,4 @@
-/* $Id: hisax_hw.h,v 0.7 2001/09/29 20:05:01 kkeil Exp $
+/* $Id: hisax_hw.h,v 0.8 2001/10/01 23:22:43 kkeil Exp $
  *
  *   Basic declarations, defines for HiSax hardware drivers
  *
@@ -160,7 +160,7 @@ struct isac_chip {
 	int mon_rxp;
 	struct arcofi_msg *arcofi_list;
 	struct timer_list arcofitimer;
-	struct wait_queue *arcofi_wait;
+	wait_queue_head_t arcofi_wait;
 	u_char arcofi_bc;
 	u_char arcofi_state;
 	u_char mocr;
