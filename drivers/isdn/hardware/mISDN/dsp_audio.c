@@ -1,6 +1,6 @@
-/* $Id: dsp_audio.c,v 1.2 2003/11/09 09:43:10 keil Exp $
+/* $Id: dsp_audio.c,v 1.3 2004/02/14 17:43:14 jolly Exp $
  *
- * Audio support data for ISDN4Linux.
+ * Audio support data for mISDN_dsp.
  *
  * Copyright 2002/2003 by Andreas Eversberg (jolly@jolly.de)
  *
@@ -15,7 +15,7 @@
 #include "dsp.h"
 
 /* ulaw[unsigned char] -> signed 16-bit */
-signed long dsp_audio_ulaw_to_s32[256] =
+s32 dsp_audio_ulaw_to_s32[256] =
 {
 	0xffff8284, 0xffff8684, 0xffff8a84, 0xffff8e84,
 	0xffff9284, 0xffff9684, 0xffff9a84, 0xffff9e84,
@@ -84,7 +84,7 @@ signed long dsp_audio_ulaw_to_s32[256] =
 };
 
 /* alaw[unsigned char] -> signed 16-bit */
-signed long dsp_audio_alaw_to_s32[256] =
+s32 dsp_audio_alaw_to_s32[256] =
 {
 	0x000013fc, 0xffffec04, 0x00000144, 0xfffffebc,
 	0x0000517c, 0xffffae84, 0x0000051c, 0xfffffae4,
@@ -152,10 +152,10 @@ signed long dsp_audio_alaw_to_s32[256] =
 	0x0000327c, 0xffffcd84, 0x0000032c, 0xfffffcd4
 };
 
-signed long *dsp_audio_law_to_s32;
+s32 *dsp_audio_law_to_s32;
 
 /* signed 16-bit -> law */
-unsigned char dsp_audio_s16_to_law[65536];
+u8 dsp_audio_s16_to_law[65536];
 
 /* table is used to generate s16_to_alaw */
 static short dsp_audio_alaw_relations[512] =
@@ -228,7 +228,7 @@ static short dsp_audio_alaw_relations[512] =
 
 
 /* alaw -> ulaw */
-unsigned char dsp_audio_alaw_to_ulaw[256] =
+u8 dsp_audio_alaw_to_ulaw[256] =
 {
 	0xab, 0x2b, 0xe3, 0x63, 0x8b, 0x0b, 0xc9, 0x49,
 	0xba, 0x3a, 0xf6, 0x76, 0x9b, 0x1b, 0xd7, 0x57,
@@ -264,7 +264,44 @@ unsigned char dsp_audio_alaw_to_ulaw[256] =
 	0xb5, 0x35, 0xee, 0x6e, 0x96, 0x16, 0xd2, 0x52
 };
 
-unsigned char silence;
+/* ulaw -> alaw */
+u8 dsp_audio_ulaw_to_alaw[256] =
+{
+	0xab, 0x55, 0xd5, 0x15, 0x95, 0x75, 0xf5, 0x35,
+	0xb5, 0x45, 0xc5, 0x05, 0x85, 0x65, 0xe5, 0x25,
+	0xa5, 0x5d, 0xdd, 0x1d, 0x9d, 0x7d, 0xfd, 0x3d,
+	0xbd, 0x4d, 0xcd, 0x0d, 0x8d, 0x6d, 0xed, 0x2d,
+	0xad, 0x51, 0xd1, 0x11, 0x91, 0x71, 0xf1, 0x31,
+	0xb1, 0x41, 0xc1, 0x01, 0x81, 0x61, 0xe1, 0x21,
+	0x59, 0xd9, 0x19, 0x99, 0x79, 0xf9, 0x39, 0xb9,
+	0x49, 0xc9, 0x09, 0x89, 0x69, 0xe9, 0x29, 0xa9,
+	0xd7, 0x17, 0x97, 0x77, 0xf7, 0x37, 0xb7, 0x47,
+	0xc7, 0x07, 0x87, 0x67, 0xe7, 0x27, 0xa7, 0xdf,
+	0x9f, 0x7f, 0xff, 0x3f, 0xbf, 0x4f, 0xcf, 0x0f,
+	0x8f, 0x6f, 0xef, 0x2f, 0x53, 0x13, 0x73, 0x33,
+	0xb3, 0x43, 0xc3, 0x03, 0x83, 0x63, 0xe3, 0x23,
+	0xa3, 0x5b, 0xdb, 0x1b, 0x9b, 0x7b, 0xfb, 0x3b,
+	0xbb, 0xbb, 0x4b, 0x4b, 0xcb, 0xcb, 0x0b, 0x0b,
+	0x8b, 0x8b, 0x6b, 0x6b, 0xeb, 0xeb, 0x2b, 0x2b,
+	0xab, 0x54, 0xd4, 0x14, 0x94, 0x74, 0xf4, 0x34,
+	0xb4, 0x44, 0xc4, 0x04, 0x84, 0x64, 0xe4, 0x24,
+	0xa4, 0x5c, 0xdc, 0x1c, 0x9c, 0x7c, 0xfc, 0x3c,
+	0xbc, 0x4c, 0xcc, 0x0c, 0x8c, 0x6c, 0xec, 0x2c,
+	0xac, 0x50, 0xd0, 0x10, 0x90, 0x70, 0xf0, 0x30,
+	0xb0, 0x40, 0xc0, 0x00, 0x80, 0x60, 0xe0, 0x20,
+	0x58, 0xd8, 0x18, 0x98, 0x78, 0xf8, 0x38, 0xb8,
+	0x48, 0xc8, 0x08, 0x88, 0x68, 0xe8, 0x28, 0xa8,
+	0xd6, 0x16, 0x96, 0x76, 0xf6, 0x36, 0xb6, 0x46,
+	0xc6, 0x06, 0x86, 0x66, 0xe6, 0x26, 0xa6, 0xde,
+	0x9e, 0x7e, 0xfe, 0x3e, 0xbe, 0x4e, 0xce, 0x0e,
+	0x8e, 0x6e, 0xee, 0x2e, 0x52, 0x12, 0x72, 0x32,
+	0xb2, 0x42, 0xc2, 0x02, 0x82, 0x62, 0xe2, 0x22,
+	0xa2, 0x5a, 0xda, 0x1a, 0x9a, 0x7a, 0xfa, 0x3a,
+	0xba, 0xba, 0x4a, 0x4a, 0xca, 0xca, 0x0a, 0x0a,
+	0x8a, 0x8a, 0x6a, 0x6a, 0xea, 0xea, 0x2a, 0x2a
+};
+
+u8 silence;
 
 
 /*****************************************************
@@ -276,7 +313,7 @@ dsp_audio_generate_s2law_table(void)
 {
 	int i, j;
 
-	if (options & DSP_OPT_ULAW) {
+	if (dsp_options & DSP_OPT_ULAW) {
 		/* generating ulaw-table */
 		i = j = 0;
 		while(i < 32768) {
@@ -308,8 +345,62 @@ dsp_audio_generate_s2law_table(void)
 }
 
 
+/*
+ * the seven bit sample is the number of every second alaw-sample ordered by
+ * aplitude. 0x00 is negative, 0x7f is positive amplitude.
+ */
+u8 dsp_audio_seven2law[128];
+u8 dsp_audio_law2seven[256];
+
+/********************************************************************
+ * generate table for conversion law from/to 7-bit alaw-like sample *
+ ********************************************************************/
+
+void
+dsp_audio_generate_seven(void)
+{
+	int i, j;
+	u8 spl;
+
+	/* conversion from law to seven bit audio */
+	i = 0;
+	while(i < 256) {
+		/* spl is the source: the law-sample (converted to alaw) */
+		spl = i;
+		if (dsp_options & DSP_OPT_ULAW)
+			spl = dsp_audio_ulaw_to_alaw[i];
+		/* find the 7-bit-sample */
+		j = 0;
+		while(j < 256) {
+			if (dsp_audio_alaw_relations[(j<<1)|1] == spl)
+				break;
+			j++;
+		}
+		if (j == 256) {
+			printk(KERN_WARNING "fatal error in %s: alaw-sample '0x%2x' not found in relations-table.\n", __FUNCTION__, spl);
+		}
+		/* write 7-bit audio value */
+		dsp_audio_law2seven[i] = j >> 1;
+		i++;
+	}
+
+	/* conversion from seven bit audio to law */
+	i = 0;
+	while(i < 128) {
+		/* find alaw-spl */
+		spl = dsp_audio_alaw_relations[(i<<2)|1];
+		/* convert to ulaw, if required */
+		if (dsp_options & DSP_OPT_ULAW)
+			spl = dsp_audio_alaw_to_ulaw[spl];
+		/* write 8-bit law sample */
+		dsp_audio_seven2law[i] = spl;
+		i++;
+	}
+}
+
+
 /* mix 2*law -> law */
-unsigned char dsp_audio_mix_law[65536];
+u8 dsp_audio_mix_law[65536];
 
 /******************************************************
  * generate mix table to mix two law samples into one *
@@ -319,7 +410,7 @@ void
 dsp_audio_generate_mix_table(void)
 {
 	int i, j;
-	signed long sample;
+	s32 sample;
 
 	i = 0;
 	while(i < 256) {
@@ -343,24 +434,24 @@ dsp_audio_generate_mix_table(void)
  * generate different volume changes *
  *************************************/
 
-static unsigned char dsp_audio_reduce8[256];
-static unsigned char dsp_audio_reduce7[256];
-static unsigned char dsp_audio_reduce6[256];
-static unsigned char dsp_audio_reduce5[256];
-static unsigned char dsp_audio_reduce4[256];
-static unsigned char dsp_audio_reduce3[256];
-static unsigned char dsp_audio_reduce2[256];
-static unsigned char dsp_audio_reduce1[256];
-static unsigned char dsp_audio_increase1[256];
-static unsigned char dsp_audio_increase2[256];
-static unsigned char dsp_audio_increase3[256];
-static unsigned char dsp_audio_increase4[256];
-static unsigned char dsp_audio_increase5[256];
-static unsigned char dsp_audio_increase6[256];
-static unsigned char dsp_audio_increase7[256];
-static unsigned char dsp_audio_increase8[256];
+static u8 dsp_audio_reduce8[256];
+static u8 dsp_audio_reduce7[256];
+static u8 dsp_audio_reduce6[256];
+static u8 dsp_audio_reduce5[256];
+static u8 dsp_audio_reduce4[256];
+static u8 dsp_audio_reduce3[256];
+static u8 dsp_audio_reduce2[256];
+static u8 dsp_audio_reduce1[256];
+static u8 dsp_audio_increase1[256];
+static u8 dsp_audio_increase2[256];
+static u8 dsp_audio_increase3[256];
+static u8 dsp_audio_increase4[256];
+static u8 dsp_audio_increase5[256];
+static u8 dsp_audio_increase6[256];
+static u8 dsp_audio_increase7[256];
+static u8 dsp_audio_increase8[256];
 
-static unsigned char *dsp_audio_volume_change[16] = {
+static u8 *dsp_audio_volume_change[16] = {
 	dsp_audio_reduce8,
 	dsp_audio_reduce7,
 	dsp_audio_reduce6,
@@ -382,7 +473,7 @@ static unsigned char *dsp_audio_volume_change[16] = {
 void
 dsp_audio_generate_volume_changes(void)
 {
-	register signed long sample;
+	register s32 sample;
 	int i;
 
 	i = 0;
@@ -459,9 +550,9 @@ dsp_audio_generate_volume_changes(void)
 void
 dsp_change_volume(struct sk_buff *skb, int volume)
 {
-	unsigned char *volume_change;
+	u8 *volume_change;
 	int i, ii;
-	unsigned char *p;
+	u8 *p;
 	int shift;
 
 	if (volume == 0)

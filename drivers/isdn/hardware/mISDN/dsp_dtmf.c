@@ -1,4 +1,4 @@
-/* $Id: dsp_dtmf.c,v 1.2 2003/11/09 09:43:10 keil Exp $
+/* $Id: dsp_dtmf.c,v 1.3 2004/02/14 17:43:14 jolly Exp $
  *
  * DTMF decoder.
  *
@@ -21,9 +21,9 @@
 /* For DTMF recognition:
  * 2 * cos(2 * PI * k / N) precalculated for all k
  */
-static signed long long cos2pik[NCOEFF] =
+static u64 cos2pik[NCOEFF] =
 {
-	/* k << 15 (source: hfc-4s document (www.colognechip.de)) */
+	/* k << 15 (source: hfc-4s/8s documentation (www.colognechip.de)) */
 	55960, 53912, 51402, 48438, 38146, 32650, 26170, 18630
 };
 
@@ -68,17 +68,18 @@ void dsp_dtmf_goertzel_init(dsp_t *dsp)
  * fmt - 0 = alaw, 1 = ulaw, 2 = coefficients from HFC DTMF hw-decoder
  */
 
-unsigned char 
-*dsp_dtmf_goertzel_decode(dsp_t *dsp, unsigned char *data, int len, int fmt)
+u8
+*dsp_dtmf_goertzel_decode(dsp_t *dsp, u8 *data, int len, int fmt)
 {
-	unsigned char what;
+	u8 what;
 	int size;
 	signed short *buf;
-	signed long sk, sk1, sk2;
+	s32 sk, sk1, sk2;
 	int k, n, i;
-	signed long result[NCOEFF], tresh, treshl;
+	s32 *hfccoeff;
+	s32 result[NCOEFF], tresh, treshl;
 	int lowgroup, highgroup;
-	signed long long cos2pik_;
+	s64 cos2pik_;
 
 	dsp->dtmf.digits[0] = '\0';
 
@@ -100,16 +101,26 @@ again:
 
 		case 2: /* HFC coefficients */
 		default:
-		if (len == 0)
-			return(dsp->dtmf.digits);
-		if (len < sizeof(result)) {
-			printk(KERN_ERR "%s: coefficients have invalid size.\n",
-				__FUNCTION__);
+		if (len < 64) {
+			if (len > 0)
+				printk(KERN_ERR "%s: coefficients have invalid size. (is=%d < must=%d)\n",
+					__FUNCTION__, len, 64);
 			return(dsp->dtmf.digits);
 		}
-		memcpy(result, data, sizeof(result));
-		data += sizeof(result);
-		len -= sizeof(result);
+		hfccoeff = (s32 *)data;
+		for (k = 0; k < NCOEFF; k++) {
+			sk2 = (*hfccoeff++)>>4;
+			sk = (*hfccoeff++)>>4;
+			if (sk>32767 || sk<-32767 || sk2>32767 || sk2<-32767)
+				printk(KERN_WARNING "DTMF-Detection overflow\n");
+			/* compute |X(k)|**2 */
+			result[k] =
+				 (sk * sk) -
+				 (((cos2pik[k] * sk) >> 15) * sk2) +
+				 (sk2 * sk2);
+		}
+		data += 64;
+		len -= 64;
 		goto coefficients;
 		break;
 	}
@@ -160,9 +171,9 @@ again:
 		goto storedigit;
 	}
 
-	if (dsp->debug & DEBUG_DSP_DTMFCOEFF)
-		printk(KERN_DEBUG "a %3ld %3ld %3ld %3ld %3ld %3ld %3ld %3ld"
-			" tr:%3ld r %3ld %3ld %3ld %3ld %3ld %3ld %3ld %3ld\n",
+	if (dsp_debug & DEBUG_DSP_DTMFCOEFF)
+		printk(KERN_DEBUG "a %3d %3d %3d %3d %3d %3d %3d %3d"
+			" tr:%3d r %3d %3d %3d %3d %3d %3d %3d %3d\n",
 			result[0]/10000, result[1]/10000, result[2]/10000,
 			result[3]/10000, result[4]/10000, result[5]/10000,
 			result[6]/10000, result[7]/10000, tresh/10000,
@@ -208,7 +219,7 @@ again:
 		what = dtmf_matrix[lowgroup][highgroup];
 
 storedigit:
-	if (what && (dsp->debug & DEBUG_DSP_DTMF))
+	if (what && (dsp_debug & DEBUG_DSP_DTMF))
 		printk(KERN_DEBUG "DTMF what: %c\n", what);
 
 	if (dsp->dtmf.lastwhat!=what)
@@ -219,7 +230,7 @@ storedigit:
 		if (dsp->dtmf.lastdigit!=what) {
 			dsp->dtmf.lastdigit = what;
 			if (what) {
-				if (dsp->debug & DEBUG_DSP_DTMF)
+				if (dsp_debug & DEBUG_DSP_DTMF)
 					printk(KERN_DEBUG "DTMF digit: %c\n",
 						what);
 				if ((strlen(dsp->dtmf.digits)+1) <sizeof(dsp->dtmf.digits)) {

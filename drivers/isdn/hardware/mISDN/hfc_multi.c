@@ -78,7 +78,7 @@
 	Valid is 8, 16, 32, 64, 128, 256.
  */
 
-// debug using register map (never use this, it will flood your system log)
+/* debug using register map (never use this, it will flood your system log) */
 //#define HFC_REGISTER_MAP
 
 #include <linux/config.h>
@@ -100,7 +100,7 @@
 
 extern const char *CardType[];
 
-static const char *hfcmulti_revision = "$Revision: 1.4 $";
+static const char *hfcmulti_revision = "$Revision: 1.5 $";
 
 static int HFC_cnt;
 
@@ -148,11 +148,9 @@ static const PCI_ENTRY id_list[] =
 	{0x1397, 0x1397, 0x16B8, 0xB522, VENDOR_CCD,
 	 "HFC-8S OEM IOB8ST", 8, 1, 0},
 	{0x1397, 0x1397, 0x30B1, 0xB523, VENDOR_CCD,
-	 "HFC-E1 OEM IOB1E1", 1, 0, 0},
+	 "HFC-E1 OEM IOB1E1", 1, 0, 0}, /* E1 only supports single clock */
 	{0, 0, 0, 0, NULL, NULL, 0, 0, 0},
 };
-#warning COLOGNE welcher takt beim GUDE-E1-board ?
-#warning COLOGNE gibt es ein E1 eval ?
 
 
 /****************/
@@ -241,9 +239,10 @@ release_io_hfcmulti(hfc_multi_t *hc)
 static int
 init_chip(hfc_multi_t *hc)
 {
-	unsigned long val, val2 = 0, rev;
+	u_long val, val2 = 0, rev;
 	int cnt = 0;
 	int i;
+	u_char r_conf_en;
 
 	/* reset all registers */
 	memset(&hc->hw, 0, sizeof(hfcmulti_hw_t));
@@ -319,8 +318,8 @@ init_chip(hfc_multi_t *hc)
 		HFC_outb(hc, R_PCM_MO1, 0x20);
 	HFC_outb(hc, R_PCM_MO0, hc->hw.r_pcm_mo0 | 0x00);
 	while (i < 256) {
-		HFC_outb(hc, R_SLOT, i);
-		HFC_outb(hc, A_SL_CFG, 0);
+		HFC_outb_(hc, R_SLOT, i);
+		HFC_outb_(hc, A_SL_CFG, 0);
 		i++;
 	}
 
@@ -362,6 +361,13 @@ init_chip(hfc_multi_t *hc)
 		HFC_outb(hc, R_DTMF_N, 102-1);
 		hc->hw.r_irqmsk_misc |= V_DTMF_IRQMSK;
 	}
+
+	/* conference engine */
+	if (test_bit(HFC_CHIP_ULAW, &hc->chip))
+		r_conf_en = V_CONF_EN | V_ULAW;
+	else
+		r_conf_en = V_CONF_EN;
+	HFC_outb(hc, R_CONF_EN, r_conf_en);
 
 	/* set master clock */
 	if (hc->masterclk >= 0) {
@@ -422,7 +428,6 @@ hfcmulti_leds(hfc_multi_t *hc)
 		break;
 	}
 }
-#warning COLOGNE ansteuerung der LEDS 
 
 
 /**************************/
@@ -465,11 +470,11 @@ hfcmulti_dtmf(hfc_multi_t *hc)
 		while(co < 8) {
 			/* read W(n-1) coefficient */
 			addr = hc->DTMFbase + ((co<<7) | (ch<<2));
-			HFC_outb(hc, R_RAM_ADDR0, addr);
-			HFC_outb(hc, R_RAM_ADDR1, addr>>8);
-			HFC_outb(hc, R_RAM_ADDR2, (addr>>16) | V_ADDR_INC);
-			w_float = HFC_inb(hc, R_RAM_DATA);
-			w_float |= (HFC_inb(hc, R_RAM_DATA) << 8);
+			HFC_outb_(hc, R_RAM_ADDR0, addr);
+			HFC_outb_(hc, R_RAM_ADDR1, addr>>8);
+			HFC_outb_(hc, R_RAM_ADDR2, (addr>>16) | V_ADDR_INC);
+			w_float = HFC_inb_(hc, R_RAM_DATA);
+			w_float |= (HFC_inb_(hc, R_RAM_DATA) << 8);
 			if (debug & DEBUG_HFCMULTI_DTMF)
 				printk(" %04x", w_float);
 
@@ -487,8 +492,8 @@ hfcmulti_dtmf(hfc_multi_t *hc)
 			coeff[co<<1] = mantissa;
 
 			/* read W(n) coefficient */
-			w_float = HFC_inb(hc, R_RAM_DATA);
-			w_float |= (HFC_inb(hc, R_RAM_DATA) << 8);
+			w_float = HFC_inb_(hc, R_RAM_DATA);
+			w_float |= (HFC_inb_(hc, R_RAM_DATA) << 8);
 			if (debug & DEBUG_HFCMULTI_DTMF)
 				printk(" %04x", w_float);
 
@@ -509,8 +514,7 @@ hfcmulti_dtmf(hfc_multi_t *hc)
 		if (debug & DEBUG_HFCMULTI_DTMF)
 			printk("\n");
 		if (hc->chan[ch].dtmf_skb) {
-#warning
-//			printk(KERN_WARNING "%s: dtmf_skb still exist\n", __FUNCTION__);
+			printk(KERN_WARNING "%s: dtmf_skb still exist\n", __FUNCTION__);
 			ch++;
 			continue;
 		}
@@ -527,7 +531,7 @@ hfcmulti_dtmf(hfc_multi_t *hc)
 	/* restart DTMF processing */
 	hc->dtmf = dtmf;
 	if (dtmf)
-		HFC_outb(hc, R_DTMF, hc->hw.r_dtmf | V_RST_DTMF);
+		HFC_outb_(hc, R_DTMF, hc->hw.r_dtmf | V_RST_DTMF);
 }
 
 
@@ -543,6 +547,7 @@ hfcmulti_tx(hfc_multi_t *hc, int ch, dchannel_t *dch, bchannel_t *bch)
 	int Fspace, f1, f2;
 	unsigned char *d, *dd, *buf = NULL;
 	int *len = NULL, *idx = NULL; /* = NULL, to make GCC happy */
+	int txpending, slot_tx;
 	int hdlc = 0;
 
 	/* get skb, fifo & mode */
@@ -559,17 +564,27 @@ hfcmulti_tx(hfc_multi_t *hc, int ch, dchannel_t *dch, bchannel_t *bch)
 		if (bch->protocol == ISDN_PID_L1_B_64HDLC)
 			hdlc = 1;
 	}
-	if (!(*len))
+	txpending = hc->chan[ch].txpending;
+	slot_tx = hc->chan[ch].slot_tx;
+	if ((!(*len)) && txpending!=1)
 		return; /* no data */
 
+//printk("debug: data: len = %d, txpending = %d!!!!\n", *len, txpending);
 	/* lets see how much data we will have left in buffer */
-	HFC_outb(hc, R_FIFO, ch<<1);
-	HFC_wait(hc);
+	HFC_outb_(hc, R_FIFO, ch<<1);
+	HFC_wait_(hc);
+	if (txpending == 2) {
+		/* reset fifo */
+		HFC_outb_(hc, R_INC_RES_FIFO, V_RES_F);
+		HFC_wait_(hc);
+		HFC_outb(hc, A_SUBCH_CFG, 0);
+		txpending = 1;
+	}
 next_frame:
 	if (hdlc) {
-		f1 = HFC_inb(hc, A_F1);
-		f2 = HFC_inb(hc, A_F2);
-		while (f2 != (temp=HFC_inb(hc, A_F2))) {
+		f1 = HFC_inb_(hc, A_F1);
+		f2 = HFC_inb_(hc, A_F2);
+		while (f2 != (temp=HFC_inb_(hc, A_F2))) {
 			if (debug & DEBUG_HFCMULTI_FIFO)
 				printk(KERN_DEBUG "%s: reread f2 because %d!=%d\n", __FUNCTION__, temp, f2);
 			f2 = temp; /* repeat until F2 is equal */
@@ -597,9 +612,9 @@ next_frame:
 		if (Fspace == 0)
 			return;
 	}
-	z1 = HFC_inw(hc, A_Z1) - hc->Zmin;
-	z2 = HFC_inw(hc, A_Z2) - hc->Zmin;
-	while(z2 != (temp=(HFC_inw(hc, A_Z2) - hc->Zmin))) {
+	z1 = HFC_inw_(hc, A_Z1) - hc->Zmin;
+	z2 = HFC_inw_(hc, A_Z2) - hc->Zmin;
+	while(z2 != (temp=(HFC_inw_(hc, A_Z2) - hc->Zmin))) {
 		if (debug & DEBUG_HFCMULTI_FIFO)
 			printk(KERN_DEBUG "%s: reread z2 because %d!=%d\n", __FUNCTION__, temp, z2);
 		z2 = temp; /* repeat unti Z2 is equal */
@@ -610,6 +625,36 @@ next_frame:
 	/* buffer too full, there must be at least one more byte for 0-volume */
 	if (Zspace < 4) /* just to be safe */
 		return;
+
+	/* if no data */
+	if (!(*len)) {
+		if (z1 == z2) { /* empty */
+			/* if done with FIFO audio data during PCM connection */
+			if (!hdlc && txpending && slot_tx>=0) {
+				/* connect slot */
+				HFC_outb(hc, A_CON_HDLC, 0xc0 | 0x00 | V_HDLC_TRP | V_IFF);
+				HFC_outb_(hc, R_FIFO, ch<<1 | 1);
+				HFC_wait_(hc);
+				HFC_outb(hc, A_CON_HDLC, 0xc0 | 0x00 | V_HDLC_TRP | V_IFF);
+				HFC_outb_(hc, R_FIFO, ch<<1);
+				HFC_wait_(hc);
+			}
+			txpending = hc->chan[ch].txpending = 0;
+		}
+		return; /* no data */
+	}
+
+	/* if audio data */
+	if (!hdlc && !txpending && slot_tx>=0) {
+		/* disconnect slot */
+		HFC_outb(hc, A_CON_HDLC, 0x80 | 0x00 | V_HDLC_TRP | V_IFF);
+		HFC_outb_(hc, R_FIFO, ch<<1 | 1);
+		HFC_wait_(hc);
+		HFC_outb(hc, A_CON_HDLC, 0x80 | 0x00 | V_HDLC_TRP | V_IFF);
+		HFC_outb_(hc, R_FIFO, ch<<1);
+		HFC_wait_(hc);
+	}
+	txpending = hc->chan[ch].txpending = 1;
 
 	/* fill fifo to what we have left */
 	i = *idx;
@@ -625,7 +670,7 @@ next_frame:
 	dd = d + ((ii-i)&0xfffc);
 	i += (ii-i) & 0xfffc;
 	while(d != dd) {
-		HFC_outl(hc, A_FIFO_DATA0, *((unsigned long *)d));
+		HFC_outl_(hc, A_FIFO_DATA0, *((unsigned long *)d));
 //		if (debug & DEBUG_HFCMULTI_FIFO)
 //			printk("%02x %02x %02x %02x ", d[0], d[1], d[2], d[3]);
 		d+=4;
@@ -633,7 +678,7 @@ next_frame:
 #endif
 	dd = d + (ii-i);
 	while(d != dd) {
-		HFC_outb(hc, A_FIFO_DATA0, *d);
+		HFC_outb_(hc, A_FIFO_DATA0, *d);
 //		if (debug & DEBUG_HFCMULTI_FIFO)
 //			printk("%02x ", d[0]);
 		d++;
@@ -651,8 +696,8 @@ next_frame:
 	/* if all data has been written */
 	if (hdlc) {
 		/* increment f-counter */
-		HFC_outb(hc, R_INC_RES_FIFO, V_INC_F);
-		HFC_wait(hc);
+		HFC_outb_(hc, R_INC_RES_FIFO, V_INC_F);
+		HFC_wait_(hc);
 	}
 	if (dch) {
 		/* check for next frame */
@@ -689,7 +734,7 @@ next_frame:
 	 * no more data at all. this prevents sending an undefined value.
 	 */
 	if (!hdlc)
-		HFC_outb(hc, A_FIFO_DATA0_NOINC, silence);
+		HFC_outb_(hc, A_FIFO_DATA0_NOINC, silence);
 }
 
 
@@ -724,29 +769,29 @@ hfcmulti_rx(hfc_multi_t *hc, int ch, dchannel_t *dch, bchannel_t *bch)
 	}
 
 	/* lets see how much data we received */
-	HFC_outb(hc, R_FIFO, (ch<<1)|1);
-	HFC_wait(hc);
+	HFC_outb_(hc, R_FIFO, (ch<<1)|1);
+	HFC_wait_(hc);
 next_frame:
 #if 0
 	/* set Z2(F1) */
-	HFC_outb(hc, R_RAM_SZ, hc->hw.r_ram_sz & ~V_FZ_MD);
+	HFC_outb_(hc, R_RAM_SZ, hc->hw.r_ram_sz & ~V_FZ_MD);
 #endif
 	if (hdlc) {
-		f1 = HFC_inb(hc, A_F1);
-		while (f1 != (temp=HFC_inb(hc, A_F1))) {
+		f1 = HFC_inb_(hc, A_F1);
+		while (f1 != (temp=HFC_inb_(hc, A_F1))) {
 			if (debug & DEBUG_HFCMULTI_FIFO)
 				printk(KERN_DEBUG "%s: reread f1 because %d!=%d\n", __FUNCTION__, temp, f1);
 			f1 = temp; /* repeat until F1 is equal */
 		}
-		f2 = HFC_inb(hc, A_F2);
+		f2 = HFC_inb_(hc, A_F2);
 	}
-	z1 = HFC_inw(hc, A_Z1) - hc->Zmin;
-	while(z1 != (temp=(HFC_inw(hc, A_Z1) - hc->Zmin))) {
+	z1 = HFC_inw_(hc, A_Z1) - hc->Zmin;
+	while(z1 != (temp=(HFC_inw_(hc, A_Z1) - hc->Zmin))) {
 		if (debug & DEBUG_HFCMULTI_FIFO)
 			printk(KERN_DEBUG "%s: reread z2 because %d!=%d\n", __FUNCTION__, temp, z2);
 		z1 = temp; /* repeat unti Z1 is equal */
 	}
-	z2 = HFC_inw(hc, A_Z2) - hc->Zmin;
+	z2 = HFC_inw_(hc, A_Z2) - hc->Zmin;
 	Zsize = z1-z2;
 	if (hdlc && f1!=f2) /* complete hdlc frame */
 		Zsize++;
@@ -767,30 +812,29 @@ next_frame:
 		if ((ii + *idx) > max) {
 			printk(KERN_DEBUG "%s: hdlc-frame too large.\n", __FUNCTION__);
 			*idx = 0;
-			HFC_outb(hc, R_INC_RES_FIFO, V_RES_F);
-			HFC_wait(hc);
+			HFC_outb_(hc, R_INC_RES_FIFO, V_RES_F);
+			HFC_wait_(hc);
 			return;
 		}
 		d = buf + *idx;
 #ifdef FIFO_32BIT_ACCESS
 		dd = d + (ii&0xfffc);
 		while(d != dd) {
-			*((unsigned long *)d) = HFC_inl(hc, A_FIFO_DATA0);
-//#warning *****************
-//printk("%02x %02x %02x %02x ", d[0], d[1], d[2], d[3]);
+			*((unsigned long *)d) = HFC_inl_(hc, A_FIFO_DATA0);
 			d+=4;
 		}
-//printk("\n");
-#endif
 		dd = d + (ii&0x0003);
+#else
+		dd = d + ii;
+#endif
 		while(d != dd) {
-			*d++ = HFC_inb(hc, A_FIFO_DATA0);
+			*d++ = HFC_inb_(hc, A_FIFO_DATA0);
 		}
 		*idx += ii;
 		if (f1 != f2) {
 			/* increment Z2,F2-counter */
-			HFC_outb(hc, R_INC_RES_FIFO, V_INC_F);
-			HFC_wait(hc);
+			HFC_outb_(hc, R_INC_RES_FIFO, V_INC_F);
+			HFC_wait_(hc);
 			/* check size */
 			if (*idx < 4) {
 				printk(KERN_DEBUG "%s: Frame below minimum size\n", __FUNCTION__);
@@ -836,8 +880,8 @@ next_frame:
 			ii = MAX_DATA_MEM;
 		if (!(skb = alloc_stack_skb(ii, bch->up_headerlen))) {
 			printk(KERN_DEBUG "%s: No mem for skb\n", __FUNCTION__);
-			HFC_outb(hc, R_INC_RES_FIFO, V_RES_F);
-			HFC_wait(hc);
+			HFC_outb_(hc, R_INC_RES_FIFO, V_RES_F);
+			HFC_wait_(hc);
 			return;
 		}
 		if (debug & DEBUG_HFCMULTI_FIFO)
@@ -847,13 +891,13 @@ next_frame:
 #ifdef FIFO_32BIT_ACCESS
 		dd = d + (ii&0xfffc);
 		while(d != dd) {
-			*((unsigned long *)d) = HFC_inl(hc, A_FIFO_DATA0);
+			*((unsigned long *)d) = HFC_inl_(hc, A_FIFO_DATA0);
 			d+=4;
 		}
 #endif
 		dd = d + (ii&0x0003);
 		while(d != dd) {
-			*d++ = HFC_inb(hc, A_FIFO_DATA0);
+			*d++ = HFC_inb_(hc, A_FIFO_DATA0);
 		}
 		if (dch) {
 			/* schedule D-channel event */
@@ -900,8 +944,8 @@ hfcmulti_interrupt(int intno, void *dev_id, struct pt_regs *regs)
 		return(IRQ_NONE);
 	}
 
-	status = HFC_inb(hc, R_STATUS);
-	r_irq_statech = HFC_inb(hc, R_IRQ_STATECH);
+	status = HFC_inb_(hc, R_STATUS);
+	r_irq_statech = HFC_inb_(hc, R_IRQ_STATECH);
 	if (!r_irq_statech && !(status & (V_DTMF_STA | V_LOST_STA | V_EXT_IRQSTA | V_MISC_IRQSTA | V_FR_IRQSTA))) {
 		/* irq is not for us */
 		goto irq_notforus;
@@ -936,7 +980,7 @@ hfcmulti_interrupt(int intno, void *dev_id, struct pt_regs *regs)
 		if (hc->type == 1) {
 			/* state machine */
 			dch = hc->chan[16].dch;
-			dch->ph_state = HFC_inb(hc, R_E1_RD_STA) & 0x7;
+			dch->ph_state = HFC_inb_(hc, R_E1_RD_STA) & 0x7;
 			dchannel_sched_event(dch, D_L1STATECHANGE);
 			if (debug & DEBUG_HFCMULTI_STATE)
 				printk(KERN_DEBUG "%s: E1 newstate %x\n", __FUNCTION__, dch->ph_state);
@@ -946,7 +990,7 @@ hfcmulti_interrupt(int intno, void *dev_id, struct pt_regs *regs)
 			while(ch < 32) {
 				if ((dch = hc->chan[ch].dch)) {
 					if (r_irq_statech & 1) {
-						HFC_outb(hc, R_ST_SEL, hc->chan[ch].port);
+						HFC_outb_(hc, R_ST_SEL, hc->chan[ch].port);
 						dch->ph_state = HFC_inb(hc, A_ST_RD_STATE) & 0x0f;
 						dchannel_sched_event(dch, D_L1STATECHANGE);
 						if (debug & DEBUG_HFCMULTI_STATE)
@@ -967,7 +1011,7 @@ hfcmulti_interrupt(int intno, void *dev_id, struct pt_regs *regs)
 	}
 	if (status & V_MISC_IRQSTA) {
 		/* misc IRQ */
-		r_irq_misc = HFC_inb(hc, R_IRQ_MISC);
+		r_irq_misc = HFC_inb_(hc, R_IRQ_MISC);
 		if (r_irq_misc & V_TI_IRQ) {
 			/* -> timer IRQ */
 			ch = 0;
@@ -999,7 +1043,7 @@ hfcmulti_interrupt(int intno, void *dev_id, struct pt_regs *regs)
 			if (hc->created[0]) {
 				if (test_bit(HFC_CFG_REPORT_LOS, &hc->chan[16].cfg)) {
 					/* LOS */
-					temp = HFC_inb(hc, R_RX_STA0) & V_SIG_LOS;
+					temp = HFC_inb_(hc, R_RX_STA0) & V_SIG_LOS;
 					if (!temp && hc->chan[16].los)
 						dchannel_sched_event(dch, D_LOS);
 					if (temp && !hc->chan[16].los)
@@ -1008,7 +1052,7 @@ hfcmulti_interrupt(int intno, void *dev_id, struct pt_regs *regs)
 				}
 				if (test_bit(HFC_CFG_REPORT_AIS, &hc->chan[16].cfg)) {
 					/* AIS */
-					temp = HFC_inb(hc, R_RX_STA0) & V_AIS;
+					temp = HFC_inb_(hc, R_RX_STA0) & V_AIS;
 					if (!temp && hc->chan[16].ais)
 						dchannel_sched_event(dch, D_AIS);
 					if (!temp && hc->chan[16].ais)
@@ -1017,16 +1061,16 @@ hfcmulti_interrupt(int intno, void *dev_id, struct pt_regs *regs)
 				}
 				if (test_bit(HFC_CFG_REPORT_SLIP, &hc->chan[16].cfg)) {
 					/* SLIP */
-					temp = HFC_inb(hc, R_SLIP) & V_FOSLIP_RX;
+					temp = HFC_inb_(hc, R_SLIP) & V_FOSLIP_RX;
 					if (!temp && hc->chan[16].slip_rx)
 						dchannel_sched_event(dch, D_SLIP_RX);
 					hc->chan[16].slip_rx = temp;
-					temp = HFC_inb(hc, R_SLIP) & V_FOSLIP_TX;
+					temp = HFC_inb_(hc, R_SLIP) & V_FOSLIP_TX;
 					if (!temp && hc->chan[16].slip_tx)
 						dchannel_sched_event(dch, D_SLIP_TX);
 					hc->chan[16].slip_tx = temp;
 				}
-				temp = HFC_inb(hc, R_JATT_DIR);
+				temp = HFC_inb_(hc, R_JATT_DIR);
 				switch(!hc->chan[16].sync) {
 					case 0:
 					if ((temp&0x60) == 0x60) {
@@ -1047,7 +1091,7 @@ hfcmulti_interrupt(int intno, void *dev_id, struct pt_regs *regs)
 						break;
 					}
 					check_framesync:
-					temp = HFC_inb(hc, R_RX_STA0);
+					temp = HFC_inb_(hc, R_RX_STA0);
 					if (temp == 0x27) {
 						if (debug & DEBUG_HFCMULTI_SYNC)
 							printk(KERN_DEBUG "%s: E1 now in frame sync\n", __FUNCTION__);
@@ -1062,7 +1106,7 @@ hfcmulti_interrupt(int intno, void *dev_id, struct pt_regs *regs)
 						hc->chan[16].sync = 0;
 						break;
 					}
-					temp = HFC_inb(hc, R_RX_STA0);
+					temp = HFC_inb_(hc, R_RX_STA0);
 					if (temp != 0x27) {
 						if (debug & DEBUG_HFCMULTI_SYNC)
 							printk(KERN_DEBUG "%s: E1 lost frame sync\n", __FUNCTION__);
@@ -1081,11 +1125,11 @@ hfcmulti_interrupt(int intno, void *dev_id, struct pt_regs *regs)
 	}
 	if (status & V_FR_IRQSTA) {
 		/* FIFO IRQ */
-		r_irq_oview = HFC_inb(hc, R_IRQ_OVIEW);
+		r_irq_oview = HFC_inb_(hc, R_IRQ_OVIEW);
 		i = 0;
 		while(i < 8) {
 			if (r_irq_oview & (1 << i)) {
-				r_irq_fifo_bl = HFC_inb(hc, R_IRQ_FIFO_BL0 + i);
+				r_irq_fifo_bl = HFC_inb_(hc, R_IRQ_FIFO_BL0 + i);
 				j = 0;
 				while(j < 8) {
 					ch = (i<<2) + (j>>1);
@@ -1094,16 +1138,16 @@ hfcmulti_interrupt(int intno, void *dev_id, struct pt_regs *regs)
 						if (hc->created[hc->chan[ch].port]) {
 							hfcmulti_tx(hc, ch, dch, NULL);
 							/* start fifo */
-							HFC_outb(hc, R_FIFO, 0);
-							HFC_wait(hc);
+							HFC_outb_(hc, R_FIFO, 0);
+							HFC_wait_(hc);
 						}
 						if ((bch = hc->chan[ch].bch))
 						if (hc->created[hc->chan[ch].port]) {
 							if (bch->protocol != ISDN_PID_NONE) {
 								hfcmulti_tx(hc, ch, NULL, bch);
 								/* start fifo */
-								HFC_outb(hc, R_FIFO, 0);
-								HFC_wait(hc);
+								HFC_outb_(hc, R_FIFO, 0);
+								HFC_wait_(hc);
 							}
 						}
 					}
@@ -1167,48 +1211,79 @@ hfcmulti_dbusy_timer(hfc_multi_t *hc)
  * 
  */
 static int
-mode_hfcmulti(hfc_multi_t *hc, int ch, int protocol, int slot, int dir)
+mode_hfcmulti(hfc_multi_t *hc, int ch, int protocol, int slot_tx, int bank_tx, int slot_rx, int bank_rx)
 {
-	int flow = 0, routing = 0;
-	int oslot = hc->chan[ch].slot;
+	int flow_tx = 0, flow_rx = 0, routing = 0;
+	int oslot_tx = hc->chan[ch].slot_tx;
+	int oslot_rx = hc->chan[ch].slot_rx;
 	int conf = hc->chan[ch].conf;
 
 	if (debug & DEBUG_HFCMULTI_MODE)
-		printk(KERN_DEBUG "%s: channel %d protocol %x slot %d dir %d\n", __FUNCTION__, ch, protocol, slot, dir);
+		printk(KERN_DEBUG "%s: channel %d protocol %x slot %d bank %d (TX) slot %d bank %d (RX)\n", __FUNCTION__, ch, protocol, slot_tx, bank_tx, slot_rx, bank_rx);
 
-	if (oslot>=0 && slot!=oslot) {
+	if (oslot_tx>=0 && slot_tx!=oslot_tx) {
 		/* remove from slot */
 		if (debug & DEBUG_HFCMULTI_MODE)
-			printk(KERN_DEBUG "%s: remove from slot %d\n", __FUNCTION__, oslot);
-		HFC_outb(hc, R_SLOT, oslot<<1);
-		HFC_outb(hc, A_SL_CFG, 0);
-		HFC_outb(hc, A_CONF, 0);
-		HFC_outb(hc, R_SLOT, (oslot<<1) | V_SL_DIR);
+			printk(KERN_DEBUG "%s: remove from slot %d (TX)\n", __FUNCTION__, oslot_tx);
+		HFC_outb(hc, R_SLOT, oslot_tx<<1);
 		HFC_outb(hc, A_SL_CFG, 0);
 		HFC_outb(hc, A_CONF, 0);
 	}
 
-	if (slot < 0) {
+	if (oslot_rx>=0 && slot_rx!=oslot_rx) {
+		/* remove from slot */
+		if (debug & DEBUG_HFCMULTI_MODE)
+			printk(KERN_DEBUG "%s: remove from slot %d (RX)\n", __FUNCTION__, oslot_rx);
+		HFC_outb(hc, R_SLOT, (oslot_rx<<1) | V_SL_DIR);
+		HFC_outb(hc, A_SL_CFG, 0);
+		HFC_outb(hc, A_CONF, 0);
+	}
+
+	if (slot_tx < 0) {
+		flow_tx = 0x80; /* FIFO->ST */
 		/* disable pcm slot */
-		flow = 0x80; /* FIFO->ST, ST->(FIFO,PCM) */
-		hc->chan[ch].slot = -1;
+		hc->chan[ch].slot_tx = -1;
+		hc->chan[ch].bank_tx = 0;
 	} else {
 		/* set pcm slot */
-		flow = 0xa0; /* PCM->ST, ST->(FIFO,PCM) */
+		if (hc->chan[ch].txpending)
+			flow_tx = 0x80; /* FIFO->ST */
+		else
+			flow_tx = 0xc0; /* PCM->ST */
 		/* put on slot */
-		routing = dir?0xc0:0x80;
-		if (conf || dir>1)
+		routing = bank_tx?0xc0:0x80;
+		if (conf>=0 || bank_tx>1)
 			routing = 0x40; /* loop */
 		if (debug & DEBUG_HFCMULTI_MODE)
-			printk(KERN_DEBUG "%s: put to slot %d dir %d flow %02x routing %02x conf %d\n", __FUNCTION__, slot, dir, flow, routing, conf);
-		HFC_outb(hc, R_SLOT, slot<<1);
-		HFC_outb(hc, A_SL_CFG, (ch<<1) | V_CH_DIR | routing);
-		HFC_outb(hc, A_CONF, conf);
-		HFC_outb(hc, R_SLOT, (slot<<1) | V_SL_DIR);
+			printk(KERN_DEBUG "%s: put to slot %d bank %d flow %02x routing %02x conf %d (TX)\n", __FUNCTION__, slot_tx, bank_tx, flow_tx, routing, conf);
+		HFC_outb(hc, R_SLOT, slot_tx<<1);
 		HFC_outb(hc, A_SL_CFG, (ch<<1) | routing);
+		HFC_outb(hc, A_CONF, (conf<0)?0:(conf|V_CONF_SL));
+		hc->chan[ch].slot_tx = slot_tx;
+		hc->chan[ch].bank_tx = bank_tx;
+	}
+	if (slot_rx < 0) {
+		/* disable pcm slot */
+		flow_rx = 0x80; /* ST->FIFO */
+		hc->chan[ch].slot_rx = -1;
+		hc->chan[ch].bank_rx = 0;
+	} else {
+		/* set pcm slot */
+		if (hc->chan[ch].txpending)
+			flow_rx = 0x80; /* ST->FIFO */
+		else
+			flow_rx = 0xc0; /* ST->(FIFO,PCM) */
+		/* put on slot */
+		routing = bank_rx?0x80:0xc0; /* reversed */
+		if (conf>=0 || bank_rx>1)
+			routing = 0x40; /* loop */
+		if (debug & DEBUG_HFCMULTI_MODE)
+			printk(KERN_DEBUG "%s: put to slot %d bank %d flow %02x routing %02x conf %d (RX)\n", __FUNCTION__, slot_rx, bank_rx, flow_rx, routing, conf);
+		HFC_outb(hc, R_SLOT, (slot_rx<<1) | V_SL_DIR);
+		HFC_outb(hc, A_SL_CFG, (ch<<1) | V_CH_DIR | routing);
 		HFC_outb(hc, A_CONF, 0);
-		hc->chan[ch].slot = slot;
-		hc->chan[ch].dir = dir;
+		hc->chan[ch].slot_rx = slot_rx;
+		hc->chan[ch].bank_rx = bank_rx;
 	}
 	
 	switch (protocol) {
@@ -1216,7 +1291,7 @@ mode_hfcmulti(hfc_multi_t *hc, int ch, int protocol, int slot, int dir)
 		/* disable TX fifo */
 		HFC_outb(hc, R_FIFO, ch<<1);
 		HFC_wait(hc);
-		HFC_outb(hc, A_CON_HDLC, flow | 0x00 | V_IFF);
+		HFC_outb(hc, A_CON_HDLC, flow_tx | 0x00 | V_IFF);
 		HFC_outb(hc, A_SUBCH_CFG, 0);
 		HFC_outb(hc, A_IRQ_MSK, 0);
 		HFC_outb(hc, R_INC_RES_FIFO, V_RES_F);
@@ -1224,7 +1299,7 @@ mode_hfcmulti(hfc_multi_t *hc, int ch, int protocol, int slot, int dir)
 		/* disable RX fifo */
 		HFC_outb(hc, R_FIFO, (ch<<1)|1);
 		HFC_wait(hc);
-		HFC_outb(hc, A_CON_HDLC, flow | 0x00);
+		HFC_outb(hc, A_CON_HDLC, flow_rx | 0x00);
 		HFC_outb(hc, A_SUBCH_CFG, 0);
 		HFC_outb(hc, A_IRQ_MSK, 0);
 		HFC_outb(hc, R_INC_RES_FIFO, V_RES_F);
@@ -1241,15 +1316,16 @@ mode_hfcmulti(hfc_multi_t *hc, int ch, int protocol, int slot, int dir)
 		/* enable TX fifo */
 		HFC_outb(hc, R_FIFO, ch<<1);
 		HFC_wait(hc);
-		HFC_outb(hc, A_CON_HDLC, flow | 0x00 | V_HDLC_TRP | V_IFF);
+		HFC_outb(hc, A_CON_HDLC, flow_tx | 0x00 | V_HDLC_TRP | V_IFF);
 		HFC_outb(hc, A_SUBCH_CFG, 0);
 		HFC_outb(hc, A_IRQ_MSK, 0);
 		HFC_outb(hc, R_INC_RES_FIFO, V_RES_F);
 		HFC_wait(hc);
+		HFC_outb_(hc, A_FIFO_DATA0_NOINC, silence); /* tx silence */
 		/* enable RX fifo */
 		HFC_outb(hc, R_FIFO, (ch<<1)|1);
 		HFC_wait(hc);
-		HFC_outb(hc, A_CON_HDLC, flow | 0x00 | V_HDLC_TRP);
+		HFC_outb(hc, A_CON_HDLC, flow_rx | 0x00 | V_HDLC_TRP);
 		HFC_outb(hc, A_SUBCH_CFG, 0);
 		HFC_outb(hc, A_IRQ_MSK, 0);
 		HFC_outb(hc, R_INC_RES_FIFO, V_RES_F);
@@ -1267,7 +1343,7 @@ mode_hfcmulti(hfc_multi_t *hc, int ch, int protocol, int slot, int dir)
 		/* enable TX fifo */
 		HFC_outb(hc, R_FIFO, ch<<1);
 		HFC_wait(hc);
-		HFC_outb(hc, A_CON_HDLC, flow | 0x04);
+		HFC_outb(hc, A_CON_HDLC, flow_tx | 0x04);
 		HFC_outb(hc, A_SUBCH_CFG, 0);
 		HFC_outb(hc, A_IRQ_MSK, V_IRQ);
 		HFC_outb(hc, R_INC_RES_FIFO, V_RES_F);
@@ -1275,7 +1351,7 @@ mode_hfcmulti(hfc_multi_t *hc, int ch, int protocol, int slot, int dir)
 		/* enable RX fifo */
 		HFC_outb(hc, R_FIFO, (ch<<1)|1);
 		HFC_wait(hc);
-		HFC_outb(hc, A_CON_HDLC, flow | 0x04);
+		HFC_outb(hc, A_CON_HDLC, flow_rx | 0x04);
 		HFC_outb(hc, A_SUBCH_CFG, 0);
 		HFC_outb(hc, A_IRQ_MSK, V_IRQ);
 		HFC_outb(hc, R_INC_RES_FIFO, V_RES_F);
@@ -1293,7 +1369,7 @@ mode_hfcmulti(hfc_multi_t *hc, int ch, int protocol, int slot, int dir)
 		/* enable TX fifo */
 		HFC_outb(hc, R_FIFO, ch<<1);
 		HFC_wait(hc);
-		HFC_outb(hc, A_CON_HDLC, flow | 0x04 | V_IFF);
+		HFC_outb(hc, A_CON_HDLC, flow_tx | 0x04 | V_IFF);
 		HFC_outb(hc, A_SUBCH_CFG, 2);
 		HFC_outb(hc, A_IRQ_MSK, V_IRQ);
 		HFC_outb(hc, R_INC_RES_FIFO, V_RES_F);
@@ -1301,7 +1377,7 @@ mode_hfcmulti(hfc_multi_t *hc, int ch, int protocol, int slot, int dir)
 		/* enable RX fifo */
 		HFC_outb(hc, R_FIFO, (ch<<1)|1);
 		HFC_wait(hc);
-		HFC_outb(hc, A_CON_HDLC, flow | 0x04);
+		HFC_outb(hc, A_CON_HDLC, flow_rx | 0x04);
 		HFC_outb(hc, A_SUBCH_CFG, 2);
 		HFC_outb(hc, A_IRQ_MSK, V_IRQ);
 		HFC_outb(hc, R_INC_RES_FIFO, V_RES_F);
@@ -1323,16 +1399,16 @@ mode_hfcmulti(hfc_multi_t *hc, int ch, int protocol, int slot, int dir)
 /**************************/
 
 static void
-hfcmulti_pcm(hfc_multi_t *hc, int ch, int slot, int dir)
+hfcmulti_pcm(hfc_multi_t *hc, int ch, int slot_tx, int bank_tx, int slot_rx, int bank_rx)
 {
-	if (slot < 0) {
+	if (slot_rx<0 || slot_rx<0 || bank_tx<0 || bank_rx<0) {
 		/* disable PCM */
-		mode_hfcmulti(hc, ch, hc->chan[ch].protocol, -1, 0);
+		mode_hfcmulti(hc, ch, hc->chan[ch].protocol, -1, 0, -1, 0);
 		return;
 	}
 
 	/* enable pcm */
-	mode_hfcmulti(hc, ch, hc->chan[ch].protocol, slot, dir);
+	mode_hfcmulti(hc, ch, hc->chan[ch].protocol, slot_tx, bank_tx, slot_rx, bank_rx);
 }
 
 
@@ -1343,11 +1419,101 @@ hfcmulti_pcm(hfc_multi_t *hc, int ch, int slot, int dir)
 static void
 hfcmulti_conf(hfc_multi_t *hc, int ch, int num)
 {
-	if (num)
-		hc->chan[ch].conf = V_CONF_EN | num;
+	if (num>=0 && num<=7)
+		hc->chan[ch].conf = num;
 	else
-		hc->chan[ch].conf = 0;
-	mode_hfcmulti(hc, ch, hc->chan[ch].protocol, hc->chan[ch].slot, hc->chan[ch].dir);
+		hc->chan[ch].conf = -1;
+	mode_hfcmulti(hc, ch, hc->chan[ch].protocol, hc->chan[ch].slot_tx, hc->chan[ch].bank_tx, hc->chan[ch].slot_rx, hc->chan[ch].bank_rx);
+}
+
+
+/***************************/
+/* set/disable sample loop */
+/***************************/
+
+static void
+hfcmulti_splloop(hfc_multi_t *hc, int ch, u_char *data, int len)
+{
+	u_char *d, *dd;
+	bchannel_t *bch = hc->chan[ch].bch;
+
+	/* flush pending TX data */
+	if (bch->next_skb) {
+		test_and_clear_bit(BC_FLG_TX_NEXT, &bch->Flag); 
+		dev_kfree_skb(bch->next_skb);
+		bch->next_skb = NULL;
+	}
+	bch->tx_idx = bch->tx_len = bch->rx_idx = 0;
+
+	/* prevent overflow */
+	if (len > hc->Zlen-1)
+		len = hc->Zlen-1;
+
+	/* select fifo */
+	HFC_outb_(hc, R_FIFO, ch<<1);
+	HFC_wait_(hc);
+
+	/* reset fifo */
+	HFC_outb_(hc, R_INC_RES_FIFO, V_RES_F);
+	HFC_wait_(hc);
+
+	/* loop fifo */
+	HFC_outb(hc, A_SUBCH_CFG, V_LOOP_FIFO);
+
+	/* if off */
+	if (len <= 0) {
+		HFC_outb_(hc, A_FIFO_DATA0_NOINC, silence);
+		HFC_outb(hc, A_SUBCH_CFG, 0);
+		if (hc->chan[ch].slot_tx>=0) {
+			/* connect slot */
+			HFC_outb(hc, A_CON_HDLC, 0xc0 | 0x00 | V_HDLC_TRP | V_IFF);
+			HFC_outb(hc, R_FIFO, ch<<1 | 1);
+			HFC_wait(hc);
+			HFC_outb(hc, A_CON_HDLC, 0xc0 | 0x00 | V_HDLC_TRP | V_IFF);
+		}
+		hc->chan[ch].txpending = 0;
+		return;
+	}
+
+	/* set mode */
+	hc->chan[ch].txpending = 2;
+
+	/* write loop data */
+	d = data;
+#ifdef FIFO_32BIT_ACCESS
+	dd = d + (len & 0xfffc);
+	while(d != dd) {
+		HFC_outl_(hc, A_FIFO_DATA0, *((unsigned long *)d));
+		d+=4;
+		
+	}
+	dd = d + (len & 0x0003);
+#else
+	dd = d + len;
+#endif
+	while(d != dd) {
+		HFC_outb_(hc, A_FIFO_DATA0, *d);
+		d++;
+	}
+
+	/* increment f-counter */
+	HFC_outb_(hc, R_INC_RES_FIFO, V_INC_F);
+	HFC_wait_(hc);
+
+	/* disconnect slot */
+	if (hc->chan[ch].slot_tx>=0) {
+		HFC_outb(hc, A_CON_HDLC, 0x80 | 0x00 | V_HDLC_TRP | V_IFF);
+		HFC_outb(hc, R_FIFO, ch<<1 | 1);
+		HFC_wait(hc);
+		HFC_outb(hc, A_CON_HDLC, 0x80 | 0x00 | V_HDLC_TRP | V_IFF);
+HFC_outb(hc, R_FIFO, ch<<1);
+HFC_wait(hc);
+	} else {
+		HFC_outb(hc, A_CON_HDLC, 0x80 | 0x00 | V_HDLC_TRP | V_IFF);
+		/* change fifo */
+		HFC_outb(hc, R_FIFO, ch<<1);
+		HFC_wait(hc);
+	}
 }
 
 
@@ -1361,6 +1527,7 @@ static int
 hfcmulti_l1hw(mISDNif_t *hif, struct sk_buff *skb)
 {
 	dchannel_t	*dch;
+	int		slot_tx, slot_rx, bank_tx, bank_rx;
 	hfc_multi_t	*hc;
 	int		ret = -EINVAL;
 	mISDN_head_t	*hh;
@@ -1387,10 +1554,10 @@ hfcmulti_l1hw(mISDNif_t *hif, struct sk_buff *skb)
 			return(-EBUSY);
 		}
 		/* if we have currently a pending tx skb */
-		dch->inst.lock(dch->inst.data, 0);
+		dch->inst.lock(hc, 0);
 		if (test_and_set_bit(FLG_TX_BUSY, &dch->DFlags)) {
 			test_and_set_bit(FLG_TX_NEXT, &dch->DFlags);
-			dch->inst.unlock(dch->inst.data);
+			dch->inst.unlock(hc);
 			dch->next_skb = skb;
 			return(0);
 		}
@@ -1409,13 +1576,13 @@ hfcmulti_l1hw(mISDNif_t *hif, struct sk_buff *skb)
 		/* start fifo */
 		HFC_outb(hc, R_FIFO, 0);
 		HFC_wait(hc);
-		dch->inst.unlock(dch->inst.data);
+		dch->inst.unlock(hc);
 		skb_trim(skb, 0);
 		return(if_newhead(&dch->inst.up, PH_DATA_CNF,
 			hh->dinfo, skb));
 	} else 
 	if (hh->prim == (PH_SIGNAL | REQUEST)) {
-		dch->inst.lock(dch->inst.data, 0);
+		dch->inst.lock(hc, 0);
 		switch (hh->dinfo) {
 #if 0
 			case INFO3_P8:
@@ -1431,27 +1598,52 @@ hfcmulti_l1hw(mISDNif_t *hif, struct sk_buff *skb)
 			printk(KERN_DEBUG "%s: unknown PH_SIGNAL info %x\n", __FUNCTION__, hh->dinfo);
 			ret = -EINVAL;
 		}
-		dch->inst.unlock(dch->inst.data);
+		dch->inst.unlock(hc);
 	} else 
 	if (hh->prim == (PH_CONTROL | REQUEST)) {
-		dch->inst.lock(dch->inst.data, 0);
+		dch->inst.lock(hc, 0);
 		switch (hh->dinfo) {
 			case HW_DEACTIVATE:
 			if (debug & DEBUG_HFCMULTI_MSG)
 				printk(KERN_DEBUG "%s: HW_DEACTIVATE\n", __FUNCTION__);
 			goto hw_deactivate; /* after lock */
 
+			/* connect interface to pcm timeslot (0..N) */
+			case HW_PCM_CONN:
+			if (skb->len < 4*sizeof(u_long)) {
+				printk(KERN_WARNING "%s: HW_PCM_CONN lacks parameters\n", __FUNCTION__);
+				break;
+			}
+			slot_tx = ((int *)skb->data)[0];
+			bank_tx = ((int *)skb->data)[1];
+			slot_rx = ((int *)skb->data)[2];
+			bank_rx = ((int *)skb->data)[3];
+			if (debug & DEBUG_HFCMULTI_MSG)
+				printk(KERN_DEBUG "%s: HW_PCM_CONN slot %d bank %d (TX) slot %d bank %d (RX)\n", __FUNCTION__, slot_tx, bank_tx, slot_rx, bank_rx);
+			if (slot_tx<=hc->slots && bank_tx<=2 && slot_rx<=hc->slots && bank_rx<=2)
+				hfcmulti_pcm(hc, dch->channel, slot_tx, bank_tx, slot_rx, bank_rx);
+			else
+				printk(KERN_WARNING "%s: HW_PCM_CONN slot %d bank %d (TX) slot %d bank %d (RX) out of range\n", __FUNCTION__, slot_tx, bank_tx, slot_rx, bank_rx);
+			break;
+
+			/* release interface from pcm timeslot */
+			case HW_PCM_DISC:
+			if (debug & DEBUG_HFCMULTI_MSG)
+				printk(KERN_DEBUG "%s: HW_PCM_DISC\n", __FUNCTION__);
+			hfcmulti_pcm(hc, dch->channel, -1, -1, -1, -1); 
+			break;
+
 			default:
 			printk(KERN_DEBUG "%s: unknown PH_CONTROL info %x\n", __FUNCTION__, hh->dinfo);
 			ret = -EINVAL;
 		}
-		dch->inst.unlock(dch->inst.data);
-	} else 
+		dch->inst.unlock(hc);
+	} else
 	if (hh->prim == (PH_ACTIVATE | REQUEST)) {
 		if (test_bit(HFC_CFG_NTMODE, &hc->chan[dch->channel].cfg)) {
 			if (debug & DEBUG_HFCMULTI_MSG)
 				printk(KERN_DEBUG "%s: PH_ACTIVATE port %d (0..%d)\n", __FUNCTION__, hc->chan[dch->channel].port, hc->type-1);
-			dch->inst.lock(dch->inst.data, 0);
+			dch->inst.lock(hc, 0);
 			/* start activation */
 			if (hc->type == 1) {
 				HFC_outb(hc, R_E1_WR_STA, V_E1_LD_STA | 1);
@@ -1465,7 +1657,7 @@ hfcmulti_l1hw(mISDNif_t *hif, struct sk_buff *skb)
 				HFC_outb(hc, A_ST_WR_STATE, 1 | (V_ST_ACT*3)); /* activate */
 			}
 			dch->ph_state = 1;
-			dch->inst.unlock(dch->inst.data);
+			dch->inst.unlock(hc);
 		} else {
 			if (debug & DEBUG_HFCMULTI_MSG)
 				printk(KERN_DEBUG "%s: PH_ACTIVATE no NT-mode port %d (0..%d)\n", __FUNCTION__, hc->chan[dch->channel].port, hc->type-1);
@@ -1476,12 +1668,11 @@ hfcmulti_l1hw(mISDNif_t *hif, struct sk_buff *skb)
 		if (test_bit(HFC_CFG_NTMODE, &hc->chan[dch->channel].cfg)) {
 			if (debug & DEBUG_HFCMULTI_MSG)
 				printk(KERN_DEBUG "%s: PH_DEACTIVATE port %d (0..%d)\n", __FUNCTION__, hc->chan[dch->channel].port, hc->type-1);
-			dch->inst.lock(dch->inst.data, 0);
+			dch->inst.lock(hc, 0);
 			hw_deactivate: /* after lock */
 			dch->ph_state = 0;
 			/* start deactivation */
 			if (hc->type == 1) {
-#warning COLOGNE: wie schaltet man beim E1 die statemachine auf ACT / DACT ?
 			} else {
 				HFC_outb(hc, R_ST_SEL, hc->chan[dch->channel].port);
 				HFC_outb(hc, A_ST_WR_STATE, V_ST_ACT*2); /* deactivate */
@@ -1498,7 +1689,7 @@ hfcmulti_l1hw(mISDNif_t *hif, struct sk_buff *skb)
 				del_timer(&dch->dbusytimer);
 			if (test_and_clear_bit(FLG_L1_DBUSY, &dch->DFlags))
 				dchannel_sched_event(dch, D_CLEARBUSY);
-			dch->inst.unlock(dch->inst.data);
+			dch->inst.unlock(hc);
 		} else {
 			if (debug & DEBUG_HFCMULTI_MSG)
 				printk(KERN_DEBUG "%s: PH_DEACTIVATE no NT-mode port %d (0..%d)\n", __FUNCTION__, hc->chan[dch->channel].port, hc->type-1);
@@ -1524,7 +1715,8 @@ hfcmulti_l1hw(mISDNif_t *hif, struct sk_buff *skb)
 static int
 hfcmulti_l2l1(mISDNif_t *hif, struct sk_buff *skb)
 {
-	u_long		num, dir;
+	u_long		num;
+	int		slot_tx, slot_rx, bank_tx, bank_rx;
 	bchannel_t	*bch;
 	int		ret = -EINVAL;
 	mISDN_head_t	*hh;
@@ -1552,10 +1744,10 @@ hfcmulti_l2l1(mISDNif_t *hif, struct sk_buff *skb)
 			return(-EBUSY);
 		}
 		/* if we have currently a pending tx skb */
-		bch->inst.lock(bch->inst.data, 0);
+		bch->inst.lock(hc, 0);
 		if (test_and_set_bit(BC_FLG_TX_BUSY, &bch->Flag)) {
 			test_and_set_bit(BC_FLG_TX_NEXT, &bch->Flag);
-			bch->inst.unlock(bch->inst.data);
+			bch->inst.unlock(hc);
 			bch->next_skb = skb;
 			return(0);
 		}
@@ -1565,9 +1757,9 @@ hfcmulti_l2l1(mISDNif_t *hif, struct sk_buff *skb)
 		bch->tx_idx = 0;
 		hfcmulti_tx(hc, bch->channel, NULL, bch);
 		/* start fifo */
-		HFC_outb(hc, R_FIFO, 0);
-		HFC_wait(hc);
-		bch->inst.unlock(bch->inst.data);
+		HFC_outb_(hc, R_FIFO, 0);
+		HFC_wait_(hc);
+		bch->inst.unlock(hc);
 		if ((bch->inst.pid.protocol[2] == ISDN_PID_L2_B_RAWDEV)
 			&& bch->dev)
 			hif = &bch->dev->rport.pif;
@@ -1585,9 +1777,8 @@ hfcmulti_l2l1(mISDNif_t *hif, struct sk_buff *skb)
 		if (test_and_set_bit(BC_FLG_ACTIV, &bch->Flag))
 			ret = 0;
 		else {
-			bch->inst.lock(bch->inst.data, 0);
-			ret = mode_hfcmulti(bch->inst.data, bch->channel,
-				bch->inst.pid.protocol[1], hc->chan[bch->channel].slot, hc->chan[bch->channel].dir);
+			bch->inst.lock(hc, 0);
+			ret = mode_hfcmulti(hc, bch->channel, bch->inst.pid.protocol[1], hc->chan[bch->channel].slot_tx, hc->chan[bch->channel].bank_tx, hc->chan[bch->channel].slot_rx, hc->chan[bch->channel].bank_rx);
 			if (!ret) {
 				bch->protocol = bch->inst.pid.protocol[1];
 				if (bch->protocol)
@@ -1600,7 +1791,7 @@ hfcmulti_l2l1(mISDNif_t *hif, struct sk_buff *skb)
 					HFC_outb(hc, R_DTMF, hc->hw.r_dtmf | V_RST_DTMF);
 				}
 			}
-			bch->inst.unlock(bch->inst.data);
+			bch->inst.unlock(hc);
 		}
 		if (bch->inst.pid.protocol[2] == ISDN_PID_L2_B_RAWDEV)
 			if (bch->dev)
@@ -1614,7 +1805,7 @@ hfcmulti_l2l1(mISDNif_t *hif, struct sk_buff *skb)
 		if (debug & DEBUG_HFCMULTI_MSG)
 			printk(KERN_DEBUG "%s: PH_DEACTIVATE ch %d (0..32)\n", __FUNCTION__, bch->channel);
 		/* deactivate B-channel if not already deactivated */
-		bch->inst.lock(bch->inst.data, 0);
+		bch->inst.lock(hc, 0);
 		if (bch->next_skb) {
 			test_and_clear_bit(BC_FLG_TX_NEXT, &bch->Flag); 
 			dev_kfree_skb(bch->next_skb);
@@ -1622,10 +1813,13 @@ hfcmulti_l2l1(mISDNif_t *hif, struct sk_buff *skb)
 		}
 		bch->tx_idx = bch->tx_len = bch->rx_idx = 0;
 		test_and_clear_bit(BC_FLG_TX_BUSY, &bch->Flag);
-		mode_hfcmulti(bch->inst.data, bch->channel, ISDN_PID_NONE, hc->chan[bch->channel].slot, hc->chan[bch->channel].dir);
+		hc->chan[bch->channel].slot_tx = -1;
+		hc->chan[bch->channel].slot_rx = -1;
+		hc->chan[bch->channel].conf = -1;
+		mode_hfcmulti(hc, bch->channel, ISDN_PID_NONE, hc->chan[bch->channel].slot_tx, hc->chan[bch->channel].bank_tx, hc->chan[bch->channel].slot_rx, hc->chan[bch->channel].bank_rx);
 		bch->protocol = ISDN_PID_NONE;
 		test_and_clear_bit(BC_FLG_ACTIV, &bch->Flag);
-		bch->inst.unlock(bch->inst.data);
+		bch->inst.unlock(hc);
 		skb_trim(skb, 0);
 		if (hh->prim != (MGR_DISCONNECT | REQUEST)) {
 			if (bch->inst.pid.protocol[2] == ISDN_PID_L2_B_RAWDEV)
@@ -1637,29 +1831,31 @@ hfcmulti_l2l1(mISDNif_t *hif, struct sk_buff *skb)
 		ret = 0;
 	} else
 	if (hh->prim == (PH_CONTROL | REQUEST)) {
-		bch->inst.lock(bch->inst.data, 0);
+		bch->inst.lock(hc, 0);
 		switch (hh->dinfo) {
 			/* connect interface to pcm timeslot (0..N) */
 			case HW_PCM_CONN:
-			if (skb->len < 2*sizeof(u_long)) {
+			if (skb->len < 4*sizeof(u_long)) {
 				printk(KERN_WARNING "%s: HW_PCM_CONN lacks parameters\n", __FUNCTION__);
 				break;
 			}
-			num = ((u_long *)skb->data)[0];
-			dir = ((u_long *)skb->data)[1];
+			slot_tx = ((int *)skb->data)[0];
+			bank_tx = ((int *)skb->data)[1];
+			slot_rx = ((int *)skb->data)[2];
+			bank_rx = ((int *)skb->data)[3];
 			if (debug & DEBUG_HFCMULTI_MSG)
-				printk(KERN_DEBUG "%s: HW_PCM_CONN slot %ld dir %ld\n", __FUNCTION__, num, dir);
-			if (num<=hc->slots && dir<=2)
-				hfcmulti_pcm(hc, bch->channel, num, dir);
+				printk(KERN_DEBUG "%s: HW_PCM_CONN slot %d bank %d (TX) slot %d bank %d (RX)\n", __FUNCTION__, slot_tx, bank_tx, slot_rx, bank_rx);
+			if (slot_tx<=hc->slots && bank_tx<=2 && slot_rx<=hc->slots && bank_rx<=2)
+				hfcmulti_pcm(hc, bch->channel, slot_tx, bank_tx, slot_rx, bank_rx);
 			else
-				printk(KERN_WARNING "%s: HW_PCM_CONN slot %ld dir %ld out of range\n", __FUNCTION__, num, dir);
+				printk(KERN_WARNING "%s: HW_PCM_CONN slot %d bank %d (TX) slot %d bank %d (RX) out of range\n", __FUNCTION__, slot_tx, bank_tx, slot_rx, bank_rx);
 			break;
 
 			/* release interface from pcm timeslot */
 			case HW_PCM_DISC:
 			if (debug & DEBUG_HFCMULTI_MSG)
 				printk(KERN_DEBUG "%s: HW_PCM_DISC\n", __FUNCTION__);
-			hfcmulti_pcm(hc, bch->channel, -1, -1); 
+			hfcmulti_pcm(hc, bch->channel, -1, -1, -1, -1); 
 			break;
 
 			/* join conference (0..7) */
@@ -1684,11 +1880,25 @@ hfcmulti_l2l1(mISDNif_t *hif, struct sk_buff *skb)
 			hfcmulti_conf(hc, bch->channel, -1); 
 			break;
 
+			/* set sample loop */
+			case HW_SPL_LOOP_ON:
+			if (debug & DEBUG_HFCMULTI_MSG)
+				printk(KERN_DEBUG "%s: HW_SPL_LOOP_ON (len = %d)\n", __FUNCTION__, skb->len);
+			hfcmulti_splloop(hc, bch->channel, skb->data, skb->len);
+			break;
+
+			/* set silence */
+			case HW_SPL_LOOP_OFF:
+			if (debug & DEBUG_HFCMULTI_MSG)
+				printk(KERN_DEBUG "%s: HW_SPL_LOOP_OFF\n", __FUNCTION__);
+			hfcmulti_splloop(hc, bch->channel, NULL, 0);
+			break;
+
 			default:
 			printk(KERN_DEBUG "%s: unknown PH_CONTROL info %x\n", __FUNCTION__, hh->dinfo);
 			ret = -EINVAL;
 		}
-		bch->inst.unlock(bch->inst.data);
+		bch->inst.unlock(hc);
 	} else {
 		printk(KERN_WARNING "%s: unknown prim(%x)\n", __FUNCTION__, hh->prim);
 		ret = -EINVAL;
@@ -1822,7 +2032,7 @@ hfcmulti_dch_bh(dchannel_t *dch)
 		} else { 
 			if (debug & DEBUG_HFCMULTI_STATE)
 				printk(KERN_DEBUG "%s: NT newstate %x\n", __FUNCTION__, dch->ph_state);
-			dch->inst.lock(dch->inst.data, 0);
+			dch->inst.lock(hc, 0);
 			switch (dch->ph_state) {
 				case (2):
 				if (hc->chan[ch].nt_timer == 0) {
@@ -1861,7 +2071,7 @@ hfcmulti_dch_bh(dchannel_t *dch)
 				default:
 				break;
 			}
-			dch->inst.unlock(dch->inst.data);
+			dch->inst.unlock(hc);
 		}
 		/* transmit new state to upper layer if available */
 		if (hc->created[hc->chan[ch].port]) {
@@ -1934,8 +2144,10 @@ hfcmulti_initmode(hfc_multi_t *hc)
 
 	if (hc->type == 1) {
 		nt_mode = test_bit(HFC_CFG_NTMODE, &hc->chan[16].cfg);
-		hc->chan[16].slot = -1;
-		mode_hfcmulti(hc, 16, nt_mode?ISDN_PID_L1_NT_E1:ISDN_PID_L1_TE_E1, -1, 0);
+		hc->chan[16].slot_tx = -1;
+		hc->chan[16].slot_rx = -1;
+		hc->chan[16].conf = -1;
+		mode_hfcmulti(hc, 16, nt_mode?ISDN_PID_L1_NT_E1:ISDN_PID_L1_TE_E1, -1, 0, -1, 0);
 		hc->chan[16].dch->hw_bh = hfcmulti_dch_bh;
 		hc->chan[16].dch->dbusytimer.function = (void *) hfcmulti_dbusy_timer;
 		hc->chan[16].dch->dbusytimer.data = (long) &hc->chan[16].dch;
@@ -1943,9 +2155,11 @@ hfcmulti_initmode(hfc_multi_t *hc)
 
 		i = 0;
 		while (i < 30) {
-			hc->chan[i+1+(i>=15)].slot = -1;
+			hc->chan[i+1+(i>=15)].slot_tx = -1;
+			hc->chan[i+1+(i>=15)].slot_rx = -1;
+			hc->chan[i+1+(i>=15)].conf = -1;
 			hc->chan[i+1+(i>=15)].bch->hw_bh = hfcmulti_bch_bh;
-			mode_hfcmulti(hc, i+1+(i>=15), ISDN_PID_NONE, -1, 0);
+			mode_hfcmulti(hc, i+1+(i>=15), ISDN_PID_NONE, -1, 0, -1, 0);
 			hc->chan[i+1+(i>=15)].bch->protocol = ISDN_PID_NONE;
 			i++;
 		}
@@ -1953,20 +2167,26 @@ hfcmulti_initmode(hfc_multi_t *hc)
 		i = 0;
 		while (i < hc->type) {
 			nt_mode = test_bit(HFC_CFG_NTMODE, &hc->chan[(i<<2)+2].cfg);
-			hc->chan[(i<<2)+2].slot = -1;
-			mode_hfcmulti(hc, (i<<2)+2, nt_mode?ISDN_PID_L1_NT_S0:ISDN_PID_L1_TE_S0, -1, 0);
+			hc->chan[(i<<2)+2].slot_tx = -1;
+			hc->chan[(i<<2)+2].slot_rx = -1;
+			hc->chan[(i<<2)+2].conf = -1;
+			mode_hfcmulti(hc, (i<<2)+2, nt_mode?ISDN_PID_L1_NT_S0:ISDN_PID_L1_TE_S0, -1, 0, -1, 0);
 			hc->chan[(i<<2)+2].dch->hw_bh = hfcmulti_dch_bh;
 			hc->chan[(i<<2)+2].dch->dbusytimer.function = (void *) hfcmulti_dbusy_timer;
 			hc->chan[(i<<2)+2].dch->dbusytimer.data = (long) &hc->chan[(i<<2)+2].dch;
 			init_timer(&hc->chan[(i<<2)+2].dch->dbusytimer);
 	
 			hc->chan[i<<2].bch->hw_bh = hfcmulti_bch_bh;
-			hc->chan[i<<2].slot = -1;
-			mode_hfcmulti(hc, i<<2, ISDN_PID_NONE, -1, 0);
+			hc->chan[i<<2].slot_tx = -1;
+			hc->chan[i<<2].slot_rx = -1;
+			hc->chan[i<<2].conf = -1;
+			mode_hfcmulti(hc, i<<2, ISDN_PID_NONE, -1, 0, -1, 0);
 			hc->chan[i<<2].bch->protocol = ISDN_PID_NONE;
 			hc->chan[(i<<2)+1].bch->hw_bh = hfcmulti_bch_bh;
-			hc->chan[(i<<2)+1].slot = -1;
-			mode_hfcmulti(hc, (i<<2)+1, ISDN_PID_NONE, -1, 0);
+			hc->chan[(i<<2)+1].slot_tx = -1;
+			hc->chan[(i<<2)+1].slot_rx = -1;
+			hc->chan[(i<<2)+1].conf = -1;
+			mode_hfcmulti(hc, (i<<2)+1, ISDN_PID_NONE, -1, 0, -1, 0);
 			hc->chan[(i<<2)+1].bch->protocol = ISDN_PID_NONE;
 			i++;
 		}
@@ -2096,7 +2316,6 @@ init_card(hfc_multi_t *hc)
 		unlock_dev(hc);
 		return(-EIO);
 	}
-//printk(KERN_DEBUG "INIT_CARD hc->pci_io = %lx\n", hc->pci_io);
 	hc->irq = hc->pci_dev->irq;
 
 	if (debug & DEBUG_HFCMULTI_INIT)
@@ -2109,16 +2328,13 @@ init_card(hfc_multi_t *hc)
 		 * established for this HFC, so don't do that earlier
 		 */
 		unlock_dev(hc);
-//arning ********************
 		HFC_outb(hc, R_IRQ_CTRL, V_GLOB_IRQ_EN);
-//printk(KERN_DEBUG "jollydebug: a\n");
 		current->state = TASK_UNINTERRUPTIBLE;
 		schedule_timeout((100*HZ)/1000); /* Timeout 100ms */
 		/* turn IRQ off until chip is completely initialized */
 		HFC_outb(hc, R_IRQ_CTRL, 0);
 		if (debug & DEBUG_HFCMULTI_INIT)
 			printk(KERN_DEBUG "%s: IRQ %d count %d\n", __FUNCTION__, hc->irq, hc->irqcnt);
-//printk(KERN_DEBUG "jollydebug: b\n");
 		if (hc->irqcnt) {
 			if (debug & DEBUG_HFCMULTI_INIT)
 				printk(KERN_DEBUG "%s: done\n", __FUNCTION__);
@@ -2363,13 +2579,16 @@ release_port(hfc_multi_t *hc, int port)
 	if (debug & DEBUG_HFCMULTI_INIT)
 		printk(KERN_DEBUG "%s: disable all channels (d and b)\n", __FUNCTION__);
 	if (hc->type == 1) {
-		hc->chan[16].slot = -1;
-		mode_hfcmulti(hc, 16, ISDN_PID_NONE, -1, 0);//d
+		hc->chan[16].slot_tx = -1;
+		hc->chan[16].slot_rx = -1;
+		hc->chan[16].conf = -1;
+		mode_hfcmulti(hc, 16, ISDN_PID_NONE, -1, 0, -1, 0);//d
 		i = 0;
 		while(i < 30) {
-			hc->chan[i+1+(i>=15)].slot = -1;
-			hc->chan[i+1+(i>=15)].conf = 0;
-			mode_hfcmulti(hc, i+1+(i>=15), ISDN_PID_NONE, -1, 0); //b
+			hc->chan[i+1+(i>=15)].slot_tx = -1;
+			hc->chan[i+1+(i>=15)].slot_rx = -1;
+			hc->chan[i+1+(i>=15)].conf = -1;
+			mode_hfcmulti(hc, i+1+(i>=15), ISDN_PID_NONE, -1, 0, -1, 0); //b
 			i++;
 		}
 	} else {
@@ -2377,14 +2596,18 @@ release_port(hfc_multi_t *hc, int port)
 		while(i < hc->type) {
 			if (all || port==i)
 			if (hc->created[i]) {
-				hc->chan[(i<<2)+2].slot = -1;
-				mode_hfcmulti(hc, (i<<2)+2, ISDN_PID_NONE, -1, 0); //d
-				hc->chan[i<<2].slot = -1;
-				hc->chan[i<<2].conf = 0;
-				mode_hfcmulti(hc, i<<2, ISDN_PID_NONE, -1, 0); //b1
-				hc->chan[(i<<2)+1].slot = -1;
-				hc->chan[(i<<2)+1].conf = 0;
-				mode_hfcmulti(hc, (i<<2)+1, ISDN_PID_NONE, -1, 0); //b2
+				hc->chan[(i<<2)+2].slot_tx = -1;
+				hc->chan[(i<<2)+2].slot_rx = -1;
+				hc->chan[(i<<2)+2].conf = -1;
+				mode_hfcmulti(hc, (i<<2)+2, ISDN_PID_NONE, -1, 0, -1, 0); //d
+				hc->chan[i<<2].slot_tx = -1;
+				hc->chan[i<<2].slot_rx = -1;
+				hc->chan[i<<2].conf = -1;
+				mode_hfcmulti(hc, i<<2, ISDN_PID_NONE, -1, 0, -1, 0); //b1
+				hc->chan[(i<<2)+1].slot_tx = -1;
+				hc->chan[(i<<2)+1].slot_rx = -1;
+				hc->chan[(i<<2)+1].conf = -1;
+				mode_hfcmulti(hc, (i<<2)+1, ISDN_PID_NONE, -1, 0, -1, 0); //b2
 			}
 			i++;
 		}
@@ -2438,8 +2661,8 @@ release_port(hfc_multi_t *hc, int port)
 		hfcmulti_leds(hc);
 
 	/* release IO & remove card */
-	if (all)
-		if (debug & DEBUG_HFCMULTI_INIT) {
+	if (all) {
+		if (debug & DEBUG_HFCMULTI_INIT)
 			printk(KERN_DEBUG "%s: do release_io_hfcmulti\n", __FUNCTION__);
 		release_io_hfcmulti(hc);
 
@@ -2511,9 +2734,8 @@ HFC_manager(void *data, u_int prim, void *arg)
 		break;
 
 		case MGR_UNREGLAYER | REQUEST:
-		if (debug & DEBUG_HFCMULTI_MGR) {
+		if (debug & DEBUG_HFCMULTI_MGR)
 			printk(KERN_DEBUG "%s: MGR_UNREGLAYER\n", __FUNCTION__);
-		}
 		if (dch) {
 			inst->down.fdata = dch;
 			if ((skb = create_link_skb(PH_CONTROL | REQUEST, HW_DEACTIVATE, 0, NULL, 0))) {
@@ -2664,7 +2886,9 @@ HFCmulti_init(void)
 	}
 
 	memset(&HFCM_obj, 0, sizeof(HFCM_obj));
-	SET_MODULE_OWNER(&HFCM_obj);
+#ifdef MODULE
+	HFCM_obj.owner = THIS_MODULE;
+#endif
 	HFCM_obj.name = HFCName;
 	HFCM_obj.own_ctrl = HFC_manager;
 	HFCM_obj.DPROTO.protocol[0] = ISDN_PID_L0_TE_S0 | ISDN_PID_L0_NT_S0
@@ -2930,8 +3154,8 @@ HFCmulti_init(void)
 				/* set elastic jitter buffer */
 				if (protocol[port_cnt] & 0x600000) {
 					if (debug & DEBUG_HFCMULTI_INIT)
-					hc->chan[ch].jitter = (protocol[port_cnt]>>21) & 0x3;
 						printk(KERN_DEBUG "%s: PROTOCOL set elastic buffer to %d: card(%d) port(%d)\n", __FUNCTION__, hc->chan[ch].jitter, HFC_cnt+1, pt);
+					hc->chan[ch].jitter = (protocol[port_cnt]>>21) & 0x3;
 				} else
 					hc->chan[ch].jitter = 2; /* default */
 			}

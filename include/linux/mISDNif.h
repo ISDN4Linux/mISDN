@@ -1,4 +1,4 @@
-/* $Id: mISDNif.h,v 1.26 2004/02/05 21:21:18 keil Exp $
+/* $Id: mISDNif.h,v 1.27 2004/02/14 17:43:15 jolly Exp $
  *
  */
 
@@ -120,10 +120,10 @@
 #define HW_PCM_DISC	0x0581
 #define HW_CONF_JOIN	0x0582
 #define HW_CONF_SPLIT	0x0583
-#define HW_ECHO_ON	0x0584
-#define HW_ECHO_OFF	0x0585
-#define HW_RECEIVE_OFF	0x0586
-#define HW_RECEIVE_ON	0x0587
+#define HW_RECEIVE_OFF	0x0584
+#define HW_RECEIVE_ON	0x0585
+#define HW_SPL_LOOP_ON	0x0586
+#define HW_SPL_LOOP_OFF	0x0587
 #define HW_TESTLOOP	0xFF00
 #define HW_FIRM_START	0xFF10
 #define HW_FIRM_DATA	0xFF11

@@ -38,9 +38,12 @@ struct hfc_chan {
 	int		sync; /* sync state (used by E1) */
 	struct sk_buff 	*dtmf_skb;
 	unsigned long	protocol; /* current protocol */
-	int		slot; /* current pcm slot */
-	int		dir; /* current pcm direction */
+	int		slot_tx; /* current pcm slot */
+	int		bank_tx; /* current pcm bank */
+	int		slot_rx;
+	int		bank_rx;
 	int		conf; /* conference setting of TX slot */
+	int		txpending; /* if there is currently data in the FIFO 0=no, 1=yes, 2=splloop */
 };
 
 typedef struct hfc_chan		hfc_chan_t;
@@ -1074,6 +1077,14 @@ struct hfc_register_names {
 #define HFC_outl(a,b,c) (*((volatile u_long *)((a->pci_io)+b)) = c)
 #define HFC_inl(a,b) (*((volatile u_long *)((a->pci_io)+b)))
 
+/* no debug */
+#define HFC_outl_(a,b,c) (*((volatile u_long *)((a->pci_io)+b)) = c)
+#define HFC_inl_(a,b) (*((volatile u_long *)((a->pci_io)+b)))
+#define HFC_inw_(a,b) (*((volatile u_short *)((a->pci_io)+b)))
+#define HFC_outb_(a,b,c) (*((volatile u_char *)((a->pci_io)+b)) = c)
+#define HFC_inb_(a,b) (*((volatile u_char *)((a->pci_io)+b)))
+#define HFC_wait_(a) while((*((volatile u_char *)((a->pci_io)+R_STATUS))) & V_BUSY)
+
 /* macros */
 #ifndef HFC_REGISTER_MAP
 
@@ -1140,7 +1151,7 @@ static unsigned char _HFC_inb(hfc_multi_t *a, unsigned char b, char *function, i
 	printk(KERN_DEBUG "HFC_inb(\"%s\", %02x=%s) = 0x%02x=%s; in %s() line %d\n", a->name, b, regname, c, bits, function, line);
 	return(c);
 }
-#define HFC_inb(a,b) _HFC_inw(a, b, __FUNCTION__, __LINE__)
+#define HFC_inw(a,b) _HFC_inw(a, b, __FUNCTION__, __LINE__)
 static unsigned short _HFC_inw(hfc_multi_t *a, unsigned char b, char *function, int line)
 {
 	char regname[256]="";
@@ -1168,4 +1179,6 @@ static void _HFC_wait(hfc_multi_t *a, char *function, int line)
 }
 
 #endif /* HFC_REGISTER_MAP */
+
+
 

@@ -39,6 +39,10 @@ hfcpci.o: $(hfcpci-objs)
 	$(RM) $@
 	$(LD) -r -o $@ $(filter-out $(MODVERFILE) dummy ,$^)
 
+hfcmulti.o: $(hfcmulti-objs)
+	$(RM) $@
+	$(LD) -r -o $@ $(filter-out $(MODVERFILE) dummy ,$^)
+
 mISDN_l1.o: $(mISDN_l1-objs)
 	$(RM) $@
 	$(LD) -r -o $@ $(filter-out $(MODVERFILE) dummy ,$^)

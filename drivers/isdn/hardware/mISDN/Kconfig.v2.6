@@ -39,7 +39,7 @@ config MISDN_HFCMULTI
 	bool "Support for HFC multiport cards (HFC-4S/8S/E1)"
 	depends on PCI
 	help
-	  Enable support for card with Cologne Chips Design HFC multiport
+	  Enable support for card with Cologne Chip AG's HFC multiport
 	  chip. There are three types of chips that are quite similar,
 	  but the interface is different:
 	   * HFC-4S (4 S/T interfaces on one chip)
@@ -63,11 +63,26 @@ config MISDN_DSP
 	help
 	  Enable support for digital audio processing capability.
 	  This module may be used for special applications that require
-	  cross connecting of bchannels, conferencing, dtmf decoding and
-	  tone generation. It may use hardware features if available.
+	  cross connecting of bchannels, conferencing, dtmf decoding
+	  tone generation, and Blowfish encryption and decryption.
+	  It may use hardware features if available.
 	  E.g. it is required for PBX4Linux. Go to http://isdn.jolly.de
 	  and get more informations about this module and it's usage.
 	  If unsure, say 'N'.
+
+if MISDN_DSP!=n
+
+config MISDN_DSP_HARDWARETEST
+	bool "Hardware test for one HFC-4S/8S only"
+	depends on PCI
+	help
+	  This is a test option if ONLY ONE HFC-4S/8S card is installed
+	  and NO OTHER CARD is used by mISDN. In this case the DSP module
+	  uses the hardware crossconnect/dtmf/conference/tone features.
+	  Later this flag will be removed when mISDN supports stack
+	  feature lists.
+
+endif
 
 endif
 
