@@ -1,4 +1,4 @@
-/* $Id: stack.c,v 1.7 2003/08/02 21:17:58 kkeil Exp $
+/* $Id: stack.c,v 1.8 2003/09/06 17:13:02 keil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -683,7 +683,7 @@ test_stack_protocol(mISDNstack_t *st, u_int l1prot, u_int l2prot, u_int l3prot)
 	copy_pid(&st->pid, &pid, NULL);
 	memcpy(&st->mgr->pid, &pid, sizeof(mISDN_pid_t));
 	if (!SetHandledPID(st->mgr->obj, &st->mgr->pid)) {
-		int_error();
+		memset(&st->pid, 0, sizeof(mISDN_pid_t));
 		return(-ENOPROTOOPT);
 	} else {
 		RemoveUsedPID(&pid, &st->mgr->pid);

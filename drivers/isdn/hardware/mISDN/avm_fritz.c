@@ -1,4 +1,4 @@
-/* $Id: avm_fritz.c,v 1.15 2003/08/01 22:15:52 kkeil Exp $
+/* $Id: avm_fritz.c,v 1.16 2003/09/06 17:13:01 keil Exp $
  *
  * fritz_pci.c    low level stuff for AVM Fritz!PCI and ISA PnP isdn cards
  *              Thanks to AVM, Berlin for informations
@@ -28,7 +28,7 @@
 #define LOCK_STATISTIC
 #include "hw_lock.h"
 
-static const char *avm_fritz_rev = "$Revision: 1.15 $";
+static const char *avm_fritz_rev = "$Revision: 1.16 $";
 
 enum {
 	AVM_FRITZ_PCI,
@@ -1028,6 +1028,7 @@ fritz_manager(void *data, u_int prim, void *arg) {
 		printk(KERN_DEBUG "%s: data(%p) prim(%x) arg(%p)\n",
 			__FUNCTION__, data, prim, arg);
 	if (!data) {
+		MGR_HASPROTOCOL_HANDLER(prim,arg,&fritz)
 		printk(KERN_ERR "%s: no data prim %x arg %p\n",
 			__FUNCTION__, prim, arg);
 		return(-EINVAL);
@@ -1124,6 +1125,7 @@ fritz_manager(void *data, u_int prim, void *arg) {
 					0, 0, NULL, 0);
 		}
 		break;
+	    PRIM_NOT_HANDLED(MGR_CTRLREADY | INDICATION);
 	    default:
 		printk(KERN_WARNING "%s: prim %x not handled\n",
 			__FUNCTION__, prim);

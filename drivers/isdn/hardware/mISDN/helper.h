@@ -1,4 +1,4 @@
-/* $Id: helper.h,v 1.9 2003/08/01 22:15:52 kkeil Exp $
+/* $Id: helper.h,v 1.10 2003/09/06 17:13:02 keil Exp $
  *
  *   Basic declarations, defines and prototypes
  *
@@ -163,5 +163,18 @@ extern	struct sk_buff 	*alloc_l3msg(int, u_char);
 extern	void		AddvarIE(struct sk_buff *, u_char *);
 extern	void		AddIE(struct sk_buff *, u_char, u_char *);
 extern	void		LogL3Msg(struct sk_buff *);
+
+/* manager default handler helper macros */
+
+#define PRIM_NOT_HANDLED(p)	case p: break
+
+#define MGR_HASPROTOCOL_HANDLER(p,a,o)	\
+	if ((MGR_HASPROTOCOL | REQUEST) == p) {\
+		if (a) {\
+			int prot = *((int *)a);\
+			return(HasProtocol(o, prot));\
+		} else \
+			return(-EINVAL);\
+	}
 
 #endif /* _mISDN_HELPER_H */

@@ -1,4 +1,4 @@
-/* $Id: layer1.c,v 1.7 2003/08/01 22:15:53 kkeil Exp $
+/* $Id: layer1.c,v 1.8 2003/09/06 17:13:02 keil Exp $
  *
  * mISDN_l1.c     common low level stuff for I.430 layer1
  *
@@ -10,7 +10,7 @@
  *
  */
 
-static char *l1_revision = "$Revision: 1.7 $";
+static char *l1_revision = "$Revision: 1.8 $";
 
 #include <linux/config.h>
 #include <linux/module.h>
@@ -702,7 +702,9 @@ l1_manager(void *data, u_int prim, void *arg) {
 	mISDNinstance_t *inst = data;
 	layer1_t *l1l = isdnl1.ilist;
 
-	printk(KERN_DEBUG "l1_manager data:%p prim:%x arg:%p\n", data, prim, arg);
+	if (debug & 0x10000)
+		printk(KERN_DEBUG "%s: data(%p) prim(%x) arg(%p)\n",
+			__FUNCTION__, data, prim, arg);
 	if (!data)
 		return(-EINVAL);
 	while(l1l) {
@@ -750,6 +752,8 @@ l1_manager(void *data, u_int prim, void *arg) {
 			return(-EINVAL);
 		}
 		return(l1_status(l1l, arg));
+	    PRIM_NOT_HANDLED(MGR_CTRLREADY|INDICATION);
+	    PRIM_NOT_HANDLED(MGR_ADDSTPARA|INDICATION);
 	    default:
 		printk(KERN_WARNING "l1_manager prim %x not handled\n", prim);
 		return(-EINVAL);
