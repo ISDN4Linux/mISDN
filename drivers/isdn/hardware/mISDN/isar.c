@@ -1,4 +1,4 @@
-/* $Id: isar.c,v 0.9 2001/03/04 18:55:15 kkeil Exp $
+/* $Id: isar.c,v 0.10 2001/03/05 01:48:27 kkeil Exp $
  *
  * isar.c   ISAR (Siemens PSB 7110) specific routines
  *
@@ -704,7 +704,7 @@ isar_fill_fifo(bchannel_t *bch)
 	u_char *ptr;
 
 	if ((bch->debug & L1_DEB_HSCX) && !(bch->debug & L1_DEB_HSCX_FIFO))
-		debugprint(&bch->inst, "isar_fill_fifo");
+		debugprint(&bch->inst, __FUNCTION__);
 	count = bch->tx_len - bch->tx_idx;
 	if (count <= 0)
 		return;
@@ -718,8 +718,7 @@ isar_fill_fifo(bchannel_t *bch)
 		msb = HDLC_FED;
 	}
 	ptr = bch->tx_buf + bch->tx_idx;
-	bch->tx_idx += count;
-	if (!bch->hw.isar.txcnt) {
+	if (!bch->tx_idx) {
 		msb |= HDLC_FST;
 		if ((bch->protocol == ISDN_PID_L1_B_FAX) &&
 			(bch->hw.isar.cmd == PCTRL_CMD_FTH)) {
@@ -731,10 +730,10 @@ isar_fill_fifo(bchannel_t *bch)
 			}  
 		}
 	}
-	bch->hw.isar.txcnt += count;
+	bch->tx_idx += count;
 	switch (bch->protocol) {
 		case ISDN_PID_NONE:
-			printk(KERN_ERR"isar_fill_fifo wrong protocol 0\n");
+			printk(KERN_ERR __FUNCTION__" wrong protocol 0\n");
 			break;
 		case ISDN_PID_L1_B_64TRANS:
 		case ISDN_PID_L1_B_TRANS_TTR:
@@ -750,7 +749,7 @@ isar_fill_fifo(bchannel_t *bch)
 		case ISDN_PID_L1_B_FAX:
 			if (bch->hw.isar.state != STFAX_ACTIV) {
 				if (bch->debug & L1_DEB_WARN)
-					debugprint(&bch->inst, "isar_fill_fifo: not ACTIV");
+					debugprint(&bch->inst, __FUNCTION__": not ACTIV");
 			} else if (bch->hw.isar.cmd == PCTRL_CMD_FTH) { 
 				sendmsg(bch, SET_DPS(bch->hw.isar.dpath) | ISAR_HIS_SDATA,
 					msb, count, ptr);
@@ -759,13 +758,13 @@ isar_fill_fifo(bchannel_t *bch)
 					0, count, ptr);
 			} else {
 				if (bch->debug & L1_DEB_WARN)
-					debugprint(&bch->inst, "isar_fill_fifo: not FTH/FTM");
+					debugprint(&bch->inst, __FUNCTION__": not FTH/FTM");
 			}
 			break;
 		default:
 			if (bch->debug)
-				debugprint(&bch->inst, "isar_fill_fifo protocol(%x) error", bch->protocol);
-			printk(KERN_ERR"isar_fill_fifo protocol(%x) error\n", bch->protocol);
+				debugprint(&bch->inst, __FUNCTION__": protocol(%x) error", bch->protocol);
+			printk(KERN_ERR __FUNCTION__" protocol(%x) error\n", bch->protocol);
 			break;
 	}
 }
@@ -788,6 +787,7 @@ send_frames(bchannel_t *bch)
 	if (bch->tx_len - bch->tx_idx) {
 		isar_fill_fifo(bch);
 	} else {
+		bch->tx_idx = 0;
 		if (bch->protocol == ISDN_PID_L1_B_FAX) {
 			if (bch->hw.isar.cmd == PCTRL_CMD_FTH) {
 				if (test_bit(BC_FLG_LASTDATA, &bch->Flag)) {
@@ -800,13 +800,11 @@ send_frames(bchannel_t *bch)
 				}
 			}
 		}
-		bch->hw.isar.txcnt = 0;
 		if (test_and_clear_bit(FLG_TX_NEXT, &bch->Flag)) {
 			if (bch->next_skb) {
 				bch->tx_len = bch->next_skb->len;
 				memcpy(bch->tx_buf,
 					bch->next_skb->data, bch->tx_len);
-				bch->tx_idx = 0;
 				isar_fill_fifo(bch);
 				isar_sched_event(bch, B_XMTBUFREADY);
 			} else {

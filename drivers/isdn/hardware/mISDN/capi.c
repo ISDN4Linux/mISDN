@@ -1,4 +1,4 @@
-/* $Id: capi.c,v 0.6 2001/03/04 17:08:32 kkeil Exp $
+/* $Id: capi.c,v 0.7 2001/03/05 01:48:27 kkeil Exp $
  *
  */
 
@@ -9,7 +9,7 @@
 #include "helper.h"
 #include "debug.h"
 
-const char *capi_revision = "$Revision: 0.6 $";
+const char *capi_revision = "$Revision: 0.7 $";
 
 static int debug = 0;
 static hisaxobject_t capi_obj;
@@ -238,6 +238,7 @@ capi20_manager(void *data, u_int prim, void *arg) {
 				inst = &binst->inst;
 				break;
 			}
+			binst = binst->next;
 		}
 		if (inst)
 			break;

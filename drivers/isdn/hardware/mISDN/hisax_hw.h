@@ -1,4 +1,4 @@
-/* $Id: hisax_hw.h,v 0.3 2001/03/03 18:17:15 kkeil Exp $
+/* $Id: hisax_hw.h,v 0.4 2001/03/05 01:48:27 kkeil Exp $
  *
  *   Basic declarations, defines for HiSax hardware drivers
  *
@@ -49,7 +49,6 @@ struct isar_reg {
 
 struct isar_hw {
 	int dpath;
-	int txcnt;
 	int mml;
 	u_char state;
 	u_char cmd;
@@ -68,7 +67,6 @@ struct hdlc_hw {
 		struct hdlc_stat_reg sr;
 	} ctrl;
 	u_int stat;
-	int count;              /* Current skb sent count */
 };
 
 
