@@ -1,7 +1,7 @@
 Vendor:       SuSE GmbH, Nuernberg, Germany
 Distribution: SuSE Linux 7.3 (i386)
 Name:         km_newhisax
-Release:      13
+Release:      14
 Packager:     feedback@suse.de
 
 Copyright:    Karsten Keil GPL
@@ -36,14 +36,14 @@ mv Makefile.standalone Makefile
 rm -f -r $RPM_BUILD_ROOT
 DESTDIR=$RPM_BUILD_ROOT/usr/src/kernel-modules/newhisax
 mkdir -p $DESTDIR
-install Makefile* $DESTDIR
-install Rules.make.ext $DESTDIR
-install add.config $DESTDIR
+install -p Makefile* $DESTDIR
+install -p Rules.make.ext $DESTDIR
+install -p add.config $DESTDIR
 mkdir -p $DESTDIR/newinclude/linux
-install include/linux/*.h $DESTDIR/newinclude/linux
+install -p include/linux/*.h $DESTDIR/newinclude/linux
 mkdir -p $DESTDIR/drivers/isdn/hisax
-install drivers/isdn/hisax/Makefile $DESTDIR/drivers/isdn/hisax
-install drivers/isdn/hisax/*.[ch] $DESTDIR/drivers/isdn/hisax
+install -p drivers/isdn/hisax/Makefile $DESTDIR/drivers/isdn/hisax
+install -p drivers/isdn/hisax/*.[ch] $DESTDIR/drivers/isdn/hisax
 
 #
 %{?suse_check}
