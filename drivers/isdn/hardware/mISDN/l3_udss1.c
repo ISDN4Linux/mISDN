@@ -1,4 +1,4 @@
-/* $Id: l3_udss1.c,v 1.1 2001/11/14 10:41:26 kkeil Exp $
+/* $Id: l3_udss1.c,v 1.2 2001/12/05 13:49:17 kkeil Exp $
  *
  * EURO/DSS1 D-channel protocol
  *
@@ -24,7 +24,7 @@ static int debug = 0;
 static hisaxobject_t u_dss1;
 
 
-const char *dss1_revision = "$Revision: 1.1 $";
+const char *dss1_revision = "$Revision: 1.2 $";
 
 static int dss1man(l3_process_t *, u_int, void *);
 
@@ -1975,9 +1975,14 @@ dss1_fromdown(hisaxif_t *hif, struct sk_buff *skb)
 				dev_kfree_skb(skb);
 			return(0);
 			break;
+		case (DL_DATA | CONFIRM):
+		case (DL_UNITDATA | CONFIRM):
+			dev_kfree_skb(skb);
+			return(0);
+			break;
                 default:
-                        printk(KERN_WARNING
-                        	"HiSax dss1up unknown pr=%04x\n", hh->prim);
+                        printk(KERN_WARNING __FUNCTION__
+                        	": unknown pr=%04x\n", hh->prim);
                         return(-EINVAL);
 	}
 	if (skb->len < 3) {
