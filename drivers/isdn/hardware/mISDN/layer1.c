@@ -1,4 +1,4 @@
-/* $Id: layer1.c,v 0.10 2001/03/11 21:23:39 kkeil Exp $
+/* $Id: layer1.c,v 0.11 2001/03/26 11:40:02 kkeil Exp $
  *
  * hisax_l1.c     common low level stuff for I.430 layer1
  *
@@ -10,7 +10,7 @@
  *
  */
 
-const char *l1_revision = "$Revision: 0.10 $";
+const char *l1_revision = "$Revision: 0.11 $";
 
 #include <linux/config.h>
 #include <linux/module.h>
@@ -29,7 +29,6 @@ typedef struct _layer1 {
 	hisaxinstance_t	inst;
 } layer1_t;
 
-static layer1_t *l1list = NULL;
 static int debug = 0;
 static hisaxobject_t isdnl1;
 
@@ -163,7 +162,24 @@ l1up(layer1_t *l1, u_int prim, int dinfo, int len, void *arg) {
 			printk(KERN_WARNING "HiSax: l1up err %d\n", err);
 			return(err);
 		}
-	}
+	} else
+		printk(KERN_ERR "l1up no func\n");
+	return(err);	
+}
+
+static int
+l1down(layer1_t *l1, u_int prim, int dinfo, int len, void *arg) {
+	int		err = -EINVAL;
+	hisaxif_t	*downif = &l1->inst.down;
+
+	if (downif->func) {
+		err = downif->func(downif, prim, dinfo, len, arg);
+		if (err < 0) {
+			printk(KERN_WARNING "HiSax: l1down err %d\n", err);
+			return(err);
+		}
+	} else
+		printk(KERN_ERR "l1down no func\n");
 	return(err);	
 }
 
@@ -180,7 +196,7 @@ l1_deact_cnf(struct FsmInst *fi, int event, void *arg)
 
 	FsmChangeState(fi, ST_L1_F3);
 	if (test_bit(FLG_L1_ACTIVATING, &l1->Flags))
-		l1->inst.down.func(&l1->inst.down, PH_CONTROL | REQUEST,
+		l1down(l1, PH_CONTROL | REQUEST,
 			0, 4, (void *)HW_POWERUP);
 }
 
@@ -201,7 +217,7 @@ l1_power_up_s(struct FsmInst *fi, int event, void *arg)
 
 	if (test_bit(FLG_L1_ACTIVATING, &l1->Flags)) {
 		FsmChangeState(fi, ST_L1_F4);
-		l1->inst.down.func(&l1->inst.down, PH_SIGNAL | REQUEST,
+		l1down(l1, PH_SIGNAL | REQUEST,
 			0, 4, (void *)INFO3_P8);
 		FsmRestartTimer(&l1->timer, TIMER3_VALUE, EV_TIMER3, NULL, 2);
 		test_and_set_bit(FLG_L1_T3RUN, &l1->Flags);
@@ -232,7 +248,7 @@ l1_info2_ind(struct FsmInst *fi, int event, void *arg)
 	else
 #endif
 		FsmChangeState(fi, ST_L1_F6);
-	l1->inst.down.func(&l1->inst.down, PH_SIGNAL | REQUEST, 0,
+	l1down(l1, PH_SIGNAL | REQUEST, 0,
 		4, (void *)INFO3_P8);
 }
 
@@ -247,7 +263,7 @@ l1_info4_ind(struct FsmInst *fi, int event, void *arg)
 	else
 #endif
 		FsmChangeState(fi, ST_L1_F7);
-	l1->inst.down.func(&l1->inst.down, PH_SIGNAL | REQUEST, 0,
+	l1down(l1, PH_SIGNAL | REQUEST, 0,
 		4, (void *)INFO3_P8);
 	if (test_and_clear_bit(FLG_L1_DEACTTIMER, &l1->Flags))
 		FsmDelTimer(&l1->timer, 4);
@@ -276,7 +292,7 @@ l1_timer3(struct FsmInst *fi, int event, void *arg)
 #endif
 	if (l1->l1m.state != ST_L1_F6) {
 		FsmChangeState(fi, ST_L1_F3);
-		l1->inst.down.func(&l1->inst.down, PH_CONTROL | REQUEST,
+		l1down(l1, PH_CONTROL | REQUEST,
 			0, 4, (void *)HW_POWERUP);
 	}
 }
@@ -305,7 +321,7 @@ l1_timer_deact(struct FsmInst *fi, int event, void *arg)
 	if (test_and_clear_bit(FLG_L1_DBLOCKED, &l1->Flags))
 		l1up(l1, PH_CONTROL | INDICATION, 0, 4, &db);
 	l1up(l1, PH_DEACTIVATE | INDICATION, 0, 0, NULL);
-	l1->inst.down.func(&l1->inst.down, PH_CONTROL | REQUEST, 0, 4,
+	l1down(l1, PH_CONTROL | REQUEST, 0, 4,
 		(void *)HW_DEACTIVATE);
 }
 
@@ -314,7 +330,7 @@ l1_activate_s(struct FsmInst *fi, int event, void *arg)
 {
 	layer1_t *l1 = fi->userdata;
 
-	l1->inst.down.func(&l1->inst.down, PH_CONTROL | REQUEST, 0, 4,
+	l1down(l1, PH_CONTROL | REQUEST, 0, 4,
 		(void *)HW_RESET);
 }
 
@@ -391,7 +407,7 @@ l1_deact_req_u(struct FsmInst *fi, int event, void *arg)
 	FsmChangeState(fi, ST_L1_RESET);
 	FsmRestartTimer(&l1->timer, 550, EV_TIMER_DEACT, NULL, 2);
 	test_and_set_bit(FLG_L1_DEACTTIMER, &l1->Flags);
-	l1->inst.down.func(&l1->inst.down, PH_CONTROL | REQUEST, 0, 4,
+	l1down(l1, PH_CONTROL | REQUEST, 0, 4,
 		(void *)HW_POWERUP);
 }
 
@@ -415,7 +431,7 @@ l1_activate_u(struct FsmInst *fi, int event, void *arg)
 {
 	layer1_t *l1 = fi->userdata;
 
-	l1->inst.down.func(&l1->inst.down, PH_SIGNAL | REQUEST, 0, 4,
+	l1down(l1, PH_SIGNAL | REQUEST, 0, 4,
 		(void *)INFO1);
 }
 
@@ -501,7 +517,7 @@ l1from_up(hisaxif_t *hif, u_int prim, int dinfo, int len, void *arg) {
 	switch(prim) {
 		case (PH_DATA | REQUEST):
 		case (PH_CONTROL | REQUEST):
-			return(l1->inst.down.func(&l1->inst.down, prim, dinfo, len, arg));
+			return(l1down(l1, prim, dinfo, len, arg));
 			break;
 		case (PH_ACTIVATE | REQUEST):
 			if (test_bit(FLG_L1_ACTIVATED, &l1->Flags))
@@ -576,49 +592,41 @@ l1from_down(hisaxif_t *hif, u_int prim, int dinfo, int len, void *arg) {
 static void
 release_l1(layer1_t *l1) {
 	hisaxinstance_t	*inst = &l1->inst;
-	hisaxif_t hif;
 
 	FsmDelTimer(&l1->timer, 0);
-	memset(&hif, 0, sizeof(hisaxif_t));
-	hif.fdata = l1;
-	hif.func = l1from_up;
-	hif.protocol = inst->up.protocol;
-	hif.layermask = inst->up.layermask;
-	isdnl1.ctrl(inst->st, MGR_DELIF | REQUEST, &hif);
-	hif.fdata = l1;
-	hif.func = l1from_down;
-	hif.protocol = inst->down.protocol;
-	hif.layermask = inst->down.layermask;
-	isdnl1.ctrl(inst->st, MGR_DELIF | REQUEST, &hif);
-	REMOVE_FROM_LISTBASE(l1, l1list);
-	isdnl1.ctrl(inst->st, MGR_DELLAYER | REQUEST, inst);
+	if (inst->up.peer) {
+		inst->up.peer->obj->ctrl(inst->up.peer,
+			MGR_DISCONNECT | REQUEST, &inst->up);
+	}
+	if (inst->down.peer) {
+		inst->down.peer->obj->ctrl(inst->down.peer,
+			MGR_DISCONNECT | REQUEST, &inst->down);
+	}
+	REMOVE_FROM_LISTBASE(l1, ((layer1_t *)isdnl1.ilist));
+	isdnl1.ctrl(inst->st, MGR_UNREGLAYER | REQUEST, inst);
 	kfree(l1);
 }
 
-static layer1_t *
-create_l1(hisaxstack_t *st, hisaxif_t *hif) {
+static int
+new_l1(hisaxstack_t *st, hisax_pid_t *pid) {
 	layer1_t *nl1;
-	int err, lay;
+	int err;
 
-	if (!hif)
-		return(NULL);
-	printk(KERN_DEBUG "create_l1 prot %x\n", hif->protocol);
-	if (!st) {
-		printk(KERN_ERR "create_l1 no stack\n");
-		return(NULL);
-	}
-	lay = layermask2layer(hif->layermask);
-	if (lay < 0) {
-		int_errtxt("lm %x", hif->layermask);
-		return(NULL);
-	}
+	if (!st || !pid)
+		return(-EINVAL);
 	if (!(nl1 = kmalloc(sizeof(layer1_t), GFP_ATOMIC))) {
 		printk(KERN_ERR "kmalloc layer1_t failed\n");
-		return(NULL);
+		return(-ENOMEM);
 	}
 	memset(nl1, 0, sizeof(layer1_t));
-	nl1->inst.pid.protocol[lay] = hif->protocol;
-	switch(hif->protocol) {
+	memcpy(&nl1->inst.pid, pid, sizeof(hisax_pid_t));
+	nl1->inst.obj = &isdnl1;
+	nl1->inst.data = nl1;
+	if (!SetHandledPID(&isdnl1, &nl1->inst.pid)) {
+		int_error();
+		return(-ENOPROTOOPT);
+	}
+	switch(pid->protocol[1]) {
 	    case ISDN_PID_L1_TE_S0:
 	    	sprintf(nl1->inst.name, "l1TES0 %d", st->id);
 		nl1->l1m.fsm = &l1fsm_s;
@@ -626,9 +634,10 @@ create_l1(hisaxstack_t *st, hisaxif_t *hif) {
 		nl1->Flags = 0;
 		break;
 	    default:
-		printk(KERN_ERR "layer1 create failed prt %x\n",hif->protocol);
+		printk(KERN_ERR "layer1 create failed prt %x\n",
+			pid->protocol[1]);
 		kfree(nl1);
-		return(NULL);
+		return(-ENOPROTOOPT);
 	}
 	nl1->debug = debug;
 	nl1->l1m.debug = debug;
@@ -636,85 +645,16 @@ create_l1(hisaxstack_t *st, hisaxif_t *hif) {
 	nl1->l1m.userint = 0;
 	nl1->l1m.printdebug = l1m_debug;
 	FsmInitTimer(&nl1->l1m, &nl1->timer);
-	nl1->inst.obj = &isdnl1;
-	nl1->inst.layermask = hif->layermask;
-	nl1->inst.data = nl1;
-	APPEND_TO_LIST(nl1, l1list);
-	isdnl1.ctrl(st, MGR_ADDLAYER | INDICATION, &nl1->inst);
-	nl1->inst.up.layermask = get_up_layer(nl1->inst.layermask);
-	nl1->inst.up.protocol = get_protocol(st, nl1->inst.up.layermask);
-	nl1->inst.up.stat = IF_DOWN;
-	nl1->inst.down.layermask = get_down_layer(nl1->inst.layermask);
-	nl1->inst.down.protocol = get_protocol(st, nl1->inst.down.layermask);
-	nl1->inst.down.stat = IF_UP;
-	err = isdnl1.ctrl(st, MGR_ADDIF | REQUEST, &nl1->inst.down);
+	nl1->inst.up.owner = &nl1->inst;
+	nl1->inst.down.owner = &nl1->inst;
+	APPEND_TO_LIST(nl1, ((layer1_t *)isdnl1.ilist));
+	err = isdnl1.ctrl(st, MGR_REGLAYER | INDICATION, &nl1->inst);
 	if (err) {
-		release_l1(nl1);
-		printk(KERN_ERR "layer1 down interface request failed %d\n", err);
-		return(NULL);
+		FsmDelTimer(&nl1->timer, 0);
+		REMOVE_FROM_LISTBASE(nl1, ((layer1_t *)isdnl1.ilist));
+		kfree(nl1);
 	}
-	err = isdnl1.ctrl(st, MGR_ADDIF | REQUEST, &nl1->inst.up);
-	if (err) {
-		release_l1(nl1);
-		printk(KERN_ERR "layer1 up interface request failed %d\n", err);
-		return(NULL);
-	}
-	return(nl1);
-}
-
-static int
-add_if(layer1_t *l1, hisaxif_t *hif) {
-	int err;
-	hisaxinstance_t *inst = &l1->inst;
-
-	printk(KERN_DEBUG "layer1 add_if lay %x/%x prot %x\n", hif->layermask,
-		hif->stat, hif->protocol);
-	hif->fdata = l1;
-	if (IF_TYPE(hif) == IF_UP) {
-		hif->func = l1from_up;
-		if (inst->up.stat == IF_NOACTIV) {
-			inst->up.stat = IF_DOWN;
-			inst->up.protocol = get_protocol(inst->st,
-				inst->up.layermask);
-			err = isdnl1.ctrl(inst->st, MGR_ADDIF | REQUEST, &inst->up);
-			if (err)
-				inst->up.stat = IF_NOACTIV;
-		}
-	} else if (IF_TYPE(hif) == IF_DOWN) {
-		hif->func = l1from_down;
-		if (inst->down.stat == IF_NOACTIV) {
-			inst->down.stat = IF_UP;
-			inst->down.protocol = get_protocol(inst->st,
-				inst->down.layermask);
-			err = isdnl1.ctrl(inst->st, MGR_ADDIF | REQUEST, &inst->down);
-			if (err)
-				inst->down.stat = IF_NOACTIV;
-		}
-	} else
-		return(-EINVAL);
-	return(0);
-}
-
-static int
-del_if(layer1_t *l1, hisaxif_t *hif) {
-	int err;
-	hisaxinstance_t *inst = &l1->inst;
-
-	printk(KERN_DEBUG "layer1 del_if lay %x/%x %p/%p\n", hif->layermask,
-		hif->stat, hif->func, hif->fdata);
-	if ((hif->func == inst->up.func) && (hif->fdata == inst->up.fdata)) {
-		inst->up.stat = IF_NOACTIV;
-		inst->up.protocol = ISDN_PID_NONE;
-		err = isdnl1.ctrl(inst->st, MGR_ADDIF | REQUEST, &inst->up);
-	} else if ((hif->func == inst->down.func) && (hif->fdata == inst->down.fdata)) {
-		inst->down.stat = IF_NOACTIV;
-		inst->down.protocol = ISDN_PID_NONE;
-		err = isdnl1.ctrl(inst->st, MGR_ADDIF | REQUEST, &inst->down);
-	} else {
-		printk(KERN_DEBUG "layer1 del_if no if found\n");
-		return(-EINVAL);
-	}
-	return(0);
+	return(err);
 }
 
 static char MName[] = "ISDNL1";
@@ -727,35 +667,44 @@ MODULE_PARM(debug, "1i");
 
 static int
 l1_manager(void *data, u_int prim, void *arg) {
-	hisaxstack_t *st = data;
-	layer1_t *l1l = l1list;
+	hisaxinstance_t *inst = data;
+	layer1_t *l1l = isdnl1.ilist;
 
-//	printk(KERN_DEBUG "l1_manager data:%p prim:%x arg:%p\n", data, prim, arg);
+	printk(KERN_DEBUG "l1_manager data:%p prim:%x arg:%p\n", data, prim, arg);
 	if (!data)
 		return(-EINVAL);
 	while(l1l) {
-		if (l1l->inst.st == st)
+		if (&l1l->inst == inst)
 			break;
 		l1l = l1l->next;
 	}
 	switch(prim) {
-	    case MGR_ADDIF | REQUEST:
-		if (!l1l)
-			l1l = create_l1(st, arg);
+	    case MGR_NEWLAYER | REQUEST:
+		return(new_l1(data, arg));
+	    case MGR_CONNECT | REQUEST:
 		if (!l1l) {
-			printk(KERN_WARNING "l1_manager create_l1 failed\n");
+			printk(KERN_WARNING "l1_manager connect no instance\n");
 			return(-EINVAL);
 		}
-		return(add_if(l1l, arg));
+		return(ConnectIF(inst, arg));
 		break;
-	    case MGR_DELIF | REQUEST:
+	    case MGR_SETIF | REQUEST:
+	    case MGR_SETIF | INDICATION:
 		if (!l1l) {
-			printk(KERN_WARNING "l1_manager delif no instance\n");
+			printk(KERN_WARNING "l1_manager setif no instance\n");
 			return(-EINVAL);
 		}
-		return(del_if(l1l, arg));
+		return(SetIF(inst, arg, prim, l1from_up, l1from_down, l1l));
 		break;
-	    case MGR_DELLAYER | REQUEST:
+	    case MGR_DISCONNECT | REQUEST:
+	    case MGR_DISCONNECT | INDICATION:
+		if (!l1l) {
+			printk(KERN_WARNING "l1_manager disconnect no instance\n");
+			return(-EINVAL);
+		}
+		return(DisConnectIF(inst, arg));
+		break;
+	    case MGR_UNREGLAYER | REQUEST:
 	    case MGR_RELEASE | INDICATION:
 	    	if (l1l) {
 			printk(KERN_DEBUG "release_l1 id %x\n", l1l->inst.st->id);
@@ -779,6 +728,7 @@ int Isdnl1Init(void)
 	isdnl1.own_ctrl = l1_manager;
 	isdnl1.prev = NULL;
 	isdnl1.next = NULL;
+	isdnl1.ilist = NULL;
 #ifdef HISAX_UINTERFACE
 	isdnl1.DPROTO.protocol[1] |= ISDN_PID_L1_TE_U;
 	l1fsm_u.state_count = L1U_STATE_COUNT;
@@ -816,10 +766,10 @@ void cleanup_module(void)
 	if ((err = HiSax_unregister(&isdnl1))) {
 		printk(KERN_ERR "Can't unregister ISDN layer 1 error(%d)\n", err);
 	}
-	if(l1list) {
-		printk(KERN_WARNING "hisaxl1 l1list not empty\n");
-		while(l1list)
-			release_l1(l1list);
+	if(isdnl1.ilist) {
+		printk(KERN_WARNING "hisaxl1 inst list not empty\n");
+		while(isdnl1.ilist)
+			release_l1(isdnl1.ilist);
 	}
 #ifdef HISAX_UINTERFACE
 	FsmFree(&l1fsm_u);

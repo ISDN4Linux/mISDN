@@ -1,4 +1,4 @@
-/* $Id: contr.c,v 0.6 2001/03/11 21:23:39 kkeil Exp $
+/* $Id: contr.c,v 0.7 2001/03/26 11:40:02 kkeil Exp $
  *
  */
 
@@ -9,20 +9,21 @@
 #define contrDebug(contr, lev, fmt, args...) \
 	capidebug(lev, fmt, ## args)
 
-//static void d2_listener(struct IsdnCardState *cs, u_char *buf, int len);
-
-int contrConstr(Contr_t *contr, hisaxstack_t *st, hisaxif_t *hif, hisaxobject_t *ocapi)
+int contrConstr(Contr_t *contr, hisaxstack_t *st, hisax_pid_t *pid, hisaxobject_t *ocapi)
 { 
 	char tmp[10];
-	int err;
 	hisaxstack_t *cst = st->child;
 	BInst_t	*binst;
 
 	memset(contr, 0, sizeof(Contr_t));
+	memcpy(&contr->inst.pid, pid, sizeof(hisax_pid_t));
 	contr->adrController = st->id;
 	sprintf(contr->inst.name, "CAPI %d", st->id);
 	contr->inst.obj = ocapi;
-	APPEND_TO_LIST(contr, ocapi->ilist);
+	if (!SetHandledPID(ocapi, &contr->inst.pid)) {
+		int_error();
+		return(-ENOPROTOOPT);
+	}
 	while(cst) {
 		if (!(binst = kmalloc(sizeof(BInst_t), GFP_KERNEL))) {
 			printk(KERN_ERR "no mem for Binst\n");
@@ -33,39 +34,32 @@ int contrConstr(Contr_t *contr, hisaxstack_t *st, hisaxif_t *hif, hisaxobject_t 
 		binst->inst.st = cst;
 		binst->inst.data = binst;
 		binst->inst.obj = ocapi;
-		binst->inst.layermask = ISDN_LAYER(4);
+		binst->inst.pid.layermask |= ISDN_LAYER(4);
 		binst->inst.down.stat = IF_NOACTIV;
 		binst->inst.down.protocol = ISDN_PID_NONE;
-		binst->inst.down.layermask = get_down_layer(binst->inst.layermask);
+		binst->inst.down.layer = get_down_layer(binst->inst.pid.layermask);
 		APPEND_TO_LIST(binst, contr->binst);
 		cst = cst->next;
 	}
+	APPEND_TO_LIST(contr, ocapi->ilist);
 	sprintf(tmp, "HiSax%d", contr->adrController);
 	contr->ctrl = cdrv_if->attach_ctr(&hisax_driver, tmp, contr);
 	if (!contr->ctrl)
 		return -ENODEV;
-	contr->inst.pid.protocol[4] = hif->protocol;
-	contr->inst.layermask = hif->layermask;
 	contr->inst.data = contr;
-	ocapi->ctrl(st, MGR_ADDLAYER | INDICATION, &contr->inst);
+	ocapi->ctrl(st, MGR_REGLAYER | INDICATION, &contr->inst);
 	contr->inst.up.protocol = ISDN_PID_NONE;
-	contr->inst.up.layermask = 0;
+	contr->inst.up.layer = 0;
 	contr->inst.up.stat = IF_DOWN;
-	contr->inst.down.layermask = get_down_layer(contr->inst.layermask);
-	contr->inst.down.protocol = get_protocol(st, contr->inst.down.layermask);
-	contr->inst.down.stat = IF_UP;
-	err = ocapi->ctrl(st, MGR_ADDIF | REQUEST, &contr->inst.down);
-	if (err) {
-		printk(KERN_ERR "contrConstr down interface request failed %d\n", err);
-		return(-EIO);
-	}
+	contr->inst.down.layer = get_down_layer(contr->inst.pid.layermask);
+	contr->inst.down.protocol = get_protocol(st, contr->inst.down.layer);
 	return 0;
 }
 
 void contrDestr(Contr_t *contr)
 {
 	int i;
-	Contr_t *base = contr->inst.obj->ilist;
+	hisaxinstance_t *inst = &contr->inst;
 
 	for (i = 0; i < CAPI_MAXAPPL; i++) {
 		if (contr->appls[i]) {
@@ -96,8 +90,16 @@ void contrDestr(Contr_t *contr)
 		REMOVE_FROM_LISTBASE(binst, contr->binst);
 		kfree(binst);
 	}
-	REMOVE_FROM_LISTBASE(contr, base);
-	contr->inst.obj->ilist = base;
+	if (inst->up.peer) {
+		inst->up.peer->obj->ctrl(inst->up.peer,
+			MGR_DISCONNECT | REQUEST, &inst->up);
+	}
+	if (inst->down.peer) {
+		inst->down.peer->obj->ctrl(inst->down.peer,
+			MGR_DISCONNECT | REQUEST, &inst->down);
+	}
+	inst->obj->ctrl(inst, MGR_UNREGLAYER | REQUEST, NULL);
+	REMOVE_FROM_LISTBASE(contr, ((Contr_t *)inst->obj->ilist));
 }
 
 void contrRun(Contr_t *contr)
@@ -359,13 +361,12 @@ void contrPutStatus(Contr_t *contr, char *msg)
 	printk(KERN_DEBUG "HiSax: %s", msg);
 }
 
-Contr_t *newContr(hisaxobject_t *ocapi, hisaxstack_t *st, hisaxif_t *hif)
+Contr_t *newContr(hisaxobject_t *ocapi, hisaxstack_t *st, hisax_pid_t *pid)
 {
 	Contr_t *contr;
 
-	if (!hif)
+	if (!pid)
 		return(NULL);
-	printk(KERN_DEBUG "newContr prot %x\n", hif->protocol);
 	if (!st) {
 		printk(KERN_ERR "newContr no stack\n");
 		return(NULL);
@@ -374,7 +375,7 @@ Contr_t *newContr(hisaxobject_t *ocapi, hisaxstack_t *st, hisaxif_t *hif)
 	if (!contr)
 		return(NULL);
 
-	if (contrConstr(contr, st, hif, ocapi) != 0) {
+	if (contrConstr(contr, st, pid, ocapi) != 0) {
 		contrDestr(contr);
 		kfree(contr);
 		return(NULL);
@@ -401,10 +402,11 @@ BInst_t *contrSelChannel(Contr_t *contr, int channr)
 			binst->inst.st = cst;
 			binst->inst.data = binst;
 			binst->inst.obj = contr->inst.obj;
-			binst->inst.layermask = ISDN_LAYER(4);
+			binst->inst.pid.layermask = ISDN_LAYER(4);
 			binst->inst.down.stat = IF_NOACTIV;
 			binst->inst.down.protocol = ISDN_PID_NONE;
-			binst->inst.down.layermask = get_down_layer(binst->inst.layermask);
+			binst->inst.down.layer = 
+				get_down_layer(binst->inst.pid.layermask);
 			APPEND_TO_LIST(binst, contr->binst);
 			cst = cst->next;
 		}

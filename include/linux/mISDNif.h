@@ -1,4 +1,4 @@
-/* $Id: mISDNif.h,v 0.19 2001/03/13 02:34:02 kkeil Exp $
+/* $Id: mISDNif.h,v 0.20 2001/03/26 11:40:02 kkeil Exp $
  *
  */
 
@@ -19,7 +19,7 @@
  *
  */
 
-/* type */
+/* SUBCOMMANDS */
 #define REQUEST		0x80
 #define CONFIRM		0x81
 #define INDICATION	0x82
@@ -27,19 +27,21 @@
 
 /* management */
 #define MGR_GETOBJECT	0x0f0100
-#define MGR_ADDOBJECT	0x0f0200
+#define MGR_NEWOBJECT	0x0f0200
 #define MGR_DELOBJECT	0x0f0300
 #define MGR_GETSTACK	0x0f1100
-#define MGR_ADDSTACK	0x0f1200
+#define MGR_NEWSTACK	0x0f1200
 #define MGR_DELSTACK	0x0f1300
 #define MGR_SETSTACK	0x0f1400
 #define MGR_CLEARSTACK	0x0f1500
+#define MGR_REGLAYER	0x0f1600
+#define MGR_UNREGLAYER	0x0f1700
 #define MGR_GETLAYER	0x0f2100
-#define MGR_ADDLAYER	0x0f2200
+#define MGR_NEWLAYER	0x0f2200
 #define MGR_DELLAYER	0x0f2300
 #define MGR_GETIF	0x0f3100
-#define MGR_ADDIF	0x0f3200
-#define MGR_DELIF	0x0f3300
+#define MGR_CONNECT	0x0f3200
+#define MGR_DISCONNECT	0x0f3300
 #define MGR_SETIF	0x0f3400
 #define MGR_RELEASE	0x0f4500
 #define MGR_CONTROL	0x0fe100
@@ -210,7 +212,7 @@
 
 #define MAX_LAYER_NR	7
 #define ISDN_LAYER(n)	(1<<n)
-
+#define LAYER_OUTRANGE(layer)	((layer<0) || (layer>MAX_LAYER_NR))
 #define HISAX_MAX_IDLEN	16
 
 #define IADDR_BIT	0x10000000
@@ -230,6 +232,9 @@
 #define DUMMY_CR_FLAG	0x7FFFFF00
 #define CONTROLER_MASK	0x000000FF
 
+
+/* interface extentions */
+#define EXT_LAYER_SPLIT
 /* special packet type */
 #define PACKET_NOACK	250
 
@@ -271,13 +276,13 @@ typedef struct _hisax_pid {
 	int	protocol[MAX_LAYER_NR +1];
 	void	*param[MAX_LAYER_NR +1];
 	__u16	global;
+	int	layermask;
 } hisax_pid_t;
 
 typedef struct _layer_info {
 	char		name[HISAX_MAX_IDLEN];
 	int		object_id;
 	int		extentions;
-	int		layermask;
 	hisax_pid_t	pid;
 } layer_info_t;
 
@@ -485,11 +490,13 @@ typedef struct _hisaxobject {
 typedef struct _hisaxif {
 	struct _hisaxif		*prev;
 	struct _hisaxif		*next;
-	int			layermask;
+	int			extentions;
+	int			layer;
 	int			protocol;
 	int			stat;
 	struct _hisaxstack	*st;
-	struct _hisaxinstance	*inst;
+	struct _hisaxinstance	*owner;
+	struct _hisaxinstance	*peer;
 	int			(*func)(struct _hisaxif *, u_int, int, int, void *);
 	void			*fdata;
 } hisaxif_t;
@@ -498,8 +505,8 @@ typedef struct _hisaxinstance {
 	struct _hisaxinstance	*prev;
 	struct _hisaxinstance	*next;
 	char			name[HISAX_MAX_IDLEN];
+	u_int			id;
 	int			extentions;
-	int			layermask;
 	hisax_pid_t		pid;
 	struct _hisaxstack	*st;
 	hisaxobject_t		*obj;
@@ -530,7 +537,11 @@ typedef struct _hisaxstack {
 extern int bprotocol2pid(void *, hisax_pid_t *);
 extern int get_protocol(hisaxstack_t *, int);
 extern int HasProtocol(hisaxobject_t *, int);
-extern int DelIF(hisaxinstance_t *, hisaxif_t *, void *, void *);
+extern int SetHandledPID(hisaxobject_t *, hisax_pid_t *);
+extern void RemoveUsedPID(hisax_pid_t *, hisax_pid_t *);
+extern int SetIF(hisaxinstance_t *, hisaxif_t *, u_int, void *, void *, void *);
+extern int ConnectIF(hisaxinstance_t *, hisaxinstance_t *);
+extern int DisConnectIF(hisaxinstance_t *, hisaxif_t *);
 
 /* global exported functions */
 

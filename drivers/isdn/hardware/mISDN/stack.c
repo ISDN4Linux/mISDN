@@ -1,4 +1,4 @@
-/* $Id: stack.c,v 0.6 2001/03/13 02:03:23 kkeil Exp $
+/* $Id: stack.c,v 0.7 2001/03/26 11:40:02 kkeil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -125,7 +125,7 @@ getlayer4lay(hisaxstack_t *st, int layermask)
 	while(layer) {
 		inst = layer->inst;
 		while(inst) {
-			if (inst->layermask & layermask)
+			if (inst->pid.layermask & layermask)
 				goto out;
 			inst = inst->next;
 		}
@@ -158,9 +158,9 @@ get_instance(hisaxstack_t *st, int layer_nr, int protocol)
 		while(inst) {
 			if (core_debug & DEBUG_CORE_FUNC)
 				printk(KERN_DEBUG "get_instance inst(%p) lm %x/%x prot %x/%x\n",
-					inst, inst->layermask, ISDN_LAYER(layer_nr),
+					inst, inst->pid.layermask, ISDN_LAYER(layer_nr),
 					inst->pid.protocol[layer_nr], protocol);
-			if ((inst->layermask & ISDN_LAYER(layer_nr)) &&
+			if ((inst->pid.layermask & ISDN_LAYER(layer_nr)) &&
 				(inst->pid.protocol[layer_nr] == protocol))
 				goto out;
 			if (inst == inst->next) {
@@ -187,7 +187,7 @@ get_layermask(hisaxlayer_t *layer)
 
 	inst = layer->inst;
 	while(inst) {
-		mask |= inst->layermask;
+		mask |= inst->pid.layermask;
 		inst = inst->next;
 	}
 	return(mask);
@@ -226,7 +226,8 @@ insertlayer(hisaxstack_t *st, hisaxlayer_t *layer, int layermask)
 }
 
 hisaxstack_t *
-new_stack(hisaxinstance_t *inst, hisaxstack_t *master) {
+new_stack(hisaxstack_t *master, hisaxinstance_t *inst)
+{
 	hisaxstack_t *newst;
 
 	if (core_debug & DEBUG_CORE_FUNC)
@@ -246,6 +247,8 @@ new_stack(hisaxinstance_t *inst, hisaxstack_t *master) {
 	}
 	if (core_debug & DEBUG_CORE_FUNC)
 		printk(KERN_DEBUG "Stack id %x added\n", newst->id);
+	if (inst)
+		inst->st = newst;
 	return(newst);
 }
 
@@ -261,9 +264,9 @@ release_layers(hisaxstack_t *st, u_int prim) {
 		while (inst) {
 			if (core_debug & DEBUG_CORE_FUNC)
 				printk(KERN_DEBUG __FUNCTION__ ": st(%p) inst(%p) lm(%x)\n",
-					st, inst, inst->layermask);
+					st, inst, inst->pid.layermask);
 			tmp = inst->next;
-			inst->obj->own_ctrl(st, prim, inst);
+			inst->obj->own_ctrl(inst, prim, NULL);
 			inst = tmp;
 		}
 		REMOVE_FROM_LISTBASE(layer, st->lstack);
@@ -338,10 +341,10 @@ register_layer(hisaxstack_t *st, hisaxinstance_t *inst) {
 
 	if (!st || !inst)
 		return(-EINVAL);
-	lay = inst->layermask;
+	lay = inst->pid.layermask;
 	if (core_debug & DEBUG_CORE_FUNC)
-		printk(KERN_DEBUG "register_layer st(%p) inst(%p) lmask(%x)\n",
-			st, inst, lay);
+		printk(KERN_DEBUG "register_layer st(%p) inst(%p/%p) lmask(%x)\n",
+			st, inst, inst->obj, lay);
 	if (!(layer = getlayer4lay(st, lay))) {
 		if (!(layer = kmalloc(sizeof(hisaxlayer_t), GFP_ATOMIC))) {
 			int_errtxt("no mem for layer %d", lay);
@@ -366,8 +369,8 @@ unregister_instance(hisaxinstance_t *inst) {
 	st = inst->st;
 	if (core_debug & DEBUG_CORE_FUNC)
 		printk(KERN_DEBUG "unregister_instance st(%p) inst(%p) lay(%x)\n",
-			st, inst, inst->layermask);
-	if ((layer = getlayer4lay(st, inst->layermask))) {
+			st, inst, inst->pid.layermask);
+	if ((layer = getlayer4lay(st, inst->pid.layermask))) {
 		REMOVE_FROM_LISTBASE(inst, layer->inst);
 		inst->obj->refcnt--;
 	} else
@@ -377,17 +380,48 @@ unregister_instance(hisaxinstance_t *inst) {
 
 int
 set_stack(hisaxstack_t *st, hisax_pid_t *pid) {
+	int err;
+	hisaxinstance_t *inst;
+	hisaxlayer_t *hl;
 
 	if (!st || !pid) {
 		int_error();
 		return(-EINVAL);
 	}
 	memcpy(&st->pid, pid, sizeof(hisax_pid_t));
-	if (!st->mgr || !st->mgr->obj || !st->mgr->obj->own_ctrl) {
+	if (!st->mgr || !st->mgr->obj || !st->mgr->obj->ctrl) {
 		int_error();
 		return(-EINVAL);
 	}
-	return(st->mgr->obj->own_ctrl(st, MGR_SETSTACK | REQUEST, &st->pid));
+	memcpy(&st->mgr->pid, pid, sizeof(hisax_pid_t));
+	if (!SetHandledPID(st->mgr->obj, &st->mgr->pid)) {
+		int_error();
+		return(-ENOPROTOOPT);
+	} else {
+		RemoveUsedPID(pid, &st->mgr->pid);
+	}
+	err = st->mgr->obj->ctrl(st, MGR_REGLAYER | REQUEST, st->mgr);
+	if (err) {
+		int_error();
+		return(err);
+	}
+	while (pid->layermask) {
+		inst = get_next_instance(st, pid);
+		if (!inst) {
+			int_error();
+			st->mgr->obj->ctrl(st, MGR_CLEARSTACK| REQUEST, NULL);
+			return(-ENOPROTOOPT);
+		}
+		RemoveUsedPID(pid, &inst->pid);
+	}
+	hl = st->lstack;
+	while(hl && hl->next) {
+		hl->inst->obj->own_ctrl(hl->inst, MGR_CONNECT | REQUEST,
+			hl->next->inst);
+		hl = hl->next;
+	}
+	st->mgr->obj->own_ctrl(st->mgr, MGR_SETSTACK |CONFIRM, NULL);
+	return(0);
 }
 
 int
@@ -396,5 +430,5 @@ clear_stack(hisaxstack_t *st) {
 	if (!st)
 		return(-EINVAL);
 	memset(&st->pid, 0, sizeof(hisax_pid_t));
-	return(release_layers(st, MGR_DELLAYER | REQUEST));
+	return(release_layers(st, MGR_UNREGLAYER | REQUEST));
 }

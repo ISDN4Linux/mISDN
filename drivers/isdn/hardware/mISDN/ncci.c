@@ -1,4 +1,4 @@
-/* $Id: ncci.c,v 0.6 2001/03/04 00:48:49 kkeil Exp $
+/* $Id: ncci.c,v 0.7 2001/03/26 11:40:02 kkeil Exp $
  *
  */
 
@@ -309,8 +309,6 @@ static struct FsmNode fn_ncci_list[] =
 
 const int FN_NCCI_COUNT = sizeof(fn_ncci_list)/sizeof(struct FsmNode);
 
-static int ncci_l3l4(hisaxif_t *hif, u_int prim, int dinfo, int len, void *arg);
-
 void ncciConstr(Ncci_t *ncci, Cplci_t *cplci)
 {
 	memset(ncci, 0, sizeof(Ncci_t));
@@ -326,6 +324,7 @@ void ncciConstr(Ncci_t *ncci, Cplci_t *cplci)
 	ncci->contr = cplci->contr;
 	ncci->appl = cplci->appl;
 	ncci->window = cplci->appl->rp.datablkcnt;
+	skb_queue_head_init(&ncci->squeue);
 	if (ncci->window > CAPI_MAXDATAWINDOW) {
 		ncci->window = CAPI_MAXDATAWINDOW;
 	}
@@ -338,6 +337,8 @@ void ncciInitSt(Ncci_t *ncci)
 	Cplci_t *cplci = ncci->cplci;
 
 	memset(&pid, 0, sizeof(hisax_pid_t));
+	pid.layermask = ISDN_LAYER(1) | ISDN_LAYER(2) | ISDN_LAYER(3) |
+		ISDN_LAYER(4);
 	if (test_bit(PLCI_FLAG_OUTGOING, &cplci->plci->flags))
 		pid.global = 1; // DTE, orginate
 	else
@@ -352,6 +353,10 @@ void ncciInitSt(Ncci_t *ncci)
 		int_errtxt("wrong B2 prot %x", cplci->Bprotocol.B2protocol);
 		return;
 	}
+	if (cplci->Bprotocol.B2protocol == 0) /* X.75 has own flowctrl */
+		ncci->Flags = 0;
+	else
+		ncci->Flags = NCCI_FLG_FCTRL;
 	pid.protocol[2] = (1 << cplci->Bprotocol.B2protocol) |
 		ISDN_PID_LAYER(2) | ISDN_PID_BCHANNEL_BIT;
 	if (cplci->Bprotocol.B3protocol > 23) {
@@ -376,19 +381,16 @@ void ncciInitSt(Ncci_t *ncci)
 		int_error();
 		return;
 	}		
-#if 0
-	sp.headroom = 22; // reserve space for DATA_B3 IND message in skb's
-#endif
-	memset(& ncci->binst->inst.pid, 0, sizeof(hisax_pid_t));
+	memset(&ncci->binst->inst.pid, 0, sizeof(hisax_pid_t));
 	ncci->binst->inst.data = ncci;
-	ncci->binst->inst.layermask = ISDN_LAYER(4);
+	ncci->binst->inst.pid.layermask = ISDN_LAYER(4);
 	ncci->binst->inst.pid.protocol[4] = ISDN_PID_L4_B_CAPI20;
 	if (pid.protocol[3] == ISDN_PID_L3_B_TRANS) {
 		ncci->binst->inst.pid.protocol[3] = ISDN_PID_L3_B_TRANS;
-		ncci->binst->inst.layermask |= ISDN_LAYER(3);
+		ncci->binst->inst.pid.layermask |= ISDN_LAYER(3);
 	}
 	retval = ncci->binst->inst.obj->ctrl(ncci->binst->inst.st,
-		MGR_ADDLAYER | INDICATION, &ncci->binst->inst); 
+		MGR_REGLAYER | INDICATION, &ncci->binst->inst); 
 	if (retval) {
 		int_error();
 		return;
@@ -440,12 +442,20 @@ __u16 ncciSelectBprotocol(Ncci_t *ncci)
 
 void ncciDestr(Ncci_t *ncci)
 {
+	int i;
+
 	printk(KERN_DEBUG "ncciDestr NCCI %x\n", ncci->adrNCCI);
 	if (ncci->binst)
 		ncciReleaseSt(ncci);
 	if (ncci->appl)
 		ncci->contr->ctrl->free_ncci(ncci->contr->ctrl, 
 			ncci->appl->ApplId, ncci->adrNCCI);
+	/* cleanup data queues */
+	discard_queue(&ncci->squeue);
+	for (i = 0; i < ncci->window; i++) {
+		if (ncci->xmit_skb_handles[i].skb)
+			dev_kfree_skb(ncci->xmit_skb_handles[i].skb);
+	}
 }
 
 void ncciDataInd(Ncci_t *ncci, int pr, void *arg)
@@ -506,26 +516,36 @@ void ncciDataReq(Ncci_t *ncci, struct sk_buff *skb)
 		goto fail;
 	}
 	for (i = 0; i < ncci->window; i++) {
-		if (ncci->xmit_skb_handles[i].skb == 0)
+		if (ncci->xmit_skb_handles[i].skb == NULL)
 			break;
 	}
 	if (i == ncci->window) {
 		goto fail;
 	}
-
+	
 	ncci->xmit_skb_handles[i].skb = skb;
 	ncci->xmit_skb_handles[i].DataHandle = CAPIMSG_REQ_DATAHANDLE(skb->data);
 	ncci->xmit_skb_handles[i].MsgId = CAPIMSG_MSGID(skb->data);
-
 	skb_pull(skb, CAPIMSG_LEN(skb->data));
+	if (ncci->Flags & NCCI_FLG_FCTRL) {
+		if (test_and_set_bit(NCCI_FLG_BUSY, &ncci->Flags)) {
+			skb_queue_tail(&ncci->squeue, skb);
+			return;
+		}
+		if (skb_queue_len(&ncci->squeue)) {
+			skb_queue_tail(&ncci->squeue, skb);
+			skb = skb_dequeue(&ncci->squeue);
+		}
+	}
 	ncciL4L3(ncci, DL_DATA | REQUEST, DINFO_SKB, 0, skb);
 	return;
 
- fail:
+ fail: /* FIXME send error CONFIRM */
+ 	int_error();
 	dev_kfree_skb(skb);
 }
 
-void ncciDataConf(Ncci_t *ncci, int pr, void *arg)
+int ncciDataConf(Ncci_t *ncci, int pr, void *arg)
 {
 	struct sk_buff *skb = arg;
 	_cmsg cmsg;
@@ -537,14 +557,23 @@ void ncciDataConf(Ncci_t *ncci, int pr, void *arg)
 	}
 	if (i == ncci->window) {
 		int_error();
-		return;
+		return(-EINVAL);
 	}
-	ncci->xmit_skb_handles[i].skb = 0;
+	ncci->xmit_skb_handles[i].skb = NULL;
+	dev_kfree_skb(skb);
 	capi_cmsg_header(&cmsg, ncci->cplci->appl->ApplId, CAPI_DATA_B3, CAPI_CONF, 
 			 ncci->xmit_skb_handles[i].MsgId, ncci->adrNCCI);
 	cmsg.DataHandle = ncci->xmit_skb_handles[i].DataHandle;
 	cmsg.Info = 0;
 	ncciRecvCmsg(ncci, &cmsg);
+	if (ncci->Flags & NCCI_FLG_FCTRL) {
+		if (skb_queue_len(&ncci->squeue)) {
+			skb = skb_dequeue(&ncci->squeue);
+			ncciL4L3(ncci, DL_DATA | REQUEST, DINFO_SKB, 0, skb);
+		} else
+			test_and_clear_bit(NCCI_FLG_BUSY, &ncci->Flags);
+	}
+	return(0);
 }	
 	
 void ncciDataResp(Ncci_t *ncci, struct sk_buff *skb)
@@ -619,16 +648,8 @@ void ncciSendMessage(Ncci_t *ncci, struct sk_buff *skb)
  out:
 }
 
-#if 0
-void ncci_l3l4st(struct PStack *st, int pr, void *arg)
-{
-	Ncci_t *ncci = (Ncci_t *)st->l4;
 
-	ncci_l3l4(ncci, pr, arg);
-}
-#endif
-
-static int ncci_l3l4(hisaxif_t *hif, u_int prim, int dinfo, int len, void *arg)
+int ncci_l3l4(hisaxif_t *hif, u_int prim, int dinfo, int len, void *arg)
 {
 	Ncci_t *ncci;
 	struct sk_buff *skb = arg;
@@ -648,7 +669,7 @@ static int ncci_l3l4(hisaxif_t *hif, u_int prim, int dinfo, int len, void *arg)
 			break;
 		case DL_DATA | CONFIRM:
 			if (ncci->ncci_m.state == ST_NCCI_N_ACT) {
-				ncciDataConf(ncci, prim, arg);
+				return(ncciDataConf(ncci, prim, arg));
 			}
 			break;
 		case DL_ESTABLISH | INDICATION:
@@ -669,10 +690,6 @@ static int ncci_l3l4(hisaxif_t *hif, u_int prim, int dinfo, int len, void *arg)
 			int_error();
 	}
 	return(0);
-}
-
-void ncciSetInterface(hisaxif_t *hif) {
-	hif->func = ncci_l3l4;
 }
 
 static int ncciL4L3(Ncci_t *ncci, u_int prim, int dtyp, int len, void *arg)

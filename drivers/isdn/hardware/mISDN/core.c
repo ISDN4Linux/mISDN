@@ -1,4 +1,4 @@
-/* $Id: core.c,v 0.12 2001/03/13 02:04:37 kkeil Exp $
+/* $Id: core.c,v 0.13 2001/03/26 11:40:02 kkeil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -115,83 +115,49 @@ dummy_if(hisaxif_t *hif, u_int prim, int dinfo, int len, void *arg) {
 	return(-EINVAL);
 }
 
-static int
-add_stack_if(hisaxstack_t *st, hisaxif_t *hif) {
-	int		err, lay;
-	hisaxinstance_t	*inst;
-	hisaxobject_t	*obj = NULL;
+hisaxinstance_t *
+get_next_instance(hisaxstack_t *st, hisax_pid_t *pid)
+{
+	int		err;
+	hisaxinstance_t	*next;
+	int		layer, proto;
+	hisaxobject_t	*obj;
 
-	if (!hif)
-		return(-EINVAL);
-	lay = layermask2layer(hif->layermask);
-	if (debug & DEBUG_CORE_FUNC)
-		printk(KERN_DEBUG "add_stack_if for layer %d proto %x/%x\n",
-			lay, hif->protocol, hif->stat);
-	if (hif->protocol == ISDN_PID_NONE) {
-		printk(KERN_WARNING "add_stack_if: for protocol none\n");
-		hif->fdata = NULL;
-		hif->func = dummy_if;
-		hif->stat = IF_NOACTIV;
-		return(0);
+	layer = get_lowlayer(pid->layermask);
+	proto = pid->protocol[layer];
+	next = get_instance(st, layer, proto);
+	if (!next) {
+		obj = find_object(proto);
+		if (!obj)
+			obj = find_object_module(proto);
+		if (!obj) {
+			printk(KERN_WARNING __FUNCTION__": no object found\n");
+			return(NULL);
+		}
+		err = obj->own_ctrl(st, MGR_NEWLAYER | REQUEST, pid);
+		if (err) {
+			printk(KERN_WARNING __FUNCTION__": newlayer err(%d)\n",
+				err);
+			return(NULL);
+		}
+		next = get_instance(st, layer, proto);
 	}
-	if (lay<0) {
-		int_errtxt("lm %x", hif->layermask);
-		return(-EINVAL);
-	}
-	inst = get_instance(st, lay, hif->protocol);
-	if (inst)
-		obj = inst->obj;
-	if (!obj)
-		obj = find_object(hif->protocol);
-	if (!obj)
-		obj = find_object_module(hif->protocol);
-	if (!obj) {
-		printk(KERN_WARNING "add_stack_if: no object found\n");
-		return(-ENOPROTOOPT);
-	}
-	if ((err = obj->own_ctrl(st, MGR_ADDIF | REQUEST, hif))) {
-		return(err);
-	}
-	return(0);
+	return(next);
 }
 
 static int
-del_stack_if(hisaxstack_t *st, hisaxif_t *hif) {
-	int		err, lay;
-	hisaxinstance_t	*inst;
-	hisaxobject_t	*obj = NULL;
+disconnect_if(hisaxinstance_t *inst, u_int prim, hisaxif_t *hif) {
+	int	err = 0;
 
-	if (!hif)
-		return(-EINVAL);
-	if (!hif->layermask)
-		return(-EINVAL);
-	lay = layermask2layer(hif->layermask);
-	if (debug & DEBUG_CORE_FUNC)
-		printk(KERN_DEBUG "del_stack_if for layer %d proto %x/%x\n",
-			lay, hif->protocol, hif->stat);
-	if (lay<0) {
-		int_errtxt("lm %x", hif->layermask);
-		return(-EINVAL);
+	if (hif) {
+		hif->stat = IF_NOACTIV;
+		hif->func = dummy_if;
+		hif->peer = NULL;
+		hif->fdata = NULL;
 	}
-	if (!(inst = get_instance(st, lay, hif->protocol))) {
-		printk(KERN_DEBUG "del_stack_if no instance found\n");
-		return(-ENODEV);
-	}
-	while(inst) {
-		if (inst->pid.protocol[lay] == hif->protocol) {
-			obj = inst->obj;
-			err = obj->own_ctrl(st, MGR_DELIF | REQUEST, hif);
-			if (err)
-				printk(KERN_WARNING "del_stack_if err %d\n",
-					err);
-		}
-		inst = inst->next;
-	}
-	if (!obj) {
-		printk(KERN_WARNING "del_stack_if: no object found\n");
-		return(-ENOPROTOOPT);
-	}
-	return(0);
+	if (inst)
+		err = inst->obj->own_ctrl(inst, prim, hif);
+	return(err);
 }
 
 static char tmpbuf[4096];
@@ -212,18 +178,13 @@ debugout(hisaxinstance_t *inst, logdata_t *log)
 static int central_manager(void *data, u_int prim, void *arg) {
 	hisaxstack_t *st = data;
 
-	if ((prim != (MGR_ADDSTACK | REQUEST)) && !data)
+	if ((prim != (MGR_NEWSTACK | REQUEST)) &&
+		(prim != (MGR_DISCONNECT | REQUEST)) && !data)
 		return(-EINVAL);
 	switch(prim) {
-	    case MGR_ADDSTACK | REQUEST:
-		if (!(st = new_stack(arg, data))) {
+	    case MGR_NEWSTACK | REQUEST:
+		if (!(st = new_stack(data, arg)))
 			return(-EINVAL);
-		} else {
-			hisaxinstance_t *inst = arg;
-			
-			if (inst)
-				inst->st = st;
-		}
 		return(0);
 	    case MGR_SETSTACK | REQUEST:
 		return(set_stack(st, arg));
@@ -231,22 +192,22 @@ static int central_manager(void *data, u_int prim, void *arg) {
 		return(clear_stack(st));
 	    case MGR_DELSTACK | REQUEST:
 		return(release_stack(st));
-	    case MGR_ADDLAYER | INDICATION:
+	    case MGR_REGLAYER | INDICATION:
 		return(register_layer(st, arg));
-	    case MGR_ADDLAYER | REQUEST:
+	    case MGR_REGLAYER | REQUEST:
 		if (!register_layer(st, arg)) {
 			hisaxinstance_t *inst = arg;
-			return(inst->obj->own_ctrl(st, MGR_ADDLAYER | CONFIRM, arg));
+			return(inst->obj->own_ctrl(arg, MGR_REGLAYER | CONFIRM, NULL));
 		}
-	    case MGR_DELLAYER | REQUEST:
+		return(-EINVAL);
+	    case MGR_UNREGLAYER | REQUEST:
 		return(unregister_instance(arg));
-	    case MGR_ADDIF | REQUEST:
-		return(add_stack_if(st, arg));
-	    case MGR_DELIF | REQUEST:
-		return(del_stack_if(st, arg));
+	    case MGR_DISCONNECT | REQUEST:
+	    case MGR_DISCONNECT | INDICATION:
+		return(disconnect_if(data, prim, arg));
 	    case MGR_LOADFIRM | REQUEST:
 	    	if (st->mgr && st->mgr->obj && st->mgr->obj->own_ctrl)
-	    		return(st->mgr->obj->own_ctrl(st, prim, arg));
+	    		return(st->mgr->obj->own_ctrl(st->mgr, prim, arg));
 	    	break;
 	    case MGR_DEBUGDATA | REQUEST:
 	    	return(debugout(data, arg));

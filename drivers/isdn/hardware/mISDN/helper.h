@@ -1,4 +1,4 @@
-/* $Id: helper.h,v 0.9 2001/03/13 02:03:23 kkeil Exp $
+/* $Id: helper.h,v 0.10 2001/03/26 11:40:02 kkeil Exp $
  *
  *   Basic declarations, defines and prototypes
  *
@@ -53,6 +53,7 @@
 
 extern int discard_queue(struct sk_buff_head *);
 extern struct sk_buff *alloc_uplink_skb(size_t);
+extern int get_lowlayer(int);
 extern int get_up_layer(int);
 extern int get_down_layer(int);
 extern int layermask2layer(int);

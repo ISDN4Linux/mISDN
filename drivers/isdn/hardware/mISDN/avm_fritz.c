@@ -1,4 +1,4 @@
-/* $Id: avm_fritz.c,v 0.13 2001/03/13 02:34:02 kkeil Exp $
+/* $Id: avm_fritz.c,v 0.14 2001/03/26 11:40:02 kkeil Exp $
  *
  * fritz_pci.c    low level stuff for AVM Fritz!PCI and ISA PnP isdn cards
  *              Thanks to AVM, Berlin for informations
@@ -18,7 +18,7 @@
 #include "helper.h"
 #include "debug.h"
 
-static const char *avm_pci_rev = "$Revision: 0.13 $";
+static const char *avm_pci_rev = "$Revision: 0.14 $";
 
 #define ISDN_CTYPE_FRITZPCI 1
 
@@ -617,7 +617,7 @@ hdlc_down(hisaxif_t *hif, u_int prim, int dinfo, int len, void *arg)
 			ret, NULL);
 	} else if ((prim == (PH_DEACTIVATE | REQUEST)) ||
 		(prim == (DL_RELEASE | REQUEST)) ||
-		(prim == (MGR_DELIF | REQUEST))) {
+		(prim == (MGR_DISCONNECT | REQUEST))) {
 		bch->inst.lock(bch->inst.data);
 		if (test_and_clear_bit(FLG_TX_NEXT, &bch->Flag)) {
 			dev_kfree_skb(bch->next_skb);
@@ -627,7 +627,7 @@ hdlc_down(hisaxif_t *hif, u_int prim, int dinfo, int len, void *arg)
 		modehdlc(bch, bch->channel, 0);
 		test_and_clear_bit(BC_FLG_ACTIV, &bch->Flag);
 		bch->inst.unlock(bch->inst.data);
-		if (prim != (MGR_DELIF | REQUEST))
+		if (prim != (MGR_DISCONNECT | REQUEST))
 			bch->inst.up.func(&bch->inst.up, prim | CONFIRM, 0,
 				0, NULL);
 	} else {
@@ -803,7 +803,6 @@ static u_int irq[MAX_CARDS];
 static int layermask[MAX_CARDS];
 static int cfg_idx;
 
-static fritzpnppci	*cardlist = NULL;
 static hisaxobject_t	fritz;
 static int debug;
 
@@ -923,97 +922,6 @@ setup_fritz(fritzpnppci *fc, u_int io_cfg, u_int irq_cfg)
 	return(0);
 }
 
-static int
-dummy_down(hisaxif_t *hif,  u_int prim, int dinfo, int len, void *arg) {
-	fritzpnppci *card;
-
-	if (!hif || !hif->fdata)
-		return(-EINVAL);
-	card = hif->fdata;
-	printk(KERN_WARNING "dummy fritz down id %d prim %x\n", card->dch.inst.st->id, prim);
-	return(-EINVAL);
-}
-
-
-static int
-add_if(hisaxinstance_t *inst, int channel, hisaxif_t *hif) {
-	int err, lay;
-	fritzpnppci *card = inst->data;
-
-	if (!hif)
-		return(-EINVAL);
-	if (IF_TYPE(hif) != IF_UP)
-		return(-EINVAL);
-	lay = layermask2layer(hif->layermask);
-	if (lay < 0) {
-		int_errtxt("lm %x", hif->layermask);
-		return(-EINVAL);
-	}
-	switch(hif->protocol) {
-	    case ISDN_PID_L1_B_64TRANS:
-	    case ISDN_PID_L1_B_64HDLC:
-		printk(KERN_DEBUG "fritz_add_if ch%d p:%x\n", channel, hif->protocol);
-	    	if ((channel<0) || (channel>1))
-	    		return(-EINVAL);
-		hif->fdata = &card->bch[channel];
-		hif->func = hdlc_down;
-		inst->pid.protocol[lay] = hif->protocol;
-		if (inst->up.stat == IF_NOACTIV) {
-			printk(KERN_DEBUG "fritz_add_if set upif\n");
-			inst->up.stat = IF_DOWN;
-			inst->up.layermask = get_up_layer(inst->layermask);
-			inst->up.protocol = get_protocol(inst->st, inst->up.layermask);
-			err = fritz.ctrl(inst->st, MGR_ADDIF | REQUEST, &inst->up);
-			if (err) {
-				printk(KERN_WARNING "fritz_add_if up no if\n");
-				inst->up.stat = IF_NOACTIV;
-			}
-		}
-		break;
-	    case ISDN_PID_L0_TE_S0:
-	    	if (inst != &card->dch.inst)
-	    		return(-EINVAL);
-		hif->fdata = &card->dch;
-		hif->func = ISAC_l1hw;
-		if (inst->up.stat == IF_NOACTIV) {
-			inst->up.stat = IF_DOWN;
-			inst->up.layermask = get_up_layer(inst->layermask);
-			inst->up.protocol = get_protocol(inst->st, inst->up.layermask);
-			err = fritz.ctrl(inst->st, MGR_ADDIF | REQUEST, &inst->up);
-			if (err)
-				inst->up.stat = IF_NOACTIV;
-		}
-		break;
-	    default:
-		printk(KERN_WARNING "fritz_add_if: protocol %x not supported\n",
-			hif->protocol);
-		return(-EPROTONOSUPPORT);
-	}
-	return(0);
-}
-
-static int
-del_if(hisaxinstance_t *inst, int channel, hisaxif_t *hif) {
-	int err;
-	fritzpnppci *card = inst->data;
-
-	printk(KERN_DEBUG "fritz del_if lay %x/%x %p/%p\n", hif->layermask,
-		hif->stat, hif->func, hif->fdata);
-	if ((hif->func == inst->up.func) && (hif->fdata == inst->up.fdata)) {
-		if (channel==2)
-			DelIF(inst, &inst->up, ISAC_l1hw, &card->dch);
-		else
-			DelIF(inst, &inst->up, hdlc_down, &card->bch[channel]);
-		inst->up.stat = IF_NOACTIV;
-		inst->up.protocol = ISDN_PID_NONE;
-		err = fritz.ctrl(inst->st, MGR_ADDIF | REQUEST, &inst->up);
-	} else {
-		printk(KERN_DEBUG "fritz del_if no if found\n");
-		return(-EINVAL);
-	}
-	return(0);
-}
-
 static void
 release_card(fritzpnppci *card) {
 
@@ -1027,89 +935,34 @@ release_card(fritzpnppci *card) {
 	free_bchannel(&card->bch[1]);
 	free_bchannel(&card->bch[0]);
 	free_dchannel(&card->dch);
-	REMOVE_FROM_LISTBASE(card, cardlist);
+	REMOVE_FROM_LISTBASE(card, ((fritzpnppci *)fritz.ilist));
 	unlock_dev(card);
 	kfree(card);
 	fritz.refcnt--;
 }
 
 static int
-set_stack(hisaxstack_t *st, hisaxinstance_t *inst, int chan, hisax_pid_t *pid) {
-	int err,layer = 0;
-
-#if 0
-	if (st->inst[0] || st->inst[1] || st->inst[2]) {
-		return(-EBUSY);	
-	}
-#endif
-	memset(&inst->pid, 0, sizeof(hisax_pid_t));
-	if  (chan == 2) { /* D-channel */
-		if (!HasProtocol(inst->obj, pid->protocol[0])) {
-			return(-EPROTONOSUPPORT);
-		} else 
-			layer = ISDN_LAYER(0);
-		inst->pid.protocol[0] = pid->protocol[0];
-	} else {
-		if (!HasProtocol(inst->obj, pid->protocol[1])) {
-			return(-EPROTONOSUPPORT);
-		} else
-			layer = ISDN_LAYER(1);
-		inst->pid.protocol[1] = pid->protocol[1];
-		if (HasProtocol(inst->obj, pid->protocol[2])) {
-			layer |= ISDN_LAYER(2);
-			inst->pid.protocol[2] = pid->protocol[2];
-		}
-	}
-	inst->layermask = layer;
-	if ((err = fritz.ctrl(st, MGR_ADDLAYER | REQUEST, inst))) {
-		printk(KERN_WARNING "set_stack MGR_ADDLAYER err(%d)\n", err);
-		return(err);
-	}
-	inst->up.layermask = get_up_layer(layer);
-	inst->up.protocol = get_protocol(st, inst->up.layermask);
-	inst->up.inst = inst;
-	inst->up.stat = IF_DOWN;
-	if ((err = fritz.ctrl(st, MGR_ADDIF | REQUEST, &inst->up))) {
-		printk(KERN_WARNING "set_stack MGR_ADDIF err(%d)\n", err);
-		return(err);
-	}
-	if  ((chan != 2) && (pid->global == 2)) { /* B-channel */
-		u_int pr;
-
-		if (inst->pid.protocol[2] == ISDN_PID_L2_B_TRANS)
-			pr = DL_ESTABLISH | REQUEST;
-		else
-			pr = PH_ACTIVATE | REQUEST;
-		
-		hdlc_down(&inst->down, pr, 0, 0, NULL);
-	}
-	return(0);	                                    
-}
-
-static int
 fritz_manager(void *data, u_int prim, void *arg) {
-	fritzpnppci *card = cardlist;
-	hisaxinstance_t *inst=NULL;
+	fritzpnppci *card = fritz.ilist;
+	hisaxinstance_t *inst = data;
 	int channel = -1;
-	hisaxstack_t *st = data;
+	int val;
 
 	if (!data) {
-		printk(KERN_ERR "fritz_manager no data prim %x arg %p\n",
+		printk(KERN_ERR __FUNCTION__": no data prim %x arg %p\n",
 			prim, arg);
 		return(-EINVAL);
 	}
 	while(card) {
-		if (card->dch.inst.st == st) {
-			inst = &card->dch.inst;
+		if (&card->dch.inst == inst) {
 			channel = 2;
 			break;
 		}
-		if (card->bch[0].inst.st == st) {
-			inst = &card->bch[0].inst;
+		if (&card->bch[0].inst == inst) {
 			channel = 0;
 			break;
 		}
-		if (card->bch[1].inst.st == st) {
+		if (&card->bch[1].inst == inst) {
 			inst = &card->bch[1].inst;
 			channel = 1;
 			break;
@@ -1117,32 +970,40 @@ fritz_manager(void *data, u_int prim, void *arg) {
 		card = card->next;
 	}
 	if (channel<0) {
-		printk(KERN_ERR "fritz_manager no channel data %p prim %x arg %p\n",
+		printk(KERN_ERR __FUNCTION__": no channel data %p prim %x arg %p\n",
 			data, prim, arg);
 		return(-EINVAL);
 	}
 
 	switch(prim) {
-	    case MGR_ADDLAYER | CONFIRM:
+	    case MGR_REGLAYER | CONFIRM:
 		if (!card) {
-			printk(KERN_WARNING "fritz_manager no card found\n");
+			printk(KERN_WARNING __FUNCTION__": no card found\n");
 			return(-ENODEV);
 		}
 		break;
-	    case MGR_DELLAYER | REQUEST:
+	    case MGR_UNREGLAYER | REQUEST:
 		if (!card) {
-			printk(KERN_WARNING "fritz_manager del layer request failed\n");
+			printk(KERN_WARNING __FUNCTION__": no card found\n");
 			return(-ENODEV);
+		} else {
+			if (channel == 2) {
+				val = HW_DEACTIVATE;
+				inst->down.fdata = &card->dch;
+				ISAC_l1hw(&inst->down, PH_CONTROL | REQUEST, 0,
+					4, &val);
+			} else {
+				inst->down.fdata = &card->bch[channel];
+				hdlc_down(&inst->down, MGR_DISCONNECT | REQUEST,
+					0, 0, NULL);
+			}
+			fritz.ctrl(inst->up.peer, MGR_DISCONNECT | REQUEST,
+				&inst->up);
 		}
-		if (channel==2)
-			DelIF(inst, &inst->up, ISAC_l1hw, &card->dch);
-		else
-			DelIF(inst, &inst->up, hdlc_down, &card->bch[channel]);
-		fritz.ctrl(st, MGR_DELLAYER | REQUEST, inst);
 		break;
 	    case MGR_RELEASE | INDICATION:
 		if (!card) {
-			printk(KERN_WARNING "fritz_manager no card found\n");
+			printk(KERN_WARNING __FUNCTION__": no card found\n");
 			return(-ENODEV);
 		} else {
 			if (channel == 2) {
@@ -1152,30 +1013,54 @@ fritz_manager(void *data, u_int prim, void *arg) {
 			}
 		}
 		break;
-	    case MGR_ADDIF | REQUEST:
+	    case MGR_CONNECT | REQUEST:
 		if (!card) {
-			printk(KERN_WARNING "fritz_manager interface request failed\n");
+			printk(KERN_WARNING __FUNCTION__": connect request failed\n");
 			return(-ENODEV);
 		}
-		return(add_if(inst, channel, arg));
+		return(ConnectIF(inst, arg));
 		break;
-	    case MGR_DELIF | REQUEST:
+	    case MGR_SETIF | REQUEST:
+	    case MGR_SETIF | INDICATION:
 		if (!card) {
-			printk(KERN_WARNING "fritz_manager del interface request failed\n");
+			printk(KERN_WARNING __FUNCTION__": setif failed\n");
 			return(-ENODEV);
 		}
-		return(del_if(inst, channel, arg));
+		if (channel==2)
+			return(SetIF(inst, arg, prim, ISAC_l1hw, NULL,
+				&card->dch));
+		else
+			return(SetIF(inst, arg, prim, hdlc_down, NULL,
+				&card->bch[channel]));
 		break;
-	    case MGR_SETSTACK | REQUEST:
+	    case MGR_DISCONNECT | REQUEST:
+	    case MGR_DISCONNECT | INDICATION:
 		if (!card) {
-			printk(KERN_WARNING "fritz_manager del interface request failed\n");
+			printk(KERN_WARNING __FUNCTION__": del interface request failed\n");
 			return(-ENODEV);
-		} else {
-			return(set_stack(st, inst, channel, arg));
+		}
+		return(DisConnectIF(inst, arg));
+		break;
+	    case MGR_SETSTACK | CONFIRM:
+		if (!card) {
+			printk(KERN_WARNING __FUNCTION__": setstack failed\n");
+			return(-ENODEV);
+		}
+		if ((channel!=2) && (inst->pid.global == 2)) {
+			inst->down.fdata = &card->bch[channel];
+			hdlc_down(&inst->down, PH_ACTIVATE | REQUEST,
+				0, 0, NULL);
+			if (inst->pid.protocol[2] == ISDN_PID_L2_B_TRANS)
+				val = DL_ESTABLISH;
+			else
+				val = PH_ACTIVATE;
+			if (inst->up.func)
+				inst->up.func(&inst->up, val | INDICATION,
+					0, 0, NULL);
 		}
 		break;
 	    default:
-		printk(KERN_WARNING "fritz_manager prim %x not handled\n", prim);
+		printk(KERN_WARNING __FUNCTION__": prim %x not handled\n", prim);
 		return(-EINVAL);
 	}
 	return(0);
@@ -1207,18 +1092,19 @@ Fritz_init(void)
 			return(-ENOMEM);
 		}
 		memset(card, 0, sizeof(fritzpnppci));
-		APPEND_TO_LIST(card, cardlist);
+		APPEND_TO_LIST(card, ((fritzpnppci *)fritz.ilist));
 		card->dch.debug = debug;
 		card->dch.inst.obj = &fritz;
 		spin_lock_init(&card->devlock);
 		card->dch.inst.lock = lock_dev;
 		card->dch.inst.unlock = unlock_dev;
 		card->dch.inst.data = card;
-		card->dch.inst.layermask = ISDN_LAYER(0);
+		card->dch.inst.pid.layermask = ISDN_LAYER(0);
 		card->dch.inst.pid.protocol[0] = ISDN_PID_L0_TE_S0;
-		card->dch.inst.up.inst = &card->dch.inst;
-		card->dch.inst.down.inst = &card->dch.inst;
-		card->dch.inst.down.func = dummy_down;
+		card->dch.inst.up.owner = &card->dch.inst;
+		card->dch.inst.down.owner = &card->dch.inst;
+		fritz.ctrl(NULL, MGR_DISCONNECT | REQUEST,
+			&card->dch.inst.down);
 		sprintf(card->dch.inst.name, "Fritz%d", fritz_cnt+1);
 		set_dchannel_pid(&pid, protocol[fritz_cnt],
 			layermask[fritz_cnt]);
@@ -1227,11 +1113,12 @@ Fritz_init(void)
 			card->bch[i].channel = i;
 			card->bch[i].inst.obj = &fritz;
 			card->bch[i].inst.data = card;
-			card->bch[i].inst.layermask = ISDN_LAYER(0);
-			card->bch[i].inst.up.layermask = ISDN_LAYER(1);
-			card->bch[i].inst.up.inst = &card->bch[i].inst;
-			card->bch[i].inst.down.inst = &card->bch[i].inst;
-			card->bch[i].inst.down.func = dummy_down;
+			card->bch[i].inst.pid.layermask = ISDN_LAYER(0);
+			card->bch[i].inst.up.layer = 1;
+			card->bch[i].inst.up.owner = &card->bch[i].inst;
+			card->bch[i].inst.down.owner = &card->bch[i].inst;
+			fritz.ctrl(NULL, MGR_DISCONNECT | REQUEST,
+				&card->bch[i].inst.down);
 			card->bch[i].inst.lock = lock_dev;
 			card->bch[i].inst.unlock = unlock_dev;
 			card->bch[i].debug = debug;
@@ -1246,7 +1133,7 @@ Fritz_init(void)
 			free_dchannel(&card->dch);
 			free_bchannel(&card->bch[1]);
 			free_bchannel(&card->bch[0]);
-			REMOVE_FROM_LISTBASE(card, cardlist);
+			REMOVE_FROM_LISTBASE(card, ((fritzpnppci *)fritz.ilist));
 			kfree(card);
 			if (!fritz_cnt) {
 				HiSax_unregister(&fritz);
@@ -1259,7 +1146,7 @@ Fritz_init(void)
 		if (card->subtyp == AVM_FRITZ_PNP)
 			cfg_idx++;
 		fritz_cnt++;
-		if ((err = fritz.ctrl(NULL, MGR_ADDSTACK | REQUEST, &card->dch.inst))) {
+		if ((err = fritz.ctrl(NULL, MGR_NEWSTACK | REQUEST, &card->dch.inst))) {
 			printk(KERN_ERR  "MGR_ADDSTACK REQUEST dch err(%d)\n", err);
 			release_card(card);
 			if (!fritz_cnt)
@@ -1278,7 +1165,7 @@ Fritz_init(void)
 			return(err);
 		}
 		for (i=0; i<2; i++) {
-			if ((err = fritz.ctrl(card->dch.inst.st, MGR_ADDSTACK | REQUEST,
+			if ((err = fritz.ctrl(card->dch.inst.st, MGR_NEWSTACK | REQUEST,
 				&card->bch[i].inst))) {
 				printk(KERN_ERR "MGR_ADDSTACK bchan error %d\n", err);
 				fritz.ctrl(card->dch.inst.st,
@@ -1312,10 +1199,10 @@ cleanup_module(void)
 		printk(KERN_ERR "Can't unregister Fritz PCI error(%d)\n", err);
 		return(err);
 	}
-	while(cardlist) {
+	while(fritz.ilist) {
 		printk(KERN_ERR "Fritz PCI card struct not empty refs %d\n",
 			fritz.refcnt);
-		release_card(cardlist);
+		release_card(fritz.ilist);
 	}
 	return(0);
 }

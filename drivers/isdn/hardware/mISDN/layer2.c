@@ -1,4 +1,4 @@
-/* $Id: layer2.c,v 0.10 2001/03/11 21:23:39 kkeil Exp $
+/* $Id: layer2.c,v 0.11 2001/03/26 11:40:02 kkeil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -12,11 +12,10 @@
 #include "helper.h"
 #include "debug.h"
 
-const char *l2_revision = "$Revision: 0.10 $";
+const char *l2_revision = "$Revision: 0.11 $";
 
 static void l2m_debug(struct FsmInst *fi, char *fmt, ...);
 
-static layer2_t *l2list = NULL;
 static int debug = 0;
 static hisaxobject_t isdnl2;
 
@@ -1928,7 +1927,6 @@ static void
 release_l2(layer2_t *l2)
 {
 	hisaxinstance_t  *inst = &l2->inst;
-	hisaxif_t	hif;
 
 	FsmDelTimer(&l2->t200, 21);
 	FsmDelTimer(&l2->t203, 16);
@@ -1940,48 +1938,40 @@ release_l2(layer2_t *l2)
 	ReleaseWin(l2);
 	if (test_bit(FLG_LAPD, &l2->flag))
 		release_tei(l2->tm);
-	memset(&hif, 0, sizeof(hisaxif_t));
-	hif.fdata = l2;
-	hif.func = l2from_up;
-	hif.protocol = inst->up.protocol;
-	hif.layermask = inst->up.layermask;
-	isdnl2.ctrl(inst->st, MGR_DELIF | REQUEST, &hif);
-	hif.fdata = l2;
-	hif.func = l2from_down;
-	hif.protocol = inst->down.protocol;
-	hif.layermask = inst->down.layermask;
-	isdnl2.ctrl(inst->st, MGR_DELIF | REQUEST, &hif);
-	REMOVE_FROM_LISTBASE(l2, l2list);
-	isdnl2.ctrl(inst->st, MGR_DELLAYER | REQUEST, inst);
+	if (inst->up.peer) {
+		inst->up.peer->obj->ctrl(inst->up.peer,
+			MGR_DISCONNECT | REQUEST, &inst->up);
+	}
+	if (inst->down.peer) {
+		inst->down.peer->obj->ctrl(inst->down.peer,
+			MGR_DISCONNECT | REQUEST, &inst->down);
+	}
+	REMOVE_FROM_LISTBASE(l2, ((layer2_t *)isdnl2.ilist));
+	isdnl2.ctrl(inst->st, MGR_UNREGLAYER | REQUEST, inst);
 	kfree(l2);
 }
 
-static layer2_t *
-create_l2(hisaxstack_t *st, hisaxif_t *hif) {
+static int
+new_l2(hisaxstack_t *st, hisax_pid_t *pid) {
 	layer2_t *nl2;
-	int err,lay;
+	int err;
 	u_char *p;
 
-	if (!hif)
-		return(NULL);
-	printk(KERN_DEBUG "create_l2 prot %x\n", hif->protocol);
-	if (!st) {
-		printk(KERN_ERR "create_l2 no stack\n");
-		return(NULL);
-	}
-	lay = layermask2layer(hif->layermask);
-	if (lay < 0) {
-		int_errtxt("lm %x", hif->layermask);
-		return(NULL);
-	}
+	if (!st || !pid)
+		return(-EINVAL);
 	if (!(nl2 = kmalloc(sizeof(layer2_t), GFP_ATOMIC))) {
 		printk(KERN_ERR "kmalloc layer2 failed\n");
-		return(NULL);
+		return(-ENOMEM);
 	}
 	memset(nl2, 0, sizeof(layer2_t));
 	nl2->debug = debug;
-	nl2->inst.pid.protocol[lay] = hif->protocol;
-	switch(hif->protocol) {
+	nl2->inst.obj = &isdnl2;
+	memcpy(&nl2->inst.pid, pid, sizeof(hisax_pid_t));
+	if (!SetHandledPID(&isdnl2, &nl2->inst.pid)) {
+		int_error();
+		return(-ENOPROTOOPT);
+	}
+	switch(pid->protocol[2]) {
 	    case ISDN_PID_L2_LAPD:
 	    	sprintf(nl2->inst.name, "lapd %x", st->id);
 		test_and_set_bit(FLG_LAPD, &nl2->flag);
@@ -1997,7 +1987,7 @@ create_l2(hisaxstack_t *st, hisaxif_t *hif) {
 		nl2->T203 = 10000;
 		if (create_teimgr(nl2)) {
 			kfree(nl2);
-			return(NULL);
+			return(-EINVAL);
 		}
 		break;
 	    case ISDN_PID_L2_B_X75SLP:
@@ -2010,10 +2000,9 @@ create_l2(hisaxstack_t *st, hisaxif_t *hif) {
 		nl2->T203 = 5000;
 		nl2->addr.A = 3;
 		nl2->addr.B = 1;
-		nl2->inst.pid.global = st->pid.global;
 		if (nl2->inst.pid.global == 1)
 			test_and_set_bit(FLG_ORIG, &nl2->flag);
-		if ((p=st->pid.param[2])) {
+		if ((p=pid->param[2])) {
 			if (*p>=4) {
 				p++;
 				nl2->addr.A = *p++;
@@ -2027,11 +2016,11 @@ create_l2(hisaxstack_t *st, hisaxif_t *hif) {
 		}
 		break;
 	    default:
-		printk(KERN_ERR "layer1 create failed prt %x\n",hif->protocol);
+		printk(KERN_ERR "layer2 create failed prt %x\n",
+			pid->protocol[2]);
 		kfree(nl2);
-		return(NULL);
+		return(-ENOPROTOOPT);
 	}
-	nl2->inst.obj = &isdnl2;
 	skb_queue_head_init(&nl2->i_queue);
 	skb_queue_head_init(&nl2->ui_queue);
 	skb_queue_head_init(&nl2->down_queue);
@@ -2048,82 +2037,18 @@ create_l2(hisaxstack_t *st, hisaxif_t *hif) {
 
 	FsmInitTimer(&nl2->l2m, &nl2->t200);
 	FsmInitTimer(&nl2->l2m, &nl2->t203);
-	nl2->inst.layermask = hif->layermask;
 	nl2->inst.data = nl2;
-	APPEND_TO_LIST(nl2, l2list);
-	isdnl2.ctrl(st, MGR_ADDLAYER | INDICATION, &nl2->inst);
-	nl2->inst.up.layermask = get_up_layer(nl2->inst.layermask);
-	nl2->inst.up.protocol = get_protocol(st, nl2->inst.up.layermask);
-	nl2->inst.up.stat = IF_DOWN;
-	nl2->inst.down.layermask = get_down_layer(nl2->inst.layermask);
-	nl2->inst.down.protocol = get_protocol(st, nl2->inst.down.layermask);
-	nl2->inst.down.stat = IF_UP;
-	err = isdnl2.ctrl(st, MGR_ADDIF | REQUEST, &nl2->inst.down);
+	nl2->inst.up.owner = &nl2->inst;
+	nl2->inst.down.owner = &nl2->inst;
+	APPEND_TO_LIST(nl2, ((layer2_t *)isdnl2.ilist));
+	err = isdnl2.ctrl(st, MGR_REGLAYER | INDICATION, &nl2->inst);
 	if (err) {
-		release_l2(nl2);
-		printk(KERN_ERR "layer2 down interface request failed %d\n", err);
-		return(NULL);
+		FsmDelTimer(&nl2->t200, 0);
+		FsmDelTimer(&nl2->t203, 0);
+		REMOVE_FROM_LISTBASE(nl2, ((layer2_t *)isdnl2.ilist));
+		kfree(nl2);
 	}
-	err = isdnl2.ctrl(st, MGR_ADDIF | REQUEST, &nl2->inst.up);
-	if (err) {
-		release_l2(nl2);
-		printk(KERN_ERR "layer2 up interface request failed %d\n", err);
-		return(NULL);
-	}
-	return(nl2);
-}
-
-static int
-add_if(layer2_t *l2, hisaxif_t *hif) {
-	int err;
-	hisaxinstance_t *inst = &l2->inst;
-
-	printk(KERN_DEBUG "layer2 add_if lay %x/%x prot %x\n", hif->layermask,
-		hif->stat, hif->protocol);
-	hif->fdata = l2;
-	if (IF_TYPE(hif) == IF_UP) {
-		hif->func = l2from_up;
-		if (inst->up.stat == IF_NOACTIV) {
-			inst->up.stat = IF_DOWN;
-			inst->up.protocol = get_protocol(inst->st, inst->up.layermask);
-			err = isdnl2.ctrl(inst->st, MGR_ADDIF | REQUEST, &inst->up);
-			if (err)
-				inst->up.stat = IF_NOACTIV;
-		}
-	} else if (IF_TYPE(hif) == IF_DOWN) {
-		hif->func = l2from_down;
-		if (inst->down.stat == IF_NOACTIV) {
-			inst->down.stat = IF_UP;
-			inst->down.protocol = get_protocol(inst->st, inst->down.layermask);
-			err = isdnl2.ctrl(inst->st, MGR_ADDIF | REQUEST, &inst->down);
-			if (err)
-				inst->down.stat = IF_NOACTIV;
-		}
-	} else
-		return(-EINVAL);
-	return(0);
-}
-
-static int
-del_if(layer2_t *l2, hisaxif_t *hif) {
-	int err;
-	hisaxinstance_t *inst = &l2->inst;
-
-	printk(KERN_DEBUG "layer2 del_if lay %x/%x %p/%p\n", hif->layermask,
-		hif->stat, hif->func, hif->fdata);
-	if ((hif->func == inst->up.func) && (hif->fdata == inst->up.fdata)) {
-		inst->up.stat = IF_NOACTIV;
-		inst->up.protocol = ISDN_PID_NONE;
-		err = isdnl2.ctrl(inst->st, MGR_ADDIF | REQUEST, &inst->up);
-	} else if ((hif->func == inst->down.func) && (hif->fdata == inst->down.fdata)) {
-		inst->down.stat = IF_NOACTIV;
-		inst->down.protocol = ISDN_PID_NONE;
-		err = isdnl2.ctrl(inst->st, MGR_ADDIF | REQUEST, &inst->down);
-	} else {
-		printk(KERN_DEBUG "layer2 del_if no if found\n");
-		return(-EINVAL);
-	}
-	return(0);
+	return(err);
 }
 
 static char MName[] = "ISDNL2";
@@ -2136,38 +2061,47 @@ MODULE_PARM(debug, "1i");
 
 static int
 l2_manager(void *data, u_int prim, void *arg) {
-	hisaxstack_t *st = data;
-	layer2_t *l2l = l2list;
+	hisaxinstance_t *inst = data;
+	layer2_t *l2l = isdnl2.ilist;;
 
-//	printk(KERN_DEBUG "l2_manager data:%p prim:%x arg:%p\n", data, prim, arg);
+	printk(KERN_DEBUG __FUNCTION__": data:%p prim:%x arg:%p\n", data, prim, arg);
 	if (!data)
 		return(-EINVAL);
 	while(l2l) {
-		if (l2l->inst.st == st)
+		if (&l2l->inst == inst)
 			break;
 		l2l = l2l->next;
 	}
 	switch(prim) {
-	    case MGR_ADDIF | REQUEST:
-		if (!l2l)
-			l2l = create_l2(st, arg);
+	    case MGR_NEWLAYER | REQUEST:
+		return(new_l2(data, arg));
+	    case MGR_CONNECT | REQUEST:
 		if (!l2l) {
-			printk(KERN_WARNING "l2_manager create_l2 failed\n");
+			printk(KERN_WARNING "l2_manager connect l2 no instance\n");
 			return(-EINVAL);
 		}
-		return(add_if(l2l, arg));
+		return(ConnectIF(inst, arg));
 		break;
-	    case MGR_DELIF | REQUEST:
+	    case MGR_SETIF | REQUEST:
+	    case MGR_SETIF | INDICATION:
 		if (!l2l) {
-			printk(KERN_WARNING "l2_manager delif no instance\n");
+			printk(KERN_WARNING "l2_manager setif l2 no instance\n");
 			return(-EINVAL);
 		}
-		return(del_if(l2l, arg));
+		return(SetIF(inst, arg, prim, l2from_up, l2from_down, l2l));
+		break;
+	    case MGR_DISCONNECT | REQUEST:
+	    case MGR_DISCONNECT | INDICATION:
+		if (!l2l) {
+			printk(KERN_WARNING "l2_manager disconnect l2 no instance\n");
+			return(-EINVAL);
+		}
+		return(DisConnectIF(inst, arg));
 		break;
 	    case MGR_RELEASE | INDICATION:
-	    case MGR_DELLAYER | REQUEST:
+	    case MGR_UNREGLAYER | REQUEST:
 	    	if (l2l) {
-			printk(KERN_DEBUG "release_l2 id %x\n", l2l->inst.st->id);
+			printk(KERN_DEBUG "release_l2 id %x\n", inst->st->id);
 	    		release_l2(l2l);
 	    	} else 
 	    		printk(KERN_WARNING "l2_manager release no instance\n");
@@ -2211,10 +2145,10 @@ void cleanup_module(void)
 	if ((err = HiSax_unregister(&isdnl2))) {
 		printk(KERN_ERR "Can't unregister ISDN layer 2 error(%d)\n", err);
 	}
-	if(l2list) {
-		printk(KERN_WARNING "hisaxl2 l2list not empty\n");
-		while(l2list)
-			release_l2(l2list);
+	if(isdnl2.ilist) {
+		printk(KERN_WARNING "hisaxl2 l2 list not empty\n");
+		while(isdnl2.ilist)
+			release_l2(isdnl2.ilist);
 	}
 	TEIFree();
 	FsmFree(&l2fsm);

@@ -1,4 +1,4 @@
-/* $Id: capi.h,v 0.5 2001/03/03 18:17:15 kkeil Exp $
+/* $Id: capi.h,v 0.6 2001/03/26 11:40:02 kkeil Exp $
  *
  */
 
@@ -164,8 +164,8 @@ typedef struct _Contr {
 	__u16		lastInvokeId;
 } Contr_t;
 
-Contr_t		*newContr(hisaxobject_t *, hisaxstack_t *, hisaxif_t *);
-int		contrConstr(Contr_t *, hisaxstack_t *, hisaxif_t *, hisaxobject_t *);
+Contr_t		*newContr(hisaxobject_t *, hisaxstack_t *, hisax_pid_t *);
+int		contrConstr(Contr_t *, hisaxstack_t *, hisax_pid_t *, hisaxobject_t *);
 void		contrDestr(Contr_t *contr);
 void		contrDebug(Contr_t *contr, __u32 level, char *fmt, ...);
 void		contrRegisterAppl(Contr_t *contr, __u16 ApplId, capi_register_params *rp);
@@ -326,23 +326,27 @@ typedef struct _Ncci {
 	Appl_t		*appl;
 	struct FsmInst	ncci_m;
 	int		window;
+	u_long		Flags;
 	struct { 
 		struct sk_buff *skb; 
 		__u16	DataHandle;
 		__u16	MsgId;
 	} xmit_skb_handles[CAPI_MAXDATAWINDOW];
 	struct sk_buff *recv_skb_handles[CAPI_MAXDATAWINDOW];
+	struct sk_buff_head squeue;
 } Ncci_t;
+
+#define NCCI_FLG_FCTRL	1
+#define NCCI_FLG_BUSY	2
 
 void ncciConstr(Ncci_t *ncci, Cplci_t *cplci);
 void ncciDestr(Ncci_t *ncci);
 void ncciSendMessage(Ncci_t *ncci, struct sk_buff *skb);
-// void ncci_l3l4(Ncci_t *ncci, int pr, void *arg);
+int  ncci_l3l4(hisaxif_t *, u_int, int, int, void *);
 void ncciLinkUp(Ncci_t *ncci);
 void ncciLinkDown(Ncci_t *ncci);
 void ncciInitSt(Ncci_t *ncci);
 void ncciReleaseSt(Ncci_t *ncci);
-void ncciSetInterface(hisaxif_t *);
 __u16 ncciSelectBprotocol(Ncci_t *ncci);
 void ncciRecvCmsg(Ncci_t *ncci, _cmsg *cmsg);
 void ncciCmsgHeader(Ncci_t *ncci, _cmsg *cmsg, __u8 cmd, __u8 subcmd);

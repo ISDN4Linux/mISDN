@@ -1,4 +1,4 @@
-/* $Id: sedl_fax.c,v 0.15 2001/03/13 02:34:02 kkeil Exp $
+/* $Id: sedl_fax.c,v 0.16 2001/03/26 11:40:02 kkeil Exp $
  *
  * sedl_fax.c  low level stuff for Sedlbauer Speedfax + cards
  *
@@ -40,7 +40,7 @@
 
 extern const char *CardType[];
 
-const char *Sedlfax_revision = "$Revision: 0.15 $";
+const char *Sedlfax_revision = "$Revision: 0.16 $";
 
 const char *Sedlbauer_Types[] =
 	{"None", "speed fax+", "speed fax+ pyramid", "speed fax+ pci"};
@@ -393,7 +393,6 @@ static int init_card(sedl_fax *sf)
 
 #define MAX_CARDS	4
 #define MODULE_PARM_T	"1-4i"
-static sedl_fax	*cardlist;
 static int sedl_cnt;
 static hisaxobject_t	speedfax;
 static int debug;
@@ -554,92 +553,6 @@ setup_speedfax(sedl_fax *sf, u_int io_cfg, u_int irq_cfg)
 	return (0);
 }
 
-static int
-dummy_down(hisaxif_t *hif,  u_int prim, int dinfo, int len, void *arg) {
-	sedl_fax *card;
-
-	if (!hif || !hif->fdata)
-		return(-EINVAL);
-	card = hif->fdata;
-	printk(KERN_WARNING "dummy speedfax down id %d prim %x\n", card->dch.inst.st->id, prim);
-	return(-EINVAL);
-}
-
-static int
-add_if(hisaxinstance_t *inst, int channel, hisaxif_t *hif) {
-	int err;
-	sedl_fax *card = inst->data;
-
-	if (!hif)
-		return(-EINVAL);
-	if (IF_TYPE(hif) != IF_UP)
-		return(-EINVAL);
-	switch(hif->protocol) {
-	    case ISDN_PID_L1_B_64TRANS:
-	    case ISDN_PID_L1_B_TRANS_TT:
-	    case ISDN_PID_L1_B_TRANS_TTR:
-	    case ISDN_PID_L1_B_TRANS_TTS:
-	    case ISDN_PID_L1_B_64HDLC:
-	    case ISDN_PID_L2_B_TRANS:
-		printk(KERN_DEBUG "speedfax_add_if ch%d p:%x\n", channel,
-			hif->protocol);
-	    	if ((channel<0) || (channel>1))
-	    		return(-EINVAL);
-		hif->fdata = &card->bch[channel];
-		hif->func = isar_down;
-		if (inst->up.stat == IF_NOACTIV) {
-			printk(KERN_DEBUG "speedfax_add_if set upif\n");
-			inst->up.stat = IF_DOWN;
-			inst->up.layermask = hif->inst->layermask;
-			inst->up.protocol = get_protocol(inst->st,
-				inst->up.layermask);;
-			err = speedfax.ctrl(inst->st, MGR_ADDIF | REQUEST, &inst->up);
-			if (err) {
-				printk(KERN_WARNING "speedfax_add_if up no if\n");
-				inst->up.stat = IF_NOACTIV;
-			}
-		}
-		break;
-	    case ISDN_PID_L0_TE_S0:
-	    	if (inst != &card->dch.inst)
-	    		return(-EINVAL);
-		hif->fdata = &card->dch;
-		hif->func = ISAC_l1hw;
-		if (inst->up.stat == IF_NOACTIV) {
-			inst->up.stat = IF_DOWN;
-			inst->up.protocol = get_protocol(inst->st,
-				inst->up.layermask);
-			err = speedfax.ctrl(inst->st, MGR_ADDIF | REQUEST, &inst->up);
-			if (err)
-				inst->up.stat = IF_NOACTIV;
-		}
-		break;
-	    default:
-		printk(KERN_WARNING "speedfax_add_if: inst %s protocol %x not supported\n",
-			inst->name, hif->protocol);
-		return(-EPROTONOSUPPORT);
-	}
-	return(0);
-}
-
-static int
-del_if(hisaxinstance_t *inst, int channel, hisaxif_t *hif) {
-	sedl_fax *card = inst->data;
-
-	printk(KERN_DEBUG "speedfax del_if lay %x/%x %p/%p\n", hif->layermask,
-		hif->stat, hif->func, hif->fdata);
-	if ((hif->func == inst->up.func) && (hif->fdata == inst->up.fdata)) {
-		if (channel==2)
-			DelIF(inst, &inst->up, ISAC_l1hw, &card->dch);
-		else
-			DelIF(inst, &inst->up, isar_down, &card->bch[channel]);
-	} else {
-		printk(KERN_DEBUG "speedfax del_if no if found\n");
-		return(-EINVAL);
-	}
-	return(0);
-}
-
 static void
 release_card(sedl_fax *card) {
 	lock_dev(card);
@@ -657,7 +570,7 @@ release_card(sedl_fax *card) {
 	free_bchannel(&card->bch[1]);
 	free_bchannel(&card->bch[0]);
 	free_dchannel(&card->dch);
-	REMOVE_FROM_LISTBASE(card, cardlist);
+	REMOVE_FROM_LISTBASE(card, ((sedl_fax *)speedfax.ilist));
 	unlock_dev(card);
 	kfree(card);
 	sedl_cnt--;
@@ -665,83 +578,28 @@ release_card(sedl_fax *card) {
 }
 
 static int
-set_stack(hisaxstack_t *st, hisaxinstance_t *inst, int chan, hisax_pid_t *pid) {
-	int err, layer = 0;
-
-#if 0
-	if (st->inst[0] || st->inst[1] || st->inst[2]) {
-		return(-EBUSY);	
-	}
-#endif
-	memset(&inst->pid, 0, sizeof(hisax_pid_t));
-	if  (chan == 2) { /* D-channel */
-		if (!HasProtocol(inst->obj, pid->protocol[0])) {
-			return(-EPROTONOSUPPORT);
-		} else 
-			layer = ISDN_LAYER(0);
-		inst->pid.protocol[0] = pid->protocol[0];
-	} else {
-		if (!HasProtocol(inst->obj, pid->protocol[1])) {
-			return(-EPROTONOSUPPORT);
-		} else
-			layer = ISDN_LAYER(1);
-		inst->pid.protocol[1] = pid->protocol[1];
-		if (HasProtocol(inst->obj, pid->protocol[2])) {
-			layer |= ISDN_LAYER(2);
-			inst->pid.protocol[2] = pid->protocol[2];
-		}
-	}
-	inst->layermask = layer;
-	if ((err = speedfax.ctrl(st, MGR_ADDLAYER | REQUEST, inst))) {
-		printk(KERN_WARNING "set_stack MGR_ADDLAYER err(%d)\n", err);
-		return(err);
-	}
-	inst->up.layermask = get_up_layer(layer);
-	inst->up.protocol = get_protocol(st, inst->up.layermask);
-	inst->up.inst = inst;
-	inst->up.stat = IF_DOWN;
-	if ((err = speedfax.ctrl(st, MGR_ADDIF | REQUEST, &inst->up))) {
-		printk(KERN_WARNING "set_stack MGR_ADDIF err(%d)\n", err);
-		return(err);
-	}
-	if  ((chan != 2) && (pid->global == 2)) { /* B-channel */
-		u_int pr;
-
-		if (inst->pid.protocol[2] == ISDN_PID_L2_B_TRANS)
-			pr = DL_ESTABLISH | REQUEST;
-		else
-			pr = PH_ACTIVATE | REQUEST;
-		
-		isar_down(&inst->down, pr, 0, 0, NULL);
-	}
-	return(0);	                                    
-}
-
-static int
 speedfax_manager(void *data, u_int prim, void *arg) {
-	sedl_fax *card = cardlist;
-	hisaxinstance_t *inst=NULL;
+	sedl_fax *card = speedfax.ilist;
+	hisaxinstance_t *inst=data;
 	int channel = -1;
-	hisaxstack_t *st = data;
+	int val;
 
+	printk(KERN_DEBUG __FUNCTION__": data:%p prim:%x arg:%p\n", data, prim, arg);
 	if (!data) {
 		printk(KERN_ERR "speedfax_manager no data prim %x arg %p\n",
 			prim, arg);
 		return(-EINVAL);
 	}
 	while(card) {
-		if (card->dch.inst.st == st) {
-			inst = &card->dch.inst;
+		if (&card->dch.inst == inst) {
 			channel = 2;
 			break;
 		}
-		if (card->bch[0].inst.st == st) {
-			inst = &card->bch[0].inst;
+		if (&card->bch[0].inst == inst) {
 			channel = 0;
 			break;
 		}
-		if (card->bch[1].inst.st == st) {
-			inst = &card->bch[1].inst;
+		if (&card->bch[1].inst == inst) {
 			channel = 1;
 			break;
 		}
@@ -753,22 +611,30 @@ speedfax_manager(void *data, u_int prim, void *arg) {
 		return(-EINVAL);
 	}
 	switch(prim) {
-	    case MGR_ADDLAYER | CONFIRM:
+	    case MGR_REGLAYER | CONFIRM:
 		if (!card) {
 			printk(KERN_WARNING "speedfax_manager no card found\n");
 			return(-ENODEV);
 		}
 		break;
-	    case MGR_DELLAYER | REQUEST:
+	    case MGR_UNREGLAYER | REQUEST:
 		if (!card) {
-			printk(KERN_WARNING "speedfax_manager del layer request failed\n");
+			printk(KERN_WARNING "speedfax_manager no card found\n");
 			return(-ENODEV);
+		} else {
+			if (channel == 2) {
+				val = HW_DEACTIVATE;
+				inst->down.fdata = &card->dch;
+				ISAC_l1hw(&inst->down, PH_CONTROL | REQUEST, 0,
+					4, &val);
+			} else {
+				inst->down.fdata = &card->bch[channel];
+				isar_down(&inst->down, MGR_DISCONNECT | REQUEST,
+					0, 0, NULL);
+			}
+			speedfax.ctrl(inst->up.peer, MGR_DISCONNECT | REQUEST,
+				&inst->up);
 		}
-		if (channel==2)
-			DelIF(inst, &inst->up, ISAC_l1hw, &card->dch);
-		else
-			DelIF(inst, &inst->up, isar_down, &card->bch[channel]);
-		speedfax.ctrl(st, MGR_DELLAYER | REQUEST, inst);
 		break;
 	    case MGR_RELEASE | INDICATION:
 		if (!card) {
@@ -782,27 +648,32 @@ speedfax_manager(void *data, u_int prim, void *arg) {
 			}
 		}
 		break;
-	    case MGR_ADDIF | REQUEST:
+	    case MGR_CONNECT | REQUEST:
 		if (!card) {
-			printk(KERN_WARNING "speedfax_manager interface request failed\n");
+			printk(KERN_WARNING __FUNCTION__": connect request failed\n");
 			return(-ENODEV);
 		}
-		return(add_if(inst, channel, arg));
+		return(ConnectIF(inst, arg));
 		break;
-	    case MGR_DELIF | REQUEST:
+	    case MGR_SETIF | REQUEST:
+	    case MGR_SETIF | INDICATION:
+		if (!card) {
+			printk(KERN_WARNING __FUNCTION__": setif failed\n");
+			return(-ENODEV);
+		}
+		if (channel==2)
+			return(SetIF(inst, arg, prim, ISAC_l1hw, NULL,
+				&card->dch));
+		else
+			return(SetIF(inst, arg, prim, isar_down, NULL,
+				&card->bch[channel]));
+	    case MGR_DISCONNECT | REQUEST:
+	    case MGR_DISCONNECT | INDICATION:
 		if (!card) {
 			printk(KERN_WARNING "speedfax_manager del interface request failed\n");
 			return(-ENODEV);
 		}
-		return(del_if(inst, channel, arg));
-		break;
-	    case MGR_SETSTACK | REQUEST:
-		if (!card) {
-			printk(KERN_WARNING "speedfax_manager del interface request failed\n");
-			return(-ENODEV);
-		} else {
-			return(set_stack(st, inst, channel, arg));
-		}
+		return(DisConnectIF(inst, arg));
 		break;
 	    case MGR_LOADFIRM | REQUEST:
 		if (!card) {
@@ -818,6 +689,24 @@ speedfax_manager(void *data, u_int prim, void *arg) {
 				return(-EINVAL);
 			return(isar_load_firmware(&card->bch[0], firm->data, firm->len));
 		}
+	    case MGR_SETSTACK | CONFIRM:
+		if (!card) {
+			printk(KERN_WARNING __FUNCTION__": setstack failed\n");
+			return(-ENODEV);
+		}
+		if ((channel!=2) && (inst->pid.global == 2)) {
+			inst->down.fdata = &card->bch[channel];
+			isar_down(&inst->down, PH_ACTIVATE | REQUEST,
+				0, 0, NULL);
+			if (inst->pid.protocol[2] == ISDN_PID_L2_B_TRANS)
+				val = DL_ESTABLISH;
+			else
+				val = PH_ACTIVATE;
+			if (inst->up.func)
+				inst->up.func(&inst->up, val | INDICATION,
+					0, 0, NULL);
+		}
+		break;
 	    default:
 		printk(KERN_WARNING "speedfax_manager prim %x not handled\n", prim);
 		return(-EINVAL);
@@ -855,16 +744,17 @@ Speedfax_init(void)
 			return(-ENOMEM);
 		}
 		memset(card, 0, sizeof(sedl_fax));
-		APPEND_TO_LIST(card, cardlist);
+		APPEND_TO_LIST(card, ((sedl_fax *)speedfax.ilist));
 		card->dch.debug = debug;
 		card->dch.inst.obj = &speedfax;
 		spin_lock_init(&card->devlock);
 		card->dch.inst.lock = lock_dev;
 		card->dch.inst.unlock = unlock_dev;
 		card->dch.inst.data = card;
-		card->dch.inst.up.inst = &card->dch.inst;
-		card->dch.inst.down.func = dummy_down;
-		card->dch.inst.down.fdata = card;
+		card->dch.inst.up.owner = &card->dch.inst;
+		card->dch.inst.down.owner = &card->dch.inst;
+		speedfax.ctrl(NULL, MGR_DISCONNECT | REQUEST,
+			&card->dch.inst.down);
 		set_dchannel_pid(&pid, protocol[sedl_cnt], layermask[sedl_cnt]);
 		sprintf(card->dch.inst.name, "SFax%d", sedl_cnt+1);
 		init_dchannel(&card->dch);
@@ -872,11 +762,13 @@ Speedfax_init(void)
 			card->bch[i].channel = i;
 			card->bch[i].inst.obj = &speedfax;
 			card->bch[i].inst.data = card;
-			card->bch[i].inst.layermask = 0;
-			card->bch[i].inst.up.layermask = ISDN_LAYER(1);
-			card->bch[i].inst.up.inst = &card->bch[i].inst;
+			card->bch[i].inst.pid.layermask = 0;
+			card->bch[i].inst.up.layer = 1;
+			card->bch[i].inst.up.owner = &card->bch[i].inst;
+			card->bch[i].inst.down.owner = &card->bch[i].inst;
 			card->bch[i].inst.down.fdata = &card->bch[i];
-			card->bch[i].inst.down.func = dummy_down;
+			speedfax.ctrl(NULL, MGR_DISCONNECT | REQUEST,
+				&card->bch[i].inst.down);
 			card->bch[i].inst.lock = lock_dev;
 			card->bch[i].inst.unlock = unlock_dev;
 			card->bch[i].debug = debug;
@@ -891,7 +783,7 @@ Speedfax_init(void)
 			free_dchannel(&card->dch);
 			free_bchannel(&card->bch[1]);
 			free_bchannel(&card->bch[0]);
-			REMOVE_FROM_LISTBASE(card, cardlist);
+			REMOVE_FROM_LISTBASE(card, ((sedl_fax *)speedfax.ilist));
 			kfree(card);
 			card = NULL;
 			if (!sedl_cnt) {
@@ -905,7 +797,7 @@ Speedfax_init(void)
 		if (card->subtyp == SEDL_SPEEDFAX_ISA)
 			cfg_idx++;
 		sedl_cnt++;
-		if ((err = speedfax.ctrl(NULL, MGR_ADDSTACK | REQUEST, &card->dch.inst))) {
+		if ((err = speedfax.ctrl(NULL, MGR_NEWSTACK | REQUEST, &card->dch.inst))) {
 			printk(KERN_ERR  "MGR_ADDSTACK REQUEST dch err(%d)\n", err);
 			release_card(card);
 			if (!sedl_cnt)
@@ -924,8 +816,8 @@ Speedfax_init(void)
 			return(err);
 		}
 		for (i=0; i<2; i++) {
-			if ((err = speedfax.ctrl(card->dch.inst.st, MGR_ADDSTACK | REQUEST,
-				&card->bch[i].inst))) {
+			if ((err = speedfax.ctrl(card->dch.inst.st,
+				MGR_NEWSTACK | REQUEST, &card->bch[i].inst))) {
 				printk(KERN_ERR "MGR_ADDSTACK bchan error %d\n", err);
 				speedfax.ctrl(card->dch.inst.st, MGR_DELSTACK | REQUEST, NULL);
 				if (!sedl_cnt)
@@ -957,10 +849,10 @@ cleanup_module(void)
 		printk(KERN_ERR "Can't unregister Speedfax PCI error(%d)\n", err);
 		return(err);
 	}
-	while(cardlist) {
+	while(speedfax.ilist) {
 		printk(KERN_ERR "Speedfax PCI card struct not empty refs %d\n",
 			speedfax.refcnt);
-		release_card(cardlist);
+		release_card(speedfax.ilist);
 	}
 	return(0);
 }

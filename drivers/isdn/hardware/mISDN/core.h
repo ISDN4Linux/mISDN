@@ -1,4 +1,4 @@
-/* $Id: core.h,v 0.5 2001/03/03 08:07:30 kkeil Exp $
+/* $Id: core.h,v 0.6 2001/03/26 11:40:02 kkeil Exp $
  * 
  * This file is (c) under GNU PUBLIC LICENSE
  *
@@ -35,7 +35,7 @@ extern hisaxstack_t	*hisax_stacklist;
 extern void		get_stack_profile(iframe_t *);
 extern int		get_stack_cnt(void);
 extern hisaxstack_t	*get_stack4id(int);
-extern hisaxstack_t	*new_stack(hisaxinstance_t *, hisaxstack_t *);
+extern hisaxstack_t	*new_stack(hisaxstack_t *, hisaxinstance_t *);
 extern int		release_stack(hisaxstack_t *);
 extern void		release_stacks(hisaxobject_t *);
 extern int		set_stack(hisaxstack_t *, hisax_pid_t *);
@@ -52,3 +52,4 @@ extern void		hisaxlock_core(void);
 extern void		hisaxunlock_core(void);
 extern int		register_layer(hisaxstack_t *, hisaxinstance_t *);
 extern int		unregister_instance(hisaxinstance_t *);
+extern hisaxinstance_t	*get_next_instance(hisaxstack_t *, hisax_pid_t *);

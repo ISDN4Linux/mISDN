@@ -1,4 +1,4 @@
-/* $Id: helper.c,v 0.10 2001/03/11 21:09:07 kkeil Exp $
+/* $Id: helper.c,v 0.11 2001/03/26 11:40:02 kkeil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -192,6 +192,7 @@ set_dchannel_pid(hisax_pid_t *pid, int protocol, int layermask) {
 			ISDN_LAYER(3) | ISDN_LAYER(4);
 	
 	memset(pid, 0, sizeof(hisax_pid_t));
+	pid->layermask = layermask;
 	if (layermask & ISDN_LAYER(0))
 		pid->protocol[0] = ISDN_PID_L0_TE_S0;
 	if (layermask & ISDN_LAYER(1))
@@ -206,7 +207,9 @@ set_dchannel_pid(hisax_pid_t *pid, int protocol, int layermask) {
 		pid->protocol[4] = ISDN_PID_L4_CAPI20;
 }
 
-int HasProtocol(hisaxobject_t *obj, int protocol) {
+int
+HasProtocol(hisaxobject_t *obj, int protocol)
+{
 	int layer;
 	int pmask;
 
@@ -232,6 +235,65 @@ int HasProtocol(hisaxobject_t *obj, int protocol) {
 }
 
 int
+SetHandledPID(hisaxobject_t *obj, hisax_pid_t *pid)
+{
+	int layer;
+	int ret = 0;
+	hisax_pid_t sav;
+
+	if (!obj || !pid) {
+		int_error();
+		return(0);
+	}
+	printk(KERN_DEBUG __FUNCTION__": %s LM(%x)\n", obj->name,
+		pid->layermask);
+	memcpy(&sav, pid, sizeof(hisax_pid_t));
+	memset(pid, 0, sizeof(hisax_pid_t));
+	pid->global = sav.global;
+	if (!sav.layermask) {
+		printk(KERN_WARNING __FUNCTION__": no layermask in pid\n");
+		return(0);
+	}
+	for (layer=0; layer<=MAX_LAYER_NR; layer++) {
+		if (!(ISDN_LAYER(layer) & sav.layermask)) {
+			if (ret)
+				break;
+			else
+				continue;
+		}
+		if (HasProtocol(obj, sav.protocol[layer])) {
+			ret++;
+			pid->protocol[layer] = sav.protocol[layer];
+			pid->param[layer] = sav.param[layer];
+			pid->layermask |= ISDN_LAYER(layer);
+		} else
+			break;
+	}
+	return(ret);
+}
+
+void
+RemoveUsedPID(hisax_pid_t *pid, hisax_pid_t *used)
+{
+	int layer;
+
+	if (!used || !pid) {
+		int_error();
+		return;
+	}
+	if (!used->layermask)
+		return;
+	
+	for (layer=0; layer<=MAX_LAYER_NR; layer++) {
+		if (!(ISDN_LAYER(layer) & used->layermask))
+				continue;
+		pid->protocol[layer] = ISDN_PID_NONE;
+		pid->param[layer] = NULL;
+		pid->layermask &= ~(ISDN_LAYER(layer));
+	}
+}
+
+int
 layermask2layer(int layermask) {
 	switch(layermask) {
 		case ISDN_LAYER(0): return(0);
@@ -248,70 +310,157 @@ layermask2layer(int layermask) {
 }
 
 int
-get_protocol(hisaxstack_t *st, int layermask)
+get_protocol(hisaxstack_t *st, int layer)
 {
-	int layer = layermask2layer(layermask);
 
 	if (!st){
 		int_error();
 		return(-EINVAL);
 	}
-	if (layer<0) {
-		int_errtxt("lmask(%x) layer(%x) st(%x)",
-			layermask, layer, st->id);
+	if (LAYER_OUTRANGE(layer)) {
+		int_errtxt("L%d st(%x)", layer, st->id);
 		return(-EINVAL);
 	}
 	return(st->pid.protocol[layer]);
 }
 
-int get_down_layer(int layermask) {
-	int downlayer = 2;
+int
+get_lowlayer(int layermask)
+{
+	int layer;
+
+	if (!layermask)
+		return(0);
+	for (layer=0; layer <= MAX_LAYER_NR; layer++)
+		if (layermask & ISDN_LAYER(layer))
+			return(layer);
+	return(0);
+}
+
+int
+get_down_layer(int layermask)
+{
+	int downlayer = 1;
 	
 	if (layermask>255 || (layermask & 1)) {
 		int_errtxt("lmask %x out of range", layermask);
 		return(0);
 	}
-	while(downlayer & 0xFF) {
-		if (downlayer & layermask)
+	while(downlayer <= MAX_LAYER_NR) {
+		if (ISDN_LAYER(downlayer) & layermask)
 			break;
-		downlayer <<= 1;
+		downlayer++;
 	}
-	if (downlayer & 0xFF)
-		downlayer >>= 1;
-	else
-		downlayer = 0;
+	downlayer--;
 	return(downlayer);
 }
 
 int get_up_layer(int layermask) {
-	int uplayer = 0x40;
+	int uplayer = MAX_LAYER_NR;
 	
 	if (layermask>=128) {
 		int_errtxt("lmask %x out of range", layermask);
 		return(0);
 	}
-	while(uplayer) {
-		if (uplayer & layermask)
+	while(uplayer>=0) {
+		if (ISDN_LAYER(uplayer) & layermask)
 			break;
-		uplayer >>= 1;
+		uplayer--;
 	}
-	if (uplayer)
-		uplayer <<= 1;
-	else
-		uplayer = 1;
+	uplayer++;
 	return(uplayer);
 }
 
-int DelIF(hisaxinstance_t *inst, hisaxif_t *mif, void *func, void *data) {
-	hisaxif_t hif;
+int
+SetIF(hisaxinstance_t *owner, hisaxif_t *hif, u_int prim, void *upfunc,
+	void *downfunc, void *data)
+{
+	hisaxif_t *own_hif;
 
-	memset(&hif, 0, sizeof(hisaxif_t));
-	hif.protocol = mif->protocol;
-	hif.layermask = mif->layermask;
-	hif.fdata = data;
-	hif.func = func;
-	hif.func(&hif, MGR_DELIF | REQUEST, 0, 0, NULL);
-	mif->protocol = ISDN_PID_NONE;
-	inst->obj->ctrl(inst->st, MGR_ADDIF | REQUEST, mif);
-	return(inst->obj->ctrl(inst->st, MGR_DELIF | REQUEST, &hif));
+	if (!owner) {
+		int_error();
+		return(-EINVAL);
+	}
+	if (!hif) {
+		int_error();
+		return(-EINVAL);
+	}
+	if (IF_TYPE(hif) == IF_UP) {
+		hif->func = upfunc;
+		own_hif = &owner->up;
+		printk(KERN_DEBUG __FUNCTION__": IF_UP: f:%p(%p)\n",
+			hif->func, owner->data);
+	} else if (IF_TYPE(hif) == IF_DOWN) {
+		hif->func = downfunc;
+		own_hif = &owner->down;
+		printk(KERN_DEBUG __FUNCTION__": IF_DOWN: f:%p(%p)\n",
+			hif->func, owner->data);
+	} else {
+		int_errtxt("stat(%x)", hif->stat);
+		return(-EINVAL);
+	}
+	hif->peer = owner;
+	hif->fdata = data;
+	if ((prim & SUBCOMMAND_MASK) == REQUEST) {
+		if (own_hif->stat == IF_NOACTIV) {
+			if (IF_TYPE(hif) == IF_UP)
+				own_hif->stat = IF_DOWN;
+			else
+				own_hif->stat = IF_UP;
+			own_hif->owner = owner;
+			return(hif->owner->obj->own_ctrl(hif->owner,
+				MGR_SETIF | INDICATION, own_hif));
+		} else {
+			int_errtxt("REQ own stat(%x)", own_hif->stat);
+			return(-EBUSY);
+		}
+	}
+	return(0);
 }
+
+int
+ConnectIF(hisaxinstance_t *owner, hisaxinstance_t *peer)
+{
+	hisaxif_t *hif;
+
+	if (!owner) {
+		int_error();
+		return(-EINVAL);
+	}
+	if (!peer) {
+		int_error();
+		return(-EINVAL);
+	}
+	
+	if (owner->pid.layermask < peer->pid.layermask) {
+		hif = &owner->up;
+		hif->owner = owner;
+		hif->stat = IF_DOWN;
+	} else if (owner->pid.layermask > peer->pid.layermask) {
+		hif = &owner->down;
+		hif->owner = owner;
+		hif->stat = IF_UP;
+	} else {
+		int_errtxt("OLM == PLM: %x", owner->pid.layermask);
+		return(-EINVAL);
+	}
+	return(peer->obj->own_ctrl(peer, MGR_SETIF | REQUEST, hif));
+}
+
+int DisConnectIF(hisaxinstance_t *inst, hisaxif_t *hif) {
+	
+	if (hif) {
+		if (inst->up.peer) {
+			if (inst->up.peer == hif->owner)
+				inst->up.peer->obj->ctrl(inst->up.peer,
+					MGR_DISCONNECT | INDICATION, &inst->up);
+		}
+		if (inst->down.peer) {
+			if (inst->down.peer == hif->owner)
+				inst->down.peer->obj->ctrl(inst->down.peer,
+					MGR_DISCONNECT | INDICATION, &inst->down);
+		}
+	}
+	return(0);
+}
+

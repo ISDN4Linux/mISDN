@@ -1,4 +1,4 @@
-/* $Id: capi.c,v 0.7 2001/03/05 01:48:27 kkeil Exp $
+/* $Id: capi.c,v 0.8 2001/03/26 11:40:02 kkeil Exp $
  *
  */
 
@@ -9,7 +9,7 @@
 #include "helper.h"
 #include "debug.h"
 
-const char *capi_revision = "$Revision: 0.7 $";
+const char *capi_revision = "$Revision: 0.8 $";
 
 static int debug = 0;
 static hisaxobject_t capi_obj;
@@ -166,61 +166,9 @@ int CapiNew(void)
 }
 
 static int
-add_if_contr(Contr_t *ctrl, hisaxinstance_t *inst, hisaxif_t *hif) {
-	int err;
-
-	printk(KERN_DEBUG "capi add_if lay %x/%x prot %x\n", hif->layermask,
-		hif->stat, hif->protocol);
-	if (IF_TYPE(hif) == IF_UP) {
-		printk(KERN_WARNING "capi add_if here is no UP interface\n");
-	} else if (IF_TYPE(hif) == IF_DOWN) {
-		if (inst == &ctrl->inst) {
-			hif->fdata = ctrl;
-			hif->func = contrL3L4;
-		} else {
-			hif->fdata = inst->data;
-			ncciSetInterface(hif);
-		}
-		if (inst->down.stat == IF_NOACTIV) {
-			inst->down.stat = IF_UP;
-			inst->down.layermask = get_down_layer(hif->layermask);
-			inst->down.protocol = get_protocol(inst->st,
-				inst->down.layermask);
-			err = capi_obj.ctrl(inst->st, MGR_ADDIF | REQUEST, &inst->down);
-			if (err)
-				inst->down.stat = IF_NOACTIV;
-		}
-	} else
-		return(-EINVAL);
-	return(0);
-}
-
-static int
-del_if(hisaxinstance_t *inst, hisaxif_t *hif) {
-	int err;
-
-	printk(KERN_DEBUG "capi del_if lay %x/%x %p/%p\n", hif->layermask,
-		hif->stat, hif->func, hif->fdata);
-	if ((hif->func == inst->up.func) && (hif->fdata == inst->up.fdata)) {
-		inst->up.stat = IF_NOACTIV;
-		inst->up.protocol = ISDN_PID_NONE;
-		err = capi_obj.ctrl(inst->st, MGR_ADDIF | REQUEST, &inst->up);
-	} else if ((hif->func == inst->down.func) && (hif->fdata == inst->down.fdata)) {
-		inst->down.stat = IF_NOACTIV;
-		inst->down.protocol = ISDN_PID_NONE;
-		err = capi_obj.ctrl(inst->st, MGR_ADDIF | REQUEST, &inst->down);
-	} else {
-		printk(KERN_DEBUG "capi del_if no if found\n");
-		return(-EINVAL);
-	}
-	return(0);
-}
-
-
-static int
 capi20_manager(void *data, u_int prim, void *arg) {
-	hisaxstack_t *st = data;
-	hisaxinstance_t *inst = NULL;
+	hisaxinstance_t *inst = data;
+	int	found=0;
 	BInst_t *binst;
 	Contr_t *ctrl = (Contr_t *)capi_obj.ilist;
 
@@ -228,56 +176,52 @@ capi20_manager(void *data, u_int prim, void *arg) {
 	if (!data)
 		return(-EINVAL);
 	while(ctrl) {
-		if (ctrl->inst.st == st) {
-			inst = &ctrl->inst;
+		if (&ctrl->inst == inst) {
+			found++;
 			break;
 		}
 		binst = ctrl->binst;
 		while(binst) {
-			if (binst->inst.st == st) {
-				inst = &binst->inst;
+			if (&binst->inst == inst) {
+				found++;
 				break;
 			}
 			binst = binst->next;
 		}
-		if (inst)
+		if (found)
 			break;
 		ctrl = ctrl->next;
 	}
 	switch(prim) {
-	    case MGR_ADDIF | REQUEST:
+	    case MGR_NEWLAYER | REQUEST:
+	    	if (!(ctrl = newContr(&capi_obj, data, arg)))
+	    		return(-EINVAL);
+	        break;
+	    case MGR_CONNECT | REQUEST:
 		if (!ctrl) {
-			ctrl = newContr(&capi_obj, st, arg);
-			if (!ctrl) {
-				printk(KERN_WARNING "capi20_manager create_ctrl failed\n");
-				return(-EINVAL);
-			} else {
-				inst = &ctrl->inst;
-			}
-		}
-		return(add_if_contr(ctrl, inst, arg));
-		break;
-	    case MGR_DELIF | REQUEST:
-		if (!ctrl) {
-			printk(KERN_WARNING "capi20_manager delif no instance\n");
+			printk(KERN_WARNING "capi20_manager connect no instance\n");
 			return(-EINVAL);
 		}
-		return(del_if(inst, arg));
+		return(ConnectIF(inst, arg));
 		break;
-	    case MGR_DELLAYER | REQUEST:
-		if (inst) {
-			if (ctrl->inst.st == st) {
-				DelIF(inst, &inst->down, contrL3L4, ctrl);
-			} else {
-				hisaxif_t hif;
-				ncciSetInterface(&hif);
-				DelIF(inst, &inst->down, hif.func, inst->data);
-			}
-		} else {
-			printk(KERN_WARNING "capi20_manager DELLAYER no instance\n");
+	    case MGR_SETIF | INDICATION:
+	    case MGR_SETIF | REQUEST:
+		if (!ctrl) {
+			printk(KERN_WARNING "capi20_manager setif no instance\n");
 			return(-EINVAL);
 		}
-		capi_obj.ctrl(st, MGR_DELLAYER | REQUEST, inst);
+		if (&ctrl->inst == inst)
+			return(SetIF(inst, arg, prim, NULL, contrL3L4, ctrl));
+		else
+			return(SetIF(inst, arg, prim, NULL, ncci_l3l4, inst->data));
+		break;
+	    case MGR_DISCONNECT | REQUEST:
+	    case MGR_DISCONNECT | INDICATION:
+		if (!ctrl) {
+			printk(KERN_WARNING "capi20_manager disconnect no instance\n");
+			return(-EINVAL);
+		}
+		return(DisConnectIF(inst, arg));
 		break;
 	    case MGR_RELEASE | INDICATION:
 	    	if (ctrl) {
