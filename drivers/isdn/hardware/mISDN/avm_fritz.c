@@ -1,4 +1,4 @@
-/* $Id: avm_fritz.c,v 1.21 2004/01/11 13:58:49 keil Exp $
+/* $Id: avm_fritz.c,v 1.22 2004/01/12 16:18:20 keil Exp $
  *
  * fritz_pci.c    low level stuff for AVM Fritz!PCI and ISA PnP isdn cards
  *              Thanks to AVM, Berlin for informations
@@ -28,7 +28,7 @@
 #define LOCK_STATISTIC
 #include "hw_lock.h"
 
-static const char *avm_fritz_rev = "$Revision: 1.21 $";
+static const char *avm_fritz_rev = "$Revision: 1.22 $";
 
 enum {
 	AVM_FRITZ_PCI,
@@ -142,6 +142,7 @@ typedef struct _fritzpnppci {
 	hdlc_hw_t		hdlc[2];
 	dchannel_t		dch;
 	bchannel_t		bch[2];
+	u_char			ctrlreg;
 } fritzpnppci;
 
 
@@ -277,7 +278,7 @@ __write_ctrl_pci(fritzpnppci *fc, hdlc_hw_t *hdlc, int channel) {
 
 static inline void
 __write_ctrl_pciv2(fritzpnppci *fc, hdlc_hw_t *hdlc, int channel) {
-	outl(hdlc->ctrl.ctrl, fc->addr + channel ? AVM_HDLC_STATUS_2 : AVM_HDLC_STATUS_1);
+	outl(hdlc->ctrl.ctrl, fc->addr + (channel ? AVM_HDLC_STATUS_2 : AVM_HDLC_STATUS_1));
 }
 
 void
@@ -324,7 +325,7 @@ __read_status_pci(u_long addr, u_int channel)
 static inline u_int
 __read_status_pciv2(u_long addr, u_int channel)
 {
-	return inl(addr + channel ? AVM_HDLC_STATUS_2 : AVM_HDLC_STATUS_1);
+	return inl(addr + (channel ? AVM_HDLC_STATUS_2 : AVM_HDLC_STATUS_1));
 }
 
 
@@ -415,12 +416,12 @@ hdlc_empty_fifo(bchannel_t *bch, int count)
 		while (cnt < count) {
 #ifdef __powerpc__
 #ifdef CONFIG_APUS
-			*ptr++ = in_le32((unsigned *)(fc->addr + bch->channel ? AVM_HDLC_FIFO_2 : AVM_HDLC_FIFO_1 +_IO_BASE));
+			*ptr++ = in_le32((unsigned *)(fc->addr + (bch->channel ? AVM_HDLC_FIFO_2 : AVM_HDLC_FIFO_1) +_IO_BASE));
 #else
-			*ptr++ = in_be32((unsigned *)(fc->addr + bch->channel ? AVM_HDLC_FIFO_2 : AVM_HDLC_FIFO_1 +_IO_BASE));
+			*ptr++ = in_be32((unsigned *)(fc->addr + (bch->channel ? AVM_HDLC_FIFO_2 : AVM_HDLC_FIFO_1) +_IO_BASE));
 #endif /* CONFIG_APUS */
 #else
-			*ptr++ = inl(fc->addr + bch->channel ? AVM_HDLC_FIFO_2 : AVM_HDLC_FIFO_1);
+			*ptr++ = inl(fc->addr + (bch->channel ? AVM_HDLC_FIFO_2 : AVM_HDLC_FIFO_1));
 #endif /* __powerpc__ */
 			cnt += 4;
 		}
@@ -492,12 +493,12 @@ hdlc_fill_fifo(bchannel_t *bch)
 		while (cnt<count) {
 #ifdef __powerpc__
 #ifdef CONFIG_APUS
-			out_le32((unsigned *)(fc->addr + bch->channel ? AVM_HDLC_FIFO_2 : AVM_HDLC_FIFO_1 +_IO_BASE), *ptr++);
+			out_le32((unsigned *)(fc->addr + (bch->channel ? AVM_HDLC_FIFO_2 : AVM_HDLC_FIFO_1) +_IO_BASE), *ptr++);
 #else
-			out_be32((unsigned *)(fc->addr + bch->channel ? AVM_HDLC_FIFO_2 : AVM_HDLC_FIFO_1 +_IO_BASE), *ptr++);
+			out_be32((unsigned *)(fc->addr + (bch->channel ? AVM_HDLC_FIFO_2 : AVM_HDLC_FIFO_1) +_IO_BASE), *ptr++);
 #endif /* CONFIG_APUS */
 #else
-			outl(*ptr++, fc->addr + bch->channel ? AVM_HDLC_FIFO_2 : AVM_HDLC_FIFO_1);
+			outl(*ptr++, fc->addr + (bch->channel ? AVM_HDLC_FIFO_2 : AVM_HDLC_FIFO_1));
 #endif /* __powerpc__ */
 			cnt += 4;
 		}
@@ -665,6 +666,8 @@ avm_fritz_interrupt(int intno, void *dev_id, struct pt_regs *regs)
 	fc->lock.spin_adr = (void *)0x2001;
 #endif
 	sval = inb(fc->addr + 2);
+	if (fc->dch.debug & L1_DEB_INTSTAT)
+		debugprint(&fc->dch.inst, "irq stat0 %x", sval);
 	if ((sval & AVM_STATUS0_IRQ_MASK) == AVM_STATUS0_IRQ_MASK) {
 		/* possible a shared  IRQ reqest */
 #ifdef SPIN_DEBUG
@@ -708,6 +711,86 @@ avm_fritz_interrupt(int intno, void *dev_id, struct pt_regs *regs)
 	if (fc->type == AVM_FRITZ_PNP) {
 		WriteISAC(fc, ISAC_MASK, 0xFF);
 		WriteISAC(fc, ISAC_MASK, 0x0);
+	}
+	spin_lock_irqsave(&fc->lock.lock, flags);
+#ifdef SPIN_DEBUG
+	fc->lock.spin_adr = (void *)0x2002;
+#endif
+	if (!test_and_clear_bit(STATE_FLAG_INIRQ, &fc->lock.state)) {
+	}
+	if (!test_and_clear_bit(STATE_FLAG_BUSY, &fc->lock.state)) {
+		printk(KERN_ERR "%s: STATE_FLAG_BUSY not locked state(%lx)\n",
+			__FUNCTION__, fc->lock.state);
+	}
+#ifdef SPIN_DEBUG
+	fc->lock.busy_adr = NULL;
+	fc->lock.spin_adr = NULL;
+#endif
+	spin_unlock_irqrestore(&fc->lock.lock, flags);
+	return IRQ_HANDLED;
+}
+
+static irqreturn_t
+avm_fritzv2_interrupt(int intno, void *dev_id, struct pt_regs *regs)
+{
+	fritzpnppci	*fc = dev_id;
+	u_long		flags;
+	u_char val;
+	u_char sval;
+
+	spin_lock_irqsave(&fc->lock.lock, flags);
+#ifdef SPIN_DEBUG
+	fc->lock.spin_adr = (void *)0x2001;
+#endif
+	sval = inb(fc->addr + 2);
+	if (fc->dch.debug & L1_DEB_INTSTAT)
+		debugprint(&fc->dch.inst, "irq stat0 %x", sval);
+	if (!(sval & AVM_STATUS0_IRQ_MASK)) {
+		/* possible a shared  IRQ reqest */
+#ifdef SPIN_DEBUG
+		fc->lock.spin_adr = NULL;
+#endif
+		spin_unlock_irqrestore(&fc->lock.lock, flags);
+		return IRQ_NONE;
+	}
+	fc->irqcnt++;
+	if (test_and_set_bit(STATE_FLAG_BUSY, &fc->lock.state)) {
+		printk(KERN_ERR "%s: STATE_FLAG_BUSY allready activ, should never happen state:%lx\n",
+			__FUNCTION__, fc->lock.state);
+#ifdef SPIN_DEBUG
+		printk(KERN_ERR "%s: previous lock:%p\n",
+			__FUNCTION__, fc->lock.busy_adr);
+#endif
+#ifdef LOCK_STATISTIC
+		fc->lock.irq_fail++;
+#endif
+	} else {
+#ifdef LOCK_STATISTIC
+		fc->lock.irq_ok++;
+#endif
+#ifdef SPIN_DEBUG
+		fc->lock.busy_adr = avm_fritz_interrupt;
+#endif
+	}
+
+	test_and_set_bit(STATE_FLAG_INIRQ, &fc->lock.state);
+#ifdef SPIN_DEBUG
+	fc->lock.spin_adr = NULL;
+#endif
+	spin_unlock_irqrestore(&fc->lock.lock, flags);
+	if (sval & AVM_STATUS0_IRQ_HDLC) {
+		HDLC_irq_main(fc);
+	}
+	if (sval & AVM_STATUS0_IRQ_ISAC) {
+		val = fcpci2_read_isac(fc, ISACSX_ISTA);
+		ISAC_interrupt(&fc->dch, val);
+	}
+	if (sval & AVM_STATUS0_IRQ_TIMER) {
+		if (fc->dch.debug & L1_DEB_INTSTAT)
+			debugprint(&fc->dch.inst, "Fc2 timer irq");
+		outb(fc->ctrlreg | AVM_STATUS0_RES_TIMER, fc->addr + 2);
+		udelay(1);
+		outb(fc->ctrlreg, fc->addr + 2);
 	}
 	spin_lock_irqsave(&fc->lock.lock, flags);
 #ifdef SPIN_DEBUG
@@ -819,13 +902,32 @@ clear_pending_hdlc_ints(fritzpnppci *fc)
 static void
 reset_avmpcipnp(fritzpnppci *fc)
 {
+	switch (fc->type) {
+		case AVM_FRITZ_PNP:
+		case AVM_FRITZ_PCI:
+			fc->ctrlreg = AVM_STATUS0_RESET | AVM_STATUS0_DIS_TIMER;
+			break;
+		case AVM_FRITZ_PCIV2:
+			fc->ctrlreg = AVM_STATUS0_RESET;
+			break;
+	}
 	printk(KERN_INFO "AVM PCI/PnP: reset\n");
-	outb(AVM_STATUS0_RESET | AVM_STATUS0_DIS_TIMER, fc->addr + 2);
+	outb(fc->ctrlreg, fc->addr + 2);
 	mdelay(5);
-	outb(AVM_STATUS0_DIS_TIMER | AVM_STATUS0_RES_TIMER | AVM_STATUS0_ENA_IRQ, fc->addr + 2);
-	outb(AVM_STATUS1_ENA_IOM | fc->irq, fc->addr + 3);
+	switch (fc->type) {
+		case AVM_FRITZ_PNP:
+		case AVM_FRITZ_PCI:
+			fc->ctrlreg = AVM_STATUS0_DIS_TIMER | AVM_STATUS0_RES_TIMER;
+			outb(fc->ctrlreg, fc->addr + 2);
+			outb(AVM_STATUS1_ENA_IOM | fc->irq, fc->addr + 3);
+			break;
+		case AVM_FRITZ_PCIV2:
+			fc->ctrlreg = 0;
+			outb(fc->ctrlreg, fc->addr + 2);
+			break;
+	}
 	mdelay(1);
-	printk(KERN_INFO "AVM PCI/PnP: S1 %x\n", inb(fc->addr + 3));
+	printk(KERN_INFO "AVM PCI/PnP: S0/S1 %x/%x\n", inb(fc->addr + 2), inb(fc->addr + 3));
 }
 
 static int init_card(fritzpnppci *fc)
@@ -838,12 +940,23 @@ static int init_card(fritzpnppci *fc)
 		shared = 0;
 	save_flags(flags);
 	lock_dev(fc, 0);
-	if (request_irq(fc->irq, avm_fritz_interrupt, SA_SHIRQ,
-		"AVM Fritz!PCI", fc)) {
-		printk(KERN_WARNING "mISDN: couldn't get interrupt %d\n",
-			fc->irq);
-		unlock_dev(fc);
-		return(-EIO);
+	reset_avmpcipnp(fc);
+	if (fc->type == AVM_FRITZ_PCIV2) {
+		if (request_irq(fc->irq, avm_fritzv2_interrupt, SA_SHIRQ,
+			"AVM Fritz!PCI", fc)) {
+			printk(KERN_WARNING "mISDN: couldn't get interrupt %d\n",
+				fc->irq);
+			unlock_dev(fc);
+			return(-EIO);
+		}
+	} else {
+		if (request_irq(fc->irq, avm_fritz_interrupt, shared,
+			"AVM Fritz!PCI", fc)) {
+			printk(KERN_WARNING "mISDN: couldn't get interrupt %d\n",
+				fc->irq);
+			unlock_dev(fc);
+			return(-EIO);
+		}
 	}
 	while (cnt) {
 		int	ret;
@@ -854,11 +967,10 @@ static int init_card(fritzpnppci *fc)
 		}
 		clear_pending_hdlc_ints(fc);
 		inithdlc(fc);
-		outb(AVM_STATUS0_DIS_TIMER | AVM_STATUS0_RES_TIMER,
-			fc->addr + 2);
+		outb(fc->ctrlreg, fc->addr + 2);
 		WriteISAC(fc, ISAC_MASK, 0);
-		outb(AVM_STATUS0_DIS_TIMER | AVM_STATUS0_RES_TIMER |
-			AVM_STATUS0_ENA_IRQ, fc->addr + 2);
+		fc->ctrlreg |= AVM_STATUS0_ENA_IRQ;
+		outb(fc->ctrlreg, fc->addr + 2);
 		/* RESET Receiver and Transmitter */
 		WriteISAC(fc, ISAC_CMDR, 0x41);
 		unlock_dev(fc);
@@ -955,7 +1067,6 @@ setup_fritz(fritzpnppci *fc)
 		outb(AVM_HDLC_1, fc->addr + CHIP_INDEX);
 		ver = inb(fc->addr + CHIP_WINDOW + 7);
 		printk(KERN_INFO "AVM PnP: HDLC version %x\n", ver & 0xf);
-		reset_avmpcipnp(fc);
 		fc->dch.read_reg = &ReadISAC;
 		fc->dch.write_reg = &WriteISAC;
 		fc->dch.read_fifo = &ReadISACfifo;
