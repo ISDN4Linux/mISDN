@@ -1,4 +1,4 @@
-/* $Id: layer2.h,v 1.2 2003/07/27 11:14:19 kkeil Exp $
+/* $Id: layer2.h,v 1.3 2003/09/06 17:11:42 keil Exp $
  *
  * Layer 2 defines
  *
@@ -53,6 +53,8 @@ typedef struct _layer2 {
 	struct sk_buff_head	i_queue;
 	struct sk_buff_head	ui_queue;
 	struct sk_buff_head	down_queue;
+	struct sk_buff_head	tmp_queue;
+	spinlock_t		lock;
 } layer2_t;
 
 /* l2 status_info */
