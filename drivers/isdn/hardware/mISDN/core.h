@@ -1,4 +1,4 @@
-/* $Id: core.h,v 0.4 2001/02/27 17:45:44 kkeil Exp $
+/* $Id: core.h,v 0.5 2001/03/03 08:07:30 kkeil Exp $
  * 
  * This file is (c) under GNU PUBLIC LICENSE
  *
@@ -8,7 +8,10 @@
 #include <linux/string.h>
 #include <linux/hisaxif.h>
 #include "helper.h"
- 
+#ifdef MEMDBG
+#include "memdbg.h"
+#endif
+
 #define	HISAX_MAJOR		46
 #define HISAX_DEVBUF_SIZE	8192
 
@@ -33,14 +36,19 @@ extern void		get_stack_profile(iframe_t *);
 extern int		get_stack_cnt(void);
 extern hisaxstack_t	*get_stack4id(int);
 extern hisaxstack_t	*new_stack(hisaxinstance_t *, hisaxstack_t *);
+extern int		release_stack(hisaxstack_t *);
 extern void		release_stacks(hisaxobject_t *);
 extern int		set_stack(hisaxstack_t *, hisax_pid_t *);
 extern int		clear_stack(hisaxstack_t *);
+extern hisaxlayer_t	*getlayer4lay(hisaxstack_t *, int);
+extern hisaxinstance_t	*get_instance(hisaxstack_t *, int, int);
 
 /* from hisax_core.c */
 
 extern hisaxobject_t	*hisax_objects;
 extern int core_debug;
 
-extern void hisaxlock_core(void);
-extern void hisaxunlock_core(void);
+extern void		hisaxlock_core(void);
+extern void		hisaxunlock_core(void);
+extern int		register_layer(hisaxstack_t *, hisaxinstance_t *);
+extern int		unregister_instance(hisaxinstance_t *);

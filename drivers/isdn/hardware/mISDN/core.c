@@ -1,4 +1,4 @@
-/* $Id: core.c,v 0.7 2001/02/27 17:45:44 kkeil Exp $
+/* $Id: core.c,v 0.8 2001/03/03 08:07:30 kkeil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -41,7 +41,7 @@ find_object(int layer, int protocol) {
 	int i, *pp;
 
 	while (obj) {
-		if (obj->layer == layer) {
+		if (obj->layermask & layer) {
 			pp = obj->protocols;
 			for (i=0; i<obj->protcnt; i++) {
 				if (*pp == protocol)
@@ -60,7 +60,7 @@ find_object_module(int layer, int protocol) {
 	hisaxobject_t *obj;
 
 	while (m->name != NULL) {
-		if (m->layer == layer) {
+		if (m->layermask & layer) {
 			if (m->protocol == protocol) {
 #ifdef CONFIG_KMOD
 				if (debug)
@@ -84,52 +84,16 @@ find_object_module(int layer, int protocol) {
 	return(NULL);
 }
 
-static int
-register_instance(hisaxstack_t *st, hisaxinstance_t *inst) {
-	int lay;
-
-	if (!st || !inst)
-		return(-EINVAL);
-	lay = inst->layer;
-	if (debug & DEBUG_CORE_FUNC)
-		printk(KERN_DEBUG "register_instance st(%p) inst(%p) lay(%d)\n",
-			st, inst, lay);
-	if ((lay>MAX_LAYER) || (lay<0))
-		return(-EINVAL);
-	APPEND_TO_LIST(inst, st->inst[lay]);
-	st->protocols[lay] = inst->protocol;
-	inst->st = st;
-	inst->obj->refcnt++;
-	return(0);
-}
-
-static int
-unregister_instance(hisaxstack_t *st, hisaxinstance_t *inst) {
-	int lay;
-
-	if (!st || !inst)
-		return(-EINVAL);
-	lay = inst->layer;
-	if (debug & DEBUG_CORE_FUNC)
-		printk(KERN_DEBUG "unregister_instance st(%p) inst(%p) lay(%d)\n",
-			st, inst, lay);
-	if ((lay>MAX_LAYER) || (lay<0))
-		return(-EINVAL);
-	REMOVE_FROM_LISTBASE(inst, st->inst[lay]);
-	st->protocols[lay] = ISDN_PID_NONE;
-	inst->obj->refcnt--;
-	return(0);
-}
-
 static void
 remove_object(hisaxobject_t *obj) {
 	hisaxstack_t *st = hisax_stacklist;
+	hisaxlayer_t *layer;
 	hisaxinstance_t *inst, *tmp;
-	int l;
 
 	while (st) {
-		for(l=0;l<=MAX_LAYER;l++) {
-			inst = st->inst[l];
+		layer = st->lstack;
+		while(layer) {
+			inst = layer->inst;
 			while (inst) {
 				if (inst->obj == obj) {
 					tmp = inst->next;
@@ -139,6 +103,7 @@ remove_object(hisaxobject_t *obj) {
 				} else
 					inst = inst->next;
 			}
+			layer = layer->next;
 		}
 		st = st->next;
 	}
@@ -160,12 +125,10 @@ add_stack_if(hisaxstack_t *st, hisaxif_t *hif) {
 
 	if (!hif)
 		return(-EINVAL);
-	lay = hif->layer;
+	lay = layermask2layer(hif->layermask);
 	if (debug & DEBUG_CORE_FUNC)
 		printk(KERN_DEBUG "add_stack_if for layer %d proto %x/%x\n",
 			lay, hif->protocol, hif->stat);
-	if ((lay>MAX_LAYER) || (lay<0))
-		return(-EINVAL);
 	if (hif->protocol == ISDN_PID_NONE) {
 		printk(KERN_WARNING "add_stack_if: for protocol none\n");
 		hif->fdata = NULL;
@@ -173,16 +136,17 @@ add_stack_if(hisaxstack_t *st, hisaxif_t *hif) {
 		hif->stat = IF_NOACTIV;
 		return(0);
 	}
-	inst = st->inst[lay];
-	while(inst) {
-		if (inst->protocol == hif->protocol)
-			obj = inst->obj;
-		inst = inst->next;
+	if (lay<0) {
+		int_errtxt("lm %x", hif->layermask);
+		return(-EINVAL);
 	}
+	inst = get_instance(st, lay, hif->protocol);
+	if (inst)
+		obj = inst->obj;
 	if (!obj)
-		obj = find_object(lay, hif->protocol);
+		obj = find_object(hif->layermask, hif->protocol);
 	if (!obj)
-		obj = find_object_module(lay, hif->protocol);
+		obj = find_object_module(hif->layermask, hif->protocol);
 	if (!obj) {
 		printk(KERN_WARNING "add_stack_if: no object found\n");
 		return(-ENOPROTOOPT);
@@ -201,15 +165,20 @@ del_stack_if(hisaxstack_t *st, hisaxif_t *hif) {
 
 	if (!hif)
 		return(-EINVAL);
-	lay = hif->layer;
+	lay = layermask2layer(hif->layermask);
 	if (debug & DEBUG_CORE_FUNC)
 		printk(KERN_DEBUG "del_stack_if for layer %d proto %x/%x\n",
 			lay, hif->protocol, hif->stat);
-	if ((lay>MAX_LAYER) || (lay<0))
+	if (lay<0) {
+		int_errtxt("lm %x", hif->layermask);
 		return(-EINVAL);
-	inst = st->inst[lay];
+	}
+	if (!(inst = get_instance(st, lay, hif->protocol))) {
+		printk(KERN_DEBUG "del_stack_if no instance found\n");
+		return(-ENODEV);
+	}
 	while(inst) {
-		if (inst->protocol == hif->protocol) {
+		if (inst->pid.protocol[lay] == hif->protocol) {
 			obj = inst->obj;
 			err = obj->own_ctrl(st, MGR_DELIF | REQUEST, hif);
 			if (err)
@@ -260,15 +229,17 @@ static int central_manager(void *data, u_int prim, void *arg) {
 		return(set_stack(st, arg));
 	    case MGR_CLEARSTACK | REQUEST:
 		return(clear_stack(st));
+	    case MGR_DELSTACK | REQUEST:
+		return(release_stack(st));
 	    case MGR_ADDLAYER | INDICATION:
-		return(register_instance(st, arg));
+		return(register_layer(st, arg));
 	    case MGR_ADDLAYER | REQUEST:
-		if (!register_instance(st, arg)) {
+		if (!register_layer(st, arg)) {
 			hisaxinstance_t *inst = arg;
 			return(inst->obj->own_ctrl(st, MGR_ADDLAYER | CONFIRM, arg));
 		}
 	    case MGR_DELLAYER | REQUEST:
-		return(unregister_instance(st, arg));
+		return(unregister_instance(arg));
 	    case MGR_ADDIF | REQUEST:
 		return(add_stack_if(st, arg));
 	    case MGR_DELIF | REQUEST:
@@ -319,7 +290,7 @@ int HiSax_unregister(hisaxobject_t *obj) {
 	if (debug)
 		printk(KERN_DEBUG "HiSax_unregister %s %d refs\n",
 			obj->name, obj->refcnt);
-	if (obj->layer == 0)
+	if (obj->layermask == ISDN_LAYER(0))
 		release_stacks(obj);
 	else
 		remove_object(obj);
@@ -339,6 +310,7 @@ HiSaxInit(void)
 
 #ifdef MODULE
 void cleanup_module(void) {
+	hisaxstack_t *st;
 
 	free_hisaxdev();
 	if (hisax_objects) {
@@ -346,6 +318,16 @@ void cleanup_module(void) {
 	}
 	if (hisax_stacklist) {
 		printk(KERN_WARNING "hisaxcore hisax_stacklist not empty\n");
+		st = hisax_stacklist;
+		while (st) {
+			printk(KERN_WARNING "hisaxcore st %x in list\n",
+				st->id);
+			if (st == st->next) {
+				printk(KERN_WARNING "hisaxcore st == next\n");
+				break;
+			}
+			st = st->next;
+		}
 	}
 	printk(KERN_DEBUG "hisaxcore unloaded\n");
 }

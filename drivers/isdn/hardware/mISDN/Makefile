@@ -9,7 +9,6 @@ O_TARGET :=
 
 # EXTRA_CFLAGS += -S -g
 
-
 # multi objects
 
 SEDLFAXOBJ := sedl_fax.o debug.o helper.o
@@ -28,6 +27,11 @@ OBJ_capi := capi.o contr.o listen.o appl.o plci.o cplci.o ncci.o asn1.o \
             supp_serv.o helper.o debug.o fsm.o
 
 LX_OBJS += hisax_core.o
+
+ifdef MEMDBG
+EXTRA_CFLAGS += -DMEMDBG
+MX_OBJS += memdbg.o
+endif
 
 #ifeq ($(CONFIG_ISDN_DRV_HISAX),y)
 #  O_TARGET += hisax.o

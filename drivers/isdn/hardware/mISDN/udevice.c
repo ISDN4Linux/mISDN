@@ -1,4 +1,4 @@
-/* $Id: udevice.c,v 0.3 2001/02/13 14:30:32 kkeil Exp $
+/* $Id: udevice.c,v 0.4 2001/03/03 08:07:30 kkeil Exp $
  *
  * Copyright 2000  by Karsten Keil <kkeil@isdn4linux.de>
  */
@@ -39,7 +39,7 @@ static rwlock_t	hisax_device_lock = RW_LOCK_UNLOCKED;
 
 static hisaxobject_t	udev_obj;
 static char MName[] = "UserDevice";
-static int  stbuf[32*(MAX_LAYER+2)];
+static int  stbuf[1000];
 
 static int device_debug = 0;
 
@@ -91,18 +91,16 @@ static devicelayer_t
 
 static int
 create_layer(hisaxdevice_t *dev, hisaxstack_t *st, int *ip) {
-	int	ret;
-	u_char	*p;
-	devicelayer_t *nl;
+	hisaxlayer_t	*layer;
+	int		ret;
+	u_char		*p;
+	devicelayer_t	*nl;
 
-	if ((*ip < 0) || (*ip > MAX_LAYER))
-		return(-EINVAL);
-	if (st->inst[*ip]) {
+	if ((layer = getlayer4lay(st, *ip))) {
 		printk(KERN_WARNING
 			"HiSax create_layer st(%d) lay(%d) inst not empty(%p)\n",
-			st->id, *ip, st->inst[*ip]);
-		return(-EBUSY);
-	}
+			st->id, *ip, layer);
+	} 
 	if (!(nl = kmalloc(sizeof(devicelayer_t), GFP_ATOMIC))) {
 		printk(KERN_ERR "kmalloc devicelayer failed\n");
 		return(-ENOMEM);
@@ -113,24 +111,16 @@ create_layer(hisaxdevice_t *dev, hisaxstack_t *st, int *ip) {
 			"HiSax create_layer lay(%d) nl(%p) nl inst(%p)\n",
 			*ip, nl, &nl->inst);
 	nl->dev = dev;
-	nl->inst.layer = *ip++;
-	nl->inst.protocol = *ip++;
+	nl->inst.layermask = *ip++;
+	nl->inst.pid.protocol[0] = *ip++;
 	p = (u_char *)ip;
 	strcpy(nl->inst.id, p);
 	p += HISAX_MAX_IDLEN;
 	ip = (int *)p;
 	nl->inst.down.protocol = *ip++;
-	if ((*ip < 0) || (*ip > MAX_LAYER)) {
-		kfree(nl);
-		return(-EINVAL);
-	}
-	nl->inst.down.layer = *ip++;
+	nl->inst.down.layermask = *ip++;
 	nl->inst.up.protocol = *ip++;
-	if ((*ip < 0) || (*ip > MAX_LAYER)) {
-		kfree(nl);
-		return(-EINVAL);
-	}
-	nl->inst.up.layer = *ip++;
+	nl->inst.up.layermask = *ip++;
 	nl->inst.obj = &udev_obj;
 	nl->inst.data = nl;
 	APPEND_TO_LIST(nl, dev->layer);
@@ -145,7 +135,8 @@ create_layer(hisaxdevice_t *dev, hisaxstack_t *st, int *ip) {
 	if (ret) {
 		nl->inst.up.stat = IF_NOACTIV;
 	}
-	nl->iaddr = st->id | IADDR_BIT | (0x000F0000 & (nl->inst.layer << 16));
+	nl->iaddr = st->id | IADDR_BIT |
+		(IF_LAYERMASK & (nl->inst.layermask << 16));
 	ret = nl->iaddr;
 	return(ret);
 }
@@ -157,8 +148,8 @@ del_layer(devicelayer_t *dl) {
 	hisaxdevice_t	*dev = dl->dev;
 
 	if (device_debug & DEBUG_MGR_FUNC) {
-		printk(KERN_DEBUG "del_layer: dl(%p) inst(%p) lay(%d) dev(%p) nexti(%p)\n", 
-			dl, inst, inst->layer, dev, inst->next);
+		printk(KERN_DEBUG "del_layer: dl(%p) inst(%p) lay(%x) dev(%p) nexti(%p)\n", 
+			dl, inst, inst->layermask, dev, inst->next);
 		printk(KERN_DEBUG "del_layer iaddr %x inst %s\n",
 			dl->iaddr, inst->id);
 	}
@@ -166,28 +157,17 @@ del_layer(devicelayer_t *dl) {
 	hif.fdata = dl;
 	hif.func = from_up_down;
 	hif.protocol = inst->up.protocol;
-	hif.layer = inst->up.layer;
+	hif.layermask = inst->up.layermask;
 	udev_obj.ctrl(inst->st, MGR_DELIF | REQUEST, &hif);
 	hif.fdata = dl;
 	hif.func = from_up_down;
 	hif.protocol = inst->down.protocol;
-	hif.layer = inst->down.layer;
+	hif.layermask = inst->down.layermask;
 	udev_obj.ctrl(inst->st, MGR_DELIF | REQUEST, &hif);
 	dl->iaddr = 0;
 	REMOVE_FROM_LISTBASE(dl, dev->layer);
-	REMOVE_FROM_LIST(inst);
-	if (inst->st) {
-		if (device_debug & DEBUG_MGR_FUNC)
-			printk(KERN_DEBUG
-				"del_layer: st(%p) st->prot(l)%x st->inst(l) %p\n",
-				inst->st, inst->st->protocols[inst->layer],
-				inst->st->inst[inst->layer]);
-		inst->st->protocols[inst->layer] = ISDN_PID_NONE;
-		if (inst->st->inst[inst->layer] == inst)
-			inst->st->inst[inst->layer] = inst->next;
-	}
+	udev_obj.ctrl(inst->st, MGR_DELLAYER | REQUEST, inst);
 	kfree(dl);
-	udev_obj.refcnt--;
 	return(0);
 }
 
@@ -260,11 +240,12 @@ hisax_wdata(hisaxdevice_t *dev, void *dp, int len) {
 	iframe_t        off;
 	hisaxstack_t	*st;
 	devicelayer_t	*dl;
+	hisaxlayer_t    *layer;
 	int		lay;
 	int		err = 0;
 	int		used = 0;
 	int		head = 4*sizeof(u_int);
-	int		*ip,i;
+	int		*ip;
 
 	if (len < head) {
 		printk(KERN_WARNING "hisax: if_frame(%d) too short\n", len);
@@ -299,22 +280,22 @@ hisax_wdata(hisaxdevice_t *dev, void *dp, int len) {
 		off.nr = iff->nr;
 		lay = iff->data.i;
 		off.len = 0;
-		if ((lay >= 0) && (lay <= MAX_LAYER)) {
-			if ((st = get_stack4id(iff->addr))) {
-				if (st->inst[lay]) {
-					off.data.p = stbuf;
-					ip = stbuf;
-					*ip++ = st->inst[lay]->layer;
-					*ip++ = st->inst[lay]->protocol;
-					if (st->inst[lay]->obj) {
-						*ip++ = st->inst[lay]->obj->protcnt;
-						for (i=0; i<st->inst[lay]->obj->protcnt; i++) {
-							*ip++ = st->inst[lay]->obj->protocols[i];
-						}
-					} else
-						*ip++ = 0;
-					off.len = (u_char *)ip - (u_char *)stbuf;
-				}
+		if ((st = get_stack4id(iff->addr))) {
+			if ((layer = getlayer4lay(st, lay))) {
+				off.data.p = stbuf;
+				ip = stbuf;
+#if 0
+				*ip++ = st->inst[lay]->layer;
+				*ip++ = st->inst[lay]->protocol;
+				if (st->inst[lay]->obj) {
+					*ip++ = st->inst[lay]->obj->protcnt;
+					for (i=0; i<st->inst[lay]->obj->protcnt; i++) {
+						*ip++ = st->inst[lay]->obj->protocols[i];
+					}
+				} else
+#endif
+					*ip++ = 0;
+				off.len = (u_char *)ip - (u_char *)stbuf;
 			}
 		}
 		hisax_rdata(dev, &off, 0);
@@ -649,15 +630,15 @@ add_if(devicelayer_t *dl, hisaxif_t *hif) {
 	hisaxinstance_t *inst = &dl->inst;
 
 	if (device_debug & DEBUG_MGR_FUNC)
-		printk(KERN_DEBUG "userdev add_if lay %d/%x prot %x\n", hif->layer,
-			hif->stat, hif->protocol);
+		printk(KERN_DEBUG "userdev add_if lay %x/%x prot %x\n",
+			hif->layermask, hif->stat, hif->protocol);
 	hif->fdata = dl;
 	if (IF_TYPE(hif) == IF_UP) {
 		hif->func = from_up_down;
 		if (inst->up.stat == IF_NOACTIV) {
 			inst->up.stat = IF_DOWN;
-			inst->up.protocol =
-				inst->st->protocols[inst->up.layer];
+			inst->up.protocol = get_protocol(inst->st,
+				inst->up.layermask); 
 			err = udev_obj.ctrl(inst->st, MGR_ADDIF | REQUEST, &inst->up);
 			if (err)
 				inst->up.stat = IF_NOACTIV;
@@ -666,8 +647,8 @@ add_if(devicelayer_t *dl, hisaxif_t *hif) {
 		hif->func = from_up_down;
 		if (inst->down.stat == IF_NOACTIV) {
 			inst->down.stat = IF_UP;
-			inst->down.protocol =
-				inst->st->protocols[inst->down.layer];
+			inst->down.protocol = get_protocol(inst->st,
+				inst->down.layermask);
 			err = udev_obj.ctrl(inst->st, MGR_ADDIF | REQUEST, &inst->down);
 			if (err)
 				inst->down.stat = IF_NOACTIV;
@@ -683,8 +664,8 @@ del_if(devicelayer_t *dl, hisaxif_t *hif) {
 	hisaxinstance_t *inst = &dl->inst;
 
 	if (device_debug & DEBUG_MGR_FUNC)
-		printk(KERN_DEBUG "dev del_if lay %d/%d %p/%p\n", hif->layer,
-			hif->stat, hif->func, hif->fdata);
+		printk(KERN_DEBUG "dev del_if lay %x/%x %p/%p\n",
+			hif->layermask, hif->stat, hif->func, hif->fdata);
 	if ((hif->func == inst->up.func) && (hif->fdata == inst->up.fdata)) {
 		inst->up.stat = IF_NOACTIV;
 		inst->up.protocol = ISDN_PID_NONE;
@@ -761,7 +742,7 @@ int init_hisaxdev (int debug) {
 	udev_obj.own_ctrl = udev_manager;
 	udev_obj.prev = NULL;
 	udev_obj.next = NULL;
-	udev_obj.layer = -1;
+	udev_obj.layermask = -1;
 	device_debug = debug;
 	if (register_chrdev(HISAX_MAJOR, "hisax", &hisax_fops)) {
 		printk(KERN_WARNING "hisax: Could not register devices\n");

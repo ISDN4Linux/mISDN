@@ -1,4 +1,4 @@
-/* $Id: capi.h,v 0.3 2001/02/27 17:45:44 kkeil Exp $
+/* $Id: capi.h,v 0.4 2001/03/03 08:07:29 kkeil Exp $
  *
  */
 
@@ -15,6 +15,9 @@
 #include "../avmb1/capilli.h"
 #include "asn1.h"
 #include "fsm.h"
+#ifdef MEMDBG
+#include "memdbg.h"
+#endif
 
 // ---------------------------------------------------------------------------
 // common stuff

@@ -1,9 +1,9 @@
-/* $Id: ncci.c,v 0.3 2001/02/27 17:45:44 kkeil Exp $
+/* $Id: ncci.c,v 0.4 2001/03/03 08:07:30 kkeil Exp $
  *
  */
 
-#include "hisax_capi.h"
 #include "helper.h"
+#include "hisax_capi.h"
 #include "debug.h"
 #include "dss1.h"
 
@@ -123,7 +123,8 @@ static void ncci_connect_b3_req(struct FsmInst *fi, int event, void *arg)
 
 	FsmEvent(fi, EV_NCCI_CONNECT_B3_CONF, cmsg);
 	ncciRecvCmsg(ncci, cmsg);
-
+	printk(KERN_DEBUG "ncci_connect_b3_req NCCI %x cmsg->Info(%x)\n",
+		ncci->adrNCCI, cmsg->Info);
 	if (cmsg->Info < 0x1000) 
 		ncciL4L3(ncci, DL_ESTABLISH | REQUEST, 0, 0);
 }
@@ -258,8 +259,7 @@ static void ncci_select_b_protocol(struct FsmInst *fi, int event, void *arg)
 {
 	Ncci_t *ncci = fi->userdata;
 
-//	if (ncci->l4.st)
-//		ncciReleaseSt(ncci);
+	ncciReleaseSt(ncci);
 	ncciInitSt(ncci);
 }
 
@@ -338,13 +338,30 @@ void ncciInitSt(Ncci_t *ncci)
 	Cplci_t *cplci = ncci->cplci;
 
 	memset(&pid, 0, sizeof(hisax_pid_t));
-	pid.B1 = cplci->Bprotocol.B1protocol | ISDN_PID_LAYER1 | ISDN_PID_BCHANNEL_BIT;
-	pid.B2 = cplci->Bprotocol.B2protocol | ISDN_PID_LAYER2 | ISDN_PID_BCHANNEL_BIT;
-	pid.B3 = cplci->Bprotocol.B3protocol | ISDN_PID_LAYER3 | ISDN_PID_BCHANNEL_BIT;
+	if (cplci->Bprotocol.B1protocol > 23) {
+		int_errtxt("wrong B1 prot %x", cplci->Bprotocol.B1protocol);
+		return;
+	}
+	pid.protocol[1] = (1 << cplci->Bprotocol.B1protocol) |
+		ISDN_PID_LAYER(1) | ISDN_PID_BCHANNEL_BIT;
+	if (cplci->Bprotocol.B2protocol > 23) {
+		int_errtxt("wrong B2 prot %x", cplci->Bprotocol.B2protocol);
+		return;
+	}
+	pid.protocol[2] = (1 << cplci->Bprotocol.B2protocol) |
+		ISDN_PID_LAYER(2) | ISDN_PID_BCHANNEL_BIT;
+	if (cplci->Bprotocol.B3protocol > 23) {
+		int_errtxt("wrong B3 prot %x", cplci->Bprotocol.B3protocol);
+		return;
+	}
+	pid.protocol[3] = (1 << cplci->Bprotocol.B3protocol) |
+		ISDN_PID_LAYER(3) | ISDN_PID_BCHANNEL_BIT;
 	printk(KERN_DEBUG "ncciInitSt B1(%x) B2(%x) B3(%x) ch(%x)\n",
-		pid.B1, pid.B2, pid.B3, cplci->bchannel);
+		pid.protocol[1], pid.protocol[2], pid.protocol[3],
+		cplci->bchannel);
 	printk(KERN_DEBUG "ncciInitSt ch(%d) cplci->contr->binst(%p)\n",
 		cplci->bchannel & 3, cplci->contr->binst);
+	pid.protocol[4] = ISDN_PID_L4_B_CAPI20;
 	if ((cplci->bchannel & 0xf4) == 0x80) {
 		ncci->binst = contrSelChannel(cplci->contr, cplci->bchannel & 3);
 	} else {
@@ -358,9 +375,14 @@ void ncciInitSt(Ncci_t *ncci)
 #if 0
 	sp.headroom = 22; // reserve space for DATA_B3 IND message in skb's
 #endif
+	memset(& ncci->binst->inst.pid, 0, sizeof(hisax_pid_t));
 	ncci->binst->inst.data = ncci;
-	ncci->binst->inst.layer = 4;
-	ncci->binst->inst.protocol = ISDN_PID_CAPI20;
+	ncci->binst->inst.layermask = ISDN_LAYER(4);
+	ncci->binst->inst.pid.protocol[4] = ISDN_PID_L4_B_CAPI20;
+	if (pid.protocol[3] == ISDN_PID_L3_B_TRANS) {
+		ncci->binst->inst.pid.protocol[3] = ISDN_PID_L3_B_TRANS;
+		ncci->binst->inst.layermask |= ISDN_LAYER(3);
+	}
 	retval = ncci->binst->inst.obj->ctrl(ncci->binst->inst.st,
 		MGR_ADDLAYER | INDICATION, &ncci->binst->inst); 
 	if (retval) {
@@ -375,7 +397,7 @@ void ncciInitSt(Ncci_t *ncci)
 	}
 //	if (sp.b2_mode != B2_MODE_TRANS || !test_bit(PLCI_FLAG_OUTGOING, &cplci->plci->flags)) {
 		// listen for e.g. SABME
-		ncciL4L3(ncci, PH_ACTIVATE | REQUEST, 0, 0);
+//		ncciL4L3(ncci, PH_ACTIVATE | REQUEST, 0, 0);
 //	}
 }
 
@@ -385,7 +407,8 @@ void ncciReleaseSt(Ncci_t *ncci)
 
 	ncciL4L3(ncci, PH_DEACTIVATE | REQUEST, 0, 0);
 	retval = ncci->binst->inst.obj->ctrl(ncci->binst->inst.st,
-		MGR_CLEARSTACK, NULL);
+		MGR_CLEARSTACK | REQUEST, NULL);
+
 	if (retval) {
 		int_error();
 		return;
@@ -417,6 +440,7 @@ __u16 ncciSelectBprotocol(Ncci_t *ncci)
 
 void ncciDestr(Ncci_t *ncci)
 {
+	printk(KERN_DEBUG "ncciDestr NCCI %x\n", ncci->adrNCCI);
 	if (ncci->binst)
 		ncciReleaseSt(ncci);
 	if (ncci->appl)
@@ -647,7 +671,7 @@ static int ncci_l3l4(hisaxif_t *hif, u_int prim, u_int nr, int dtyp, void *arg)
 			FsmEvent(&ncci->ncci_m, EV_NCCI_DL_RELEASE_CONF, arg);
 			break;
 		default:
-			printk("ncci_l3l4 prim(%x) dtyp(%x) arg(%p)\n",
+			printk(KERN_DEBUG __FUNCTION__ ": unknown prim(%x) dtyp(%x) arg(%p)\n",
 				prim, dtyp, arg);
 			int_error();
 	}
@@ -661,6 +685,8 @@ void ncciSetInterface(hisaxif_t *hif) {
 
 static int ncciL4L3(Ncci_t *ncci, u_int prim, int dtyp, void *arg)
 {
+	printk(KERN_DEBUG __FUNCTION__ ": NCCI %x prim(%x)\n",
+		ncci->adrNCCI, prim);
 	if (!ncci->binst || !ncci->binst->inst.down.func) {
 		int_error();
 		return -EINVAL;

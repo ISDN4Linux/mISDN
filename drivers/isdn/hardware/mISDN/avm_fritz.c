@@ -1,4 +1,4 @@
-/* $Id: avm_fritz.c,v 0.5 2001/02/27 17:45:44 kkeil Exp $
+/* $Id: avm_fritz.c,v 0.6 2001/03/03 08:07:29 kkeil Exp $
  *
  * fritz_pci.c    low level stuff for AVM Fritz!PCI and ISA PnP isdn cards
  *              Thanks to AVM, Berlin for informations
@@ -18,12 +18,12 @@
 #include "helper.h"
 #include "debug.h"
 
-static const char *avm_pci_rev = "$Revision: 0.5 $";
+static const char *avm_pci_rev = "$Revision: 0.6 $";
 
 #define ISDN_CTYPE_FRITZPCI 1
 
-#define  AVM_FRITZ_PCI		1
-#define  AVM_FRITZ_PNP		2
+#define AVM_FRITZ_PCI		1
+#define AVM_FRITZ_PNP		2
 
 #ifndef PCI_VENDOR_ID_AVM
 #define PCI_VENDOR_ID_AVM	0x1244
@@ -773,21 +773,24 @@ static int init_card(fritzpnppci *fc)
 {
 	int irq_cnt, cnt = 3;
 	long flags;
+	u_int shared = SA_SHIRQ;
 
+	if (fc->subtyp == AVM_FRITZ_PNP)
+		shared = 0;
+	save_flags(flags);
 	irq_cnt = kstat_irqs(fc->irq);
 	printk(KERN_INFO "AVM Fritz!PCI: IRQ %d count %d\n", fc->irq, irq_cnt);
+	lock_dev(fc);
 	if (request_irq(fc->irq, avm_pcipnp_interrupt, SA_SHIRQ,
 		"AVM Fritz!PCI", fc)) {
 		printk(KERN_WARNING "HiSax: couldn't get interrupt %d\n",
 			fc->irq);
+		unlock_dev(fc);
 		return(-EIO);
 	}
-	save_flags(flags);
 	while (cnt) {
-		sti();
-		current->state = TASK_UNINTERRUPTIBLE;
 		clear_pending_isac_ints(&fc->dch);
-		initisac(&fc->dch);
+		init_isac(&fc->dch);
 		clear_pending_hdlc_ints(fc);
 		inithdlc(fc);
 		outb(AVM_STATUS0_DIS_TIMER | AVM_STATUS0_RES_TIMER,
@@ -797,7 +800,10 @@ static int init_card(fritzpnppci *fc)
 			AVM_STATUS0_ENA_IRQ, fc->addr + 2);
 		/* RESET Receiver and Transmitter */
 		WriteISAC(fc, ISAC_CMDR, 0x41);
+		unlock_dev(fc);
+		sti();
 		/* Timeout 10ms */
+		current->state = TASK_UNINTERRUPTIBLE;
 		schedule_timeout((10*HZ)/1000);
 		restore_flags(flags);
 		printk(KERN_INFO "AVM Fritz!PCI: IRQ %d count %d\n",
@@ -807,7 +813,6 @@ static int init_card(fritzpnppci *fc)
 			       "AVM Fritz!PCI: IRQ(%d) getting no interrupts during init %d\n",
 			       fc->irq, 4 - cnt);
 			if (cnt == 1) {
-				free_irq(fc->irq, fc);
 				return (-EIO);
 			} else {
 				reset_avmpcipnp(fc);
@@ -816,19 +821,10 @@ static int init_card(fritzpnppci *fc)
 		} else {
 			return(0);
 		}
+		lock_dev(fc);
 	}
-	restore_flags(flags);
+	unlock_dev(fc);
 	return(-EIO);
-}
-
-static void
-closecard(fritzpnppci *fc)
-{
-	close_hdlcstate(fc->bch + 1);
-	close_hdlcstate(fc->bch);
-	DC_Close_isac(&fc->dch);
-	outb(0, fc->addr + 2);
-	release_region(fc->addr, 32);
 }
 
 void
@@ -1001,13 +997,18 @@ dummy_down(hisaxif_t *hif,  u_int prim, u_int nr, int dtyp, void *arg) {
 
 static int
 add_if(hisaxinstance_t *inst, int channel, hisaxif_t *hif) {
-	int err;
+	int err, lay;
 	fritzpnppci *card = inst->data;
 
 	if (!hif)
 		return(-EINVAL);
 	if (IF_TYPE(hif) != IF_UP)
 		return(-EINVAL);
+	lay = layermask2layer(hif->layermask);
+	if (lay < 0) {
+		int_errtxt("lm %x", hif->layermask);
+		return(-EINVAL);
+	}
 	switch(hif->protocol) {
 	    case ISDN_PID_L1_B_64TRANS:
 	    case ISDN_PID_L1_B_64HDLC:
@@ -1016,12 +1017,12 @@ add_if(hisaxinstance_t *inst, int channel, hisaxif_t *hif) {
 	    		return(-EINVAL);
 		hif->fdata = &card->bch[channel];
 		hif->func = hdlc_down;
-		inst->protocol = hif->protocol;
+		inst->pid.protocol[lay] = hif->protocol;
 		if (inst->up.stat == IF_NOACTIV) {
 			printk(KERN_DEBUG "fritz_add_if set upif\n");
 			inst->up.stat = IF_DOWN;
-			inst->up.layer = hif->inst->layer;
-			inst->up.protocol = hif->inst->protocol;
+			inst->up.layermask = get_up_layer(inst->layermask);
+			inst->up.protocol = get_protocol(inst->st, inst->up.layermask);
 			err = fritz.ctrl(inst->st, MGR_ADDIF | REQUEST, &inst->up);
 			if (err) {
 				printk(KERN_WARNING "fritz_add_if up no if\n");
@@ -1036,8 +1037,8 @@ add_if(hisaxinstance_t *inst, int channel, hisaxif_t *hif) {
 		hif->func = ISAC_l1hw;
 		if (inst->up.stat == IF_NOACTIV) {
 			inst->up.stat = IF_DOWN;
-			inst->up.protocol =
-				inst->st->protocols[inst->up.layer];
+			inst->up.layermask = get_up_layer(inst->layermask);
+			inst->up.protocol = get_protocol(inst->st, inst->up.layermask);
 			err = fritz.ctrl(inst->st, MGR_ADDIF | REQUEST, &inst->up);
 			if (err)
 				inst->up.stat = IF_NOACTIV;
@@ -1056,7 +1057,7 @@ del_if(hisaxinstance_t *inst, int channel, hisaxif_t *hif) {
 	int err;
 	fritzpnppci *card = inst->data;
 
-	printk(KERN_DEBUG "fritz del_if lay %d/%d %p/%p\n", hif->layer,
+	printk(KERN_DEBUG "fritz del_if lay %x/%x %p/%p\n", hif->layermask,
 		hif->stat, hif->func, hif->fdata);
 	if ((hif->func == inst->up.func) && (hif->fdata == inst->up.fdata)) {
 		if (channel==2)
@@ -1076,14 +1077,18 @@ del_if(hisaxinstance_t *inst, int channel, hisaxif_t *hif) {
 static void
 release_card(fritzpnppci *card) {
 
-	closecard(card);
+	lock_dev(card);
+	outb(0, card->addr + 2);
 	free_irq(card->irq, card);
-	if (card->next)
-		card->next->prev = card->prev;
-	if (card->prev)
-		card->prev->next = card->next;
-	if (card == cardlist)
-		cardlist = card->next;
+	close_hdlcstate(card->bch + 1);
+	close_hdlcstate(card->bch);
+	free_isac(&card->dch);
+	release_region(card->addr, 32);
+	free_bchannel(&card->bch[1]);
+	free_bchannel(&card->bch[0]);
+	free_dchannel(&card->dch);
+	REMOVE_FROM_LISTBASE(card, cardlist);
+	unlock_dev(card);
 	kfree(card);
 	fritz.refcnt--;
 }
@@ -1092,25 +1097,28 @@ static int
 set_stack(hisaxstack_t *st, hisaxinstance_t *inst, int chan, hisax_pid_t *pid) {
 	int err,layer = 0;
 
+#if 0
 	if (st->inst[0] || st->inst[1] || st->inst[2]) {
 		return(-EBUSY);	
 	}
-	if (!HasProtocol(inst, pid->B1)) {
+#endif
+	if (!HasProtocol(inst, pid->protocol[1])) {
 		return(-EPROTONOSUPPORT);
 	} else
-		layer = 1;
-	if (HasProtocol(inst, pid->B2))
-		layer = 2;
-	if (HasProtocol(inst, pid->B3))
-		layer = 3;
-	inst->layer = layer;
-	inst->protocol = pid->B1;
+		layer = ISDN_LAYER(1);
+	if (HasProtocol(inst, pid->protocol[2])) {
+		layer |= ISDN_LAYER(2);
+		if (HasProtocol(inst, protocol[3]))
+			layer |= ISDN_LAYER(3);
+	}
+	inst->layermask = layer;
+	inst->pid.protocol[1] = pid->protocol[1];
 	if ((err = fritz.ctrl(st, MGR_ADDLAYER | REQUEST, inst))) {
 		printk(KERN_WARNING "set_stack MGR_ADDLAYER err(%d)\n", err);
 		return(err);
 	}
-	inst->up.layer = layer + 1;
-	inst->up.protocol = st->protocols[layer+1];
+	inst->up.layermask = get_up_layer(layer);
+	inst->up.protocol = get_protocol(st, inst->up.layermask);
 	inst->up.inst = inst;
 	inst->up.stat = IF_DOWN;
 	if ((err = fritz.ctrl(st, MGR_ADDIF | REQUEST, &inst->up))) {
@@ -1124,7 +1132,7 @@ static int
 fritz_manager(void *data, u_int prim, void *arg) {
 	fritzpnppci *card = cardlist;
 	hisaxinstance_t *inst=NULL;
-	int i,channel = -1;
+	int channel = -1;
 	hisaxstack_t *st = data;
 
 	if (!data) {
@@ -1163,6 +1171,7 @@ fritz_manager(void *data, u_int prim, void *arg) {
 			return(-ENODEV);
 		}
 		if (channel == 2) {
+#if 0
 			card->dch.inst.st->protocols[0] = ISDN_PID_L0_TE_S0;
 			card->dch.inst.st->protocols[1] = ISDN_PID_L1_TE_S0;
 			card->dch.inst.st->protocols[2] = ISDN_PID_L2_LAPD;
@@ -1173,6 +1182,7 @@ fritz_manager(void *data, u_int prim, void *arg) {
 				card->dch.inst.st->protocols[3] = ISDN_PID_NONE;
 				card->dch.inst.st->protocols[4] = ISDN_PID_NONE;
 			}
+#endif
 		} else {
 			break;
 		}
@@ -1237,7 +1247,7 @@ Fritz_init(void)
 
 	fritz.name = FritzName;
 	fritz.own_ctrl = fritz_manager;
-	fritz.layer = 0;
+	fritz.layermask = ISDN_LAYER(0);
 	fritz.protocols = FritzProtocols;
 	fritz.protcnt = FRITZPCNT;
 	fritz.prev = NULL;
@@ -1260,8 +1270,8 @@ Fritz_init(void)
 		card->dch.inst.lock = lock_dev;
 		card->dch.inst.unlock = unlock_dev;
 		card->dch.inst.data = card;
-		card->dch.inst.layer = 0;
-		card->dch.inst.protocol = ISDN_PID_L0_TE_S0;
+		card->dch.inst.layermask = ISDN_LAYER(0);
+		card->dch.inst.pid.protocol[0] = ISDN_PID_L0_TE_S0;
 		card->dch.inst.up.inst = &card->dch.inst;
 		act_protocol = protocol[fritz_cnt];
 		sprintf(card->dch.inst.id, "Fritz%d", fritz_cnt+1);
@@ -1269,8 +1279,8 @@ Fritz_init(void)
 		for (i=0; i<2; i++) {
 			card->bch[i].inst.obj = &fritz;
 			card->bch[i].inst.data = card;
-			card->bch[i].inst.layer = 0;
-			card->bch[i].inst.up.layer = 1;
+			card->bch[i].inst.layermask = ISDN_LAYER(0);
+			card->bch[i].inst.up.layermask = ISDN_LAYER(1);
 			card->bch[i].inst.up.inst = &card->bch[i].inst;
 			card->bch[i].inst.lock = lock_dev;
 			card->bch[i].inst.unlock = unlock_dev;
@@ -1309,22 +1319,25 @@ Fritz_init(void)
 		}
 		if ((err = fritz.ctrl(card->dch.inst.st, MGR_ADDLAYER | REQUEST, &card->dch.inst))) {
 			printk(KERN_ERR  "MGR_ADDLAYER REQUEST dch err(%d)\n", err);
-			release_card(card);
+ 			fritz.ctrl(card->dch.inst.st,
+				MGR_DELSTACK | REQUEST, NULL);
 			if (!fritz_cnt)
 				HiSax_unregister(&fritz);
 			else
 				err = 0;
 			return(err);
 		}
-		card->dch.inst.up.layer = 1;
+		card->dch.inst.up.layermask = get_up_layer(card->dch.inst.layermask);
 		card->dch.inst.up.stat = IF_DOWN;
-		card->dch.inst.up.protocol = card->dch.inst.st->protocols[1];
+		card->dch.inst.up.protocol = get_protocol(card->dch.inst.st,
+			card->dch.inst.up.layermask);
 		card->dch.inst.down.func = dummy_down;
 		card->dch.inst.down.fdata = card;
 		if ((err = fritz.ctrl(card->dch.inst.st, MGR_ADDIF | REQUEST,
 			&card->dch.inst.up))) {
 			printk(KERN_ERR  "MGR_ADDIF REQUEST dch err(%d)\n", err);
-			release_card(card);
+ 			fritz.ctrl(card->dch.inst.st,
+				MGR_DELSTACK | REQUEST, NULL);
 			if (!fritz_cnt)
 				HiSax_unregister(&fritz);
 			else
@@ -1335,7 +1348,8 @@ Fritz_init(void)
 			if ((err = fritz.ctrl(card->dch.inst.st, MGR_ADDSTACK | REQUEST,
 				&card->bch[i].inst))) {
 				printk(KERN_ERR "MGR_ADDSTACK bchan error %d\n", err);
-				release_card(card);
+				fritz.ctrl(card->dch.inst.st,
+					MGR_DELSTACK | REQUEST, NULL);
 				if (!fritz_cnt)
 					HiSax_unregister(&fritz);
 				else
@@ -1344,7 +1358,7 @@ Fritz_init(void)
 			}
 		}
 		if ((err = init_card(card))) {
-			release_card(card);
+			fritz.ctrl(card->dch.inst.st, MGR_DELSTACK | REQUEST, NULL);
 			if (!fritz_cnt)
 				HiSax_unregister(&fritz);
 			else

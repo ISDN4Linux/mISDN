@@ -1,4 +1,4 @@
-/* $Id: helper.c,v 0.4 2001/02/27 17:45:44 kkeil Exp $
+/* $Id: helper.c,v 0.5 2001/03/03 08:07:29 kkeil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -129,36 +129,27 @@ free_bchannel(bchannel_t *bch) {
 }
 
 int bprotocol2pid(void *bp, hisax_pid_t *pid) {
-	__u8		*p = bp;
-	__u16		*w = bp;
+	__u8	*p = bp;
+	__u16	*w = bp;
+	int	i;
+	
 
 	p += 6;
-	pid->B1 = *w;
-	pid->B1 |= ISDN_PID_LAYER1 | ISDN_PID_BCHANNEL_BIT;
-	if (*p)
-		pid->B1p = p;
-	else
-		pid->B1p = NULL;
-	w++;
-	p += *p;
-	p++;
-	pid->B2 = *w;
-	pid->B2 |= ISDN_PID_LAYER2 | ISDN_PID_BCHANNEL_BIT;
-	if (*p)
-		pid->B2p = p;
-	else
-		pid->B2p = NULL;
-	w++;
-	p += *p;
-	p++;
-	pid->B3 = *w;
-	pid->B3 |= ISDN_PID_LAYER3 | ISDN_PID_BCHANNEL_BIT;
-	if (*p)
-		pid->B3p = p;
-	else
-		pid->B3p = NULL;
-	p += *p;
-	p++;
+	for (i=1; i<=3; i++) {
+		if (*w > 23) {
+			int_errtxt("L%d pid %x\n",i,*w);
+			return(-EINVAL);
+		}
+		pid->protocol[i] = (1 <<*w) | ISDN_PID_LAYER(i) |
+			ISDN_PID_BCHANNEL_BIT;
+		if (*p)
+			pid->param[i] = p;
+		else
+			pid->param[i] = NULL;
+		w++;
+		p += *p;
+		p++;
+	}
 	if (*p)
 		pid->global = p;
 	else
@@ -180,15 +171,87 @@ int HasProtocol(hisaxinstance_t *inst, int proto) {
 	return(0); 
 }
 
+int
+layermask2layer(int layermask) {
+	switch(layermask) {
+		case ISDN_LAYER(0): return(0);
+		case ISDN_LAYER(1): return(1);
+		case ISDN_LAYER(2): return(2);
+		case ISDN_LAYER(3): return(3);
+		case ISDN_LAYER(4): return(4);
+		case ISDN_LAYER(5): return(5);
+		case ISDN_LAYER(6): return(6);
+		case ISDN_LAYER(7): return(7);
+		case 0:	return(-1);
+	}
+	return(-2);
+}
+
+int
+get_protocol(hisaxstack_t *st, int layermask)
+{
+	int layer = layermask2layer(layermask);
+
+	if (!st){
+		int_error();
+		return(-EINVAL);
+	}
+	if (layer<0) {
+		int_errtxt("lmask(%x) layer(%x) st(%x)",
+			layermask, layer, st->id);
+		return(-EINVAL);
+	}
+	return(st->pid.protocol[layer]);
+}
+
+int get_down_layer(int layermask) {
+	int downlayer = 2;
+	
+	if (layermask>255 || (layermask & 1)) {
+		int_errtxt("lmask %x out of range", layermask);
+		return(0);
+	}
+	while(downlayer & 0xFF) {
+		if (downlayer & layermask)
+			break;
+		downlayer <<= 1;
+	}
+	if (downlayer & 0xFF)
+		downlayer >>= 1;
+	else
+		downlayer = 0;
+	return(downlayer);
+}
+
+int get_up_layer(int layermask) {
+	int uplayer = 0x40;
+	
+	if (layermask>=128) {
+		int_errtxt("lmask %x out of range", layermask);
+		return(0);
+	}
+	while(uplayer) {
+		if (uplayer & layermask)
+			break;
+		uplayer >>= 1;
+	}
+	if (uplayer)
+		uplayer <<= 1;
+	else
+		uplayer = 1;
+	return(uplayer);
+}
+
 int DelIF(hisaxinstance_t *inst, hisaxif_t *mif, void *func, void *data) {
 	hisaxif_t hif;
 
+	memset(&hif, 0, sizeof(hisaxif_t));
 	hif.protocol = mif->protocol;
-	hif.layer = mif->layer;
+	hif.layermask = mif->layermask;
 	hif.fdata = data;
 	hif.func = func;
+	hif.func(&hif, MGR_DELIF | REQUEST, 0, 0, NULL);
 	mif->protocol = ISDN_PID_NONE;
-	mif->stat = IF_NOACTIV;
 	inst->obj->ctrl(inst->st, MGR_ADDIF | REQUEST, mif);
 	return(inst->obj->ctrl(inst->st, MGR_DELIF | REQUEST, &hif));
 }

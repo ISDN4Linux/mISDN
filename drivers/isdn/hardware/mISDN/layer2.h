@@ -1,4 +1,4 @@
-/* $Id: layer2.h,v 0.4 2001/02/19 11:51:42 kkeil Exp $
+/* $Id: layer2.h,v 0.5 2001/03/03 08:07:30 kkeil Exp $
  *
  * Layer 2 defines
  *
@@ -9,6 +9,9 @@
 #include <linux/hisaxif.h>
 #include <linux/skbuff.h>
 #include "fsm.h"
+#ifdef MEMDBG
+#include "memdbg.h"
+#endif
 
 #define MAX_WINDOW	8
 

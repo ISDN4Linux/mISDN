@@ -1,4 +1,4 @@
-/* $Id: contr.c,v 0.3 2001/02/27 17:45:44 kkeil Exp $
+/* $Id: contr.c,v 0.4 2001/03/03 08:07:29 kkeil Exp $
  *
  */
 
@@ -14,7 +14,7 @@
 int contrConstr(Contr_t *contr, hisaxstack_t *st, hisaxif_t *hif, hisaxobject_t *ocapi)
 { 
 	char tmp[10];
-	int lay, err;
+	int err;
 	hisaxstack_t *cst = st->child;
 	BInst_t	*binst;
 
@@ -32,10 +32,10 @@ int contrConstr(Contr_t *contr, hisaxstack_t *st, hisaxif_t *hif, hisaxobject_t 
 		binst->inst.st = cst;
 		binst->inst.data = binst;
 		binst->inst.obj = ocapi;
-		binst->inst.layer = 4;
+		binst->inst.layermask = ISDN_LAYER(4);
 		binst->inst.down.stat = IF_NOACTIV;
 		binst->inst.down.protocol = ISDN_PID_NONE;
-		binst->inst.down.layer = 3;
+		binst->inst.down.layermask = get_down_layer(binst->inst.layermask);
 		APPEND_TO_LIST(binst, contr->binst);
 		cst = cst->next;
 	}
@@ -43,20 +43,15 @@ int contrConstr(Contr_t *contr, hisaxstack_t *st, hisaxif_t *hif, hisaxobject_t 
 	contr->ctrl = cdrv_if->attach_ctr(&hisax_driver, tmp, contr);
 	if (!contr->ctrl)
 		return -ENODEV;
-	contr->inst.protocol = hif->protocol;
-	contr->inst.layer = hif->layer;
+	contr->inst.pid.protocol[4] = hif->protocol;
+	contr->inst.layermask = hif->layermask;
 	contr->inst.data = contr;
 	ocapi->ctrl(st, MGR_ADDLAYER | INDICATION, &contr->inst);
 	contr->inst.up.protocol = ISDN_PID_NONE;
-	contr->inst.up.layer = 0;
+	contr->inst.up.layermask = 0;
 	contr->inst.up.stat = IF_DOWN;
-	lay = contr->inst.layer - 1;
-	if ((lay<0) || (lay>MAX_LAYER)) {
-		lay = 0;
-		contr->inst.down.protocol = ISDN_PID_NONE;
-	} else
-		contr->inst.down.protocol = st->protocols[lay];
-	contr->inst.down.layer = lay;
+	contr->inst.down.layermask = get_down_layer(contr->inst.layermask);
+	contr->inst.down.protocol = get_protocol(st, contr->inst.down.layermask);
 	contr->inst.down.stat = IF_UP;
 	err = ocapi->ctrl(st, MGR_ADDIF | REQUEST, &contr->inst.down);
 	if (err) {
@@ -288,6 +283,7 @@ void contrDelPlci(Contr_t *contr, Plci_t *plci)
 {
 	int i = plci->adrPLCI >> 8;
 
+	contrDebug(contr, LL_DEB_INFO, __FUNCTION__ ": PLCI(%x)", plci->adrPLCI);
 	if ((i < 1) || (i > CAPI_MAXPLCI)) {
 		int_error();
 		return;
@@ -407,10 +403,10 @@ BInst_t *contrSelChannel(Contr_t *contr, int channr)
 			binst->inst.st = cst;
 			binst->inst.data = binst;
 			binst->inst.obj = contr->inst.obj;
-			binst->inst.layer = 4;
+			binst->inst.layermask = ISDN_LAYER(4);
 			binst->inst.down.stat = IF_NOACTIV;
 			binst->inst.down.protocol = ISDN_PID_NONE;
-			binst->inst.down.layer = 3;
+			binst->inst.down.layermask = get_down_layer(binst->inst.layermask);
 			APPEND_TO_LIST(binst, contr->binst);
 			cst = cst->next;
 		}

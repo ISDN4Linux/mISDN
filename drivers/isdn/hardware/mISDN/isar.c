@@ -1,4 +1,4 @@
-/* $Id: isar.c,v 0.5 2001/02/27 17:45:44 kkeil Exp $
+/* $Id: isar.c,v 0.6 2001/03/03 08:07:30 kkeil Exp $
  *
  * isar.c   ISAR (Siemens PSB 7110) specific routines
  *
@@ -800,6 +800,7 @@ send_frames(bchannel_t *bch)
 				}
 			}
 		}
+		bch->hw.isar.txcnt = 0;
 		if (test_and_clear_bit(FLG_TX_NEXT, &bch->Flag)) {
 			if (bch->next_skb) {
 				bch->tx_len = bch->next_skb->len;
@@ -1408,13 +1409,13 @@ setup_iom2(bchannel_t *bch) {
 	udelay(1000);
 }
 
-int
-modeisar(bchannel_t *bch, bsetup_t *bs)
+static int
+modeisar(bchannel_t *bch, int channel, u_int bprotocol, u_char *param)
 {
 	/* Here we are selecting the best datapath for requested protocol */
 	if(bch->protocol == ISDN_PID_NONE) { /* New Setup */
-		bch->channel = bs->channel;
-		switch (bs->protocol[0]) {
+		bch->channel = channel;
+		switch (bprotocol) {
 			case ISDN_PID_NONE: /* init */
 				if (!bch->hw.isar.dpath)
 					/* no init for dpath 0 */
@@ -1453,8 +1454,8 @@ modeisar(bchannel_t *bch, bsetup_t *bs)
 	}
 	if (bch->debug & L1_DEB_HSCX)
 		debugprint(&bch->inst, "isar dp%d protocol %x->%x ichan %d",
-			bch->hw.isar.dpath, bch->protocol, bs->protocol[0], bs->channel);
-	bch->protocol = bs->protocol[0];
+			bch->hw.isar.dpath, bch->protocol, bprotocol, channel);
+	bch->protocol = bprotocol;
 	setup_pump(bch);
 	setup_iom2(bch);
 	setup_sart(bch);
@@ -1583,11 +1584,9 @@ isar_setup(bchannel_t *bch)
 {
 	u_char msg;
 	int i;
-	bsetup_t bs;
 	
 	/* Dpath 1, 2 */
 	msg = 61;
-	memset(&bs, 0, sizeof(bsetup_t));
 	for (i=0; i<2; i++) {
 		/* Buffer Config */
 		sendmsg(bch, (i ? ISAR_HIS_DPS2 : ISAR_HIS_DPS1) |
@@ -1595,8 +1594,7 @@ isar_setup(bchannel_t *bch)
 		bch[i].hw.isar.mml = msg;
 		bch[i].protocol = 0;
 		bch[i].hw.isar.dpath = i + 1;
-		bs.channel = i;
-		modeisar(&bch[i], &bs);
+		modeisar(&bch[i], i, 0, NULL);
 	}
 }
 
@@ -1607,7 +1605,7 @@ isar_down(hisaxif_t *hif, u_int prim, u_int nr, int len, void *arg)
 	int ret = 0;
 
 	if ((prim == PH_DATA_REQ) ||
-		(prim == (CC_B3_DATA | REQUEST))) {
+		(prim == (DL_DATA | REQUEST))) {
 		struct sk_buff *skb = arg;
 
 		if (bch->next_skb) {
@@ -1629,38 +1627,34 @@ isar_down(hisaxif_t *hif, u_int prim, u_int nr, int len, void *arg)
 			bch->inst.up.func(&bch->inst.up, PH_DATA_CNF, nr,
 				DTYPE_SKB, skb);
 		}
-	} else if (prim == (PH_ACTIVATE | REQUEST)) {
-		bsetup_t bs;
-
-		memset(&bs, 0, sizeof(bsetup_t));
-		bs.channel = bch->channel;
-		bs.protocol[0] = bch->inst.protocol;
+	} else if ((prim == (PH_ACTIVATE | REQUEST)) ||
+		(prim == (DL_ESTABLISH  | REQUEST))) {
 		test_and_set_bit(BC_FLG_ACTIV, &bch->Flag);
 		bch->inst.lock(bch->inst.data);
-		ret = modeisar(bch, &bs);
+		ret = modeisar(bch, bch->channel,
+			bch->inst.pid.protocol[1], NULL);
 		bch->inst.unlock(bch->inst.data);
 		if (ret)
-			bch->inst.up.func(&bch->inst.up, PH_ACTIVATE | CONFIRM, nr,
+			bch->inst.up.func(&bch->inst.up, prim | CONFIRM, nr,
 				ret, NULL);
 		else
-			bch->inst.up.func(&bch->inst.up, PH_ACTIVATE | CONFIRM, nr,
+			bch->inst.up.func(&bch->inst.up, prim | CONFIRM, nr,
 				0, NULL);
-	} else if (prim == (PH_DEACTIVATE | REQUEST)) {
-		bsetup_t bs;
-
-		memset(&bs, 0, sizeof(bsetup_t));
-		bs.channel = bch->channel;
+	} else if ((prim == (PH_DEACTIVATE | REQUEST)) ||
+		(prim == (DL_RELEASE | REQUEST)) ||
+		(prim == (MGR_DELIF | REQUEST))) {
 		bch->inst.lock(bch->inst.data);
 		if (test_and_clear_bit(FLG_TX_NEXT, &bch->Flag)) {
 			dev_kfree_skb(bch->next_skb);
 			bch->next_skb = NULL;
 		}
 		test_and_clear_bit(FLG_TX_BUSY, &bch->Flag);
-		modeisar(bch, &bs);
+		modeisar(bch, bch->channel, 0, NULL);
 		test_and_clear_bit(BC_FLG_ACTIV, &bch->Flag);
 		bch->inst.unlock(bch->inst.data);
-		bch->inst.up.func(&bch->inst.up, PH_DEACTIVATE | CONFIRM, nr++,
-			0, NULL);
+		if (prim != (MGR_DELIF | REQUEST))
+			bch->inst.up.func(&bch->inst.up, prim | CONFIRM, nr++,
+				0, NULL);
 	} else if (prim == (PH_CONTROL | REQUEST)) {
 		int  *val = arg;
 		int  len;
@@ -1710,6 +1704,9 @@ isar_down(hisaxif_t *hif, u_int prim, u_int nr, int len, void *arg)
 			bch->inst.up.func(&bch->inst.up, PH_CONTROL | RESPONSE,
 				nr++, 0, 0);
 		}
+	} else {
+		printk(KERN_WARNING "isar_down unknown prim(%x)\n", prim);
+		ret = -EINVAL;
 	}
 	return(ret);
 }
@@ -1781,11 +1778,7 @@ isar_auxcmd(bchannel_t *bch, isdn_ctrl *ic) {
 void
 free_isar(bchannel_t *bch)
 {
-	bsetup_t bs;
-
-	memset(&bs, 0, sizeof(bsetup_t));
-	bs.channel = bch->channel;
-	modeisar(bch, &bs);
+	modeisar(bch, bch->channel, 0, NULL);
 	del_timer(&bch->hw.isar.ftimer);
 }
 

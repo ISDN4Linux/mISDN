@@ -1,4 +1,4 @@
-/* $Id: mISDNif.h,v 0.9 2001/02/27 17:45:44 kkeil Exp $
+/* $Id: mISDNif.h,v 0.10 2001/03/03 08:07:30 kkeil Exp $
  *
  */
 
@@ -185,26 +185,27 @@
 #define ISDN_PID_L1_NT_S0	0x01000101
 #define ISDN_PID_L1_TE_U	0x01000002
 #define ISDN_PID_L1_NT_U	0x01000102
-#define ISDN_PID_L1_B_64HDLC	0x41000000
-#define ISDN_PID_L1_B_64TRANS	0x41000001
-#define ISDN_PID_L1_B_TRANS_TTS	0x41000101
-#define ISDN_PID_L1_B_TRANS_TTR	0x41000201
-#define ISDN_PID_L1_B_TRANS_TT	0x41000301
-#define ISDN_PID_L1_B_V32	0x41000008
-#define ISDN_PID_L1_B_FAX	0x41000004
+#define ISDN_PID_L1_B_64HDLC	0x41000001
+#define ISDN_PID_L1_B_64TRANS	0x41000002
+#define ISDN_PID_L1_B_TRANS_TTS	0x41100002
+#define ISDN_PID_L1_B_TRANS_TTR	0x41200002
+#define ISDN_PID_L1_B_TRANS_TT	0x41300002
+#define ISDN_PID_L1_B_V32	0x41000100
+#define ISDN_PID_L1_B_FAX	0x41000010
 #define ISDN_PID_L2_LAPD	0x02000001
-#define ISDN_PID_L2_B_X75SLP	0x42000000
-#define ISDN_PID_L2_B_TRANS	0x42000001
-#define ISDN_PID_L3_B_TRANS	0x43000000
+#define ISDN_PID_L2_B_X75SLP	0x42000001
+#define ISDN_PID_L2_B_TRANS	0x42000002
+#define ISDN_PID_L3_B_TRANS	0x43000001
 #define ISDN_PID_L3_DSS1USER	0x03000001
-#define ISDN_PID_CAPI20		0x04000001
+#define ISDN_PID_L4_CAPI20	0x04000001
+#define ISDN_PID_L4_B_CAPI20	0x44000001
 
 #define ISDN_PID_BCHANNEL_BIT	0x40000000
-#define ISDN_PID_LAYER1		0x01000000
-#define ISDN_PID_LAYER2		0x02000000
-#define ISDN_PID_LAYER3		0x03000000
+#define ISDN_PID_LAYER(n)	(n<<24)
 
-#define MAX_LAYER	4
+#define MAX_LAYER_NR	7
+#define ISDN_LAYER(n)	(1<<n)
+
 #define HISAX_MAX_IDLEN	16
 
 #define IADDR_BIT	0x10000000
@@ -216,7 +217,7 @@
 #define IF_TYPEMASK	0x07000000
 #define IF_ADDRMASK	0x00FFFFFF
 #define IF_IADDRMASK	0xF0FFFFFF
-#define IF_LAYERMASK	0x000F0000
+#define IF_LAYERMASK	0x00FF0000
 #define IF_TYPE(i)	((i)->stat & IF_TYPEMASK)
 
 #define DTYPE_SKB	-1
@@ -258,28 +259,16 @@ typedef struct _logdata {
 
 typedef struct _moditem {
 	char	*name;
-	int	layer;
+	int	layermask;
 	int	protocol;
 } moditem_t;
 
-#define PROTO_PARA_PID		1
-#define PROTO_PARA_BPROTOCOL	2
-
 typedef struct _hisax_pid {
-	u_int	B1;
-	u_int	B2;
-	u_int	B3;
-	void	*B1p;
-	void	*B2p;
-	void	*B3p;
+	int	protocol[MAX_LAYER_NR +1];
+	void	*param[MAX_LAYER_NR +1];
 	void	*global;
 } hisax_pid_t;
 
-typedef struct _bsetup {
-	int	channel;
-	int	flags;
-	u_int	protocol[MAX_LAYER+1];
-} bsetup_t;
 
 typedef struct _l3msg_t {
 	int	id;
@@ -478,7 +467,7 @@ typedef struct _hisaxobject {
 	struct _hisaxobject *prev;
 	struct _hisaxobject *next;
 	char	*name;
-	int	layer;
+	int	layermask;
 	int	refcnt;
 	int     protcnt;
 	int	*protocols;
@@ -490,7 +479,7 @@ typedef struct _hisaxobject {
 typedef struct _hisaxif {
 	struct _hisaxif		*prev;
 	struct _hisaxif		*next;
-	int			layer;
+	int			layermask;
 	int			protocol;
 	int			stat;
 	struct _hisaxstack	*st;
@@ -502,8 +491,8 @@ typedef struct _hisaxif {
 typedef struct _hisaxinstance {
 	struct _hisaxinstance	*prev;
 	struct _hisaxinstance	*next;
-	int			layer;
-	int			protocol;
+	int			layermask;
+	hisax_pid_t		pid;
 	char			id[HISAX_MAX_IDLEN];
 	struct _hisaxstack	*st;
 	hisaxobject_t		*obj;
@@ -514,21 +503,29 @@ typedef struct _hisaxinstance {
 	void			(*unlock)(void *);
 } hisaxinstance_t;
 
+typedef struct _hisaxlayer {
+	struct _hisaxlayer	*prev;
+	struct _hisaxlayer	*next;
+	hisaxinstance_t		*inst;
+} hisaxlayer_t;
+
 typedef struct _hisaxstack {
 	struct _hisaxstack	*prev;
 	struct _hisaxstack	*next;
 	u_int			id;
 	hisax_pid_t		pid;
-	int			protocols[MAX_LAYER+1];
-	hisaxinstance_t		*inst[MAX_LAYER+1];
+	hisaxlayer_t		*lstack;
 	hisaxinstance_t		*mgr;
 	struct _hisaxstack	*child;
 } hisaxstack_t;
 
+/* common helper functions */
 extern int bprotocol2pid(void *, hisax_pid_t *);
+extern int get_protocol(hisaxstack_t *, int);
 extern int HasProtocol(hisaxinstance_t *, int);
 extern int DelIF(hisaxinstance_t *, hisaxif_t *, void *, void *);
-/* global functions */
+
+/* global exported functions */
 
 extern int HiSax_register(hisaxobject_t *obj);
 extern int HiSax_unregister(hisaxobject_t *obj);

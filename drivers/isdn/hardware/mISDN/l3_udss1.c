@@ -1,4 +1,4 @@
-/* $Id: l3_udss1.c,v 0.9 2001/02/27 17:45:44 kkeil Exp $
+/* $Id: l3_udss1.c,v 0.10 2001/03/03 08:07:30 kkeil Exp $
  *
  * EURO/DSS1 D-channel protocol
  *
@@ -25,7 +25,7 @@ static int debug = 0;
 static hisaxobject_t u_dss1;
 
 
-const char *dss1_revision = "$Revision: 0.9 $";
+const char *dss1_revision = "$Revision: 0.10 $";
 
 static int dss1man(l3_process_t *, u_int, void *);
 
@@ -753,7 +753,7 @@ l3dss1_release_cmpl(l3_process_t *pc, u_char pr, void *arg)
 		findie(skb->data, skb->len, IE_SIGNAL, 0);
 	pc->para.RELEASE_COMPLETE.USER_USER =
 		findie(skb->data, skb->len, IE_USER_USER, 0);
-	hisax_l3up(pc, CC_RELEASE | CONFIRM, &pc->para.RELEASE_COMPLETE);
+	hisax_l3up(pc, CC_RELEASE_COMPLETE | INDICATION, &pc->para.RELEASE_COMPLETE);
 	release_l3_process(pc);
 }
 
@@ -1331,18 +1331,18 @@ l3dss1_release_ind(l3_process_t *pc, u_char pr, void *arg)
 		/* ETS 300-104 7.6.1, 8.6.1, 10.6.1... and 16.1
 		 * set down layer 3 without sending any message
 		 */
-		hisax_l3up(pc, CC_RELEASE | INDICATION, pc);
+		hisax_l3up(pc, CC_RELEASE | INDICATION, NULL);
 		newl3state(pc, 0);
 		release_l3_process(pc);
 	} else {
-		hisax_l3up(pc, CC_RELEASE | INDICATION, pc);
+		hisax_l3up(pc, CC_RELEASE | INDICATION, NULL);
 	}
 }
 
 static void
 l3dss1_restart(l3_process_t *pc, u_char pr, void *arg) {
 	L3DelTimer(&pc->timer);
-	hisax_l3up(pc, CC_RELEASE | INDICATION, pc);
+	hisax_l3up(pc, CC_RELEASE | INDICATION, NULL);
 	release_l3_process(pc);
 }
 
@@ -2176,32 +2176,33 @@ release_udss1(layer3_t *l3)
 	hif.fdata = l3;
 	hif.func = dss1_fromup;
 	hif.protocol = inst->up.protocol;
-	hif.layer = inst->up.layer;
+	hif.layermask = inst->up.layermask;
 	u_dss1.ctrl(inst->st, MGR_DELIF | REQUEST, &hif);
 	hif.fdata = l3;
 	hif.func = dss1_fromdown;
 	hif.protocol = inst->down.protocol;
-	hif.layer = inst->down.layer;
+	hif.layermask = inst->down.layermask;
 	u_dss1.ctrl(inst->st, MGR_DELIF | REQUEST, &hif);
 	REMOVE_FROM_LISTBASE(l3, dss1list);
-	REMOVE_FROM_LIST(inst);
-	if (inst->st)
-		if (inst->st->inst[inst->layer] == inst)
-			inst->st->inst[inst->layer] = inst->next;
+	u_dss1.ctrl(inst->st, MGR_DELLAYER | REQUEST, inst);
 	kfree(l3);
-	u_dss1.refcnt--;
 }
 
 static layer3_t *
 create_udss1(hisaxstack_t *st, hisaxif_t *hif) {
 	layer3_t *nl3;
-	int lay, err;
+	int err, lay;
 
 	if (!hif)
 		return(NULL);
 	printk(KERN_DEBUG "create_udss1 prot %x\n", hif->protocol);
 	if (!st) {
 		printk(KERN_ERR "create_udss1 no stack\n");
+		return(NULL);
+	}
+	lay = layermask2layer(hif->layermask);
+	if (lay < 0) {
+		int_errtxt("lm %x", hif->layermask);
 		return(NULL);
 	}
 	if (!(nl3 = kmalloc(sizeof(layer3_t), GFP_ATOMIC))) {
@@ -2211,12 +2212,14 @@ create_udss1(hisaxstack_t *st, hisaxif_t *hif) {
 	memset(nl3, 0, sizeof(layer3_t));
 	nl3->debug = debug;
 	if (hif->protocol != ISDN_PID_L3_DSS1USER) {
-		printk(KERN_ERR "udss1 create failed prt %x\n",nl3->inst.protocol);
+		printk(KERN_ERR "udss1 create failed prt %x\n",hif->protocol);
 		kfree(nl3);
 		return(NULL);
 	}
+	init_l3(nl3);
 	if (!(nl3->global = kmalloc(sizeof(l3_process_t), GFP_ATOMIC))) {
 		printk(KERN_ERR "HiSax can't get memory for dss1 global CR\n");
+		release_l3(nl3);
 		kfree(nl3);
 		return(NULL);
 	} else {
@@ -2229,7 +2232,7 @@ create_udss1(hisaxstack_t *st, hisaxif_t *hif) {
 	}
 	if (!(nl3->dummy = kmalloc(sizeof(l3_process_t), GFP_ATOMIC))) {
 		printk(KERN_ERR "HiSax can't get memory for dss1 dummy CR\n");
-		kfree(nl3->global);
+		release_l3(nl3);
 		kfree(nl3);
 		return(NULL);
 	} else {
@@ -2240,29 +2243,18 @@ create_udss1(hisaxstack_t *st, hisaxif_t *hif) {
 		nl3->dummy->l3 = nl3;
 		L3InitTimer(nl3->dummy, &nl3->dummy->timer);
 	}
-	nl3->inst.protocol = hif->protocol;
+	nl3->inst.pid.protocol[lay] = hif->protocol;
 	nl3->inst.obj = &u_dss1;
-	nl3->inst.layer = hif->layer;
+	nl3->inst.layermask = hif->layermask;
 	nl3->inst.data = nl3;
-	init_l3(nl3);
 	nl3->p_mgr = dss1man;
 	APPEND_TO_LIST(nl3, dss1list);
 	u_dss1.ctrl(st, MGR_ADDLAYER | INDICATION, &nl3->inst);
-	lay = nl3->inst.layer + 1;
-	if ((lay<0) || (lay>MAX_LAYER)) {
-		lay = 0;
-		nl3->inst.up.protocol = ISDN_PID_NONE;
-	} else
-		nl3->inst.up.protocol = st->protocols[lay];
-	nl3->inst.up.layer = lay;
+	nl3->inst.up.layermask = get_up_layer(nl3->inst.layermask);
+	nl3->inst.up.protocol = get_protocol(st, nl3->inst.up.layermask);
 	nl3->inst.up.stat = IF_DOWN;
-	lay = nl3->inst.layer - 1;
-	if ((lay<0) || (lay>MAX_LAYER)) {
-		lay = 0;
-		nl3->inst.down.protocol = ISDN_PID_NONE;
-	} else
-		nl3->inst.down.protocol = st->protocols[lay];
-	nl3->inst.down.layer = lay;
+	nl3->inst.down.layermask = get_down_layer(nl3->inst.layermask);
+	nl3->inst.down.protocol = get_protocol(st, nl3->inst.down.layermask);
 	nl3->inst.down.stat = IF_UP;
 	err = u_dss1.ctrl(st, MGR_ADDIF | REQUEST, &nl3->inst.down);
 	if (err) {
@@ -2284,15 +2276,14 @@ add_if(layer3_t *l3, hisaxif_t *hif) {
 	int err;
 	hisaxinstance_t *inst = &l3->inst;
 
-	printk(KERN_DEBUG "layer3 add_if lay %d/%x prot %x\n", hif->layer,
+	printk(KERN_DEBUG "layer3 add_if lay %x/%x prot %x\n", hif->layermask,
 		hif->stat, hif->protocol);
 	hif->fdata = l3;
 	if (IF_TYPE(hif) == IF_UP) {
 		hif->func = dss1_fromup;
 		if (inst->up.stat == IF_NOACTIV) {
 			inst->up.stat = IF_DOWN;
-			inst->up.protocol =
-				inst->st->protocols[inst->up.layer];
+			inst->up.protocol = get_protocol(inst->st, inst->up.layermask);
 			err = u_dss1.ctrl(inst->st, MGR_ADDIF | REQUEST, &inst->up);
 			if (err)
 				inst->up.stat = IF_NOACTIV;
@@ -2301,8 +2292,7 @@ add_if(layer3_t *l3, hisaxif_t *hif) {
 		hif->func = dss1_fromdown;
 		if (inst->down.stat == IF_NOACTIV) {
 			inst->down.stat = IF_UP;
-			inst->down.protocol =
-				inst->st->protocols[inst->down.layer];
+			inst->down.protocol = get_protocol(inst->st, inst->down.layermask);
 			err = u_dss1.ctrl(inst->st, MGR_ADDIF | REQUEST, &inst->down);
 			if (err)
 				inst->down.stat = IF_NOACTIV;
@@ -2317,7 +2307,7 @@ del_if(layer3_t *l3, hisaxif_t *hif) {
 	int err;
 	hisaxinstance_t *inst = &l3->inst;
 
-	printk(KERN_DEBUG "layer3 del_if lay %d/%x %p/%p\n", hif->layer,
+	printk(KERN_DEBUG "layer3 del_if lay %x/%x %p/%p\n", hif->layermask,
 		hif->stat, hif->func, hif->fdata);
 	if ((hif->func == inst->up.func) && (hif->fdata == inst->up.fdata)) {
 		inst->up.stat = IF_NOACTIV;
@@ -2377,6 +2367,7 @@ udss1_manager(void *data, u_int prim, void *arg) {
 		return(del_if(l3l, arg));
 		break;
 	    case MGR_RELEASE | INDICATION:
+	    case MGR_DELLAYER | REQUEST:
 	    	if (l3l) {
 			printk(KERN_DEBUG "release_udss1 id %x\n", l3l->inst.st->id);
 	    		release_udss1(l3l);
@@ -2404,7 +2395,7 @@ int UDSS1Init(void)
 	u_dss1.own_ctrl = udss1_manager;
 	u_dss1.prev = NULL;
 	u_dss1.next = NULL;
-	u_dss1.layer = 3;
+	u_dss1.layermask = ISDN_LAYER(3);
 	HiSaxl3New();
 	if ((err = HiSax_register(&u_dss1))) {
 		printk(KERN_ERR "Can't register %s error(%d)\n", MName, err);

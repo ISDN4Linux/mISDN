@@ -1,4 +1,4 @@
-/* $Id: hisax_hw.h,v 0.1 2001/02/13 10:41:32 kkeil Exp $
+/* $Id: hisax_hw.h,v 0.2 2001/03/03 08:07:30 kkeil Exp $
  *
  *   Basic declarations, defines for HiSax hardware drivers
  *
@@ -15,6 +15,9 @@
 #include <asm/io.h>
 #include <linux/ioport.h>
 #include <linux/skbuff.h>
+#ifdef MEMDBG
+#include "memdbg.h"
+#endif
 
 #define MAX_DFRAME_LEN_L1	300
 #define MAX_MON_FRAME		32

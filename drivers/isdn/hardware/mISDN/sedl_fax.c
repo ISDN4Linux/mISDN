@@ -1,4 +1,4 @@
-/* $Id: sedl_fax.c,v 0.6 2001/02/27 17:45:44 kkeil Exp $
+/* $Id: sedl_fax.c,v 0.7 2001/03/03 08:07:30 kkeil Exp $
  *
  * sedl_fax.c  low level stuff for Sedlbauer Speedfax + cards
  *
@@ -40,7 +40,7 @@
 
 extern const char *CardType[];
 
-const char *Sedlfax_revision = "$Revision: 0.6 $";
+const char *Sedlfax_revision = "$Revision: 0.7 $";
 
 const char *Sedlbauer_Types[] =
 	{"None", "speed fax+", "speed fax+ pyramid", "speed fax+ pci"};
@@ -95,8 +95,6 @@ const char *Sedlbauer_Types[] =
 
 
 #define SEDL_RESET      0x3	/* same as DOS driver */
-
-#define SPIN_DEBUG	1
 
 /* data struct */
 
@@ -399,7 +397,6 @@ static sedl_fax	*cardlist;
 static int sedl_cnt;
 static hisaxobject_t	speedfax;
 static int debug;
-static u_int act_protocol;
 static u_int protocol[MAX_CARDS];
 static u_int io[MAX_CARDS];
 static u_int irq[MAX_CARDS];
@@ -592,17 +589,19 @@ add_if(hisaxinstance_t *inst, int channel, hisaxif_t *hif) {
 	    case ISDN_PID_L1_B_TRANS_TTR:
 	    case ISDN_PID_L1_B_TRANS_TTS:
 	    case ISDN_PID_L1_B_64HDLC:
+	    case ISDN_PID_L2_B_TRANS:
+	    case ISDN_PID_L3_B_TRANS:
 		printk(KERN_DEBUG "speedfax_add_if ch%d p:%x\n", channel, hif->protocol);
 	    	if ((channel<0) || (channel>1))
 	    		return(-EINVAL);
 		hif->fdata = &card->bch[channel];
 		hif->func = isar_down;
-		inst->protocol = hif->protocol;
 		if (inst->up.stat == IF_NOACTIV) {
 			printk(KERN_DEBUG "speedfax_add_if set upif\n");
 			inst->up.stat = IF_DOWN;
-			inst->up.layer = hif->inst->layer;
-			inst->up.protocol = hif->inst->protocol;
+			inst->up.layermask = hif->inst->layermask;
+			inst->up.protocol = get_protocol(inst->st,
+				inst->up.layermask);;
 			err = speedfax.ctrl(inst->st, MGR_ADDIF | REQUEST, &inst->up);
 			if (err) {
 				printk(KERN_WARNING "speedfax_add_if up no if\n");
@@ -617,8 +616,8 @@ add_if(hisaxinstance_t *inst, int channel, hisaxif_t *hif) {
 		hif->func = ISAC_l1hw;
 		if (inst->up.stat == IF_NOACTIV) {
 			inst->up.stat = IF_DOWN;
-			inst->up.protocol =
-				inst->st->protocols[inst->up.layer];
+			inst->up.protocol = get_protocol(inst->st,
+				inst->up.layermask);
 			err = speedfax.ctrl(inst->st, MGR_ADDIF | REQUEST, &inst->up);
 			if (err)
 				inst->up.stat = IF_NOACTIV;
@@ -634,10 +633,9 @@ add_if(hisaxinstance_t *inst, int channel, hisaxif_t *hif) {
 
 static int
 del_if(hisaxinstance_t *inst, int channel, hisaxif_t *hif) {
-	int err;
 	sedl_fax *card = inst->data;
 
-	printk(KERN_DEBUG "speedfax del_if lay %d/%d %p/%p\n", hif->layer,
+	printk(KERN_DEBUG "speedfax del_if lay %x/%x %p/%p\n", hif->layermask,
 		hif->stat, hif->func, hif->fdata);
 	if ((hif->func == inst->up.func) && (hif->fdata == inst->up.fdata)) {
 		if (channel==2)
@@ -671,34 +669,48 @@ release_card(sedl_fax *card) {
 	REMOVE_FROM_LISTBASE(card, cardlist);
 	unlock_dev(card);
 	kfree(card);
-	card = NULL;
 	sedl_cnt--;
 	speedfax.refcnt--;
 }
 
 static int
 set_stack(hisaxstack_t *st, hisaxinstance_t *inst, int chan, hisax_pid_t *pid) {
-	int err,layer = 0;
+	int err, layer = 0;
 
+#if 0
 	if (st->inst[0] || st->inst[1] || st->inst[2]) {
 		return(-EBUSY);	
 	}
-	if (!HasProtocol(inst, pid->B1)) {
-		return(-EPROTONOSUPPORT);
-	} else
-		layer = 1;
-	if (HasProtocol(inst, pid->B2))
-		layer = 2;
-	if (HasProtocol(inst, pid->B3))
-		layer = 3;
-	inst->layer = layer;
-	inst->protocol = pid->B1;
+#endif
+	memset(&inst->pid, 0, sizeof(hisax_pid_t));
+	if  (chan == 2) { /* D-channel */
+		if (!HasProtocol(inst, pid->protocol[0])) {
+			return(-EPROTONOSUPPORT);
+		} else 
+			layer = ISDN_LAYER(0);
+		inst->pid.protocol[0] = pid->protocol[0];
+	} else {
+		if (!HasProtocol(inst, pid->protocol[1])) {
+			return(-EPROTONOSUPPORT);
+		} else
+			layer = ISDN_LAYER(1);
+		inst->pid.protocol[1] = pid->protocol[1];
+		if (HasProtocol(inst, pid->protocol[2])) {
+			layer |= ISDN_LAYER(2);
+			inst->pid.protocol[2] = pid->protocol[2];
+			if (HasProtocol(inst, pid->protocol[3])) {
+				layer |= ISDN_LAYER(3);
+				inst->pid.protocol[3] = pid->protocol[3];
+			}
+		}
+	}
+	inst->layermask = layer;
 	if ((err = speedfax.ctrl(st, MGR_ADDLAYER | REQUEST, inst))) {
 		printk(KERN_WARNING "set_stack MGR_ADDLAYER err(%d)\n", err);
 		return(err);
 	}
-	inst->up.layer = layer + 1;
-	inst->up.protocol = st->protocols[layer+1];
+	inst->up.layermask = get_up_layer(layer);
+	inst->up.protocol = get_protocol(st, inst->up.layermask);
 	inst->up.inst = inst;
 	inst->up.stat = IF_DOWN;
 	if ((err = speedfax.ctrl(st, MGR_ADDIF | REQUEST, &inst->up))) {
@@ -712,7 +724,7 @@ static int
 speedfax_manager(void *data, u_int prim, void *arg) {
 	sedl_fax *card = cardlist;
 	hisaxinstance_t *inst=NULL;
-	int i,channel = -1;
+	int channel = -1;
 	hisaxstack_t *st = data;
 
 	if (!data) {
@@ -748,20 +760,6 @@ speedfax_manager(void *data, u_int prim, void *arg) {
 		if (!card) {
 			printk(KERN_WARNING "speedfax_manager no card found\n");
 			return(-ENODEV);
-		}
-		if (channel == 2) {
-			card->dch.inst.st->protocols[0] = ISDN_PID_L0_TE_S0;
-			card->dch.inst.st->protocols[1] = ISDN_PID_L1_TE_S0;
-			card->dch.inst.st->protocols[2] = ISDN_PID_L2_LAPD;
-			if (act_protocol == 2) {
-				card->dch.inst.st->protocols[3] = ISDN_PID_L3_DSS1USER;
-				card->dch.inst.st->protocols[4] = ISDN_PID_CAPI20;
-			} else {
-				card->dch.inst.st->protocols[3] = ISDN_PID_NONE;
-				card->dch.inst.st->protocols[4] = ISDN_PID_NONE;
-			}
-		} else {
-			break;
 		}
 		break;
 	    case MGR_DELLAYER | REQUEST:
@@ -832,10 +830,11 @@ Speedfax_init(void)
 {
 	int err,i;
 	sedl_fax *card;
+	hisax_pid_t pid;
 
 	speedfax.name = SpeedfaxName;
 	speedfax.own_ctrl = speedfax_manager;
-	speedfax.layer = 0;
+	speedfax.layermask = ISDN_LAYER(0);
 	speedfax.protocols = SpeedfaxProtocols;
 	speedfax.protcnt = SPEEDFAX_PCNT;
 	speedfax.prev = NULL;
@@ -859,17 +858,27 @@ Speedfax_init(void)
 		card->dch.inst.lock = lock_dev;
 		card->dch.inst.unlock = unlock_dev;
 		card->dch.inst.data = card;
-		card->dch.inst.layer = 0;
-		card->dch.inst.protocol = ISDN_PID_L0_TE_S0;
 		card->dch.inst.up.inst = &card->dch.inst;
-		act_protocol = protocol[sedl_cnt];
+		card->dch.inst.down.func = dummy_down;
+		card->dch.inst.down.fdata = card;
+		memset(&pid, 0, sizeof(hisax_pid_t));
+		pid.protocol[0] = ISDN_PID_L0_TE_S0;
+		pid.protocol[1] = ISDN_PID_L1_TE_S0;
+		pid.protocol[2] = ISDN_PID_L2_LAPD;
+		if (protocol[sedl_cnt] == 2) {
+			pid.protocol[3] = ISDN_PID_L3_DSS1USER;
+			pid.protocol[4] = ISDN_PID_L4_CAPI20;
+		} else {
+			pid.protocol[3] = ISDN_PID_NONE;
+			pid.protocol[4] = ISDN_PID_NONE;
+		}
 		sprintf(card->dch.inst.id, "SFax%d", sedl_cnt+1);
 		init_dchannel(&card->dch);
 		for (i=0; i<2; i++) {
 			card->bch[i].inst.obj = &speedfax;
 			card->bch[i].inst.data = card;
-			card->bch[i].inst.layer = 0;
-			card->bch[i].inst.up.layer = 1;
+			card->bch[i].inst.layermask = 0;
+			card->bch[i].inst.up.layermask = ISDN_LAYER(1);
 			card->bch[i].inst.up.inst = &card->bch[i].inst;
 			card->bch[i].inst.lock = lock_dev;
 			card->bch[i].inst.unlock = unlock_dev;
@@ -907,24 +916,9 @@ Speedfax_init(void)
 				err = 0;
 			return(err);
 		}
-		if ((err = speedfax.ctrl(card->dch.inst.st, MGR_ADDLAYER | REQUEST, &card->dch.inst))) {
-			printk(KERN_ERR  "MGR_ADDLAYER REQUEST dch err(%d)\n", err);
-			release_card(card);
-			if (!sedl_cnt)
-				HiSax_unregister(&speedfax);
-			else
-				err = 0;
-			return(err);
-		}
-		card->dch.inst.up.layer = 1;
-		card->dch.inst.up.stat = IF_DOWN;
-		card->dch.inst.up.protocol = card->dch.inst.st->protocols[1];
-		card->dch.inst.down.func = dummy_down;
-		card->dch.inst.down.fdata = card;
-		if ((err = speedfax.ctrl(card->dch.inst.st, MGR_ADDIF | REQUEST,
-			&card->dch.inst.up))) {
-			printk(KERN_ERR  "MGR_ADDIF REQUEST dch err(%d)\n", err);
-			release_card(card);
+		if ((err = speedfax.ctrl(card->dch.inst.st, MGR_SETSTACK | REQUEST, &pid))) {
+			printk(KERN_ERR  "MGR_SETSTACK REQUEST dch err(%d)\n", err);
+			speedfax.ctrl(card->dch.inst.st, MGR_DELSTACK | REQUEST, NULL);
 			if (!sedl_cnt)
 				HiSax_unregister(&speedfax);
 			else
@@ -935,7 +929,7 @@ Speedfax_init(void)
 			if ((err = speedfax.ctrl(card->dch.inst.st, MGR_ADDSTACK | REQUEST,
 				&card->bch[i].inst))) {
 				printk(KERN_ERR "MGR_ADDSTACK bchan error %d\n", err);
-				release_card(card);
+				speedfax.ctrl(card->dch.inst.st, MGR_DELSTACK | REQUEST, NULL);
 				if (!sedl_cnt)
 					HiSax_unregister(&speedfax);
 				else
@@ -944,7 +938,7 @@ Speedfax_init(void)
 			}
 		}
 		if ((err = init_card(card))) {
-			release_card(card);
+			speedfax.ctrl(card->dch.inst.st, MGR_DELSTACK | REQUEST, NULL);
 			if (!sedl_cnt)
 				HiSax_unregister(&speedfax);
 			else

@@ -1,4 +1,4 @@
-/* $Id: layer1.c,v 0.5 2001/02/27 17:45:44 kkeil Exp $
+/* $Id: layer1.c,v 0.6 2001/03/03 08:07:30 kkeil Exp $
  *
  * hisax_l1.c     common low level stuff for I.430 layer1
  *
@@ -10,12 +10,12 @@
  *
  */
 
-const char *l1_revision = "$Revision: 0.5 $";
+const char *l1_revision = "$Revision: 0.6 $";
 
 #include <linux/config.h>
 #include <linux/module.h>
-#include "hisaxl1.h"
 #include "helper.h"
+#include "hisaxl1.h"
 #include "debug.h"
 
 typedef struct _layer1 {
@@ -584,26 +584,22 @@ release_l1(layer1_t *l1) {
 	hif.fdata = l1;
 	hif.func = l1from_up;
 	hif.protocol = inst->up.protocol;
-	hif.layer = inst->up.layer;
+	hif.layermask = inst->up.layermask;
 	isdnl1.ctrl(inst->st, MGR_DELIF | REQUEST, &hif);
 	hif.fdata = l1;
 	hif.func = l1from_down;
 	hif.protocol = inst->down.protocol;
-	hif.layer = inst->down.layer;
+	hif.layermask = inst->down.layermask;
 	isdnl1.ctrl(inst->st, MGR_DELIF | REQUEST, &hif);
 	REMOVE_FROM_LISTBASE(l1, l1list);
-	REMOVE_FROM_LIST(inst);
-	if (inst->st)
-		if (inst->st->inst[inst->layer] == inst)
-			inst->st->inst[inst->layer] = inst->next;
+	isdnl1.ctrl(inst->st, MGR_DELLAYER | REQUEST, inst);
 	kfree(l1);
-	isdnl1.refcnt--;
 }
 
 static layer1_t *
 create_l1(hisaxstack_t *st, hisaxif_t *hif) {
 	layer1_t *nl1;
-	int lay, err;
+	int err, lay;
 
 	if (!hif)
 		return(NULL);
@@ -612,13 +608,18 @@ create_l1(hisaxstack_t *st, hisaxif_t *hif) {
 		printk(KERN_ERR "create_l1 no stack\n");
 		return(NULL);
 	}
+	lay = layermask2layer(hif->layermask);
+	if (lay < 0) {
+		int_errtxt("lm %x", hif->layermask);
+		return(NULL);
+	}
 	if (!(nl1 = kmalloc(sizeof(layer1_t), GFP_ATOMIC))) {
 		printk(KERN_ERR "kmalloc layer1_t failed\n");
 		return(NULL);
 	}
 	memset(nl1, 0, sizeof(layer1_t));
-	nl1->inst.protocol = hif->protocol;
-	switch(nl1->inst.protocol) {
+	nl1->inst.pid.protocol[lay] = hif->protocol;
+	switch(hif->protocol) {
 	    case ISDN_PID_L1_TE_S0:
 	    	sprintf(nl1->inst.id, "l1TES0 %d", st->id);
 		nl1->l1m.fsm = &l1fsm_s;
@@ -626,7 +627,7 @@ create_l1(hisaxstack_t *st, hisaxif_t *hif) {
 		nl1->Flags = 0;
 		break;
 	    default:
-		printk(KERN_ERR "layer1 create failed prt %x\n",nl1->inst.protocol);
+		printk(KERN_ERR "layer1 create failed prt %x\n",hif->protocol);
 		kfree(nl1);
 		return(NULL);
 	}
@@ -637,25 +638,15 @@ create_l1(hisaxstack_t *st, hisaxif_t *hif) {
 	nl1->l1m.printdebug = l1m_debug;
 	FsmInitTimer(&nl1->l1m, &nl1->timer);
 	nl1->inst.obj = &isdnl1;
-	nl1->inst.layer = hif->layer;
+	nl1->inst.layermask = hif->layermask;
 	nl1->inst.data = nl1;
 	APPEND_TO_LIST(nl1, l1list);
 	isdnl1.ctrl(st, MGR_ADDLAYER | INDICATION, &nl1->inst);
-	lay = nl1->inst.layer + 1;
-	if ((lay<0) || (lay>MAX_LAYER)) {
-		lay = 0;
-		nl1->inst.up.protocol = ISDN_PID_NONE;
-	} else
-		nl1->inst.up.protocol = st->protocols[lay];
-	nl1->inst.up.layer = lay;
+	nl1->inst.up.layermask = get_up_layer(nl1->inst.layermask);
+	nl1->inst.up.protocol = get_protocol(st, nl1->inst.up.layermask);
 	nl1->inst.up.stat = IF_DOWN;
-	lay = nl1->inst.layer - 1;
-	if ((lay<0) || (lay>MAX_LAYER)) {
-		lay = 0;
-		nl1->inst.down.protocol = ISDN_PID_NONE;
-	} else
-		nl1->inst.down.protocol = st->protocols[lay];
-	nl1->inst.down.layer = lay;
+	nl1->inst.down.layermask = get_down_layer(nl1->inst.layermask);
+	nl1->inst.down.protocol = get_protocol(st, nl1->inst.down.layermask);
 	nl1->inst.down.stat = IF_UP;
 	err = isdnl1.ctrl(st, MGR_ADDIF | REQUEST, &nl1->inst.down);
 	if (err) {
@@ -677,15 +668,15 @@ add_if(layer1_t *l1, hisaxif_t *hif) {
 	int err;
 	hisaxinstance_t *inst = &l1->inst;
 
-	printk(KERN_DEBUG "layer1 add_if lay %d/%x prot %x\n", hif->layer,
+	printk(KERN_DEBUG "layer1 add_if lay %x/%x prot %x\n", hif->layermask,
 		hif->stat, hif->protocol);
 	hif->fdata = l1;
 	if (IF_TYPE(hif) == IF_UP) {
 		hif->func = l1from_up;
 		if (inst->up.stat == IF_NOACTIV) {
 			inst->up.stat = IF_DOWN;
-			inst->up.protocol =
-				inst->st->protocols[inst->up.layer];
+			inst->up.protocol = get_protocol(inst->st,
+				inst->up.layermask);
 			err = isdnl1.ctrl(inst->st, MGR_ADDIF | REQUEST, &inst->up);
 			if (err)
 				inst->up.stat = IF_NOACTIV;
@@ -694,8 +685,8 @@ add_if(layer1_t *l1, hisaxif_t *hif) {
 		hif->func = l1from_down;
 		if (inst->down.stat == IF_NOACTIV) {
 			inst->down.stat = IF_UP;
-			inst->down.protocol =
-				inst->st->protocols[inst->down.layer];
+			inst->down.protocol = get_protocol(inst->st,
+				inst->down.layermask);
 			err = isdnl1.ctrl(inst->st, MGR_ADDIF | REQUEST, &inst->down);
 			if (err)
 				inst->down.stat = IF_NOACTIV;
@@ -710,7 +701,7 @@ del_if(layer1_t *l1, hisaxif_t *hif) {
 	int err;
 	hisaxinstance_t *inst = &l1->inst;
 
-	printk(KERN_DEBUG "layer1 del_if lay %d/%x %p/%p\n", hif->layer,
+	printk(KERN_DEBUG "layer1 del_if lay %x/%x %p/%p\n", hif->layermask,
 		hif->stat, hif->func, hif->fdata);
 	if ((hif->func == inst->up.func) && (hif->fdata == inst->up.fdata)) {
 		inst->up.stat = IF_NOACTIV;
@@ -772,6 +763,7 @@ l1_manager(void *data, u_int prim, void *arg) {
 		}
 		return(del_if(l1l, arg));
 		break;
+	    case MGR_DELLAYER | REQUEST:
 	    case MGR_RELEASE | INDICATION:
 	    	if (l1l) {
 			printk(KERN_DEBUG "release_l1 id %x\n", l1l->inst.st->id);
@@ -779,7 +771,6 @@ l1_manager(void *data, u_int prim, void *arg) {
 	    	} else 
 	    		printk(KERN_WARNING "l1_manager release no instance\n");
 	    	break;
-	    		
 	    default:
 		printk(KERN_WARNING "l1_manager prim %x not handled\n", prim);
 		return(-EINVAL);
@@ -797,7 +788,7 @@ int Isdnl1Init(void)
 	isdnl1.own_ctrl = l1_manager;
 	isdnl1.prev = NULL;
 	isdnl1.next = NULL;
-	isdnl1.layer = 1;
+	isdnl1.layermask = ISDN_LAYER(1);
 #ifdef HISAX_UINTERFACE
 	l1fsm_u.state_count = L1U_STATE_COUNT;
 	l1fsm_u.event_count = L1_EVENT_COUNT;

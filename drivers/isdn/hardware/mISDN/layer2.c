@@ -1,4 +1,4 @@
-/* $Id: layer2.c,v 0.5 2001/02/22 09:49:10 kkeil Exp $
+/* $Id: layer2.c,v 0.6 2001/03/03 08:07:30 kkeil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -12,7 +12,7 @@
 #include "helper.h"
 #include "debug.h"
 
-const char *l2_revision = "$Revision: 0.5 $";
+const char *l2_revision = "$Revision: 0.6 $";
 
 static void l2m_debug(struct FsmInst *fi, char *fmt, ...);
 
@@ -1761,6 +1761,7 @@ l2from_down(hisaxif_t *hif, u_int prim, u_int nr, int dtyp, void *arg) {
 	int ret = -EINVAL;
 	int *iarg;
 
+	printk(KERN_DEBUG __FUNCTION__ ": prim(%x)\n", prim);
 	if (!hif)
 		return(-EINVAL);
 	l2 = hif->fdata;
@@ -1813,7 +1814,7 @@ l2from_down(hisaxif_t *hif, u_int prim, u_int nr, int dtyp, void *arg) {
 			}
 			break;
 		default:
-			l2m_debug(&l2->l2m, "l2 unknown pr %04x", prim);
+			l2m_debug(&l2->l2m, "l2 unknown pr %x", prim);
 			ret = -EINVAL;
 			break;
 	}
@@ -1826,6 +1827,7 @@ static int
 l2from_up(hisaxif_t *hif, u_int prim, u_int nr, int dtyp, void *arg) {
 	layer2_t *l2;
 
+	printk(KERN_DEBUG __FUNCTION__ ": prim(%x)\n", prim);
 	if (!hif || !hif->fdata)
 		return(-EINVAL);
 	l2 = hif->fdata;
@@ -1873,6 +1875,9 @@ l2from_up(hisaxif_t *hif, u_int prim, u_int nr, int dtyp, void *arg) {
 		case (MDL_STATUS | REQUEST):
 			l2up(l2, MDL_STATUS | CONFIRM, nr, 0, (void *)l2->tei);
 			break;
+		default:
+			l2m_debug(&l2->l2m, "l2 unknown pr %04x", prim);
+			return(-EINVAL);
 	}
 	return(0);
 }
@@ -1894,6 +1899,7 @@ tei_l2(layer2_t *l2, u_int prim, u_int nr, int dtyp, void *arg)
 	    case (MDL_ERROR | RESPONSE):
 		FsmEvent(&l2->l2m, EV_L2_MDL_ERROR, arg);
 		break;
+#if 0
 	    case (MDL_STATUS | REQUEST):
 		if (l2->inst.st && l2->inst.st->inst[1]) {
 			hisaxif_t *up = &l2->inst.st->inst[1]->up;
@@ -1902,6 +1908,7 @@ tei_l2(layer2_t *l2, u_int prim, u_int nr, int dtyp, void *arg)
 					nr, dtyp, arg));
 		}
 		break;
+#endif
 	}
 	return(0);
 }
@@ -1933,31 +1940,28 @@ release_l2(layer2_t *l2)
 	if (l2->ph_skb)
 		dev_kfree_skb(l2->ph_skb);
 	ReleaseWin(l2);
-	release_tei(l2->tm);
+	if (test_bit(FLG_LAPD, &l2->flag))
+		release_tei(l2->tm);
 	memset(&hif, 0, sizeof(hisaxif_t));
 	hif.fdata = l2;
 	hif.func = l2from_up;
 	hif.protocol = inst->up.protocol;
-	hif.layer = inst->up.layer;
+	hif.layermask = inst->up.layermask;
 	isdnl2.ctrl(inst->st, MGR_DELIF | REQUEST, &hif);
 	hif.fdata = l2;
 	hif.func = l2from_down;
 	hif.protocol = inst->down.protocol;
-	hif.layer = inst->down.layer;
+	hif.layermask = inst->down.layermask;
 	isdnl2.ctrl(inst->st, MGR_DELIF | REQUEST, &hif);
 	REMOVE_FROM_LISTBASE(l2, l2list);
-	REMOVE_FROM_LIST(inst);
-	if (inst->st)
-		if (inst->st->inst[inst->layer] == inst)
-			inst->st->inst[inst->layer] = inst->next;
+	isdnl2.ctrl(inst->st, MGR_DELLAYER | REQUEST, inst);
 	kfree(l2);
-	isdnl2.refcnt--;
 }
 
 static layer2_t *
 create_l2(hisaxstack_t *st, hisaxif_t *hif) {
 	layer2_t *nl2;
-	int lay, err;
+	int err,lay;
 
 	if (!hif)
 		return(NULL);
@@ -1966,16 +1970,21 @@ create_l2(hisaxstack_t *st, hisaxif_t *hif) {
 		printk(KERN_ERR "create_l2 no stack\n");
 		return(NULL);
 	}
+	lay = layermask2layer(hif->layermask);
+	if (lay < 0) {
+		int_errtxt("lm %x", hif->layermask);
+		return(NULL);
+	}
 	if (!(nl2 = kmalloc(sizeof(layer2_t), GFP_ATOMIC))) {
 		printk(KERN_ERR "kmalloc layer2 failed\n");
 		return(NULL);
 	}
 	memset(nl2, 0, sizeof(layer2_t));
 	nl2->debug = debug;
-	nl2->inst.protocol = hif->protocol;
-	switch(nl2->inst.protocol) {
+	nl2->inst.pid.protocol[lay] = hif->protocol;
+	switch(hif->protocol) {
 	    case ISDN_PID_L2_LAPD:
-	    	sprintf(nl2->inst.id, "lapd %d", st->id);
+	    	sprintf(nl2->inst.id, "lapd %x", st->id);
 		test_and_set_bit(FLG_LAPD, &nl2->flag);
 		test_and_set_bit(FLG_MOD128, &nl2->flag);
 		test_and_set_bit(FLG_LAPD, &nl2->flag);
@@ -1994,15 +2003,16 @@ create_l2(hisaxstack_t *st, hisaxif_t *hif) {
 		break;
 	    case ISDN_PID_L2_B_X75SLP:
 		test_and_set_bit(FLG_LAPB, &nl2->flag);
-		sprintf(nl2->inst.id, "lapb %d", st->id);
+		sprintf(nl2->inst.id, "lapb %x", st->id);
 		nl2->window = 7;
 		nl2->maxlen = MAX_DATA_SIZE;
 		nl2->T200 = 1000;
 		nl2->N200 = 4;
 		nl2->T203 = 5000;
+		test_and_set_bit(FLG_ORIG, &nl2->flag);
 		break;
 	    default:
-		printk(KERN_ERR "layer1 create failed prt %x\n",nl2->inst.protocol);
+		printk(KERN_ERR "layer1 create failed prt %x\n",hif->protocol);
 		kfree(nl2);
 		return(NULL);
 	}
@@ -2024,25 +2034,15 @@ create_l2(hisaxstack_t *st, hisaxif_t *hif) {
 
 	FsmInitTimer(&nl2->l2m, &nl2->t200);
 	FsmInitTimer(&nl2->l2m, &nl2->t203);
-	nl2->inst.layer = hif->layer;
+	nl2->inst.layermask = hif->layermask;
 	nl2->inst.data = nl2;
 	APPEND_TO_LIST(nl2, l2list);
 	isdnl2.ctrl(st, MGR_ADDLAYER | INDICATION, &nl2->inst);
-	lay = nl2->inst.layer + 1;
-	if ((lay<0) || (lay>MAX_LAYER)) {
-		lay = 0;
-		nl2->inst.up.protocol = ISDN_PID_NONE;
-	} else
-		nl2->inst.up.protocol = st->protocols[lay];
-	nl2->inst.up.layer = lay;
+	nl2->inst.up.layermask = get_up_layer(nl2->inst.layermask);
+	nl2->inst.up.protocol = get_protocol(st, nl2->inst.up.layermask);
 	nl2->inst.up.stat = IF_DOWN;
-	lay = nl2->inst.layer - 1;
-	if ((lay<0) || (lay>MAX_LAYER)) {
-		lay = 0;
-		nl2->inst.down.protocol = ISDN_PID_NONE;
-	} else
-		nl2->inst.down.protocol = st->protocols[lay];
-	nl2->inst.down.layer = lay;
+	nl2->inst.down.layermask = get_down_layer(nl2->inst.layermask);
+	nl2->inst.down.protocol = get_protocol(st, nl2->inst.down.layermask);
 	nl2->inst.down.stat = IF_UP;
 	err = isdnl2.ctrl(st, MGR_ADDIF | REQUEST, &nl2->inst.down);
 	if (err) {
@@ -2064,15 +2064,14 @@ add_if(layer2_t *l2, hisaxif_t *hif) {
 	int err;
 	hisaxinstance_t *inst = &l2->inst;
 
-	printk(KERN_DEBUG "layer2 add_if lay %d/%x prot %x\n", hif->layer,
+	printk(KERN_DEBUG "layer2 add_if lay %x/%x prot %x\n", hif->layermask,
 		hif->stat, hif->protocol);
 	hif->fdata = l2;
 	if (IF_TYPE(hif) == IF_UP) {
 		hif->func = l2from_up;
 		if (inst->up.stat == IF_NOACTIV) {
 			inst->up.stat = IF_DOWN;
-			inst->up.protocol =
-				inst->st->protocols[inst->up.layer];
+			inst->up.protocol = get_protocol(inst->st, inst->up.layermask);
 			err = isdnl2.ctrl(inst->st, MGR_ADDIF | REQUEST, &inst->up);
 			if (err)
 				inst->up.stat = IF_NOACTIV;
@@ -2081,8 +2080,7 @@ add_if(layer2_t *l2, hisaxif_t *hif) {
 		hif->func = l2from_down;
 		if (inst->down.stat == IF_NOACTIV) {
 			inst->down.stat = IF_UP;
-			inst->down.protocol =
-				inst->st->protocols[inst->down.layer];
+			inst->down.protocol = get_protocol(inst->st, inst->down.layermask);
 			err = isdnl2.ctrl(inst->st, MGR_ADDIF | REQUEST, &inst->down);
 			if (err)
 				inst->down.stat = IF_NOACTIV;
@@ -2097,7 +2095,7 @@ del_if(layer2_t *l2, hisaxif_t *hif) {
 	int err;
 	hisaxinstance_t *inst = &l2->inst;
 
-	printk(KERN_DEBUG "layer2 del_if lay %d/%x %p/%p\n", hif->layer,
+	printk(KERN_DEBUG "layer2 del_if lay %x/%x %p/%p\n", hif->layermask,
 		hif->stat, hif->func, hif->fdata);
 	if ((hif->func == inst->up.func) && (hif->fdata == inst->up.fdata)) {
 		inst->up.stat = IF_NOACTIV;
@@ -2158,6 +2156,7 @@ l2_manager(void *data, u_int prim, void *arg) {
 		return(del_if(l2l, arg));
 		break;
 	    case MGR_RELEASE | INDICATION:
+	    case MGR_DELLAYER | REQUEST:
 	    	if (l2l) {
 			printk(KERN_DEBUG "release_l2 id %x\n", l2l->inst.st->id);
 	    		release_l2(l2l);
@@ -2182,7 +2181,7 @@ int Isdnl2Init(void)
 	isdnl2.own_ctrl = l2_manager;
 	isdnl2.prev = NULL;
 	isdnl2.next = NULL;
-	isdnl2.layer = 2;
+	isdnl2.layermask = ISDN_LAYER(2);
 	l2fsm.state_count = L2_STATE_COUNT;
 	l2fsm.event_count = L2_EVENT_COUNT;
 	l2fsm.strEvent = strL2Event;

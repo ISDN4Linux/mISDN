@@ -1,4 +1,4 @@
-/* $Id: capi.c,v 0.3 2001/02/27 17:45:44 kkeil Exp $
+/* $Id: capi.c,v 0.4 2001/03/03 08:07:29 kkeil Exp $
  *
  */
 
@@ -9,7 +9,7 @@
 #include "helper.h"
 #include "debug.h"
 
-const char *capi_revision = "$Revision: 0.3 $";
+const char *capi_revision = "$Revision: 0.4 $";
 
 static int debug = 0;
 static hisaxobject_t capi_obj;
@@ -17,7 +17,9 @@ static hisaxobject_t capi_obj;
 
 static char MName[] = "HiSax Capi 2.0";
 
-static int Capi20Protocols[] = { ISDN_PID_CAPI20
+static int Capi20Protocols[] = {ISDN_PID_L4_CAPI20,
+				ISDN_PID_L4_B_CAPI20,
+				ISDN_PID_L3_B_TRANS  
 };
 #define PROTOCOLCNT	(sizeof(Capi20Protocols)/sizeof(int))
 
@@ -173,7 +175,7 @@ static int
 add_if_contr(Contr_t *ctrl, hisaxinstance_t *inst, hisaxif_t *hif) {
 	int err;
 
-	printk(KERN_DEBUG "capi add_if lay %d/%x prot %x\n", hif->layer,
+	printk(KERN_DEBUG "capi add_if lay %x/%x prot %x\n", hif->layermask,
 		hif->stat, hif->protocol);
 	if (IF_TYPE(hif) == IF_UP) {
 		printk(KERN_WARNING "capi add_if here is no UP interface\n");
@@ -187,8 +189,9 @@ add_if_contr(Contr_t *ctrl, hisaxinstance_t *inst, hisaxif_t *hif) {
 		}
 		if (inst->down.stat == IF_NOACTIV) {
 			inst->down.stat = IF_UP;
-			inst->down.protocol =
-				inst->st->protocols[inst->down.layer];
+			inst->down.layermask = get_down_layer(hif->layermask);
+			inst->down.protocol = get_protocol(inst->st,
+				inst->down.layermask);
 			err = capi_obj.ctrl(inst->st, MGR_ADDIF | REQUEST, &inst->down);
 			if (err)
 				inst->down.stat = IF_NOACTIV;
@@ -202,7 +205,7 @@ static int
 del_if(hisaxinstance_t *inst, hisaxif_t *hif) {
 	int err;
 
-	printk(KERN_DEBUG "capi del_if lay %d/%x %p/%p\n", hif->layer,
+	printk(KERN_DEBUG "capi del_if lay %x/%x %p/%p\n", hif->layermask,
 		hif->stat, hif->func, hif->fdata);
 	if ((hif->func == inst->up.func) && (hif->fdata == inst->up.fdata)) {
 		inst->up.stat = IF_NOACTIV;
@@ -266,6 +269,21 @@ capi20_manager(void *data, u_int prim, void *arg) {
 		}
 		return(del_if(inst, arg));
 		break;
+	    case MGR_DELLAYER | REQUEST:
+		if (inst) {
+			if (ctrl->inst.st == st) {
+				DelIF(inst, &inst->down, contrL3L4, ctrl);
+			} else {
+				hisaxif_t hif;
+				ncciSetInterface(&hif);
+				DelIF(inst, &inst->down, hif.func, inst->data);
+			}
+		} else {
+			printk(KERN_WARNING "capi20_manager DELLAYER no instance\n");
+			return(-EINVAL);
+		}
+		capi_obj.ctrl(st, MGR_DELLAYER | REQUEST, inst);
+		break;
 	    case MGR_RELEASE | INDICATION:
 	    	if (ctrl) {
 			printk(KERN_DEBUG "release_capi20 id %x\n", ctrl->inst.st->id);
@@ -291,7 +309,7 @@ int Capi20Init(void)
 	capi_obj.prev = NULL;
 	capi_obj.next = NULL;
 	capi_obj.ilist = NULL;
-	capi_obj.layer = 4;
+	capi_obj.layermask = ISDN_LAYER(4);
 	if ((err = CapiNew()))
 		return(err);
 	if ((err = HiSax_register(&capi_obj))) {

@@ -1,4 +1,4 @@
-/* $Id: layer1.h,v 0.3 2001/02/13 10:42:55 kkeil Exp $
+/* $Id: layer1.h,v 0.4 2001/03/03 08:07:30 kkeil Exp $
  *
  * Layer 1 defines
  *
@@ -8,6 +8,9 @@
 
 #include <linux/hisaxif.h>
 #include "fsm.h"
+#ifdef MEMDBG
+#include "memdbg.h"
+#endif
 
 #define D_RCVBUFREADY	0
 #define D_XMTBUFREADY	1

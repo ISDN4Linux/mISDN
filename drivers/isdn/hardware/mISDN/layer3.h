@@ -1,4 +1,4 @@
-/* $Id: layer3.h,v 0.7 2001/02/27 17:45:44 kkeil Exp $
+/* $Id: layer3.h,v 0.8 2001/03/03 08:07:30 kkeil Exp $
  *
  * This file is (c) under GNU PUBLIC LICENSE
  *
@@ -7,6 +7,9 @@
 #include <linux/hisaxif.h>
 #include <linux/skbuff.h>
 #include "fsm.h"
+#ifdef MEMDBG
+#include "memdbg.h"
+#endif
 
 #define SBIT(state) (1<<state)
 #define ALL_STATES  0x03ffffff
