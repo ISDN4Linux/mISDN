@@ -1,4 +1,4 @@
-/* $Id: core.c,v 1.4 2003/06/27 15:26:39 kkeil Exp $
+/* $Id: core.c,v 1.5 2003/06/27 16:19:43 kkeil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -505,7 +505,7 @@ void cleanup_module(void) {
 	if (hisax_thread.thread) {
 		/* abort hisaxd kernel thread */
 		hisax_thread.notify = &sem;
-		test_and_set_bit(HISAX_TFLAGS_TEST, &hisax_thread.Flags);
+		test_and_set_bit(HISAX_TFLAGS_RMMOD, &hisax_thread.Flags);
 		wake_up_interruptible(&hisax_thread.wq);
 		down(&sem);
 		hisax_thread.notify = NULL;
