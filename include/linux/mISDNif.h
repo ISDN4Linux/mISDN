@@ -1,4 +1,4 @@
-/* $Id: mISDNif.h,v 0.5 2001/02/19 22:25:31 kkeil Exp $
+/* $Id: mISDNif.h,v 0.6 2001/02/21 19:15:14 kkeil Exp $
  *
  */
 
@@ -107,7 +107,7 @@
 #define CC_SETUP		0x030100
 #define CC_RESUME		0x030200
 #define CC_INFO			0x030300
-#define CC_SETUP_COMPL		0x030400
+#define CC_SETUP_ACKNOWLEDGE	0x030400
 #define CC_PROCEEDING		0x030500
 #define CC_ALERTING		0x030600
 #define CC_PROGRESS		0x030700
@@ -124,10 +124,16 @@
 #define CC_NOTIFY		0x030900
 #define CC_DISCONNECT		0x030a00
 #define CC_RELEASE		0x030b00
-#define CC_SUSPEND		0x030c00
-#define CC_PROCEED_SEND 	0x030d00
-#define CC_REDIR        	0x030e00
+#define CC_RELEASE_COMPLETE	0x030c00
+#define CC_SUSPEND		0x030d00
+#define CC_PROCEED_SEND 	0x030e00
+#define CC_REDIR        	0x030f00
 #define CC_RESTART		0x031000
+#define CC_RESET		0x031100
+#define CC_TIMEOUT		0x031200
+#define CC_NEW_CR		0x03f000
+#define CC_RELEASE_CR		0x03f100
+#define CC_DUMMY		0x03f200
 
 
 #define LAYER_MASK	0x0F0000
@@ -187,6 +193,7 @@
 #define ISDN_PID_L2_LAPD	0x02000001
 #define ISDN_PID_L2_LAPB	0x02020001
 #define ISDN_PID_L3_DSS1USER	0x03000001
+#define ISDN_PID_CAPI20		0x04000001
 
 #define ISDN_PID_BCHANNEL_BIT	0x00020000
 
@@ -256,6 +263,192 @@ typedef struct _l3msg_t {
 	void	*arg;
 } l3msg_t;
 
+
+/* l3 pointer arrays */
+
+typedef struct _ALERTING {
+	u_char *BEARER;
+	u_char *CHANNEL_ID;
+	u_char *FACILITY;
+	u_char *PROGRESS;
+	u_char *DISPLAY;
+	u_char *SIGNAL;
+	u_char *HLC;
+	u_char *USER_USER;
+} ALERTING_t;
+
+typedef struct _CALL_PROCEEDING {
+	u_char *BEARER;
+	u_char *CHANNEL_ID;
+	u_char *FACILITY;
+	u_char *PROGRESS;
+	u_char *DISPLAY;
+	u_char *HLC;
+} CALL_PROCEEDING_t;
+
+typedef struct _CONNECT {
+	u_char *BEARER;
+	u_char *CHANNEL_ID;
+	u_char *FACILITY;
+	u_char *PROGRESS;
+	u_char *DISPLAY;
+	u_char *DATE;
+	u_char *SIGNAL;
+	u_char *CONNECT_PN;
+	u_char *CONNECT_SUB;
+	u_char *LLC;
+	u_char *HLC;
+	u_char *USER_USER;
+} CONNECT_t;
+
+typedef struct _CONNECT_ACKNOWLEDGE {
+	u_char *CHANNEL_ID;
+	u_char *DISPLAY;
+	u_char *SIGNAL;
+} CONNECT_ACKNOWLEDGE_t;
+
+typedef struct _DISCONNECT {
+	u_char *CAUSE;
+	u_char *FACILITY;
+	u_char *PROGRESS;
+	u_char *DISPLAY;
+	u_char *SIGNAL;
+	u_char *USER_USER;
+} DISCONNECT_t;
+
+typedef struct _INFORMATION {
+	u_char *COMPLETE;
+	u_char *DISPLAY;
+	u_char *KEYPAD;
+	u_char *SIGNAL;
+	u_char *CALLED_PN;
+} INFORMATION_t;
+
+typedef struct _NOTIFY {
+	u_char *BEARER;
+	u_char *NOTIFY;
+	u_char *DISPLAY;
+} NOTIFY_t;
+
+typedef struct _PROGRESS {
+	u_char *BEARER;
+	u_char *CAUSE;
+	u_char *FACILITY;
+	u_char *PROGRESS;
+	u_char *DISPLAY;
+	u_char *HLC;
+	u_char *USER_USER;
+} PROGRESS_t;
+
+typedef struct _RELEASE {
+	u_char *CAUSE;
+	u_char *FACILITY;
+	u_char *DISPLAY;
+	u_char *SIGNAL;
+	u_char *USER_USER;
+} RELEASE_t;
+
+typedef struct _RELEASE_COMPLETE {
+	u_char *CAUSE;
+	u_char *FACILITY;
+	u_char *DISPLAY;
+	u_char *SIGNAL;
+	u_char *USER_USER;
+} RELEASE_COMPLETE_t;
+
+typedef struct _RESUME {
+	u_char *CALL_ID;
+	u_char *FACILITY;
+} RESUME_t;
+
+typedef struct _RESUME_ACKNOWLEDGE {
+	u_char *CHANNEL_ID;
+	u_char *FACILITY;
+	u_char *DISPLAY;
+} RESUME_ACKNOWLEDGE_t;
+
+typedef struct _RESUME_REJECT {
+	u_char *CAUSE;
+	u_char *DISPLAY;
+} RESUME_REJECT_t;
+
+typedef struct _SETUP {
+	u_char *COMPLETE;
+	u_char *BEARER;
+	u_char *CHANNEL_ID;
+	u_char *FACILITY;
+	u_char *PROGRESS;
+	u_char *NET_FAC;
+	u_char *DISPLAY;
+	u_char *KEYPAD;
+	u_char *SIGNAL;
+	u_char *CALLING_PN;
+	u_char *CALLING_SUB;
+	u_char *CALLED_PN;
+	u_char *CALLED_SUB;
+	u_char *REDIR_NR;
+	u_char *LLC;
+	u_char *HLC;
+	u_char *USER_USER;
+} SETUP_t;
+
+typedef struct _SETUP_ACKNOWLEDGE {
+	u_char *CHANNEL_ID;
+	u_char *FACILITY;
+	u_char *PROGRESS;
+	u_char *DISPLAY;
+	u_char *SIGNAL;
+} SETUP_ACKNOWLEDGE_t;
+
+typedef struct _STATUS {
+	u_char *CAUSE;
+	u_char *CALL_STATE;
+	u_char *DISPLAY;
+} STATUS_t;
+
+typedef struct _STATUS_ENQUIRY {
+	u_char *DISPLAY;
+} STATUS_ENQUIRY_t;
+
+typedef struct _SUSPEND {
+	u_char *CALL_ID;
+	u_char *FACILITY;
+} SUSPEND_t;
+
+typedef struct _SUSPEND_ACKNOWLEDGE {
+	u_char *FACILITY;
+	u_char *DISPLAY;
+} SUSPEND_ACKNOWLEDGE_t;
+
+typedef struct _SUSPEND_REJECT {
+	u_char *CAUSE;
+	u_char *DISPLAY;
+} SUSPEND_REJECT_t;
+
+typedef struct _CONGESTION_CONTROL {
+	u_char *CONGESTION;
+	u_char *CAUSE;
+	u_char *DISPLAY;
+} CONGESTION_CONTROL_t;
+
+typedef struct _USER_INFORMATION {
+	u_char *MORE_DATA;
+	u_char *USER_USER;
+} USER_INFORMATION_t;
+
+typedef struct _RESTART {
+	u_char *CHANNEL_ID;
+	u_char *DISPLAY;
+	u_char *RESTART_IND;
+} RESTART_t;
+
+typedef struct _FACILITY {
+	u_char *FACILITY;
+	u_char *DISPLAY;
+} FACILITY_t;
+
+
+
 #ifdef __KERNEL__
 
 typedef struct _hisaxobject {
@@ -268,6 +461,7 @@ typedef struct _hisaxobject {
 	int	*protocols;
 	int     (*own_ctrl)(void *, u_int, void *);
 	int     (*ctrl)(void *, u_int, void *);
+	void	*ilist;
 } hisaxobject_t;
 
 typedef struct _hisaxif {
