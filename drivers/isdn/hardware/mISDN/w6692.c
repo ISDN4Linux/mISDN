@@ -1,4 +1,4 @@
-/* $Id: w6692.c,v 1.6 2003/12/14 15:19:02 keil Exp $
+/* $Id: w6692.c,v 1.7 2004/01/03 23:07:35 keil Exp $
 
  * w6692.c     low level driver for CCD's hfc-pci based cards
  *
@@ -41,7 +41,7 @@
 
 extern const char *CardType[];
 
-const char *w6692_rev = "$Revision: 1.6 $";
+const char *w6692_rev = "$Revision: 1.7 $";
 
 #define DBUSY_TIMER_VALUE	80
 
@@ -1242,6 +1242,7 @@ release_card(w6692pci *card)
 	free_bchannel(&card->bch[1]);
 	free_bchannel(&card->bch[0]);
 	free_dchannel(&card->dch);
+	w6692.ctrl(card->dch.inst.up.peer, MGR_DISCONNECT | REQUEST, &card->dch.inst.up);
 	w6692.ctrl(&card->dch.inst, MGR_UNREGLAYER | REQUEST, NULL);
 	REMOVE_FROM_LISTBASE(card, ((w6692pci *)w6692.ilist));
 	unlock_dev(card);

@@ -1,4 +1,4 @@
-/* $Id: avm_fritz.c,v 1.19 2003/12/03 14:32:44 keil Exp $
+/* $Id: avm_fritz.c,v 1.20 2004/01/03 23:07:35 keil Exp $
  *
  * fritz_pci.c    low level stuff for AVM Fritz!PCI and ISA PnP isdn cards
  *              Thanks to AVM, Berlin for informations
@@ -28,7 +28,7 @@
 #define LOCK_STATISTIC
 #include "hw_lock.h"
 
-static const char *avm_fritz_rev = "$Revision: 1.19 $";
+static const char *avm_fritz_rev = "$Revision: 1.20 $";
 
 enum {
 	AVM_FRITZ_PCI,
@@ -1001,6 +1001,7 @@ release_card(fritzpnppci *card)
 	free_bchannel(&card->bch[1]);
 	free_bchannel(&card->bch[0]);
 	free_dchannel(&card->dch);
+	fritz.ctrl(card->dch.inst.up.peer, MGR_DISCONNECT | REQUEST, &card->dch.inst.up);
 	fritz.ctrl(&card->dch.inst, MGR_UNREGLAYER | REQUEST, NULL);
 	REMOVE_FROM_LISTBASE(card, ((fritzpnppci *)fritz.ilist));
 	unlock_dev(card);
