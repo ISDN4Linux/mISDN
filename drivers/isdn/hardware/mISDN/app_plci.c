@@ -1,4 +1,4 @@
-/* $Id: app_plci.c,v 1.5 2004/01/12 16:20:26 keil Exp $
+/* $Id: app_plci.c,v 1.6 2004/01/13 13:38:02 keil Exp $
  *
  */
 
@@ -304,6 +304,61 @@ Send2Application(AppPlci_t *aplci, _cmsg *cmsg)
 	SendCmsg2Application(aplci->appl, cmsg);
 }
 
+static void
+SendingDelayedMsg(AppPlci_t *aplci)
+{
+	struct sk_buff  *skb;
+
+	while((skb = skb_dequeue(&aplci->delayedq))) {
+		if (test_bit(APPL_STATE_RELEASE, &aplci->appl->state)) {
+			printk(KERN_WARNING "%s: Application allready released\n", __FUNCTION__);
+			dev_kfree_skb(skb);
+		} else {
+#ifdef OLDCAPI_DRIVER_INTERFACE
+			aplci->appl->contr->ctrl->handle_capimsg(aplci->appl->contr->ctrl, aplci->appl->ApplId, skb);
+#else
+			capi_ctr_handle_message(aplci->appl->contr->ctrl, aplci->appl->ApplId, skb);
+#endif
+		}
+	}
+	test_and_clear_bit(PLCI_STATE_SENDDELAYED, &aplci->plci->state);
+}
+
+static void
+Send2ApplicationDelayed(AppPlci_t *aplci, _cmsg *cmsg)
+{
+	struct sk_buff	*skb;
+	
+	if (test_bit(APPL_STATE_RELEASE, &aplci->appl->state)) {
+		printk(KERN_WARNING "%s: Application allready released\n", __FUNCTION__);
+		cmsg_free(cmsg);
+		return;
+	}
+	if (!(skb = alloc_skb(CAPI_MSG_DEFAULT_LEN, GFP_ATOMIC))) {
+		printk(KERN_WARNING "%s: no mem for %d bytes\n", __FUNCTION__, CAPI_MSG_DEFAULT_LEN);
+		int_error();
+		cmsg_free(cmsg);
+		return;
+	}
+	capi_cmsg2message(cmsg, skb->data);
+	AppPlciDebug(aplci, CAPI_DBG_APPL_MSG, "%s: len(%d) applid(%x) %s msgnr(%d) addr(%08x)",
+		__FUNCTION__, CAPIMSG_LEN(skb->data), cmsg->ApplId, capi_cmd2str(cmsg->Command, cmsg->Subcommand),
+		cmsg->Messagenumber, cmsg->adr.adrController);
+	cmsg_free(cmsg);
+	if (CAPI_MSG_DEFAULT_LEN < CAPIMSG_LEN(skb->data)) {
+		printk(KERN_ERR "%s: CAPI_MSG_DEFAULT_LEN overrun (%d/%d)\n", __FUNCTION__,
+			CAPIMSG_LEN(skb->data), CAPI_MSG_DEFAULT_LEN);
+		int_error();
+		dev_kfree_skb(skb);
+		return;
+	}
+	skb_put(skb, CAPIMSG_LEN(skb->data));
+	skb_queue_tail(&aplci->delayedq, skb);
+	if (test_bit(PLCI_STATE_STACKREADY, &aplci->plci->state) &&
+		!test_and_set_bit(PLCI_STATE_SENDDELAYED, &aplci->plci->state))
+		SendingDelayedMsg(aplci);
+}
+
 static inline void
 AppPlciCmsgHeader(AppPlci_t *aplci, _cmsg *cmsg, __u8 cmd, __u8 subcmd)
 {
@@ -488,15 +543,10 @@ plci_connect_active_ind(struct FsmInst *fi, int event, void *arg)
 
 	FsmChangeState(fi, ST_PLCI_P_ACT);
 	AppPlciLinkUp(aplci);
-	if (test_bit(PLCI_STATE_STACKREADY, &aplci->plci->state)) {
+	if (test_bit(PLCI_STATE_STACKREADY, &aplci->plci->state))
 		Send2Application(aplci, arg);
-	} else {
-		if (aplci->pending) {
-			int_errtxt("overwrite pending cmsg");
-			cmsg_free(aplci->pending);
-		}
-		aplci->pending = arg;
-	}
+	else
+		Send2ApplicationDelayed(aplci, arg);
 }
 
 static void plci_connect_active_resp(struct FsmInst *fi, int event, void *arg)
@@ -554,15 +604,10 @@ static void plci_resume_conf(struct FsmInst *fi, int event, void *arg)
 
 	FsmChangeState(fi, ST_PLCI_P_ACT);
 	AppPlciLinkUp(aplci);
-	if (test_bit(PLCI_STATE_STACKREADY, &aplci->plci->state)) {
+	if (test_bit(PLCI_STATE_STACKREADY, &aplci->plci->state))
 		Send2Application(aplci, arg);
-	} else {
-		if (aplci->pending) {
-			int_errtxt("overwrite pending cmsg");
-			cmsg_free(aplci->pending);
-		}
-		aplci->pending = arg;
-	}
+	else
+		Send2ApplicationDelayed(aplci, arg);
 }
 
 static void
@@ -949,15 +994,10 @@ plci_select_b_protocol_req(struct FsmInst *fi, int event, void *arg)
 answer:
 	capi_cmsg_answer(cmsg);
 	cmsg->Info = Info;
-	if (test_bit(PLCI_STATE_STACKREADY, &aplci->plci->state)) {
+	if (test_bit(PLCI_STATE_STACKREADY, &aplci->plci->state))
 		Send2Application(aplci, arg);
-	} else {
-		if (aplci->pending) {
-			int_errtxt("overwrite pending cmsg");
-			cmsg_free(aplci->pending);
-		}
-		aplci->pending = cmsg;
-	}
+	else
+		Send2ApplicationDelayed(aplci, arg);
 }
 
 static void
@@ -1104,6 +1144,7 @@ AppPlciConstr(AppPlci_t **aplci, Application_t *appl, Plci_t *plci)
 	apl->plci_m.userdata   = apl;
 	apl->plci_m.printdebug = AppPlci_debug;
 	apl->channel = -1;
+	skb_queue_head_init(&apl->delayedq);
 	*aplci = apl;
 	return(0);
 }
@@ -1131,10 +1172,7 @@ void AppPlciDestr(AppPlci_t *aplci)
 	}
 	if (aplci->appl)
 		ApplicationDelAppPlci(aplci->appl, aplci);
-	if (aplci->pending) {
-		cmsg_free(aplci->pending);
-		aplci->pending = NULL;
-	}
+	skb_queue_purge(&aplci->delayedq);
 	AppPlci_free(aplci);
 }
 
@@ -1251,11 +1289,8 @@ ReleaseLink(AppPlci_t *aplci)
 		if (retval)
 			int_error();
 		aplci->link = NULL;
+		skb_queue_purge(&aplci->delayedq);
 		test_and_clear_bit(PLCI_STATE_STACKREADY, &aplci->plci->state);
-		if (aplci->pending) {
-			cmsg_free(aplci->pending);
-			aplci->pending = NULL;
-		}
 	}
 	return(retval);
 }
@@ -1406,11 +1441,12 @@ AppPlciSetIF(AppPlci_t *aplci, u_int prim, void *arg)
 		ret = SetIF(&aplci->link->inst, arg, prim, NULL, PL_l3l4mux, aplci);
 	if (ret)
 		return(ret);
-	test_and_set_bit(PLCI_STATE_STACKREADY, &aplci->plci->state);
-	if (aplci->pending) {
-		Send2Application(aplci, aplci->pending);
-		aplci->pending = NULL;
-	}
+	
+	if (!test_and_set_bit(PLCI_STATE_SENDDELAYED, &aplci->plci->state)) {
+		test_and_set_bit(PLCI_STATE_STACKREADY, &aplci->plci->state);
+		SendingDelayedMsg(aplci);
+	} else
+		test_and_set_bit(PLCI_STATE_STACKREADY, &aplci->plci->state);
 	return(0);
 }
 
@@ -1792,11 +1828,7 @@ AppPlciInfoIndIE(AppPlci_t *aplci, unsigned char ie, __u32 mask, Q931_info_t *qi
 		if (iep[0] == 0x02 && iep[2] == 0x88) { // in-band information available
 			AppPlciLinkUp(aplci);
 			if (!test_bit(PLCI_STATE_STACKREADY, &aplci->plci->state)) {
-				if (aplci->pending) {
-					int_errtxt("overwrite pending cmsg");
-					cmsg_free(aplci->pending);
-				}
-				aplci->pending = cmsg;
+				Send2ApplicationDelayed(aplci,cmsg);
 				return;
 			}
 		}
