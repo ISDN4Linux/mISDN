@@ -1,4 +1,4 @@
-/* $Id: core.c,v 1.5 2003/06/27 16:19:43 kkeil Exp $
+/* $Id: core.c,v 1.6 2003/06/30 11:23:33 kkeil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -38,18 +38,16 @@ EXPORT_SYMBOL(HiSax_unregister);
 typedef struct _hisax_thread {
 	/* thread */
 	struct task_struct	*thread;
-	wait_queue_head_t	wq;
+	wait_queue_head_t	waitq;
 	struct semaphore	*notify;
 	u_int			Flags;
-	void			*data1;
-	void			*data2;
+	struct sk_buff_head	workq;
 } hisax_thread_t;
 
 #define	HISAX_TFLAGS_STARTED	1
 #define HISAX_TFLAGS_RMMOD	2
 #define HISAX_TFLAGS_ACTIV	3
 #define HISAX_TFLAGS_TEST	4
-#define HISAX_TFLAGS_SETSTACK	5
 
 static hisax_thread_t	hisax_thread;
 
@@ -71,7 +69,6 @@ static int
 hisaxd(void *data)
 {
 	hisax_thread_t	*hkt = data;
-	int		err;
 
 #ifdef CONFIG_SMP
 	lock_kernel();
@@ -86,22 +83,44 @@ hisaxd(void *data)
 	printk(KERN_DEBUG "hisaxd: daemon started\n");
 
 	test_and_set_bit(HISAX_TFLAGS_STARTED, &hkt->Flags);
-	if (hkt->notify != NULL)
-		up(hkt->notify);
 
 	for (;;) {
+		int		err;
+		struct sk_buff	*skb;
+		hisax_headext_t	*hhe;
+
 		if (test_and_clear_bit(HISAX_TFLAGS_RMMOD, &hkt->Flags))
 			break;
-		interruptible_sleep_on(&hkt->wq);
+		if (hkt->notify != NULL)
+			up(hkt->notify);
+		interruptible_sleep_on(&hkt->waitq);
 		if (test_and_clear_bit(HISAX_TFLAGS_RMMOD, &hkt->Flags))
 			break;
-		if (test_and_clear_bit(HISAX_TFLAGS_SETSTACK, &hkt->Flags)) {
-			printk(KERN_DEBUG "hisaxd: SETSTACK\n");
-			err = set_stack(hkt->data1, hkt->data2);
-			kfree(hkt->data2);
-			hkt->data2 = NULL;
-			hkt->data1 = NULL;
-			printk(KERN_DEBUG "hisaxd: SETSTACK return(%d)\n", err);
+		while ((skb = skb_dequeue(&hkt->workq))) {
+			test_and_set_bit(HISAX_TFLAGS_ACTIV, &hkt->Flags);
+			err = -EINVAL;
+			hhe=HISAX_HEADEXT_P(skb);
+			switch (hhe->what) {
+				case MGR_FUNCTION:
+					err=hhe->func.ctrl(hhe->data[0], hhe->prim, skb->data);
+					if (err) {
+						printk(KERN_WARNING "hisaxd: what(%x) prim(%x) failed err(%x)\n",
+							hhe->what, hhe->prim, err);
+					} else {
+						printk(KERN_DEBUG "hisaxd: what(%x) prim(%x) success\n",
+							hhe->what, hhe->prim);
+						err--; /* to free skb */
+					}
+					break;
+				default:
+					int_error();
+					printk(KERN_WARNING "hisaxd: what(%x) prim(%x) unknown\n",
+						hhe->what, hhe->prim);
+					break;
+			}
+			if (err)
+				kfree_skb(skb);
+			test_and_clear_bit(HISAX_TFLAGS_ACTIV, &hkt->Flags);
 		}
 		if (test_and_clear_bit(HISAX_TFLAGS_TEST, &hkt->Flags))
 			printk(KERN_DEBUG "hisaxd: test event done\n");
@@ -110,12 +129,7 @@ hisaxd(void *data)
 	printk(KERN_DEBUG "hisaxd: daemon exit now\n");
 	test_and_clear_bit(HISAX_TFLAGS_STARTED, &hkt->Flags);
 	test_and_clear_bit(HISAX_TFLAGS_ACTIV, &hkt->Flags);
-	if (test_and_clear_bit(HISAX_TFLAGS_SETSTACK, &hkt->Flags)) {
-		if (hkt->data2)
-			kfree(hkt->data2);
-		hkt->data2 = NULL;
-		hkt->data1 = NULL;
-	}
+	discard_queue(&hkt->workq);
 	hkt->thread = NULL;
 	if (hkt->notify != NULL)
 		up(hkt->notify);
@@ -393,24 +407,23 @@ static int central_manager(void *data, u_int prim, void *arg) {
 	    case MGR_SETSTACK | REQUEST:
 	    	/* can sleep in case of module reload */
 	    	if (in_interrupt()) {
-	    		if (!test_and_set_bit(HISAX_TFLAGS_SETSTACK, &hisax_thread.Flags)) {
-	    			hisax_thread.data1 = st;
-	    			hisax_thread.data2 = kmalloc(sizeof(hisax_pid_t), GFP_ATOMIC);
-	    			if (!hisax_thread.data2) {
-	    				test_and_clear_bit(HISAX_TFLAGS_SETSTACK, &hisax_thread.Flags);
-	    				printk(KERN_WARNING "MGR_SETSTACK REQUEST no kmem\n");
-	    				return(-ENOMEM);
-	    			}
-	    			memcpy(hisax_thread.data2, arg, sizeof(hisax_pid_t));
-	    			wake_up_interruptible(&hisax_thread.wq);
-	    			return(0);
-	    		} else {
-	    			printk(KERN_WARNING "MGR_SETSTACK REQUEST: cannot submit to hisaxd\n");
-	    			int_error();
-	    			return(-EBUSY);
-	    		}
+			struct sk_buff	*skb;
+			hisax_headext_t	*hhe;
+
+			skb = alloc_skb(sizeof(hisax_pid_t), GFP_ATOMIC);
+			hhe = HISAX_HEADEXT_P(skb);
+			hhe->prim = prim;
+			hhe->what = MGR_FUNCTION;
+			hhe->data[0] = st;
+			/* FIXME: handling of optional pid parameters */
+			memcpy(skb_put(skb, sizeof(hisax_pid_t)), arg, sizeof(hisax_pid_t));
+			hhe->func.ctrl = central_manager;
+			skb_queue_tail(&hisax_thread.workq, skb);
+	    		wake_up_interruptible(&hisax_thread.waitq);
+	    		return(0);
 	    	} else
 			return(set_stack(st, arg));
+		break;
 	    case MGR_CLEARSTACK | REQUEST:
 		return(clear_stack(st));
 	    case MGR_DELSTACK | REQUEST:
@@ -487,13 +500,14 @@ HiSaxInit(void)
 	err = init_hisaxdev(debug);
 	if (err)
 		return(err);
-	init_waitqueue_head(&hisax_thread.wq);
+	init_waitqueue_head(&hisax_thread.waitq);
+	skb_queue_head_init(&hisax_thread.workq);
 	hisax_thread.notify = &sem;
 	kernel_thread(hisaxd, (void *)&hisax_thread, 0);
 	down(&sem);
 	hisax_thread.notify = NULL;
 	test_and_set_bit(HISAX_TFLAGS_TEST, &hisax_thread.Flags);
-	wake_up_interruptible(&hisax_thread.wq);
+	wake_up_interruptible(&hisax_thread.waitq);
 	return(err);
 }
 
@@ -506,7 +520,7 @@ void cleanup_module(void) {
 		/* abort hisaxd kernel thread */
 		hisax_thread.notify = &sem;
 		test_and_set_bit(HISAX_TFLAGS_RMMOD, &hisax_thread.Flags);
-		wake_up_interruptible(&hisax_thread.wq);
+		wake_up_interruptible(&hisax_thread.waitq);
 		down(&sem);
 		hisax_thread.notify = NULL;
 	}

@@ -1,4 +1,4 @@
-/* $Id: mISDNif.h,v 1.7 2003/06/27 15:19:42 kkeil Exp $
+/* $Id: mISDNif.h,v 1.8 2003/06/30 11:23:33 kkeil Exp $
  *
  */
 
@@ -27,6 +27,7 @@
 #define SUB_ERROR	0xff
 
 /* management */
+#define MGR_FUNCTION	0x0f0000
 #define MGR_GETOBJECT	0x0f0100
 #define MGR_NEWOBJECT	0x0f0200
 #define MGR_DELOBJECT	0x0f0300
@@ -581,12 +582,32 @@ typedef struct _FACILITY {
 #include <linux/isdn_compat.h>
 #include <linux/skbuff.h>
 
+typedef struct _hisaxif hisaxif_t;
+typedef int	(ctrl_func_t)(void *, u_int, void *);
+typedef int	(if_func_t)(struct _hisaxif *, struct sk_buff *);
+typedef int	(lock_func_t)(void *, int);
+typedef void	(unlock_func_t)(void *);
+
 typedef struct _hisax_head {
 	u_int	prim;
 	int	dinfo;
 } hisax_head_t;
 
 #define HISAX_HEAD_P(s)	((hisax_head_t *)&s->cb[0])
+
+typedef struct _hisax_headext {
+	u_int	prim;
+	int	dinfo;
+	u_int	what;
+	void	*data[4];
+	union {
+		ctrl_func_t	*ctrl;
+		if_func_t	*iff;
+		void		*func;
+	} func;
+} hisax_headext_t;
+
+#define HISAX_HEADEXT_P(s) ((hisax_headext_t *)&s->cb[0])
 
 typedef struct _hisaxobject {
 	struct _hisaxobject	*prev;
@@ -596,13 +617,13 @@ typedef struct _hisaxobject {
 	int			refcnt;
 	hisax_pid_t		DPROTO;
 	hisax_pid_t		BPROTO;
-	int			(*own_ctrl)(void *, u_int, void *);
-	int			(*ctrl)(void *, u_int, void *);
+	ctrl_func_t		*own_ctrl;
+	ctrl_func_t		*ctrl;
 	void			*ilist;
 	struct module		*owner;
 } hisaxobject_t;
 
-typedef struct _hisaxif {
+struct _hisaxif {
 	struct _hisaxif		*prev;
 	struct _hisaxif		*next;
 	int			extentions;
@@ -610,9 +631,9 @@ typedef struct _hisaxif {
 	struct _hisaxstack	*st;
 	struct _hisaxinstance	*owner;
 	struct _hisaxinstance	*peer;
-	int			(*func)(struct _hisaxif *, struct sk_buff *);
+	if_func_t		*func;
 	void			*fdata;
-} hisaxif_t;
+};
 
 typedef struct _hisaxinstance {
 	struct _hisaxinstance	*prev;
@@ -626,8 +647,8 @@ typedef struct _hisaxinstance {
 	void			*data;
 	hisaxif_t		up;
 	hisaxif_t		down;
-	int			(*lock)(void *, int);
-	void			(*unlock)(void *);
+	lock_func_t		*lock;
+	unlock_func_t		*unlock;
 } hisaxinstance_t;
 
 typedef struct _hisaxlayer {
