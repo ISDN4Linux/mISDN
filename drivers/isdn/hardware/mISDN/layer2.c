@@ -1,4 +1,4 @@
-/* $Id: layer2.c,v 1.12 2003/09/06 17:11:42 keil Exp $
+/* $Id: layer2.c,v 1.13 2003/11/09 16:02:36 keil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -12,7 +12,7 @@
 #include "helper.h"
 #include "debug.h"
 
-static char *l2_revision = "$Revision: 1.12 $";
+static char *l2_revision = "$Revision: 1.13 $";
 
 static void l2m_debug(struct FsmInst *fi, char *fmt, ...);
 
@@ -189,6 +189,7 @@ ph_data_confirm(mISDNif_t *up, mISDN_head_t *hh, struct sk_buff *skb) {
 	int ret = -EAGAIN;
 
 	if (test_bit(FLG_L1_BUSY, &l2->flag)) {
+#warning  at the moment it is save to use the skb address as reference TODO: change it to dinfo
 		if (skb == l2->down_skb) {
 			if ((nskb = skb_dequeue(&l2->down_queue))) {
 				l2->down_skb = nskb;
@@ -1074,7 +1075,10 @@ invoke_retransmission(layer2_t *l2, unsigned int nr)
 				p1 = (l2->vs - l2->va) % 8;
 			}
 			p1 = (p1 + l2->sow) % l2->window;
-			skb_queue_head(&l2->i_queue, l2->windowar[p1]);
+			if (l2->windowar[p1])
+				skb_queue_head(&l2->i_queue, l2->windowar[p1]);
+			else
+				printk(KERN_WARNING "%s: windowar[%d] is NULL\n", __FUNCTION__, p1);
 			l2->windowar[p1] = NULL;
 		}
 		spin_unlock_irqrestore(&l2->lock, flags);
@@ -1852,7 +1856,7 @@ l2from_down(mISDNif_t *hif, struct sk_buff *askb)
 		return(-EINVAL);
 	l2 = hif->fdata;
 	hh = mISDN_HEAD_P(askb);
-	printk(KERN_DEBUG "%s: prim(%x)\n", __FUNCTION__, hh->prim);
+//	printk(KERN_DEBUG "%s: prim(%x)\n", __FUNCTION__, hh->prim);
 	if (!l2) {
 		if (hif->next && hif->next->func)
 			ret = hif->next->func(hif->next, askb);
@@ -1936,7 +1940,7 @@ l2from_up(mISDNif_t *hif, struct sk_buff *skb) {
 		return(ret);
 	l2 = hif->fdata;
 	hh = mISDN_HEAD_P(skb);
-	printk(KERN_DEBUG "%s: prim(%x)\n", __FUNCTION__, hh->prim);
+//	printk(KERN_DEBUG "%s: prim(%x)\n", __FUNCTION__, hh->prim);
 	if (!l2)
 		return(ret);
 	switch (hh->prim) {
@@ -2167,6 +2171,7 @@ new_l2(mISDNstack_t *st, mISDN_pid_t *pid, layer2_t **newl2) {
 	InitWin(nl2);
 	nl2->l2m.fsm = &l2fsm;
 	if (test_bit(FLG_LAPB, &nl2->flag) ||
+		test_bit(FLG_PTP, &nl2->flag) ||
 		test_bit(FLG_LAPD_NET, &nl2->flag))
 		nl2->l2m.state = ST_L2_4;
 	else
