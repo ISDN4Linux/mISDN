@@ -1,4 +1,4 @@
-/* $Id: hfc_pci.c,v 1.15 2002/09/16 23:49:38 kkeil Exp $
+/* $Id: hfc_pci.c,v 1.16 2002/09/17 12:17:21 kkeil Exp $
 
  * hfc_pci.c     low level driver for CCD's hfc-pci based cards
  *
@@ -42,7 +42,7 @@
 
 extern const char *CardType[];
 
-static const char *hfcpci_revision = "$Revision: 1.15 $";
+static const char *hfcpci_revision = "$Revision: 1.16 $";
 
 /* table entry in the PCI devices list */
 typedef struct {
@@ -219,7 +219,7 @@ release_io_hfcpci(hfc_pci_t *hc)
 	del_timer(&hc->hw.timer);
 	kfree(hc->hw.share_start);
 	hc->hw.share_start = NULL;
-	vfree(hc->hw.pci_io);
+	iounmap((void *)hc->hw.pci_io);
 }
 
 
