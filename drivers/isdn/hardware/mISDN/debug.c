@@ -1,4 +1,4 @@
-/* $Id: debug.c,v 1.3 2004/01/27 01:50:20 keil Exp $
+/* $Id: debug.c,v 1.4 2004/01/28 09:40:04 keil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -60,7 +60,8 @@ mISDN_getrev(const char *revision)
 	if ((p = strchr(revision, ':'))) {
 		rev = p + 2;
 		p = strchr(rev, '$');
-		*--p = 0;
+		if (p)
+			*--p = 0;
 	} else
 		rev = "???";
 	return rev;
