@@ -1,4 +1,4 @@
-/* $Id: udevice.c,v 1.13 2004/06/30 15:13:18 keil Exp $
+/* $Id: udevice.c,v 1.14 2004/07/08 00:49:48 keil Exp $
  *
  * Copyright 2000  by Karsten Keil <kkeil@isdn4linux.de>
  *
@@ -1488,7 +1488,7 @@ do_mISDN_read(struct file *file, char *buf, size_t count, loff_t * off)
 		return(-ESPIPE);
 	if (!access_ok(VERIFY_WRITE, buf, count))
 		return(-EFAULT);
-	if ((dev->minor == 0) && (count < IFRAME_HEAD_SIZE)) {
+	if ((dev->minor == 0) && (count < mISDN_HEADER_LEN)) {
 		printk(KERN_WARNING "mISDN_read: count(%d) too small\n", count);
 		return(-ENOSPC);
 	}
@@ -1508,12 +1508,12 @@ do_mISDN_read(struct file *file, char *buf, size_t count, loff_t * off)
 	len = 0;
 	while ((skb = skb_dequeue(&dev->rport.queue))) {
 		if (dev->minor == mISDN_CORE_DEVICE) {
-			if ((skb->len + IFRAME_HEAD_SIZE) > (count - len))
+			if ((skb->len + mISDN_HEADER_LEN) > (count - len))
 				goto nospace;
-			if (copy_to_user(buf, skb->cb, IFRAME_HEAD_SIZE))
+			if (copy_to_user(buf, skb->cb, mISDN_HEADER_LEN))
 				goto efault;
-			len += IFRAME_HEAD_SIZE;
-			buf += IFRAME_HEAD_SIZE;
+			len += mISDN_HEADER_LEN;
+			buf += mISDN_HEADER_LEN;
 		} else {
 			if (skb->len > (count - len)) {
 			    nospace:
@@ -1583,7 +1583,7 @@ do_mISDN_write(struct file *file, const char *buf, size_t count, loff_t * off)
 	if (!access_ok(VERIFY_WRITE, buf, count))
 		return(-EFAULT);
 	if (dev->minor == 0) {
-		if (count < IFRAME_HEAD_SIZE)
+		if (count < mISDN_HEADER_LEN)
 			return(-EINVAL);
 	}
 	spin_lock_irqsave(&dev->wport.lock, flags);
@@ -1598,8 +1598,8 @@ do_mISDN_write(struct file *file, const char *buf, size_t count, loff_t * off)
 	}
 	if (dev->minor == mISDN_CORE_DEVICE) {
 		len = count;
-		while (len >= IFRAME_HEAD_SIZE) {
-			if (copy_from_user(&head.addr, buf, IFRAME_HEAD_SIZE)) {
+		while (len >= mISDN_HEADER_LEN) {
+			if (copy_from_user(&head.addr, buf, mISDN_HEADER_LEN)) {
 				spin_unlock_irqrestore(&dev->rport.lock, flags);
 				return(-EFAULT);
 			}
@@ -1610,9 +1610,9 @@ do_mISDN_write(struct file *file, const char *buf, size_t count, loff_t * off)
 				skb = alloc_stack_skb(PORT_SKB_MINIMUM, PORT_SKB_RESERVE);
 			if (!skb)
 				break;
-			memcpy(skb->cb, &head.addr, IFRAME_HEAD_SIZE);
-			len -= IFRAME_HEAD_SIZE;
-			buf += IFRAME_HEAD_SIZE;
+			memcpy(skb->cb, &head.addr, mISDN_HEADER_LEN);
+			len -= mISDN_HEADER_LEN;
+			buf += mISDN_HEADER_LEN;
 			if (head.len > 0) {
 				if (head.len > len) {
 					/* since header is complete we can handle this later */
