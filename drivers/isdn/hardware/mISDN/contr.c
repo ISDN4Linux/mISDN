@@ -1,4 +1,4 @@
-/* $Id: contr.c,v 1.6 2003/07/18 16:36:03 kkeil Exp $
+/* $Id: contr.c,v 1.7 2003/07/21 11:13:02 kkeil Exp $
  *
  */
 
@@ -169,7 +169,7 @@ void contrReleaseAppl(Contr_t *contr, __u16 ApplId)
 { 
 	Appl_t *appl;
 
-	printk(KERN_DEBUG "%s %x\n", __FUNCTION__, ApplId);
+	contrDebug(contr, CAPI_DBG_APPL, "%s: ApplId(%x)", __FUNCTION__, ApplId);
 	appl = contrId2appl(contr, ApplId);
 	if (!appl) {
 		int_error();
@@ -294,7 +294,7 @@ void contrDelPlci(Contr_t *contr, Plci_t *plci)
 {
 	int i = plci->adrPLCI >> 8;
 
-	contrDebug(contr, LL_DEB_INFO, "%s: PLCI(%x)", __FUNCTION__, plci->adrPLCI);
+	contrDebug(contr, CAPI_DBG_PLCI, "%s: PLCI(%x)", __FUNCTION__, plci->adrPLCI);
 	if ((i < 1) || (i > CAPI_MAXPLCI)) {
 		int_error();
 		return;
@@ -349,7 +349,7 @@ contrL3L4(hisaxif_t *hif, struct sk_buff *skb)
 		ret = contrDummyInd(contr, hh->prim, skb);
 	} else {
 		if (!(plci = contrGetPLCI4addr(contr, hh->dinfo))) {
-			contrDebug(contr, LL_DEB_WARN, "%s: unknown plci prim(%x) id(%x)",
+			contrDebug(contr, CAPI_DBG_WARN, "%s: unknown plci prim(%x) id(%x)",
 				__FUNCTION__, hh->prim, hh->dinfo);
 			return(-ENODEV);
 		}
@@ -365,7 +365,7 @@ int contrL4L3(Contr_t *contr, u_int prim, int dinfo, struct sk_buff *skb)
 
 void contrPutStatus(Contr_t *contr, char *msg)
 {
-	printk(KERN_DEBUG "HiSax: %s", msg);
+	contrDebug(contr, CAPI_DBG_CONTR, "%s: %s", __FUNCTION__, msg);
 }
 
 Contr_t *newContr(hisaxobject_t *ocapi, hisaxstack_t *st, hisax_pid_t *pid)
@@ -423,7 +423,7 @@ BInst_t *contrSelChannel(Contr_t *contr, u_int channel)
 	ret = contr->inst.obj->ctrl(contr->inst.st, MGR_SELCHANNEL | REQUEST,
 		&ci);
 	if (ret) {
-		int_errtxt("ret(%d)", ret);
+		int_errtxt("MGR_SELCHANNEL ret(%d)", ret);
 		return(NULL);
 	}
 	cst = ci.st.p;

@@ -1,4 +1,4 @@
-/* $Id: ncci.c,v 1.6 2003/06/27 15:19:42 kkeil Exp $
+/* $Id: ncci.c,v 1.7 2003/07/21 11:13:02 kkeil Exp $
  *
  */
 
@@ -94,6 +94,8 @@ static void ncci_debug(struct FsmInst *fi, char *fmt, ...)
 	va_list args;
 	Ncci_t *ncci = fi->userdata;
 	
+	if (!ncci->ncci_m.debug)
+		return;
 	va_start(args, fmt);
 	p += sprintf(p, "NCCI 0x%x: ", ncci->adrNCCI);
 	p += vsprintf(p, fmt, args);
@@ -125,7 +127,7 @@ static void ncci_connect_b3_req(struct FsmInst *fi, int event, void *arg)
 
 	FsmEvent(fi, EV_NCCI_CONNECT_B3_CONF, cmsg);
 	ncciRecvCmsg(ncci, cmsg);
-	printk(KERN_DEBUG "ncci_connect_b3_req NCCI %x cmsg->Info(%x)\n",
+	ncci_debug(fi, "ncci_connect_b3_req NCCI %x cmsg->Info(%x)\n",
 		ncci->adrNCCI, cmsg->Info);
 	if (cmsg->Info < 0x1000) 
 		ncciL4L3(ncci, DL_ESTABLISH | REQUEST, 0, 0, NULL, NULL);
@@ -200,7 +202,7 @@ static void ncci_facility_req(struct FsmInst *fi, int event, void *arg)
 		cmsg->Info = CapiIllMessageParmCoding;
 	} else if (p && p[0]) {
 		func = CAPIMSG_U16(p, 1);
-		printk(KERN_DEBUG "ncci_facility_req: p %02x %02x %02x func(%x)\n",
+		ncci_debug(fi, "ncci_facility_req: p %02x %02x %02x func(%x)\n",
 			p[0], p[1], p[2], func);
 		switch (func) {
 			case 1:
@@ -349,7 +351,7 @@ void ncciConstr(Ncci_t *ncci, Cplci_t *cplci)
 
 	ncci->ncci_m.fsm        = &ncci_fsm;
 	ncci->ncci_m.state      = ST_NCCI_N_0;
-	ncci->ncci_m.debug      = 1;
+	ncci->ncci_m.debug      = cplci->plci->contr->debug & CAPI_DBG_NCCI_STATE;
 	ncci->ncci_m.userdata   = ncci;
 	ncci->ncci_m.printdebug = ncci_debug;
 
@@ -403,10 +405,10 @@ void ncciInitSt(Ncci_t *ncci)
 	}
 	pid.protocol[3] = (1 << cplci->Bprotocol.B3protocol) |
 		ISDN_PID_LAYER(3) | ISDN_PID_BCHANNEL_BIT;
-	printk(KERN_DEBUG "ncciInitSt B1(%x) B2(%x) B3(%x) global(%d) ch(%x)\n",
+	capidebug(CAPI_DBG_NCCI, "ncciInitSt B1(%x) B2(%x) B3(%x) global(%d) ch(%x)\n",
    		pid.protocol[1], pid.protocol[2], pid.protocol[3], pid.global, 
 		cplci->bchannel);
-	printk(KERN_DEBUG "ncciInitSt ch(%d) cplci->contr->binst(%p)\n",
+	capidebug(CAPI_DBG_NCCI, "ncciInitSt ch(%d) cplci->contr->binst(%p)\n",
 		cplci->bchannel & 3, cplci->contr->binst);
 	pid.protocol[4] = ISDN_PID_L4_B_CAPI20;
 	ncci->binst = contrSelChannel(cplci->contr, cplci->bchannel);
@@ -414,7 +416,7 @@ void ncciInitSt(Ncci_t *ncci)
 		int_error();
 		return;
 	}
-	printk(KERN_DEBUG "ncciInitSt ncci->binst(%p)\n", ncci->binst);
+	capidebug(CAPI_DBG_NCCI, "ncciInitSt ncci->binst(%p)\n", ncci->binst);
 	memset(&ncci->binst->inst.pid, 0, sizeof(hisax_pid_t));
 	ncci->binst->inst.data = ncci;
 	ncci->binst->inst.pid.layermask = ISDN_LAYER(4);
@@ -479,7 +481,7 @@ void ncciDestr(Ncci_t *ncci)
 {
 	int i;
 
-	printk(KERN_DEBUG "ncciDestr NCCI %x\n", ncci->adrNCCI);
+	capidebug(CAPI_DBG_NCCI, "ncciDestr NCCI %x\n", ncci->adrNCCI);
 	if (ncci->binst)
 		ncciReleaseSt(ncci);
 	if (ncci->appl)
@@ -505,14 +507,14 @@ void ncciDataInd(Ncci_t *ncci, int pr, struct sk_buff *skb)
 
 	if (i == CAPI_MAXDATAWINDOW) {
 		// FIXME: trigger flow control if supported by L2 protocol
-		printk(KERN_INFO "HiSax: frame dropped\n");
+		printk(KERN_DEBUG "%s: frame %d dropped\n", __FUNCTION__, skb->len);
 		dev_kfree_skb(skb);
 		return;
 	}
 
 	if (skb_headroom(skb) < 22) {
-		printk(KERN_DEBUG "HiSax: only %d bytes headroom, need %d\n",
-		       skb_headroom(skb), 22);
+		capidebug(CAPI_DBG_NCCI_L3, "%s: only %d bytes headroom, need %d\n",
+			__FUNCTION__, skb_headroom(skb), 22);
 		nskb = skb_realloc_headroom(skb, 22);
 		dev_kfree_skb(skb);
 		if (!nskb) {
@@ -645,10 +647,10 @@ void ncciSendMessage(Ncci_t *ncci, struct sk_buff *skb)
 					CapiMessageNotSupportedInCurrentState);
 				dev_kfree_skb(skb);
 			}
-			goto out;
+			return;
 		case CAPI_DATA_B3_RESP:
 			ncciDataResp(ncci, skb);
-			goto out;
+			return;
 	}
 
 	capi_message2cmsg(&ncci->tmpmsg, skb->data);
@@ -688,7 +690,6 @@ void ncciSendMessage(Ncci_t *ncci, struct sk_buff *skb)
 		}
 	}
 	dev_kfree_skb(skb);
- out:
 }
 
 
@@ -732,7 +733,7 @@ int ncci_l3l4(hisaxif_t *hif, struct sk_buff *skb)
 			cplci_l3l4(ncci->cplci, hh->prim, skb->data);
 			break;
 		default:
-			printk(KERN_DEBUG "%s: unknown prim(%x) dinfo(%x) len(%d) skb(%p)\n",
+			capidebug(CAPI_DBG_WARN, "%s: unknown prim(%x) dinfo(%x) len(%d) skb(%p)\n",
 				__FUNCTION__, hh->prim, hh->dinfo, skb->len, skb);
 			int_error();
 			return(-EINVAL);
@@ -744,7 +745,7 @@ int ncci_l3l4(hisaxif_t *hif, struct sk_buff *skb)
 static int ncciL4L3(Ncci_t *ncci, u_int prim, int dtyp, int len, void *arg,
 			struct sk_buff *skb)
 {
-	printk(KERN_DEBUG "%s: NCCI %x prim(%x)\n",
+	capidebug(CAPI_DBG_NCCI_L3, "%s: NCCI %x prim(%x)\n",
 		__FUNCTION__, ncci->adrNCCI, prim);
 	if (skb)
 		return(if_newhead(&ncci->binst->inst.down, prim, dtyp, skb));

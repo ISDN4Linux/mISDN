@@ -1,4 +1,4 @@
-/* $Id: i4l_mISDN.c,v 1.1 2003/07/18 16:36:57 kkeil Exp $
+/* $Id: i4l_mISDN.c,v 1.2 2003/07/21 11:13:02 kkeil Exp $
  *
  * interface for old I4L hardware drivers to the CAPI driver
  *
@@ -21,7 +21,7 @@
 #include "dss1.h"
 #include "debug.h"
 
-const char *i4lcapi_revision = "$Revision: 1.1 $";
+static char *i4lcapi_revision = "$Revision: 1.2 $";
 
 /* data struct */
 typedef struct _i4l_channel	i4l_channel_t;
@@ -994,8 +994,7 @@ Dchannel_i4l(hisaxif_t *hif, struct sk_buff *skb)
 		ch = NULL;
 	if ((CC_NEW_CR | REQUEST) == hh->prim) {
 		if (ch) {
-			printk(KERN_WARNING "%s: ch%x in use\n",
-				__FUNCTION__, ch->nr);
+			printk(KERN_WARNING "%s: ch%x in use\n", __FUNCTION__, ch->nr);
 			ret = -EBUSY;
 		} else {
 			ch = ic->ch;
@@ -1038,8 +1037,9 @@ Dchannel_i4l(hisaxif_t *hif, struct sk_buff *skb)
 			ret = FsmEvent(&ch->i4lm, EV_CAPI_RELEASE, skb);
 			break;
 		default:
-			printk(KERN_WARNING "%s: ch%x prim(%x) id(%x) not handled\n",
-				__FUNCTION__, ch->nr, hh->prim, hh->dinfo);
+			if (debug)
+				printk(KERN_DEBUG "%s: ch%x prim(%x) id(%x) not handled\n",
+					__FUNCTION__, ch->nr, hh->prim, hh->dinfo);
 			break;
 	}
 	return(ret);
@@ -1077,8 +1077,9 @@ Bchannel_i4l(hisaxif_t *hif, struct sk_buff *skb)
 			ret = sendqueued(ch);
 			break;
 		default:
-			printk(KERN_WARNING "%s: ch%x prim(%x) id(%x) not handled\n",
-				__FUNCTION__, ch->nr, hh->prim, hh->dinfo);
+			if (debug)
+				printk(KERN_DEBUG "%s: ch%x prim(%x) id(%x) not handled\n",
+					__FUNCTION__, ch->nr, hh->prim, hh->dinfo);
 			break;
 	}
 	return(ret);
@@ -1321,6 +1322,8 @@ I4Lcapi_manager(void *data, u_int prim, void *arg) {
 	if (debug & 0x100)
 		printk(KERN_DEBUG "%s: data:%p prim:%x arg:%p\n",
 			__FUNCTION__, data, prim, arg);
+	if (prim == (MGR_HASPROTOCOL | REQUEST))
+		return(HasProtocolP(&I4Lcapi, arg));
 	if (!data) {
 		printk(KERN_ERR "I4Lcapi_manager no data prim %x arg %p\n",
 			prim, arg);
@@ -1381,7 +1384,8 @@ I4Lcapi_manager(void *data, u_int prim, void *arg) {
 		}
 		break;
 	    default:
-		printk(KERN_WARNING "I4Lcapi_manager prim %x not handled\n", prim);
+		if (debug)
+			printk(KERN_DEBUG "I4Lcapi_manager prim %x not handled\n", prim);
 		return(-EINVAL);
 	}
 	return(0);
@@ -1529,6 +1533,7 @@ I4Lcapi_init(void)
 {
 	int err;
 
+	printk(KERN_INFO "I4L CAPI interface modul version %s\n", HiSax_getrev(i4lcapi_revision));
 	SET_MODULE_OWNER(&I4Lcapi);
 	I4Lcapi.name = I4L_capi_name;
 	I4Lcapi.own_ctrl = I4Lcapi_manager;

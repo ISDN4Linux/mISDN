@@ -1,4 +1,4 @@
-/* $Id: capi.h,v 1.3 2003/07/18 16:36:03 kkeil Exp $
+/* $Id: capi.h,v 1.4 2003/07/21 11:13:02 kkeil Exp $
  *
  */
 
@@ -22,10 +22,22 @@
 // ---------------------------------------------------------------------------
 // common stuff
 
-#define LL_DEB_INFO		0x0001
-#define LL_DEB_STATE		0x0002
-#define LL_DEB_BUFFERING	0x0004
-#define LL_DEB_WARN		0x0008
+#define CAPI_DBG_WARN		0x00000001
+#define CAPI_DBG_INFO		0x00000004
+#define CAPI_DBG_APPL		0x00000010
+#define CAPI_DBG_APPL_INFO	0x00000040
+#define CAPI_DBG_LISTEN		0x00000100
+#define CAPI_DBG_LISTEN_STATE	0x00000200
+#define CAPI_DBG_LISTEN_INFO	0x00000400
+#define CAPI_DBG_CONTR		0x00010000
+#define CAPI_DBG_PLCI		0x00100000
+#define CAPI_DBG_PLCI_STATE	0x00200000
+#define CAPI_DBG_PLCI_INFO	0x00400000
+#define CAPI_DBG_PLCI_L3	0x00800000
+#define CAPI_DBG_NCCI		0x01000000
+#define CAPI_DBG_NCCI_STATE	0x02000000
+#define CAPI_DBG_NCCI_INFO	0x04000000
+#define CAPI_DBG_NCCI_L3	0x08000000
 
 extern struct capi_driver_interface *cdrv_if;                  
 extern struct capi_driver hisax_driver;
@@ -157,6 +169,7 @@ typedef struct _Contr {
 	struct capi_ctr	*ctrl;
 	__u32		adrController;
 	int		b3_mode;
+	u_int		debug;
 	char		infobuf[128];
 	char		msgbuf[128];
 	struct _Plci	*plcis[CAPI_MAXPLCI];

@@ -1,4 +1,4 @@
-/* $Id: layer2.c,v 1.6 2003/07/18 16:36:03 kkeil Exp $
+/* $Id: layer2.c,v 1.7 2003/07/21 11:13:02 kkeil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -12,7 +12,7 @@
 #include "helper.h"
 #include "debug.h"
 
-const char *l2_revision = "$Revision: 1.6 $";
+static char *l2_revision = "$Revision: 1.7 $";
 
 static void l2m_debug(struct FsmInst *fi, char *fmt, ...);
 
@@ -2356,6 +2356,7 @@ int Isdnl2Init(void)
 {
 	int err;
 
+	printk(KERN_INFO "ISDN L2 driver version %s\n", HiSax_getrev(l2_revision));
 	SET_MODULE_OWNER(&isdnl2);
 	isdnl2.name = MName;
 	isdnl2.DPROTO.protocol[2] = ISDN_PID_L2_LAPD |

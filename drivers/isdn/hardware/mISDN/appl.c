@@ -1,4 +1,4 @@
-/* $Id: appl.c,v 1.1 2003/06/27 15:19:42 kkeil Exp $
+/* $Id: appl.c,v 1.2 2003/07/21 11:13:02 kkeil Exp $
  *
  */
 
@@ -119,7 +119,7 @@ void applSendMessage(Appl_t *appl, struct sk_buff *skb)
 	case CAPI_INFO_RESP:
 		goto free;
 	default:
-		applDebug(appl, LL_DEB_WARN, "applSendMessage: %#x %#x not handled!", 
+		applDebug(appl, CAPI_DBG_WARN, "applSendMessage: %#x %#x not handled!", 
 			  CAPIMSG_COMMAND(skb->data), CAPIMSG_SUBCOMMAND(skb->data));
 		if (CAPIMSG_SUBCOMMAND(skb->data) == CAPI_REQ)
 			contrAnswerMessage(appl->contr, skb, 
@@ -226,7 +226,7 @@ void applManufacturerReqAVM(Appl_t *appl, struct sk_buff *skb)
 
 	manuReq = (struct ManufacturerReq *)&skb->data[16];
 	if (manuReq->Class != CLASS_AVM) {
-		applDebug(appl, LL_DEB_INFO, "CAPI: unknown class %#x\n", manuReq->Class);
+		applDebug(appl, CAPI_DBG_APPL_INFO, "CAPI: unknown class %#x\n", manuReq->Class);
 		goto out;
 	}
 	switch (manuReq->Function) {
@@ -244,7 +244,7 @@ void applManufacturerReqAVM(Appl_t *appl, struct sk_buff *skb)
 		}
 		break;
 	default:
-		applDebug(appl, LL_DEB_INFO, "CAPI: unknown function %#x\n", manuReq->Function);
+		applDebug(appl, CAPI_DBG_APPL_INFO, "CAPI: unknown function %#x\n", manuReq->Function);
 	}
 
  out:
@@ -258,7 +258,7 @@ void applManufacturerReqI4L(Appl_t *appl, struct sk_buff *skb)
 
 	manuReq = (struct ManufacturerReq *)&skb->data[16];
 	if (manuReq->Class != CLASS_I4L) {
-		applDebug(appl, LL_DEB_INFO, "CAPI: unknown class %#x\n", manuReq->Class);
+		applDebug(appl, CAPI_DBG_APPL_INFO, "CAPI: unknown class %#x\n", manuReq->Class);
 		goto out;
 	}
 	switch (manuReq->Function) {
@@ -278,7 +278,7 @@ void applManufacturerReqI4L(Appl_t *appl, struct sk_buff *skb)
 	case FUNCTION_I4L_INC_USE_COUNT:
 		break;
 	default:
-		applDebug(appl, LL_DEB_INFO, "CAPI: unknown function %#x\n", manuReq->Function);
+		applDebug(appl, CAPI_DBG_APPL_INFO, "CAPI: unknown function %#x\n", manuReq->Function);
 	}
 
  out:

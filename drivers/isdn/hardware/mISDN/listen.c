@@ -1,4 +1,4 @@
-/* $Id: listen.c,v 1.1 2002/09/17 10:43:35 kkeil Exp $
+/* $Id: listen.c,v 1.2 2003/07/21 11:13:02 kkeil Exp $
  *
  */
 
@@ -57,7 +57,7 @@ static void listen_debug(struct FsmInst *fi, char *fmt, ...)
 		     listen->contr->adrController, listen->ApplId);
 	p += vsprintf(p, fmt, args);
 	*p = 0;
-	listenDebug(listen, LL_DEB_STATE, tmp);
+	listenDebug(listen, CAPI_DBG_LISTEN_STATE, tmp);
 	va_end(args);
 }
 
@@ -71,8 +71,8 @@ static void listen_req_l_x(struct FsmInst *fi, int event, void *arg, int state)
 	listen->InfoMask = cmsg->InfoMask;
 	listen->CIPmask = cmsg->CIPmask;
 	listen->CIPmask2 = cmsg->CIPmask2;
-	listenDebug(listen, LL_DEB_INFO, "set InfoMask to 0x%x", listen->InfoMask);
-	listenDebug(listen, LL_DEB_INFO, "set CIP to 0x%x,0x%x", listen->CIPmask,
+	listenDebug(listen, CAPI_DBG_LISTEN_INFO, "set InfoMask to 0x%x", listen->InfoMask);
+	listenDebug(listen, CAPI_DBG_LISTEN_INFO, "set CIP to 0x%x,0x%x", listen->CIPmask,
 		    listen->CIPmask2);
 
 	capi_cmsg_answer(cmsg);
@@ -136,7 +136,7 @@ void listenConstr(Listen_t *listen, Contr_t *contr, __u16 ApplId)
 {
 	listen->listen_m.fsm = &listen_fsm;
 	listen->listen_m.state = ST_LISTEN_L_0;
-	listen->listen_m.debug = 1;
+	listen->listen_m.debug = contr->debug & CAPI_DBG_LISTEN_STATE;
 	listen->listen_m.userdata = listen;
 	listen->listen_m.printdebug = listen_debug;
 
@@ -149,7 +149,7 @@ void listenConstr(Listen_t *listen, Contr_t *contr, __u16 ApplId)
 
 void listenDestr(Listen_t *listen)
 {
-	printk(KERN_DEBUG "%s\n", __FUNCTION__);
+	listenDebug(listen, CAPI_DBG_LISTEN, "%s\n", __FUNCTION__);
 }
 
 void listenSendMessage(Listen_t *listen, struct sk_buff *skb)

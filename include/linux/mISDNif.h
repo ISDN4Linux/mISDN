@@ -1,4 +1,4 @@
-/* $Id: mISDNif.h,v 1.10 2003/07/18 16:36:03 kkeil Exp $
+/* $Id: mISDNif.h,v 1.11 2003/07/21 11:13:02 kkeil Exp $
  *
  */
 
@@ -555,20 +555,16 @@ typedef struct _hisaxdevice {
 } hisaxdevice_t;
 
 /* common helper functions */
-extern int put_hisax_header(struct sk_buff *, iframe_t *);
-extern int bprotocol2pid(void *, hisax_pid_t *);
-extern int get_protocol(hisaxstack_t *, int);
-extern int HasProtocol(hisaxobject_t *, int);
-extern int SetHandledPID(hisaxobject_t *, hisax_pid_t *);
-extern void RemoveUsedPID(hisax_pid_t *, hisax_pid_t *);
-extern int SetIF(hisaxinstance_t *, hisaxif_t *, u_int, void *, void *, void *);
-extern int ConnectIF(hisaxinstance_t *, hisaxinstance_t *);
-extern int DisConnectIF(hisaxinstance_t *, hisaxif_t *);
+extern int	put_hisax_header(struct sk_buff *, iframe_t *);
+extern int	bprotocol2pid(void *, hisax_pid_t *);
+extern int	SetIF(hisaxinstance_t *, hisaxif_t *, u_int, void *, void *, void *);
+extern int	ConnectIF(hisaxinstance_t *, hisaxinstance_t *);
+extern int	DisConnectIF(hisaxinstance_t *, hisaxif_t *);
 
 /* global exported functions */
 
-extern int HiSax_register(hisaxobject_t *obj);
-extern int HiSax_unregister(hisaxobject_t *obj);
+extern int	HiSax_register(hisaxobject_t *obj);
+extern int	HiSax_unregister(hisaxobject_t *obj);
 
 #endif /* __KERNEL__ */
 #endif /* HISAXIF_H */

@@ -1,4 +1,4 @@
-/* $Id: cplci.c,v 1.7 2003/07/18 16:36:03 kkeil Exp $
+/* $Id: cplci.c,v 1.8 2003/07/21 11:13:02 kkeil Exp $
  *
  */
 
@@ -66,7 +66,7 @@ u_int plci_parse_channel_id(u_char *p)
 
 	if (p) {
 		p++;
-		printk(KERN_DEBUG "%s: l(%d) %x\n", __FUNCTION__, p[0], p[1]);
+		capidebug(CAPI_DBG_PLCI_INFO, "%s: l(%d) %x\n", __FUNCTION__, p[0], p[1]);
 		l = *p++;
 		if (l == 1) {
 			cid = *p;
@@ -275,7 +275,7 @@ static void cplci_debug(struct FsmInst *fi, char *fmt, ...)
 	p += sprintf(p, "PLCI 0x%x: ", cplci->adrPLCI);
 	p += vsprintf(p, fmt, args);
 	*p = 0;
-	cplciDebug(cplci, LL_DEB_STATE, tmp);
+	cplciDebug(cplci, CAPI_DBG_PLCI_STATE, tmp);
 	va_end(args);
 }
 
@@ -867,7 +867,7 @@ static void plci_cc_ph_control_ind(struct FsmInst *fi, int event, void *arg)
 	if (!arg)
 		return;
 
-	printk(KERN_DEBUG "%s: tt(%x)\n", __FUNCTION__, *tt);
+	cplciDebug(cplci, CAPI_DBG_PLCI_INFO, "%s: tt(%x)\n", __FUNCTION__, *tt);
 	if ((*tt & ~DTMF_TONE_MASK) != DTMF_TONE_VAL)
 		return;
 
@@ -978,7 +978,7 @@ void cplciConstr(Cplci_t *cplci, Appl_t *appl, Plci_t *plci)
 	cplci->contr = plci->contr;
 	cplci->plci_m.fsm        = &plci_fsm;
 	cplci->plci_m.state      = ST_PLCI_P_0;
-	cplci->plci_m.debug      = 1;
+	cplci->plci_m.debug      = plci->contr->debug & CAPI_DBG_PLCI_STATE;
 	cplci->plci_m.userdata   = cplci;
 	cplci->plci_m.printdebug = cplci_debug;
 	cplci->bchannel = -1;
@@ -987,7 +987,7 @@ void cplciConstr(Cplci_t *cplci, Appl_t *appl, Plci_t *plci)
 void cplciDestr(Cplci_t *cplci)
 {
 	if (cplci->plci) {
-		printk(KERN_DEBUG "%s plci state %s\n", __FUNCTION__,
+		cplciDebug(cplci, CAPI_DBG_PLCI, "%s plci state %s\n", __FUNCTION__,
 			str_st_plci[cplci->plci_m.state]);
 		if (cplci->plci_m.state != ST_PLCI_P_0) {
 			struct sk_buff	*skb = alloc_l3msg(10, MT_RELEASE_COMPLETE);
@@ -1011,9 +1011,9 @@ void cplci_l3l4(Cplci_t *cplci, int pr, void *arg)
 {
 	Q931_info_t	*qi = arg;
 	u_char		*ie;
-	
-	printk(KERN_DEBUG "cplci_l3l4: cplci(%x) plci(%x) pr(%x) arg(%p)\n",
-		cplci->adrPLCI, cplci->plci->adrPLCI, pr, arg);
+
+	cplciDebug(cplci, CAPI_DBG_PLCI_L3, "%s: cplci(%x) plci(%x) pr(%x) arg(%p)\n",
+		__FUNCTION__, cplci->adrPLCI, cplci->plci->adrPLCI, pr, arg);
 	switch (pr) {
 		case CC_SETUP | INDICATION:
 			if (!qi)
@@ -1167,8 +1167,8 @@ void cplci_l3l4(Cplci_t *cplci, int pr, void *arg)
 			FsmEvent(&cplci->plci_m, EV_PLCI_CC_PH_CONTROL_IND, arg);
 			break;
 		default:
-			cplciDebug(cplci, LL_DEB_WARN, 
-			   "cplci_handle_call_control: pr 0x%x not handled", pr);
+			cplciDebug(cplci, CAPI_DBG_WARN, 
+			   "%s: pr 0x%x not handled", __FUNCTION__, pr);
 			break;
 	}
 }

@@ -1,4 +1,4 @@
-/* $Id: layer1.c,v 1.2 2003/06/24 21:58:53 kkeil Exp $
+/* $Id: layer1.c,v 1.3 2003/07/21 11:13:02 kkeil Exp $
  *
  * hisax_l1.c     common low level stuff for I.430 layer1
  *
@@ -10,7 +10,7 @@
  *
  */
 
-const char *l1_revision = "$Revision: 1.2 $";
+static char *l1_revision = "$Revision: 1.3 $";
 
 #include <linux/config.h>
 #include <linux/module.h>
@@ -764,6 +764,7 @@ int Isdnl1Init(void)
 {
 	int err;
 
+	printk(KERN_INFO "ISDN L1 driver version %s\n", HiSax_getrev(l1_revision));
 	SET_MODULE_OWNER(&isdnl1);
 	isdnl1.name = MName;
 	isdnl1.DPROTO.protocol[1] = ISDN_PID_L1_TE_S0;

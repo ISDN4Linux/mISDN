@@ -1,4 +1,4 @@
-/* $Id: core.c,v 1.7 2003/07/18 16:36:03 kkeil Exp $
+/* $Id: core.c,v 1.8 2003/07/21 11:13:02 kkeil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -17,6 +17,8 @@
 #ifdef CONFIG_SMP
 #include <linux/smp_lock.h>
 #endif
+
+static char *hisax_core_revision = "$Revision: 1.8 $";
 
 hisaxobject_t	*hisax_objects = NULL;
 int core_debug;
@@ -80,7 +82,7 @@ hisaxd(void *data)
 #ifdef CONFIG_SMP
 	unlock_kernel();
 #endif
-	printk(KERN_DEBUG "hisaxd: daemon started\n");
+	printk(KERN_DEBUG "hisaxd: kernel daemon started\n");
 
 	test_and_set_bit(HISAX_TFLAGS_STARTED, &hkt->Flags);
 
@@ -107,8 +109,9 @@ hisaxd(void *data)
 						printk(KERN_WARNING "hisaxd: what(%x) prim(%x) failed err(%x)\n",
 							hhe->what, hhe->prim, err);
 					} else {
-						printk(KERN_DEBUG "hisaxd: what(%x) prim(%x) success\n",
-							hhe->what, hhe->prim);
+						if (debug)
+							printk(KERN_DEBUG "hisaxd: what(%x) prim(%x) success\n",
+								hhe->what, hhe->prim);
 						err--; /* to free skb */
 					}
 					break;
@@ -166,7 +169,7 @@ find_object(int protocol) {
 		if (!err)
 			return(obj);
 		if (err != -ENOPROTOOPT) {
-			if (HasProtocol(obj, protocol))
+			if (0 == HasProtocol(obj, protocol))
 				return(obj);
 		}	
 		obj = obj->next;
@@ -265,8 +268,9 @@ get_next_instance(hisaxstack_t *st, hisax_pid_t *pid)
 		if (!obj)
 			obj = find_object_module(proto);
 		if (!obj) {
-			printk(KERN_WARNING "%s: no object found\n",
-				__FUNCTION__);
+			if (debug)
+				printk(KERN_WARNING "%s: no object found\n",
+					__FUNCTION__);
 			return(NULL);
 		}
 		err = obj->own_ctrl(st, MGR_NEWLAYER | REQUEST, pid);
@@ -287,14 +291,14 @@ sel_channel(hisaxstack_t *st, channel_info_t *ci)
 
 	if (!ci)
 		return(err);
-	printk(KERN_DEBUG "%s: st(%p) st->mgr(%p)\n",
-		__FUNCTION__, st, st->mgr);
+	if (debug)
+		printk(KERN_DEBUG "%s: st(%p) st->mgr(%p)\n",
+			__FUNCTION__, st, st->mgr);
 	if (st->mgr) {
 		if (st->mgr->obj && st->mgr->obj->own_ctrl) {
-			err = st->mgr->obj->own_ctrl(st->mgr,
-				MGR_SELCHANNEL | REQUEST, ci);
-			printk(KERN_DEBUG "%s: MGR_SELCHANNEL(%d)\n",
-				__FUNCTION__, err);
+			err = st->mgr->obj->own_ctrl(st->mgr, MGR_SELCHANNEL | REQUEST, ci);
+			if (debug)
+				printk(KERN_DEBUG "%s: MGR_SELCHANNEL(%d)\n", __FUNCTION__, err);
 		} else
 			int_error();
 	} else {
@@ -465,7 +469,8 @@ static int central_manager(void *data, u_int prim, void *arg) {
 	    case MGR_DEBUGDATA | REQUEST:
 	    	return(debugout(data, arg));
 	    default:
-		printk(KERN_WARNING "manager prim %x not handled\n", prim);
+	    	if (debug)
+			printk(KERN_WARNING "manager prim %x not handled\n", prim);
 		break;
 	}
 	return(-EINVAL);
@@ -520,6 +525,7 @@ HiSaxInit(void)
 	DECLARE_MUTEX_LOCKED(sem);
 	int err;
 
+	printk(KERN_INFO "Modular ISDN Stack core %s\n", hisax_core_revision);
 	core_debug = debug;
 	err = init_hisaxdev(debug);
 	if (err)

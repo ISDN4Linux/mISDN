@@ -1,4 +1,4 @@
-/* $Id: capi.c,v 1.2 2003/06/24 21:58:53 kkeil Exp $
+/* $Id: capi.c,v 1.3 2003/07/21 11:13:02 kkeil Exp $
  *
  */
 
@@ -9,7 +9,7 @@
 #include "helper.h"
 #include "debug.h"
 
-const char *capi_revision = "$Revision: 1.2 $";
+static char *capi_revision = "$Revision: 1.3 $";
 
 static int debug = 0;
 static hisaxobject_t capi_obj;
@@ -49,10 +49,12 @@ int hisax_load_firmware(struct capi_ctr *ctrl, capiloaddata *data)
 	u_char *tmp;
 	int retval;
 
-	printk(KERN_INFO "%s: firm user(%d) len(%d)\n", __FUNCTION__,
-		data->firmware.user, data->firmware.len);
-	printk(KERN_INFO "%s: cfg user(%d) len(%d)\n", __FUNCTION__,
-		data->configuration.user, data->configuration.len);
+	if (CAPI_DBG_INFO & debug) {
+		printk(KERN_INFO "%s: firm user(%d) len(%d)\n", __FUNCTION__,
+			data->firmware.user, data->firmware.len);
+		printk(KERN_INFO "%s: cfg user(%d) len(%d)\n", __FUNCTION__,
+			data->configuration.user, data->configuration.len);
+	}
 	if (data->firmware.user) {
 		tmp = vmalloc(data->firmware.len);
 		if (!tmp)
@@ -73,21 +75,23 @@ void hisax_reset_ctr(struct capi_ctr *ctrl)
 {
 	Contr_t *contr = ctrl->driverdata;
 
-	printk(KERN_DEBUG "%s\n", __FUNCTION__);
+	if (CAPI_DBG_INFO & debug)
+		printk(KERN_DEBUG "%s\n", __FUNCTION__);
 	contrReset(contr);
 }
 
 void hisax_remove_ctr(struct capi_ctr *ctrl)
 {
-	printk(KERN_DEBUG "%s\n", __FUNCTION__);
-//	int_error();
+	if (CAPI_DBG_INFO & debug)
+		printk(KERN_DEBUG "%s\n", __FUNCTION__);
 }
 
 static char *hisax_procinfo(struct capi_ctr *ctrl)
 {
 	Contr_t *contr = (ctrl->driverdata);
 
-	printk(KERN_DEBUG "%s\n", __FUNCTION__);
+	if (CAPI_DBG_INFO & debug)
+		printk(KERN_DEBUG "%s\n", __FUNCTION__);
 	if (!contr)
 		return "";
 	sprintf(contr->infobuf, "-");
@@ -99,7 +103,8 @@ void hisax_register_appl(struct capi_ctr *ctrl,
 {
 	Contr_t *contr = ctrl->driverdata;
 
-	printk(KERN_DEBUG "%s\n", __FUNCTION__);
+	if (CAPI_DBG_INFO & debug)
+		printk(KERN_DEBUG "%s\n", __FUNCTION__);
 	contrRegisterAppl(contr, ApplId, rp);
 }
 
@@ -107,7 +112,8 @@ void hisax_release_appl(struct capi_ctr *ctrl, __u16 ApplId)
 {
 	Contr_t *contr = ctrl->driverdata;
 
-	printk(KERN_DEBUG "%s\n", __FUNCTION__);
+	if (CAPI_DBG_INFO & debug)
+		printk(KERN_DEBUG "%s\n", __FUNCTION__);
 	contrReleaseAppl(contr, ApplId);
 }
 
@@ -151,13 +157,8 @@ struct capi_driver hisax_driver = {
 
 int CapiNew(void)
 {
-	char tmp[64];
-
-	strcpy(tmp, capi_revision);
-	printk(KERN_INFO "HiSax: CAPI Revision %s\n", HiSax_getrev(tmp));
-
+	printk(KERN_INFO "new %s instance\n", MName);
 	cdrv_if = attach_capi_driver(&hisax_driver);
-	
 	if (!cdrv_if) {
 		printk(KERN_ERR "hisax: failed to attach capi_driver\n");
 		return -EIO;
@@ -175,7 +176,8 @@ capi20_manager(void *data, u_int prim, void *arg) {
 	BInst_t *binst = NULL;
 	Contr_t *ctrl = (Contr_t *)capi_obj.ilist;
 
-	printk(KERN_DEBUG "capi20_manager data:%p prim:%x arg:%p\n", data, prim, arg);
+	if (CAPI_DBG_INFO & debug)
+		printk(KERN_DEBUG "capi20_manager data:%p prim:%x arg:%p\n", data, prim, arg);
 	if (!data)
 		return(-EINVAL);
 	while(ctrl) {
@@ -199,10 +201,13 @@ capi20_manager(void *data, u_int prim, void *arg) {
 	    case MGR_NEWLAYER | REQUEST:
 	    	if (!(ctrl = newContr(&capi_obj, data, arg)))
 	    		return(-EINVAL);
+	    	else
+	    		ctrl->debug = debug;
 	        break;
 	    case MGR_CONNECT | REQUEST:
 		if (!ctrl) {
-			printk(KERN_WARNING "capi20_manager connect no instance\n");
+			if (CAPI_DBG_WARN & debug)
+				printk(KERN_WARNING "capi20_manager connect no instance\n");
 			return(-EINVAL);
 		}
 		return(ConnectIF(inst, arg));
@@ -210,7 +215,8 @@ capi20_manager(void *data, u_int prim, void *arg) {
 	    case MGR_SETIF | INDICATION:
 	    case MGR_SETIF | REQUEST:
 		if (!ctrl) {
-			printk(KERN_WARNING "capi20_manager setif no instance\n");
+			if (CAPI_DBG_WARN & debug)
+				printk(KERN_WARNING "capi20_manager setif no instance\n");
 			return(-EINVAL);
 		}
 		if (&ctrl->inst == inst)
@@ -221,22 +227,25 @@ capi20_manager(void *data, u_int prim, void *arg) {
 	    case MGR_DISCONNECT | REQUEST:
 	    case MGR_DISCONNECT | INDICATION:
 		if (!ctrl) {
-			printk(KERN_WARNING "capi20_manager disconnect no instance\n");
+			if (CAPI_DBG_WARN & debug)
+				printk(KERN_WARNING "capi20_manager disconnect no instance\n");
 			return(-EINVAL);
 		}
 		return(DisConnectIF(inst, arg));
 		break;
 	    case MGR_RELEASE | INDICATION:
 	    	if (ctrl) {
-			printk(KERN_DEBUG "release_capi20 id %x\n", ctrl->inst.st->id);
+	    		if (CAPI_DBG_INFO & debug)
+				printk(KERN_DEBUG "release_capi20 id %x\n", ctrl->inst.st->id);
 			contrDestr(ctrl);
 			kfree(ctrl);
-	    	} else 
+	    	} else if (CAPI_DBG_WARN & debug)
 	    		printk(KERN_WARNING "capi20_manager release no instance\n");
 	    	break;
 	    case MGR_UNREGLAYER | REQUEST:
 		if (!ctrl) {
-			printk(KERN_WARNING "capi20_manager unreglayer no instance\n");
+			if (CAPI_DBG_WARN & debug)
+				printk(KERN_WARNING "capi20_manager unreglayer no instance\n");
 			return(-EINVAL);
 		}
 		if (binst) {
@@ -246,7 +255,8 @@ capi20_manager(void *data, u_int prim, void *arg) {
 		}
 		break;
 	    default:
-		printk(KERN_WARNING "capi20_manager prim %x not handled\n", prim);
+	    	if (CAPI_DBG_WARN & debug)
+			printk(KERN_WARNING "capi20_manager prim %x not handled\n", prim);
 		return(-EINVAL);
 	}
 	return(0);
@@ -256,6 +266,7 @@ int Capi20Init(void)
 {
 	int err;
 
+	printk(KERN_INFO "%s driver file version %s\n", MName, HiSax_getrev(capi_revision));
 	SET_MODULE_OWNER(&capi_obj);
 	capi_obj.name = MName;
 	capi_obj.DPROTO.protocol[4] = ISDN_PID_L4_CAPI20;

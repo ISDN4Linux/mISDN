@@ -1,7 +1,7 @@
 Vendor:       SuSE GmbH, Nuernberg, Germany
 Distribution: SuSE Linux 8.2 (i386)
 Name:         km_newhisax
-Release:      1
+Release:      2
 Packager:     feedback@suse.de
 
 Copyright:    Karsten Keil GPL

@@ -1,4 +1,4 @@
-/* $Id: dtmf.c,v 1.1 2003/06/27 15:20:19 kkeil Exp $
+/* $Id: dtmf.c,v 1.2 2003/07/21 11:13:02 kkeil Exp $
  *
  * Linux ISDN subsystem, DTMF tone module
  *
@@ -39,14 +39,15 @@ typedef struct _dtmf {
 
 static int debug = 0;
 
-#define DEBUG_DTMF_TONE		0x001
-#define DEBUG_DTMF_CTRL		0x002
+#define DEBUG_DTMF_MGR		0x001
+#define DEBUG_DTMF_TONE		0x010
+#define DEBUG_DTMF_CTRL		0x020
 #define DEBUG_DTMF_DETECT	0x100
 #define DEBUG_DTMF_KOEFF	0x200
 
 static hisaxobject_t dtmf_obj;
 
-char *hisax_dtmf_revision = "$Revision: 1.1 $";
+static char *hisax_dtmf_revision = "$Revision: 1.2 $";
 
 /*
  * Misc. lookup-tables.
@@ -412,7 +413,6 @@ dtmf_from_up(hisaxif_t *hif, struct sk_buff *skb)
 		return(-ENXIO);
 	}
 	hh = HISAX_HEAD_P(skb);
-//	printk(KERN_DEBUG "dtmf_from_up: prim:%x\n", hh->prim);
 	switch(hh->prim) {
 		case (PH_CONTROL | REQUEST):
 			if (skb->len >= sizeof(int)) {
@@ -452,7 +452,6 @@ dtmf_from_down(hisaxif_t *hif,  struct sk_buff *skb)
 		return(-ENXIO);
 	}
 	hh = HISAX_HEAD_P(skb);
-//	printk(KERN_DEBUG "dtmf_from_down: prim:%x\n", hh->prim);
 	switch(hh->prim) {
 		case (PH_DATA | CONFIRM):
 			hh->prim = DL_DATA | CONFIRM;
@@ -565,7 +564,8 @@ dtmf_manager(void *data, u_int prim, void *arg) {
 	hisaxinstance_t *inst = data;
 	dtmf_t *dtmf_l = dtmf_obj.ilist;
 
-	printk(KERN_DEBUG "dtmf_manager data:%p prim:%x arg:%p\n", data, prim, arg);
+	if (debug & DEBUG_DTMF_MGR)
+		printk(KERN_DEBUG "dtmf_manager data:%p prim:%x arg:%p\n", data, prim, arg);
 	if (!data)
 		return(-EINVAL);
 	while(dtmf_l) {
@@ -582,7 +582,6 @@ dtmf_manager(void *data, u_int prim, void *arg) {
 			return(-EINVAL);
 		}
 		return(ConnectIF(inst, arg));
-		break;
 	    case MGR_SETIF | REQUEST:
 	    case MGR_SETIF | INDICATION:
 		if (!dtmf_l) {
@@ -590,7 +589,6 @@ dtmf_manager(void *data, u_int prim, void *arg) {
 			return(-EINVAL);
 		}
 		return(SetIF(inst, arg, prim, dtmf_from_up, dtmf_from_down, dtmf_l));
-		break;
 	    case MGR_DISCONNECT | REQUEST:
 	    case MGR_DISCONNECT | INDICATION:
 		if (!dtmf_l) {
@@ -598,15 +596,15 @@ dtmf_manager(void *data, u_int prim, void *arg) {
 			return(-EINVAL);
 		}
 		return(DisConnectIF(inst, arg));
-		break;
 	    case MGR_UNREGLAYER | REQUEST:
 	    case MGR_RELEASE | INDICATION:
-	    	if (dtmf_l) {
-			printk(KERN_DEBUG "release_dtmf id %x\n", dtmf_l->inst.st->id);
-	    		release_dtmf(dtmf_l);
-	    	} else 
-	    		printk(KERN_WARNING "dtmf_manager release no instance\n");
-	    	break;
+		if (dtmf_l) {
+			if (debug & DEBUG_DTMF_MGR)
+				printk(KERN_DEBUG "release_dtmf id %x\n", dtmf_l->inst.st->id);
+			release_dtmf(dtmf_l);
+		} else 
+			printk(KERN_WARNING "dtmf_manager release no instance\n");
+		break;
 //	    case MGR_STATUS | REQUEST:
 //		if (!dtmf_l) {
 //			printk(KERN_WARNING "dtmf_manager status dtmf no instance\n");
@@ -614,7 +612,8 @@ dtmf_manager(void *data, u_int prim, void *arg) {
 //		}
 //		return(dtmf_status(dtmf_l, arg));
 	    default:
-		printk(KERN_WARNING "dtmf_manager prim %x not handled\n", prim);
+		if (debug & DEBUG_DTMF_MGR)
+			printk(KERN_WARNING "dtmf_manager prim %x not handled\n", prim);
 		return(-EINVAL);
 	}
 	return(0);
@@ -624,6 +623,7 @@ static int dtmf_init(void)
 {
 	int err;
 
+	printk(KERN_INFO "DTMF modul version %s\n", HiSax_getrev(hisax_dtmf_revision));
 	SET_MODULE_OWNER(&dtmf_obj);
 	dtmf_obj.name = MName;
 	dtmf_obj.BPROTO.protocol[2] = ISDN_PID_L2_B_TRANSDTMF;

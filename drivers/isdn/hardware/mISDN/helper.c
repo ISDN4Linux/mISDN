@@ -1,4 +1,4 @@
-/* $Id: helper.c,v 1.5 2003/07/18 16:36:03 kkeil Exp $
+/* $Id: helper.c,v 1.6 2003/07/21 11:13:02 kkeil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -9,6 +9,9 @@
 #define __NO_VERSION__
 #include <linux/hisaxif.h>
 #include "helper.h"
+
+#undef	DEBUG_LM
+#undef	DEBUG_IF
 
 void
 set_dchannel_pid(hisax_pid_t *pid, int protocol, int layermask)
@@ -74,23 +77,23 @@ HasProtocol(hisaxobject_t *obj, int protocol)
 
 	if (!obj) {
 		int_error();
-		return(0);
+		return(-EINVAL);
 	}
 	layer = (protocol & ISDN_PID_LAYER_MASK)>>24;
 	if (layer > MAX_LAYER_NR) {
 		int_errtxt("layer %d", layer);
-		return(0);
+		return(-EINVAL);
 	}
 	if (protocol & ISDN_PID_BCHANNEL_BIT)
 		pmask = obj->BPROTO.protocol[layer];
 	else
 		pmask = obj->DPROTO.protocol[layer];
 	if (pmask == ISDN_PID_ANY)
-		return(0);
+		return(-EPROTO);
 	if (protocol == (protocol & pmask))
-		return(1);
+		return(0);
 	else
-		return(0); 
+		return(-ENOPROTOOPT); 
 }
 
 int
@@ -104,14 +107,14 @@ SetHandledPID(hisaxobject_t *obj, hisax_pid_t *pid)
 		int_error();
 		return(0);
 	}
-	printk(KERN_DEBUG "%s: %s LM(%x)\n", __FUNCTION__, obj->name,
-		pid->layermask);
+#ifdef DEBUG_LM
+	printk(KERN_DEBUG "%s: %s LM(%x)\n", __FUNCTION__, obj->name, pid->layermask);
+#endif
 	memcpy(&sav, pid, sizeof(hisax_pid_t));
 	memset(pid, 0, sizeof(hisax_pid_t));
 	pid->global = sav.global;
 	if (!sav.layermask) {
-		printk(KERN_WARNING "%s: no layermask in pid\n",
-			__FUNCTION__);
+		printk(KERN_WARNING "%s: no layermask in pid\n", __FUNCTION__);
 		return(0);
 	}
 	for (layer=0; layer<=MAX_LAYER_NR; layer++) {
@@ -121,7 +124,7 @@ SetHandledPID(hisaxobject_t *obj, hisax_pid_t *pid)
 			else
 				continue;
 		}
-		if (HasProtocol(obj, sav.protocol[layer])) {
+		if (0 == HasProtocol(obj, sav.protocol[layer])) {
 			ret++;
 			pid->protocol[layer] = sav.protocol[layer];
 			pid->param[layer] = sav.param[layer];
@@ -248,13 +251,15 @@ SetIF(hisaxinstance_t *owner, hisaxif_t *hif, u_int prim, void *upfunc,
 	if (IF_TYPE(hif) == IF_UP) {
 		hif->func = upfunc;
 		own_hif = &owner->up;
-		printk(KERN_DEBUG "%s: IF_UP: func:%p(%p)\n",
-			__FUNCTION__, hif->func, owner->data);
+#ifdef DEBUG_IF
+		printk(KERN_DEBUG "%s: IF_UP: func:%p(%p)\n", __FUNCTION__, hif->func, owner->data);
+#endif
 	} else if (IF_TYPE(hif) == IF_DOWN) {
 		hif->func = downfunc;
 		own_hif = &owner->down;
-		printk(KERN_DEBUG "%s: IF_DOWN: func:%p(%p)\n",
-			__FUNCTION__, hif->func, owner->data);
+#ifdef DEBUG_IF
+		printk(KERN_DEBUG "%s: IF_DOWN: func:%p(%p)\n", __FUNCTION__, hif->func, owner->data);
+#endif
 	} else {
 		int_errtxt("stat(%x)", hif->stat);
 		return(-EINVAL);
