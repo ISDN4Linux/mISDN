@@ -1,4 +1,4 @@
-/* $Id: arcofi.c,v 0.2 2001/02/11 22:57:23 kkeil Exp $
+/* $Id: arcofi.c,v 0.3 2001/02/13 10:42:55 kkeil Exp $
  *
  * arcofi.c   Ansteuerung ARCOFI 2165
  *
@@ -9,8 +9,8 @@
  */
  
 #define __NO_VERSION__
-#include "hisax.h"
-#include "isdnl1.h"
+#include "hisax_hw.h"
+#include "hisaxl1.h"
 #include "isac.h"
 #include "arcofi.h"
 #include "debug.h"

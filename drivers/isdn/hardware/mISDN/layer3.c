@@ -1,4 +1,4 @@
-/* $Id: layer3.c,v 0.2 2001/02/11 22:57:23 kkeil Exp $
+/* $Id: layer3.c,v 0.3 2001/02/13 10:42:55 kkeil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -11,10 +11,10 @@
  *
  */
 #define __NO_VERSION__
-#include "hisax.h"
 #include "hisaxl3.h"
+#include "helper.h"
 
-const char *l3_revision = "$Revision: 0.2 $";
+const char *l3_revision = "$Revision: 0.3 $";
 
 static
 struct Fsm l3fsm = {NULL, 0, 0, NULL, NULL};
@@ -65,6 +65,18 @@ static void
 l3m_debug(struct FsmInst *fi, char *fmt, ...)
 {
 	layer3_t *l3 = fi->userdata;
+	logdata_t log;
+
+	va_start(log.args, fmt);
+	log.fmt = fmt;
+	log.head = l3->inst.id;
+	l3->inst.obj->ctrl(&l3->inst, MGR_DEBUGDATA | REQUEST, &log);
+	va_end(log.args);
+}
+
+void
+l3_debug(layer3_t *l3, char *fmt, ...)
+{
 	logdata_t log;
 
 	va_start(log.args, fmt);
@@ -158,7 +170,7 @@ newl3state(l3_process_t *pc, int state)
 static void
 L3ExpireTimer(L3Timer_t *t)
 {
-	t->pc->l3->p_down(t->pc->l3, t->event, t->pc);
+	t->pc->l3->p_mgr(t->pc, t->event, NULL);
 }
 
 void
@@ -243,7 +255,7 @@ l3_process_t
 }
 
 l3_process_t
-*new_l3_process(layer3_t *l3, int cr)
+*new_l3_process(layer3_t *l3, int cr, int n303)
 {
 	l3_process_t *p;
 
@@ -255,7 +267,7 @@ l3_process_t
 	p->l3 = l3;
 	p->debug = l3->debug;
 	p->callref = cr;
-	p->N303 = l3->N303;
+	p->n303 = n303;
 	L3InitTimer(p, &p->timer);
 	APPEND_TO_LIST(p, l3->proc);
 	return (p);
@@ -284,100 +296,10 @@ l3ml3p(layer3_t *l3, int pr)
 	while (p) {
 		/* p might be kfreed under us, so we need to save where we want to go on */
 		np = p->next;
-		l3->p_down(l3, pr, p);
+		l3->p_mgr(p, pr, NULL);
 		p = np;
 	}
 }
-
-#if 0
-setstack_l3dc(struct PStack *st, struct Channel *chanp)
-{
-	char tmp[64];
-
-	st->l3.proc   = NULL;
-	st->l3.global = NULL;
-	skb_queue_head_init(&st->l3.squeue);
-	st->l3.l3m.fsm = &l3fsm;
-	st->l3.l3m.state = ST_L3_LC_REL;
-	st->l3.l3m.debug = 1;
-	st->l3.l3m.userdata = st;
-	st->l3.l3m.userint = 0;
-	st->l3.l3m.printdebug = l3m_debug;
-        FsmInitTimer(&st->l3.l3m, &st->l3.l3m_timer);
-	strcpy(st->l3.debug_id, "L3DC ");
-	st->lli.l4l3_proto = no_l3_proto_spec;
-
-#ifdef	CONFIG_HISAX_EURO
-	if (st->protocol == ISDN_PTYPE_EURO) {
-		setstack_dss1(st);
-	} else
-#endif
-#ifdef  CONFIG_HISAX_NI1
-	if (st->protocol == ISDN_PTYPE_NI1) {
-		setstack_ni1(st);
-	} else
-#endif
-#ifdef	CONFIG_HISAX_1TR6
-	if (st->protocol == ISDN_PTYPE_1TR6) {
-		setstack_1tr6(st);
-	} else
-#endif
-	if (st->protocol == ISDN_PTYPE_LEASED) {
-		st->lli.l4l3 = no_l3_proto;
-		st->l2.l2l3 = no_l3_proto;
-                st->l3.l3ml3 = no_l3_proto;
-		printk(KERN_INFO "HiSax: Leased line mode\n");
-	} else {
-		st->lli.l4l3 = no_l3_proto;
-		st->l2.l2l3 = no_l3_proto;
-                st->l3.l3ml3 = no_l3_proto;
-		sprintf(tmp, "protocol %s not supported",
-			(st->protocol == ISDN_PTYPE_1TR6) ? "1tr6" :
-			(st->protocol == ISDN_PTYPE_EURO) ? "euro" :
-			(st->protocol == ISDN_PTYPE_NI1) ? "ni1" :
-			"unknown");
-		printk(KERN_WARNING "HiSax: %s\n", tmp);
-		st->protocol = -1;
-	}
-}
-
-
-void
-isdnl3_trans(struct PStack *st, int pr, void *arg) {
-	st->l3.l3l2(st, pr, arg);
-}
-
-void
-releasestack_isdnl3(struct PStack *st)
-{
-	while (st->l3.proc)
-		release_l3_process(st->l3.proc);
-	if (st->l3.global) {
-		StopAllL3Timer(st->l3.global);
-		kfree(st->l3.global);
-		st->l3.global = NULL;
-	}
-	FsmDelTimer(&st->l3.l3m_timer, 54);
-	discard_queue(&st->l3.squeue);
-}
-
-void
-setstack_l3bc(struct PStack *st, struct Channel *chanp)
-{
-
-	st->l3.proc   = NULL;
-	st->l3.global = NULL;
-	skb_queue_head_init(&st->l3.squeue);
-	st->l3.l3m.fsm = &l3fsm;
-	st->l3.l3m.state = ST_L3_LC_REL;
-	st->l3.l3m.debug = 1;
-	st->l3.l3m.userdata = st;
-	st->l3.l3m.userint = 0;
-	st->l3.l3m.printdebug = l3m_debug;
-	strcpy(st->l3.debug_id, "L3BC ");
-	st->lli.l4l3 = isdnl3_trans;
-}
-#endif
 
 int
 hisax_l3up(l3_process_t *l3p, u_int prim, void *arg) {
@@ -506,7 +428,7 @@ lc_release_cnf(struct FsmInst *fi, int event, void *arg)
 
 
 /* *INDENT-OFF* */
-static struct FsmNode L3FnList[] HISAX_INITDATA =
+static struct FsmNode L3FnList[] =
 {
 	{ST_L3_LC_REL,		EV_ESTABLISH_REQ,	lc_activate},
 	{ST_L3_LC_REL,		EV_ESTABLISH_IND,	lc_connect},
@@ -527,7 +449,7 @@ static struct FsmNode L3FnList[] HISAX_INITDATA =
 #define L3_FN_COUNT (sizeof(L3FnList)/sizeof(struct FsmNode))
 
 void
-l3_msg(layer3_t *l3, int pr, void *arg)
+l3_msg(layer3_t *l3, u_int pr, u_int nr, int dtyp, void *arg)
 {
 	switch (pr) {
 		case (DL_DATA | REQUEST):
@@ -561,8 +483,39 @@ l3_msg(layer3_t *l3, int pr, void *arg)
 	}
 }
 
-HISAX_INITFUNC(void
-Isdnl3New(void))
+void
+init_l3(layer3_t *l3)
+{
+	l3->proc   = NULL;
+	l3->global = NULL;
+	skb_queue_head_init(&l3->squeue);
+	l3->l3m.fsm = &l3fsm;
+	l3->l3m.state = ST_L3_LC_REL;
+	l3->l3m.debug = 1;
+	l3->l3m.userdata = l3;
+	l3->l3m.userint = 0;
+	l3->l3m.printdebug = l3m_debug;
+        FsmInitTimer(&l3->l3m, &l3->l3m_timer);
+        l3->msgnr = 1;
+}
+
+
+void
+release_l3(layer3_t *l3)
+{
+	while (l3->proc)
+		release_l3_process(l3->proc);
+	if (l3->global) {
+		StopAllL3Timer(l3->global);
+		kfree(l3->global);
+		l3->global = NULL;
+	}
+	FsmDelTimer(&l3->l3m_timer, 54);
+	discard_queue(&l3->squeue);
+}
+
+void
+HiSaxl3New(void)
 {
 	l3fsm.state_count = L3_STATE_COUNT;
 	l3fsm.event_count = L3_EVENT_COUNT;
@@ -572,7 +525,7 @@ Isdnl3New(void))
 }
 
 void
-Isdnl3Free(void)
+HiSaxl3Free(void)
 {
 	FsmFree(&l3fsm);
 }

@@ -1,4 +1,4 @@
-/* $Id: debug.c,v 0.2 2001/02/11 22:57:23 kkeil Exp $
+/* $Id: debug.c,v 0.3 2001/02/13 10:42:55 kkeil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -7,7 +7,10 @@
  */
 
 #define __NO_VERSION__
-#include "hisax.h"
+#include <linux/hisaxif.h>
+#include <linux/kernel.h>
+#include <linux/string.h>
+#include "debug.h"
 
 #define HISAX_STATUS_BUFSIZE 4096
 

@@ -1,4 +1,4 @@
-/* $Id: tei.c,v 0.2 2001/02/11 22:57:24 kkeil Exp $
+/* $Id: tei.c,v 0.3 2001/02/13 10:42:55 kkeil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -8,12 +8,11 @@
  *
  */
 #define __NO_VERSION__
-#include "hisax.h"
-#include "debug.h"
 #include "hisaxl2.h"
+#include "debug.h"
 #include <linux/random.h>
 
-const char *tei_revision = "$Revision: 0.2 $";
+const char *tei_revision = "$Revision: 0.3 $";
 
 #define ID_REQUEST	1
 #define ID_ASSIGNED	2
@@ -382,7 +381,7 @@ tei_debug(struct FsmInst *fi, char *fmt, ...)
 	va_end(log.args);
 }
 
-static struct FsmNode TeiFnList[] HISAX_INITDATA =
+static struct FsmNode TeiFnList[] =
 {
 	{ST_TEI_NOP, EV_IDREQ, tei_id_request},
 	{ST_TEI_NOP, EV_ASSIGN, tei_id_test_dup},

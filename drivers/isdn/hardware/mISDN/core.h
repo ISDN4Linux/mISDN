@@ -1,8 +1,9 @@
-/*
+/* $Id: core.h,v 0.2 2001/02/13 10:42:55 kkeil Exp $
+ * 
+ * This file is (c) under GNU PUBLIC LICENSE
  *
  */
 
-#include <linux/errno.h>
 #include <linux/malloc.h>
 #include <linux/string.h>
 #include <linux/hisaxif.h>

@@ -1,14 +1,14 @@
-/* $Id: helper.h,v 0.2 2001/02/11 22:54:20 kkeil Exp $
+/* $Id: helper.h,v 0.3 2001/02/13 10:42:55 kkeil Exp $
  *
  *   Basic declarations, defines and prototypes
  *
  * This file is (c) under GNU PUBLIC LICENSE
  *
  */
+#include <linux/kernel.h>
 #include <linux/skbuff.h>
       
 extern int discard_queue(struct sk_buff_head *);
-
 #define APPEND_TO_LIST(item,base) \
 	item->prev = base; \
 	while (item->prev && item->prev->next) \

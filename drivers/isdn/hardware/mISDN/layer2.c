@@ -1,4 +1,4 @@
-/* $Id: layer2.c,v 0.2 2001/02/11 22:57:23 kkeil Exp $
+/* $Id: layer2.c,v 0.3 2001/02/13 10:42:55 kkeil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -8,11 +8,11 @@
  *
  */
 #include <linux/module.h>
-#include "hisax.h"
 #include "hisaxl2.h"
+#include "helper.h"
 #include "debug.h"
 
-const char *l2_revision = "$Revision: 0.2 $";
+const char *l2_revision = "$Revision: 0.3 $";
 
 static void l2m_debug(struct FsmInst *fi, char *fmt, ...);
 
@@ -1558,7 +1558,7 @@ l2_frame_error_reest(struct FsmInst *fi, int event, void *arg)
 	test_and_clear_bit(FLG_L3_INIT, &l2->flag);
 }
 
-static struct FsmNode L2FnList[] HISAX_INITDATA =
+static struct FsmNode L2FnList[] =
 {
 	{ST_L2_1, EV_L2_DL_ESTABLISH_REQ, l2_mdl_assign},
 	{ST_L2_2, EV_L2_DL_ESTABLISH_REQ, l2_go_st3},
@@ -1759,6 +1759,7 @@ static int
 l2from_down(hisaxif_t *hif, u_int prim, u_int nr, int dtyp, void *arg) {
 	layer2_t *l2;
 	int ret = -EINVAL;
+	int *iarg;
 
 	if (!hif)
 		return(-EINVAL);
@@ -1773,13 +1774,19 @@ l2from_down(hisaxif_t *hif, u_int prim, u_int nr, int dtyp, void *arg) {
 			return(ph_data_indication(hif, nr, dtyp, arg));
 		case (PH_DATA | CONFIRM):
 			return(ph_data_confirm(hif, nr, dtyp, arg));
-		case (PH_PAUSE | INDICATION):
-			test_and_set_bit(FLG_DCHAN_BUSY, &l2->flag);
-			ret = 0;
-			break;
-		case (PH_PAUSE | CONFIRM):
-			test_and_clear_bit(FLG_DCHAN_BUSY, &l2->flag);
-			ret = 0;
+		case (PH_CONTROL | INDICATION):
+			iarg = arg;
+			if (dtyp == 4) {
+				if (*iarg == HW_D_BLOCKED)
+					test_and_set_bit(FLG_DCHAN_BUSY,
+						&l2->flag);
+				else if (*iarg == HW_D_NOBLOCKED)
+					test_and_clear_bit(FLG_DCHAN_BUSY,
+						&l2->flag);
+				else
+					break;
+				ret = 0;
+			}
 			break;
 		case (PH_ACTIVATE | CONFIRM):
 		case (PH_ACTIVATE | INDICATION):
@@ -2159,7 +2166,7 @@ l2_manager(void *data, u_int prim, void *arg) {
 	    	break;
 	    		
 	    default:
-		printk(KERN_WARNING "fritz_manager prim %x not handled\n", prim);
+		printk(KERN_WARNING "l2_manager prim %x not handled\n", prim);
 		return(-EINVAL);
 	}
 	return(0);

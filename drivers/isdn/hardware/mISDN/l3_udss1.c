@@ -1,4 +1,4 @@
-/* $Id: l3_udss1.c,v 0.2 2001/02/11 22:57:24 kkeil Exp $
+/* $Id: l3_udss1.c,v 0.3 2001/02/13 10:42:55 kkeil Exp $
  *
  * EURO/DSS1 D-channel protocol
  *
@@ -15,8 +15,9 @@
 
 #include <linux/module.h>
 
-#include "hisax.h"
 #include "hisaxl3.h"
+#include "helper.h"
+#include "debug.h"
 #include "dss1.h"
 
 static layer3_t *dss1list = NULL;
@@ -25,7 +26,9 @@ static hisaxobject_t u_dss1;
 
 
 extern char *HiSax_getrev(const char *revision);
-const char *dss1_revision = "$Revision: 0.2 $";
+const char *dss1_revision = "$Revision: 0.3 $";
+
+static int dss1man(l3_process_t *, u_int, void *);
 
 #define EXT_BEARER_CAPS 1
 
@@ -49,7 +52,7 @@ l3dss1_message(l3_process_t *pc, u_char mt)
 		return;
 	p = skb_put(skb, 4);
 	MsgHead(p, pc->callref, mt);
-	l3_msg(pc->l3, DL_DATA | REQUEST, skb);
+	l3_msg(pc->l3, DL_DATA | REQUEST, pc->l3->msgnr++, DTYPE_SKB, skb);
 }
 
 static void
@@ -70,7 +73,7 @@ l3dss1_message_cause(l3_process_t *pc, u_char mt, u_char cause)
 	if (!(skb = l3_alloc_skb(l)))
 		return;
 	memcpy(skb_put(skb, l), tmp, l);
-	l3_msg(pc->l3, DL_DATA | REQUEST, skb);
+	l3_msg(pc->l3, DL_DATA | REQUEST, pc->l3->msgnr++, DTYPE_SKB, skb);
 }
 
 static void
@@ -96,7 +99,7 @@ l3dss1_status_send(l3_process_t *pc, u_char loc, u_char cause)
 	if (!(skb = l3_alloc_skb(l)))
 		return;
 	memcpy(skb_put(skb, l), tmp, l);
-	l3_msg(pc->l3, DL_DATA | REQUEST, skb);
+	l3_msg(pc->l3, DL_DATA | REQUEST, pc->l3->msgnr++, DTYPE_SKB, skb);
 }
 
 static void
@@ -132,7 +135,7 @@ l3dss1_msg_without_setup(l3_process_t *pc, u_char loc, u_char cause)
 	if (!(skb = l3_alloc_skb(l)))
 		return;
 	memcpy(skb_put(skb, l), tmp, l);
-	l3_msg(pc->l3, DL_DATA | REQUEST, skb);
+	l3_msg(pc->l3, DL_DATA | REQUEST, pc->l3->msgnr++, DTYPE_SKB, skb);
 	release_l3_process(pc);
 }
 
@@ -487,7 +490,7 @@ l3dss1_msg_with_uus(l3_process_t *pc, u_char cmd)
 	if (!(skb = l3_alloc_skb(l)))
 		return;
 	memcpy(skb_put(skb, l), tmp, l);
-	l3_msg(pc->l3, DL_DATA | REQUEST, skb);
+	l3_msg(pc->l3, DL_DATA | REQUEST, pc->l3->msgnr++, DTYPE_SKB, skb);
 }
 #endif
 
@@ -604,7 +607,7 @@ l3dss1_setup_req(l3_process_t *pc, u_char pr, void *arg)
 	L3DelTimer(&pc->timer);
 	L3AddTimer(&pc->timer, T303, CC_T303);
 	newl3state(pc, 1);
-	l3_msg(pc->l3, DL_DATA | REQUEST, skb);
+	l3_msg(pc->l3, DL_DATA | REQUEST, pc->l3->msgnr++, DTYPE_SKB, skb);
 }
 
 static void
@@ -680,7 +683,7 @@ l3dss1_setup_ack(l3_process_t *pc, u_char pr, void *arg)
 	L3AddTimer(&pc->timer, T304, CC_T304);
 	if (ret) /* STATUS for none mandatory IE errors after actions are taken */
 		l3dss1_std_ie_err(pc, ret);
-	hisax_l3up(pc, CC_MORE_INFO | INDICATION, pc);
+	hisax_l3up(pc, CC_INFO | INDICATION, pc);
 }
 
 static void
@@ -741,7 +744,7 @@ l3dss1_connect(l3_process_t *pc, u_char pr, void *arg)
 	/* here should inserted COLP handling KKe */
 	if (ret)
 		l3dss1_std_ie_err(pc, ret);
-	hisax_l3up(pc, CC_SETUP | CONFIRM, pc);
+	hisax_l3up(pc, CC_CONNECT | INDICATION, pc);
 }
 
 static void
@@ -945,12 +948,12 @@ l3dss1_disconnect_req(l3_process_t *pc, u_char pr, void *arg)
 		return;
 	memcpy(skb_put(skb, l), tmp, l);
 	newl3state(pc, 11);
-	l3_msg(pc->l3, DL_DATA | REQUEST, skb);
+	l3_msg(pc->l3, DL_DATA | REQUEST, pc->l3->msgnr++, DTYPE_SKB, skb);
 	L3AddTimer(&pc->timer, T305, CC_T305);
 }
 
 static void
-l3dss1_setup_rsp(l3_process_t *pc, u_char pr,
+l3dss1_connect_req(l3_process_t *pc, u_char pr,
 		 void *arg)
 {
 #if 0
@@ -1014,7 +1017,7 @@ l3dss1_reject_req(l3_process_t *pc, u_char pr, void *arg)
 	if (!(skb = l3_alloc_skb(l)))
 		return;
 	memcpy(skb_put(skb, l), tmp, l);
-	l3_msg(pc->l3, DL_DATA | REQUEST, skb);
+	l3_msg(pc->l3, DL_DATA | REQUEST, pc->l3->msgnr++, DTYPE_SKB, skb);
 	hisax_l3up(pc, CC_RELEASE | INDICATION, pc);
 	newl3state(pc, 0);
 	release_l3_process(pc);
@@ -1305,7 +1308,7 @@ static void l3dss1_redir_req(l3_process_t *pc, u_char pr, void *arg)
 	if (!(skb = l3_alloc_skb(l))) return;
 	memcpy(skb_put(skb, l), tmp, l);
 
-        l3_msg(pc->l3, DL_DATA | REQUEST, skb);
+        l3_msg(pc->l3, DL_DATA | REQUEST, pc->l3->msgnr++, DTYPE_SKB, skb);
 } /* l3dss1_redir_req */
 
 /********************************************/
@@ -1382,7 +1385,7 @@ static int l3dss1_cmd_global(struct PStack *st, isdn_ctrl *ic)
           L3AddTimer(&pc->timer, ic->parm.dss1_io.timeout, CC_TDSS1_IO | REQUEST);
         }
        
-       l3_msg(st, DL_DATA | REQUEST, skb);
+       l3_msg(st, DL_DATA | REQUEST, pc->l3->msgnr++, DTYPE_SKB, skb);
        ic->parm.dss1_io.hl_id = id; /* return id */
        return(0);
 
@@ -1450,7 +1453,7 @@ l3dss1_release_ind(l3_process_t *pc, u_char pr, void *arg)
 		newl3state(pc, 0);
 		release_l3_process(pc);
 	} else {
-		hisax_l3up(pc, CC_IGNORE | INDICATION, pc);
+		hisax_l3up(pc, CC_RELEASE | INDICATION, pc);
 	}
 }
 
@@ -1469,20 +1472,20 @@ l3dss1_t302(l3_process_t *pc, u_char pr, void *arg)
 	cause.loc = 0x80 | CAUSE_LOC_USER;
 	cause.val = 0x80 | CAUSE_INVALID_NUMBER;
 	l3dss1_disconnect_req(pc, pr, &cause);
-	hisax_l3up(pc, CC_SETUP_ERR, pc);
+	hisax_l3up(pc, CC_DISCONNECT | REQUEST, pc);
 }
 
 static void
 l3dss1_t303(l3_process_t *pc, u_char pr, void *arg)
 {
-	if (pc->N303 > 0) {
-		pc->N303--;
+	if (pc->n303 > 0) {
+		pc->n303--;
 		L3DelTimer(&pc->timer);
 		l3dss1_setup_req(pc, pr, arg);
 	} else {
 		L3DelTimer(&pc->timer);
 		l3dss1_message_cause(pc, MT_RELEASE_COMPLETE, CAUSE_TIMER_EXPIRED);
-		hisax_l3up(pc, CC_NOSETUP_RSP, pc);
+		hisax_l3up(pc, CC_RELEASE | REQUEST, pc);
 		release_l3_process(pc);
 	}
 }
@@ -1497,7 +1500,7 @@ l3dss1_t304(l3_process_t *pc, u_char pr, void *arg)
 	cause.loc = 0x80 | CAUSE_LOC_USER;
 	cause.val = 0x80 | CAUSE_TIMER_EXPIRED;
 	l3dss1_disconnect_req(pc, pr, &cause);
-	hisax_l3up(pc, CC_SETUP_ERR, pc);
+	hisax_l3up(pc, CC_DISCONNECT | REQUEST, pc);
 }
 
 static void
@@ -1523,7 +1526,7 @@ l3dss1_t310(l3_process_t *pc, u_char pr, void *arg)
 	cause.loc = 0x80 | CAUSE_LOC_USER;
 	cause.val = 0x80 | CAUSE_TIMER_EXPIRED;
 	l3dss1_disconnect_req(pc, pr, &cause);
-	hisax_l3up(pc, CC_SETUP_ERR, pc);
+	hisax_l3up(pc, CC_DISCONNECT | REQUEST, pc);
 }
 
 static void
@@ -1536,7 +1539,7 @@ l3dss1_t313(l3_process_t *pc, u_char pr, void *arg)
 	cause.loc = 0x80 | CAUSE_LOC_USER;
 	cause.val = 0x80 | CAUSE_TIMER_EXPIRED;
 	l3dss1_disconnect_req(pc, pr, &cause);
-	hisax_l3up(pc, CC_CONNECT_ERR, pc);
+	hisax_l3up(pc, CC_DISCONNECT | REQUEST, pc);
 }
 
 static void
@@ -1552,7 +1555,7 @@ static void
 l3dss1_t308_2(l3_process_t *pc, u_char pr, void *arg)
 {
 	L3DelTimer(&pc->timer);
-	hisax_l3up(pc, CC_RELEASE_ERR, pc);
+	hisax_l3up(pc, CC_RELEASE | REQUEST, pc);
 	release_l3_process(pc);
 }
 
@@ -1564,7 +1567,7 @@ l3dss1_t318(l3_process_t *pc, u_char pr, void *arg)
 	pc->para.cause = 102;	/* Timer expiry */
 	pc->para.loc = 0;	/* local */
 #endif
-	hisax_l3up(pc, CC_RESUME_ERR, pc);
+	hisax_l3up(pc, CC_RESUME | CONFIRM, pc);
 	newl3state(pc, 19);
 	l3dss1_message(pc, MT_RELEASE);
 	L3AddTimer(&pc->timer, T308, CC_T308_1);
@@ -1578,7 +1581,7 @@ l3dss1_t319(l3_process_t *pc, u_char pr, void *arg)
 	pc->para.cause = 102;	/* Timer expiry */
 	pc->para.loc = 0;	/* local */
 #endif
-	hisax_l3up(pc, CC_SUSPEND_ERR, pc);
+	hisax_l3up(pc, CC_SUSPEND | CONFIRM, pc);
 	newl3state(pc, 10);
 }
 
@@ -1681,7 +1684,7 @@ l3dss1_suspend_req(l3_process_t *pc, u_char pr, void *arg)
 	if (!(skb = l3_alloc_skb(l)))
 		return;
 	memcpy(skb_put(skb, l), tmp, l);
-	l3_msg(pc->l3, DL_DATA | REQUEST, skb);
+	l3_msg(pc->l3, DL_DATA | REQUEST, pc->l3->msgnr++, DTYPE_SKB, skb);
 	newl3state(pc, 15);
 	L3AddTimer(&pc->timer, T319, CC_T319);
 }
@@ -1725,7 +1728,7 @@ l3dss1_suspend_rej(l3_process_t *pc, u_char pr, void *arg)
 		return;
 	}
 	L3DelTimer(&pc->timer);
-	hisax_l3up(pc, CC_SUSPEND_ERR, pc);
+	hisax_l3up(pc, CC_SUSPEND | CONFIRM, pc);
 	newl3state(pc, 10);
 	if (ret) /* STATUS for none mandatory IE errors after actions are taken */
 		l3dss1_std_ie_err(pc, ret);
@@ -1756,7 +1759,7 @@ l3dss1_resume_req(l3_process_t *pc, u_char pr, void *arg)
 	if (!(skb = l3_alloc_skb(l)))
 		return;
 	memcpy(skb_put(skb, l), tmp, l);
-	l3_msg(pc->l3, DL_DATA | REQUEST, skb);
+	l3_msg(pc->l3, DL_DATA | REQUEST, pc->l3->msgnr++, DTYPE_SKB, skb);
 	newl3state(pc, 17);
 	L3AddTimer(&pc->timer, T318, CC_T318);
 }
@@ -1816,7 +1819,7 @@ l3dss1_resume_rej(l3_process_t *pc, u_char pr, void *arg)
 		return;
 	}
 	L3DelTimer(&pc->timer);
-	hisax_l3up(pc, CC_RESUME_ERR, pc);
+	hisax_l3up(pc, CC_RESUME | CONFIRM, pc);
 	newl3state(pc, 0);
 	if (ret) /* STATUS for none mandatory IE errors after actions are taken */
 		l3dss1_std_ie_err(pc, ret);
@@ -1852,7 +1855,7 @@ l3dss1_global_restart(l3_process_t *pc, u_char pr, void *arg)
 	up = pc->l3->proc;
 	while (up) {
 		if ((ri & 7) == 7)
-			up->l3->p_down(up->l3, CC_RESTART | REQUEST, up);
+			dss1man(up, CC_RESTART | REQUEST, NULL);
 //		else if (up->para.bchannel == chan)
 //			up->st->lli.l4l3(up->st, CC_RESTART | REQUEST, up);
 		up = up->next;
@@ -1872,7 +1875,7 @@ l3dss1_global_restart(l3_process_t *pc, u_char pr, void *arg)
 		return;
 	memcpy(skb_put(skb, l), tmp, l);
 	newl3state(pc, 0);
-	l3_msg(pc->l3, DL_DATA | REQUEST, skb);
+	l3_msg(pc->l3, DL_DATA | REQUEST, pc->l3->msgnr++, DTYPE_SKB, skb);
 }
 
 static void
@@ -1884,7 +1887,7 @@ l3dss1_dl_reset(l3_process_t *pc, u_char pr, void *arg)
 	cause.loc = 0x80 | CAUSE_LOC_USER;
 	cause.val = 0x80 | CAUSE_TEMPORARY_FAILURE;
         l3dss1_disconnect_req(pc, pr, &cause);
-        hisax_l3up(pc, CC_SETUP_ERR, pc);
+        hisax_l3up(pc, CC_DISCONNECT | REQUEST, pc);
 }
 
 static void
@@ -1904,7 +1907,7 @@ l3dss1_dl_reestablish(l3_process_t *pc, u_char pr, void *arg)
 {
         L3DelTimer(&pc->timer);
         L3AddTimer(&pc->timer, T309, CC_T309);
-        l3_msg(pc->l3, DL_ESTABLISH | REQUEST, NULL);
+        l3_msg(pc->l3, DL_ESTABLISH | REQUEST, pc->l3->msgnr++, 0, NULL);
 }
  
 static void
@@ -1922,26 +1925,25 @@ static struct stateentry downstatelist[] =
 	 CC_SETUP | REQUEST, l3dss1_setup_req},
 	{SBIT(0),
 	 CC_RESUME | REQUEST, l3dss1_resume_req},
-	{SBIT(1) | SBIT(2) | SBIT(3) | SBIT(4) | SBIT(6) | SBIT(7) | SBIT(8) | SBIT(9) | SBIT(10) | SBIT(25),
+	{SBIT(1) | SBIT(2) | SBIT(3) | SBIT(4) | SBIT(6) | SBIT(7) |
+		SBIT(8) | SBIT(9) | SBIT(10) | SBIT(25),
 	 CC_DISCONNECT | REQUEST, l3dss1_disconnect_req},
 	{SBIT(12),
 	 CC_RELEASE | REQUEST, l3dss1_release_req},
 	{ALL_STATES,
 	 CC_RESTART | REQUEST, l3dss1_restart},
 	{SBIT(6) | SBIT(25),
-	 CC_IGNORE | REQUEST, l3dss1_reset},
-	{SBIT(6) | SBIT(25),
-	 CC_REJECT | REQUEST, l3dss1_reject_req},
+	 CC_SETUP | RESPONSE, l3dss1_reject_req},
 	{SBIT(6) | SBIT(25),
 	 CC_PROCEED_SEND | REQUEST, l3dss1_proceed_req},
 	{SBIT(6),
-	 CC_MORE_INFO | REQUEST, l3dss1_setup_ack_req},
+	 CC_INFO | REQUEST, l3dss1_setup_ack_req},
 	{SBIT(25),
-	 CC_MORE_INFO | REQUEST, l3dss1_dummy},
+	 CC_INFO | REQUEST, l3dss1_dummy},
 	{SBIT(6) | SBIT(9) | SBIT(25),
 	 CC_ALERTING | REQUEST, l3dss1_alert_req},
 	{SBIT(6) | SBIT(7) | SBIT(9) | SBIT(25),
-	 CC_SETUP | RESPONSE, l3dss1_setup_rsp},
+	 CC_CONNECT | REQUEST, l3dss1_connect_req},
 	{SBIT(10),
 	 CC_SUSPEND | REQUEST, l3dss1_suspend_req},
 #if 0
@@ -1950,30 +1952,6 @@ static struct stateentry downstatelist[] =
         {SBIT(6),
          CC_REDIR | REQUEST, l3dss1_redir_req_early},
 #endif
-        {SBIT(9) | SBIT(25),
-         CC_DISCONNECT | REQUEST, l3dss1_disconnect_req},
-	{SBIT(25),
-	 CC_T302, l3dss1_t302},
-	{SBIT(1),
-	 CC_T303, l3dss1_t303},
-	{SBIT(2),
-	 CC_T304, l3dss1_t304},
-	{SBIT(3),
-	 CC_T310, l3dss1_t310},
-	{SBIT(8),
-	 CC_T313, l3dss1_t313},
-	{SBIT(11),
-	 CC_T305, l3dss1_t305},
-	{SBIT(15),
-	 CC_T319, l3dss1_t319},
-	{SBIT(17),
-	 CC_T318, l3dss1_t318},
-	{SBIT(19),
-	 CC_T308_1, l3dss1_t308_1},
-	{SBIT(19),
-	 CC_T308_2, l3dss1_t308_2},
-	{SBIT(10),
-	 CC_T309, l3dss1_dl_release},
 };
 
 #define DOWNSLLEN \
@@ -2057,6 +2035,30 @@ static struct stateentry manstatelist[] =
          DL_RELEASE | INDICATION, l3dss1_dl_reestablish},
         {ALL_STATES,
          DL_RELEASE | INDICATION, l3dss1_dl_release},
+	{SBIT(25),
+	 CC_T302, l3dss1_t302},
+	{SBIT(1),
+	 CC_T303, l3dss1_t303},
+	{SBIT(2),
+	 CC_T304, l3dss1_t304},
+	{SBIT(3),
+	 CC_T310, l3dss1_t310},
+	{SBIT(8),
+	 CC_T313, l3dss1_t313},
+	{SBIT(11),
+	 CC_T305, l3dss1_t305},
+	{SBIT(15),
+	 CC_T319, l3dss1_t319},
+	{SBIT(17),
+	 CC_T318, l3dss1_t318},
+	{SBIT(19),
+	 CC_T308_1, l3dss1_t308_1},
+	{SBIT(19),
+	 CC_T308_2, l3dss1_t308_2},
+	{SBIT(10),
+	 CC_T309, l3dss1_dl_release},
+	{ALL_STATES,
+	 CC_RESTART | REQUEST, l3dss1_restart},
 };
 
 #define MANSLLEN \
@@ -2095,7 +2097,7 @@ global_handler(layer3_t *l3, int mt, struct sk_buff *skb)
 		if (!(skb = l3_alloc_skb(l)))
 			return;
 		memcpy(skb_put(skb, l), tmp, l);
-		l3_msg(l3, DL_DATA | REQUEST, skb);
+		l3_msg(l3, DL_DATA | REQUEST, l3->msgnr++, DTYPE_SKB, skb);
 	} else {
 		if (l3->debug & L3_DEB_STATE) {
 			l3_debug(l3, "dss1 global %d mt %x",
@@ -2105,15 +2107,18 @@ global_handler(layer3_t *l3, int mt, struct sk_buff *skb)
 	}
 }
 
-static void
-dss1up(layer3_t *l3, int pr, void *arg)
-{
+static int
+dss1_fromdown(hisaxif_t *hif, u_int prim, u_int nr, int dtyp, void *arg) {
+	layer3_t *l3;
 	int i, mt, cr, cause, callState;
 	char *ptr;
 	struct sk_buff *skb = arg;
 	l3_process_t *proc;
 
-	switch (pr) {
+	if (!hif || !hif->fdata)
+		return(-EINVAL);
+	l3 = hif->fdata;
+	switch (prim) {
 		case (DL_DATA | INDICATION):
 		case (DL_UNITDATA | INDICATION):
 			break;
@@ -2121,33 +2126,40 @@ dss1up(layer3_t *l3, int pr, void *arg)
 		case (DL_ESTABLISH | INDICATION):
 		case (DL_RELEASE | INDICATION):
 		case (DL_RELEASE | CONFIRM):
-			l3_msg(l3, pr, arg);
-			return;
+			l3_msg(l3, prim, nr, dtyp, arg);
+			return(0);
 			break;
                 default:
-                        printk(KERN_ERR "HiSax dss1up unknown pr=%04x\n", pr);
-                        return;
+                        printk(KERN_WARNING
+                        	"HiSax dss1up unknown pr=%04x\n", prim);
+                        return(-EINVAL);
+	}
+	if ((dtyp != DTYPE_SKB) || !arg) {
+		printk(KERN_WARNING
+			"HiSax dss1_fromdown prim %x dtyp %x skb %p\n",
+			prim, dtyp, arg);
+		return(-EINVAL);
 	}
 	if (skb->len < 3) {
 		l3_debug(l3, "dss1up frame too short(%d)", skb->len);
 		dev_kfree_skb(skb);
-		return;
+		return(0);
 	}
 
 	if (skb->data[0] != PROTO_DIS_EURO) {
 		if (l3->debug & L3_DEB_PROTERR) {
 			l3_debug(l3, "dss1up%sunexpected discriminator %x message len %d",
-				 (pr == (DL_DATA | INDICATION)) ? " " : "(broadcast) ",
+				 (prim == (DL_DATA | INDICATION)) ? " " : "(broadcast) ",
 				 skb->data[0], skb->len);
 		}
 		dev_kfree_skb(skb);
-		return;
+		return(0);
 	}
 	cr = getcallref(skb->data);
 	if (skb->len < ((skb->data[1] & 0x0f) + 3)) {
 		l3_debug(l3, "dss1up frame too short(%d)", skb->len);
 		dev_kfree_skb(skb);
-		return;
+		return(0);
 	}
 	mt = skb->data[skb->data[1] + 2];
 	if (l3->debug & L3_DEB_STATE)
@@ -2156,7 +2168,7 @@ dss1up(layer3_t *l3, int pr, void *arg)
 		if (l3->debug & L3_DEB_WARN)
 			l3_debug(l3, "dss1up wrong Callref");
 		dev_kfree_skb(skb);
-		return;
+		return(0);
 	} else if (cr == -1) {	/* Dummy Callref */
 #if 0
 	u_char *p;
@@ -2165,20 +2177,20 @@ dss1up(layer3_t *l3, int pr, void *arg)
 				l3dss1_parse_facility(st, NULL, 
 					(pr == (DL_DATA | INDICATION)) ? -1 : -2, p); 
 				dev_kfree_skb(skb);
-				return;  
+				return(0);  
 			}
 #endif
 		if (l3->debug & L3_DEB_WARN)
 			l3_debug(l3, "dss1up dummy Callref (no facility msg or ie)");
 		dev_kfree_skb(skb);
-		return;
+		return(0);
 	} else if ((((skb->data[1] & 0x0f) == 1) && (0==(cr & 0x7f))) ||
 		(((skb->data[1] & 0x0f) == 2) && (0==(cr & 0x7fff)))) {	/* Global CallRef */
 		if (l3->debug & L3_DEB_STATE)
 			l3_debug(l3, "dss1up Global CallRef");
 		global_handler(l3, mt, skb);
 		dev_kfree_skb(skb);
-		return;
+		return(0);
 	} else if (!(proc = getl3proc(l3, cr))) {
 		/* No transaction process exist, that means no call with
 		 * this callreference is active
@@ -2190,15 +2202,15 @@ dss1up(layer3_t *l3, int pr, void *arg)
 				if (l3->debug & L3_DEB_STATE)
 					l3_debug(l3, "dss1up wrong CRef flag");
 				dev_kfree_skb(skb);
-				return;
+				return(0);
 			}
-			if (!(proc = new_l3_process(l3, cr))) {
+			if (!(proc = new_l3_process(l3, cr, N303))) {
 				/* May be to answer with RELEASE_COMPLETE and
 				 * CAUSE 0x2f "Resource unavailable", but this
 				 * need a new_l3_process too ... arghh
 				 */
 				dev_kfree_skb(skb);
-				return;
+				return(0);
 			}
 		} else if (mt == MT_STATUS) {
 			cause = 0;
@@ -2226,32 +2238,32 @@ dss1up(layer3_t *l3, int pr, void *arg)
 				 * MT_STATUS is received with call state != 0,
 				 * we must send MT_RELEASE_COMPLETE cause 101
 				 */
-				if ((proc = new_l3_process(l3, cr))) {
+				if ((proc = new_l3_process(l3, cr, N303))) {
 					l3dss1_msg_without_setup(proc,
 						CAUSE_LOC_USER, CAUSE_NOTCOMPAT_STATE);
 				}
 			}
 			dev_kfree_skb(skb);
-			return;
+			return(0);
 		} else if (mt == MT_RELEASE_COMPLETE) {
 			dev_kfree_skb(skb);
-			return;
+			return(0);
 		} else {
 			/* ETS 300-104 part 2
 			 * if setup has not been made and a message type
 			 * (except MT_SETUP and RELEASE_COMPLETE) is received,
 			 * we must send MT_RELEASE_COMPLETE cause 81 */
 			dev_kfree_skb(skb);
-			if ((proc = new_l3_process(l3, cr))) {
+			if ((proc = new_l3_process(l3, cr, N303))) {
 				l3dss1_msg_without_setup(proc, CAUSE_LOC_USER,
 					CAUSE_INVALID_CALLREF);
 			}
-			return;
+			return(0);
 		}
 	}
 	if (l3dss1_check_messagetype_validity(proc, mt, skb)) {
 		dev_kfree_skb(skb);
-		return;
+		return(0);
 	}
 #if 0
 	if ((p = findie(skb->data, skb->len, IE_DISPLAY, 0)) != NULL) 
@@ -2264,7 +2276,7 @@ dss1up(layer3_t *l3, int pr, void *arg)
 	if (i == DATASLLEN) {
 		if (l3->debug & L3_DEB_STATE) {
 			l3_debug(l3, "dss1up%sstate %d mt %#x unhandled",
-				(pr == (DL_DATA | INDICATION)) ? " " : "(broadcast) ",
+				(prim == (DL_DATA | INDICATION)) ? " " : "(broadcast) ",
 				proc->state, mt);
 		}
 		if ((MT_RELEASE_COMPLETE != mt) && (MT_RELEASE != mt)) {
@@ -2273,34 +2285,37 @@ dss1up(layer3_t *l3, int pr, void *arg)
 	} else {
 		if (l3->debug & L3_DEB_STATE) {
 			l3_debug(l3, "dss1up%sstate %d mt %x",
-				(pr == (DL_DATA | INDICATION)) ? " " : "(broadcast) ",
+				(prim == (DL_DATA | INDICATION)) ? " " : "(broadcast) ",
 				proc->state, mt);
 		}
-		datastatelist[i].rout(proc, pr, skb);
+		datastatelist[i].rout(proc, prim, skb);
 	}
 	dev_kfree_skb(skb);
-	return;
+	return(0);
 }
 
-static void
-dss1down(layer3_t *l3, int pr, void *arg)
-{
+static int
+dss1_fromup(hisaxif_t *hif, u_int prim, u_int nr, int dtyp, void *arg) {
+	layer3_t *l3;
 	int i, cr;
 	l3_process_t *proc;
 
-	if ((DL_ESTABLISH | REQUEST) == pr) {
-		l3_msg(l3, pr, NULL);
-		return;
-	} else if (((CC_SETUP | REQUEST) == pr) || ((CC_RESUME | REQUEST) == pr)) {
+	if (!hif || !hif->fdata)
+		return(-EINVAL);
+	l3 = hif->fdata;
+	if ((DL_ESTABLISH | REQUEST) == prim) {
+		l3_msg(l3, prim, l3->msgnr++, 0, NULL);
+		return(0);
+	} else if (((CC_SETUP | REQUEST) == prim) || ((CC_RESUME | REQUEST) == prim)) {
 		cr = newcallref();
 		cr |= 0x80;
-		proc = new_l3_process(l3, cr);
+		proc = new_l3_process(l3, cr, N303);
 	} else {
 		proc = arg;
 	}
 	if (!proc) {
-		printk(KERN_ERR "HiSax dss1down without proc pr=%04x\n", pr);
-		return;
+		printk(KERN_ERR "HiSax dss1 fromup without proc pr=%04x\n", prim);
+		return(-EINVAL);
 	}
 #if 0
 	if ( pr == (CC_TDSS1_IO | REQUEST)) {
@@ -2309,70 +2324,301 @@ dss1down(layer3_t *l3, int pr, void *arg)
 	}  
 #endif
 	for (i = 0; i < DOWNSLLEN; i++)
-		if ((pr == downstatelist[i].primitive) &&
+		if ((prim == downstatelist[i].primitive) &&
 		    ((1 << proc->state) & downstatelist[i].state))
 			break;
 	if (i == DOWNSLLEN) {
 		if (l3->debug & L3_DEB_STATE) {
 			l3_debug(l3, "dss1down state %d prim %#x unhandled",
-				proc->state, pr);
+				proc->state, prim);
 		}
 	} else {
 		if (l3->debug & L3_DEB_STATE) {
 			l3_debug(l3, "dss1down state %d prim %#x",
-				proc->state, pr);
+				proc->state, prim);
 		}
-		downstatelist[i].rout(proc, pr, arg);
+		downstatelist[i].rout(proc, prim, arg);
 	}
+	return(0);
+}
+
+static int
+dss1man(l3_process_t *proc, u_int pr, void *arg)
+{
+	int i;
+ 
+	if (!proc) {
+		printk(KERN_ERR "HiSax dss1man without proc pr=%04x\n", pr);
+		return(-EINVAL);
+	}
+	for (i = 0; i < MANSLLEN; i++)
+		if ((pr == manstatelist[i].primitive) &&
+			((1 << proc->state) & manstatelist[i].state))
+			break;
+		if (i == MANSLLEN) {
+			if (proc->debug & L3_DEB_STATE) {
+				l3_debug(proc->l3, "cr %d dss1man state %d prim %#x unhandled",
+					proc->callref & 0x7f, proc->state, pr);
+			}
+		} else {
+			if (proc->debug & L3_DEB_STATE) {
+				l3_debug(proc->l3, "cr %d dss1man state %d prim %#x",
+					proc->callref & 0x7f, proc->state, pr);
+			}
+			manstatelist[i].rout(proc, pr, arg);
+	}
+	return(0);
 }
 
 static void
-dss1man(layer3_t *l3, int pr, void *arg)
+release_udss1(layer3_t *l3)
 {
-        int i;
-        l3_process_t *proc = arg;
- 
-        if (!proc) {
-                printk(KERN_ERR "HiSax dss1man without proc pr=%04x\n", pr);
-                return;
-        }
-        for (i = 0; i < MANSLLEN; i++)
-                if ((pr == manstatelist[i].primitive) &&
-                    ((1 << proc->state) & manstatelist[i].state))
-                        break;
-        if (i == MANSLLEN) {
-                if (l3->debug & L3_DEB_STATE) {
-                        l3_debug(l3, "cr %d dss1man state %d prim %#x unhandled",
-                                proc->callref & 0x7f, proc->state, pr);
-                }
-        } else {
-                if (l3->debug & L3_DEB_STATE) {
-                        l3_debug(l3, "cr %d dss1man state %d prim %#x",
-                                proc->callref & 0x7f, proc->state, pr);
-                }
-                manstatelist[i].rout(proc, pr, arg);
-        }
+	hisaxinstance_t  *inst = &l3->inst;
+	hisaxif_t	hif;
+
+	release_l3(l3);
+	memset(&hif, 0, sizeof(hisaxif_t));
+	hif.fdata = l3;
+	hif.func = dss1_fromup;
+	hif.protocol = inst->up.protocol;
+	hif.layer = inst->up.layer;
+	u_dss1.ctrl(inst->st, MGR_DELIF | REQUEST, &hif);
+	hif.fdata = l3;
+	hif.func = dss1_fromdown;
+	hif.protocol = inst->down.protocol;
+	hif.layer = inst->down.layer;
+	u_dss1.ctrl(inst->st, MGR_DELIF | REQUEST, &hif);
+	REMOVE_FROM_LISTBASE(l3, dss1list);
+	REMOVE_FROM_LIST(inst);
+	if (inst->st)
+		if (inst->st->inst[inst->layer] == inst)
+			inst->st->inst[inst->layer] = inst->next;
+	kfree(l3);
+	u_dss1.refcnt--;
 }
 
-int 
-init_dss1(layer3_t *l3)
-{
-	char tmp[64];
-	int i;
+static layer3_t *
+create_udss1(hisaxstack_t *st, hisaxif_t *hif) {
+	layer3_t *nl3;
+	int lay, err;
 
-	l3->p_down = dss1down;
-	l3->N303 = 1;
-	if (!(l3->global = kmalloc(sizeof(l3_process_t), GFP_ATOMIC))) {
-		printk(KERN_ERR "HiSax can't get memory for dss1 global CR\n");
-	} else {
-		l3->global->state = 0;
-		l3->global->callref = 0;
-		l3->global->next = NULL;
-		l3->global->debug = L3_DEB_WARN;
-		l3->global->l3 = l3;
-		l3->global->N303 = 1;
-		L3InitTimer(l3->global, &l3->global->timer);
+	if (!hif)
+		return(NULL);
+	printk(KERN_DEBUG "create_udss1 prot %x\n", hif->protocol);
+	if (!st) {
+		printk(KERN_ERR "create_udss1 no stack\n");
+		return(NULL);
 	}
+	if (!(nl3 = kmalloc(sizeof(layer3_t), GFP_ATOMIC))) {
+		printk(KERN_ERR "kmalloc layer3 failed\n");
+		return(NULL);
+	}
+	memset(nl3, 0, sizeof(layer3_t));
+	nl3->debug = debug;
+	if (hif->protocol != ISDN_PID_L3_DSS1USER) {
+		printk(KERN_ERR "udss1 create failed prt %x\n",nl3->inst.protocol);
+		kfree(nl3);
+		return(NULL);
+	}
+	if (!(nl3->global = kmalloc(sizeof(l3_process_t), GFP_ATOMIC))) {
+		printk(KERN_ERR "HiSax can't get memory for dss1 global CR\n");
+		kfree(nl3);
+		return(NULL);
+	} else {
+		nl3->global->state = 0;
+		nl3->global->callref = 0;
+		nl3->global->next = NULL;
+		nl3->global->debug = L3_DEB_WARN;
+		nl3->global->n303 = N303;
+		nl3->global->l3 = nl3;
+		L3InitTimer(nl3->global, &nl3->global->timer);
+	}
+	nl3->inst.protocol = hif->protocol;
+	nl3->inst.obj = &u_dss1;
+	nl3->inst.layer = hif->layer;
+	nl3->inst.data = nl3;
+	init_l3(nl3);
+	nl3->p_mgr = dss1man;
+	APPEND_TO_LIST(nl3, dss1list);
+	u_dss1.ctrl(st, MGR_ADDLAYER | INDICATION, &nl3->inst);
+	lay = nl3->inst.layer + 1;
+	if ((lay<0) || (lay>MAX_LAYER)) {
+		lay = 0;
+		nl3->inst.up.protocol = ISDN_PID_NONE;
+	} else
+		nl3->inst.up.protocol = st->protocols[lay];
+	nl3->inst.up.layer = lay;
+	nl3->inst.up.stat = IF_DOWN;
+	lay = nl3->inst.layer - 1;
+	if ((lay<0) || (lay>MAX_LAYER)) {
+		lay = 0;
+		nl3->inst.down.protocol = ISDN_PID_NONE;
+	} else
+		nl3->inst.down.protocol = st->protocols[lay];
+	nl3->inst.down.layer = lay;
+	nl3->inst.down.stat = IF_UP;
+	err = u_dss1.ctrl(st, MGR_ADDIF | REQUEST, &nl3->inst.down);
+	if (err) {
+		release_l3(nl3);
+		printk(KERN_ERR "udss1 down interface request failed %d\n", err);
+		return(NULL);
+	}
+	err = u_dss1.ctrl(st, MGR_ADDIF | REQUEST, &nl3->inst.up);
+	if (err) {
+		release_l3(nl3);
+		printk(KERN_ERR "udss1 up interface request failed %d\n", err);
+		return(NULL);
+	}
+	return(nl3);
+}
+
+static int
+add_if(layer3_t *l3, hisaxif_t *hif) {
+	int err;
+	hisaxinstance_t *inst = &l3->inst;
+
+	printk(KERN_DEBUG "layer3 add_if lay %d/%d prot %x\n", hif->layer,
+		hif->stat, hif->protocol);
+	hif->fdata = l3;
+	if (IF_TYPE(hif) == IF_UP) {
+		hif->func = dss1_fromup;
+		if (inst->up.stat == IF_NOACTIV) {
+			inst->up.stat = IF_DOWN;
+			inst->up.protocol =
+				inst->st->protocols[inst->up.layer];
+			err = u_dss1.ctrl(inst->st, MGR_ADDIF | REQUEST, &inst->up);
+			if (err)
+				inst->up.stat = IF_NOACTIV;
+		}
+	} else if (IF_TYPE(hif) == IF_DOWN) {
+		hif->func = dss1_fromdown;
+		if (inst->down.stat == IF_NOACTIV) {
+			inst->down.stat = IF_UP;
+			inst->down.protocol =
+				inst->st->protocols[inst->down.layer];
+			err = u_dss1.ctrl(inst->st, MGR_ADDIF | REQUEST, &inst->down);
+			if (err)
+				inst->down.stat = IF_NOACTIV;
+		}
+	} else
+		return(-EINVAL);
+	return(0);
+}
+
+static int
+del_if(layer3_t *l3, hisaxif_t *hif) {
+	int err;
+	hisaxinstance_t *inst = &l3->inst;
+
+	printk(KERN_DEBUG "layer3 del_if lay %d/%d %p/%p\n", hif->layer,
+		hif->stat, hif->func, hif->fdata);
+	if ((hif->func == inst->up.func) && (hif->fdata == inst->up.fdata)) {
+		inst->up.stat = IF_NOACTIV;
+		inst->up.protocol = ISDN_PID_NONE;
+		err = u_dss1.ctrl(inst->st, MGR_ADDIF | REQUEST, &inst->up);
+	} else if ((hif->func == inst->down.func) && (hif->fdata == inst->down.fdata)) {
+		inst->down.stat = IF_NOACTIV;
+		inst->down.protocol = ISDN_PID_NONE;
+		err = u_dss1.ctrl(inst->st, MGR_ADDIF | REQUEST, &inst->down);
+	} else {
+		printk(KERN_DEBUG "layer3 del_if no if found\n");
+		return(-EINVAL);
+	}
+	return(0);
+}
+
+static char MName[] = "UDSS1";
+
+static int UDSS1Protocols[] = {	ISDN_PID_L3_DSS1USER
+			};
+#define PROTOCOLCNT	(sizeof(UDSS1Protocols)/sizeof(int))
+ 
+#ifdef MODULE
+MODULE_AUTHOR("Karsten Keil");
+MODULE_PARM(debug, "1i");
+#define UDSS1Init init_module
+#endif
+
+static int
+udss1_manager(void *data, u_int prim, void *arg) {
+	hisaxstack_t *st = data;
+	layer3_t *l3l = dss1list;
+
+//	printk(KERN_DEBUG "udss1_manager data:%p prim:%x arg:%p\n", data, prim, arg);
+	if (!data)
+		return(-EINVAL);
+	while(l3l) {
+		if (l3l->inst.st == st)
+			break;
+		l3l = l3l->next;
+	}
+	switch(prim) {
+	    case MGR_ADDIF | REQUEST:
+		if (!l3l)
+			l3l = create_udss1(st, arg);
+		if (!l3l) {
+			printk(KERN_WARNING "udss1_manager create_udss1 failed\n");
+			return(-EINVAL);
+		}
+		return(add_if(l3l, arg));
+		break;
+	    case MGR_DELIF | REQUEST:
+		if (!l3l) {
+			printk(KERN_WARNING "udss1_manager delif no instance\n");
+			return(-EINVAL);
+		}
+		return(del_if(l3l, arg));
+		break;
+	    case MGR_RELEASE | INDICATION:
+	    	if (l3l) {
+			printk(KERN_DEBUG "release_udss1 id %x\n", l3l->inst.st->id);
+	    		release_udss1(l3l);
+	    	} else 
+	    		printk(KERN_WARNING "udss1_manager release no instance\n");
+	    	break;
+	    		
+	    default:
+		printk(KERN_WARNING "udss1 prim %x not handled\n", prim);
+		return(-EINVAL);
+	}
+	return(0);
+}
+
+int UDSS1Init(void)
+{
+	int err;
+	char tmp[32];
+
 	strcpy(tmp, dss1_revision);
 	printk(KERN_INFO "HiSax: DSS1 Rev. %s\n", HiSax_getrev(tmp));
+	u_dss1.name = MName;
+	u_dss1.protocols = UDSS1Protocols;
+	u_dss1.protcnt = PROTOCOLCNT;
+	u_dss1.own_ctrl = udss1_manager;
+	u_dss1.prev = NULL;
+	u_dss1.next = NULL;
+	u_dss1.layer = 3;
+	HiSaxl3New();
+	if ((err = HiSax_register(&u_dss1))) {
+		printk(KERN_ERR "Can't register %s error(%d)\n", MName, err);
+		HiSaxl3Free();
+	}
+	return(err);
 }
+
+#ifdef MODULE
+void cleanup_module(void)
+{
+	int err;
+
+	if ((err = HiSax_unregister(&u_dss1))) {
+		printk(KERN_ERR "Can't unregister User DSS1 error(%d)\n", err);
+	}
+	if (dss1list) {
+		printk(KERN_WARNING "hisaxl3 u_dss1list not empty\n");
+		while(dss1list)
+			release_udss1(dss1list);
+	}
+	HiSaxl3Free();
+}
+#endif

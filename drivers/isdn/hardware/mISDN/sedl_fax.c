@@ -1,4 +1,4 @@
-/* $Id: sedl_fax.c,v 0.2 2001/02/11 22:57:24 kkeil Exp $
+/* $Id: sedl_fax.c,v 0.3 2001/02/13 10:42:55 kkeil Exp $
  *
  * sedl_fax.c  low level stuff for Sedlbauer Speedfax + cards
  *
@@ -27,18 +27,20 @@
  */
 
 #include <linux/config.h>
-#include "hisax.h"
-#include "isac.h"
-#include "isar.h"
-#include "isdnl1.h"
-#include "debug.h"
+#include <linux/module.h>
 #include <linux/pci.h>
 #include <linux/kernel_stat.h>
-#include <linux/interrupt.h>
+#include <linux/delay.h>
+#include "hisax_hw.h"
+#include "isac.h"
+#include "isar.h"
+#include "hisaxl1.h"
+#include "helper.h"
+#include "debug.h"
 
 extern const char *CardType[];
 
-const char *Sedlfax_revision = "$Revision: 0.2 $";
+const char *Sedlfax_revision = "$Revision: 0.3 $";
 
 const char *Sedlbauer_Types[] =
 	{"None", "speed fax+", "speed fax+ pyramid", "speed fax+ pci"};
@@ -763,8 +765,8 @@ speedfax_manager(void *data, u_int prim, void *arg) {
 	return(0);
 }
 
-__initfunc(int
-Speedfax_init(void))
+int
+Speedfax_init(void)
 {
 	int err,i;
 	sedl_fax *card;

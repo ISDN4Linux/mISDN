@@ -1,4 +1,4 @@
-/* $Id: avm_fritz.c,v 0.2 2001/02/11 22:57:23 kkeil Exp $
+/* $Id: avm_fritz.c,v 0.3 2001/02/13 10:42:55 kkeil Exp $
  *
  * fritz_pci.c    low level stuff for AVM Fritz!PCI and ISA PnP isdn cards
  *              Thanks to AVM, Berlin for informations
@@ -10,15 +10,17 @@
  */
 #include <linux/config.h>
 #include <linux/module.h>
-#include "hisax.h"
-#include "isac.h"
-#include "isdnl1.h"
-#include "debug.h"
 #include <linux/pci.h>
 #include <linux/kernel_stat.h>
-#include <linux/interrupt.h>
+#include "hisax_hw.h"
+#include "isac.h"
+#include "hisaxl1.h"
+#include "helper.h"
+#include "debug.h"
 
-static const char *avm_pci_rev = "$Revision: 0.2 $";
+static const char *avm_pci_rev = "$Revision: 0.3 $";
+
+#define ISDN_CTYPE_FRITZPCI 1
 
 #define  AVM_FRITZ_PCI		1
 #define  AVM_FRITZ_PNP		2
@@ -313,7 +315,7 @@ hdlc_empty_fifo(bchannel_t *bch, int count)
 
 	if ((fc->dch.debug & L1_DEB_HSCX) && !(fc->dch.debug & L1_DEB_HSCX_FIFO))
 		debugprint(&bch->inst, "hdlc_empty_fifo %d", count);
-	if (bch->rx_idx + count > HSCX_BUFMAX) {
+	if (bch->rx_idx + count > MAX_DATA_MEM) {
 		if (fc->dch.debug & L1_DEB_WARN)
 			debugprint(&bch->inst, "hdlc_empty_fifo: incoming packet too large");
 		return;
@@ -627,7 +629,7 @@ int
 open_hdlcstate(fritzpnppci *fc, bchannel_t *bch)
 {
 	if (!test_and_set_bit(BC_FLG_INIT, &bch->Flag)) {
-		if (!(bch->rx_buf = kmalloc(HSCX_BUFMAX, GFP_ATOMIC))) {
+		if (!(bch->rx_buf = kmalloc(MAX_DATA_MEM, GFP_ATOMIC))) {
 			printk(KERN_WARNING
 			       "HiSax: No memory for hdlc.rx_buf\n");
 			return (1);
@@ -660,8 +662,8 @@ setstack_hdlc(fritzpnppci *fc, bchannel_t *bch)
 	return (0);
 }
 
-HISAX_INITFUNC(void
-clear_pending_hdlc_ints(fritzpnppci *fc))
+void
+clear_pending_hdlc_ints(fritzpnppci *fc)
 {
 	u_int val;
 
@@ -823,10 +825,10 @@ init_bch(fritzpnppci *fc,
 	bch->Flag = 0;
 }
 
-static 	struct pci_dev *dev_avm __initdata = NULL;
+static 	struct pci_dev *dev_avm = NULL;
 
-__initfunc(int
-setup_fritz_pci(fritzpnppci *fc))
+int
+setup_fritz_pci(fritzpnppci *fc)
 {
 	u_int val, ver;
 	char tmp[64];
@@ -1093,8 +1095,8 @@ fritz_manager(void *data, u_int prim, void *arg) {
 	return(0);
 }
 
-__initfunc(int
-Fritz_init(void))
+int
+Fritz_init(void)
 {
 	int err;
 

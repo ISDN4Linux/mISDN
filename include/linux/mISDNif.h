@@ -1,7 +1,13 @@
-/* $Id: mISDNif.h,v 0.1 2001/02/11 22:46:19 kkeil Exp $
+/* $Id: mISDNif.h,v 0.2 2001/02/13 10:42:55 kkeil Exp $
  *
  */
+
+#ifndef HISAXIF_H
+#define HISAXIF_H
+
+#include <stdarg.h>
 #include <linux/types.h>
+#include <linux/errno.h>
 
 /* primitives for information exchange
  * generell format
@@ -58,6 +64,16 @@
 #define HW_POWERUP	0x0101
 #define HW_DEACTIVATE	0x0200
 #define HW_ACTIVATE	0x0201
+#define HW_MOD_FRM	0x0400
+#define HW_MOD_FRH	0x0401
+#define HW_MOD_FTM	0x0402
+#define HW_MOD_FTH	0x0403
+#define HW_MOD_CONNECT	0x0410
+#define HW_MOD_OK	0x0411
+#define HW_MOD_NOCARR	0x0412
+#define HW_MOD_FCERROR	0x0413
+#define HW_D_BLOCKED	0xFF20 
+#define HW_D_NOBLOCKED	0xFF21 
 #define HW_TESTLOOP	0xFF00
 #define HW_FIRM_START	0xFF10
 #define HW_FIRM_DATA	0xFF11
@@ -87,11 +103,28 @@
 #define MDL_INFORMATION	0x024000
 #define MDL_STATUS	0x028100
 
+/* layer 3 */
+#define CC_SETUP	0x030100
+#define CC_RESUME	0x030200
+#define CC_INFO		0x030300
+#define CC_SETUP_COMPL	0x030400
+#define CC_PROCEEDING	0x030500
+#define CC_ALERTING	0x030600
+#define CC_PROGRESS	0x030700
+#define CC_CONNECT	0x030800
+#define CC_NOTIFY	0x030900
+#define CC_DISCONNECT	0x030a00
+#define CC_RELEASE	0x030b00
+#define CC_SUSPEND	0x030c00
+#define CC_PROCEED_SEND 0x030d00
+#define CC_REDIR        0x030e00
+#define CC_RESTART	0x031000
+
+
 #define LAYER_MASK	0x0F0000
 #define COMMAND_MASK	0x00FF00
 #define SUBCOMMAND_MASK	0x0000FF
 #define DATA_COMMAND	0x100000
-
 #define CMD_IS_DATA(p)	(p & DATA_COMMAND)
 
 /* short cuts layer 1 */
@@ -162,7 +195,17 @@
 #define IF_IADDRMASK	0xF0FFFFFF
 #define IF_LAYERMASK	0x000F0000
 #define IF_TYPE(i)	((i)->stat & IF_TYPEMASK)
+
 #define DTYPE_SKB	-1
+
+/* special packet type */
+#define PACKET_NOACK	250
+
+/* limits for buffers */
+
+#define MAX_DATA_SIZE	2048
+#define MAX_DATA_MEM	2080
+#define MAX_HEADER_LEN	4
 
 /* structure for information exchange between layer/entity boundaries */
 
@@ -238,7 +281,7 @@ typedef struct _hisaxinstance {
 typedef struct _hisaxstack {
 	struct _hisaxstack	*prev;
 	struct _hisaxstack	*next;
-	int			id;
+	u_int			id;
 	int			protocols[MAX_LAYER+1];
 	hisaxinstance_t		*inst[MAX_LAYER+1];
 	hisaxinstance_t		*mgr;
@@ -247,3 +290,7 @@ typedef struct _hisaxstack {
 
 int HiSax_register(hisaxobject_t *obj);
 int HiSax_unregister(hisaxobject_t *obj);
+
+#ifdef __KERNEL__
+#endif /* __KERNEL__ */
+#endif /* HISAXIF_H */

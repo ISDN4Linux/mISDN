@@ -1,7 +1,6 @@
-/* $Id: fsm.c,v 0.2 2001/02/11 22:57:23 kkeil Exp $
+/* $Id: fsm.c,v 0.3 2001/02/13 10:42:55 kkeil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
- *              based on the teles driver from Jan den Ouden
  *
  * Thanks to    Jan den Ouden
  *              Fritz Elfert
@@ -10,13 +9,15 @@
  *
  */
 #define __NO_VERSION__
-#include "hisax.h"
+#include <linux/kernel.h>
+#include <linux/slab.h>
+#include "fsm.h"
 
 #define FSM_TIMER_DEBUG 0
 
-HISAX_INITFUNC(void
+void
 FsmNew(struct Fsm *fsm,
-       struct FsmNode *fnlist, int fncount))
+       struct FsmNode *fnlist, int fncount)
 {
 	int i;
 

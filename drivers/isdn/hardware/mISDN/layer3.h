@@ -1,8 +1,12 @@
-/* $Id: layer3.h,v 0.2 2001/02/11 22:54:20 kkeil Exp $
+/* $Id: layer3.h,v 0.3 2001/02/13 10:42:55 kkeil Exp $
  *
  * This file is (c) under GNU PUBLIC LICENSE
  *
  */
+
+#include <linux/hisaxif.h>
+#include <linux/skbuff.h>
+#include "fsm.h"
 
 #define SBIT(state) (1<<state)
 #define ALL_STATES  0x03ffffff
@@ -18,7 +22,7 @@
 
 #define FLG_L2BLOCK     1
 
-#define MAX_NR_LEN		32
+#define MAX_NR_LEN	32
 
 typedef struct _cause {
 	u_char	len __attribute__ ((packed));
@@ -59,8 +63,8 @@ typedef struct _l3_process {
 	int			callref;
 	int			state;
 	L3Timer_t		timer;
-	int			N303;
 	int			debug;
+	int			n303;
 	union {
 		setup_t		setup;
 		channel_t	channel;
@@ -75,15 +79,11 @@ typedef struct _layer3 {
 	struct FsmTimer	l3m_timer;
 	l3_process_t	*proc;
 	l3_process_t	*global;
-	int		(*p_down)(struct _layer3 *, int, l3_process_t *);
-	int		N303;
+	int		(*p_mgr)(l3_process_t *, u_int, void *);
 	int		debug;
 	u_int		Flag;
 	u_int		msgnr;
-	u_int		last_nr;
-	u_int		ph_nr;
 	hisaxinstance_t	inst;
-	struct sk_buff	*ph_skb;
 	struct sk_buff_head squeue;
 } layer3_t;
 
@@ -93,7 +93,7 @@ struct stateentry {
 	void (*rout) (l3_process_t *, u_char, void *);
 };
 
-extern void l3_msg(layer3_t *, int, void *);
+extern void l3_msg(layer3_t *, u_int, u_int, int, void *);
 extern struct sk_buff *l3_alloc_skb(int);
 extern void newl3state(l3_process_t *, int);
 extern void L3InitTimer(l3_process_t *, L3Timer_t *);
@@ -101,13 +101,14 @@ extern void L3DelTimer(L3Timer_t *);
 extern int L3AddTimer(L3Timer_t *, int, int);
 extern void StopAllL3Timer(l3_process_t *);
 extern void release_l3_process(l3_process_t *);
-extern l3_process_t *new_l3_process(layer3_t *, int);
+extern l3_process_t *new_l3_process(layer3_t *, int, int);
 extern l3_process_t *getl3proc(layer3_t *, int);
 extern u_char *findie(u_char *, int, u_char, int);
 extern int hisax_l3up(l3_process_t *, u_int, void *);
 extern int getcallref(u_char * p);
 extern int newcallref(void);
-
-/*
-#define l3_debug(st, fmt, args...) HiSax_putstatus(st->l1.hardware, "l3 ", fmt, ## args)
-*/
+extern void init_l3(layer3_t *);
+extern void release_l3(layer3_t *);
+extern void HiSaxl3New(void);
+extern void HiSaxl3Free(void);
+extern void l3_debug(layer3_t *, char *, ...);

@@ -1,4 +1,4 @@
-/* $Id: isar.c,v 0.2 2001/02/11 22:57:24 kkeil Exp $
+/* $Id: isar.c,v 0.3 2001/02/13 10:42:55 kkeil Exp $
  *
  * isar.c   ISAR (Siemens PSB 7110) specific routines
  *
@@ -9,11 +9,11 @@
  */
 
 #define __NO_VERSION__
-#include "hisax.h"
+#include <linux/delay.h>
+#include "hisax_hw.h"
 #include "isar.h"
-#include "isdnl1.h"
+#include "hisaxl1.h"
 #include "debug.h"
-#include <linux/interrupt.h>
 
 #define DBG_LOADFIRM	0
 #define DUMP_MBOXFRAME	2
@@ -28,9 +28,9 @@ const u_char faxmodulation_s[] = "3,24,48,72,73,74,96,97,98,121,122,145,146";
 const u_char faxmodulation[] = {3,24,48,72,73,74,96,97,98,121,122,145,146}; 
 #define FAXMODCNT 13
 
-void isar_setup(bchannel_t *bch);
-static void isar_pump_cmd(bchannel_t *bch, u_char cmd, u_char para);
-static inline void deliver_status(bchannel_t *bch, u_char status);
+void isar_setup(bchannel_t *);
+static void isar_pump_cmd(bchannel_t *, int, u_char);
+static inline void deliver_status(bchannel_t *, int);
 
 static u_int msgnr = 1;
 static int firmwaresize = 0;
@@ -454,15 +454,15 @@ isar_bh(bchannel_t *bch)
 		}
 	}
 	if (test_and_clear_bit(B_LL_READY, &bch->event))
-		deliver_status(bch, ISDN_FAX_CLASS1_OK);
+		deliver_status(bch, HW_MOD_OK);
 	if (test_and_clear_bit(B_LL_NOCARRIER, &bch->event))
-		deliver_status(bch, ISDN_FAX_CLASS1_NOCARR);
+		deliver_status(bch, HW_MOD_NOCARR);
 	if (test_and_clear_bit(B_LL_CONNECT, &bch->event))
-		deliver_status(bch, ISDN_FAX_CLASS1_CONNECT);
+		deliver_status(bch, HW_MOD_CONNECT);
 	if (test_and_clear_bit(B_LL_OK, &bch->event))
-		deliver_status(bch, ISDN_FAX_CLASS1_OK);
+		deliver_status(bch, HW_MOD_OK);
 	if (test_and_clear_bit(B_LL_FCERROR, &bch->event))
-		deliver_status(bch, ISDN_FAX_CLASS1_FCERROR);
+		deliver_status(bch, HW_MOD_FCERROR);
 	if (test_and_clear_bit(B_TOUCH_TONE, &bch->event)) {
 		int tt = bch->conmsg[0];
 
@@ -552,7 +552,7 @@ isar_rcv_frame(bchannel_t *bch)
 		}
 		break;
 	    case ISDN_PID_L1_B_HDLC:
-		if ((bch->rx_idx + ireg->clsb) > HSCX_BUFMAX) {
+		if ((bch->rx_idx + ireg->clsb) > MAX_DATA_MEM) {
 			if (bch->debug & L1_DEB_WARN)
 				debugprint(&bch->inst, "isar_rcv_frame: incoming packet too large");
 			bch->BC_Write_Reg(bch->inst.data, 1, ISAR_IIA, 0);
@@ -639,7 +639,7 @@ isar_rcv_frame(bchannel_t *bch)
 			break;
 		}
 		/* PCTRL_CMD_FRH */
-		if ((bch->rx_idx + ireg->clsb) > HSCX_BUFMAX) {
+		if ((bch->rx_idx + ireg->clsb) > MAX_DATA_MEM) {
 			if (bch->debug & L1_DEB_WARN)
 				debugprint(&bch->inst, "isar_rcv_frame: incoming packet too large");
 			bch->BC_Write_Reg(bch->inst.data, 1, ISAR_IIA, 0);
@@ -982,12 +982,12 @@ isar_pump_statev_modem(bchannel_t *bch, u_char devt) {
 }
 
 static inline void
-deliver_status(bchannel_t *bch, u_char status)
+deliver_status(bchannel_t *bch, int status)
 {
 	if (bch->debug & L1_DEB_HSCX)
 		debugprint(&bch->inst, "HL->LL FAXIND %x", status);
 	bch->inst.up.func(&bch->inst.up, PH_STATUS | INDICATION, msgnr++,
-		1, &status);
+		sizeof(int), &status);
 }
 
 static void
@@ -1006,9 +1006,9 @@ isar_pump_statev_fax(bchannel_t *bch, u_char devt) {
 			bch->hw.isar.state = STFAX_READY;
 			isar_sched_event(bch, B_LL_READY);
 			if (test_bit(BC_FLG_ORIG, &bch->Flag)) {
-				isar_pump_cmd(bch, ISDN_FAX_CLASS1_FRH, 3);
+				isar_pump_cmd(bch, HW_MOD_FRH, 3);
 			} else {
-				isar_pump_cmd(bch, ISDN_FAX_CLASS1_FTH, 3);
+				isar_pump_cmd(bch, HW_MOD_FTH, 3);
 			}
 			break;
 		case PSEV_LINE_TX_H:
@@ -1470,13 +1470,13 @@ modeisar(bchannel_t *bch, bsetup_t *bs)
 }
 
 static void
-isar_pump_cmd(bchannel_t *bch, u_char cmd, u_char para) 
+isar_pump_cmd(bchannel_t *bch, int cmd, u_char para) 
 {
 	u_char dps = SET_DPS(bch->hw.isar.dpath);
 	u_char ctrl = 0, nom = 0, p1 = 0;
 
 	switch(cmd) {
-		case ISDN_FAX_CLASS1_FTM:
+		case HW_MOD_FTM:
 			if (bch->hw.isar.state == STFAX_READY) {
 				p1 = para;
 				ctrl = PCTRL_CMD_FTM;
@@ -1499,7 +1499,7 @@ isar_pump_cmd(bchannel_t *bch, u_char cmd, u_char para)
 				bch->hw.isar.state = STFAX_ESCAPE; 
 			}
 			break;
-		case ISDN_FAX_CLASS1_FTH:
+		case HW_MOD_FTH:
 			if (bch->hw.isar.state == STFAX_READY) {
 				p1 = para;
 				ctrl = PCTRL_CMD_FTH;
@@ -1522,7 +1522,7 @@ isar_pump_cmd(bchannel_t *bch, u_char cmd, u_char para)
 				bch->hw.isar.state = STFAX_ESCAPE; 
 			}
 			break;
-		case ISDN_FAX_CLASS1_FRM:
+		case HW_MOD_FRM:
 			if (bch->hw.isar.state == STFAX_READY) {
 				p1 = para;
 				ctrl = PCTRL_CMD_FRM;
@@ -1545,7 +1545,7 @@ isar_pump_cmd(bchannel_t *bch, u_char cmd, u_char para)
 				bch->hw.isar.state = STFAX_ESCAPE; 
 			}
 			break;
-		case ISDN_FAX_CLASS1_FRH:
+		case HW_MOD_FRH:
 			if (bch->hw.isar.state == STFAX_READY) {
 				p1 = para;
 				ctrl = PCTRL_CMD_FRH;
@@ -1728,26 +1728,26 @@ isar_auxcmd(bchannel_t *bch, isdn_ctrl *ic) {
 				debugprint(&bch->inst, "isar_auxcmd cmd/subcmd %d/%d",
 					ic->parm.aux.cmd, ic->parm.aux.subcmd);
 			switch(ic->parm.aux.cmd) {
-				case ISDN_FAX_CLASS1_CTRL:
+				case HW_MOD_CTRL:
 					if (ic->parm.aux.subcmd == ETX)
 						test_and_set_bit(BC_FLG_DLEETX,
 							&bch->Flag);
 					break;
-				case ISDN_FAX_CLASS1_FRM:
-				case ISDN_FAX_CLASS1_FRH:
-				case ISDN_FAX_CLASS1_FTM:
-				case ISDN_FAX_CLASS1_FTH:
+				case HW_MOD_FRM:
+				case HW_MOD_FRH:
+				case HW_MOD_FTM:
+				case HW_MOD_FTH:
 					if (ic->parm.aux.subcmd == AT_QUERY) {
 						sprintf(ic->parm.aux.para,
 							"%d", bch->hw.isar.mod);
 						ic->command = ISDN_STAT_FAXIND;
-						ic->parm.aux.cmd = ISDN_FAX_CLASS1_QUERY;
+						ic->parm.aux.cmd = HW_MOD_QUERY;
 						cs->iif.statcallb(ic);
 						return(0);
 					} else if (ic->parm.aux.subcmd == AT_EQ_QUERY) {
 						strcpy(ic->parm.aux.para, faxmodulation_s);
 						ic->command = ISDN_STAT_FAXIND;
-						ic->parm.aux.cmd = ISDN_FAX_CLASS1_QUERY;
+						ic->parm.aux.cmd = HW_MOD_QUERY;
 						cs->iif.statcallb(ic);
 						return(0);
 					} else if (ic->parm.aux.subcmd == AT_EQ_VALUE) {
@@ -1766,7 +1766,7 @@ isar_auxcmd(bchannel_t *bch, isdn_ctrl *ic) {
 					/* fall through */
 				default:
 					ic->command = ISDN_STAT_FAXIND;
-					ic->parm.aux.cmd = ISDN_FAX_CLASS1_ERROR;
+					ic->parm.aux.cmd = HW_MOD_ERROR;
 					cs->iif.statcallb(ic);
 			}
 			break;

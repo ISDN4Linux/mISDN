@@ -1,10 +1,17 @@
-/* $Id: layer2.h,v 0.2 2001/02/11 22:54:20 kkeil Exp $
+/* $Id: layer2.h,v 0.3 2001/02/13 10:42:55 kkeil Exp $
  *
  * Layer 2 defines
  *
  * This file is (c) under GNU PUBLIC LICENSE
  *
  */
+
+#include <linux/hisaxif.h>
+#include <linux/skbuff.h>
+#include "fsm.h"
+
+#define MAX_DFRAME_LEN	260
+#define MAX_WINDOW	8
 
 typedef struct _teimgr {
 	int		ri;

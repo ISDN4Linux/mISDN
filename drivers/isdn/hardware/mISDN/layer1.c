@@ -1,4 +1,4 @@
-/* $Id: layer1.c,v 0.2 2001/02/11 22:57:23 kkeil Exp $
+/* $Id: layer1.c,v 0.3 2001/02/13 10:42:55 kkeil Exp $
  *
  * hisax_l1.c     common low level stuff for I.430 layer1
  *
@@ -10,12 +10,12 @@
  *
  */
 
-const char *l1_revision = "$Revision: 0.2 $";
+const char *l1_revision = "$Revision: 0.3 $";
 
 #include <linux/config.h>
 #include <linux/module.h>
-#include "hisax.h"
 #include "hisaxl1.h"
+#include "helper.h"
 #include "debug.h"
 
 typedef struct _layer1 {
@@ -265,11 +265,12 @@ static void
 l1_timer3(struct FsmInst *fi, int event, void *arg)
 {
 	layer1_t *l1 = fi->userdata;
+	u_int db = HW_D_NOBLOCKED;
 
 	test_and_clear_bit(FLG_L1_T3RUN, &l1->Flags);	
 	if (test_and_clear_bit(FLG_L1_ACTIVATING, &l1->Flags)) {
-		if (test_and_clear_bit(FLG_L1_DBUSY, &l1->Flags))
-			l1up(l1, PH_PAUSE | CONFIRM, msgnr++, 0, NULL);
+		if (test_and_clear_bit(FLG_L1_DBLOCKED, &l1->Flags))
+			l1up(l1, PH_CONTROL | INDICATION, msgnr++, 4, &db);
 		l1up(l1, PH_DEACTIVATE | INDICATION, msgnr++, 0, NULL);
 	}
 #ifdef HISAX_UINTERFACE
@@ -299,11 +300,12 @@ static void
 l1_timer_deact(struct FsmInst *fi, int event, void *arg)
 {
 	layer1_t *l1 = fi->userdata;
+	u_int db = HW_D_NOBLOCKED;
 
 	test_and_clear_bit(FLG_L1_DEACTTIMER, &l1->Flags);
 	test_and_clear_bit(FLG_L1_ACTIVATED, &l1->Flags);
-	if (test_and_clear_bit(FLG_L1_DBUSY, &l1->Flags))
-		l1up(l1, PH_PAUSE | CONFIRM, msgnr++, 0, NULL);
+	if (test_and_clear_bit(FLG_L1_DBLOCKED, &l1->Flags))
+		l1up(l1, PH_CONTROL | INDICATION, msgnr++, 4, &db);
 	l1up(l1, PH_DEACTIVATE | INDICATION, msgnr++, 0, NULL);
 	l1->inst.down.func(&l1->inst.down, PH_CONTROL | REQUEST, msgnr++, 4,
 		(void *)HW_DEACTIVATE);
@@ -322,16 +324,17 @@ static void
 l1_activate_no(struct FsmInst *fi, int event, void *arg)
 {
 	layer1_t *l1 = fi->userdata;
+	u_int db = HW_D_NOBLOCKED;
 
 	if ((!test_bit(FLG_L1_DEACTTIMER, &l1->Flags)) && (!test_bit(FLG_L1_T3RUN, &l1->Flags))) {
 		test_and_clear_bit(FLG_L1_ACTIVATING, &l1->Flags);
-		if (test_and_clear_bit(FLG_L1_DBUSY, &l1->Flags))
-			l1up(l1, PH_PAUSE | CONFIRM, msgnr++, 0, NULL);
+		if (test_and_clear_bit(FLG_L1_DBLOCKED, &l1->Flags))
+			l1up(l1, PH_CONTROL | INDICATION, msgnr++, 4, &db);
 		l1up(l1, PH_DEACTIVATE | INDICATION, msgnr++, 0, NULL);
 	}
 }
 
-static struct FsmNode L1SFnList[] HISAX_INITDATA =
+static struct FsmNode L1SFnList[] =
 {
 	{ST_L1_F3, EV_PH_ACTIVATE, l1_activate_s},
 	{ST_L1_F6, EV_PH_ACTIVATE, l1_activate_no},
@@ -418,7 +421,7 @@ l1_activate_u(struct FsmInst *fi, int event, void *arg)
 		(void *)INFO1);
 }
 
-static struct FsmNode L1UFnList[] HISAX_INITDATA =
+static struct FsmNode L1UFnList[] =
 {
 	{ST_L1_RESET, EV_DEACT_IND, l1_deact_req_u},
 	{ST_L1_DEACT, EV_DEACT_IND, l1_deact_req_u},
@@ -480,7 +483,7 @@ l1b_timer_deact(struct FsmInst *fi, int event, void *arg)
 	l1up(l1, PH_DEACTIVATE | CONFIRM, l1->last_nr, 0, NULL);
 }
 
-static struct FsmNode L1BFnList[] HISAX_INITDATA =
+static struct FsmNode L1BFnList[] =
 {
 	{ST_L1_NULL, EV_PH_ACTIVATE, l1b_activate},
 	{ST_L1_WAIT_ACT, EV_TIMER_ACT, l1b_timer_act},
@@ -499,7 +502,7 @@ l1from_up(hisaxif_t *hif, u_int prim, u_int nr, int dtyp, void *arg) {
 	l1 = hif->fdata;
 	switch(prim) {
 		case (PH_DATA | REQUEST):
-		case (PH_TESTLOOP | REQUEST):
+		case (PH_CONTROL | REQUEST):
 			return(l1->inst.down.func(&l1->inst.down, prim, nr, dtyp, arg));
 			break;
 		case (PH_ACTIVATE | REQUEST):
