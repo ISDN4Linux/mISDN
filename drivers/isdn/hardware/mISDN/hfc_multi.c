@@ -108,7 +108,7 @@
 
 extern const char *CardType[];
 
-static const char *hfcmulti_revision = "$Revision: 1.12 $";
+static const char *hfcmulti_revision = "$Revision: 1.13 $";
 
 static int HFC_cnt;
 
@@ -1618,15 +1618,15 @@ hfcmulti_l1hw(mISDNif_t *hif, struct sk_buff *skb)
 		}
 		/* check for pending next_skb */
 		if (dch->next_skb) {
-			printk(KERN_WARNING "%s: next_skb exist ERROR\n", __FUNCTION__);
+			printk(KERN_WARNING "%s: next_skb exist ERROR (skb->len=%d next_skb->len=%d)\n", __FUNCTION__, skb->len, dch->next_skb->len);
 			return(-EBUSY);
 		}
 		/* if we have currently a pending tx skb */
 		dch->inst.lock(hc, 0);
 		if (test_and_set_bit(FLG_TX_BUSY, &dch->DFlags)) {
 			test_and_set_bit(FLG_TX_NEXT, &dch->DFlags);
-			dch->inst.unlock(hc);
 			dch->next_skb = skb;
+			dch->inst.unlock(hc);
 			return(0);
 		}
 		/* write to fifo */
@@ -1827,15 +1827,15 @@ hfcmulti_l2l1(mISDNif_t *hif, struct sk_buff *skb)
 		}
 		/* check for pending next_skb */
 		if (bch->next_skb) {
-			printk(KERN_WARNING "%s: next_skb exist ERROR\n", __FUNCTION__);
+			printk(KERN_WARNING "%s: next_skb exist ERROR (skb->len=%d next_skb->len=%d)\n", __FUNCTION__, skb->len, bch->next_skb->len);
 			return(-EBUSY);
 		}
 		/* if we have currently a pending tx skb */
 		bch->inst.lock(hc, 0);
 		if (test_and_set_bit(BC_FLG_TX_BUSY, &bch->Flag)) {
 			test_and_set_bit(BC_FLG_TX_NEXT, &bch->Flag);
-			bch->inst.unlock(hc);
 			bch->next_skb = skb;
+			bch->inst.unlock(hc);
 			return(0);
 		}
 		/* write to fifo */
@@ -2774,6 +2774,8 @@ release_port(hfc_multi_t *hc, int port)
 				if (debug & DEBUG_HFCMULTI_INIT)
 					printk(KERN_DEBUG "%s: free port %d D-channel %d (1..32)\n", __FUNCTION__, hc->chan[i].port, i);
 				mISDN_free_dch(hc->chan[i].dch);
+				HFCM_obj.ctrl(hc->chan[i].dch->inst.up.peer, MGR_DISCONNECT | REQUEST, &hc->chan[i].dch->inst.up);
+				HFCM_obj.ctrl(&hc->chan[i].dch->inst, MGR_UNREGLAYER | REQUEST, NULL);
 				kfree(hc->chan[i].dch);
 				hc->chan[i].dch = NULL;
 			}
@@ -2812,10 +2814,10 @@ release_port(hfc_multi_t *hc, int port)
 		if (debug & DEBUG_HFCMULTI_INIT)
 			printk(KERN_DEBUG "%s: removing object from listbase\n", __FUNCTION__);
 		list_del(&hc->list);
+		unlock_dev(hc);
 		kfree(hc);
-	}
- 
-	unlock_dev(hc);
+	} else
+		unlock_dev(hc);
 }
 
 static int
