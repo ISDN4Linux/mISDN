@@ -1,4 +1,4 @@
-/* $Id: layer3.h,v 1.3 2003/07/21 12:00:04 kkeil Exp $
+/* $Id: layer3.h,v 1.4 2003/07/27 11:14:19 kkeil Exp $
  *
  * This file is (c) under GNU PUBLIC LICENSE
  *
@@ -59,34 +59,34 @@ typedef struct _layer3 {
 	int		(*p_mgr)(l3_process_t *, u_int, void *);
 	u_int		id;
 	int		debug;
-	u_int		Flag;
+	u_long		Flag;
 	mISDNinstance_t	inst;
 	struct sk_buff_head squeue;
 } layer3_t;
 
 struct stateentry {
-	int state;
-	int primitive;
-	void (*rout) (l3_process_t *, u_char, void *);
+	int	state;
+	u_int	primitive;
+	void	(*rout) (l3_process_t *, u_char, void *);
 };
 
-extern int l3_msg(layer3_t *, u_int, int, int, void *);
-extern struct sk_buff *l3_alloc_skb(int);
-extern void newl3state(l3_process_t *, int);
-extern void L3InitTimer(l3_process_t *, L3Timer_t *);
-extern void L3DelTimer(L3Timer_t *);
-extern int L3AddTimer(L3Timer_t *, int, int);
-extern void StopAllL3Timer(l3_process_t *);
-extern void release_l3_process(l3_process_t *);
-extern l3_process_t *getl3proc(layer3_t *, int);
-extern l3_process_t *getl3proc4id(layer3_t *, int);
-extern l3_process_t *new_l3_process(layer3_t *, int, int);
-extern u_char *findie(u_char *, int, u_char, int);
-extern int mISDN_l3up(l3_process_t *, u_int, struct sk_buff *);
-extern int getcallref(u_char * p);
-extern int newcallref(void);
-extern void init_l3(layer3_t *);
-extern void release_l3(layer3_t *);
-extern void mISDNl3New(void);
-extern void mISDNl3Free(void);
-extern void l3_debug(layer3_t *, char *, ...);
+extern int		l3_msg(layer3_t *, u_int, int, int, void *);
+extern struct sk_buff	*l3_alloc_skb(int);
+extern void		newl3state(l3_process_t *, int);
+extern void		L3InitTimer(l3_process_t *, L3Timer_t *);
+extern void		L3DelTimer(L3Timer_t *);
+extern int		L3AddTimer(L3Timer_t *, int, int);
+extern void		StopAllL3Timer(l3_process_t *);
+extern void		release_l3_process(l3_process_t *);
+extern l3_process_t	*getl3proc(layer3_t *, int);
+extern l3_process_t	*getl3proc4id(layer3_t *, u_int);
+extern l3_process_t	*new_l3_process(layer3_t *, int, int);
+extern u_char		*findie(u_char *, int, u_char, int);
+extern int		mISDN_l3up(l3_process_t *, u_int, struct sk_buff *);
+extern int		getcallref(u_char * p);
+extern int		newcallref(void);
+extern void		init_l3(layer3_t *);
+extern void		release_l3(layer3_t *);
+extern void		mISDNl3New(void);
+extern void		mISDNl3Free(void);
+extern void		l3_debug(layer3_t *, char *, ...);

@@ -1,4 +1,4 @@
-/* $Id: helper.h,v 1.7 2003/07/21 12:00:04 kkeil Exp $
+/* $Id: helper.h,v 1.8 2003/07/27 11:14:19 kkeil Exp $
  *
  *   Basic declarations, defines and prototypes
  *
@@ -88,7 +88,7 @@ extern int	get_up_layer(int);
 extern int	get_down_layer(int);
 extern int	layermask2layer(int);
 extern int	get_protocol(mISDNstack_t *, int);
-extern int	HasProtocol(mISDNobject_t *, int);
+extern int	HasProtocol(mISDNobject_t *, u_int);
 extern int	SetHandledPID(mISDNobject_t *, mISDN_pid_t *);
 extern void	RemoveUsedPID(mISDN_pid_t *, mISDN_pid_t *);
 

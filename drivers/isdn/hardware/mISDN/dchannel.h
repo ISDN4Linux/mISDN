@@ -1,4 +1,4 @@
-/* $Id: dchannel.h,v 1.4 2003/07/21 12:00:04 kkeil Exp $
+/* $Id: dchannel.h,v 1.5 2003/07/27 11:14:19 kkeil Exp $
  *
  *   Basic declarations for dchannel HW
  *
@@ -36,7 +36,7 @@
 
 typedef struct _dchannel_t {
 	mISDNinstance_t		inst;
-	u_int			DFlags;
+	u_long			DFlags;
 	u_int			type;
 	u_int			ph_state;
 	u_char			(*read_reg) (void *, u_char);
@@ -55,7 +55,7 @@ typedef struct _dchannel_t {
 	int			err_rx;
 	void			*hw;
 	struct timer_list	dbusytimer;
-	u_int			event;
+	u_long			event;
 	struct sk_buff_head	rqueue; /* D-channel receive queue */
 	struct tq_struct	tqueue;
 	void			(*hw_bh) (struct _dchannel_t *);

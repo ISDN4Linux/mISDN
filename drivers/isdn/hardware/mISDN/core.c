@@ -1,4 +1,4 @@
-/* $Id: core.c,v 1.11 2003/07/21 13:09:03 kkeil Exp $
+/* $Id: core.c,v 1.12 2003/07/27 11:14:19 kkeil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -18,7 +18,7 @@
 #include <linux/smp_lock.h>
 #endif
 
-static char *mISDN_core_revision = "$Revision: 1.11 $";
+static char *mISDN_core_revision = "$Revision: 1.12 $";
 
 mISDNobject_t	*mISDN_objects = NULL;
 int core_debug;
@@ -42,7 +42,7 @@ typedef struct _mISDN_thread {
 	struct task_struct	*thread;
 	wait_queue_head_t	waitq;
 	struct semaphore	*notify;
-	u_int			Flags;
+	u_long			Flags;
 	struct sk_buff_head	workq;
 } mISDN_thread_t;
 
@@ -306,7 +306,7 @@ sel_channel(mISDNstack_t *st, channel_info_t *ci)
 	}
 	if (err) {
 		mISDNstack_t	*cst = st->child;
-		int		nr = 0;
+		u_int		nr = 0;
 
 		ci->st.p = NULL;
 		if (!(ci->channel & (~CHANNEL_NUMBER))) {

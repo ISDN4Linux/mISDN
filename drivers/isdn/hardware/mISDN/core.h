@@ -1,4 +1,4 @@
-/* $Id: core.h,v 1.2 2003/07/21 12:00:04 kkeil Exp $
+/* $Id: core.h,v 1.3 2003/07/27 11:14:19 kkeil Exp $
  * 
  * This file is (c) under GNU PUBLIC LICENSE
  *
@@ -42,7 +42,7 @@ extern mISDNinstance_t	*mISDN_instlist;
 
 extern void		get_stack_info(iframe_t *);
 extern int		get_stack_cnt(void);
-extern mISDNstack_t	*get_stack4id(int);
+extern mISDNstack_t	*get_stack4id(u_int);
 extern mISDNstack_t	*new_stack(mISDNstack_t *, mISDNinstance_t *);
 extern int		release_stack(mISDNstack_t *);
 extern void		release_stacks(mISDNobject_t *);
@@ -62,4 +62,4 @@ extern int		register_layer(mISDNstack_t *, mISDNinstance_t *);
 extern int		unregister_instance(mISDNinstance_t *);
 extern mISDNinstance_t	*get_next_instance(mISDNstack_t *, mISDN_pid_t *);
 extern mISDNobject_t	*get_object(int);
-extern mISDNinstance_t	*get_instance4id(int);
+extern mISDNinstance_t	*get_instance4id(u_int);

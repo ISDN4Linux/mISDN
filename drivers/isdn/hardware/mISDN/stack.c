@@ -1,4 +1,4 @@
-/* $Id: stack.c,v 1.4 2003/07/21 12:44:46 kkeil Exp $
+/* $Id: stack.c,v 1.5 2003/07/27 11:14:19 kkeil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -66,8 +66,8 @@ get_stack_info(iframe_t *frm) {
 
 static int
 get_free_stackid(mISDNstack_t *mst, int flag) {
-	int id=1;
-	mISDNstack_t *st;
+	u_int		id=1;
+	mISDNstack_t	*st;
 
 	if (!mst) {
 		while(id<127) {
@@ -113,11 +113,10 @@ get_free_stackid(mISDNstack_t *mst, int flag) {
 }
 
 mISDNstack_t *
-get_stack4id(int id)
+get_stack4id(u_int id)
 {
 	mISDNstack_t *cst, *st = mISDN_stacklist;
 
-	
 	if (core_debug & DEBUG_CORE_FUNC)
 		printk(KERN_DEBUG "get_stack4id(%x)\n", id);
 	if (!id) /* 0 isn't a valid id */
@@ -197,7 +196,7 @@ out:
 }
 
 mISDNinstance_t *
-get_instance4id(int id)
+get_instance4id(u_int id)
 {
 	mISDNinstance_t *inst = mISDN_instlist;
 

@@ -1,4 +1,4 @@
-/* $Id: dtmf.c,v 1.4 2003/07/21 12:44:45 kkeil Exp $
+/* $Id: dtmf.c,v 1.5 2003/07/27 11:14:19 kkeil Exp $
  *
  * Linux ISDN subsystem, DTMF tone module
  *
@@ -26,7 +26,7 @@
 typedef struct _dtmf {
 	struct _dtmf	*prev;
 	struct _dtmf	*next;
-	int 		Flags;
+	u_long 		Flags;
 	int		debug;
 	char		last;
 	int		idx;
@@ -47,7 +47,7 @@ static int debug = 0;
 
 static mISDNobject_t dtmf_obj;
 
-static char *mISDN_dtmf_revision = "$Revision: 1.4 $";
+static char *mISDN_dtmf_revision = "$Revision: 1.5 $";
 
 /*
  * Misc. lookup-tables.

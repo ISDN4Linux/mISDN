@@ -1,4 +1,4 @@
-/* $Id: bchannel.h,v 1.4 2003/07/21 12:00:04 kkeil Exp $
+/* $Id: bchannel.h,v 1.5 2003/07/27 11:14:19 kkeil Exp $
  *
  *   Basic declarations, defines for Bchannel hardware
  *
@@ -42,7 +42,7 @@
 typedef struct _bchannel_t {
 	int			channel;
 	int			protocol;
-	int			Flag;
+	u_long			Flag;
 	int			debug;
 	mISDNstack_t		*st;
 	mISDNinstance_t		inst;
@@ -59,10 +59,10 @@ typedef struct _bchannel_t {
 	struct sk_buff_head	rqueue;	/* B-Channel receive Queue */
 	u_char			*blog;
 	u_char			*conmsg;
-	struct			timer_list transbusy;
-	struct			tq_struct tqueue;
+	struct timer_list	transbusy;
+	struct tq_struct	tqueue;
 	void			(*hw_bh) (struct _bchannel_t *);
-	int			event;
+	u_long			event;
 	int			err_crc;
 	int			err_tx;
 	int			err_rdo;

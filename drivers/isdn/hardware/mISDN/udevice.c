@@ -1,4 +1,4 @@
-/* $Id: udevice.c,v 1.6 2003/07/21 12:44:46 kkeil Exp $
+/* $Id: udevice.c,v 1.7 2003/07/27 11:14:19 kkeil Exp $
  *
  * Copyright 2000  by Karsten Keil <kkeil@isdn4linux.de>
  *
@@ -31,7 +31,7 @@ typedef struct _devicelayer {
 	mISDNif_t		s_down;
 	int			iaddr;
 	int			lm_st;
-	int			Flags;
+	u_long			Flags;
 } devicelayer_t;
 
 typedef struct _devicestack {
@@ -48,7 +48,7 @@ typedef struct _mISDNtimer {
 	struct _mISDNdevice	*dev;
 	struct timer_list	tl;
 	int			id;
-	int			Flags;
+	u_long			Flags;
 } mISDNtimer_t;
 
 static mISDNdevice_t	*mISDN_devicelist = NULL;
@@ -161,7 +161,7 @@ next_frame_len(mISDNport_t *port)
 	} else {
 		len = IFRAME_HEAD_SIZE + *lp;
 	}
-	if (len > port->cnt) {
+	if (len > (size_t)port->cnt) {
 		int_errtxt("size mismatch %d/%d/%d", *lp, len, port->cnt);
 		return(0);
 	}
@@ -182,7 +182,7 @@ mISDN_rdata_raw(mISDNif_t *hif, struct sk_buff *skb) {
 	if (hh->prim == (PH_DATA | INDICATION)) {
 		if (test_bit(FLG_mISDNPORT_OPEN, &dev->rport.Flag)) {
 			spin_lock_irqsave(&dev->rport.lock, flags);
-			if (skb->len < (dev->rport.size - dev->rport.cnt)) {
+			if (skb->len < (u_int)(dev->rport.size - dev->rport.cnt)) {
 				p_memcpy_i(&dev->rport, skb->data, skb->len);
 			} else {
 				retval = -ENOSPC;
@@ -255,7 +255,7 @@ static devicelayer_t
 //		if (device_debug & DEBUG_MGR_FUNC)
 //			printk(KERN_DEBUG "%s: dl(%p) iaddr:%x\n",
 //				__FUNCTION__, dl, dl->iaddr);
-		if (dl->iaddr == (IF_IADDRMASK & addr))
+		if ((u_int)dl->iaddr == (IF_IADDRMASK & addr))
 			break;
 		dl = dl->next;
 	}
@@ -263,14 +263,14 @@ static devicelayer_t
 }
 
 static devicestack_t
-*get_devstack(mISDNdevice_t   *dev, int addr)
+*get_devstack(mISDNdevice_t *dev, int addr)
 {
 	devicestack_t *ds = dev->stack;
 
 	if (device_debug & DEBUG_MGR_FUNC)
 		printk(KERN_DEBUG "%s: addr:%x\n", __FUNCTION__, addr);
 	while(ds) {
-		if (ds->st && (ds->st->id == addr))
+		if (ds->st && (ds->st->id == (u_int)addr))
 			break;
 		ds = ds->next;
 	}
@@ -1378,7 +1378,7 @@ mISDN_wdata(mISDNdevice_t *dev) {
 						wake_up(&dev->wport.procq);
 						break;
 					}
-					if (frag < (iff->len + IFRAME_HEAD_SIZE)) {
+					if (frag < (size_t)(iff->len + IFRAME_HEAD_SIZE)) {
 						broken = 1;
 						p_memcpy_o(&dev->wport, &hlp, IFRAME_HEAD_SIZE);
 					}
@@ -1415,7 +1415,7 @@ mISDN_wdata(mISDNdevice_t *dev) {
 				p_pull_o(&dev->wport, used);
 			}
 		} else { /* RAW DEVICES */
-			printk(KERN_DEBUG "%s: wflg(%x)\n",
+			printk(KERN_DEBUG "%s: wflg(%lx)\n",
 				__FUNCTION__, dev->wport.Flag);
 			if (test_bit(FLG_mISDNPORT_BLOCK, &dev->wport.Flag))
 				break;
@@ -1678,7 +1678,7 @@ do_mISDN_read(struct file *file, char *buf, size_t count, loff_t * off)
 			return(-ENOSPC);
 		}
 	} else {
-		if (count < dev->rport.cnt)
+		if (count < (size_t)dev->rport.cnt)
 			len = count;
 		else
 			len = dev->rport.cnt;
@@ -1746,10 +1746,10 @@ do_mISDN_write(struct file *file, const char *buf, size_t count, loff_t * off)
 		return -EINVAL;	
 	if (!access_ok(VERIFY_WRITE, buf, count))
 		return(-EFAULT);
-	if (count > dev->wport.size)
+	if (count > (size_t)dev->wport.size)
 		return(-ENOSPC);
 	spin_lock_irqsave(&dev->wport.lock, flags);
-	while ((dev->wport.size - dev->wport.cnt) < count) {
+	while ((size_t)(dev->wport.size - dev->wport.cnt) < count) {
 		spin_unlock_irqrestore(&dev->wport.lock, flags);
 		if (file->f_flags & O_NONBLOCK)
 			return(-EAGAIN);
@@ -1839,10 +1839,10 @@ static struct file_operations mISDN_fops =
 static int
 from_up_down(mISDNif_t *hif, struct sk_buff *skb) {
 	
-	devicelayer_t *dl;
-	iframe_t off;
-	mISDN_head_t *hh; 
-	int retval = -EINVAL;
+	devicelayer_t	*dl;
+	iframe_t	off;
+	mISDN_head_t	*hh; 
+	int		retval = -EINVAL;
 
 	if (!hif || !hif->fdata || !skb)
 		return(-EINVAL);
@@ -1857,7 +1857,7 @@ from_up_down(mISDNif_t *hif, struct sk_buff *skb) {
 		printk(KERN_DEBUG "from_up_down: %x(%x) dinfo:%x len:%d\n",
 			off.prim, off.addr, off.dinfo, off.len);
 	retval = mISDN_rdata(dl->dev, &off, 0);
-	if (retval == (4*sizeof(u_int) + off.len)) {
+	if (retval == (int)(4*sizeof(u_int) + off.len)) {
 		dev_kfree_skb(skb);
 		retval = 0;
 	} else if (retval == 0)

@@ -1,4 +1,4 @@
-/* $Id: capi.c,v 1.5 2003/07/21 12:44:45 kkeil Exp $
+/* $Id: capi.c,v 1.6 2003/07/27 11:14:19 kkeil Exp $
  *
  */
 
@@ -9,7 +9,7 @@
 #include "helper.h"
 #include "debug.h"
 
-static char *capi_revision = "$Revision: 1.5 $";
+static char *capi_revision = "$Revision: 1.6 $";
 
 static int debug = 0;
 static mISDNobject_t capi_obj;
@@ -23,7 +23,6 @@ MODULE_AUTHOR("Karsten Keil");
 MODULE_LICENSE("GPL");
 #endif
 MODULE_PARM(debug, "1i");
-#define Capi20Init init_module
 #endif
 
 static char deb_buf[256];
@@ -289,7 +288,7 @@ int Capi20Init(void)
 }
 
 #ifdef MODULE
-void cleanup_module(void)
+static void Capi20cleanup(void)
 {
 	int err;
 	Contr_t *contr;
@@ -309,4 +308,7 @@ void cleanup_module(void)
 	free_cplci();
 	free_ncci();
 }
+
+module_init(Capi20Init);
+module_exit(Capi20cleanup);
 #endif

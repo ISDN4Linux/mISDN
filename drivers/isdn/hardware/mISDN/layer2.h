@@ -1,4 +1,4 @@
-/* $Id: layer2.h,v 1.1 2003/07/21 12:00:04 kkeil Exp $
+/* $Id: layer2.h,v 1.2 2003/07/27 11:14:19 kkeil Exp $
  *
  * Layer 2 defines
  *
@@ -30,29 +30,29 @@ typedef struct _laddr {
 } laddr_t;
 
 typedef struct _layer2 {
-	struct _layer2	*prev;
-	struct _layer2	*next;
-	int		sapi;
-	int		tei;
-	laddr_t		addr;
-	int		maxlen;
-	teimgr_t	*tm;
-	u_int		flag;
-	u_int		vs, va, vr;
-	int		rc;
-	u_int		window;
-	u_int		sow;
-	struct FsmInst	l2m;
-	struct FsmTimer	t200, t203;
-	int		T200, N200, T203;
-	int		debug;
-	mISDNinstance_t	inst;
-	mISDNif_t	*cloneif;
-	struct sk_buff	*windowar[MAX_WINDOW];
-	struct sk_buff	*down_skb;
-	struct sk_buff_head i_queue;
-	struct sk_buff_head ui_queue;
-	struct sk_buff_head down_queue;
+	struct _layer2		*prev;
+	struct _layer2		*next;
+	int			sapi;
+	int			tei;
+	laddr_t			addr;
+	u_int			maxlen;
+	teimgr_t		*tm;
+	u_long			flag;
+	u_int			vs, va, vr;
+	int			rc;
+	u_int			window;
+	u_int			sow;
+	struct FsmInst		l2m;
+	struct FsmTimer		t200, t203;
+	int			T200, N200, T203;
+	int			debug;
+	mISDNinstance_t		inst;
+	mISDNif_t		*cloneif;
+	struct sk_buff		*windowar[MAX_WINDOW];
+	struct sk_buff		*down_skb;
+	struct sk_buff_head	i_queue;
+	struct sk_buff_head	ui_queue;
+	struct sk_buff_head	down_queue;
 } layer2_t;
 
 /* l2 status_info */
@@ -64,8 +64,8 @@ typedef struct _status_info_l2 {
 	int	sapi;
 	int	tei;
 	laddr_t addr;
-	int	maxlen;
-	u_int	flag;
+	u_int	maxlen;
+	u_long	flag;
 	u_int	vs;
 	u_int	va;
 	u_int	vr;

@@ -1,4 +1,4 @@
-/* $Id: avm_fritz.c,v 1.12 2003/07/21 12:44:45 kkeil Exp $
+/* $Id: avm_fritz.c,v 1.13 2003/07/27 11:14:19 kkeil Exp $
  *
  * fritz_pci.c    low level stuff for AVM Fritz!PCI and ISA PnP isdn cards
  *              Thanks to AVM, Berlin for informations
@@ -25,7 +25,7 @@
 #define LOCK_STATISTIC
 #include "hw_lock.h"
 
-static const char *avm_fritz_rev = "$Revision: 1.12 $";
+static const char *avm_fritz_rev = "$Revision: 1.13 $";
 
 enum {
 	AVM_FRITZ_PCI,
@@ -132,6 +132,7 @@ typedef struct _fritzpnppci {
 	struct pci_dev		*pdev;
 	u_int			type;
 	u_int			irq;
+	u_int			irqcnt;
 	u_int			addr;
 	mISDN_HWlock_t		lock;
 	isac_chip_t		isac;
@@ -468,7 +469,7 @@ hdlc_fill_fifo(bchannel_t *bch)
 	u_int		*ptr;
 
 	if ((bch->debug & L1_DEB_HSCX) && !(bch->debug & L1_DEB_HSCX_FIFO))
-		debugprint(&bch->inst, __FUNCTION__);
+		debugprint(&bch->inst, "%s", __FUNCTION__);
 	count = bch->tx_len - bch->tx_idx;
 	if (count <= 0)
 		return;
@@ -645,7 +646,7 @@ HDLC_irq_main(fritzpnppci *fc)
 	}
 }
 
-static void
+static irqreturn_t
 avm_fritz_interrupt(int intno, void *dev_id, struct pt_regs *regs)
 {
 	fritzpnppci	*fc = dev_id;
@@ -664,10 +665,11 @@ avm_fritz_interrupt(int intno, void *dev_id, struct pt_regs *regs)
 		fc->lock.spin_adr = NULL;
 #endif
 		spin_unlock_irqrestore(&fc->lock.lock, flags);
-		return;
+		return IRQ_NONE;
 	}
+	fc->irqcnt++;
 	if (test_and_set_bit(STATE_FLAG_BUSY, &fc->lock.state)) {
-		printk(KERN_ERR "%s: STATE_FLAG_BUSY allready activ, should never happen state:%x\n",
+		printk(KERN_ERR "%s: STATE_FLAG_BUSY allready activ, should never happen state:%lx\n",
 			__FUNCTION__, fc->lock.state);
 #ifdef SPIN_DEBUG
 		printk(KERN_ERR "%s: previous lock:%p\n",
@@ -708,7 +710,7 @@ avm_fritz_interrupt(int intno, void *dev_id, struct pt_regs *regs)
 	if (!test_and_clear_bit(STATE_FLAG_INIRQ, &fc->lock.state)) {
 	}
 	if (!test_and_clear_bit(STATE_FLAG_BUSY, &fc->lock.state)) {
-		printk(KERN_ERR "%s: STATE_FLAG_BUSY not locked state(%x)\n",
+		printk(KERN_ERR "%s: STATE_FLAG_BUSY not locked state(%lx)\n",
 			__FUNCTION__, fc->lock.state);
 	}
 #ifdef SPIN_DEBUG
@@ -716,6 +718,7 @@ avm_fritz_interrupt(int intno, void *dev_id, struct pt_regs *regs)
 	fc->lock.spin_adr = NULL;
 #endif
 	spin_unlock_irqrestore(&fc->lock.lock, flags);
+	return IRQ_HANDLED;
 }
 
 static int
@@ -810,33 +813,24 @@ clear_pending_hdlc_ints(fritzpnppci *fc)
 static void
 reset_avmpcipnp(fritzpnppci *fc)
 {
-	long flags;
-
 	printk(KERN_INFO "AVM PCI/PnP: reset\n");
-	save_flags(flags);
-	sti();
 	outb(AVM_STATUS0_RESET | AVM_STATUS0_DIS_TIMER, fc->addr + 2);
-	current->state = TASK_UNINTERRUPTIBLE;
-	schedule_timeout((10*HZ)/1000); /* Timeout 10ms */
+	mdelay(5);
 	outb(AVM_STATUS0_DIS_TIMER | AVM_STATUS0_RES_TIMER | AVM_STATUS0_ENA_IRQ, fc->addr + 2);
 	outb(AVM_STATUS1_ENA_IOM | fc->irq, fc->addr + 3);
-	current->state = TASK_UNINTERRUPTIBLE;
-	schedule_timeout((10*HZ)/1000); /* Timeout 10ms */
+	mdelay(1);
 	printk(KERN_INFO "AVM PCI/PnP: S1 %x\n", inb(fc->addr + 3));
-	restore_flags(flags);
 }
 
 static int init_card(fritzpnppci *fc)
 {
-	int irq_cnt, cnt = 3;
-	long flags;
-	u_int shared = SA_SHIRQ;
+	int		cnt = 3;
+	unsigned long	flags;
+	u_int		shared = SA_SHIRQ;
 
 	if (fc->type == AVM_FRITZ_PNP)
 		shared = 0;
 	save_flags(flags);
-	irq_cnt = kstat_irqs(fc->irq);
-	printk(KERN_INFO "AVM Fritz!PCI: IRQ %d count %d\n", fc->irq, irq_cnt);
 	lock_dev(fc, 0);
 	if (request_irq(fc->irq, avm_fritz_interrupt, SA_SHIRQ,
 		"AVM Fritz!PCI", fc)) {
@@ -868,8 +862,8 @@ static int init_card(fritzpnppci *fc)
 		schedule_timeout((10*HZ)/1000);
 		restore_flags(flags);
 		printk(KERN_INFO "AVM Fritz!PCI: IRQ %d count %d\n",
-			fc->irq, kstat_irqs(fc->irq));
-		if (kstat_irqs(fc->irq) == irq_cnt) {
+			fc->irq, fc->irqcnt);
+		if (!fc->irqcnt) {
 			printk(KERN_WARNING
 			       "AVM Fritz!PCI: IRQ(%d) getting no interrupts during init %d\n",
 			       fc->irq, 4 - cnt);
@@ -903,9 +897,7 @@ MODULE_AUTHOR("Karsten Keil");
 MODULE_LICENSE("GPL");
 #endif
 MODULE_PARM(debug, "1i");
-MODULE_PARM(io, MODULE_PARM_T);
 MODULE_PARM(protocol, MODULE_PARM_T);
-MODULE_PARM(irq, MODULE_PARM_T);
 MODULE_PARM(layermask, MODULE_PARM_T);
 #endif
 
@@ -1180,7 +1172,6 @@ static int __devinit setup_instance(fritzpnppci *card)
 	int		i, err;
 	mISDN_pid_t	pid;
 	
-	pci_set_drvdata(card->pdev, card);
 	APPEND_TO_LIST(card, ((fritzpnppci *)fritz.ilist));
 	card->dch.debug = debug;
 	card->dch.inst.obj = &fritz;
@@ -1277,6 +1268,7 @@ static int __devinit fritzpci_probe(struct pci_dev *pdev, const struct pci_devic
 
 	card->addr = pci_resource_start(pdev, 1);
 	card->irq = pdev->irq;
+	pci_set_drvdata(pdev, card);
 	err = setup_instance(card);
 	return(err);
 }

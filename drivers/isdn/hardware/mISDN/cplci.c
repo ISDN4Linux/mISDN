@@ -1,4 +1,4 @@
-/* $Id: cplci.c,v 1.10 2003/07/21 12:44:45 kkeil Exp $
+/* $Id: cplci.c,v 1.11 2003/07/27 11:14:19 kkeil Exp $
  *
  */
 
@@ -139,13 +139,17 @@ __u16 cmsg2alerting_req(_cmsg *cmsg, struct sk_buff *skb)
 
 __u16 cplciCheckBprotocol(Cplci_t *cplci, _cmsg *cmsg)
 {
-	struct capi_ctr *ctrl = cplci->contr->ctrl;
+	struct capi_ctr	*ctrl = cplci->contr->ctrl;
+	u_long		sprot;
 
-	if (!test_bit(cmsg->B1protocol, &ctrl->profile.support1))
+	sprot = ctrl->profile.support1;
+	if (!test_bit(cmsg->B1protocol, &sprot))
 		return CapiB1ProtocolNotSupported;
-	if (!test_bit(cmsg->B2protocol, &ctrl->profile.support2))
+	sprot = ctrl->profile.support2;
+	if (!test_bit(cmsg->B2protocol, &sprot))
 		return CapiB2ProtocolNotSupported;
-	if (!test_bit(cmsg->B3protocol, &ctrl->profile.support3))
+	sprot = ctrl->profile.support3;
+	if (!test_bit(cmsg->B3protocol, &sprot))
 		return CapiB3ProtocolNotSupported;
 
 	cplci->Bprotocol.B1protocol = cmsg->B1protocol;

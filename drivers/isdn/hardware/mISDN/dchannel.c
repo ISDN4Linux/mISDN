@@ -1,4 +1,4 @@
-/* $Id: dchannel.c,v 1.5 2003/07/21 12:44:45 kkeil Exp $
+/* $Id: dchannel.c,v 1.6 2003/07/27 11:14:19 kkeil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -21,7 +21,7 @@ dchannel_bh(dchannel_t *dch)
 	if (!dch)
 		return;
 	if (dch->debug)
-		printk(KERN_DEBUG "%s: event %x\n", __FUNCTION__, dch->event);
+		printk(KERN_DEBUG "%s: event %lx\n", __FUNCTION__, dch->event);
 #if 0
 	if (test_and_clear_bit(D_CLEARBUSY, &dch->event)) {
 		if (dch->debug)

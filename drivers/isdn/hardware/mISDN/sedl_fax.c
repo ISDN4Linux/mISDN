@@ -1,4 +1,4 @@
-/* $Id: sedl_fax.c,v 1.11 2003/07/21 12:44:46 kkeil Exp $
+/* $Id: sedl_fax.c,v 1.12 2003/07/27 11:14:19 kkeil Exp $
  *
  * sedl_fax.c  low level stuff for Sedlbauer Speedfax + cards
  *
@@ -29,7 +29,6 @@
 #include <linux/config.h>
 #include <linux/module.h>
 #include <linux/pci.h>
-#include <linux/kernel_stat.h>
 #include <linux/delay.h>
 #include <asm/semaphore.h>
 #include "dchannel.h"
@@ -46,7 +45,7 @@
 
 extern const char *CardType[];
 
-const char *Sedlfax_revision = "$Revision: 1.11 $";
+const char *Sedlfax_revision = "$Revision: 1.12 $";
 
 const char *Sedlbauer_Types[] =
 	{"None", "speed fax+", "speed fax+ pyramid", "speed fax+ pci"};
@@ -109,6 +108,7 @@ typedef struct _sedl_fax {
 	struct _sedl_fax	*next;
 	u_char			subtyp;
 	u_int			irq;
+	u_int			irqcnt;
 	u_int			cfg;
 	u_int			addr;
 	u_int			isac;
@@ -257,7 +257,7 @@ do_sedl_interrupt(sedl_fax *sf)
 	writereg(sf->addr, sf->isar, ISAR_IRQBIT, ISAR_IRQMSK);
 }
 
-static void
+static irqreturn_t
 speedfax_isa_interrupt(int intno, void *dev_id, struct pt_regs *regs)
 {
 	sedl_fax	*sf = dev_id;
@@ -268,7 +268,7 @@ speedfax_isa_interrupt(int intno, void *dev_id, struct pt_regs *regs)
 	sf->lock.spin_adr = (void *)0x2001;
 #endif
 	if (test_and_set_bit(STATE_FLAG_BUSY, &sf->lock.state)) {
-		printk(KERN_ERR "%s: STATE_FLAG_BUSY allready activ, should never happen state:%x\n",
+		printk(KERN_ERR "%s: STATE_FLAG_BUSY allready activ, should never happen state:%lx\n",
 			__FUNCTION__, sf->lock.state);
 #ifdef SPIN_DEBUG
 		printk(KERN_ERR "%s: previous lock:%p\n",
@@ -291,6 +291,7 @@ speedfax_isa_interrupt(int intno, void *dev_id, struct pt_regs *regs)
 	sf->lock.spin_adr = NULL;
 #endif
 	spin_unlock_irqrestore(&sf->lock.lock, flags);
+	sf->irqcnt++;
 	do_sedl_interrupt(sf);
 	spin_lock_irqsave(&sf->lock.lock, flags);
 #ifdef SPIN_DEBUG
@@ -299,7 +300,7 @@ speedfax_isa_interrupt(int intno, void *dev_id, struct pt_regs *regs)
 	if (!test_and_clear_bit(STATE_FLAG_INIRQ, &sf->lock.state)) {
 	}
 	if (!test_and_clear_bit(STATE_FLAG_BUSY, &sf->lock.state)) {
-		printk(KERN_ERR "%s: STATE_FLAG_BUSY not locked state(%x)\n",
+		printk(KERN_ERR "%s: STATE_FLAG_BUSY not locked state(%lx)\n",
 			__FUNCTION__, sf->lock.state);
 	}
 #ifdef SPIN_DEBUG
@@ -307,9 +308,10 @@ speedfax_isa_interrupt(int intno, void *dev_id, struct pt_regs *regs)
 	sf->lock.spin_adr = NULL;
 #endif
 	spin_unlock_irqrestore(&sf->lock.lock, flags);
+	return IRQ_HANDLED;
 }
 
-static void
+static irqreturn_t
 speedfax_pci_interrupt(int intno, void *dev_id, struct pt_regs *regs)
 {
 	sedl_fax	*sf = dev_id;
@@ -326,10 +328,11 @@ speedfax_pci_interrupt(int intno, void *dev_id, struct pt_regs *regs)
 		sf->lock.spin_adr = NULL;
 #endif
 		spin_unlock_irqrestore(&sf->lock.lock, flags);
-		return; /* shared */
+		return IRQ_NONE; /* shared */
 	}
+	sf->irqcnt++;
 	if (test_and_set_bit(STATE_FLAG_BUSY, &sf->lock.state)) {
-		printk(KERN_ERR "%s: STATE_FLAG_BUSY allready activ, should never happen state:%x\n",
+		printk(KERN_ERR "%s: STATE_FLAG_BUSY allready activ, should never happen state:%lx\n",
 			__FUNCTION__, sf->lock.state);
 #ifdef SPIN_DEBUG
 		printk(KERN_ERR "%s: previous lock:%p\n",
@@ -360,7 +363,7 @@ speedfax_pci_interrupt(int intno, void *dev_id, struct pt_regs *regs)
 	if (!test_and_clear_bit(STATE_FLAG_INIRQ, &sf->lock.state)) {
 	}
 	if (!test_and_clear_bit(STATE_FLAG_BUSY, &sf->lock.state)) {
-		printk(KERN_ERR "%s: STATE_FLAG_BUSY not locked state(%x)\n",
+		printk(KERN_ERR "%s: STATE_FLAG_BUSY not locked state(%lx)\n",
 			__FUNCTION__, sf->lock.state);
 	}
 #ifdef SPIN_DEBUG
@@ -368,6 +371,7 @@ speedfax_pci_interrupt(int intno, void *dev_id, struct pt_regs *regs)
 	sf->lock.spin_adr = NULL;
 #endif
 	spin_unlock_irqrestore(&sf->lock.lock, flags);
+	return IRQ_HANDLED;
 }
 
 void
@@ -406,17 +410,14 @@ reset_speedfax(sedl_fax *sf)
 
 static int init_card(sedl_fax *sf)
 {
-	int irq_cnt, cnt = 3;
-	u_int shared = SA_SHIRQ;
-	void *irq_func = speedfax_pci_interrupt;
+	int	cnt = 3;
+	u_int	shared = SA_SHIRQ;
+	void	*irq_func = speedfax_pci_interrupt;
 
 	if (sf->subtyp == SEDL_SPEEDFAX_ISA) {
 		irq_func = speedfax_isa_interrupt;
 		shared = 0;
 	}
-	irq_cnt = kstat_irqs(sf->irq);
-	printk(KERN_INFO "%s: IRQ %d count %d cpu%d\n",
-		sf->dch.inst.name, sf->irq, irq_cnt, smp_processor_id());
 	lock_dev(sf, 0);
 	if (request_irq(sf->irq, irq_func, shared, "speedfax", sf)) {
 		printk(KERN_WARNING "mISDN: couldn't get interrupt %d\n",
@@ -444,9 +445,9 @@ static int init_card(sedl_fax *sf)
 		current->state = TASK_UNINTERRUPTIBLE;
 		/* Timeout 10ms */
 		schedule_timeout((10*HZ)/1000);
-		printk(KERN_INFO "%s: IRQ %d count %d cpu%d\n",
-			sf->dch.inst.name, sf->irq, kstat_irqs(sf->irq), smp_processor_id());
-		if (kstat_irqs(sf->irq) == irq_cnt) {
+		printk(KERN_INFO "%s: IRQ %d count %d\n",
+			sf->dch.inst.name, sf->irq, sf->irqcnt);
+		if (!sf->irqcnt) {
 			printk(KERN_WARNING
 			       "Sedlbauer speedfax: IRQ(%d) getting no interrupts during init %d\n",
 			       sf->irq, 4 - cnt);
@@ -487,7 +488,6 @@ MODULE_PARM(io, MODULE_PARM_T);
 MODULE_PARM(protocol, MODULE_PARM_T);
 MODULE_PARM(irq, MODULE_PARM_T);
 MODULE_PARM(layermask, MODULE_PARM_T);
-#define Speedfax_init init_module
 #endif
 
 static char SpeedfaxName[] = "Speedfax";
@@ -509,7 +509,7 @@ setup_speedfax(sedl_fax *sf, u_int io_cfg, u_int irq_cfg)
 	bytecnt = 16;
 /* Probe for Sedlbauer speedfax pci */
 #if CONFIG_PCI
-	if (pci_present() && !pci_finished_lookup) {
+	if (!pci_finished_lookup) {
 		while ((dev_sedl = pci_find_device(PCI_VENDOR_ID_TIGERJET,
 				PCI_DEVICE_ID_TIGERJET_100, dev_sedl))) {
 			sf->irq = dev_sedl->irq;
@@ -563,15 +563,13 @@ setup_speedfax(sedl_fax *sf, u_int io_cfg, u_int irq_cfg)
 		bytecnt = 16;
 	}
 	
-	if (check_region(sf->cfg, bytecnt)) {
+	if (!request_region(sf->cfg, bytecnt, "sedlbauer speedfax+")) {
 		printk(KERN_WARNING
 			"mISDN: %s config port %x-%x already in use\n",
 			 Sedlbauer_Types[sf->subtyp],
 			sf->cfg,
 			sf->cfg + bytecnt);
 			return (1);
-	} else {
-		request_region(sf->cfg, bytecnt, "sedlbauer speedfax+");
 	}
 
 	printk(KERN_INFO
@@ -812,8 +810,7 @@ speedfax_manager(void *data, u_int prim, void *arg) {
 	return(0);
 }
 
-int
-Speedfax_init(void)
+static int __init Speedfax_init(void)
 {
 	int err,i;
 	sedl_fax *card;
@@ -939,20 +936,20 @@ Speedfax_init(void)
 	return(0);
 }
 
-#ifdef MODULE
-int
-cleanup_module(void)
+
+static void __exit Speedfax_cleanup(void)
 {
 	int err;
 	if ((err = mISDN_unregister(&speedfax))) {
 		printk(KERN_ERR "Can't unregister Speedfax PCI error(%d)\n", err);
-		return(err);
 	}
 	while(speedfax.ilist) {
 		printk(KERN_ERR "Speedfax PCI card struct not empty refs %d\n",
 			speedfax.refcnt);
 		release_card(speedfax.ilist);
 	}
-	return(0);
+	return;
 }
-#endif
+
+module_init(Speedfax_init);
+module_exit(Speedfax_cleanup);

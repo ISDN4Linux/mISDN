@@ -1,4 +1,4 @@
-/* $Id: isac.c,v 1.10 2003/07/21 12:44:45 kkeil Exp $
+/* $Id: isac.c,v 1.11 2003/07/27 11:14:19 kkeil Exp $
  *
  * isac.c   ISAC specific routines
  *
@@ -23,7 +23,7 @@
 #define DBUSY_TIMER_VALUE 80
 #define ARCOFI_USE 1
 
-const char *isac_revision = "$Revision: 1.10 $";
+const char *isac_revision = "$Revision: 1.11 $";
 
 #ifdef MODULE
 MODULE_AUTHOR("Karsten Keil");
@@ -101,7 +101,7 @@ static void
 isac_hwbh(dchannel_t *dch)
 {
 	if (dch->debug)
-		printk(KERN_DEBUG "%s: event %x\n", __FUNCTION__, dch->event);
+		printk(KERN_DEBUG "%s: event %lx\n", __FUNCTION__, dch->event);
 #if 0
 	if (test_and_clear_bit(D_CLEARBUSY, &dch->event)) {
 		if (dch->debug)
@@ -833,9 +833,16 @@ ISAC_clear_pending_ints(dchannel_t *dch)
 }
 
 #ifdef MODULE
-int
-init_module(void) {
+static int isac_mod_init(void)
+{
 	printk(KERN_INFO "ISAC module %s\n", isac_revision);
 	return(0);
 }
+
+static void isac_mod_cleanup(void)
+{
+	printk(KERN_INFO "ISAC module unloaded\n");
+}
+module_init(isac_mod_init);
+module_exit(isac_mod_cleanup);
 #endif

@@ -1,4 +1,4 @@
-/* $Id: isar.h,v 1.2 2003/07/21 12:00:04 kkeil Exp $
+/* $Id: isar.h,v 1.3 2003/07/27 11:14:19 kkeil Exp $
  *
  * isar.h   ISAR (Siemens PSB 7110) specific defines
  *
@@ -9,7 +9,7 @@
  */
  
 typedef struct _isar_reg {
-	unsigned int	Flags;
+	unsigned long	Flags;
 	volatile u_char	bstat;
 	volatile u_char	iis;
 	volatile u_char	cmsb;

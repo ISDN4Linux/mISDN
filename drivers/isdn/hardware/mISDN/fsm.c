@@ -1,4 +1,4 @@
-/* $Id: fsm.c,v 1.0 2001/11/02 23:42:26 kkeil Exp $
+/* $Id: fsm.c,v 1.1 2003/07/27 11:14:19 kkeil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -11,6 +11,7 @@
 #define __NO_VERSION__
 #include <linux/kernel.h>
 #include <linux/slab.h>
+#include <linux/string.h>
 #include "fsm.h"
 
 #define FSM_TIMER_DEBUG 0

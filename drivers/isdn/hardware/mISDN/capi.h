@@ -1,4 +1,4 @@
-/* $Id: capi.h,v 1.5 2003/07/21 12:00:04 kkeil Exp $
+/* $Id: capi.h,v 1.6 2003/07/27 11:14:19 kkeil Exp $
  *
  */
 
@@ -242,7 +242,7 @@ typedef struct _Appl {
 	Listen_t		listen;
 	struct _Cplci		*cplcis[CAPI_MAXPLCI];
 	__u32			NotificationMask;
-	int			flags;
+	u_long			flags;
 	capi_register_params	rp;
 } Appl_t;
 
@@ -278,11 +278,11 @@ void applDelCplci(Appl_t *appl, struct _Cplci *cplci);
 #define PLCI_FLAG_OUTGOING 2
 
 typedef struct _Plci {
-	Contr_t	*contr;
-	__u32	adrPLCI;
-	int	flags;
-	int	nAppl;
-	struct _Cplci *cplcis[CAPI_MAXAPPL];
+	Contr_t		*contr;
+	__u32		adrPLCI;
+	u_long		flags;
+	int		nAppl;
+	struct _Cplci	*cplcis[CAPI_MAXAPPL];
 } Plci_t;
 
 void plciConstr(Plci_t *plci, Contr_t *contr, __u32 adrPLCI);
@@ -308,7 +308,7 @@ typedef struct _Cplci {
 	u_char	cause[4]; // we may get a cause from l3 DISCONNECT message
 			  // which we'll need send in DISCONNECT_IND caused by
 			  // l3 RELEASE message
-	u_int	bchannel;
+	int	bchannel;
 	struct Bprotocol Bprotocol;
 } Cplci_t;
 

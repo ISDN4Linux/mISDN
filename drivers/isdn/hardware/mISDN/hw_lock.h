@@ -1,4 +1,4 @@
-/* $Id: hw_lock.h,v 1.4 2003/07/21 12:00:04 kkeil Exp $
+/* $Id: hw_lock.h,v 1.5 2003/07/27 11:14:19 kkeil Exp $
  *
  * hw_lock.h  Hardware locking inline routines
  *
@@ -71,7 +71,7 @@ typedef struct _mISDN_HWlock {
 	void			*spin_adr;
 	void			*busy_adr;
 #endif
-	volatile u_int		state;
+	volatile u_long		state;
 #ifdef LOCK_STATISTIC
 	u_int			try_ok;
 	u_int			try_wait;
@@ -119,7 +119,7 @@ static inline int lock_HW(mISDN_HWlock_t *lock, int nowait)
 #ifdef LOCK_STATISTIC
 			lock->try_inirq++;
 #endif
-			printk(KERN_ERR "lock_HW: try to schedule in IRQ state(%x)\n",
+			printk(KERN_ERR "lock_HW: try to schedule in IRQ state(%lx)\n",
 				lock->state);
 			mdelay(1);
 		} else {
@@ -151,7 +151,7 @@ static inline int lock_HW(mISDN_HWlock_t *lock, int nowait)
 static inline void unlock_HW(mISDN_HWlock_t *lock)
 {
 	if (!test_and_clear_bit(STATE_FLAG_BUSY, &lock->state)) {
-		printk(KERN_ERR "lock_HW: STATE_FLAG_BUSY not locked state(%x)\n",
+		printk(KERN_ERR "lock_HW: STATE_FLAG_BUSY not locked state(%lx)\n",
 			lock->state);
 	}
 #ifdef SPIN_DEBUG

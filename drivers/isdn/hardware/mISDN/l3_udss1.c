@@ -1,4 +1,4 @@
-/* $Id: l3_udss1.c,v 1.11 2003/07/21 12:44:45 kkeil Exp $
+/* $Id: l3_udss1.c,v 1.12 2003/07/27 11:14:19 kkeil Exp $
  *
  * EURO/DSS1 D-channel protocol
  *
@@ -24,7 +24,7 @@ static int debug = 0;
 static mISDNobject_t u_dss1;
 
 
-const char *dss1_revision = "$Revision: 1.11 $";
+const char *dss1_revision = "$Revision: 1.12 $";
 
 static int dss1man(l3_process_t *, u_int, void *);
 
@@ -62,7 +62,7 @@ parseQ931(struct sk_buff *skb) {
 	skb_pull(skb, (p - skb->data) - pos);
 	len = skb->len;
 	p = skb->data;
-	if (skb_headroom(skb) < L3_EXTRA_SIZE) {
+	if (skb_headroom(skb) < (int)L3_EXTRA_SIZE) {
 		int_error();
 		return(-3);
 	}
@@ -1884,10 +1884,10 @@ static struct stateentry manstatelist[] =
 
 
 static void
-global_handler(layer3_t *l3, int mt, struct sk_buff *skb)
+global_handler(layer3_t *l3, u_int mt, struct sk_buff *skb)
 {
-	int i;
-	l3_process_t *proc = l3->global;
+	u_int		i;
+	l3_process_t	*proc = l3->global;
 
 	proc->callref = skb->data[2]; /* cr flag */
 	for (i = 0; i < GLOBALM_LEN; i++)
@@ -1913,7 +1913,8 @@ static int
 dss1_fromdown(mISDNif_t *hif, struct sk_buff *skb)
 {
 	layer3_t	*l3;
-	int		i, cause, callState, ret = -EINVAL;
+	u_int		i;
+	int		cause, callState, ret = -EINVAL;
 	char		*ptr;
 	l3_process_t	*proc;
 	mISDN_head_t	*hh;
@@ -2089,7 +2090,8 @@ static int
 dss1_fromup(mISDNif_t *hif, struct sk_buff *skb)
 {
 	layer3_t	*l3;
-	int		i, cr, ret = -EINVAL;
+	u_int		i;
+	int		cr, ret = -EINVAL;
 	l3_process_t	*proc;
 	mISDN_head_t	*hh;
 
@@ -2155,7 +2157,7 @@ dss1_fromup(mISDNif_t *hif, struct sk_buff *skb)
 static int
 dss1man(l3_process_t *proc, u_int pr, void *arg)
 {
-	int i;
+	u_int	i;
  
 	if (!proc) {
 		printk(KERN_ERR "mISDN dss1man without proc pr=%04x\n", pr);

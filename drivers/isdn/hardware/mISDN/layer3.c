@@ -1,4 +1,4 @@
-/* $Id: layer3.c,v 1.5 2003/07/21 12:44:46 kkeil Exp $
+/* $Id: layer3.c,v 1.6 2003/07/27 11:14:19 kkeil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -14,7 +14,7 @@
 #include "layer3.h"
 #include "helper.h"
 
-const char *l3_revision = "$Revision: 1.5 $";
+const char *l3_revision = "$Revision: 1.6 $";
 
 static
 struct Fsm l3fsm = {NULL, 0, 0, NULL, NULL};
@@ -260,7 +260,7 @@ l3_process_t
 }
 
 l3_process_t
-*getl3proc4id(layer3_t *l3, int id)
+*getl3proc4id(layer3_t *l3, u_int id)
 {
 	l3_process_t *p = l3->proc;
 

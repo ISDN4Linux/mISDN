@@ -1,4 +1,4 @@
-/* $Id: layer1.c,v 1.5 2003/07/21 12:44:46 kkeil Exp $
+/* $Id: layer1.c,v 1.6 2003/07/27 11:14:19 kkeil Exp $
  *
  * mISDN_l1.c     common low level stuff for I.430 layer1
  *
@@ -10,7 +10,7 @@
  *
  */
 
-static char *l1_revision = "$Revision: 1.5 $";
+static char *l1_revision = "$Revision: 1.6 $";
 
 #include <linux/config.h>
 #include <linux/module.h>
@@ -21,11 +21,11 @@ static char *l1_revision = "$Revision: 1.5 $";
 typedef struct _layer1 {
 	struct _layer1	*prev;
 	struct _layer1	*next;
-	int Flags;
-	struct FsmInst l1m;
+	u_long		Flags;
+	struct FsmInst	l1m;
 	struct FsmTimer timer;
-	int debug;
-	int delay;
+	int		debug;
+	int		delay;
 	mISDNinstance_t	inst;
 } layer1_t;
 
@@ -36,7 +36,7 @@ typedef struct _status_info_l1 {
 	int	protocol;
 	int	status;
 	int	state;
-	int	Flags;
+	u_long	Flags;
 	int	T3;
 	int	delay;
 	int	debug;

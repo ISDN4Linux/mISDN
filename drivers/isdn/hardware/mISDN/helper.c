@@ -1,4 +1,4 @@
-/* $Id: helper.c,v 1.7 2003/07/21 12:00:04 kkeil Exp $
+/* $Id: helper.c,v 1.8 2003/07/27 11:14:19 kkeil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -70,10 +70,10 @@ bprotocol2pid(void *bp, mISDN_pid_t *pid)
 }
 
 int
-HasProtocol(mISDNobject_t *obj, int protocol)
+HasProtocol(mISDNobject_t *obj, u_int protocol)
 {
 	int layer;
-	int pmask;
+	u_int pmask;
 
 	if (!obj) {
 		int_error();

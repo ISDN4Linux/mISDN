@@ -1,4 +1,4 @@
-/* $Id: hfc_pci.c,v 1.26 2003/07/21 12:44:45 kkeil Exp $
+/* $Id: hfc_pci.c,v 1.27 2003/07/27 11:14:19 kkeil Exp $
 
  * hfc_pci.c     low level driver for CCD's hfc-pci based cards
  *
@@ -28,7 +28,6 @@
 #include <linux/config.h>
 #include <linux/module.h>
 #include <linux/pci.h>
-#include <linux/kernel_stat.h>
 #include <linux/delay.h>
 
 #include "dchannel.h"
@@ -47,7 +46,7 @@
 
 extern const char *CardType[];
 
-static const char *hfcpci_revision = "$Revision: 1.26 $";
+static const char *hfcpci_revision = "$Revision: 1.27 $";
 
 /* table entry in the PCI devices list */
 typedef struct {
@@ -123,29 +122,28 @@ static const PCI_ENTRY id_list[] =
 
 
 struct hfcPCI_hw {
-	unsigned char	cirm;
-	unsigned char	ctmt;
-	unsigned char	clkdel;
-	unsigned char	states;
-	unsigned char	conn;
-	unsigned char	mst_m;
-	unsigned char	int_m1;
-	unsigned char	int_m2;
-	unsigned char	sctrl;
-	unsigned char	sctrl_r;
-	unsigned char	sctrl_e;
-	unsigned char	trm;
-	unsigned char	fifo_en;
-	unsigned char	bswapped;
-	unsigned char	nt_mode;
-	int		nt_timer;
-	unsigned char	pci_bus;
-	unsigned char	pci_device_fn;
-	unsigned char	*pci_io; /* start of PCI IO memory */
-	void		*share_start; /* shared memory for Fifos start */
-	void		*fifos; /* FIFO memory */ 
-	int		last_bfifo_cnt[2]; /* marker saving last b-fifo frame count */
-	timer_t		timer;
+	unsigned char		cirm;
+	unsigned char		ctmt;
+	unsigned char		clkdel;
+	unsigned char		states;
+	unsigned char		conn;
+	unsigned char		mst_m;
+	unsigned char		int_m1;
+	unsigned char		int_m2;
+	unsigned char		sctrl;
+	unsigned char		sctrl_r;
+	unsigned char		sctrl_e;
+	unsigned char		trm;
+	unsigned char		fifo_en;
+	unsigned char		bswapped;
+	unsigned char		nt_mode;
+	int			nt_timer;
+	struct pci_dev		*dev;
+	unsigned char		*pci_io; /* start of PCI IO memory */
+	void			*share_start; /* shared memory for Fifos start */
+	void			*fifos; /* FIFO memory */ 
+	int			last_bfifo_cnt[2]; /* marker saving last b-fifo frame count */
+	struct timer_list	timer;
 };
 
 typedef struct hfcPCI_hw	hfcPCI_hw_t;
@@ -164,8 +162,9 @@ typedef struct _hfc_pci {
 	struct _hfc_pci	*next;
 	u_char		subtyp;
 	u_char		chanlimit;
-	u_int		cfg;
+	u_long		cfg;
 	u_int		irq;
+	u_int		irqcnt;
 	hfcPCI_hw_t	hw;
 	mISDN_HWlock_t	lock;
 	dchannel_t	dch;
@@ -197,12 +196,11 @@ release_io_hfcpci(hfc_pci_t *hc)
 {
 	hc->hw.int_m2 = 0;	/* interrupt output off ! */
 	Write_hfc(hc, HFCPCI_INT_M2, hc->hw.int_m2);
-	Write_hfc(hc, HFCPCI_CIRM, HFCPCI_RESET);	/* Reset On */
-	set_current_state(TASK_UNINTERRUPTIBLE);
-	schedule_timeout((30 * HZ) / 1000);	/* Timeout 30ms */
+	Write_hfc(hc, HFCPCI_CIRM, HFCPCI_RESET);		/* Reset On */
+	mdelay(10);						/* Timeout 10ms */
 	hc->hw.cirm = 0; /* Reset Off */
 	Write_hfc(hc, HFCPCI_CIRM, hc->hw.cirm);
-	pcibios_write_config_word(hc->hw.pci_bus, hc->hw.pci_device_fn, PCI_COMMAND, 0);	/* disable memory mapped ports + busmaster */
+	pci_write_config_word(hc->hw.dev, PCI_COMMAND, 0);	/* disable memory mapped ports + busmaster */
 	del_timer(&hc->hw.timer);
 	kfree(hc->hw.share_start);
 	hc->hw.share_start = NULL;
@@ -223,17 +221,17 @@ reset_hfcpci(hfc_pci_t *hc)
 	HFC_INFO("reset_hfcpci: entered\n");
 	val = Read_hfc(hc, HFCPCI_CHIP_ID);
 	printk(KERN_INFO "HFC_PCI: resetting HFC ChipId(%x)\n", val);
-	pcibios_write_config_word(hc->hw.pci_bus, hc->hw.pci_device_fn, PCI_COMMAND, PCI_ENA_MEMIO);	/* enable memory mapped ports, disable busmaster */
-	hc->hw.int_m2 = 0;	/* interrupt output off ! */
+	pci_write_config_word(hc->hw.dev, PCI_COMMAND, PCI_ENA_MEMIO);	/* enable memory mapped ports, disable busmaster */
+	hc->hw.int_m2 = 0;		/* interrupt output off ! */
 	Write_hfc(hc, HFCPCI_INT_M2, hc->hw.int_m2);
-	pcibios_write_config_word(hc->hw.pci_bus, hc->hw.pci_device_fn, PCI_COMMAND, PCI_ENA_MEMIO + PCI_ENA_MASTER);	/* enable memory ports + busmaster */
+	pci_write_config_word(hc->hw.dev, PCI_COMMAND, PCI_ENA_MEMIO + PCI_ENA_MASTER);	/* enable memory ports + busmaster */
 	val = Read_hfc(hc, HFCPCI_STATUS);
 	printk(KERN_DEBUG "HFC-PCI status(%x) before reset\n", val);
-	hc->hw.cirm = HFCPCI_RESET;		/* Reset On */
+	hc->hw.cirm = HFCPCI_RESET;	/* Reset On */
 	Write_hfc(hc, HFCPCI_CIRM, hc->hw.cirm);
 	set_current_state(TASK_UNINTERRUPTIBLE);
-	schedule_timeout((30 * HZ) / 1000);	/* Timeout 30ms */
-	hc->hw.cirm = 0;			/* Reset Off */
+	mdelay(10);			/* Timeout 10ms */
+	hc->hw.cirm = 0;		/* Reset Off */
 	Write_hfc(hc, HFCPCI_CIRM, hc->hw.cirm);
 	val = Read_hfc(hc, HFCPCI_STATUS);
 	printk(KERN_DEBUG "HFC-PCI status(%x) after reset\n", val);
@@ -746,7 +744,7 @@ hfcpci_fill_fifo(bchannel_t *bch)
 	unsigned short	*z1t, *z2t;
 
 	if ((bch->debug & L1_DEB_HSCX) && !(bch->debug & L1_DEB_HSCX_FIFO))
-		debugprint(&bch->inst, __FUNCTION__);
+		debugprint(&bch->inst, "%s", __FUNCTION__);
 	count = bch->tx_len - bch->tx_idx;
 	if (bch->tx_len <= 0)
 		return;
@@ -1060,13 +1058,13 @@ receive_emsg(hfc_pci_t *hc)
 /*********************/
 /* Interrupt handler */
 /*********************/
-static void
+static irqreturn_t
 hfcpci_interrupt(int intno, void *dev_id, struct pt_regs *regs)
 {
 	hfc_pci_t	*hc = dev_id;
 	u_char		exval;
 	bchannel_t	*bch;
-	long		flags;
+	u_long		flags;
 	u_char		val, stat;
 
 	spin_lock_irqsave(&hc->lock.lock, flags);
@@ -1078,7 +1076,7 @@ hfcpci_interrupt(int intno, void *dev_id, struct pt_regs *regs)
 		hc->lock.spin_adr = NULL;
 #endif
 		spin_unlock_irqrestore(&hc->lock.lock, flags);
-		return;		/* not initialised */
+		return IRQ_NONE; /* not initialised */
 	}
 
 	if (HFCPCI_ANYINT & (stat = Read_hfc(hc, HFCPCI_STATUS))) {
@@ -1092,10 +1090,11 @@ hfcpci_interrupt(int intno, void *dev_id, struct pt_regs *regs)
 		hc->lock.spin_adr = NULL;
 #endif
 		spin_unlock_irqrestore(&hc->lock.lock, flags);
-		return;
+		return IRQ_NONE;
 	}
+	hc->irqcnt++;
 	if (test_and_set_bit(STATE_FLAG_BUSY, &hc->lock.state)) {
-		printk(KERN_ERR "%s: STATE_FLAG_BUSY allready activ, should never happen state:%x\n",
+		printk(KERN_ERR "%s: STATE_FLAG_BUSY allready activ, should never happen state:%lx\n",
 			__FUNCTION__, hc->lock.state);
 #ifdef SPIN_DEBUG
 		printk(KERN_ERR "%s: previous lock:%p\n",
@@ -1251,7 +1250,7 @@ hfcpci_interrupt(int intno, void *dev_id, struct pt_regs *regs)
 	if (!test_and_clear_bit(STATE_FLAG_INIRQ, &hc->lock.state)) {
 	}
 	if (!test_and_clear_bit(STATE_FLAG_BUSY, &hc->lock.state)) {
-		printk(KERN_ERR "%s: STATE_FLAG_BUSY not locked state(%x)\n",
+		printk(KERN_ERR "%s: STATE_FLAG_BUSY not locked state(%lx)\n",
 			__FUNCTION__, hc->lock.state);
 	}
 #ifdef SPIN_DEBUG
@@ -1259,6 +1258,7 @@ hfcpci_interrupt(int intno, void *dev_id, struct pt_regs *regs)
 	hc->lock.spin_adr = NULL;
 #endif
 	spin_unlock_irqrestore(&hc->lock.lock, flags);
+	return IRQ_HANDLED;
 }
 
 /********************************************************************/
@@ -1880,12 +1880,10 @@ hfcpci_card_msg(hfc_pci_t *hc, int mt, void *arg)
 
 static int init_card(hfc_pci_t *hc)
 {
-	int irq_cnt, cnt = 3;
+	int	cnt = 3;
 
 	HFC_INFO("init_card: entered\n");
 
-	irq_cnt = kstat_irqs(hc->irq);
-	printk(KERN_INFO "HFC PCI: IRQ %d count %d\n", hc->irq, irq_cnt);
 	lock_dev(hc, 0);
 	if (request_irq(hc->irq, hfcpci_interrupt, SA_SHIRQ, "HFC PCI", hc)) {
 		printk(KERN_WARNING "mISDN: couldn't get interrupt %d\n",
@@ -1906,13 +1904,13 @@ static int init_card(hfc_pci_t *hc)
 		current->state = TASK_UNINTERRUPTIBLE;
 		schedule_timeout((80*HZ)/1000);
 		printk(KERN_INFO "HFC PCI: IRQ %d count %d\n",
-			hc->irq, kstat_irqs(hc->irq));
+			hc->irq, hc->irqcnt);
 		/* now switch timer interrupt off */
 		hc->hw.int_m1 &= ~HFCPCI_INTS_TIMER;
 		Write_hfc(hc, HFCPCI_INT_M1, hc->hw.int_m1);
 		/* reinit mode reg */
 		Write_hfc(hc, HFCPCI_MST_MODE, hc->hw.mst_m);
-		if (kstat_irqs(hc->irq) == irq_cnt) {
+		if (!hc->irqcnt) {
 			printk(KERN_WARNING
 			       "HFC PCI: IRQ(%d) getting no interrupts during init %d\n",
 			       hc->irq, 4 - cnt);
@@ -1937,7 +1935,7 @@ SelFreeBChannel(hfc_pci_t *hc, channel_info_t *ci)
 	bchannel_t	*bch;
 	hfc_pci_t	*hfc;
 	mISDNstack_t	*bst;
-	int		cnr;
+	u_int		cnr;
 	
 	if (!ci)
 		return(-EINVAL);
@@ -2023,7 +2021,6 @@ MODULE_PARM(protocol, MODULE_PARM_T);
  */
  
 MODULE_PARM(layermask, MODULE_PARM_T);
-#define HFC_init init_module
 #endif
 
 static char HFCName[] = "HFC_PCI";
@@ -2060,8 +2057,7 @@ setup_hfcpci(hfc_pci_t *hc)
 	if (tmp_hfcpci) {
 		i--;
 		dev_hfcpci = tmp_hfcpci;	/* old device */
-		hc->hw.pci_bus = dev_hfcpci->bus->number;
-		hc->hw.pci_device_fn = dev_hfcpci->devfn;
+		hc->hw.dev = dev_hfcpci;
 		hc->irq = dev_hfcpci->irq;
 		if (!hc->irq) {
 			printk(KERN_WARNING "HFC-PCI: No IRQ for PCI card found\n");
@@ -2086,16 +2082,14 @@ setup_hfcpci(hfc_pci_t *hc)
 	}
 	(ulong) hc->hw.fifos =
 		(((ulong) hc->hw.share_start) & ~0x7FFF) + 0x8000;
-	pcibios_write_config_dword(hc->hw.pci_bus,
-		hc->hw.pci_device_fn, 0x80,
-		(u_int) virt_to_bus(hc->hw.fifos));
+	pci_write_config_dword(hc->hw.dev, 0x80, (u_int) virt_to_bus(hc->hw.fifos));
 	hc->hw.pci_io = ioremap((ulong) hc->hw.pci_io, 256);
 	printk(KERN_INFO
 		"HFC-PCI: defined at mem %#x fifo %#x(%#x) IRQ %d HZ %d\n",
 		(u_int) hc->hw.pci_io, (u_int) hc->hw.fifos,
 		(u_int) virt_to_bus(hc->hw.fifos),
 		hc->irq, HZ);
-	pcibios_write_config_word(hc->hw.pci_bus, hc->hw.pci_device_fn, PCI_COMMAND, PCI_ENA_MEMIO);	/* enable memory mapped ports, disable busmaster */
+	pci_write_config_word(hc->hw.dev, PCI_COMMAND, PCI_ENA_MEMIO);	/* enable memory mapped ports, disable busmaster */
 	hc->hw.int_m2 = 0;	/* disable alle interrupts */
 	Write_hfc(hc, HFCPCI_INT_M2, hc->hw.int_m2);
 	hc->hw.int_m1 = 0;
@@ -2287,8 +2281,7 @@ HFC_manager(void *data, u_int prim, void *arg) {
 	return(0);
 }
 
-int
-HFC_init(void)
+static int __init HFC_init(void)
 {
 	int		err,i;
 	hfc_pci_t	*card, *prev;
@@ -2486,20 +2479,20 @@ HFC_init(void)
 }
 
 #ifdef MODULE
-int
-cleanup_module(void)
+static void __exit HFC_cleanup(void)
 {
 	int err;
 	if ((err = mISDN_unregister(&HFC_obj))) {
 		printk(KERN_ERR "Can't unregister HFC PCI error(%d)\n", err);
-		return(err);
 	}
 	while(HFC_obj.ilist) {
 		printk(KERN_ERR "HFC PCI card struct not empty refs %d\n",
 			HFC_obj.refcnt);
 		release_card(HFC_obj.ilist);
 	}
-
-	return(0);
+	return;
 }
+
+module_init(HFC_init);
+module_exit(HFC_cleanup);
 #endif

@@ -1,4 +1,4 @@
-/* $Id: layer2.c,v 1.9 2003/07/21 12:44:46 kkeil Exp $
+/* $Id: layer2.c,v 1.10 2003/07/27 11:14:19 kkeil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -12,7 +12,7 @@
 #include "helper.h"
 #include "debug.h"
 
-static char *l2_revision = "$Revision: 1.9 $";
+static char *l2_revision = "$Revision: 1.10 $";
 
 static void l2m_debug(struct FsmInst *fi, char *fmt, ...);
 
@@ -100,7 +100,18 @@ static char *strL2Event[] =
 	"EV_L2_FRAME_ERROR",
 };
 
-static int l2addrsize(layer2_t *l2);
+inline u_int
+l2headersize(layer2_t *l2, int ui)
+{
+	return (((test_bit(FLG_MOD128, &l2->flag) && (!ui)) ? 2 : 1) +
+		(test_bit(FLG_LAPD, &l2->flag) ? 2 : 1));
+}
+
+inline u_int
+l2addrsize(layer2_t *l2)
+{
+	return (test_bit(FLG_LAPD, &l2->flag) ? 2 : 1);
+}
 
 static int
 l2up(layer2_t *l2, u_int prim, int dinfo, struct sk_buff *skb)
@@ -290,19 +301,6 @@ clear_exception(layer2_t *l2)
 	clear_peer_busy(l2);
 }
 
-inline int
-l2headersize(layer2_t *l2, int ui)
-{
-	return (((test_bit(FLG_MOD128, &l2->flag) && (!ui)) ? 2 : 1) +
-		(test_bit(FLG_LAPD, &l2->flag) ? 2 : 1));
-}
-
-inline int
-l2addrsize(layer2_t *l2)
-{
-	return (test_bit(FLG_LAPD, &l2->flag) ? 2 : 1);
-}
-
 static int
 sethdraddr(layer2_t *l2, u_char *header, int rsp)
 {
@@ -407,8 +405,8 @@ IsRNR(u_char * data, layer2_t *l2)
 int
 iframe_error(layer2_t *l2, struct sk_buff *skb)
 {
-	int i = l2addrsize(l2) + (test_bit(FLG_MOD128, &l2->flag) ? 2 : 1);
-	int rsp = *skb->data & 0x2;
+	u_int	i = l2addrsize(l2) + (test_bit(FLG_MOD128, &l2->flag) ? 2 : 1);
+	int	rsp = *skb->data & 0x2;
 
 	if (test_bit(FLG_ORIG, &l2->flag))
 		rsp = !rsp;
@@ -459,9 +457,9 @@ UI_error(layer2_t *l2, struct sk_buff *skb)
 int
 FRMR_error(layer2_t *l2, struct sk_buff *skb)
 {
-	int headers = l2addrsize(l2) + 1;
-	u_char *datap = skb->data + headers;
-	int rsp = *skb->data & 0x2;
+	u_int	headers = l2addrsize(l2) + 1;
+	u_char	*datap = skb->data + headers;
+	int	rsp = *skb->data & 0x2;
 
 	if (test_bit(FLG_ORIG, &l2->flag))
 		rsp = !rsp;
@@ -1170,10 +1168,10 @@ l2_feed_iqueue(struct FsmInst *fi, int event, void *arg)
 static void
 l2_got_iframe(struct FsmInst *fi, int event, void *arg)
 {
-	layer2_t *l2 = fi->userdata;
-	struct sk_buff *skb = arg;
-	int PollFlag, ns, i;
-	unsigned int nr;
+	layer2_t	*l2 = fi->userdata;
+	struct sk_buff	*skb = arg;
+	int		PollFlag, i;
+	u_int		ns, nr;
 
 	i = l2addrsize(l2);
 	if (test_bit(FLG_MOD128, &l2->flag)) {
@@ -1353,12 +1351,11 @@ l2_st7_tout_203(struct FsmInst *fi, int event, void *arg)
 static void
 l2_pull_iqueue(struct FsmInst *fi, int event, void *arg)
 {
-	layer2_t *l2 = fi->userdata;
-	struct sk_buff *skb, *oskb;
-	u_char header[MAX_HEADER_LEN];
-	int i;
-	int unsigned p1;
-	long flags;
+	layer2_t	*l2 = fi->userdata;
+	struct sk_buff	*skb, *oskb;
+	u_char		header[MAX_HEADER_LEN];
+	u_int		i, p1;
+	u_long		flags;
 
 	if (!cansend(l2))
 		return;
@@ -1763,11 +1760,11 @@ static struct FsmNode L2FnList[] =
 
 static int
 ph_data_indication(layer2_t *l2, mISDN_head_t *hh, struct sk_buff *skb) {
-	u_char *datap = skb->data;
-	int ret = -EINVAL;
-	int psapi, ptei;
-	int l;
-	int c = 0;
+	u_char	*datap = skb->data;
+	int	ret = -EINVAL;
+	int	psapi, ptei;
+	u_int	l;
+	int	c = 0;
 
 	
 	l = l2addrsize(l2);

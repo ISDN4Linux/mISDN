@@ -1,4 +1,4 @@
-/* $Id: mISDNif.h,v 1.12 2003/07/21 12:00:05 kkeil Exp $
+/* $Id: mISDNif.h,v 1.13 2003/07/27 11:14:19 kkeil Exp $
  *
  */
 
@@ -533,7 +533,7 @@ typedef struct _mISDNport {
 	wait_queue_head_t	procq;
 	spinlock_t		lock;
 	mISDNif_t		pif;
-	int			Flag;
+	u_long			Flag;
 	int			size;
 	int			cnt;
 	u_char			*buf;
