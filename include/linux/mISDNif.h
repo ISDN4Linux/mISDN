@@ -1,4 +1,4 @@
-/* $Id: mISDNif.h,v 1.31 2004/07/08 00:49:49 keil Exp $
+/* $Id: mISDNif.h,v 1.32 2004/07/08 00:58:20 keil Exp $
  *
  */
 
@@ -33,8 +33,8 @@
 #define	MISDN_MINOR_VERSION	0
 #define	MISDN_VERSION		((MISDN_MAJOR_VERSION<<16) | MISDN_MINOR_VERSION)
 
-#define MISDN_REVISION		"$Revision: 1.31 $"
-#define MISDN_DATE		"$Date: 2004/07/08 00:49:49 $"
+#define MISDN_REVISION		"$Revision: 1.32 $"
+#define MISDN_DATE		"$Date: 2004/07/08 00:58:20 $"
 
 /* SUBCOMMANDS */
 #define REQUEST		0x80
@@ -632,9 +632,9 @@ typedef void	(unlock_func_t)(void *);
 #define mISDN_HEAD_DINFO(s)	((mISDN_head_t *)&s->cb[0])->dinfo
 
 typedef struct _mISDN_headext {
-	u_int	addr;
-	u_int	prim;
-	int	dinfo;
+	u_int	addr __attribute__((packed));
+	u_int	prim __attribute__((packed));
+	int	dinfo  __attribute__((packed));
 	void	*data[3];
 	union {
 		ctrl_func_t	*ctrl;
@@ -642,15 +642,6 @@ typedef struct _mISDN_headext {
 		void		*func;
 	} func;
 } mISDN_headext_t;
-
-#define mISDN_HEADEXT_P(s) ((mISDN_headext_t *)&s->cb[0])
-
-typedef struct _mISDN_headifrm {
-	u_int	prim;
-	int	dinfo;
-	int	len;
-	u_int	addr;
-} mISDN_headifrm_t;
 
 #define mISDN_HEADEXT_P(s) ((mISDN_headext_t *)&s->cb[0])
 
