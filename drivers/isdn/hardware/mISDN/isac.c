@@ -1,4 +1,4 @@
-/* $Id: isac.c,v 1.12 2003/08/01 22:15:53 kkeil Exp $
+/* $Id: isac.c,v 1.13 2003/11/09 09:21:28 keil Exp $
  *
  * isac.c   ISAC specific routines
  *
@@ -23,7 +23,7 @@
 #define DBUSY_TIMER_VALUE 80
 #define ARCOFI_USE 1
 
-const char *isac_revision = "$Revision: 1.12 $";
+const char *isac_revision = "$Revision: 1.13 $";
 
 #ifdef MODULE
 MODULE_AUTHOR("Karsten Keil");
@@ -599,7 +599,7 @@ ISAC_l1hw(mISDNif_t *hif, struct sk_buff *skb)
 			isac_fill_fifo(dch);
 			dch->inst.unlock(dch->inst.data);
 			return(if_newhead(&dch->inst.up, PH_DATA_CNF,
-				DINFO_SKB, skb));
+				hh->dinfo, skb));
 		}
 	} else if (hh->prim == (PH_SIGNAL | REQUEST)) {
 		dch->inst.lock(dch->inst.data,0);
