@@ -1,4 +1,4 @@
-/* $Id: udevice.c,v 1.8 2003/08/02 21:17:58 kkeil Exp $
+/* $Id: udevice.c,v 1.9 2003/10/20 07:19:42 keil Exp $
  *
  * Copyright 2000  by Karsten Keil <kkeil@isdn4linux.de>
  *
@@ -1540,7 +1540,7 @@ free_device(mISDNdevice_t *dev)
 static int
 mISDN_open(struct inode *ino, struct file *filep)
 {
-	u_int		minor = MINOR(ino->i_rdev);
+	u_int		minor = iminor(ino);
 	mISDNdevice_t 	*dev = NULL;
 	u_long		flags;
 	int		isnew = 0;

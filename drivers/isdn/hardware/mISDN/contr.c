@@ -1,4 +1,4 @@
-/* $Id: contr.c,v 1.12 2003/08/02 21:17:58 kkeil Exp $
+/* $Id: contr.c,v 1.13 2003/10/20 07:19:42 keil Exp $
  *
  */
 
@@ -391,6 +391,7 @@ contrNewPlci(Contr_t *contr)
 	}
 	contr->plcis[i] = plci;
 	plciConstr(plci, contr, (i+1) << 8 | contr->adrController);
+	contrDebug(contr, CAPI_DBG_PLCI, "%s: PLCI(%x) plci(%p,%d)", __FUNCTION__, plci->adrPLCI, plci, sizeof(*plci));
 	return plci;
 }
 
@@ -399,7 +400,7 @@ contrDelPlci(Contr_t *contr, Plci_t *plci)
 {
 	int	i = plci->adrPLCI >> 8;
 
-	contrDebug(contr, CAPI_DBG_PLCI, "%s: PLCI(%x)", __FUNCTION__, plci->adrPLCI);
+	contrDebug(contr, CAPI_DBG_PLCI, "%s: PLCI(%x) plci(%p)", __FUNCTION__, plci->adrPLCI, plci);
 	if ((i < 1) || (i > CAPI_MAXPLCI)) {
 		int_error();
 		return;
@@ -440,6 +441,8 @@ contrL3L4(mISDNif_t *hif, struct sk_buff *skb)
 		return(ret);
 	hh = mISDN_HEAD_P(skb);
 	contr = hif->fdata;
+	contrDebug(contr, CAPI_DBG_CONTR_INFO, "%s: prim(%x) id(%x)",
+		__FUNCTION__, hh->prim, hh->dinfo);
 	if (hh->prim == (CC_NEW_CR | INDICATION)) {
 		plci = contrNewPlci(contr);
 		if (!plci)
@@ -458,6 +461,7 @@ contrL3L4(mISDNif_t *hif, struct sk_buff *skb)
 				__FUNCTION__, hh->prim, hh->dinfo);
 			return(-ENODEV);
 		}
+		contrDebug(contr, CAPI_DBG_PLCI, "%s: PLCI(%x) plci(%p)", __FUNCTION__, plci->adrPLCI, plci);
 		ret = plci_l3l4(plci, hh->prim, skb);
 	}
 	return(ret);

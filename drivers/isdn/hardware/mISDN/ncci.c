@@ -1,4 +1,4 @@
-/* $Id: ncci.c,v 1.11 2003/08/01 22:15:53 kkeil Exp $
+/* $Id: ncci.c,v 1.12 2003/10/20 07:19:42 keil Exp $
  *
  */
 
@@ -127,7 +127,7 @@ static void ncci_connect_b3_req(struct FsmInst *fi, int event, void *arg)
 
 	FsmEvent(fi, EV_NCCI_CONNECT_B3_CONF, cmsg);
 	ncciRecvCmsg(ncci, cmsg);
-	ncci_debug(fi, "ncci_connect_b3_req NCCI %x cmsg->Info(%x)\n",
+	ncci_debug(fi, "ncci_connect_b3_req NCCI %x cmsg->Info(%x)",
 		ncci->adrNCCI, cmsg->Info);
 	if (cmsg->Info < 0x1000) 
 		ncciL4L3(ncci, DL_ESTABLISH | REQUEST, 0, 0, NULL, NULL);
