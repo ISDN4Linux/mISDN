@@ -1,4 +1,4 @@
-/* $Id: hisax_hw.h,v 0.5 2001/03/11 21:09:07 kkeil Exp $
+/* $Id: hisax_hw.h,v 0.6 2001/08/02 14:56:28 kkeil Exp $
  *
  *   Basic declarations, defines for HiSax hardware drivers
  *
@@ -70,9 +70,15 @@ struct hdlc_hw {
 };
 
 
+struct hfcB_hw {
+	unsigned int *send;
+	int f1;
+	int f2;
+};
+
 #define BC_FLG_INIT	1
 #define BC_FLG_ACTIV	2
-#define BC_FLG_BUSY	3
+// #define BC_FLG_BUSY	3
 #define BC_FLG_NOFRAME	4
 #define BC_FLG_HALF	5
 #define BC_FLG_EMPTY	6
@@ -160,6 +166,10 @@ struct isac_chip {
 	u_char adf2;
 };
 
+struct hfcpci_chip {
+	int ph_state;
+};
+
 #define HW_IOM1			0
 #define HW_IPAC			1
 #define HW_ISAR			2
@@ -196,6 +206,7 @@ typedef struct _dchannel_t {
 	int		err_rx;
 	union {
 		struct isac_chip isac;
+		struct hfcpci_chip hfcpci;
 	} hw;
 	struct sk_buff_head rqueue; /* D-channel receive queue */
 	struct tq_struct tqueue;

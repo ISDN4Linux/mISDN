@@ -17,6 +17,8 @@ SEDLFAXOBJ += isac.o arcofi.o fsm.o isar.o
 FRITZOBJ := fritz_pci.o debug.o helper.o
 FRITZOBJ += isac.o arcofi.o fsm.o
 
+HFC_PCIOBJ := hfc_pci.o debug.o helper.o
+
 OBJ_core := hisax_core.o hisax_stack.o hisax_dev.o helper.o
 OBJ_l1 := hisax_l1.o helper.o debug.o fsm.o
 OBJ_l2 := hisax_l2.o tei.o helper.o debug.o fsm.o
@@ -43,11 +45,12 @@ endif
 #endif
 
 M_OBJS += hisaxcore.o
+M_OBJS += fritzpci.o
+M_OBJS += sedlfax.o
+M_OBJS += hfcpci.o
 M_OBJS += hisaxl1.o
 M_OBJS += hisaxl2.o
 M_OBJS += l3udss1.o
-M_OBJS += fritzpci.o
-M_OBJS += sedlfax.o
 M_OBJS += hisaxcapi.o
 
 include $(TOPDIR)/Rules.make
@@ -65,6 +68,18 @@ hisaxcore.o: $(OBJ_core)
 	$(RM) $@
 	$(LD) -r -o $@ $(^:dummy=)
 
+fritzpci.o: $(FRITZOBJ)
+	$(RM) $@
+	$(LD) -r -o $@ $(^:dummy=)
+
+sedlfax.o: $(SEDLFAXOBJ)
+	$(RM) $@
+	$(LD) -r -o $@ $(^:dummy=)
+
+hfcpci.o: $(HFC_PCIOBJ)
+	$(RM) $@
+	$(LD) -r -o $@ $(^:dummy=)
+
 hisaxl1.o: $(OBJ_l1)
 	$(RM) $@
 	$(LD) -r -o $@ $(^:dummy=)
@@ -74,14 +89,6 @@ hisaxl2.o: $(OBJ_l2)
 	$(LD) -r -o $@ $(^:dummy=)
 
 l3udss1.o: $(OBJ_l3udss1)
-	$(RM) $@
-	$(LD) -r -o $@ $(^:dummy=)
-
-fritzpci.o: $(FRITZOBJ)
-	$(RM) $@
-	$(LD) -r -o $@ $(^:dummy=)
-
-sedlfax.o: $(SEDLFAXOBJ)
 	$(RM) $@
 	$(LD) -r -o $@ $(^:dummy=)
 
