@@ -1,4 +1,4 @@
-/* $Id: hfc_pci.c,v 1.1 2001/11/14 10:41:26 kkeil Exp $
+/* $Id: hfc_pci.c,v 1.2 2001/11/16 01:49:21 kkeil Exp $
 
  * hfc_pci.c     low level driver for CCD's hfc-pci based cards
  *
@@ -39,7 +39,7 @@
 
 extern const char *CardType[];
 
-static const char *hfcpci_revision = "$Revision: 1.1 $";
+static const char *hfcpci_revision = "$Revision: 1.2 $";
 
 /* table entry in the PCI devices list */
 typedef struct {
@@ -228,7 +228,8 @@ release_io_hfcpci(hfc_pci_t *hc)
 static void
 reset_hfcpci(hfc_pci_t *hc)
 {
-	long flags;
+	long	flags;
+	u_char	val;
 
 	save_flags(flags);
 	cli();
@@ -308,10 +309,7 @@ reset_hfcpci(hfc_pci_t *hc)
 	Write_hfc(hc, HFCPCI_B1_RSL, 0x80);	/* B1-Slot 0 STIO2 in enabled */
 	Write_hfc(hc, HFCPCI_B2_RSL, 0x81);	/* B2-Slot 1 STIO2 in enabled */
 
-	/* Finally enable IRQ output */
-	hc->hw.int_m2 = HFCPCI_IRQ_ENABLE;
-	Write_hfc(hc, HFCPCI_INT_M2, hc->hw.int_m2);
-	if (Read_hfc(hc, HFCPCI_INT_S2));
+	val = Read_hfc(hc, HFCPCI_INT_S2);
 	restore_flags(flags);
 }
 
@@ -2040,6 +2038,12 @@ static int init_card(hfc_pci_t *hc)
 	while (cnt) {
 		inithfcpci(hc);
 		unlock_dev(hc);
+		/* Finally enable IRQ output 
+		 * this is only allowed, if an IRQ routine is allready
+		 * established for this HFC, so don't do that earlier
+		 */
+		hc->hw.int_m2 = HFCPCI_IRQ_ENABLE;
+		Write_hfc(hc, HFCPCI_INT_M2, hc->hw.int_m2);
 		/* Timeout 80ms */
 		current->state = TASK_UNINTERRUPTIBLE;
 		schedule_timeout((80*HZ)/1000);
@@ -2209,9 +2213,9 @@ setup_hfcpci(hfc_pci_t *hc)
 		hc->irq, HZ);
 	pcibios_write_config_word(hc->hw.pci_bus, hc->hw.pci_device_fn, PCI_COMMAND, PCI_ENA_MEMIO);	/* enable memory mapped ports, disable busmaster */
 	hc->hw.int_m2 = 0;	/* disable alle interrupts */
+	Write_hfc(hc, HFCPCI_INT_M2, hc->hw.int_m2);
 	hc->hw.int_m1 = 0;
 	Write_hfc(hc, HFCPCI_INT_M1, hc->hw.int_m1);
-	Write_hfc(hc, HFCPCI_INT_M2, hc->hw.int_m2);
 	/* At this point the needed PCI config is done */
 	/* fifos are still not enabled */
 	hc->hw.timer.function = (void *) hfcpci_Timer;
