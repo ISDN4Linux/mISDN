@@ -1,4 +1,4 @@
-/* $Id: capi.c,v 0.8 2001/03/26 11:40:02 kkeil Exp $
+/* $Id: capi.c,v 0.9 2001/10/31 23:04:42 kkeil Exp $
  *
  */
 
@@ -9,7 +9,7 @@
 #include "helper.h"
 #include "debug.h"
 
-const char *capi_revision = "$Revision: 0.8 $";
+const char *capi_revision = "$Revision: 0.9 $";
 
 static int debug = 0;
 static hisaxobject_t capi_obj;
@@ -169,7 +169,7 @@ static int
 capi20_manager(void *data, u_int prim, void *arg) {
 	hisaxinstance_t *inst = data;
 	int	found=0;
-	BInst_t *binst;
+	BInst_t *binst = NULL;
 	Contr_t *ctrl = (Contr_t *)capi_obj.ilist;
 
 	printk(KERN_DEBUG "capi20_manager data:%p prim:%x arg:%p\n", data, prim, arg);
@@ -231,6 +231,17 @@ capi20_manager(void *data, u_int prim, void *arg) {
 	    	} else 
 	    		printk(KERN_WARNING "capi20_manager release no instance\n");
 	    	break;
+	    case MGR_UNREGLAYER | REQUEST:
+		if (!ctrl) {
+			printk(KERN_WARNING "capi20_manager unreglayer no instance\n");
+			return(-EINVAL);
+		}
+		if (binst) {
+			capi_obj.ctrl(binst->inst.down.peer, MGR_DISCONNECT | REQUEST,
+				&binst->inst.down);
+			capi_obj.ctrl(&binst->inst, MGR_UNREGLAYER | REQUEST, NULL);
+		}
+		break;
 	    default:
 		printk(KERN_WARNING "capi20_manager prim %x not handled\n", prim);
 		return(-EINVAL);

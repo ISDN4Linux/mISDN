@@ -1,4 +1,4 @@
-/* $Id: ncci.c,v 0.8 2001/08/02 14:51:56 kkeil Exp $
+/* $Id: ncci.c,v 0.9 2001/10/31 23:04:42 kkeil Exp $
  *
  */
 
@@ -389,13 +389,13 @@ void ncciInitSt(Ncci_t *ncci)
 		ncci->binst->inst.pid.protocol[3] = ISDN_PID_L3_B_TRANS;
 		ncci->binst->inst.pid.layermask |= ISDN_LAYER(3);
 	}
-	retval = ncci->binst->inst.obj->ctrl(ncci->binst->inst.st,
+	retval = ncci->binst->inst.obj->ctrl(ncci->binst->bst,
 		MGR_REGLAYER | INDICATION, &ncci->binst->inst); 
 	if (retval) {
 		int_error();
 		return;
 	}
-	retval = ncci->binst->inst.obj->ctrl(ncci->binst->inst.st,
+	retval = ncci->binst->inst.obj->ctrl(ncci->binst->bst,
 		MGR_SETSTACK | REQUEST, &pid);
 	if (retval) {
 		int_error();
@@ -407,7 +407,7 @@ void ncciReleaseSt(Ncci_t *ncci)
 {
 	int retval;
 
-	ncciL4L3(ncci, PH_DEACTIVATE | REQUEST, 0, 0, NULL, NULL);
+	ncciL4L3(ncci, DL_RELEASE | REQUEST, 0, 0, NULL, NULL);
 	retval = ncci->binst->inst.obj->ctrl(ncci->binst->inst.st,
 		MGR_CLEARSTACK | REQUEST, NULL);
 

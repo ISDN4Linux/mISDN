@@ -1,4 +1,4 @@
-/* $Id: contr.c,v 0.9 2001/08/02 14:51:56 kkeil Exp $
+/* $Id: contr.c,v 0.10 2001/10/31 23:04:42 kkeil Exp $
  *
  */
 
@@ -31,6 +31,7 @@ int contrConstr(Contr_t *contr, hisaxstack_t *st, hisax_pid_t *pid, hisaxobject_
 			return -ENOMEM;
 		}
 		memset(binst, 0, sizeof(BInst_t));
+		binst->bst = cst;
 		binst->inst.st = cst;
 		binst->inst.data = binst;
 		binst->inst.obj = ocapi;
@@ -332,7 +333,7 @@ contrL3L4(hisaxif_t *hif, struct sk_buff *skb)
 		if (!plci)
 			return(-EBUSY);
 		if (skb->len >= sizeof(void)) {
-			id = (__u32 *)skb->data;
+			id = *((__u32 **)skb->data);
 			*id = plci->adrPLCI;
 			dev_kfree_skb(skb);
 			ret = 0;
@@ -342,8 +343,8 @@ contrL3L4(hisaxif_t *hif, struct sk_buff *skb)
 	} else {
 		if (!(plci = contrGetPLCI4addr(contr, hh->dinfo))) {
 			contrDebug(contr, LL_DEB_WARN, __FUNCTION__
-			": unknown plci prim(%x) id(%x)",
-			hh->prim, hh->dinfo);
+				": unknown plci prim(%x) id(%x)",
+				hh->prim, hh->dinfo);
 			return(-ENODEV);
 		}
 		ret = plci_l3l4(plci, hh->prim, skb);
@@ -399,6 +400,7 @@ BInst_t *contrSelChannel(Contr_t *contr, int channr)
 				return(NULL);
 			}
 			memset(binst, 0, sizeof(BInst_t));
+			binst->bst = cst;
 			binst->inst.st = cst;
 			binst->inst.data = binst;
 			binst->inst.obj = contr->inst.obj;

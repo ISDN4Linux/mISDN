@@ -1,4 +1,4 @@
-/* $Id: capi.h,v 0.7 2001/08/02 14:51:56 kkeil Exp $
+/* $Id: capi.h,v 0.8 2001/10/31 23:04:42 kkeil Exp $
  *
  */
 
@@ -145,6 +145,7 @@ struct FacConfParm {
 typedef struct _BInst {
 	struct _BInst	*prev;
 	struct _BInst   *next;
+	hisaxstack_t	*bst;
 	hisaxinstance_t	inst;
 } BInst_t;
 
