@@ -1,4 +1,4 @@
-/* $Id: helper.h,v 0.8 2001/03/04 18:55:15 kkeil Exp $
+/* $Id: helper.h,v 0.9 2001/03/13 02:03:23 kkeil Exp $
  *
  *   Basic declarations, defines and prototypes
  *
@@ -23,10 +23,13 @@
 	item->prev = base; \
 	while (item->prev && item->prev->next) \
 		item->prev = item->prev->next; \
-	if (base) \
-		item->prev->next = item; \
-	else \
-		base = item
+	if (item->prev == item) { \
+		int_errtxt("APPEND DUP %p", item); \
+	} else \
+		if (base) { \
+			item->prev->next = item; \
+		} else \
+			base = item
 
 #define INSERT_INTO_LIST(newi,nexti,base) \
 	newi->next = nexti; \

@@ -1,4 +1,4 @@
-/* $Id: stack.c,v 0.5 2001/03/04 00:48:49 kkeil Exp $
+/* $Id: stack.c,v 0.6 2001/03/13 02:03:23 kkeil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -25,37 +25,24 @@ get_stack_cnt(void) {
 void
 get_stack_profile(iframe_t *frm) {
 	hisaxstack_t *cst, *st = hisax_stacklist;
-	hisaxlayer_t *layer;
-	int cnt = 0;
-	int *dp,*ccnt,*lcnt;
+	int cnt = 0, i;
+	int *dp,*ccnt;
 
 	while(st) {
 		cnt++;
 		if (cnt == frm->addr) {
 			dp = frm->data.p;
 			*dp++ = st->id;
-			lcnt = dp++;
-			layer = st->lstack;
-			*lcnt = 0;
-			while (layer && layer->inst) {
-				(*lcnt)++;
-				*dp++ = layer->inst->pid.protocol[0];
-				layer = layer->next;
-			}
+			for (i=0; i<=MAX_LAYER_NR; i++)
+				*dp++ = st->pid.protocol[i];
 			ccnt = dp++;
 			*ccnt=0;
 			cst = st->child;
 			while(cst) {
 				(*ccnt)++;
 				*dp++ = cst->id;
-				lcnt = dp++;
-				*lcnt = 0;
-				layer = cst->lstack;
-				while (layer && layer->inst) {
-					(*lcnt)++;
-					*dp++ = layer->inst->pid.protocol[0];
-					layer = layer->next;
-				}
+				for (i=0; i<=MAX_LAYER_NR; i++)
+					*dp++ = cst->pid.protocol[i];
 				cst = cst->next;
 			}
 			frm->len = (u_char *)dp - (u_char *)frm->data.p;
@@ -176,7 +163,15 @@ get_instance(hisaxstack_t *st, int layer_nr, int protocol)
 			if ((inst->layermask & ISDN_LAYER(layer_nr)) &&
 				(inst->pid.protocol[layer_nr] == protocol))
 				goto out;
+			if (inst == inst->next) {
+				int_errtxt("deadloop inst %p %s", inst, inst->name);
+				return(NULL);
+			}
 			inst = inst->next;
+		}
+		if (layer == layer->next) {
+			int_errtxt("deadloop layer %p", layer);
+			return(NULL);
 		}
 		layer = layer->next;
 	}
