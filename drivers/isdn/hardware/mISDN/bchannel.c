@@ -1,4 +1,4 @@
-/* $Id: bchannel.c,v 1.6 2004/01/26 22:21:30 keil Exp $
+/* $Id: bchannel.c,v 1.7 2004/01/27 01:50:20 keil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -6,6 +6,7 @@
  *
  */
 
+#include <linux/module.h>
 #include <linux/mISDNif.h>
 #include "layer1.h"
 #include "bchannel.h"

@@ -4,7 +4,8 @@
 
 O_TARGET := vmlinux-obj.o
 
-export-objs := core.o isac.o
+export-objs := core.o isac.o helper.o debug.o fsm.o dchannel.o bchannel.o \
+		l3helper.o
 
 ifdef CONFIG_MISDN_MEMDEBUG
 	export-objs += memdbg.o

@@ -1,4 +1,4 @@
-/* $Id: l3helper.c,v 1.5 2004/01/26 22:21:30 keil Exp $
+/* $Id: l3helper.c,v 1.6 2004/01/27 01:50:20 keil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -8,6 +8,7 @@
  *
  */
 
+#include <linux/module.h>
 #include <linux/mISDNif.h>
 #include "dss1.h"
 #include "helper.h"
