@@ -1,4 +1,4 @@
-/* $Id: dsp_cmx.c,v 1.7 2004/08/28 12:35:26 jolly Exp $
+/* $Id: dsp_cmx.c,v 1.8 2004/12/19 16:17:36 jolly Exp $
  *
  * Audio crossconnecting/conferrencing (hardware level).
  *
@@ -1077,7 +1077,7 @@ dsp_cmx_receive(dsp_t *dsp, struct sk_buff *skb)
 	} else {
 		if (dsp_debug & DEBUG_DSP_CMX)
 			printk(KERN_DEBUG "CMX: receiving too fast (rx_buff) dsp=%x\n", (u32)dsp);
-#ifdef CMX_CONF_DEBUG
+#ifdef CMX_DEBUG
 		printk(KERN_DEBUG "W_max=%x-W_min=%x = %d, largest = %d\n", W_max, W_min, (W_max - W_min) & CMX_BUFF_MASK, dsp->largest);
 #endif
 	}
@@ -1139,9 +1139,16 @@ struct sk_buff
 	} else
 		rr = dsp->W_rx;
 
+	/* increase r, if too far behind rr
+	 * (this happens if interrupts get lost, so transmission is delayed) */
+	if (((rr - r) & CMX_BUFF_MASK) > dsp->largest) {
+		if (dsp_debug & DEBUG_DSP_CMX)
+			printk(KERN_DEBUG "r=%04x is too far behind rr=%04x, correcting. (larger than %04x)\n", r, rr, dsp->largest);
+		r = (rr - dsp->largest) & CMX_BUFF_MASK;
+	}
 	/* calculate actual r (if r+len would overrun rr) */
 	if (((rr - r - len) & CMX_BUFF_MASK) >= CMX_BUFF_HALF) {
-#ifdef CMX_CONF_DEBUG
+#ifdef CMX_DEBUG
 		printk(KERN_DEBUG "r+len=%04x overruns rr=%04x\n", (r+len) & CMX_BUFF_MASK, rr);
 #endif
 		/* r is set "len" bytes before W_min */
