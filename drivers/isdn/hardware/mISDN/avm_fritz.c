@@ -1,4 +1,4 @@
-/* $Id: avm_fritz.c,v 1.16 2003/09/06 17:13:01 keil Exp $
+/* $Id: avm_fritz.c,v 1.17 2003/11/09 09:54:02 keil Exp $
  *
  * fritz_pci.c    low level stuff for AVM Fritz!PCI and ISA PnP isdn cards
  *              Thanks to AVM, Berlin for informations
@@ -28,7 +28,7 @@
 #define LOCK_STATISTIC
 #include "hw_lock.h"
 
-static const char *avm_fritz_rev = "$Revision: 1.16 $";
+static const char *avm_fritz_rev = "$Revision: 1.17 $";
 
 enum {
 	AVM_FRITZ_PCI,
@@ -346,18 +346,18 @@ read_status(fritzpnppci *fc, int channel)
 static int
 modehdlc(bchannel_t *bch, int bc, int protocol)
 {
-	int		hdlc_ch = bch->channel;
 	hdlc_hw_t	*hdlc = bch->hw;
 
 	if (bch->debug & L1_DEB_HSCX)
 		debugprint(&bch->inst, "hdlc %c protocol %x-->%x ch %d-->%d",
-			'A' + hdlc_ch, bch->protocol, protocol, hdlc_ch, bc);
+			'A' + bch->channel, bch->protocol, protocol, bch->channel, bc);
+	if ((protocol != -1) && (bc != bch->channel))
+		printk(KERN_WARNING "%s: fritzcard mismatch channel(%d/%d)\n", bch->channel, bc);
 	hdlc->ctrl.ctrl = 0;
 	switch (protocol) {
 		case (-1): /* used for init */
 			bch->protocol = -1;
 			bch->channel = bc;
-			bc = 0;
 		case (ISDN_PID_NONE):
 			if (bch->protocol == ISDN_PID_NONE)
 				break;
@@ -365,11 +365,9 @@ modehdlc(bchannel_t *bch, int bc, int protocol)
 			hdlc->ctrl.sr.mode = HDLC_MODE_TRANS;
 			write_ctrl(bch, 5);
 			bch->protocol = ISDN_PID_NONE;
-			bch->channel = bc;
 			break;
 		case (ISDN_PID_L1_B_64TRANS):
 			bch->protocol = protocol;
-			bch->channel = bc;
 			hdlc->ctrl.sr.cmd  = HDLC_CMD_XRS | HDLC_CMD_RRS;
 			hdlc->ctrl.sr.mode = HDLC_MODE_TRANS;
 			write_ctrl(bch, 5);
@@ -380,7 +378,6 @@ modehdlc(bchannel_t *bch, int bc, int protocol)
 			break;
 		case (ISDN_PID_L1_B_64HDLC):
 			bch->protocol = protocol;
-			bch->channel = bc;
 			hdlc->ctrl.sr.cmd  = HDLC_CMD_XRS | HDLC_CMD_RRS;
 			hdlc->ctrl.sr.mode = HDLC_MODE_ITF_FLG;
 			write_ctrl(bch, 5);
