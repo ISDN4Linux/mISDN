@@ -1,10 +1,10 @@
-/* $Id: contr.c,v 1.15 2003/11/11 09:59:00 keil Exp $
+/* $Id: contr.c,v 1.16 2003/11/21 22:29:41 keil Exp $
  *
  */
 
 #include <linux/vmalloc.h>
 #include <asm/uaccess.h>
-#include "capi.h"
+#include "m_capi.h"
 #include "helper.h"
 #include "debug.h"
 
@@ -12,45 +12,52 @@
 	if (contr->debug & lev) capidebug(lev, fmt, ## args)
 
 void
-contrDestr(Contr_t *contr)
+ControllerDestr(Controller_t *contr)
 {
-	int i;
-	mISDNinstance_t *inst = &contr->inst;
+	mISDNinstance_t		*inst = &contr->inst;
+	struct list_head	*item, *next;
+	u_long			flags;
 
-	for (i = 0; i < CAPI_MAXAPPL; i++) {
-		if (contr->appls[i]) {
-			applDestr(contr->appls[i]);
-			kfree(contr->appls[i]);
-			contr->appls[i] = NULL;
-		}
+	spin_lock_irqsave(&contr->list_lock, flags);
+	list_for_each_safe(item, next, &contr->Applications) {
+		ApplicationDestr((Application_t *)item, 3);
 	}
-	for (i = 0; i < CAPI_MAXPLCI; i++) {
-		if (contr->plcis[i]) {
-			plciDestr(contr->plcis[i]);
-			kfree(contr->plcis[i]);
-			contr->plcis[i] = NULL;
+	if (contr->plcis) {
+		Plci_t	*plci = contr->plcis;
+		int	i;
+
+		for (i = 0; i < contr->maxplci; i++) {
+			AppPlci_t	*aplci;
+			if (test_bit(PLCI_STATE_ACTIV, &plci->state)) {
+				if (plci->nAppl) {
+					printk(KERN_ERR "%s: PLCI(%x) still busy (%d)\n",
+						__FUNCTION__, plci->addr, plci->nAppl);
+					list_for_each_safe(item, next, &plci->AppPlcis) {
+						aplci = (AppPlci_t *)item;
+						aplci->contr = NULL;
+						plciDetachAppPlci(plci, aplci);
+						AppPlciDestr(aplci);
+					}
+				}
+			}
+			plci++;
 		}
+		kfree(contr->plcis);
+		contr->plcis = NULL;
 	}
-	for (i = 0; i < CAPI_MAXDUMMYPCS; i++) {
-		if (contr->dummy_pcs[i]) {
-			dummyPcDestr(contr->dummy_pcs[i]);
-			kfree(contr->dummy_pcs[i]);
-			contr->dummy_pcs[i] = NULL;
-		}
+	list_for_each_safe(item, next, &contr->SSProcesse) {
+		SSProcessDestr((SSProcess_t *)item);
 	}
 #ifdef OLDCAPI_DRIVER_INTERFACE
 	if (contr->ctrl)
 		cdrv_if->detach_ctr(contr->ctrl);
 #else
-	detach_capi_ctr(contr->ctrl);
-	kfree(contr->ctrl);
-	contr->ctrl = NULL;
-#endif
-	while (contr->binst) {
-		BInst_t *binst = contr->binst;
-		REMOVE_FROM_LISTBASE(binst, contr->binst);
-		kfree(binst);
+	if (contr->ctrl) {
+		detach_capi_ctr(contr->ctrl);
+		kfree(contr->ctrl);
 	}
+#endif
+	contr->ctrl = NULL;
 	if (inst->up.peer) {
 		inst->up.peer->obj->ctrl(inst->up.peer,
 			MGR_DISCONNECT | REQUEST, &inst->up);
@@ -59,24 +66,25 @@ contrDestr(Contr_t *contr)
 		inst->down.peer->obj->ctrl(inst->down.peer,
 			MGR_DISCONNECT | REQUEST, &inst->down);
 	}
-	inst->obj->ctrl(inst, MGR_UNREGLAYER | REQUEST, NULL);
-	REMOVE_FROM_LISTBASE(contr, ((Contr_t *)inst->obj->ilist));
+	while (contr->binst) {
+		BInst_t *binst = contr->binst;
+		REMOVE_FROM_LISTBASE(binst, contr->binst);
+		kfree(binst);
+	}
 	if (contr->entity != MISDN_ENTITY_NONE)
 		inst->obj->ctrl(inst, MGR_DELENTITY | REQUEST, (void *)contr->entity);
+	inst->obj->ctrl(inst, MGR_UNREGLAYER | REQUEST, NULL);
+	REMOVE_FROM_LISTBASE(contr, ((Controller_t *)inst->obj->ilist));
+	spin_unlock_irqrestore(&contr->list_lock, flags);
+	kfree(contr);
 }
 
 void
-contrRun(Contr_t *contr)
+ControllerRun(Controller_t *contr)
 {
 	BInst_t	*binst;
-	int	nb, ret;
+	int	ret;
 
-	nb = 0;
-	binst = contr->binst;
-	while(binst) {
-		nb++;
-		binst = binst->next;
-	}
 	if (contr->inst.st && contr->inst.st->mgr)
 		sprintf(contr->ctrl->manu, "mISDN CAPI controller %s", contr->inst.st->mgr->name);
 	else
@@ -88,7 +96,7 @@ contrRun(Contr_t *contr)
 	contr->ctrl->version.minormanuversion = 0;
 	memset(&contr->ctrl->profile, 0, sizeof(struct capi_profile));
 	contr->ctrl->profile.ncontroller = 1;
-	contr->ctrl->profile.nbchannel = nb;
+	contr->ctrl->profile.nbchannel = contr->nr_bc;
 	contrDebug(contr, CAPI_DBG_INFO, "%s: %s version(%s)",
 		__FUNCTION__, contr->ctrl->manu, contr->ctrl->serial);
 	// FIXME
@@ -101,7 +109,7 @@ contrRun(Contr_t *contr)
 	contr->ctrl->profile.goptions |= GLOBALOPT_DTMF |
 					 GLOBALOPT_SUPPLEMENTARY_SERVICE;
 
-	if (nb) {
+	if (contr->nr_bc) {
 		mISDN_pid_t	pidmask;
 
 		memset(&pidmask, 0, sizeof(mISDN_pid_t));
@@ -132,67 +140,76 @@ contrRun(Contr_t *contr)
 #endif
 }
 
-Appl_t
-*contrId2appl(Contr_t *contr, __u16 ApplId)
+Application_t
+*getApplication4Id(Controller_t *contr, __u16 ApplId)
 {
-	if ((ApplId < 1) || (ApplId > CAPI_MAXAPPL)) {
-		int_error();
-		return 0;
+	struct list_head	*item;
+	Application_t		*ap = NULL;
+
+	list_for_each(item, &contr->Applications) {
+		ap = (Application_t *)item;
+		if (ap->ApplId == ApplId)
+			break;
+		ap = NULL;
 	}
-	return contr->appls[ApplId - 1];
+	return(ap);
 }
 
 Plci_t
-*contrAdr2plci(Contr_t *contr, __u32 adr)
+*getPlci4Addr(Controller_t *contr, __u32 addr)
 {
-	int i = (adr >> 8);
+	int i = (addr >> 8) & 0xff;
 
-	if ((i < 1) || (i > CAPI_MAXPLCI)) {
+	if ((i < 1) || (i > contr->maxplci)) {
 		int_error();
-		return 0;
+		return(NULL);
 	}
-	return contr->plcis[i - 1];
+	return(&contr->plcis[i - 1]);
 }
 
 static void
-RegisterAppl(struct capi_ctr *ctrl, __u16 ApplId, capi_register_params *rp)
+RegisterApplication(struct capi_ctr *ctrl, __u16 ApplId, capi_register_params *rp)
 {
-	Contr_t	*contr = ctrl->driverdata;
-	Appl_t	*appl;
+	Controller_t	*contr = ctrl->driverdata;
+	Application_t	*appl;
+	u_long		flags;
+	int		ret;
 
 	contrDebug(contr, CAPI_DBG_APPL, "%s: ApplId(%x)", __FUNCTION__, ApplId);
-	appl = contrId2appl(contr, ApplId);
+	appl = getApplication4Id(contr, ApplId);
 	if (appl) {
 		int_error();
 		return;
 	}
-	appl = kmalloc(sizeof(Appl_t), GFP_ATOMIC);
-	if (!appl) {
+	spin_lock_irqsave(&contr->list_lock, flags);
+	ret = ApplicationConstr(contr, ApplId, rp);
+	spin_unlock_irqrestore(&contr->list_lock, flags);
+	if (ret) {
 		int_error();
 		return;
 	}
-	contr->appls[ApplId - 1] = appl;
-	applConstr(appl, contr, ApplId, rp);
 #ifdef OLDCAPI_DRIVER_INTERFACE
 	contr->ctrl->appl_registered(contr->ctrl, ApplId);
 #endif
 }
 
 static void
-ReleaseAppl(struct capi_ctr *ctrl, __u16 ApplId)
+ReleaseApplication(struct capi_ctr *ctrl, __u16 ApplId)
 {
-	Contr_t *contr = ctrl->driverdata;
-	Appl_t	*appl;
+	Controller_t	*contr = ctrl->driverdata;
+	Application_t	*appl;
+	u_long		flags;
 
 	contrDebug(contr, CAPI_DBG_APPL, "%s: ApplId(%x) caller:%lx", __FUNCTION__, ApplId, __builtin_return_address(0));
-	appl = contrId2appl(contr, ApplId);
+	spin_lock_irqsave(&contr->list_lock, flags);
+	appl = getApplication4Id(contr, ApplId);
 	if (!appl) {
+		spin_unlock_irqrestore(&contr->list_lock, flags);
 		int_error();
 		return;
 	}
-	applDestr(appl);
-	kfree(appl);
-	contr->appls[ApplId - 1] = NULL;
+	ApplicationDestr(appl, 1);
+	spin_unlock_irqrestore(&contr->list_lock, flags);
 #ifdef OLDCAPI_DRIVER_INTERFACE
 	contr->ctrl->appl_released(contr->ctrl, ApplId);
 #endif
@@ -205,18 +222,18 @@ static u16
 #endif
 SendMessage(struct capi_ctr *ctrl, struct sk_buff *skb)
 {
-	Contr_t	*contr = ctrl->driverdata;
-	Appl_t	*appl;
-	int	ApplId;
-	int	err = CAPI_NOERROR;
+	Controller_t	*contr = ctrl->driverdata;
+	Application_t	*appl;
+	int		ApplId;
+	int		err = CAPI_NOERROR;
 
 	ApplId = CAPIMSG_APPID(skb->data);
-	appl = contrId2appl(contr, ApplId);
+	appl = getApplication4Id(contr, ApplId);
 	if (!appl) {
 		int_error();
 		err = CAPI_ILLAPPNR;
 	} else
-		applSendMessage(appl, skb);
+		ApplicationSendMessage(appl, skb);
 #ifndef OLDCAPI_DRIVER_INTERFACE
 	return(err);
 #endif
@@ -225,7 +242,7 @@ SendMessage(struct capi_ctr *ctrl, struct sk_buff *skb)
 static int
 LoadFirmware(struct capi_ctr *ctrl, capiloaddata *data)
 {
-	Contr_t	*contr = ctrl->driverdata;
+	Controller_t	*contr = ctrl->driverdata;
 	struct firm {
 		int	len;
 		void	*data;
@@ -253,7 +270,7 @@ LoadFirmware(struct capi_ctr *ctrl, capiloaddata *data)
 static char *
 procinfo(struct capi_ctr *ctrl)
 {
-	Contr_t *contr = ctrl->driverdata;
+	Controller_t *contr = ctrl->driverdata;
 
 	if (CAPI_DBG_INFO & contr->debug)
 		printk(KERN_DEBUG "%s\n", __FUNCTION__);
@@ -279,20 +296,20 @@ read_proc(char *page, char **start, off_t off, int count, int *eof, struct capi_
 
 
 static void
-ResetContr(struct capi_ctr *ctrl)
+ResetController(struct capi_ctr *ctrl)
 {
-	Contr_t	*contr = ctrl->driverdata;
-	int	ApplId;
-	Appl_t	*appl;
+	Controller_t		*contr = ctrl->driverdata;
+	struct list_head	*item, *next;
+	u_long			flags;
 
-	for (ApplId = 1; ApplId <= CAPI_MAXAPPL; ApplId++) {
-		appl = contrId2appl(contr, ApplId);
-		if (appl) {
-			applDestr(appl);
-			kfree(appl);
-		}
-		contr->appls[ApplId - 1] = NULL;
+	spin_lock_irqsave(&contr->list_lock, flags);
+	list_for_each_safe(item, next, &contr->Applications) {
+		ApplicationDestr((Application_t *)item, 2);
 	}
+	list_for_each_safe(item, next, &contr->SSProcesse) {
+		SSProcessDestr((SSProcess_t *)item);
+	}
+	spin_unlock_irqrestore(&contr->list_lock, flags);
 #ifdef OLDCAPI_DRIVER_INTERFACE
 	contr->ctrl->reseted(contr->ctrl);
 #else
@@ -302,9 +319,9 @@ ResetContr(struct capi_ctr *ctrl)
 
 #ifdef OLDCAPI_DRIVER_INTERFACE
 static void
-Remove_Contr(struct capi_ctr *ctrl)
+Remove_Controller(struct capi_ctr *ctrl)
 {
-	Contr_t *contr = ctrl->driverdata;
+	Controller_t *contr = ctrl->driverdata;
 
 	if (CAPI_DBG_INFO & contr->debug)
 		printk(KERN_DEBUG "%s\n", __FUNCTION__);
@@ -314,10 +331,10 @@ struct capi_driver mISDN_driver = {
 	"mISDN",
 	"0.01",
 	LoadFirmware,
-	ResetContr,
-	Remove_Contr,
-	RegisterAppl,
-	ReleaseAppl,
+	ResetController,
+	Remove_Controller,
+	RegisterApplication,
+	ReleaseApplication,
 	SendMessage,
 	procinfo,
 	read_proc,
@@ -327,136 +344,129 @@ struct capi_driver mISDN_driver = {
 #endif
 
 void
-contrD2Trace(Contr_t *contr, u_char *buf, int len)
+ControllerD2Trace(Controller_t *contr, u_char *buf, int len)
 {
-	Appl_t	*appl;
-	__u16	applId;
+	struct list_head	*item;
 
-	for (applId = 1; applId <= CAPI_MAXAPPL; applId++) {
-		appl = contrId2appl(contr, applId);
-		if (appl) {
-			applD2Trace(appl, buf, len);
-		}
+	list_for_each(item, &contr->Applications) {
+		applD2Trace((Application_t *)item, buf, len);
 	}
 }
 
-void
-contrRecvCmsg(Contr_t *contr, _cmsg *cmsg)
+static __inline__ Plci_t *
+getPlci4L3id(Controller_t *contr, u_int l3id)
 {
-	struct sk_buff	*skb;
-	int		len;
-	
-	capi_cmsg2message(cmsg, contr->msgbuf);
-	len = CAPIMSG_LEN(contr->msgbuf);
-	contrDebug(contr, CAPI_DBG_CONTR_MSG, "%s: len(%d) applid(%x) %s msgnr(%d) addr(%08x)",
-		__FUNCTION__, len, cmsg->ApplId, capi_cmd2str(cmsg->Command, cmsg->Subcommand),
-		cmsg->Messagenumber, cmsg->adr.adrController);
-	if (!(skb = alloc_skb(len, GFP_ATOMIC))) {
-		printk(KERN_ERR "%s: no mem for %d bytes\n", __FUNCTION__, len);
-		int_error();
-		return;
-	}
-	memcpy(skb_put(skb, len), contr->msgbuf, len);
-#ifdef OLDCAPI_DRIVER_INTERFACE
-	contr->ctrl->handle_capimsg(contr->ctrl, cmsg->ApplId, skb);
-#else
-	capi_ctr_handle_message(contr->ctrl, cmsg->ApplId, skb);
-#endif
-}
-
-void
-contrAnswerCmsg(Contr_t *contr, _cmsg *cmsg, __u16 Info)
-{
-	capi_cmsg_answer(cmsg);
-	cmsg->Info = Info;
-	contrRecvCmsg(contr, cmsg);
-}
-
-void
-contrAnswerMessage(Contr_t *contr, struct sk_buff *skb, __u16 Info)
-{
-	_cmsg	cmsg;
-
-	capi_message2cmsg(&cmsg, skb->data);
-	contrAnswerCmsg(contr, &cmsg, Info);
-}
-
-static Plci_t *
-contrGetPLCI4ID(Contr_t *contr, u_int id)
-{
+	Plci_t	*plci = contr->plcis;
 	int	i;
 
-	for (i = 0; i < CAPI_MAXPLCI; i++) {
-		if (!contr->plcis[i])
-			continue;
-		if (contr->plcis[i]->id == id)
-			return(contr->plcis[i]);
+	for (i = 0; i < contr->maxplci; i++) {
+		if (test_bit(PLCI_STATE_ACTIV, &plci->state) &&
+			(plci->l3id == l3id))
+			return(plci);
+		plci++;
 	}
 	return(NULL);
 }
 
-Plci_t *
-contrNewPlci(Contr_t *contr, u_int id)
+int
+ControllerNewPlci(Controller_t *contr, Plci_t  **plci_p, u_int l3id)
 {
-	Plci_t	*plci;
 	int	i;
+	Plci_t	*plci = contr->plcis;
 
-	for (i = 0; i < CAPI_MAXPLCI; i++) {
-		if (!contr->plcis[i])
+	for (i = 0; i < contr->maxplci; i++) {
+		if (!test_and_set_bit(PLCI_STATE_ACTIV, &plci->state))
 			break;
+		plci++;
 	}
-	if (i == CAPI_MAXPLCI) {
-		return 0;
+	if (i == contr->maxplci) {
+		contrDebug(contr, CAPI_DBG_PLCI, "%s: no free PLCI",
+			__FUNCTION__);
+		return(-EBUSY); //FIXME
 	}
-	if (id == MISDN_ID_ANY) {
+	*plci_p = plci;
+	if (l3id == MISDN_ID_ANY) {
 		if (contr->entity == MISDN_ENTITY_NONE) {
 			printk(KERN_ERR "mISDN %s: no ENTITY id\n",
 				__FUNCTION__);
-			return NULL;
+			test_and_clear_bit(PLCI_STATE_ACTIV, &plci->state);
+			return(-EINVAL); //FIXME
 		}
-		id = (contr->entity << 16) | ((i+1) << 8) | (contr->adrController & 0xFF);
+		plci->l3id = (contr->entity << 16) | plci->addr;
+	} else {
+		plci = getPlci4L3id(contr, l3id);
+		if (plci) {
+			printk(KERN_WARNING "mISDN %s: PLCI(%x) allready has l3id(%x)\n",
+				__FUNCTION__, plci->addr, l3id);
+			test_and_clear_bit(PLCI_STATE_ACTIV, &(*plci_p)->state);
+			return(-EBUSY); 
+		}
+		plci = *plci_p;
+		plci->l3id = l3id;
 	}
-	plci = contrGetPLCI4ID(contr, id);
-	if (plci) {
-		printk(KERN_ERR "mISDN %s: PLCI(%x) allready has id(%x)\n",
-			__FUNCTION__, plci->adrPLCI, id);
-		return NULL;
-	}
-	plci = kmalloc(sizeof(Plci_t), GFP_ATOMIC);
-	if (!plci) {
-		int_error();
-		return NULL;
-	}
-	contr->plcis[i] = plci;
-	plciConstr(plci, contr, (i+1) << 8 | contr->adrController, id);
 	contrDebug(contr, CAPI_DBG_PLCI, "%s: PLCI(%x) plci(%p,%d) id(%x)",
-		__FUNCTION__, plci->adrPLCI, plci, sizeof(*plci), plci->id);
-	return plci;
-}
-
-void
-contrDelPlci(Contr_t *contr, Plci_t *plci)
-{
-	int	i = plci->adrPLCI >> 8;
-
-	contrDebug(contr, CAPI_DBG_PLCI, "%s: PLCI(%x) plci(%p)", __FUNCTION__, plci->adrPLCI, plci);
-	if ((i < 1) || (i > CAPI_MAXPLCI)) {
-		int_error();
-		return;
-	}
-	if (contr->plcis[i-1] != plci) {
-		int_error();
-		return;
-	}
-	plciDestr(plci);
-	kfree(plci);
-	contr->plcis[i-1] = NULL;
+		__FUNCTION__, plci->addr, plci, sizeof(*plci), plci->l3id);
+	return(0);
 }
 
 int
-contrL3L4(mISDNif_t *hif, struct sk_buff *skb)
+ControllerReleasePlci(Plci_t *plci)
 {
-	Contr_t		*contr;
+	if (!plci->contr) {
+		int_error();
+		return(-EINVAL);
+	}
+	if (plci->nAppl) {
+		contrDebug(plci->contr, CAPI_DBG_PLCI, "%s: PLCI(%x) still has %d Applications",
+			__FUNCTION__, plci->addr, plci->nAppl);
+		return(-EBUSY);
+	}
+	if (!list_empty(&plci->AppPlcis)) {
+		int_errtxt("PLCI(%x) AppPlcis list not empty", plci->addr);
+		return(-EBUSY);
+	}
+	test_and_clear_bit(PLCI_STATE_ALERTING, &plci->state);
+	test_and_clear_bit(PLCI_STATE_OUTGOING, &plci->state);
+	plci->l3id = MISDN_ID_NONE;
+	if (!test_and_clear_bit(PLCI_STATE_ACTIV, &plci->state))
+		int_errtxt("PLCI(%x) was not activ", plci->addr);
+	return(0);
+}
+
+void
+ControllerAddSSProcess(Controller_t *contr, SSProcess_t *sp)
+{
+	u_long	flags;
+
+	INIT_LIST_HEAD(&sp->head);
+	sp->contr = contr;
+	sp->addr = contr->addr;
+	spin_lock_irqsave(&contr->list_lock, flags);
+	contr->LastInvokeId++;
+	sp->invokeId = contr->LastInvokeId;
+	list_add(&sp->head, &contr->SSProcesse);
+	spin_unlock_irqrestore(&contr->list_lock, flags);
+}
+
+SSProcess_t
+*getSSProcess4Id(Controller_t *contr, __u16 id)
+{
+	struct list_head	*item;
+	SSProcess_t		*sp = NULL;
+
+	list_for_each(item, &contr->SSProcesse) {
+		sp = (SSProcess_t *)item;
+		if (sp->invokeId == id)
+			break;
+		sp = NULL;
+	}
+	return(sp);
+}
+
+int
+ControllerL3L4(mISDNif_t *hif, struct sk_buff *skb)
+{
+	Controller_t	*contr;
 	Plci_t		*plci;
 	int		ret = -EINVAL;
 	mISDN_head_t	*hh;
@@ -468,66 +478,103 @@ contrL3L4(mISDNif_t *hif, struct sk_buff *skb)
 	contrDebug(contr, CAPI_DBG_CONTR_INFO, "%s: prim(%x) id(%x)",
 		__FUNCTION__, hh->prim, hh->dinfo);
 	if (hh->prim == (CC_NEW_CR | INDICATION)) {
-		plci = contrNewPlci(contr, hh->dinfo);
-		if (plci) {
-			ret = 0;
+		ret = ControllerNewPlci(contr, &plci, hh->dinfo);
+		if(!ret)
 			dev_kfree_skb(skb);
-		} else 
-			ret = -EBUSY;
 	} else if (hh->dinfo == MISDN_ID_DUMMY) {
-		ret = contrDummyInd(contr, hh->prim, skb);
+		ret = Supplementary_l3l4(contr, hh->prim, skb);
 	} else {
-		if (!(plci = contrGetPLCI4ID(contr, hh->dinfo))) {
+		if (!(plci = getPlci4L3id(contr, hh->dinfo))) {
 			contrDebug(contr, CAPI_DBG_WARN, "%s: unknown plci prim(%x) id(%x)",
 				__FUNCTION__, hh->prim, hh->dinfo);
 			return(-ENODEV);
 		}
-		contrDebug(contr, CAPI_DBG_PLCI, "%s: PLCI(%x) plci(%p)", __FUNCTION__, plci->adrPLCI, plci);
+		contrDebug(contr, CAPI_DBG_PLCI, "%s: PLCI(%x) plci(%p)", __FUNCTION__, plci->addr, plci);
 		ret = plci_l3l4(plci, hh->prim, skb);
 	}
 	return(ret);
 }
 
 int
-contrL4L3(Contr_t *contr, u_int prim, int dinfo, struct sk_buff *skb)
+ControllerL4L3(Controller_t *contr, u_int prim, int dinfo, struct sk_buff *skb)
 {
 	return(if_newhead(&contr->inst.down, prim, dinfo, skb));
 }
 
 void
-contrPutStatus(Contr_t *contr, char *msg)
+ControllerPutStatus(Controller_t *contr, char *msg)
 {
 	contrDebug(contr, CAPI_DBG_CONTR, "%s: %s", __FUNCTION__, msg);
 }
 
-static int
-contrConstr(Contr_t *contr, mISDNstack_t *st, mISDN_pid_t *pid, mISDNobject_t *ocapi)
-{ 
+int
+ControllerConstr(Controller_t **contr_p, mISDNstack_t *st, mISDN_pid_t *pid, mISDNobject_t *ocapi)
+{
+	Controller_t	*contr;
 	int		retval;
-	mISDNstack_t	*cst = st->child;
+	mISDNstack_t	*cst;
 	BInst_t		*binst;
 
-	memset(contr, 0, sizeof(Contr_t));
+	if (!st)
+		return(-EINVAL);
+	if (!pid)
+		return(-EINVAL);
+	contr = kmalloc(sizeof(Controller_t), GFP_KERNEL);
+	if (!contr)
+		return(-ENOMEM);
+	memset(contr, 0, sizeof(Controller_t));
+	INIT_LIST_HEAD(&contr->Applications);
+	INIT_LIST_HEAD(&contr->SSProcesse);
+	spin_lock_init(&contr->list_lock);
 	memcpy(&contr->inst.pid, pid, sizeof(mISDN_pid_t));
 #ifndef OLDCAPI_DRIVER_INTERFACE
-	if (!(contr->ctrl = kmalloc(sizeof(struct capi_ctr), GFP_ATOMIC))) {
+	if (!(contr->ctrl = kmalloc(sizeof(struct capi_ctr), GFP_KERNEL))) {
 		printk(KERN_ERR "no mem for contr->ctrl\n");
 		int_error();
+		ControllerDestr(contr);
 		return -ENOMEM;
 	}
 	memset(contr->ctrl, 0, sizeof(struct capi_ctr));
 #endif
-	contr->adrController = st->id;
+	cst = st->child;
+	while(cst) {
+		contr->nr_bc++;
+		cst = cst->next;
+	}
+	if (!contr->nr_bc) {
+		printk(KERN_ERR "no bchannels\n");
+		ControllerDestr(contr);
+		return(-EINVAL); // FIXME
+	}
+	if (contr->nr_bc <= 2)
+		contr->maxplci = CAPI_MAXPLCI_BRI;
+	else if (contr->nr_bc <= 8)
+		contr->maxplci = contr->nr_bc * 2 + 4;
+	else
+		contr->maxplci = CAPI_MAXPLCI_PRI;
+	contr->plcis = kmalloc(contr->maxplci*sizeof(Plci_t), GFP_KERNEL);
+	if (!contr->plcis) {
+		printk(KERN_ERR "no mem for contr->plcis\n");
+		int_error();
+		contr->maxplci = 0;
+		ControllerDestr(contr);
+		return -ENOMEM;
+	}
+	// FIXME ???
+	contr->addr = st->id;
 	sprintf(contr->inst.name, "CAPI %d", st->id);
 	init_mISDNinstance(&contr->inst, ocapi, contr);
 	if (!SetHandledPID(ocapi, &contr->inst.pid)) {
 		int_error();
+		ControllerDestr(contr);
 		return(-ENOPROTOOPT);
 	}
+	cst = st->child;
 	while(cst) {
-		if (!(binst = kmalloc(sizeof(BInst_t), GFP_ATOMIC))) {
+		if (!(binst = kmalloc(sizeof(BInst_t), GFP_KERNEL))) {
 			printk(KERN_ERR "no mem for Binst\n");
 			int_error();
+			ControllerDestr(contr);
 			return -ENOMEM;
 		}
 		memset(binst, 0, sizeof(BInst_t));
@@ -540,7 +587,7 @@ contrConstr(Contr_t *contr, mISDNstack_t *st, mISDN_pid_t *pid, mISDNobject_t *o
 		cst = cst->next;
 	}
 	APPEND_TO_LIST(contr, ocapi->ilist);
-	contr->entity = 
+	contr->entity = MISDN_ENTITY_NONE;
 	retval = ocapi->ctrl(&contr->inst, MGR_NEWENTITY | REQUEST, NULL);
 	if (retval) {
 		printk(KERN_WARNING "mISDN %s: MGR_NEWENTITY REQUEST failed err(%x)\n",
@@ -571,38 +618,19 @@ contrConstr(Contr_t *contr, mISDNstack_t *st, mISDN_pid_t *pid, mISDNobject_t *o
 	retval = attach_capi_ctr(contr->ctrl);
 #endif
 	if (!retval) {
-		contr->adrController = contr->ctrl->cnr;
+		contr->addr = contr->ctrl->cnr;
+		plciInit(contr);
 		ocapi->ctrl(st, MGR_REGLAYER | INDICATION, &contr->inst);
 		contr->inst.up.stat = IF_DOWN;
+		*contr_p = contr;
+	} else {
+		ControllerDestr(contr);
 	}
 	return retval;
 }
 
-Contr_t *
-newContr(mISDNobject_t *ocapi, mISDNstack_t *st, mISDN_pid_t *pid)
-{
-	Contr_t *contr;
-
-	if (!pid)
-		return(NULL);
-	if (!st) {
-		printk(KERN_ERR "newContr no stack\n");
-		return(NULL);
-	}
-	contr = kmalloc(sizeof(Contr_t), GFP_KERNEL);
-	if (!contr)
-		return(NULL);
-
-	if (contrConstr(contr, st, pid, ocapi) != 0) {
-		contrDestr(contr);
-		kfree(contr);
-		return(NULL);
-	}
-	return contr;
-}
-
 BInst_t *
-contrSelChannel(Contr_t *contr, u_int channel)
+ControllerSelChannel(Controller_t *contr, u_int channel)
 { 
 	mISDNstack_t	*cst;
 	BInst_t		*binst;
@@ -610,25 +638,8 @@ contrSelChannel(Contr_t *contr, u_int channel)
 	int		ret;
 
 	if (!contr->binst) {
-		cst = contr->inst.st->child;
-		if (!cst)
-			return(NULL);
-		while(cst) {
-			if (!(binst = kmalloc(sizeof(BInst_t), GFP_ATOMIC))) {
-				printk(KERN_ERR "no mem for Binst\n");
-				int_error();
-				return(NULL);
-			}
-			memset(binst, 0, sizeof(BInst_t));
-			binst->bst = cst;
-			binst->inst.st = cst;
-			binst->inst.data = binst;
-			binst->inst.obj = contr->inst.obj;
-			binst->inst.pid.layermask = ISDN_LAYER(4);
-			binst->inst.down.stat = IF_NOACTIV;
-			APPEND_TO_LIST(binst, contr->binst);
-			cst = cst->next;
-		}
+		int_errtxt("no binst for controller(%x)", contr->addr);
+		return(NULL);
 	}
 	ci.channel = channel;
 	ci.st.p = NULL;
@@ -652,13 +663,13 @@ contrSelChannel(Contr_t *contr, u_int channel)
 static void
 d2_listener(struct IsdnCardState *cs, u_char *buf, int len)
 {
-	Contr_t *contr = cs->contr;
+	Controller_t *contr = cs->contr;
 
 	if (!contr) {
 		int_error();
 		return;
 	}
 
-	contrD2Trace(contr, buf, len);
+	ControllerD2Trace(contr, buf, len);
 }
 #endif

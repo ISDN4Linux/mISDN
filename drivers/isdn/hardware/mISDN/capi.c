@@ -1,13 +1,13 @@
-/* $Id: capi.c,v 1.9 2003/11/11 09:59:00 keil Exp $
+/* $Id: capi.c,v 1.10 2003/11/21 22:29:41 keil Exp $
  *
  */
 
 #include <linux/module.h>
-#include "capi.h"
+#include "m_capi.h"
 #include "helper.h"
 #include "debug.h"
 
-static char *capi_revision = "$Revision: 1.9 $";
+static char *capi_revision = "$Revision: 1.10 $";
 
 static int debug = 0;
 static mISDNobject_t capi_obj;
@@ -40,17 +40,267 @@ void capidebug(int level, char *fmt, ...)
 struct capi_driver_interface *cdrv_if;
 #endif
 
-int CapiNew(void)
+kmem_cache_t	*mISDN_cmsg_cp;
+kmem_cache_t	*mISDN_AppPlci_cp;
+kmem_cache_t	*mISDN_ncci_cp;
+kmem_cache_t	*mISDN_sspc_cp;
+
+#ifdef MISDN_KMEM_DEBUG
+static struct list_head mISDN_kmem_garbage = LIST_HEAD_INIT(mISDN_kmem_garbage);
+
+_cmsg *
+_kd_cmsg_alloc(char *fn, int line)
 {
+	_kd_cmsg_t	*ki = kmem_cache_alloc(mISDN_cmsg_cp, GFP_ATOMIC);
+
+	if (!ki)
+		return(NULL);
+	ki->kdi.typ = KM_DBG_TYP_CM;
+	INIT_LIST_HEAD(&ki->kdi.head);
+	ki->kdi.line = line;
+	ki->kdi.file = fn;
+	list_add_tail(&ki->kdi.head, &mISDN_kmem_garbage);
+	return(&ki->cm);
+}
+
+void
+cmsg_free(_cmsg *cm)
+{
+	km_dbg_item_t	*kdi;
+
+	if (!cm) {
+		int_errtxt("zero pointer free at %p", __builtin_return_address(0));
+		return;
+	}
+	kdi = KDB_GET_KDI(cm);
+	list_del(&kdi->head);
+	kmem_cache_free(mISDN_cmsg_cp, kdi);
+}
+
+AppPlci_t *
+_kd_AppPlci_alloc(char *fn, int line)
+{
+	_kd_AppPlci_t	*ki = kmem_cache_alloc(mISDN_AppPlci_cp, GFP_ATOMIC);
+
+	if (!ki)
+		return(NULL);
+	ki->kdi.typ = KM_DBG_TYP_AP;
+	INIT_LIST_HEAD(&ki->kdi.head);
+	ki->kdi.line = line;
+	ki->kdi.file = fn;
+	list_add_tail(&ki->kdi.head, &mISDN_kmem_garbage);
+	return(&ki->ap);
+}
+
+void
+AppPlci_free(AppPlci_t *ap)
+{
+	km_dbg_item_t	*kdi;
+
+	if (!ap) {
+		int_errtxt("zero pointer free at %p", __builtin_return_address(0));
+		return;
+	}
+	kdi = KDB_GET_KDI(ap);
+	list_del(&kdi->head);
+	kmem_cache_free(mISDN_AppPlci_cp, kdi);
+}
+
+Ncci_t *
+_kd_ncci_alloc(char *fn, int line)
+{
+	_kd_Ncci_t	*ki = kmem_cache_alloc(mISDN_ncci_cp, GFP_ATOMIC);
+
+	if (!ki)
+		return(NULL);
+	ki->kdi.typ = KM_DBG_TYP_NI;
+	INIT_LIST_HEAD(&ki->kdi.head);
+	ki->kdi.line = line;
+	ki->kdi.file = fn;
+	list_add_tail(&ki->kdi.head, &mISDN_kmem_garbage);
+	return(&ki->ni);
+}
+
+void
+ncci_free(Ncci_t *ni)
+{
+	km_dbg_item_t	*kdi;
+
+	if (!ni) {
+		int_errtxt("zero pointer free at %p", __builtin_return_address(0));
+		return;
+	}
+	kdi = KDB_GET_KDI(ni);
+	list_del(&kdi->head);
+	kmem_cache_free(mISDN_ncci_cp, kdi);
+}
+
+SSProcess_t *
+_kd_SSProcess_alloc(char *fn, int line)
+{
+	_kd_SSProcess_t	*ki = kmem_cache_alloc(mISDN_sspc_cp, GFP_ATOMIC);
+
+	if (!ki)
+		return(NULL);
+	ki->kdi.typ = KM_DBG_TYP_SP;
+	INIT_LIST_HEAD(&ki->kdi.head);
+	ki->kdi.line = line;
+	ki->kdi.file = fn;
+	list_add_tail(&ki->kdi.head, &mISDN_kmem_garbage);
+	return(&ki->sp);
+}
+
+void
+SSProcess_free(SSProcess_t *sp)
+{
+	km_dbg_item_t	*kdi;
+
+	if (!sp) {
+		int_errtxt("zero pointer free at %p", __builtin_return_address(0));
+		return;
+	}
+	kdi = KDB_GET_KDI(sp);
+	list_del(&kdi->head);
+	kmem_cache_free(mISDN_sspc_cp, kdi);
+}
+
+static void
+free_garbage(void)
+{
+	struct list_head	*item, *next;
+	_kd_all_t		*kda;
+
+	list_for_each_safe(item, next, &mISDN_kmem_garbage) {
+		kda = (_kd_all_t *)item;
+		printk(KERN_DEBUG "garbage item found (%p <- %p -> %p) type%ld allocated at %s:%d\n",
+			kda->kdi.head.prev, item, kda->kdi.head.next, kda->kdi.typ, kda->kdi.file, kda->kdi.line);
+		list_del(item);
+		switch(kda->kdi.typ) {
+			case KM_DBG_TYP_CM:
+				printk(KERN_DEBUG "cmsg cmd(%x,%x) appl(%x) addr(%x) nr(%d)\n",
+					kda->a.cm.Command,
+					kda->a.cm.Subcommand,
+					kda->a.cm.ApplId,
+					kda->a.cm.adr.adrController,
+					kda->a.cm.Messagenumber);
+				kmem_cache_free(mISDN_cmsg_cp, item);
+				break;
+			case KM_DBG_TYP_AP:
+				printk(KERN_DEBUG "AppPlci: PLCI(%x) m.state(%x) appl(%p)\n",
+					kda->a.ap.addr,
+					kda->a.ap.plci_m.state,
+					kda->a.ap.appl);
+				kmem_cache_free(mISDN_AppPlci_cp, item);
+				break;
+			case KM_DBG_TYP_NI:
+				printk(KERN_DEBUG "Ncci: NCCI(%x) state(%x) m.state(%x) aplci(%p)\n",
+					kda->a.ni.addr,
+					kda->a.ni.state,
+					kda->a.ni.ncci_m.state,
+					kda->a.ni.AppPlci);
+				kmem_cache_free(mISDN_ncci_cp, item);
+				break;
+			case KM_DBG_TYP_SP:
+				printk(KERN_DEBUG "SSPc: addr(%x) id(%x) apid(%x) func(%x)\n",
+					kda->a.sp.addr,
+					kda->a.sp.invokeId,
+					kda->a.sp.ApplId,
+					kda->a.sp.Function);
+				kmem_cache_free(mISDN_sspc_cp, item);
+				break;
+			default:
+				printk(KERN_DEBUG "unknown garbage item(%p) type %ld\n",
+					item, kda->kdi.typ);
+				break; 
+		}
+	}
+}
+
+#endif
+
+static void CapiCachesFree(void)
+{
+#ifdef MISDN_KMEM_DEBUG
+	free_garbage();
+#endif
+	if (mISDN_cmsg_cp) {
+		kmem_cache_destroy(mISDN_cmsg_cp);
+		mISDN_cmsg_cp = NULL;
+	}
+	if (mISDN_AppPlci_cp) {
+		kmem_cache_destroy(mISDN_AppPlci_cp);
+		mISDN_AppPlci_cp = NULL;
+	}
+	if (mISDN_ncci_cp) {
+		kmem_cache_destroy(mISDN_ncci_cp);
+		mISDN_ncci_cp = NULL;
+	}
+	if (mISDN_sspc_cp) {
+		kmem_cache_destroy(mISDN_sspc_cp);
+		mISDN_sspc_cp = NULL;
+	}
+}
+
+static int CapiNew(void)
+{
+	mISDN_cmsg_cp = NULL;
+	mISDN_AppPlci_cp = NULL;
+	mISDN_ncci_cp = NULL;
+	mISDN_sspc_cp = NULL;
+	mISDN_cmsg_cp = kmem_cache_create("mISDN_cmesg",
+#ifdef MISDN_KMEM_DEBUG
+				sizeof(_kd_cmsg_t),
+#else
+				sizeof(_cmsg),
+#endif
+				0, 0, NULL, NULL);
+	if (!mISDN_cmsg_cp) {
+		CapiCachesFree();
+		return(-ENOMEM);
+	}
+	mISDN_AppPlci_cp = kmem_cache_create("mISDN_AppPlci",
+#ifdef MISDN_KMEM_DEBUG
+				sizeof(_kd_AppPlci_t),
+#else
+				sizeof(AppPlci_t),
+#endif
+				0, 0, NULL, NULL);
+	if (!mISDN_AppPlci_cp) {
+		CapiCachesFree();
+		return(-ENOMEM);
+	}
+	mISDN_ncci_cp = kmem_cache_create("mISDN_Ncci",
+#ifdef MISDN_KMEM_DEBUG
+				sizeof(_kd_Ncci_t),
+#else
+				sizeof(Ncci_t),
+#endif
+				0, 0, NULL, NULL);
+	if (!mISDN_ncci_cp) {
+		CapiCachesFree();
+		return(-ENOMEM);
+	}
+	mISDN_sspc_cp = kmem_cache_create("mISDN_SSProc",
+#ifdef MISDN_KMEM_DEBUG
+				sizeof(_kd_SSProcess_t),
+#else
+				sizeof(SSProcess_t),
+#endif
+				0, 0, NULL, NULL);
+	if (!mISDN_sspc_cp) {
+		CapiCachesFree();
+		return(-ENOMEM);
+	}
 #ifdef OLDCAPI_DRIVER_INTERFACE
 	cdrv_if = attach_capi_driver(&mISDN_driver);
 	if (!cdrv_if) {
+		CapiCachesFree();
 		printk(KERN_ERR "mISDN: failed to attach capi_driver\n");
 		return -EIO;
 	}
 #endif
 	init_listen();
-	init_cplci();
+	init_AppPlci();
 	init_ncci();
 	return 0;
 }
@@ -60,7 +310,7 @@ capi20_manager(void *data, u_int prim, void *arg) {
 	mISDNinstance_t	*inst = data;
 	int		found=0;
 	BInst_t		*binst = NULL;
-	Contr_t		*ctrl = (Contr_t *)capi_obj.ilist;
+	Controller_t	*ctrl = (Controller_t *)capi_obj.ilist;
 
 	if (CAPI_DBG_INFO & debug)
 		printk(KERN_DEBUG "capi20_manager data:%p prim:%x arg:%p\n", data, prim, arg);
@@ -85,11 +335,10 @@ capi20_manager(void *data, u_int prim, void *arg) {
 		ctrl = ctrl->next;
 	}
 	if (prim == (MGR_NEWLAYER | REQUEST)) {
-		ctrl = newContr(&capi_obj, data, arg);
-		if (!ctrl)
-			return(-EINVAL);
-		ctrl->debug = debug;
-		return(0);
+		int ret = ControllerConstr(&ctrl, data, arg, &capi_obj);
+		if (!ret)
+			ctrl->debug = debug;
+		return(ret);
 	}
 	if (!ctrl) {
 		if (CAPI_DBG_WARN & debug)
@@ -105,7 +354,7 @@ capi20_manager(void *data, u_int prim, void *arg) {
 	    case MGR_SETIF | INDICATION:
 	    case MGR_SETIF | REQUEST:
 		if (&ctrl->inst == inst)
-			return(SetIF(inst, arg, prim, NULL, contrL3L4, ctrl));
+			return(SetIF(inst, arg, prim, NULL, ControllerL3L4, ctrl));
 		else
 			return(SetIF(inst, arg, prim, NULL, ncci_l3l4, inst->data));
 	    case MGR_DISCONNECT | REQUEST:
@@ -114,8 +363,7 @@ capi20_manager(void *data, u_int prim, void *arg) {
 	    case MGR_RELEASE | INDICATION:
 		if (CAPI_DBG_INFO & debug)
 			printk(KERN_DEBUG "release_capi20 id %x\n", ctrl->inst.st->id);
-		contrDestr(ctrl);
-		kfree(ctrl);
+		ControllerDestr(ctrl);
 	    	break;
 	    case MGR_UNREGLAYER | REQUEST:
 		if (binst) {
@@ -127,7 +375,7 @@ capi20_manager(void *data, u_int prim, void *arg) {
 	    case MGR_CTRLREADY | INDICATION:
 		if (CAPI_DBG_INFO & debug)
 			printk(KERN_DEBUG "ctrl %x ready\n", ctrl->inst.st->id);
-		contrRun(ctrl);
+		ControllerRun(ctrl);
 		break;
 	    default:
 		if (CAPI_DBG_WARN & debug)
@@ -158,9 +406,11 @@ int Capi20Init(void)
 #ifdef OLDCAPI_DRIVER_INTERFACE
 		detach_capi_driver(&mISDN_driver);
 #endif
+		CapiCachesFree();
 		free_listen();
-		free_cplci();
+		free_AppPlci();
 		free_ncci();
+		free_Application();
 	}
 	return(err);
 }
@@ -168,24 +418,24 @@ int Capi20Init(void)
 #ifdef MODULE
 static void Capi20cleanup(void)
 {
-	int err;
-	Contr_t *contr;
+	int		err;
+	Controller_t	*contr;
 
 	if ((err = mISDN_unregister(&capi_obj))) {
-		printk(KERN_ERR "Can't unregister User DSS1 error(%d)\n", err);
+		printk(KERN_ERR "Can't unregister CAPI20 error(%d)\n", err);
 	}
 	if (capi_obj.ilist) {
-		printk(KERN_WARNING "mISDNl3 contrlist not empty\n");
-		while((contr = capi_obj.ilist)) {
-			contrDestr(contr);
-			kfree(contr);
-		}
+		printk(KERN_WARNING "mISDN controller list not empty\n");
+		while((contr = capi_obj.ilist))
+			ControllerDestr(contr);
 	}
 #ifdef OLDCAPI_DRIVER_INTERFACE
 	detach_capi_driver(&mISDN_driver);
 #endif
+	free_Application();
+	CapiCachesFree();
 	free_listen();
-	free_cplci();
+	free_AppPlci();
 	free_ncci();
 }
 

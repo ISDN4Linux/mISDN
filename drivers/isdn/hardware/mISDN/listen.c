@@ -1,8 +1,8 @@
-/* $Id: listen.c,v 1.5 2003/08/01 22:15:53 kkeil Exp $
+/* $Id: listen.c,v 1.6 2003/11/21 22:29:41 keil Exp $
  *
  */
 
-#include "capi.h"
+#include "m_capi.h"
 #include "helper.h"
 #include "debug.h"
 
@@ -43,77 +43,87 @@ static char* str_ev_listen[] = {
 static struct Fsm listen_fsm =
 { 0, 0, 0, 0, 0 };
 
-static void listen_debug(struct FsmInst *fi, char *fmt, ...)
+static void
+listen_debug(struct FsmInst *fi, char *fmt, ...)
 {
 	char tmp[128];
 	char *p = tmp;
 	va_list args;
-	Listen_t *listen = fi->userdata;
+	Application_t *app = fi->userdata;
 	
 	if (!fi->debug)
 		return;
 	va_start(args, fmt);
 	p += sprintf(p, "Controller 0x%x ApplId %d listen ",
-		     listen->contr->adrController, listen->ApplId);
+		     app->contr->addr, app->ApplId);
 	p += vsprintf(p, fmt, args);
 	*p = 0;
-	listenDebug(listen, CAPI_DBG_LISTEN_STATE, tmp);
+	listenDebug(app, CAPI_DBG_LISTEN_STATE, tmp);
 	va_end(args);
 }
 
-static void listen_req_l_x(struct FsmInst *fi, int event, void *arg, int state)
+static void
+listen_req_l_x(struct FsmInst *fi, int event, void *arg, int state)
 {
-	Listen_t *listen = fi->userdata;
-	_cmsg *cmsg = arg;
+	Application_t	*app = fi->userdata;
+	_cmsg		*cmsg = arg;
 
 	FsmChangeState(fi, state);
 
-	listen->InfoMask = cmsg->InfoMask;
-	listen->CIPmask = cmsg->CIPmask;
-	listen->CIPmask2 = cmsg->CIPmask2;
-	listenDebug(listen, CAPI_DBG_LISTEN_INFO, "set InfoMask to 0x%x", listen->InfoMask);
-	listenDebug(listen, CAPI_DBG_LISTEN_INFO, "set CIP to 0x%x,0x%x", listen->CIPmask,
-		    listen->CIPmask2);
+	app->InfoMask = cmsg->InfoMask;
+	app->CIPmask = cmsg->CIPmask;
+	app->CIPmask2 = cmsg->CIPmask2;
+	listenDebug(app, CAPI_DBG_LISTEN_INFO, "set InfoMask to 0x%x", app->InfoMask);
+	listenDebug(app, CAPI_DBG_LISTEN_INFO, "set CIP to 0x%x,0x%x", app->CIPmask,
+		app->CIPmask2);
 
 	capi_cmsg_answer(cmsg);
 	cmsg->Info = CAPI_NOERROR;
 
-	FsmEvent(&listen->listen_m, EV_LISTEN_CONF, cmsg);
-	contrRecvCmsg(listen->contr, cmsg);
+	if (FsmEvent(&app->listen_m, EV_LISTEN_CONF, cmsg))
+		cmsg_free(cmsg);
 }
 
-static void listen_req_l_0(struct FsmInst *fi, int event, void *arg)
+static void
+listen_req_l_0(struct FsmInst *fi, int event, void *arg)
 {
 	listen_req_l_x(fi, event, arg, ST_LISTEN_L_0_1);
 }
 
-static void listen_req_l_1(struct FsmInst *fi, int event, void *arg)
+static void
+listen_req_l_1(struct FsmInst *fi, int event, void *arg)
 {
 	listen_req_l_x(fi, event, arg, ST_LISTEN_L_1_1);
 }
 
-static void listen_conf_l_x_1(struct FsmInst *fi, int event, void *arg,
-			      int state)
+static void
+listen_conf_l_x_1(struct FsmInst *fi, int event, void *arg, int state)
 {
-	Listen_t *listen = fi->userdata;
-	_cmsg *cmsg = arg;
+	Application_t	*app = fi->userdata;
+	_cmsg		*cmsg = arg;
 
 	if (cmsg->Info != CAPI_NOERROR) {
 		FsmChangeState(fi, state);
 	} else { // Info == 0
-		if (listen->CIPmask == 0)
+		if (app->CIPmask == 0) {
+			test_and_clear_bit(APPL_STATE_LISTEN, &app->state);
 			FsmChangeState(fi, ST_LISTEN_L_0);
-		else
+		} else {
+			test_and_set_bit(APPL_STATE_LISTEN, &app->state);
 			FsmChangeState(fi, ST_LISTEN_L_1);
+		}
 	}
+	SendCmsg2Application(app, cmsg);
 }
 
-static void listen_conf_l_0_1(struct FsmInst *fi, int event, void *arg)
+static void
+listen_conf_l_0_1(struct FsmInst *fi, int event, void *arg)
 {
 	listen_conf_l_x_1(fi, event, arg, ST_LISTEN_L_0);
 }
 
-static void listen_conf_l_1_1(struct FsmInst *fi, int event, void *arg)
+static void
+listen_conf_l_1_1(struct FsmInst *fi, int event, void *arg)
 {
 	listen_conf_l_x_1(fi, event, arg, ST_LISTEN_L_1);
 }
@@ -131,52 +141,55 @@ const int FN_LISTEN_COUNT = sizeof(fn_listen_list)/sizeof(struct FsmNode);
 // ----------------------------------------------------------------------
 // Methods
 
-
-void listenConstr(Listen_t *listen, Contr_t *contr, __u16 ApplId)
+void listenConstr(Application_t *app)
 {
-	listen->listen_m.fsm = &listen_fsm;
-	listen->listen_m.state = ST_LISTEN_L_0;
-	listen->listen_m.debug = contr->debug & CAPI_DBG_LISTEN_STATE;
-	listen->listen_m.userdata = listen;
-	listen->listen_m.printdebug = listen_debug;
-
-	listen->contr = contr;
-	listen->ApplId = ApplId;
-	listen->InfoMask = 0;
-	listen->CIPmask = 0;
-	listen->CIPmask2 = 0;
+	app->listen_m.fsm = &listen_fsm;
+	app->listen_m.state = ST_LISTEN_L_0;
+	app->listen_m.debug = app->contr->debug & CAPI_DBG_LISTEN_STATE;
+	app->listen_m.userdata = app;
+	app->listen_m.printdebug = listen_debug;
+	app->InfoMask = 0;
+	app->CIPmask = 0;
+	app->CIPmask2 = 0;
 }
 
-void listenDestr(Listen_t *listen)
+void listenDestr(Application_t *app)
 {
-	listenDebug(listen, CAPI_DBG_LISTEN, "%s", __FUNCTION__);
+	test_and_clear_bit(APPL_STATE_LISTEN, &app->state);
+	listenDebug(app, CAPI_DBG_LISTEN, "%s", __FUNCTION__);
 }
 
-void listenSendMessage(Listen_t *listen, struct sk_buff *skb)
+void
+listenSendMessage(Application_t *app, struct sk_buff *skb)
 {
-       _cmsg cmsg;
-       capi_message2cmsg(&cmsg, skb->data);
-       
-       switch (CMSGCMD(&cmsg)) {
-       case CAPI_LISTEN_REQ:
-               FsmEvent(&listen->listen_m, EV_LISTEN_REQ, &cmsg);
-               break;
-       default:
-	       int_error();
-       }
-       dev_kfree_skb(skb);
+	_cmsg	*cmsg;
+
+	cmsg = cmsg_alloc();
+	if (!cmsg) {
+		int_error();
+		dev_kfree_skb(skb);
+		return;
+	}
+	capi_message2cmsg(cmsg, skb->data);
+	switch (CMSGCMD(cmsg)) {
+		case CAPI_LISTEN_REQ:
+			if (FsmEvent(&app->listen_m, EV_LISTEN_REQ, cmsg))
+				cmsg_free(cmsg);
+			break;
+		default:
+			int_error();
+			cmsg_free(cmsg);
+	}
+	dev_kfree_skb(skb);
 }
  
-int listenHandle(Listen_t *listen, __u16 CIPValue)
+int listenHandle(Application_t *app, __u16 CIPValue)
 {
-	if ((listen->CIPmask & 1) || 
-	    (listen -> CIPmask & (1 << CIPValue)))
+	if ((app->CIPmask & 1) || 
+	    (app->CIPmask & (1 << CIPValue)))
 		return 1;
 	return 0;
 }
-
-// ---------------------------------------------------------------------
-//
 
 void init_listen(void)
 {

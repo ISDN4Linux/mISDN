@@ -46,7 +46,7 @@ mISDN_core-objs := core.o stack.o udevice.o helper.o
 mISDN_l1-objs := layer1.o helper.o debug.o fsm.o
 mISDN_l2-objs := layer2.o tei.o helper.o debug.o fsm.o
 l3udss1-objs := layer3.o helper.o l3helper.o debug.o fsm.o l3_udss1.o
-mISDN_capi-objs := capi.o contr.o listen.o appl.o plci.o cplci.o ncci.o asn1.o \
+mISDN_capi-objs := capi.o contr.o listen.o appl.o plci.o app_plci.o ncci.o asn1.o \
                    asn1_aoc.o asn1_comp.o asn1_generic.o asn1_diversion.o \
                    asn1_basic_service.o asn1_address.o asn1_enc.o capi_enc.o \
                    supp_serv.o helper.o l3helper.o debug.o fsm.o

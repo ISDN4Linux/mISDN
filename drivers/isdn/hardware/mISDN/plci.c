@@ -1,8 +1,8 @@
-/* $Id: plci.c,v 1.8 2003/11/11 09:59:00 keil Exp $
+/* $Id: plci.c,v 1.9 2003/11/21 22:29:41 keil Exp $
  *
  */
 
-#include "capi.h"
+#include "m_capi.h"
 #include "dss1.h"
 #include "helper.h"
 #include "debug.h"
@@ -11,47 +11,46 @@
         capidebug(lev, fmt, ## args)
 
 
-void plciConstr(Plci_t *plci, Contr_t *contr, __u32 adrPLCI, u_int id)
+void plciInit(Controller_t *contr)
 {
-	memset(plci, 0, sizeof(Plci_t));
-	plci->adrPLCI = adrPLCI;
-	plci->id = id;
-	plci->contr = contr;
-}
+	Plci_t	*plci = contr->plcis;
+	int	i;
 
-void plciDestr(Plci_t *plci)
-{
-#if 0
-	if (plci->l4_pc.l3pc) {
-		// FIXME: we need to kill l3_process, actually
-		plci->l4_pc.l3pc->l4pc = 0;
+	for (i = 0; i < contr->maxplci; i++) {
+		memset(plci, 0, sizeof(Plci_t));
+		plci->addr = ((i + 1) << 8) | contr->addr;
+		plci->l3id = MISDN_ID_NONE;
+		INIT_LIST_HEAD(&plci->AppPlcis);
+		plci->contr = contr;
+		printk(KERN_WARNING "%s: %p PLCI(%x) l3id(%x)\n",
+			__FUNCTION__, plci, plci->addr, plci->l3id);
+		plci++;
 	}
-#endif
 }
 
 void plciHandleSetupInd(Plci_t *plci, int pr, Q931_info_t *qi)
 {
-	int	ApplId;
-	__u16	CIPValue;
-	Appl_t	*appl;
-	Cplci_t	*cplci;
+	__u16			CIPValue;
+	Application_t		*appl;
+	AppPlci_t		*aplci;
+	struct list_head	*item, *next;
 
-	if (!qi) {
+	if (!qi || !plci->contr) {
 		int_error();
 		return;
 	}
-	for (ApplId = 1; ApplId <= CAPI_MAXAPPL; ApplId++) {
-		appl = contrId2appl(plci->contr, ApplId);
-		if (appl) {
-			CIPValue = q931CIPValue(qi);
-			if (listenHandle(&appl->listen, CIPValue)) {
-				cplci = applNewCplci(appl, plci);
-				if (!cplci) {
-					int_error();
-					break;
-				}
-				cplci_l3l4(cplci, pr, qi);
+	CIPValue = q931CIPValue(qi);
+	list_for_each_safe(item, next, &plci->contr->Applications) {
+		appl = (Application_t *)item;
+		if (test_bit(APPL_STATE_RELEASE, &appl->state))
+			continue;
+		if (listenHandle(appl, CIPValue)) {
+			aplci = ApplicationNewAppPlci(appl, plci);
+			if (!aplci) {
+				int_error();
+				break;
 			}
+			AppPlci_l3l4(aplci, pr, qi);
 		}
 	}
 	if (plci->nAppl == 0) {
@@ -62,14 +61,15 @@ void plciHandleSetupInd(Plci_t *plci, int pr, Q931_info_t *qi)
 			AddvarIE(skb,cause);
 			plciL4L3(plci, CC_RELEASE_COMPLETE | REQUEST, skb);
 		}
+		ControllerReleasePlci(plci);
 	}
 }
 
 int plci_l3l4(Plci_t *plci, int pr, struct sk_buff *skb)
 {
-	__u16		applId;
-	Cplci_t		*cplci;
-	Q931_info_t	*qi;
+	AppPlci_t		*aplci;
+	Q931_info_t		*qi;
+	struct list_head	*item, *next;
 
 	if (skb->len)
 		qi = (Q931_info_t *)skb->data;
@@ -80,47 +80,51 @@ int plci_l3l4(Plci_t *plci, int pr, struct sk_buff *skb)
 			plciHandleSetupInd(plci, pr, qi);
 			break;
 		case CC_RELEASE_CR | INDICATION:
-			if (plci->nAppl == 0) {
-				contrDelPlci(plci->contr, plci);
-			}
 			break;
 		default:
-			for (applId = 1; applId <= CAPI_MAXAPPL; applId++) {
-				cplci = plci->cplcis[applId - 1];
-				if (cplci) 
-					cplci_l3l4(cplci, pr, qi);
+			list_for_each_safe(item, next, &plci->AppPlcis) {
+				aplci = (AppPlci_t *)item;
+				AppPlci_l3l4(aplci, pr, qi);
 			}
-			if (plci->nAppl == 0)
-				contrDelPlci(plci->contr, plci);
 			break;
 	}
 	dev_kfree_skb(skb);
 	return(0);
 }
 
-void plciAttachCplci(Plci_t *plci, Cplci_t *cplci)
-{
-	__u16 applId = cplci->appl->ApplId;
+AppPlci_t *
+getAppPlci4Id(Plci_t *plci, __u16 appId) {
+	struct list_head	*item;
+	AppPlci_t		*aplci;
 
-	if (plci->cplcis[applId - 1]) {
+	list_for_each(item, &plci->AppPlcis) {
+		aplci = (AppPlci_t *)item;
+		if (appId == aplci->appl->ApplId)
+			return(aplci);
+	}
+	return(NULL);
+}
+
+void plciAttachAppPlci(Plci_t *plci, AppPlci_t *aplci)
+{
+	AppPlci_t	*test = getAppPlci4Id(plci, aplci->appl->ApplId);
+
+	if (test) {
 		int_error();
 		return;
 	}
-	plci->cplcis[applId - 1] = cplci;
+	list_add(&aplci->head, &plci->AppPlcis);
 	plci->nAppl++;
 }
 
-void plciDetachCplci(Plci_t *plci, Cplci_t *cplci)
+void
+plciDetachAppPlci(Plci_t *plci, AppPlci_t *aplci)
 {
-	__u16 applId = cplci->appl->ApplId;
-
-	if (plci->cplcis[applId - 1] != cplci) {
-		int_error();
-		return;
-	}
-	cplci->plci = 0;
-	plci->cplcis[applId - 1] = 0;
+	aplci->plci = NULL;
+	list_del_init(&aplci->head);
 	plci->nAppl--;
+	if (!plci->nAppl)
+		ControllerReleasePlci(plci);
 }
 
 void plciNewCrReq(Plci_t *plci)
@@ -128,7 +132,8 @@ void plciNewCrReq(Plci_t *plci)
 	plciL4L3(plci, CC_NEW_CR | REQUEST, NULL);
 }
 
-int plciL4L3(Plci_t *plci, __u32 prim, struct sk_buff *skb)
+int
+plciL4L3(Plci_t *plci, __u32 prim, struct sk_buff *skb)
 {
 #define	MY_RESERVE	8
 	int	err;
@@ -141,7 +146,7 @@ int plciL4L3(Plci_t *plci, __u32 prim, struct sk_buff *skb)
 		} else
 			skb_reserve(skb, MY_RESERVE);
 	}
-	err = contrL4L3(plci->contr, prim, plci->id, skb);
+	err = ControllerL4L3(plci->contr, prim, plci->l3id, skb);
 	if (err)
 		dev_kfree_skb(skb);
 	return(err);

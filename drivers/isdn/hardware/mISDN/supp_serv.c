@@ -1,8 +1,8 @@
-/* $Id: supp_serv.c,v 1.6 2003/11/11 09:59:00 keil Exp $
+/* $Id: supp_serv.c,v 1.7 2003/11/21 22:29:41 keil Exp $
  *
  */
 
-#include "capi.h"
+#include "m_capi.h"
 #include "asn1_comp.h"
 #include "asn1_enc.h"
 #include "dss1.h"
@@ -11,6 +11,37 @@
 #define T_ACTIVATE    4000
 #define T_DEACTIVATE  4000
 #define T_INTERROGATE 4000
+
+static void	SSProcessAddTimer(SSProcess_t *, int);
+
+static __u8 *
+encodeInvokeComponentHead(__u8 *p)
+{
+	*p++ = 0;     // length -- not known yet
+	*p++ = 0x91;  // remote operations protocol
+	*p++ = 0xa1;  // invoke component
+	*p++ = 0;     // length -- not known yet
+	return p;
+}
+
+static void
+encodeInvokeComponentLength(__u8 *msg, __u8 *p)
+{
+	msg[3] = p - &msg[5];
+	msg[0] = p - &msg[1];
+}
+
+
+static int
+SSProcess_L4L3(SSProcess_t *spc, __u32 prim, struct sk_buff *skb) {
+	int	err;
+
+// FIXME	err = ControllerL4L3(contr, prim, contr->addr | DUMMY_CR_FLAG, skb);
+	err = ControllerL4L3(spc->contr, prim, MISDN_ID_DUMMY, skb);
+	if (err)
+		dev_kfree_skb(skb);
+	return(err);
+}
 
 static __inline__ int capiGetWord(__u8 *p, __u8 *end, __u16 *word)
 {
@@ -139,8 +170,9 @@ static __inline__ int capiGetFacReqCFInterrogateNumbers(__u8 *p, __u8 *_end, str
 
 	CAPI_GET(capiGetDWord, &CFInterrogateNumbers->Handle);
 
-	if (p != end) return -1;
-	return len + 1;
+	if (p != end)
+		return(-1);
+	return(len + 1);
 }
 
 
@@ -153,161 +185,48 @@ static __inline__ int capiGetFacReqParm(__u8 *p, struct FacReqParm *facReqParm)
 	CAPI_GET(capiGetWord, &facReqParm->Function);
 
 	switch (facReqParm->Function) {
-	case 0x0000: // GetSupportedServices
-		if (*p++ != 0x00) return -1; // empty struct
-		break;
-	case 0x0001: // Listen
-		CAPI_GET(capiGetFacReqListen, &facReqParm->u.Listen);
-		break;
-	case 0x0004: // Suspend
-		CAPI_GET(capiGetFacReqSuspend, &facReqParm->u.Suspend);
-		break;
-	case 0x0005: // Resume
-		CAPI_GET(capiGetFacReqResume, &facReqParm->u.Resume);
-		break;
-	case 0x0009: // CF Activate
-		CAPI_GET(capiGetFacReqCFActivate, &facReqParm->u.CFActivate);
-		break;
-	case 0x000a: // CF Deactivate
-		CAPI_GET(capiGetFacReqCFDeactivate, &facReqParm->u.CFDeactivate);
-		break;
-	case 0x000b: // CF Interrogate Parameters
-		CAPI_GET(capiGetFacReqCFInterrogateParameters, &facReqParm->u.CFInterrogateParameters);
-		break;
-	case 0x000c: // CF Interrogate Numbers
-		CAPI_GET(capiGetFacReqCFInterrogateNumbers, &facReqParm->u.CFInterrogateNumbers);
-		break;
-	default:
-		return len + 1;
+		case 0x0000: // GetSupportedServices
+			if (*p++ != 0x00) return -1; // empty struct
+			break;
+		case 0x0001: // Listen
+			CAPI_GET(capiGetFacReqListen, &facReqParm->u.Listen);
+			break;
+		case 0x0004: // Suspend
+			CAPI_GET(capiGetFacReqSuspend, &facReqParm->u.Suspend);
+			break;
+		case 0x0005: // Resume
+			CAPI_GET(capiGetFacReqResume, &facReqParm->u.Resume);
+			break;
+		case 0x0009: // CF Activate
+			CAPI_GET(capiGetFacReqCFActivate, &facReqParm->u.CFActivate);
+			break;
+		case 0x000a: // CF Deactivate
+			CAPI_GET(capiGetFacReqCFDeactivate, &facReqParm->u.CFDeactivate);
+			break;
+		case 0x000b: // CF Interrogate Parameters
+			CAPI_GET(capiGetFacReqCFInterrogateParameters, &facReqParm->u.CFInterrogateParameters);
+			break;
+		case 0x000c: // CF Interrogate Numbers
+			CAPI_GET(capiGetFacReqCFInterrogateNumbers, &facReqParm->u.CFInterrogateNumbers);
+			break;
+		default:
+			return(len + 1);
 	}
 
-	if (p != end) return -1;
-	return len + 1;
+	if (p != end)
+		return(-1);
+	return(len + 1);
 }
 
-void applSuppFacilityReq(Appl_t *appl, _cmsg *cmsg)
-{
-	__u8 tmp[10];
-	__u16 Info;
-	struct FacReqParm facReqParm;
-	struct FacConfParm facConfParm;
-	Plci_t *plci;
-	Cplci_t *cplci;
-
-	if (capiGetFacReqParm(cmsg->FacilityRequestParameter, &facReqParm) < 0) {
-		contrAnswerCmsg(appl->contr, cmsg, CapiIllMessageParmCoding);
-		return;
-	}
-	facConfParm.Function = facReqParm.Function;
-	switch (facReqParm.Function) {
-	case 0x0000: // GetSupportedServices
-		Info = applGetSupportedServices(appl, &facReqParm, &facConfParm);
-		break;
-	case 0x0001: // Listen
-		Info = applFacListen(appl, &facReqParm, &facConfParm);
-		break;
-	case 0x0004: // Suspend
-		cplci = applAdr2cplci(appl, cmsg->adr.adrPLCI);
-		if (!cplci) {
-			Info = CapiIllContrPlciNcci;
-			break;
-		}
-		Info = cplciFacSuspendReq(cplci, &facReqParm, &facConfParm);
-		break;
-	case 0x0005: // Resume
-		plci = contrNewPlci(appl->contr, MISDN_ID_ANY);
-		if (!plci) {
-			Info = CapiNoPlciAvailable;
-			break;
-		}
-		cplci = applNewCplci(appl, plci);
-		if (!cplci) {
-			contrDelPlci(appl->contr, plci);
-			Info = CapiNoPlciAvailable;
-			break;
-		}
-		Info = cplciFacResumeReq(cplci, &facReqParm, &facConfParm);
-		if (Info == CapiSuccess)
-			cmsg->adr.adrPLCI = plci->adrPLCI;
-		break;
-	case 0x0009: // CF Activate
-		Info = applFacCFActivate(appl, &facReqParm, &facConfParm);
-		break;
-	case 0x000a: // CF Deactivate
-		Info = applFacCFDeactivate(appl, &facReqParm, &facConfParm);
-		break;
-	case 0x000b: // CF Interrogate Parameters
-		Info = applFacCFInterrogateParameters(appl, &facReqParm, &facConfParm);
-		break;
-	case 0x000c: // CF Interrogate Numbers
-		Info = applFacCFInterrogateNumbers(appl, &facReqParm, &facConfParm);
-		break;
-	default:
-		Info = CapiSuccess;
-		facConfParm.u.Info.SupplementaryServiceInfo = CapiSupplementaryServiceNotSupported;
-	}
-
-	capi_cmsg_answer(cmsg);
-	cmsg->Info = Info;
-	if (Info == 0x0000)
-		capiEncodeFacConfParm(tmp, &facConfParm);
-	else
-		tmp[0] = 0;
-	cmsg->FacilityConfirmationParameter = tmp;
-	contrRecvCmsg(appl->contr, cmsg);
-}
-
-__u8 *encodeInvokeComponentHead(__u8 *p)
-{
-	*p++ = 0;     // length -- not known yet
-	*p++ = 0x91;  // remote operations protocol
-	*p++ = 0xa1;  // invoke component
-	*p++ = 0;     // length -- not known yet
-	return p;
-}
-
-void encodeInvokeComponentLength(__u8 *msg, __u8 *p)
-{
-	msg[3] = p - &msg[5];
-	msg[0] = p - &msg[1];
-}
-
-
-static int dummy_L4L3(DummyProcess_t *dpc, __u32 prim, struct sk_buff *skb) {
-	Contr_t *contr = dpc->contr;
-	int	err;
-
-//	err = contrL4L3(contr, prim, contr->adrController | DUMMY_CR_FLAG, skb);
-	err = contrL4L3(contr, prim, MISDN_ID_DUMMY, skb);
-	if (err)
-		dev_kfree_skb(skb);
-	return(err);
-}
-
-DummyProcess_t *applNewDummyPc(Appl_t *appl, __u16 Function, __u32 Handle)
-{
-	DummyProcess_t *dummy_pc;
-
-	dummy_pc = contrNewDummyPc(appl->contr);
-	if (!dummy_pc) 
-		return 0;
-
-	dummy_pc->ApplId = appl->ApplId;
-	dummy_pc->Function = Function;
-	dummy_pc->Handle = Handle;
-	return dummy_pc;
-}
-
-int applGetSupportedServices(Appl_t *appl, struct FacReqParm *facReqParm,
-			      struct FacConfParm *facConfParm)
+static int
+GetSupportedServices(FacReqParm_t *facReqParm, FacConfParm_t *facConfParm)
 {
 	facConfParm->u.GetSupportedServices.SupplementaryServiceInfo = CapiSuccess;
 	facConfParm->u.GetSupportedServices.SupportedServices = mISDNSupportedServices;
 	return CapiSuccess;
 }
-
-int applFacListen(Appl_t *appl, struct FacReqParm *facReqParm,
-		   struct FacConfParm *facConfParm)
+static int
+FacListen(Application_t *appl, FacReqParm_t *facReqParm, FacConfParm_t *facConfParm)
 {
 	if (facReqParm->u.Listen.NotificationMask &~ mISDNSupportedServices) {
 		facConfParm->u.Info.SupplementaryServiceInfo = CapiSupplementaryServiceNotSupported;
@@ -318,220 +237,271 @@ int applFacListen(Appl_t *appl, struct FacReqParm *facReqParm,
 	return CapiSuccess;
 }
 
-int applFacCFActivate(Appl_t *appl, struct FacReqParm *facReqParm,
-		       struct FacConfParm *facConfParm)
+static int
+FacCFInterrogateParameters(Application_t *appl, FacReqParm_t *facReqParm, FacConfParm_t *facConfParm)
 {
-	DummyProcess_t	*dummy_pc;
+	SSProcess_t	*sspc;
 	struct sk_buff	*skb = alloc_l3msg(260, MT_FACILITY);
 	__u8		*p;
 
 	if (!skb)
 		return CAPI_MSGOSRESOURCEERR;
-	dummy_pc = applNewDummyPc(appl, facReqParm->Function, facReqParm->u.CFActivate.Handle);
-	if (!dummy_pc) {
-		kfree_skb(skb);
-		return CAPI_MSGOSRESOURCEERR;
-	}
-	p = encodeInvokeComponentHead(dummy_pc->buf);
-	p += encodeInt(p, dummy_pc->invokeId);
-	p += encodeInt(p, 0x07); // activationDiversion
-	p += encodeActivationDiversion(p, &facReqParm->u.CFActivate);
-	encodeInvokeComponentLength(dummy_pc->buf, p);
-	AddIE(skb, IE_FACILITY, dummy_pc->buf);
-	dummy_L4L3(dummy_pc, CC_FACILITY | REQUEST, skb);
-	dummyPcAddTimer(dummy_pc, T_ACTIVATE);
-
-	facConfParm->u.Info.SupplementaryServiceInfo = CapiSuccess;
-	return CapiSuccess;
-}
-
-int applFacCFDeactivate(Appl_t *appl, struct FacReqParm *facReqParm,
-			 struct FacConfParm *facConfParm)
-{
-	DummyProcess_t	*dummy_pc;
-	struct sk_buff	*skb = alloc_l3msg(260, MT_FACILITY);
-	__u8		*p;
-
-	if (!skb)
-		return CAPI_MSGOSRESOURCEERR;
-	dummy_pc = applNewDummyPc(appl, facReqParm->Function, facReqParm->u.CFDeactivate.Handle);
-	if (!dummy_pc) {
-		kfree_skb(skb);
-		return CAPI_MSGOSRESOURCEERR;
-	}
-	p = encodeInvokeComponentHead(dummy_pc->buf);
-	p += encodeInt(p, dummy_pc->invokeId);
-	p += encodeInt(p, 0x08); // dectivationDiversion
-	p += encodeDeactivationDiversion(p, &facReqParm->u.CFDeactivate);
-	encodeInvokeComponentLength(dummy_pc->buf, p);
-	AddIE(skb, IE_FACILITY, dummy_pc->buf);
-
-	dummy_L4L3(dummy_pc, CC_FACILITY | REQUEST, skb);
-	dummyPcAddTimer(dummy_pc, T_DEACTIVATE);
-
-	facConfParm->u.Info.SupplementaryServiceInfo = CapiSuccess;
-	return CapiSuccess;
-}
-
-int applFacCFInterrogateParameters(Appl_t *appl, struct FacReqParm *facReqParm,
-				    struct FacConfParm *facConfParm)
-{
-	DummyProcess_t	*dummy_pc;
-	struct sk_buff	*skb = alloc_l3msg(260, MT_FACILITY);
-	__u8		*p;
-
-	if (!skb)
-		return CAPI_MSGOSRESOURCEERR;
-	dummy_pc = applNewDummyPc(appl, facReqParm->Function, 
+	sspc = SSProcessConstr(appl, facReqParm->Function, 
 				  facReqParm->u.CFInterrogateParameters.Handle);
-	if (!dummy_pc) {
+	if (!sspc) {
 		kfree_skb(skb);
 		return CAPI_MSGOSRESOURCEERR;
 	}
 
-	p = encodeInvokeComponentHead(dummy_pc->buf);
-	p += encodeInt(p, dummy_pc->invokeId);
+	p = encodeInvokeComponentHead(sspc->buf);
+	p += encodeInt(p, sspc->invokeId);
 	p += encodeInt(p, 0x0b); // interrogationDiversion
 	p += encodeInterrogationDiversion(p,  &facReqParm->u.CFInterrogateParameters);
-	encodeInvokeComponentLength(dummy_pc->buf, p);
-	AddIE(skb, IE_FACILITY, dummy_pc->buf);
+	encodeInvokeComponentLength(sspc->buf, p);
+	AddIE(skb, IE_FACILITY, sspc->buf);
 
-	dummy_L4L3(dummy_pc, CC_FACILITY | REQUEST, skb);
-	dummyPcAddTimer(dummy_pc, T_INTERROGATE);
+	SSProcess_L4L3(sspc, CC_FACILITY | REQUEST, skb);
+	SSProcessAddTimer(sspc, T_INTERROGATE);
 
 	facConfParm->u.Info.SupplementaryServiceInfo = CapiSuccess;
 	return CapiSuccess;
 }
 
-int applFacCFInterrogateNumbers(Appl_t *appl, struct FacReqParm *facReqParm,
-				 struct FacConfParm *facConfParm)
+static int
+FacCFInterrogateNumbers(Application_t *appl, FacReqParm_t *facReqParm, FacConfParm_t *facConfParm)
 {
-	DummyProcess_t	*dummy_pc;
+	SSProcess_t	*sspc;
 	struct sk_buff	*skb = alloc_l3msg(260, MT_FACILITY);
 	__u8		*p;
 
 	if (!skb)
 		return CAPI_MSGOSRESOURCEERR;
-	dummy_pc = applNewDummyPc(appl, facReqParm->Function, 
+	sspc = SSProcessConstr(appl, facReqParm->Function, 
 				  facReqParm->u.CFInterrogateNumbers.Handle);
-	if (!dummy_pc) {
+	if (!sspc) {
 		kfree_skb(skb);
 		return CAPI_MSGOSRESOURCEERR;
 	}
 
-	p = encodeInvokeComponentHead(dummy_pc->buf);
-	p += encodeInt(p, dummy_pc->invokeId);
+	p = encodeInvokeComponentHead(sspc->buf);
+	p += encodeInt(p, sspc->invokeId);
 	p += encodeInt(p, 0x11); // InterrogateServedUserNumbers
-	encodeInvokeComponentLength(dummy_pc->buf, p);
-	AddIE(skb, IE_FACILITY, dummy_pc->buf);
-	dummy_L4L3(dummy_pc, CC_FACILITY | REQUEST, skb);
-	dummyPcAddTimer(dummy_pc, T_INTERROGATE);
+	encodeInvokeComponentLength(sspc->buf, p);
+	AddIE(skb, IE_FACILITY, sspc->buf);
+	SSProcess_L4L3(sspc, CC_FACILITY | REQUEST, skb);
+	SSProcessAddTimer(sspc, T_INTERROGATE);
 
 	facConfParm->u.Info.SupplementaryServiceInfo = CapiSuccess;
 	return CapiSuccess;
 }
 
-
-void dummyProcessTimeout(unsigned long arg);
-
-void dummyPcConstr(DummyProcess_t *dummy_pc, Contr_t *contr, __u16 invokeId)
+static int
+FacCFActivate(Application_t *appl, FacReqParm_t *facReqParm, FacConfParm_t *facConfParm)
 {
-	memset(dummy_pc, 0, sizeof(DummyProcess_t));
-	dummy_pc->contr = contr;
-	dummy_pc->invokeId = invokeId;
-}
+	SSProcess_t	*sspc;
+	struct sk_buff	*skb = alloc_l3msg(260, MT_FACILITY);
+	__u8		*p;
 
-void dummyPcDestr(DummyProcess_t *dummy_pc)
-{
-	del_timer(&dummy_pc->tl);
-}
-
-void dummyPcAddTimer(DummyProcess_t *dummy_pc, int msec)
-{
-	dummy_pc->tl.function = dummyProcessTimeout;
-	dummy_pc->tl.data = (unsigned long) dummy_pc;
-	init_timer(&dummy_pc->tl);
-	dummy_pc->tl.expires = jiffies + (msec * HZ) / 1000;
-	add_timer(&dummy_pc->tl);
-}
-
-DummyProcess_t *contrNewDummyPc(Contr_t* contr)
-{	
-	DummyProcess_t *dummy_pc;
-	int i;
-
-	for (i = 0; i < CAPI_MAXDUMMYPCS; i++) {
-		if (!contr->dummy_pcs[i])
-			break;
+	if (!skb)
+		return CAPI_MSGOSRESOURCEERR;
+	sspc = SSProcessConstr(appl, facReqParm->Function, facReqParm->u.CFActivate.Handle);
+	if (!sspc) {
+		kfree_skb(skb);
+		return CAPI_MSGOSRESOURCEERR;
 	}
-	if (i == CAPI_MAXDUMMYPCS)
-		return 0;
-	dummy_pc = kmalloc(sizeof(DummyProcess_t), GFP_ATOMIC);
-	if (!dummy_pc) {
-		int_error();
-		return 0;
-	}
-	contr->dummy_pcs[i] = dummy_pc;
-	dummyPcConstr(dummy_pc, contr, ++contr->lastInvokeId);
-	return dummy_pc;
+	p = encodeInvokeComponentHead(sspc->buf);
+	p += encodeInt(p, sspc->invokeId);
+	p += encodeInt(p, 0x07); // activationDiversion
+	p += encodeActivationDiversion(p, &facReqParm->u.CFActivate);
+	encodeInvokeComponentLength(sspc->buf, p);
+	AddIE(skb, IE_FACILITY, sspc->buf);
+	SSProcess_L4L3(sspc, CC_FACILITY | REQUEST, skb);
+	SSProcessAddTimer(sspc, T_ACTIVATE);
+
+	facConfParm->u.Info.SupplementaryServiceInfo = CapiSuccess;
+	return CapiSuccess;
 }
 
-void contrDelDummyPc(Contr_t* contr, DummyProcess_t *dummy_pc)
+static int
+FacCFDeactivate(Application_t *appl, FacReqParm_t *facReqParm, FacConfParm_t *facConfParm)
 {
-	int i;
+	SSProcess_t	*sspc;
+	struct sk_buff	*skb = alloc_l3msg(260, MT_FACILITY);
+	__u8		*p;
 
-	for (i = 0; i < CAPI_MAXDUMMYPCS; i++) {
-		if (contr->dummy_pcs[i] == dummy_pc)
-			break;
+	if (!skb)
+		return CAPI_MSGOSRESOURCEERR;
+	sspc = SSProcessConstr(appl, facReqParm->Function, facReqParm->u.CFDeactivate.Handle);
+	if (!sspc) {
+		kfree_skb(skb);
+		return CAPI_MSGOSRESOURCEERR;
 	}
-	if (i == CAPI_MAXDUMMYPCS) {
-		int_error();
+	p = encodeInvokeComponentHead(sspc->buf);
+	p += encodeInt(p, sspc->invokeId);
+	p += encodeInt(p, 0x08); // dectivationDiversion
+	p += encodeDeactivationDiversion(p, &facReqParm->u.CFDeactivate);
+	encodeInvokeComponentLength(sspc->buf, p);
+	AddIE(skb, IE_FACILITY, sspc->buf);
+
+	SSProcess_L4L3(sspc, CC_FACILITY | REQUEST, skb);
+	SSProcessAddTimer(sspc, T_DEACTIVATE);
+
+	facConfParm->u.Info.SupplementaryServiceInfo = CapiSuccess;
+	return CapiSuccess;
+}
+ 
+void
+SupplementaryFacilityReq(Application_t *appl, _cmsg *cmsg)
+{
+	__u8		tmp[10];
+	__u16		Info;
+	FacReqParm_t	facReqParm;
+	FacConfParm_t	facConfParm;
+	Plci_t		*plci;
+	AppPlci_t	*aplci;
+	int		ret;
+
+	if (capiGetFacReqParm(cmsg->FacilityRequestParameter, &facReqParm) < 0) {
+		SendCmsgAnswer2Application(appl, cmsg, CapiIllMessageParmCoding);
 		return;
 	}
-	contr->dummy_pcs[i] = 0;
-	dummyPcDestr(dummy_pc);
-	kfree(dummy_pc);
-}
-
-DummyProcess_t *contrId2DummyPc(Contr_t* contr, __u16 invokeId)
-{
-	int i;
-
-	for (i = 0; i < CAPI_MAXDUMMYPCS; i++) {
-		if (contr->dummy_pcs[i])
-			if (contr->dummy_pcs[i]->invokeId == invokeId) 
+	facConfParm.Function = facReqParm.Function;
+	switch (facReqParm.Function) {
+		case 0x0000: // GetSupportedServices
+			Info = GetSupportedServices(&facReqParm, &facConfParm);
+			break;
+		case 0x0001: // Listen
+			Info = FacListen(appl, &facReqParm, &facConfParm);
+			break;
+		case 0x0004: // Suspend
+			aplci = getAppPlci4addr(appl, cmsg->adr.adrPLCI);
+			if (!aplci) {
+				Info = CapiIllContrPlciNcci;
 				break;
+			}
+			Info = AppPlciFacSuspendReq(aplci, &facReqParm, &facConfParm);
+			break;
+		case 0x0005: // Resume
+			ret = ControllerNewPlci(appl->contr, &plci, MISDN_ID_ANY);
+			if (ret) {
+				Info = CapiNoPlciAvailable;
+				break;
+			}
+			aplci = ApplicationNewAppPlci(appl, plci);
+			if (!aplci) {
+				ControllerReleasePlci(plci);
+				Info = CapiNoPlciAvailable;
+				break;
+			}
+			Info = AppPlciFacResumeReq(aplci, &facReqParm, &facConfParm);
+			if (Info == CapiSuccess)
+				cmsg->adr.adrPLCI = plci->addr;
+			break;
+		case 0x0009: // CF Activate
+			Info = FacCFActivate(appl, &facReqParm, &facConfParm);
+			break;
+		case 0x000a: // CF Deactivate
+			Info = FacCFDeactivate(appl, &facReqParm, &facConfParm);
+			break;
+		case 0x000b: // CF Interrogate Parameters
+			Info = FacCFInterrogateParameters(appl, &facReqParm, &facConfParm);
+			break;
+		case 0x000c: // CF Interrogate Numbers
+			Info = FacCFInterrogateNumbers(appl, &facReqParm, &facConfParm);
+			break;
+		default:
+			Info = CapiSuccess;
+			facConfParm.u.Info.SupplementaryServiceInfo = CapiSupplementaryServiceNotSupported;
 	}
-	if (i == CAPI_MAXDUMMYPCS)
-		return 0;
-	
-	return contr->dummy_pcs[i];
+
+	if (Info == 0x0000)
+		capiEncodeFacConfParm(tmp, &facConfParm);
+	else
+		tmp[0] = 0;
+	cmsg->FacilityConfirmationParameter = tmp;
+	SendCmsgAnswer2Application(appl, cmsg, Info);
 }
 
-void dummyProcessTimeout(unsigned long arg)
+SSProcess_t *
+SSProcessConstr(Application_t *appl, __u16 Function, __u32 Handle)
 {
-	DummyProcess_t *dummy_pc = (DummyProcess_t *) arg;
-	Contr_t* contr = dummy_pc->contr;
-	Appl_t *appl;
-	__u8 tmp[10], *p;
-	_cmsg cmsg;
+	SSProcess_t	*sspc;
 
-
-	del_timer(&dummy_pc->tl);
-	appl = contrId2appl(contr, dummy_pc->ApplId);
-	if (!appl)
-		return;
-	
-	capi_cmsg_header(&cmsg, dummy_pc->ApplId, CAPI_FACILITY, CAPI_IND, 
-			 appl->MsgId++, contr->adrController);
-	p = &tmp[1];
-	p += capiEncodeWord(p, dummy_pc->Function);
-	p += capiEncodeFacIndCFact(p, CapiTimeOut, dummy_pc->Handle);
-	tmp[0] = p - &tmp[1];
-	contrDelDummyPc(contr, dummy_pc);
-	cmsg.FacilityIndicationParameter = tmp;
-	contrRecvCmsg(contr, &cmsg);
+	sspc = SSProcess_alloc();
+	if (!sspc)
+		return(NULL);
+	memset(sspc, 0, sizeof(SSProcess_t));
+	sspc->ApplId = appl->ApplId;
+	sspc->Function = Function;
+	sspc->Handle = Handle;
+	ControllerAddSSProcess(appl->contr, sspc);
+	return(sspc);
 }
+
+void SSProcessDestr(SSProcess_t *sspc)
+{
+	del_timer(&sspc->tl);
+	list_del_init(&sspc->head);
+	SSProcess_free(sspc);
+}
+
+static void
+SendSSFacilityInd(Application_t *appl, __u32 addr, __u8 *para)
+{
+	_cmsg	*cmsg;
+
+	CMSG_ALLOC(cmsg);
+	capi_cmsg_header(cmsg, appl->ApplId, CAPI_FACILITY, CAPI_IND, appl->MsgId++, addr);
+	cmsg->FacilitySelector = 0x0003;
+	cmsg->FacilityIndicationParameter = para;
+	SendCmsg2Application(appl, cmsg);
+}
+
+static void
+SendSSFacilityInd2All(Controller_t *contr, __u32 nMask, __u8 *para)
+{
+	struct list_head	*item;
+	Application_t		*appl;
+
+	list_for_each(item, &contr->Applications) {
+		appl = (Application_t *)item;
+		if (test_bit(APPL_STATE_RELEASE, &appl->state))
+			continue;
+		if (!(appl->NotificationMask & nMask))
+			continue;
+		SendSSFacilityInd(appl, contr->addr, para);
+	}
+}
+
+void
+SSProcessTimeout(unsigned long arg)
+{
+	SSProcess_t	*sspc = (SSProcess_t *) arg;
+	Application_t	*appl;
+	__u8		tmp[10], *p;
+
+	appl = getApplication4Id(sspc->contr, sspc->ApplId);
+	if (!appl) {
+		SSProcessDestr(sspc);
+		return;
+	}
+	p = &tmp[1];
+	p += capiEncodeWord(p, sspc->Function);
+	p += capiEncodeFacIndCFact(p, CapiTimeOut, sspc->Handle);
+	tmp[0] = p - &tmp[1];
+	SendSSFacilityInd(appl, sspc->addr, tmp);
+	SSProcessDestr(sspc);
+}
+
+void SSProcessAddTimer(SSProcess_t *sspc, int msec)
+{
+	sspc->tl.function = SSProcessTimeout;
+	sspc->tl.data = (unsigned long) sspc;
+	init_timer(&sspc->tl);
+	sspc->tl.expires = jiffies + (msec * HZ) / 1000;
+	add_timer(&sspc->tl);
+}
+
 
 #if 0
 void printPublicPartyNumber(struct PublicPartyNumber *publicPartyNumber)
@@ -570,16 +540,15 @@ void printAddress(struct Address *address)
 }
 #endif
 
-void contrDummyFacility(Contr_t *contr, Q931_info_t *qi)
+static void 
+SSProcessFacility(Controller_t *contr, Q931_info_t *qi)
 {
-	Appl_t			*appl;
+	Application_t		*appl;
         int			ie_len;
 	struct asn1_parm	parm;
-	DummyProcess_t		*dummy_pc;
-	_cmsg			cmsg;
-	__u8			tmp[255];
+	SSProcess_t		*sspc;
+	__u8			tmp[256];
         __u8			*p, *end;
-	__u16			ApplId;
 
         if (!qi || !qi->facility) {
 		int_error();
@@ -601,136 +570,104 @@ void contrDummyFacility(Contr_t *contr, Q931_info_t *qi)
         }
 	ParseComponent(&parm, p, end);
 	switch (parm.comp) {
-	case invoke:
+		case invoke:
 #if 0
-		printk("invokeId %d\n", parm.u.inv.invokeId);
-		printk("operationValue %d\n", parm.u.inv.operationValue);
+			printk("invokeId %d\n", parm.u.inv.invokeId);
+			printk("operationValue %d\n", parm.u.inv.operationValue);
 #endif
-		switch (parm.u.inv.operationValue) {
-		case 0x0009: 
+			switch (parm.u.inv.operationValue) {
+				case 0x0009: 
 #if 0
-			printk("procedure %d basicService %d\n", parm.c.inv.o.actNot.procedure,
-			       parm.c.inv.o.actNot.basicService);
-			printServedUserNr(&parm.c.inv.o.actNot.servedUserNr);
-			printAddress(&parm.c.inv.o.actNot.address);
+					printk("procedure %d basicService %d\n", parm.c.inv.o.actNot.procedure,
+						parm.c.inv.o.actNot.basicService);
+					printServedUserNr(&parm.c.inv.o.actNot.servedUserNr);
+					printAddress(&parm.c.inv.o.actNot.address);
 #endif
-			for (ApplId = 1; ApplId <= CAPI_MAXAPPL; ApplId++) {
-				appl = contrId2appl(contr, ApplId);
-				if (!appl)
-					continue;
-				if (!(appl->NotificationMask & 0x00000010))
-					continue;
-				
-				capi_cmsg_header(&cmsg, ApplId, CAPI_FACILITY, CAPI_IND, 
-						 appl->MsgId++, contr->adrController);
-				p = &tmp[1];
-				p += capiEncodeWord(p, 0x8006);
-				p += capiEncodeFacIndCFNotAct(p, &parm.u.inv.o.actNot);
-				tmp[0] = p - &tmp[1];
-				cmsg.FacilitySelector = 0x0003;
-				cmsg.FacilityIndicationParameter = tmp;
-				contrRecvCmsg(contr, &cmsg);
+					p = &tmp[1];
+					p += capiEncodeWord(p, 0x8006);
+					p += capiEncodeFacIndCFNotAct(p, &parm.u.inv.o.actNot);
+					tmp[0] = p - &tmp[1];
+					SendSSFacilityInd2All(contr, SuppServiceCF, tmp);
+					break;
+				case 0x000a: 
+#if 0
+					printk("procedure %d basicService %d\n", parm.c.inv.o.deactNot.procedure,
+						parm.c.inv.o.deactNot.basicService);
+					printServedUserNr(&parm.c.inv.o.deactNot.servedUserNr);
+#endif
+					p = &tmp[1];
+					p += capiEncodeWord(p, 0x8007);
+					p += capiEncodeFacIndCFNotDeact(p, &parm.u.inv.o.deactNot);
+					tmp[0] = p - &tmp[1];
+					SendSSFacilityInd2All(contr, SuppServiceCF, tmp);
+					break;
+				default:
+					int_error();
 			}
 			break;
-		case 0x000a: 
-#if 0
-			printk("procedure %d basicService %d\n", parm.c.inv.o.deactNot.procedure,
-			       parm.c.inv.o.deactNot.basicService);
-			printServedUserNr(&parm.c.inv.o.deactNot.servedUserNr);
-#endif
-			for (ApplId = 1; ApplId <= CAPI_MAXAPPL; ApplId++) {
-				appl = contrId2appl(contr, ApplId);
-				if (!appl)
-					continue;
-				if (!(appl->NotificationMask & 0x00000010))
-					continue;
-				
-				capi_cmsg_header(&cmsg, ApplId, CAPI_FACILITY, CAPI_IND, 
-						 appl->MsgId++, contr->adrController);
-				p = &tmp[1];
-				p += capiEncodeWord(p, 0x8007);
-				p += capiEncodeFacIndCFNotDeact(p, &parm.u.inv.o.deactNot);
-				tmp[0] = p - &tmp[1];
-				cmsg.FacilitySelector = 0x0003;
-				cmsg.FacilityIndicationParameter = tmp;
-				contrRecvCmsg(contr, &cmsg);
+		case returnResult:
+			sspc = getSSProcess4Id(contr, parm.u.retResult.invokeId);
+			if (!sspc)
+				return;
+			appl = getApplication4Id(contr, sspc->ApplId);
+			if (!appl)
+				return;
+			p = &tmp[1];
+			p += capiEncodeWord(p, sspc->Function);
+			switch (sspc->Function) {
+				case 0x0009:
+					p += capiEncodeFacIndCFact(p, 0, sspc->Handle);
+					break;
+				case 0x000a:
+					p += capiEncodeFacIndCFdeact(p, 0, sspc->Handle);
+					break;
+				case 0x000b:
+					p += capiEncodeFacIndCFinterParameters(p, 0, sspc->Handle, 
+						&parm.u.retResult.o.resultList);
+					break;
+				case 0x000c:
+					p += capiEncodeFacIndCFinterNumbers(p, 0, sspc->Handle, 
+						&parm.u.retResult.o.list);
+					break;
+				default:
+					int_error();
+					break;
 			}
+			tmp[0] = p - &tmp[1];
+			SendSSFacilityInd(appl, sspc->addr, tmp);
+			SSProcessDestr(sspc);
+			break;
+		case returnError:
+			sspc = getSSProcess4Id(contr, parm.u.retResult.invokeId);
+			if (!sspc)
+				return;
+			appl = getApplication4Id(contr, sspc->ApplId);
+			if (!appl)
+				return;
+			p = &tmp[1];
+			p += capiEncodeWord(p, sspc->Function);
+			p += capiEncodeFacIndCFact(p, 0x3600 | (parm.u.retError.errorValue & 0xff), 
+				sspc->Handle);
+			tmp[0] = p - &tmp[1];
+			SendSSFacilityInd(appl, sspc->addr, tmp);
+			SSProcessDestr(sspc);
 			break;
 		default:
 			int_error();
-		}
-		break;
-	case returnResult:
-		dummy_pc = contrId2DummyPc(contr, parm.u.retResult.invokeId);
-		if (!dummy_pc)
-			return;
-
-		appl = contrId2appl(contr, dummy_pc->ApplId);
-		if (!appl)
-			return;
-
-		capi_cmsg_header(&cmsg, dummy_pc->ApplId, CAPI_FACILITY, CAPI_IND, 
-				 appl->MsgId++, contr->adrController);
-		p = &tmp[1];
-		p += capiEncodeWord(p, dummy_pc->Function);
-		switch (dummy_pc->Function) {
-		case 0x0009:
-			p += capiEncodeFacIndCFact(p, 0, dummy_pc->Handle);
-			break;
-		case 0x000a:
-			p += capiEncodeFacIndCFdeact(p, 0, dummy_pc->Handle);
-			break;
-		case 0x000b:
-			p += capiEncodeFacIndCFinterParameters(p, 0, dummy_pc->Handle, 
-							       &parm.u.retResult.o.resultList);
-			break;
-		case 0x000c:
-			p += capiEncodeFacIndCFinterNumbers(p, 0, dummy_pc->Handle, 
-							    &parm.u.retResult.o.list);
-			break;
-		default:
-			int_error();
-			break;
-		}
-		tmp[0] = p - &tmp[1];
-		cmsg.FacilityIndicationParameter = tmp;
-		contrRecvCmsg(contr, &cmsg);
-		contrDelDummyPc(contr, dummy_pc);
-		break;
-	case returnError:
-		dummy_pc = contrId2DummyPc(contr, parm.u.retResult.invokeId);
-		if (!dummy_pc)
-			return;
-
-		appl = contrId2appl(contr, dummy_pc->ApplId);
-		if (!appl)
-			return;
-
-		capi_cmsg_header(&cmsg, dummy_pc->ApplId, CAPI_FACILITY, CAPI_IND, 
-				 appl->MsgId++, contr->adrController);
-		p = &tmp[1];
-		p += capiEncodeWord(p, dummy_pc->Function);
-		p += capiEncodeFacIndCFact(p, 0x3600 | (parm.u.retError.errorValue &0xff), 
-				       dummy_pc->Handle);
-		tmp[0] = p - &tmp[1];
-		cmsg.FacilityIndicationParameter = tmp;
-		contrRecvCmsg(contr, &cmsg);
-		contrDelDummyPc(contr, dummy_pc);
-		break;
-	default:
-		int_error();
 	}
 }
 
-
-int contrDummyInd(Contr_t *contr, __u32 prim, struct sk_buff *skb)
+int
+Supplementary_l3l4(Controller_t *contr, __u32 prim, struct sk_buff *skb)
 {
 	int ret = -EINVAL;
 
+	if (!skb)
+		return(ret);
 	switch (prim) {
 		case CC_FACILITY | INDICATION:
-			if (skb && skb->len)
-				contrDummyFacility(contr, (Q931_info_t *)skb->data);
+			if (skb->len)
+				SSProcessFacility(contr, (Q931_info_t *)skb->data);
 			dev_kfree_skb(skb);
 			ret = 0;
 			break;

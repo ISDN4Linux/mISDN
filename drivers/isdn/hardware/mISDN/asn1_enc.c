@@ -1,8 +1,8 @@
-/* $Id: asn1_enc.c,v 1.2 2003/07/21 12:44:45 kkeil Exp $
+/* $Id: asn1_enc.c,v 1.3 2003/11/21 22:29:41 keil Exp $
  *
  */
 
-#include "capi.h"
+#include "m_capi.h"
 #include "helper.h"
 #include "asn1_enc.h"
 

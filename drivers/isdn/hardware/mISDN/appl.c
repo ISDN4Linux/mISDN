@@ -1,8 +1,14 @@
-/* $Id: appl.c,v 1.7 2003/11/11 20:31:34 keil Exp $
+/* $Id: appl.c,v 1.8 2003/11/21 22:29:41 keil Exp $
+ *
+ *  Applications are owned by the controller and only
+ *  handle this controller, multiplexing multiple
+ *  controller with one application is done in the higher
+ *  driver independ CAPI driver. The application contain
+ *  the Listen state machine.
  *
  */
 
-#include "capi.h"
+#include "m_capi.h"
 #include "helper.h"
 #include "debug.h"
 #include "mISDNManufacturer.h"
@@ -10,188 +16,370 @@
 #define applDebug(appl, lev, fmt, args...) \
         capidebug(lev, fmt, ## args)
 
-void applConstr(Appl_t *appl, Contr_t *contr, __u16 ApplId, capi_register_params *rp)
+static struct list_head	garbage_applications = LIST_HEAD_INIT(garbage_applications);
+
+int
+ApplicationConstr(Controller_t *contr, __u16 ApplId, capi_register_params *rp)
 {
-	memset(appl, 0, sizeof(Appl_t));
+	Application_t	*appl = kmalloc(sizeof(Application_t), GFP_KERNEL);
+
+	if (!appl) {
+		return(-ENOMEM);
+	}
+	memset(appl, 0, sizeof(Application_t));
+	INIT_LIST_HEAD(&appl->head);
 	appl->contr = contr;
+	appl->maxplci = contr->maxplci;
+	appl->AppPlcis  = kmalloc(appl->maxplci * sizeof(AppPlci_t *), GFP_KERNEL);
+	if (!appl->AppPlcis) {
+		kfree(appl);
+		return(-ENOMEM);
+	}
+	memset(appl->AppPlcis, 0, appl->maxplci * sizeof(AppPlci_t *));
 	appl->ApplId = ApplId;
 	appl->MsgId = 1;
 	appl->NotificationMask = 0;
-	memcpy(&appl->rp, rp, sizeof(capi_register_params));
-	listenConstr(&appl->listen, contr, ApplId);
+	memcpy(&appl->reg_params, rp, sizeof(capi_register_params));
+	listenConstr(appl);
+	list_add(&appl->head, &contr->Applications);
+	test_and_set_bit(APPL_STATE_ACTIV, &appl->state);
+	return(0);
 }
 
-void applDestr(Appl_t *appl)
+/*
+ * Destroy the Application
+ *
+ * depending who initiate this we cannot release imediatly, if
+ * any AppPlci is still in use.
+ *
+ * @who:   0 - a AppPlci is released in state APPL_STATE_RELEASE
+ *         1 - Application is released from CAPI application
+ *         2 - the controller is resetted
+ *         3 - the controller is removed
+ *         4 - the CAPI module will be unload
+ */
+int
+ApplicationDestr(Application_t *appl, int who)
 {
-	int i;
+	int		i, used = 0;
+	AppPlci_t	**aplci_p = appl->AppPlcis;
 
-	listenDestr(&appl->listen);
-	for (i = 0; i < CAPI_MAXPLCI; i++) {
-		if (appl->cplcis[i]) {
-			cplciDestr(appl->cplcis[i]);
-			kfree(appl->cplcis[i]);
-			appl->cplcis[i] = NULL;
+	if (test_and_set_bit(APPL_STATE_DESTRUCTOR, &appl->state)) {
+		// we are allready in this function
+		return(-EBUSY);
+	}
+	test_and_set_bit(APPL_STATE_RELEASE, &appl->state);
+	test_and_clear_bit(APPL_STATE_ACTIV, &appl->state);
+	listenDestr(appl);
+	if (who > 2) {
+		appl->contr = NULL;
+	}
+	if (aplci_p) {
+		for (i = 0; i < appl->maxplci; i++) {
+			if (*aplci_p) {
+				switch (who) {
+					case 4:
+						AppPlciDestr(*aplci_p);
+						*aplci_p = NULL;
+						break;
+					case 1:
+					case 2:
+					case 3:
+						AppPlciRelease(*aplci_p);
+					case 0:
+						if ((volatile AppPlci_t *)(*aplci_p))
+							used++;
+						break;
+				}
+			}
+			aplci_p++;
 		}
 	}
-}
-
-Cplci_t *applAdr2cplci(Appl_t *appl, __u32 adr)
-{
-	int i = (adr >> 8) & 0xff;
-
-	if ((i < 1) || (i > CAPI_MAXPLCI)) {
-		int_error();
-		return 0;
+	if (used) {
+		if (who == 3) {
+			list_del_init(&appl->head);
+			list_add(&appl->head, &garbage_applications);
+		}
+		test_and_clear_bit(APPL_STATE_DESTRUCTOR, &appl->state);
+		return(-EBUSY);
 	}
-	return appl->cplcis[i - 1];
+	list_del_init(&appl->head);
+	appl->maxplci = 0;
+	kfree(appl->AppPlcis);
+	appl->AppPlcis = NULL;
+	kfree(appl);
+	return(0);
 }
 
-void applSendMessage(Appl_t *appl, struct sk_buff *skb)
+AppPlci_t *
+getAppPlci4addr(Application_t *appl, __u32 addr)
 {
-	Plci_t *plci;
-	Cplci_t *cplci;
+	int plci_idx = (addr >> 8) & 0xff;
+
+	if ((plci_idx < 1) || (plci_idx >= appl->maxplci)) {
+		int_error();
+		return NULL;
+	}
+	return(appl->AppPlcis[plci_idx - 1]);
+}
+
+static void
+FacilityReq(Application_t *appl, struct sk_buff *skb)
+{
+	_cmsg		*cmsg;
+	AppPlci_t	*aplci;
+
+	cmsg = cmsg_alloc();
+	if (!cmsg) {
+		int_error();
+		dev_kfree_skb(skb);
+		return;
+	}
+	capi_message2cmsg(cmsg, skb->data);
+	switch (cmsg->FacilitySelector) {
+		case 0x0000: // Handset
+		case 0x0001: // DTMF
+			aplci = getAppPlci4addr(appl, CAPIMSG_CONTROL(skb->data));
+			if (aplci && aplci->ncci) {
+				ncciGetCmsg(aplci->ncci, cmsg);
+				break;
+			}
+			SendCmsgAnswer2Application(appl, cmsg, CapiIllContrPlciNcci);
+			break;
+		case 0x0003: // SupplementaryServices
+			SupplementaryFacilityReq(appl, cmsg);
+			break;
+		default:
+			int_error();
+			SendCmsgAnswer2Application(appl, cmsg, CapiFacilityNotSupported);
+			break;
+	}
+	dev_kfree_skb(skb);
+}
+
+void
+ApplicationSendMessage(Application_t *appl, struct sk_buff *skb)
+{
+	Plci_t		*plci;
+	AppPlci_t	*aplci;
 
 	switch (CAPICMD(CAPIMSG_COMMAND(skb->data), CAPIMSG_SUBCOMMAND(skb->data))) {
+		// for NCCI state machine
+		case CAPI_DATA_B3_REQ:
+		case CAPI_DATA_B3_RESP:
+		case CAPI_CONNECT_B3_REQ:
+		case CAPI_CONNECT_B3_RESP:
+		case CAPI_CONNECT_B3_ACTIVE_RESP:
+		case CAPI_DISCONNECT_B3_REQ:
+		case CAPI_DISCONNECT_B3_RESP:
+			aplci = getAppPlci4addr(appl, CAPIMSG_CONTROL(skb->data));
+			if (!aplci) {
+				AnswerMessage2Application(appl, skb, CapiIllContrPlciNcci);
+				goto free;
+			}
+			if (!aplci->ncci) {
+				int_error();
+				AnswerMessage2Application(appl, skb, CapiIllContrPlciNcci);
+				goto free;
+			}
+			ncciSendMessage(aplci->ncci, skb);
+			break;
+		// for PLCI state machine
+		case CAPI_INFO_REQ:
+		case CAPI_ALERT_REQ:
+		case CAPI_CONNECT_RESP:
+		case CAPI_CONNECT_ACTIVE_RESP:
+		case CAPI_DISCONNECT_REQ:
+		case CAPI_DISCONNECT_RESP:
+		case CAPI_SELECT_B_PROTOCOL_REQ:
+			aplci = getAppPlci4addr(appl, CAPIMSG_CONTROL(skb->data));
+			if (!aplci) {
+				AnswerMessage2Application(appl, skb, CapiIllContrPlciNcci);
+				goto free;
+			}
+			AppPlciSendMessage(aplci, skb);
+			break;
+		case CAPI_CONNECT_REQ:
+			if (ControllerNewPlci(appl->contr, &plci, MISDN_ID_ANY)) {
+				AnswerMessage2Application(appl, skb, CapiNoPlciAvailable);
+				goto free;
+			}
+			aplci = ApplicationNewAppPlci(appl, plci);
+			if (!aplci) {
+				AnswerMessage2Application(appl, skb, CapiNoPlciAvailable);
+				goto free;
+			}
+			AppPlciSendMessage(aplci, skb);
+			break;
 
-	// for NCCI state machine
-	case CAPI_DATA_B3_REQ:
-	case CAPI_DATA_B3_RESP:
-	case CAPI_CONNECT_B3_REQ:
-	case CAPI_CONNECT_B3_RESP:
-	case CAPI_CONNECT_B3_ACTIVE_RESP:
-	case CAPI_DISCONNECT_B3_REQ:
-	case CAPI_DISCONNECT_B3_RESP:
-		cplci = applAdr2cplci(appl, CAPIMSG_CONTROL(skb->data));
-		if (!cplci) {
-			contrAnswerMessage(appl->contr, skb, CapiIllContrPlciNcci);
-			goto free;
-		}
-		if (!cplci->ncci) {
-			int_error();
-			contrAnswerMessage(appl->contr, skb, CapiIllContrPlciNcci);
-			goto free;
-		}
-		ncciSendMessage(cplci->ncci, skb);
-		break;
-	// for PLCI state machine
-	case CAPI_INFO_REQ:
-	case CAPI_ALERT_REQ:
-	case CAPI_CONNECT_RESP:
-	case CAPI_CONNECT_ACTIVE_RESP:
-	case CAPI_DISCONNECT_REQ:
-	case CAPI_DISCONNECT_RESP:
-	case CAPI_SELECT_B_PROTOCOL_REQ:
-		cplci = applAdr2cplci(appl, CAPIMSG_CONTROL(skb->data));
-		if (!cplci) {
-			contrAnswerMessage(appl->contr, skb, CapiIllContrPlciNcci);
-			goto free;
-		}
-		cplciSendMessage(cplci, skb);
-		break;
-	case CAPI_CONNECT_REQ:
-		plci = contrNewPlci(appl->contr, MISDN_ID_ANY);
-		if (!plci) {
-			contrAnswerMessage(appl->contr, skb, CapiNoPlciAvailable);
-			goto free;
-		}
-		cplci = applNewCplci(appl, plci);
-		if (!cplci) {
-			contrDelPlci(appl->contr, plci);
-			contrAnswerMessage(appl->contr, skb, CapiNoPlciAvailable);
-			goto free;
-		}
-		cplciSendMessage(cplci, skb);
-		break;
+			// for LISTEN state machine
+			case CAPI_LISTEN_REQ:
+				listenSendMessage(appl, skb);
+			break;
 
-	// for LISTEN state machine
-	case CAPI_LISTEN_REQ:
-		listenSendMessage(&appl->listen, skb);
-		break;
-
-	// other
-	case CAPI_FACILITY_REQ:
-		applFacilityReq(appl, skb);
-		break;
-	case CAPI_FACILITY_RESP:
-		goto free;
-	case CAPI_MANUFACTURER_REQ:
-		applManufacturerReq(appl, skb);
-		break;
-	case CAPI_INFO_RESP:
-		goto free;
-	default:
-		applDebug(appl, CAPI_DBG_WARN, "applSendMessage: %#x %#x not handled!", 
-			  CAPIMSG_COMMAND(skb->data), CAPIMSG_SUBCOMMAND(skb->data));
-		if (CAPIMSG_SUBCOMMAND(skb->data) == CAPI_REQ)
-			contrAnswerMessage(appl->contr, skb, 
-					   CapiMessageNotSupportedInCurrentState);
-		goto free;
+		// other
+		case CAPI_FACILITY_REQ:
+			FacilityReq(appl, skb);
+			break;
+		case CAPI_FACILITY_RESP:
+			goto free;
+		case CAPI_MANUFACTURER_REQ:
+			applManufacturerReq(appl, skb);
+			break;
+		case CAPI_INFO_RESP:
+			goto free;
+		default:
+			applDebug(appl, CAPI_DBG_WARN, "applSendMessage: %#x %#x not handled!", 
+				CAPIMSG_COMMAND(skb->data), CAPIMSG_SUBCOMMAND(skb->data));
+			if (CAPIMSG_SUBCOMMAND(skb->data) == CAPI_REQ)
+				AnswerMessage2Application(appl, skb, 
+					CapiMessageNotSupportedInCurrentState);
+			goto free;
 	}
-
 	return;
-
  free:
 	dev_kfree_skb(skb);
 }
 
-void applFacilityReq(Appl_t *appl, struct sk_buff *skb)
+AppPlci_t *
+ApplicationNewAppPlci(Application_t *appl, Plci_t *plci)
 {
-	_cmsg	cmsg;
-	Cplci_t	*cplci;
+	AppPlci_t	*aplci;
+	int		plci_idx = (plci->addr >> 8) & 0xff;
 
-	capi_message2cmsg(&cmsg, skb->data);
-	switch (cmsg.FacilitySelector) {
-		case 0x0000: // Handset
-		case 0x0001: // DTMF
-			cplci = applAdr2cplci(appl, CAPIMSG_CONTROL(skb->data));
-			if (cplci && cplci->ncci) {
-				ncciSendMessage(cplci->ncci, skb);
-				return;
-			}
-			contrAnswerMessage(appl->contr, skb, CapiIllContrPlciNcci);
-			break;
-		case 0x0003: // SupplementaryServices
-			applSuppFacilityReq(appl, &cmsg);
-			break;
-		default:
-			int_error();
-			contrAnswerMessage(appl->contr, skb, CapiFacilityNotSupported);
-			break;
-	}
-	dev_kfree_skb(skb);
-}
-
-Cplci_t *applNewCplci(Appl_t *appl, Plci_t *plci)
-{
-	Cplci_t *cplci;
-	int i = (plci->adrPLCI >> 8);
-
-	if (appl->cplcis[i - 1]) {
+	if (test_bit(APPL_STATE_RELEASE, &appl->state))
+		return(NULL);
+	if ((plci_idx < 1) || (plci_idx >= appl->maxplci)) {
 		int_error();
-		return 0;
+		return(NULL);
 	}
-	cplci = kmalloc(sizeof(Cplci_t), GFP_ATOMIC);
-	cplciConstr(cplci, appl, plci);
-	appl->cplcis[i - 1] = cplci;
-	plciAttachCplci(plci, cplci);
-	return cplci;
+	if (appl->AppPlcis[plci_idx - 1]) {
+		int_error();
+		return(NULL);
+	}
+	if (AppPlciConstr(&aplci, appl, plci)) {
+		int_error();
+		return(NULL);
+	}
+	applDebug(appl, CAPI_DBG_APPL_INFO, "ApplicationNewAppPlci: idx(%d) aplci(%p) appl(%p) plci(%p)",
+		plci_idx, aplci, appl, plci);
+	appl->AppPlcis[plci_idx - 1] = aplci;
+	plciAttachAppPlci(plci, aplci);
+	return(aplci);
 }
 
-void applDelCplci(Appl_t *appl, Cplci_t *cplci)
+void
+ApplicationDelAppPlci(Application_t *appl, AppPlci_t *aplci)
 {
-	int i = cplci->adrPLCI >> 8;
+	int	plci_idx = (aplci->addr >> 8) & 0xff;
 
-	if ((i < 1) || (i > CAPI_MAXPLCI)) {
+	if ((plci_idx < 1) || (plci_idx >= appl->maxplci)) {
 		int_error();
 		return;
 	}
-	if (appl->cplcis[i-1] != cplci) {
+	if (appl->AppPlcis[plci_idx - 1] != aplci) {
 		int_error();
 		return;
 	}
-	cplciDestr(cplci);
-	kfree(cplci);
-	appl->cplcis[i-1] = NULL;
+	appl->AppPlcis[plci_idx - 1] = NULL;
+	if (test_bit(APPL_STATE_RELEASE, &appl->state) &&
+		!test_bit(APPL_STATE_DESTRUCTOR, &appl->state))
+		ApplicationDestr(appl, 0);
+}
+
+void
+SendCmsg2Application(Application_t *appl, _cmsg *cmsg)
+{
+	struct sk_buff	*skb;
+	
+	if (test_bit(APPL_STATE_RELEASE, &appl->state)) {
+		/* Application is released and cannot receive messages
+		 * anymore. To avoid stalls in the state machines we
+		 * must answer INDICATIONS.
+		 */
+		AppPlci_t	*aplci;
+
+		if (CAPI_IND != cmsg->Subcommand)
+			goto free;
+		switch(cmsg->Command) {
+			// for NCCI state machine
+			case CAPI_CONNECT_B3:
+				cmsg->Reject = 2;
+			case CAPI_CONNECT_B3_ACTIVE:
+			case CAPI_DISCONNECT_B3:
+				aplci = getAppPlci4addr(appl, (cmsg->adr.adrNCCI & 0xffff));
+				if (!aplci)
+					goto free;
+				if (!aplci->ncci) {
+					int_error();
+					goto free;
+				}
+				capi_cmsg_answer(cmsg);
+				ncciGetCmsg(aplci->ncci, cmsg);
+				break;
+			// for PLCI state machine
+			case CAPI_CONNECT:
+				cmsg->Reject = 2;
+			case CAPI_CONNECT_ACTIVE:
+			case CAPI_DISCONNECT:
+				aplci = getAppPlci4addr(appl, (cmsg->adr.adrPLCI & 0xffff));
+				if (!aplci)
+					goto free;
+				capi_cmsg_answer(cmsg);
+				AppPlciGetCmsg(aplci, cmsg);
+				break;
+			case CAPI_FACILITY:
+			case CAPI_MANUFACTURER:
+			case CAPI_INFO:
+				goto free;
+			default:
+				int_error();
+				goto free;
+		}
+		return;
+	}
+	if (!(skb = alloc_skb(CAPI_MSG_DEFAULT_LEN, GFP_ATOMIC))) {
+		printk(KERN_WARNING "%s: no mem for %d bytes\n", __FUNCTION__, CAPI_MSG_DEFAULT_LEN);
+		int_error();
+		goto free;
+	}
+	capi_cmsg2message(cmsg, skb->data);
+	applDebug(appl, CAPI_DBG_APPL_MSG, "%s: len(%d) applid(%x) %s msgnr(%d) addr(%08x)",
+		__FUNCTION__, CAPIMSG_LEN(skb->data), cmsg->ApplId, capi_cmd2str(cmsg->Command, cmsg->Subcommand),
+		cmsg->Messagenumber, cmsg->adr.adrController);
+	if (CAPI_MSG_DEFAULT_LEN < CAPIMSG_LEN(skb->data)) {
+		printk(KERN_ERR "%s: CAPI_MSG_DEFAULT_LEN overrun (%d/%d)\n",  __FUNCTION__,
+			CAPIMSG_LEN(skb->data), CAPI_MSG_DEFAULT_LEN);
+		int_error();
+		dev_kfree_skb(skb);
+		goto free; 
+	}
+	skb_put(skb, CAPIMSG_LEN(skb->data));
+#ifdef OLDCAPI_DRIVER_INTERFACE
+	appl->contr->ctrl->handle_capimsg(appl->contr->ctrl, cmsg->ApplId, skb);
+#else
+	capi_ctr_handle_message(appl->contr->ctrl, cmsg->ApplId, skb);
+#endif
+free:
+	cmsg_free(cmsg);
+}
+
+void
+SendCmsgAnswer2Application(Application_t *appl, _cmsg *cmsg, __u16 Info)
+{
+	capi_cmsg_answer(cmsg);
+	cmsg->Info = Info;
+	SendCmsg2Application(appl, cmsg);
+}
+
+void
+AnswerMessage2Application(Application_t *appl, struct sk_buff *skb, __u16 Info)
+{
+	_cmsg	*cmsg;
+
+	CMSG_ALLOC(cmsg);
+	capi_message2cmsg(cmsg, skb->data);
+	SendCmsgAnswer2Application(appl, cmsg, Info);
 }
 
 #define AVM_MANUFACTURER_ID	0x214D5641 /* "AVM!" */
@@ -203,12 +391,13 @@ struct AVMD2Trace {
 	__u8 data[4];
 };
 
-void applManufacturerReqAVM(Appl_t *appl, _cmsg *cmsg, struct sk_buff *skb)
+void applManufacturerReqAVM(Application_t *appl, _cmsg *cmsg, struct sk_buff *skb)
 {
 	struct AVMD2Trace *at;
 
 	if (cmsg->Class != CLASS_AVM) {
 		applDebug(appl, CAPI_DBG_APPL_INFO, "CAPI: unknown class %#x\n", cmsg->Class);
+		cmsg_free(cmsg);
 		dev_kfree_skb(skb);
 		return;
 	}
@@ -220,9 +409,9 @@ void applManufacturerReqAVM(Appl_t *appl, _cmsg *cmsg, struct sk_buff *skb)
 				break;
 			}
 			if (memcmp(at->data, "\200\014\000\000", 4) == 0) {
-				test_and_set_bit(APPL_FLAG_D2TRACE, &appl->flags);
+				test_and_set_bit(APPL_STATE_D2TRACE, &appl->state);
 			} else if (memcmp(at->data, "\000\000\000\000", 4) == 0) {
-				test_and_clear_bit(APPL_FLAG_D2TRACE, &appl->flags);
+				test_and_clear_bit(APPL_STATE_D2TRACE, &appl->state);
 			} else {
 				int_error();
 			}
@@ -230,73 +419,101 @@ void applManufacturerReqAVM(Appl_t *appl, _cmsg *cmsg, struct sk_buff *skb)
 		default:
 			applDebug(appl, CAPI_DBG_APPL_INFO, "CAPI: unknown function %#x\n", cmsg->Function);
 	}
+	cmsg_free(cmsg);
 	dev_kfree_skb(skb);
 }
 
-void applManufacturerReqmISDN(Appl_t *appl, _cmsg *cmsg, struct sk_buff *skb)
+void applManufacturerReqmISDN(Application_t *appl, _cmsg *cmsg, struct sk_buff *skb)
 {
-	Cplci_t	*cplci;
+	AppPlci_t	*aplci;
 
 	switch (cmsg->Class) {
 		case mISDN_MF_CLASS_HANDSET:
 			/* Note normally MANUFATURER messages are only defined for
 			 * controller address we extent it here to PLCI/NCCI
 			 */
-			cplci = applAdr2cplci(appl, CAPIMSG_CONTROL(skb->data));
-			if (cplci && cplci->ncci) {
-				ncciSendMessage(cplci->ncci, skb);
+			aplci = getAppPlci4addr(appl, CAPIMSG_CONTROL(skb->data));
+			if (aplci && aplci->ncci) {
+				cmsg_free(cmsg);
+				ncciSendMessage(aplci->ncci, skb);
 				return;
 			}
-			contrAnswerMessage(appl->contr, skb, CapiIllContrPlciNcci);
+			SendCmsgAnswer2Application(appl, cmsg, CapiIllContrPlciNcci);
 			break;
 		default:
-			dev_kfree_skb(skb);
+			cmsg_free(cmsg);
 			break;
 	}
+	dev_kfree_skb(skb);
 }
 
-void applManufacturerReq(Appl_t *appl, struct sk_buff *skb)
+void
+applManufacturerReq(Application_t *appl, struct sk_buff *skb)
 {
-	_cmsg	cmsg;
+	_cmsg	*cmsg;
 
 	if (skb->len < 16 + 8) {
 		dev_kfree_skb(skb);
 		return;
 	}
-	capi_message2cmsg(&cmsg, skb->data);
-	switch (cmsg.ManuID) {
+	cmsg = cmsg_alloc();
+	if (!cmsg) {
+		int_error();
+		dev_kfree_skb(skb);
+		return;
+	}
+	capi_message2cmsg(cmsg, skb->data);
+	switch (cmsg->ManuID) {
 		case mISDN_MANUFACTURER_ID:
-			applManufacturerReqmISDN(appl, &cmsg, skb);
+			applManufacturerReqmISDN(appl, cmsg, skb);
 			break;
 		case AVM_MANUFACTURER_ID:
-			applManufacturerReqAVM(appl, &cmsg, skb);
+			applManufacturerReqAVM(appl, cmsg, skb);
 			break;
 		default:
-			applDebug(appl, CAPI_DBG_APPL_INFO, "CAPI: unknown ManuID %#x\n", cmsg.ManuID);
+			applDebug(appl, CAPI_DBG_APPL_INFO, "CAPI: unknown ManuID %#x\n", cmsg->ManuID);
+			cmsg_free(cmsg);
 			dev_kfree_skb(skb);
 			break;
 	}
 }
 
-void applD2Trace(Appl_t *appl, u_char *buf, int len)
+void applD2Trace(Application_t *appl, u_char *buf, int len)
 {
-	_cmsg cmsg;
-	__u8 manuData[255];
+	_cmsg	*cmsg;
+	__u8	manuData[255];
 
-	if (!test_bit(APPL_FLAG_D2TRACE, &appl->flags))
+	if (!test_bit(APPL_STATE_D2TRACE, &appl->state))
 		return;
 	
-	memset(&cmsg, 0, sizeof(_cmsg));
-	capi_cmsg_header(&cmsg, appl->ApplId, CAPI_MANUFACTURER, CAPI_IND, 
-			 appl->MsgId++, appl->contr->adrController);
-	cmsg.ManuID = AVM_MANUFACTURER_ID;
-	cmsg.Class = CLASS_AVM;
-	cmsg.Function = FUNCTION_AVM_D2_TRACE;
-	cmsg.ManuData = (_cstruct) &manuData;
+	CMSG_ALLOC(cmsg);
+	capi_cmsg_header(cmsg, appl->ApplId, CAPI_MANUFACTURER, CAPI_IND, 
+			 appl->MsgId++, appl->contr->addr);
+	cmsg->ManuID = AVM_MANUFACTURER_ID;
+	cmsg->Class = CLASS_AVM;
+	cmsg->Function = FUNCTION_AVM_D2_TRACE;
+	cmsg->ManuData = (_cstruct) &manuData;
 	manuData[0] = 2 + len; // length
 	manuData[1] = 0x80;
 	manuData[2] = 0x0f;
 	memcpy(&manuData[3], buf, len);
 	
-	contrRecvCmsg(appl->contr, &cmsg);
+	SendCmsg2Application(appl, cmsg);
+}
+
+void
+free_Application(void)
+{
+	struct list_head	*item, *next;
+	int			n = 0;
+
+	if (list_empty(&garbage_applications)) {
+		printk(KERN_DEBUG "%s: no garbage\n", __FUNCTION__);
+		return;
+	}
+	list_for_each_safe(item, next, &garbage_applications) {
+		ApplicationDestr((Application_t *)item, 4);
+		n++;
+	}
+	printk(KERN_WARNING"%s: %d garbage items\n", __FUNCTION__, n);
 }

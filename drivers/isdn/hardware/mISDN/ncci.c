@@ -1,18 +1,27 @@
-/* $Id: ncci.c,v 1.15 2003/11/11 20:31:34 keil Exp $
+/* $Id: ncci.c,v 1.16 2003/11/21 22:29:41 keil Exp $
  *
  */
 
-#include "capi.h"
+#include "m_capi.h"
 #include "helper.h"
 #include "debug.h"
 #include "dss1.h"
 #include "mISDNManufacturer.h"
 
-static int ncciL4L3(Ncci_t *, u_int, int, int, void *, struct sk_buff *);
+static int	ncciL4L3(Ncci_t *, u_int, int, int, void *, struct sk_buff *);
+static void	ncciInitSt(Ncci_t *);
+static void	ncciReleaseSt(Ncci_t *);
 
 // --------------------------------------------------------------------
 // NCCI state machine
-
+//
+// Some rules:
+//   *  EV_AP_*  events come from CAPI Application
+//   *  EV_DL_*  events come from the ISDN stack
+//   *  EV_NC_*  events generated in NCCI handling
+//   *  messages are send in the routine that handle the event
+//
+// --------------------------------------------------------------------
 enum {
 	ST_NCCI_N_0,
 	ST_NCCI_N_0_1,
@@ -38,59 +47,62 @@ static char *str_st_ncci[] = {
 }; 
 
 enum {
-	EV_NCCI_CONNECT_B3_REQ,
-	EV_NCCI_CONNECT_B3_CONF,
-	EV_NCCI_CONNECT_B3_IND,
-	EV_NCCI_CONNECT_B3_RESP,
-	EV_NCCI_CONNECT_B3_ACTIVE_IND,
-	EV_NCCI_CONNECT_B3_ACTIVE_RESP,
-	EV_NCCI_RESET_B3_REQ,
-	EV_NCCI_RESET_B3_IND,
-	EV_NCCI_CONNECT_B3_T90_ACTIVE_IND,
-	EV_NCCI_DISCONNECT_B3_REQ,
-	EV_NCCI_DISCONNECT_B3_IND,
-	EV_NCCI_DISCONNECT_B3_CONF,
-	EV_NCCI_DISCONNECT_B3_RESP,
-	EV_NCCI_FACILITY_REQ,
-	EV_NCCI_MANUFACTURER_REQ,
-	EV_NCCI_SELECT_B_PROTOCOL,
-	EV_NCCI_DL_ESTABLISH_IND,
-	EV_NCCI_DL_ESTABLISH_CONF,
-	EV_NCCI_DL_RELEASE_IND,
-	EV_NCCI_DL_RELEASE_CONF,
-	EV_NCCI_DL_DOWN_IND,
+	EV_AP_CONNECT_B3_REQ,
+	EV_NC_CONNECT_B3_CONF,
+	EV_NC_CONNECT_B3_IND,
+	EV_AP_CONNECT_B3_RESP,
+	EV_NC_CONNECT_B3_ACTIVE_IND,
+	EV_AP_CONNECT_B3_ACTIVE_RESP,
+	EV_AP_RESET_B3_REQ,
+	EV_NC_RESET_B3_IND,
+	EV_NC_CONNECT_B3_T90_ACTIVE_IND,
+	EV_AP_DISCONNECT_B3_REQ,
+	EV_NC_DISCONNECT_B3_IND,
+	EV_NC_DISCONNECT_B3_CONF,
+	EV_AP_DISCONNECT_B3_RESP,
+	EV_AP_FACILITY_REQ,
+	EV_AP_MANUFACTURER_REQ,
+	EV_AP_SELECT_B_PROTOCOL,
+	EV_DL_ESTABLISH_IND,
+	EV_DL_ESTABLISH_CONF,
+	EV_DL_RELEASE_IND,
+	EV_DL_RELEASE_CONF,
+	EV_DL_DOWN_IND,
+	EV_AP_RELEASE,
 }
 
-const EV_NCCI_COUNT = EV_NCCI_DL_DOWN_IND + 1;
+const EV_NCCI_COUNT = EV_AP_RELEASE + 1;
 
 static char* str_ev_ncci[] = {
-	"EV_NCCI_CONNECT_B3_REQ",
-	"EV_NCCI_CONNECT_B3_CONF",
-	"EV_NCCI_CONNECT_B3_IND",
-	"EV_NCCI_CONNECT_B3_RESP",
-	"EV_NCCI_CONNECT_B3_ACTIVE_IND",
-	"EV_NCCI_CONNECT_B3_ACTIVE_RESP",
-	"EV_NCCI_RESET_B3_REQ",
-	"EV_NCCI_RESET_B3_IND",
-	"EV_NCCI_CONNECT_B3_T90_ACTIVE_IND",
-	"EV_NCCI_DISCONNECT_B3_REQ",
-	"EV_NCCI_DISCONNECT_B3_IND",
-	"EV_NCCI_DISCONNECT_B3_CONF",
-	"EV_NCCI_DISCONNECT_B3_RESP",
-	"EV_NCCI_FACILITY_REQ",
-	"EV_NCCI_MANUFACTURER_REQ",
-	"EV_NCCI_SELECT_B_PROTOCOL",
-	"EV_NCCI_DL_ESTABLISH_IND",
-	"EV_NCCI_DL_ESTABLISH_CONF",
-	"EV_NCCI_DL_RELEASE_IND",
-	"EV_NCCI_DL_RELEASE_CONF",
-	"EV_NCCI_DL_DOWN_IND",
+	"EV_AP_CONNECT_B3_REQ",
+	"EV_NC_CONNECT_B3_CONF",
+	"EV_NC_CONNECT_B3_IND",
+	"EV_AP_CONNECT_B3_RESP",
+	"EV_NC_CONNECT_B3_ACTIVE_IND",
+	"EV_AP_CONNECT_B3_ACTIVE_RESP",
+	"EV_AP_RESET_B3_REQ",
+	"EV_NC_RESET_B3_IND",
+	"EV_NC_CONNECT_B3_T90_ACTIVE_IND",
+	"EV_AP_DISCONNECT_B3_REQ",
+	"EV_NC_DISCONNECT_B3_IND",
+	"EV_NC_DISCONNECT_B3_CONF",
+	"EV_AP_DISCONNECT_B3_RESP",
+	"EV_AP_FACILITY_REQ",
+	"EV_AP_MANUFACTURER_REQ",
+	"EV_AP_SELECT_B_PROTOCOL",
+	"EV_DL_ESTABLISH_IND",
+	"EV_DL_ESTABLISH_CONF",
+	"EV_DL_RELEASE_IND",
+	"EV_DL_RELEASE_CONF",
+	"EV_DL_DOWN_IND",
+	"EV_AP_RELEASE",
 };
 
 static struct Fsm ncci_fsm =
 { 0, 0, 0, 0, 0 };
 
-static void ncci_debug(struct FsmInst *fi, char *fmt, ...)
+static void
+ncci_debug(struct FsmInst *fi, char *fmt, ...)
 {
 	char tmp[128];
 	char *p = tmp;
@@ -100,7 +112,7 @@ static void ncci_debug(struct FsmInst *fi, char *fmt, ...)
 	if (!ncci->ncci_m.debug)
 		return;
 	va_start(args, fmt);
-	p += sprintf(p, "NCCI 0x%x: ", ncci->adrNCCI);
+	p += sprintf(p, "NCCI 0x%x: ", ncci->addr);
 	p += vsprintf(p, fmt, args);
 	*p++ = '\n';
 	*p = 0;
@@ -108,87 +120,147 @@ static void ncci_debug(struct FsmInst *fi, char *fmt, ...)
 	va_end(args);
 }
 
-inline void ncciRecvCmsg(Ncci_t *ncci, _cmsg *cmsg)
+static inline void
+Send2Application(Ncci_t *ncci, _cmsg *cmsg)
 {
-	contrRecvCmsg(ncci->contr, cmsg);
+	SendCmsg2Application(ncci->appl, cmsg);
 }
 
-inline void ncciCmsgHeader(Ncci_t *ncci, _cmsg *cmsg, __u8 cmd, __u8 subcmd)
+static inline void
+ncciCmsgHeader(Ncci_t *ncci, _cmsg *cmsg, __u8 cmd, __u8 subcmd)
 {
 	capi_cmsg_header(cmsg, ncci->appl->ApplId, cmd, subcmd, 
-			 ncci->appl->MsgId++, ncci->adrNCCI);
+			 ncci->appl->MsgId++, ncci->addr);
 }
 
-static void ncci_connect_b3_req(struct FsmInst *fi, int event, void *arg)
+static void
+ncci_connect_b3_req(struct FsmInst *fi, int event, void *arg)
 {
 	Ncci_t *ncci = fi->userdata;
 	_cmsg *cmsg = arg;
 
+	// FIXME
+	if (!ncci->appl) {
+		cmsg_free(cmsg);
+		return;
+	}
 	FsmChangeState(fi, ST_NCCI_N_0_1);
 	capi_cmsg_answer(cmsg);
-	cmsg->adr.adrNCCI = ncci->adrNCCI;
+	cmsg->adr.adrNCCI = ncci->addr;
 
-	FsmEvent(fi, EV_NCCI_CONNECT_B3_CONF, cmsg);
-	ncciRecvCmsg(ncci, cmsg);
+	// TODO: NCPI handling
+	cmsg->Info = 0;
+
 	ncci_debug(fi, "ncci_connect_b3_req NCCI %x cmsg->Info(%x)",
-		ncci->adrNCCI, cmsg->Info);
-	if (cmsg->Info < 0x1000) 
-		ncciL4L3(ncci, DL_ESTABLISH | REQUEST, 0, 0, NULL, NULL);
+		ncci->addr, cmsg->Info);
+	if (FsmEvent(fi, EV_NC_CONNECT_B3_CONF, cmsg))
+		cmsg_free(cmsg);
 }
 
-static void ncci_connect_b3_ind(struct FsmInst *fi, int event, void *arg)
+static void
+ncci_connect_b3_ind(struct FsmInst *fi, int event, void *arg)
 {
+	// from DL_ESTABLISH
 	FsmChangeState(fi, ST_NCCI_N_1);
+	Send2Application(fi->userdata, arg);
 }
 
-static void ncci_connect_b3_resp(struct FsmInst *fi, int event, void *arg)
+static void
+ncci_connect_b3_resp(struct FsmInst *fi, int event, void *arg)
 {
 	Ncci_t *ncci = fi->userdata;
 	_cmsg *cmsg = arg;
   
+	// FIXME
+	if (!ncci->appl) {
+		cmsg_free(cmsg);
+		return;
+	}
 	if (cmsg->Info == 0) {
 		FsmChangeState(fi, ST_NCCI_N_2);
 		ncciCmsgHeader(ncci, cmsg, CAPI_CONNECT_B3_ACTIVE, CAPI_IND);
-		FsmEvent(&ncci->ncci_m, EV_NCCI_CONNECT_B3_ACTIVE_IND, cmsg);
-		ncciRecvCmsg(ncci, cmsg);
+		event = EV_NC_CONNECT_B3_ACTIVE_IND;
 	} else {
 		FsmChangeState(fi, ST_NCCI_N_4);
+		cmsg->Info = 0;
 		ncciCmsgHeader(ncci, cmsg, CAPI_DISCONNECT_B3, CAPI_IND);
-		FsmEvent(&ncci->ncci_m, EV_NCCI_DISCONNECT_B3_IND, cmsg);
-		ncciRecvCmsg(ncci, cmsg);
+		event = EV_NC_DISCONNECT_B3_IND;
 	}
+	if (FsmEvent(&ncci->ncci_m, event, cmsg))
+		cmsg_free(cmsg);
 }
 
-static void ncci_connect_b3_conf(struct FsmInst *fi, int event, void *arg)
+static void
+ncci_connect_b3_conf(struct FsmInst *fi, int event, void *arg)
 {
-	_cmsg *cmsg = arg;
+	_cmsg	*cmsg = arg;
   
 	if (cmsg->Info == 0) {
 		FsmChangeState(fi, ST_NCCI_N_2);
+		Send2Application(fi->userdata, cmsg);
+		ncciL4L3(fi->userdata, DL_ESTABLISH | REQUEST, 0, 0, NULL, NULL);
 	} else {
 		FsmChangeState(fi, ST_NCCI_N_0);
+		Send2Application(fi->userdata, cmsg);
+		ncciDestr(fi->userdata);
 	}
 }
 
-static void ncci_disconnect_b3_req(struct FsmInst *fi, int event, void *arg)
+static void
+ncci_disconnect_b3_req(struct FsmInst *fi, int event, void *arg)
 {
-	Ncci_t *ncci = fi->userdata;
-	_cmsg *cmsg = arg;
-	__u16 Info = 0;
-	int saved_state = fi->state;
-	
-	FsmChangeState(fi, ST_NCCI_N_4);
+	Ncci_t	*ncci = fi->userdata;
+	_cmsg	*cmsg = arg;
+	__u16	Info = 0;
 
-	capi_cmsg_answer(cmsg);
-	cmsg->Info = Info;
-	FsmEvent(fi, EV_NCCI_DISCONNECT_B3_CONF, cmsg);
-	if (cmsg->Info != 0) {
-		FsmChangeState(fi, saved_state);
-		ncciRecvCmsg(ncci, cmsg);
+	if (ncci->appl) { //FIXME
+		/* TODO: handle NCPI and wait for all DATA_B3_REQ confirmed on
+		 * related protocols (voice, T30)
+		 */ 
+		capi_cmsg_answer(cmsg);
+		cmsg->Info = Info;
+		if (FsmEvent(fi, EV_NC_DISCONNECT_B3_CONF, cmsg))
+			cmsg_free(cmsg);
 	} else {
-		ncciRecvCmsg(ncci, cmsg);
-		ncciL4L3(ncci, DL_RELEASE | REQUEST, 0, 0, NULL, NULL);
+		cmsg_free(cmsg);
+		FsmChangeState(fi, ST_NCCI_N_4);
 	}
+	ncciL4L3(ncci, DL_RELEASE | REQUEST, 0, 0, NULL, NULL);
+}
+
+static void
+ncci_disconnect_b3_conf(struct FsmInst *fi, int event, void *arg)
+{
+	_cmsg	*cmsg = arg;
+
+	if (cmsg->Info == 0) {
+		FsmChangeState(fi, ST_NCCI_N_4);
+	}
+	Send2Application(fi->userdata, cmsg);
+}
+
+static void
+ncci_disconnect_b3_ind(struct FsmInst *fi, int event, void *arg)
+{
+	Ncci_t	*ncci = fi->userdata;
+
+	FsmChangeState(fi, ST_NCCI_N_5);
+	if (ncci->appl) { // FIXME
+		Send2Application(ncci, arg);
+	} else {
+		cmsg_free(arg);
+		FsmChangeState(fi, ST_NCCI_N_0);
+		ncciDestr(ncci);
+	}
+}
+
+static void
+ncci_disconnect_b3_resp(struct FsmInst *fi, int event, void *arg)
+{
+	if (arg)
+		cmsg_free(arg);
+	FsmChangeState(fi, ST_NCCI_N_0);
+	ncciDestr(fi->userdata);
 }
 
 static void
@@ -200,6 +272,8 @@ ncci_facility_req(struct FsmInst *fi, int event, void *arg)
 	u16	func;
 	int	op;
 
+	if (!ncci->appl)
+		return;
 	capi_cmsg_answer(cmsg);
 	cmsg->Info = CAPI_NOERROR;
 	if (cmsg->FacilitySelector == 0) { // Handset
@@ -228,7 +302,7 @@ ncci_facility_req(struct FsmInst *fi, int event, void *arg)
 	} else
 		cmsg->Info = CapiIllMessageParmCoding;
 		
-	ncciRecvCmsg(ncci, cmsg);
+	Send2Application(ncci, cmsg);
 }
 
 static void
@@ -247,6 +321,8 @@ ncci_manufacturer_req(struct FsmInst *fi, int event, void *arg)
 			u16	vol	__attribute__((packed));
 		} *mrp;
 
+	if (!ncci->appl)
+		return;
 	mrp = (struct  _manu_req_para *)cmsg->ManuData;
 	capi_cmsg_answer(cmsg);
 	if (cmsg->Class == mISDN_MF_CLASS_HANDSET) { // Handset
@@ -286,10 +362,11 @@ ncci_manufacturer_req(struct FsmInst *fi, int event, void *arg)
 		mcp.Info = CapiIllMessageParmCoding;
 
 	cmsg->ManuData = (_cstruct)&mcp;
-	ncciRecvCmsg(ncci, cmsg);
+	Send2Application(ncci, cmsg);
 }
 
-static void ncci_connect_b3_active_ind(struct FsmInst *fi, int event, void *arg)
+static void
+ncci_connect_b3_active_ind(struct FsmInst *fi, int event, void *arg)
 {
 	Ncci_t *ncci = fi->userdata;
 	int i;
@@ -299,64 +376,70 @@ static void ncci_connect_b3_active_ind(struct FsmInst *fi, int event, void *arg)
 		ncci->xmit_skb_handles[i].skb = 0;
 		ncci->recv_skb_handles[i] = 0;
 	}
+	Send2Application(ncci, arg);
 }
 
-static void ncci_connect_b3_active_resp(struct FsmInst *fi, int event, void *arg)
+static void
+ncci_connect_b3_active_resp(struct FsmInst *fi, int event, void *arg)
 {
+	cmsg_free(arg);
 }
 
-static void ncci_disconnect_b3_conf(struct FsmInst *fi, int event, void *arg)
+static void
+ncci_n0_dl_establish_ind_conf(struct FsmInst *fi, int event, void *arg)
 {
+	_cmsg   *cmsg;
+	Ncci_t	*ncci = fi->userdata;
+
+	if (!ncci->appl)
+		return;
+	CMSG_ALLOC(cmsg);
+	ncciCmsgHeader(ncci, cmsg, CAPI_CONNECT_B3, CAPI_IND);
+	if (FsmEvent(&ncci->ncci_m, EV_NC_CONNECT_B3_IND, cmsg))
+		cmsg_free(cmsg);
 }
 
-static void ncci_disconnect_b3_ind(struct FsmInst *fi, int event, void *arg)
+static void
+ncci_dl_establish_conf(struct FsmInst *fi, int event, void *arg)
 {
-	FsmChangeState(fi, ST_NCCI_N_5);
+	Ncci_t	*ncci = fi->userdata;
+	_cmsg	*cmsg;
+
+	if (!ncci->appl)
+		return;
+	CMSG_ALLOC(cmsg);
+	ncciCmsgHeader(ncci, cmsg, CAPI_CONNECT_B3_ACTIVE, CAPI_IND);
+	if (FsmEvent(&ncci->ncci_m, EV_NC_CONNECT_B3_ACTIVE_IND, cmsg))
+		cmsg_free(cmsg);
 }
 
-static void ncci_disconnect_b3_resp(struct FsmInst *fi, int event, void *arg)
+static void
+ncci_dl_release_ind_conf(struct FsmInst *fi, int event, void *arg)
 {
-	FsmChangeState(fi, ST_NCCI_N_0);
+	Ncci_t	*ncci = fi->userdata;
+	_cmsg	*cmsg;
+
+	CMSG_ALLOC(cmsg);
+	ncciCmsgHeader(ncci, cmsg, CAPI_DISCONNECT_B3, CAPI_IND);
+	if (FsmEvent(&ncci->ncci_m, EV_NC_DISCONNECT_B3_IND, cmsg))
+		cmsg_free(cmsg);
 }
 
-static void ncci_n0_dl_establish_ind_conf(struct FsmInst *fi, int event, void *arg)
+static void
+ncci_dl_down_ind(struct FsmInst *fi, int event, void *arg)
 {
-	Ncci_t *ncci = fi->userdata;
+	Ncci_t	*ncci = fi->userdata;
+	_cmsg	*cmsg;
 
-	ncciCmsgHeader(ncci, &ncci->tmpmsg, CAPI_CONNECT_B3, CAPI_IND);
-	FsmEvent(&ncci->ncci_m, EV_NCCI_CONNECT_B3_IND, &ncci->tmpmsg);
-	ncciRecvCmsg(ncci, &ncci->tmpmsg);
+	CMSG_ALLOC(cmsg);
+	ncciCmsgHeader(ncci, cmsg, CAPI_DISCONNECT_B3, CAPI_IND);
+	cmsg->Reason_B3 = CapiProtocolErrorLayer1;
+	if (FsmEvent(&ncci->ncci_m, EV_NC_DISCONNECT_B3_IND, cmsg))
+		cmsg_free(cmsg);
 }
 
-static void ncci_dl_establish_conf(struct FsmInst *fi, int event, void *arg)
-{
-	Ncci_t *ncci = fi->userdata;
-
-	ncciCmsgHeader(ncci, &ncci->tmpmsg, CAPI_CONNECT_B3_ACTIVE, CAPI_IND);
-	FsmEvent(&ncci->ncci_m, EV_NCCI_CONNECT_B3_ACTIVE_IND, &ncci->tmpmsg);
-	ncciRecvCmsg(ncci, &ncci->tmpmsg);
-}
-
-static void ncci_dl_release_ind_conf(struct FsmInst *fi, int event, void *arg)
-{
-	Ncci_t *ncci = fi->userdata;
-
-	ncciCmsgHeader(ncci, &ncci->tmpmsg, CAPI_DISCONNECT_B3, CAPI_IND);
-	FsmEvent(&ncci->ncci_m, EV_NCCI_DISCONNECT_B3_IND, &ncci->tmpmsg);
-	ncciRecvCmsg(ncci, &ncci->tmpmsg);
-}
-
-static void ncci_dl_down_ind(struct FsmInst *fi, int event, void *arg)
-{
-	Ncci_t *ncci = fi->userdata;
-
-	ncciCmsgHeader(ncci, &ncci->tmpmsg, CAPI_DISCONNECT_B3, CAPI_IND);
-	ncci->tmpmsg.Reason_B3 = CapiProtocolErrorLayer1;
-	FsmEvent(&ncci->ncci_m, EV_NCCI_DISCONNECT_B3_IND, &ncci->tmpmsg);
-	ncciRecvCmsg(ncci, &ncci->tmpmsg);
-}
-
-static void ncci_select_b_protocol(struct FsmInst *fi, int event, void *arg)
+static void
+ncci_select_b_protocol(struct FsmInst *fi, int event, void *arg)
 {
 	Ncci_t *ncci = fi->userdata;
 
@@ -364,126 +447,157 @@ static void ncci_select_b_protocol(struct FsmInst *fi, int event, void *arg)
 	ncciInitSt(ncci);
 }
 
+
+static void
+ncci_appl_release(struct FsmInst *fi, int event, void *arg)
+{
+	ncciDestr(fi->userdata);
+}
+
+static void
+ncci_appl_release_disc(struct FsmInst *fi, int event, void *arg)
+{
+	ncciL4L3(fi->userdata, DL_RELEASE | REQUEST, 0, 0, NULL, NULL);
+}
+
 static struct FsmNode fn_ncci_list[] =
 {
-  {ST_NCCI_N_0,       EV_NCCI_CONNECT_B3_REQ,            ncci_connect_b3_req},
-  {ST_NCCI_N_0,       EV_NCCI_CONNECT_B3_IND,            ncci_connect_b3_ind},
-  {ST_NCCI_N_0,       EV_NCCI_SELECT_B_PROTOCOL,         ncci_select_b_protocol},
-  {ST_NCCI_N_0,       EV_NCCI_DL_ESTABLISH_CONF,         ncci_n0_dl_establish_ind_conf},
-  {ST_NCCI_N_0,       EV_NCCI_DL_ESTABLISH_IND,          ncci_n0_dl_establish_ind_conf},
+  {ST_NCCI_N_0,		EV_AP_CONNECT_B3_REQ,		ncci_connect_b3_req},
+  {ST_NCCI_N_0,		EV_NC_CONNECT_B3_IND,		ncci_connect_b3_ind},
+  {ST_NCCI_N_0,		EV_AP_SELECT_B_PROTOCOL,	ncci_select_b_protocol},
+  {ST_NCCI_N_0,		EV_DL_ESTABLISH_CONF,		ncci_n0_dl_establish_ind_conf},
+  {ST_NCCI_N_0,		EV_DL_ESTABLISH_IND,		ncci_n0_dl_establish_ind_conf},
+  {ST_NCCI_N_0,		EV_AP_RELEASE,			ncci_appl_release},
 
-  {ST_NCCI_N_0_1,     EV_NCCI_CONNECT_B3_CONF,           ncci_connect_b3_conf},
-  {ST_NCCI_N_0_1,     EV_NCCI_MANUFACTURER_REQ,          ncci_manufacturer_req},
+  {ST_NCCI_N_0_1,	EV_NC_CONNECT_B3_CONF,		ncci_connect_b3_conf},
+  {ST_NCCI_N_0_1,	EV_AP_MANUFACTURER_REQ,		ncci_manufacturer_req},
+  {ST_NCCI_N_0_1,	EV_AP_RELEASE,			ncci_appl_release},
 
-  {ST_NCCI_N_1,       EV_NCCI_CONNECT_B3_RESP,           ncci_connect_b3_resp},
-  {ST_NCCI_N_1,       EV_NCCI_DISCONNECT_B3_REQ,         ncci_disconnect_b3_req},
-  {ST_NCCI_N_1,       EV_NCCI_DISCONNECT_B3_IND,         ncci_disconnect_b3_ind},
-  {ST_NCCI_N_1,       EV_NCCI_MANUFACTURER_REQ,          ncci_manufacturer_req},
+  {ST_NCCI_N_1,		EV_AP_CONNECT_B3_RESP,		ncci_connect_b3_resp},
+  {ST_NCCI_N_1,		EV_AP_DISCONNECT_B3_REQ,	ncci_disconnect_b3_req},
+  {ST_NCCI_N_1,		EV_NC_DISCONNECT_B3_IND,	ncci_disconnect_b3_ind},
+  {ST_NCCI_N_1,		EV_AP_MANUFACTURER_REQ,		ncci_manufacturer_req},
+  {ST_NCCI_N_1,		EV_AP_RELEASE,			ncci_appl_release_disc},
 
-  {ST_NCCI_N_2,       EV_NCCI_CONNECT_B3_ACTIVE_IND,     ncci_connect_b3_active_ind},
-  {ST_NCCI_N_2,       EV_NCCI_DISCONNECT_B3_REQ,         ncci_disconnect_b3_req},
-  {ST_NCCI_N_2,       EV_NCCI_DISCONNECT_B3_IND,         ncci_disconnect_b3_ind},
-  {ST_NCCI_N_2,       EV_NCCI_DL_ESTABLISH_CONF,         ncci_dl_establish_conf},
-  {ST_NCCI_N_2,       EV_NCCI_DL_RELEASE_IND,            ncci_dl_release_ind_conf},
-  {ST_NCCI_N_2,       EV_NCCI_MANUFACTURER_REQ,          ncci_manufacturer_req},
+  {ST_NCCI_N_2,		EV_NC_CONNECT_B3_ACTIVE_IND,	ncci_connect_b3_active_ind},
+  {ST_NCCI_N_2,		EV_AP_DISCONNECT_B3_REQ,	ncci_disconnect_b3_req},
+  {ST_NCCI_N_2,		EV_NC_DISCONNECT_B3_IND,	ncci_disconnect_b3_ind},
+  {ST_NCCI_N_2,		EV_DL_ESTABLISH_CONF,		ncci_dl_establish_conf},
+  {ST_NCCI_N_2,		EV_DL_RELEASE_IND,		ncci_dl_release_ind_conf},
+  {ST_NCCI_N_2,		EV_AP_MANUFACTURER_REQ,		ncci_manufacturer_req},
+  {ST_NCCI_N_2,		EV_AP_RELEASE,			ncci_appl_release_disc},
      
-  {ST_NCCI_N_ACT,     EV_NCCI_CONNECT_B3_ACTIVE_RESP,    ncci_connect_b3_active_resp},
-  {ST_NCCI_N_ACT,     EV_NCCI_DISCONNECT_B3_REQ,         ncci_disconnect_b3_req},
-  {ST_NCCI_N_ACT,     EV_NCCI_DISCONNECT_B3_IND,         ncci_disconnect_b3_ind},
-  {ST_NCCI_N_ACT,     EV_NCCI_DL_RELEASE_IND,            ncci_dl_release_ind_conf},
-  {ST_NCCI_N_ACT,     EV_NCCI_DL_DOWN_IND,               ncci_dl_down_ind},
-  {ST_NCCI_N_ACT,     EV_NCCI_FACILITY_REQ,              ncci_facility_req},
-  {ST_NCCI_N_ACT,     EV_NCCI_MANUFACTURER_REQ,          ncci_manufacturer_req},
-
-  {ST_NCCI_N_4,       EV_NCCI_DISCONNECT_B3_CONF,        ncci_disconnect_b3_conf},
-  {ST_NCCI_N_4,       EV_NCCI_DISCONNECT_B3_IND,         ncci_disconnect_b3_ind},
-  {ST_NCCI_N_4,       EV_NCCI_DL_RELEASE_CONF,           ncci_dl_release_ind_conf},
-  {ST_NCCI_N_4,       EV_NCCI_DL_DOWN_IND,               ncci_dl_down_ind},
-  {ST_NCCI_N_4,       EV_NCCI_MANUFACTURER_REQ,          ncci_manufacturer_req},
-
-  {ST_NCCI_N_5,       EV_NCCI_DISCONNECT_B3_RESP,        ncci_disconnect_b3_resp},
-
 #if 0
-  {ST_NCCI_N_ACT,     EV_NCCI_RESET_B3_REQ,              ncci_reset_b3_req},
-  {ST_NCCI_N_ACT,     EV_NCCI_RESET_B3_IND,              ncci_reset_b3_ind},
-  {ST_NCCI_N_ACT,     EV_NCCI_CONNECT_B3_T90_ACTIVE_IND, ncci_connect_b3_t90_active_ind},
-
-  {ST_NCCI_N_3,       EV_NCCI_RESET_B3_IND,              ncci_reset_b3_ind},
-  {ST_NCCI_N_3,       EV_NCCI_DISCONNECT_B3_REQ,         ncci_disconnect_b3_req},
-  {ST_NCCI_N_3,       EV_NCCI_DISCONNECT_B3_IND,         ncci_disconnect_b3_ind},
+  {ST_NCCI_N_3,		EV_NC_RESET_B3_IND,		ncci_reset_b3_ind},
+  {ST_NCCI_N_3,		EV_AP_DISCONNECT_B3_REQ,	ncci_disconnect_b3_req},
+  {ST_NCCI_N_3,		EV_NC_DISCONNECT_B3_IND,	ncci_disconnect_b3_ind},
+  {ST_NCCI_N_3,		EV_AP_RELEASE,			ncci_appl_release_disc},
 #endif
+
+  {ST_NCCI_N_ACT,	EV_AP_CONNECT_B3_ACTIVE_RESP,	ncci_connect_b3_active_resp},
+  {ST_NCCI_N_ACT,	EV_AP_DISCONNECT_B3_REQ,	ncci_disconnect_b3_req},
+  {ST_NCCI_N_ACT,	EV_NC_DISCONNECT_B3_IND,	ncci_disconnect_b3_ind},
+  {ST_NCCI_N_ACT,	EV_DL_RELEASE_IND,		ncci_dl_release_ind_conf},
+  {ST_NCCI_N_ACT,	EV_DL_RELEASE_CONF,		ncci_dl_release_ind_conf},
+  {ST_NCCI_N_ACT,	EV_DL_DOWN_IND,			ncci_dl_down_ind},
+  {ST_NCCI_N_ACT,	EV_AP_FACILITY_REQ,		ncci_facility_req},
+  {ST_NCCI_N_ACT,	EV_AP_MANUFACTURER_REQ,		ncci_manufacturer_req},
+  {ST_NCCI_N_ACT,	EV_AP_RELEASE,			ncci_appl_release_disc},
+#if 0
+  {ST_NCCI_N_ACT,	EV_AP_RESET_B3_REQ,		ncci_reset_b3_req},
+  {ST_NCCI_N_ACT,	EV_NC_RESET_B3_IND,		ncci_reset_b3_ind},
+  {ST_NCCI_N_ACT,	EV_NC_CONNECT_B3_T90_ACTIVE_IND,ncci_connect_b3_t90_active_ind},
+#endif
+
+  {ST_NCCI_N_4,		EV_NC_DISCONNECT_B3_CONF,	ncci_disconnect_b3_conf},
+  {ST_NCCI_N_4,		EV_NC_DISCONNECT_B3_IND,	ncci_disconnect_b3_ind},
+  {ST_NCCI_N_4,		EV_DL_RELEASE_CONF,		ncci_dl_release_ind_conf},
+  {ST_NCCI_N_4,		EV_DL_DOWN_IND,			ncci_dl_down_ind},
+  {ST_NCCI_N_4,		EV_AP_MANUFACTURER_REQ,		ncci_manufacturer_req},
+
+  {ST_NCCI_N_5,		EV_AP_DISCONNECT_B3_RESP,	ncci_disconnect_b3_resp},
+  {ST_NCCI_N_5,		EV_AP_RELEASE,			ncci_disconnect_b3_resp},
 };
 
 const int FN_NCCI_COUNT = sizeof(fn_ncci_list)/sizeof(struct FsmNode);
 
-void ncciConstr(Ncci_t *ncci, Cplci_t *cplci)
+Ncci_t *
+ncciConstr(AppPlci_t *aplci)
 {
-	memset(ncci, 0, sizeof(Ncci_t));
+	Ncci_t	*ncci = ncci_alloc();
 
+	if (!ncci)
+		return(NULL);
+
+	memset(ncci, 0, sizeof(Ncci_t));
 	ncci->ncci_m.fsm        = &ncci_fsm;
 	ncci->ncci_m.state      = ST_NCCI_N_0;
-	ncci->ncci_m.debug      = cplci->plci->contr->debug & CAPI_DBG_NCCI_STATE;
+	ncci->ncci_m.debug      = aplci->plci->contr->debug & CAPI_DBG_NCCI_STATE;
 	ncci->ncci_m.userdata   = ncci;
 	ncci->ncci_m.printdebug = ncci_debug;
-
-	ncci->adrNCCI = 0x10000 | cplci->adrPLCI;
-	ncci->cplci = cplci;
-	ncci->contr = cplci->contr;
-	ncci->appl = cplci->appl;
-	ncci->window = cplci->appl->rp.datablkcnt;
+	/* we only support one NCCI per AppPlci at the moment */
+	ncci->addr = 0x10000 | aplci->addr;
+	ncci->AppPlci = aplci;
+	ncci->contr = aplci->contr;
+	ncci->appl = aplci->appl;
+	ncci->window = aplci->appl->reg_params.datablkcnt;
 	skb_queue_head_init(&ncci->squeue);
 	if (ncci->window > CAPI_MAXDATAWINDOW) {
 		ncci->window = CAPI_MAXDATAWINDOW;
 	}
+	printk(KERN_DEBUG "%s: ncci(%p) NCCI(%x) debug (%x/%x)\n",
+		__FUNCTION__, ncci, ncci->addr, aplci->plci->contr->debug, CAPI_DBG_NCCI_STATE); 
+	return(ncci);
 }
 
-void ncciInitSt(Ncci_t *ncci)
+static void
+ncciInitSt(Ncci_t *ncci)
 {
 	mISDN_pid_t	pid;
 	mISDN_stPara_t	stpara;
 	int		retval;
-	Cplci_t		*cplci = ncci->cplci;
+	AppPlci_t	*aplci = ncci->AppPlci;
 
 	memset(&pid, 0, sizeof(mISDN_pid_t));
 	pid.layermask = ISDN_LAYER(1) | ISDN_LAYER(2) | ISDN_LAYER(3) |
 		ISDN_LAYER(4);
-	if (test_bit(PLCI_FLAG_OUTGOING, &cplci->plci->flags))
+	if (test_bit(PLCI_STATE_OUTGOING, &aplci->plci->state))
 		pid.global = 1; // DTE, orginate
 	else
 		pid.global = 2; // DCE, answer
-	if (cplci->Bprotocol.B1protocol > 23) {
-		int_errtxt("wrong B1 prot %x", cplci->Bprotocol.B1protocol);
+	if (aplci->Bprotocol.B1 > 23) {
+		int_errtxt("wrong B1 prot %x", aplci->Bprotocol.B1);
 		return;
 	}
-	pid.protocol[1] = (1 << cplci->Bprotocol.B1protocol) |
+	pid.protocol[1] = (1 << aplci->Bprotocol.B1) |
 		ISDN_PID_LAYER(1) | ISDN_PID_BCHANNEL_BIT;
-	if (cplci->Bprotocol.B2protocol > 23) {
-		int_errtxt("wrong B2 prot %x", cplci->Bprotocol.B2protocol);
+	if (aplci->Bprotocol.B2 > 23) {
+		int_errtxt("wrong B2 prot %x", aplci->Bprotocol.B2);
 		return;
 	}
-	if (cplci->Bprotocol.B2protocol == 0) /* X.75 has own flowctrl */
-		ncci->Flags = 0;
+	if (aplci->Bprotocol.B2 == 0) /* X.75 has own flowctrl */
+		ncci->state = 0;
 	else
-		ncci->Flags = NCCI_FLG_FCTRL;
-	pid.protocol[2] = (1 << cplci->Bprotocol.B2protocol) |
+		ncci->state = NCCI_STATE_FCTRL;
+	pid.protocol[2] = (1 << aplci->Bprotocol.B2) |
 		ISDN_PID_LAYER(2) | ISDN_PID_BCHANNEL_BIT;
 	/* handle DTMF TODO */
 	if ((pid.protocol[2] == ISDN_PID_L2_B_TRANS) &&
 		(pid.protocol[1] == ISDN_PID_L1_B_64TRANS))
 		pid.protocol[2] = ISDN_PID_L2_B_TRANSDTMF;
-	if (cplci->Bprotocol.B3protocol > 23) {
-		int_errtxt("wrong B3 prot %x", cplci->Bprotocol.B3protocol);
+	if (aplci->Bprotocol.B3 > 23) {
+		int_errtxt("wrong B3 prot %x", aplci->Bprotocol.B3);
 		return;
 	}
-	pid.protocol[3] = (1 << cplci->Bprotocol.B3protocol) |
+	pid.protocol[3] = (1 << aplci->Bprotocol.B3) |
 		ISDN_PID_LAYER(3) | ISDN_PID_BCHANNEL_BIT;
 	capidebug(CAPI_DBG_NCCI, "ncciInitSt B1(%x) B2(%x) B3(%x) global(%d) ch(%x)",
    		pid.protocol[1], pid.protocol[2], pid.protocol[3], pid.global, 
-		cplci->bchannel);
-	capidebug(CAPI_DBG_NCCI, "ncciInitSt ch(%d) cplci->contr->binst(%p)",
-		cplci->bchannel & 3, cplci->contr->binst);
+		aplci->channel);
+	capidebug(CAPI_DBG_NCCI, "ncciInitSt ch(%d) aplci->contr->binst(%p)",
+		aplci->channel & 3, aplci->contr->binst);
 	pid.protocol[4] = ISDN_PID_L4_B_CAPI20;
-	ncci->binst = contrSelChannel(cplci->contr, cplci->bchannel);
+	ncci->binst = ControllerSelChannel(aplci->contr, aplci->channel);
 	if (!ncci->binst) {
 		int_error();
 		return;
@@ -504,7 +618,7 @@ void ncciInitSt(Ncci_t *ncci)
 			__FUNCTION__, retval);
 		return;
 	}
-	stpara.maxdatalen = ncci->appl->rp.datablklen;
+	stpara.maxdatalen = ncci->appl->reg_params.datablklen;
 	stpara.up_headerlen = CAPI_B3_DATA_IND_HEADER_SIZE;
 	stpara.down_headerlen = 0;
                         
@@ -523,7 +637,8 @@ void ncciInitSt(Ncci_t *ncci)
 	}
 }
 
-void ncciReleaseSt(Ncci_t *ncci)
+static void
+ncciReleaseSt(Ncci_t *ncci)
 {
 	int retval;
 
@@ -538,40 +653,47 @@ void ncciReleaseSt(Ncci_t *ncci)
 	}
 }
 
-void ncciLinkUp(Ncci_t *ncci)
+void
+ncciLinkUp(Ncci_t *ncci)
 {
 #ifdef OLDCAPI_DRIVER_INTERFACE
-	ncci->contr->ctrl->new_ncci(ncci->contr->ctrl, ncci->appl->ApplId, ncci->adrNCCI, ncci->window);
+	ncci->contr->ctrl->new_ncci(ncci->contr->ctrl, ncci->appl->ApplId, ncci->addr, ncci->window);
 #endif
 	ncciInitSt(ncci);
 }
 
-void ncciLinkDown(Ncci_t *ncci)
+void
+ncciLinkDown(Ncci_t *ncci)
 {
 	if (ncci->binst)
 		ncciReleaseSt(ncci);
-	FsmEvent(&ncci->ncci_m, EV_NCCI_DL_DOWN_IND, 0);
+	FsmEvent(&ncci->ncci_m, EV_DL_DOWN_IND, 0);
 }
 
-__u16 ncciSelectBprotocol(Ncci_t *ncci)
+__u16
+ncciSelectBprotocol(Ncci_t *ncci)
 {
 	int retval;
-	retval = FsmEvent(&ncci->ncci_m, EV_NCCI_SELECT_B_PROTOCOL, 0);
+	retval = FsmEvent(&ncci->ncci_m, EV_AP_SELECT_B_PROTOCOL, 0);
 	if (retval)
 		return CapiMessageNotSupportedInCurrentState;
 	return CapiSuccess;
 }
 
-void ncciDestr(Ncci_t *ncci)
+void
+ncciDestr(Ncci_t *ncci)
 {
 	int i;
 
-	capidebug(CAPI_DBG_NCCI, "ncciDestr NCCI %x", ncci->adrNCCI);
+	printk(KERN_DEBUG "%s: ncci(%p) NCCI(%x)\n",
+		__FUNCTION__, ncci, ncci->addr); 
+	capidebug(CAPI_DBG_NCCI, "ncciDestr NCCI %x", ncci->addr);
 	if (ncci->binst)
 		ncciReleaseSt(ncci);
-	if (ncci->appl)
+
 #ifdef OLDCAPI_DRIVER_INTERFACE
-		ncci->contr->ctrl->free_ncci(ncci->contr->ctrl, ncci->appl->ApplId, ncci->adrNCCI);
+	if (!test_bit(NCCI_STATE_APPLRELEASED, &ncci->state))
+		ncci->contr->ctrl->free_ncci(ncci->contr->ctrl, ncci->appl->ApplId, ncci->addr);
 #endif
 	/* cleanup data queues */
 	discard_queue(&ncci->squeue);
@@ -579,9 +701,29 @@ void ncciDestr(Ncci_t *ncci)
 		if (ncci->xmit_skb_handles[i].skb)
 			ncci->xmit_skb_handles[i].skb = NULL;
 	}
+	if (ncci->AppPlci)
+		AppPlciDelNCCI(ncci->AppPlci);
+	ncci_free(ncci);
 }
 
-void ncciDataInd(Ncci_t *ncci, int pr, struct sk_buff *skb)
+void
+ncciApplRelease(Ncci_t *ncci)
+{
+	test_and_set_bit(NCCI_STATE_APPLRELEASED, &ncci->state);
+	FsmEvent(&ncci->ncci_m, EV_AP_RELEASE, NULL);
+}
+
+void
+ncciDelAppPlci(Ncci_t *ncci)
+{
+	printk(KERN_DEBUG "%s: ncci(%p) NCCI(%x)\n",
+		__FUNCTION__, ncci, ncci->addr); 
+	ncci->AppPlci = NULL;
+	/* maybe we should release the NCCI here */
+}
+
+void
+ncciDataInd(Ncci_t *ncci, int pr, struct sk_buff *skb)
 {
 	struct sk_buff *nskb;
 	int i;
@@ -618,7 +760,7 @@ void ncciDataInd(Ncci_t *ncci, int pr, struct sk_buff *skb)
 	*((__u8*) (nskb->data+4)) = CAPI_DATA_B3;
 	*((__u8*) (nskb->data+5)) = CAPI_IND;
 	*((__u16*)(nskb->data+6)) = ncci->appl->MsgId++;
-	*((__u32*)(nskb->data+8)) = ncci->adrNCCI;
+	*((__u32*)(nskb->data+8)) = ncci->addr;
 	if (sizeof(nskb) == 4) {
 		*((__u32*)(nskb->data+12)) = (__u32)(nskb->data + CAPI_B3_DATA_IND_HEADER_SIZE);
 		*((__u64*)(nskb->data+22)) = 0;
@@ -637,10 +779,12 @@ void ncciDataInd(Ncci_t *ncci, int pr, struct sk_buff *skb)
 #endif
 }
 
-void ncciDataReq(Ncci_t *ncci, struct sk_buff *skb)
+void
+ncciDataReq(Ncci_t *ncci, struct sk_buff *skb)
 {
 	int	i, err;
 	__u16	len, capierr = 0;
+	_cmsg	*cmsg;
 	
 	len = CAPIMSG_LEN(skb->data);
 	if (len != 22 && len != 30) {
@@ -665,8 +809,8 @@ void ncciDataReq(Ncci_t *ncci, struct sk_buff *skb)
 	/* the data begins behind the header, we don't use Data32/Data64 here */
 	skb_pull(skb, len);
 
-	if (ncci->Flags & NCCI_FLG_FCTRL) {
-		if (test_and_set_bit(NCCI_FLG_BUSY, &ncci->Flags)) {
+	if (ncci->state & NCCI_STATE_FCTRL) {
+		if (test_and_set_bit(NCCI_STATE_BUSY, &ncci->state)) {
 			skb_queue_tail(&ncci->squeue, skb);
 			return;
 		}
@@ -695,18 +839,26 @@ void ncciDataReq(Ncci_t *ncci, struct sk_buff *skb)
 			ncci->xmit_skb_handles[i].skb = NULL;
 	}
 fail:
-	capi_cmsg_header(&ncci->tmpmsg, ncci->cplci->appl->ApplId, CAPI_DATA_B3, CAPI_CONF, 
-		CAPIMSG_MSGID(skb->data), ncci->adrNCCI);
+	cmsg = cmsg_alloc();
+	if (!cmsg) {
+		int_error();
+		dev_kfree_skb(skb);
+		return;
+	}
+	capi_cmsg_header(cmsg, ncci->AppPlci->appl->ApplId, CAPI_DATA_B3, CAPI_CONF, 
+		CAPIMSG_MSGID(skb->data), ncci->addr);
 	/* illegal len (too short) ??? */
-	ncci->tmpmsg.DataHandle = CAPIMSG_REQ_DATAHANDLE(skb->data);
-	ncci->tmpmsg.Info = capierr;
-	ncciRecvCmsg(ncci, &ncci->tmpmsg);
+	cmsg->DataHandle = CAPIMSG_REQ_DATAHANDLE(skb->data);
+	cmsg->Info = capierr;
+	Send2Application(ncci, cmsg);
 	dev_kfree_skb(skb);
 }
 
-int ncciDataConf(Ncci_t *ncci, int pr, struct sk_buff *skb)
+int
+ncciDataConf(Ncci_t *ncci, int pr, struct sk_buff *skb)
 {
-	int i;
+	int	i;
+	_cmsg	*cmsg;
 
 	for (i = 0; i < ncci->window; i++) {
 		if (ncci->xmit_skb_handles[i].skb == skb)
@@ -719,13 +871,19 @@ int ncciDataConf(Ncci_t *ncci, int pr, struct sk_buff *skb)
 	ncci->xmit_skb_handles[i].skb = NULL;
 	capidebug(CAPI_DBG_NCCI_L3, "%s: entry %d/%d handle (%x)",
 		__FUNCTION__, i, ncci->window, ncci->xmit_skb_handles[i].DataHandle);
+
+	cmsg = cmsg_alloc();
+	if (!cmsg) {
+		int_error();
+		return(-ENOMEM);
+	}
 	dev_kfree_skb(skb);
-	capi_cmsg_header(&ncci->tmpmsg, ncci->cplci->appl->ApplId, CAPI_DATA_B3, CAPI_CONF, 
-			 ncci->xmit_skb_handles[i].MsgId, ncci->adrNCCI);
-	ncci->tmpmsg.DataHandle = ncci->xmit_skb_handles[i].DataHandle;
-	ncci->tmpmsg.Info = 0;
-	ncciRecvCmsg(ncci, &ncci->tmpmsg);
-	if (ncci->Flags & NCCI_FLG_FCTRL) {
+	capi_cmsg_header(cmsg, ncci->AppPlci->appl->ApplId, CAPI_DATA_B3, CAPI_CONF, 
+			 ncci->xmit_skb_handles[i].MsgId, ncci->addr);
+	cmsg->DataHandle = ncci->xmit_skb_handles[i].DataHandle;
+	cmsg->Info = 0;
+	Send2Application(ncci, cmsg);
+	if (ncci->state & NCCI_STATE_FCTRL) {
 		if (skb_queue_len(&ncci->squeue)) {
 			skb = skb_dequeue(&ncci->squeue);
 			if (ncciL4L3(ncci, DL_DATA | REQUEST, DINFO_SKB,
@@ -734,12 +892,13 @@ int ncciDataConf(Ncci_t *ncci, int pr, struct sk_buff *skb)
 				dev_kfree_skb(skb);
 			}
 		} else
-			test_and_clear_bit(NCCI_FLG_BUSY, &ncci->Flags);
+			test_and_clear_bit(NCCI_STATE_BUSY, &ncci->state);
 	}
 	return(0);
 }	
 	
-void ncciDataResp(Ncci_t *ncci, struct sk_buff *skb)
+void
+ncciDataResp(Ncci_t *ncci, struct sk_buff *skb)
 {
 	// FIXME: incoming flow control doesn't work yet
 
@@ -759,17 +918,59 @@ void ncciDataResp(Ncci_t *ncci, struct sk_buff *skb)
 	dev_kfree_skb(skb);
 }
 
-void ncciSendMessage(Ncci_t *ncci, struct sk_buff *skb)
+void
+ncciGetCmsg(Ncci_t *ncci, _cmsg *cmsg)
 {
-	int retval = 0;
+	int	retval = 0;
 
-	// we're not using the cmesg for DATA_B3 for performance reasons
+	switch (CMSGCMD(cmsg)) {
+		case CAPI_CONNECT_B3_REQ:
+			retval = FsmEvent(&ncci->ncci_m, EV_AP_CONNECT_B3_REQ, cmsg);
+			break;
+		case CAPI_CONNECT_B3_RESP:
+			retval = FsmEvent(&ncci->ncci_m, EV_AP_CONNECT_B3_RESP, cmsg);
+			break;
+		case CAPI_CONNECT_B3_ACTIVE_RESP:
+			retval = FsmEvent(&ncci->ncci_m, EV_AP_CONNECT_B3_ACTIVE_RESP, cmsg);
+			break;
+		case CAPI_DISCONNECT_B3_REQ:
+			retval = FsmEvent(&ncci->ncci_m, EV_AP_DISCONNECT_B3_REQ, cmsg);
+			break;
+		case CAPI_DISCONNECT_B3_RESP:
+			retval = FsmEvent(&ncci->ncci_m, EV_AP_DISCONNECT_B3_RESP, cmsg);
+			break;
+		case CAPI_FACILITY_REQ:
+			retval = FsmEvent(&ncci->ncci_m, EV_AP_FACILITY_REQ, cmsg);
+			break;
+		case CAPI_MANUFACTURER_REQ:
+			retval = FsmEvent(&ncci->ncci_m, EV_AP_MANUFACTURER_REQ, cmsg);
+			break;
+		default:
+			int_error();
+			retval = -1;
+	}
+	if (retval) { 
+		if (cmsg->Command == CAPI_REQ) {
+			capi_cmsg_answer(cmsg);
+			cmsg->Info = CapiMessageNotSupportedInCurrentState;
+			Send2Application(ncci, cmsg);
+		} else
+			cmsg_free(cmsg);
+	}
+}
+
+void
+ncciSendMessage(Ncci_t *ncci, struct sk_buff *skb)
+{
+	_cmsg	*cmsg;
+
+	// we're not using the cmsg for DATA_B3 for performance reasons
 	switch (CAPICMD(CAPIMSG_COMMAND(skb->data), CAPIMSG_SUBCOMMAND(skb->data))) {
 		case CAPI_DATA_B3_REQ:
 			if (ncci->ncci_m.state == ST_NCCI_N_ACT) {
 				ncciDataReq(ncci, skb);
 			} else {
-				contrAnswerMessage(ncci->cplci->contr, skb, 
+				AnswerMessage2Application(ncci->appl, skb, 
 					CapiMessageNotSupportedInCurrentState);
 				dev_kfree_skb(skb);
 			}
@@ -778,54 +979,22 @@ void ncciSendMessage(Ncci_t *ncci, struct sk_buff *skb)
 			ncciDataResp(ncci, skb);
 			return;
 	}
-
-	capi_message2cmsg(&ncci->tmpmsg, skb->data);
-	switch (CMSGCMD(&ncci->tmpmsg)) {
-		case CAPI_CONNECT_B3_REQ:
-			retval = FsmEvent(&ncci->ncci_m, EV_NCCI_CONNECT_B3_REQ,
-				&ncci->tmpmsg);
-			break;
-		case CAPI_CONNECT_B3_RESP:
-			retval = FsmEvent(&ncci->ncci_m, EV_NCCI_CONNECT_B3_RESP,
-				&ncci->tmpmsg);
-			break;
-		case CAPI_CONNECT_B3_ACTIVE_RESP:
-			retval = FsmEvent(&ncci->ncci_m, EV_NCCI_CONNECT_B3_ACTIVE_RESP,
-				&ncci->tmpmsg);
-			break;
-		case CAPI_DISCONNECT_B3_REQ:
-			retval = FsmEvent(&ncci->ncci_m, EV_NCCI_DISCONNECT_B3_REQ,
-				&ncci->tmpmsg);
-			break;
-		case CAPI_DISCONNECT_B3_RESP:
-			retval = FsmEvent(&ncci->ncci_m, EV_NCCI_DISCONNECT_B3_RESP,
-				&ncci->tmpmsg);
-			break;
-		case CAPI_FACILITY_REQ:
-			retval = FsmEvent(&ncci->ncci_m, EV_NCCI_FACILITY_REQ,
-				&ncci->tmpmsg);
-			break;
-		case CAPI_MANUFACTURER_REQ:
-			retval = FsmEvent(&ncci->ncci_m, EV_NCCI_MANUFACTURER_REQ,
-				&ncci->tmpmsg);
-			break;
-		default:
-			int_error();
-			retval = -1;
+	cmsg = cmsg_alloc();
+	if (!cmsg) {
+		int_error();
+		dev_kfree_skb(skb);
+		return;
 	}
-	if (retval) { 
-		if (CAPIMSG_SUBCOMMAND(skb->data) == CAPI_REQ) {
-			contrAnswerMessage(ncci->cplci->contr, skb, 
-				CapiMessageNotSupportedInCurrentState);
-		}
-	}
+	capi_message2cmsg(cmsg, skb->data);
+	ncciGetCmsg(ncci, cmsg);
 	dev_kfree_skb(skb);
 }
 
 
-int ncci_l3l4(mISDNif_t *hif, struct sk_buff *skb)
+int
+ncci_l3l4(mISDNif_t *hif, struct sk_buff *skb)
 {
-	Ncci_t *ncci;
+	Ncci_t 		*ncci;
 	int		ret = -EINVAL;
 	mISDN_head_t	*hh;
 
@@ -834,7 +1003,7 @@ int ncci_l3l4(mISDNif_t *hif, struct sk_buff *skb)
 	hh = mISDN_HEAD_P(skb);
 	ncci = hif->fdata;
 	capidebug(CAPI_DBG_NCCI_L3, "%s: NCCI %x prim(%x) dinfo (%x) skb(%p)",
-		__FUNCTION__, ncci->adrNCCI, hh->prim, hh->dinfo, skb);
+		__FUNCTION__, ncci->addr, hh->prim, hh->dinfo, skb);
 	switch (hh->prim) {
 		// we're not using the Fsm for DL_DATA for performance reasons
 		case DL_DATA | INDICATION: 
@@ -849,20 +1018,20 @@ int ncci_l3l4(mISDNif_t *hif, struct sk_buff *skb)
 			}
 			break;
 		case DL_ESTABLISH | INDICATION:
-			FsmEvent(&ncci->ncci_m, EV_NCCI_DL_ESTABLISH_IND, skb);
+			FsmEvent(&ncci->ncci_m, EV_DL_ESTABLISH_IND, skb);
 			break;
 		case DL_ESTABLISH | CONFIRM:
-			FsmEvent(&ncci->ncci_m, EV_NCCI_DL_ESTABLISH_CONF, skb);
+			FsmEvent(&ncci->ncci_m, EV_DL_ESTABLISH_CONF, skb);
 			break;
 		case DL_RELEASE | INDICATION:
-			FsmEvent(&ncci->ncci_m, EV_NCCI_DL_RELEASE_IND, skb);
+			FsmEvent(&ncci->ncci_m, EV_DL_RELEASE_IND, skb);
 			break;
 		case DL_RELEASE | CONFIRM:
-			FsmEvent(&ncci->ncci_m, EV_NCCI_DL_RELEASE_CONF, skb);
+			FsmEvent(&ncci->ncci_m, EV_DL_RELEASE_CONF, skb);
 			break;
 		case PH_CONTROL | INDICATION: /* e.g touch tones */
-			/* handled by cplci */
-			cplci_l3l4(ncci->cplci, hh->prim, skb->data);
+			/* handled by AppPlci */
+			AppPlci_l3l4(ncci->AppPlci, hh->prim, skb->data);
 			break;
 		default:
 			capidebug(CAPI_DBG_WARN, "%s: unknown prim(%x) dinfo(%x) len(%d) skb(%p)",
@@ -878,7 +1047,7 @@ static int
 ncciL4L3(Ncci_t *ncci, u_int prim, int dtyp, int len, void *arg, struct sk_buff *skb)
 {
 	capidebug(CAPI_DBG_NCCI_L3, "%s: NCCI %x prim(%x) dtyp(%x) skb(%p)",
-		__FUNCTION__, ncci->adrNCCI, prim, dtyp, skb);
+		__FUNCTION__, ncci->addr, prim, dtyp, skb);
 	if (skb)
 		return(if_newhead(&ncci->binst->inst.down, prim, dtyp, skb));
 	else
@@ -886,7 +1055,8 @@ ncciL4L3(Ncci_t *ncci, u_int prim, int dtyp, int len, void *arg, struct sk_buff 
 			len, arg, 8));
 }
 
-void init_ncci(void)
+void
+init_ncci(void)
 {
 	ncci_fsm.state_count = ST_NCCI_COUNT;
 	ncci_fsm.event_count = EV_NCCI_COUNT;
@@ -896,7 +1066,8 @@ void init_ncci(void)
 	FsmNew(&ncci_fsm, fn_ncci_list, FN_NCCI_COUNT);
 }
 
-void free_ncci(void)
+void
+free_ncci(void)
 {
 	FsmFree(&ncci_fsm);
 }
