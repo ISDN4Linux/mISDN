@@ -1,4 +1,4 @@
-/* $Id: l3_udss1.c,v 1.24 2004/03/28 17:13:06 jolly Exp $
+/* $Id: l3_udss1.c,v 1.25 2004/05/31 14:02:51 jolly Exp $
  *
  * EURO/DSS1 D-channel protocol
  *
@@ -24,7 +24,7 @@ static int debug = 0;
 static mISDNobject_t u_dss1;
 
 
-const char *dss1_revision = "$Revision: 1.24 $";
+const char *dss1_revision = "$Revision: 1.25 $";
 
 static int dss1man(l3_process_t *, u_int, void *);
 
@@ -1991,9 +1991,10 @@ dss1_fromdown(mISDNif_t *hif, struct sk_buff *skb)
 	if (l3->debug & L3_DEB_STATE)
 		l3_debug(l3, "dss1up cr %d", qi->cr);
 	if (qi->crlen == 0) {	/* Dummy Callref */
-		if (qi->type == MT_FACILITY)
+		if (qi->type == MT_FACILITY) {
 			l3dss1_facility(l3->dummy, hh->prim, skb);
-		else if (l3->debug & L3_DEB_WARN)
+			return(0);
+		} else if (l3->debug & L3_DEB_WARN)
 			l3_debug(l3, "dss1up dummy Callref (no facility msg or ie)");
 		dev_kfree_skb(skb);
 		return(0);
