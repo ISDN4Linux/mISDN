@@ -35,6 +35,7 @@
 	Bit 9	= Enable DTMF detection on all B-channels
 	Bit 10	= spare 
 	Bit 11	= Set PCM bus into slave mode.
+	Bit 12	= Ignore missing frame clock on PCM bus.
 	Bit 14	= Use external ram (128K)
 	Bit 15	= Use external ram (512K)
 	Bit 16	= Use 64 timeslots instead of 32
@@ -108,7 +109,7 @@
 
 extern const char *CardType[];
 
-static const char *hfcmulti_revision = "$Revision: 1.20 $";
+static const char *hfcmulti_revision = "$Revision: 1.21 $";
 
 static int HFC_cnt;
 
@@ -338,19 +339,19 @@ init_chip(hfc_multi_t *hc)
 	} else {
 		if (debug & DEBUG_HFCMULTI_INIT)
 			printk(KERN_DEBUG "%s: setting PCM into master mode\n", __FUNCTION__);
-		hc->hw.r_pcm_mo0 |= V_PCM_MO;
+		hc->hw.r_pcm_md0 |= V_PCM_MD;
 	}
 	i = 0;
-	HFC_outb(hc, R_PCM_MO0, hc->hw.r_pcm_mo0 | 0x90);
+	HFC_outb(hc, R_PCM_MD0, hc->hw.r_pcm_md0 | 0x90);
 	if (hc->slots == 32)
-		HFC_outb(hc, R_PCM_MO1, 0x00);
+		HFC_outb(hc, R_PCM_MD1, 0x00);
 	if (hc->slots == 64)
-		HFC_outb(hc, R_PCM_MO1, 0x10);
+		HFC_outb(hc, R_PCM_MD1, 0x10);
 	if (hc->slots == 128)
-		HFC_outb(hc, R_PCM_MO1, 0x20);
-	HFC_outb(hc, R_PCM_MO0, hc->hw.r_pcm_mo0 | 0xa0);
-	HFC_outb(hc, R_PCM_MO2, 0x00);
-	HFC_outb(hc, R_PCM_MO0, hc->hw.r_pcm_mo0 | 0x00);
+		HFC_outb(hc, R_PCM_MD1, 0x20);
+	HFC_outb(hc, R_PCM_MD0, hc->hw.r_pcm_md0 | 0xa0);
+	HFC_outb(hc, R_PCM_MD2, 0x00);
+	HFC_outb(hc, R_PCM_MD0, hc->hw.r_pcm_md0 | 0x00);
 	while (i < 256) {
 		HFC_outb_(hc, R_SLOT, i);
 		HFC_outb_(hc, A_SL_CFG, 0);
@@ -389,7 +390,8 @@ init_chip(hfc_multi_t *hc)
 		if (test_bit(HFC_CHIP_PCM_SLAVE, &hc->chip)) {
 			printk(KERN_ERR "HFC_multi This happens in PCM slave mode without connected master.\n");
 		}
-		return(-EIO);
+		if (!test_bit(HFC_CHIP_CLOCK_IGNORE, &hc->chip))
+			return(-EIO);
 	}
 
 	/* set up timer */
@@ -1251,6 +1253,8 @@ hfcmulti_interrupt(int intno, void *dev_id, struct pt_regs *regs)
 			if (hc->type == 1)
 			if (hc->created[0]) {
 				if (test_bit(HFC_CFG_REPORT_LOS, &hc->chan[16].cfg)) {
+					if (debug & DEBUG_HFCMULTI_SYNC)
+						printk(KERN_DEBUG "%s: (id=%d) E1 got LOS\n", __FUNCTION__, hc->id);
 					/* LOS */
 					temp = HFC_inb_(hc, R_RX_STA0) & V_SIG_LOS;
 					if (!temp && hc->chan[16].los)
@@ -1260,6 +1264,8 @@ hfcmulti_interrupt(int intno, void *dev_id, struct pt_regs *regs)
 					hc->chan[16].los = temp;
 				}
 				if (test_bit(HFC_CFG_REPORT_AIS, &hc->chan[16].cfg)) {
+					if (debug & DEBUG_HFCMULTI_SYNC)
+						printk(KERN_DEBUG "%s: (id=%d) E1 got AIS\n", __FUNCTION__, hc->id);
 					/* AIS */
 					temp = HFC_inb_(hc, R_RX_STA0) & V_AIS;
 					if (!temp && hc->chan[16].ais)
@@ -1269,6 +1275,8 @@ hfcmulti_interrupt(int intno, void *dev_id, struct pt_regs *regs)
 					hc->chan[16].ais = temp;
 				}
 				if (test_bit(HFC_CFG_REPORT_SLIP, &hc->chan[16].cfg)) {
+					if (debug & DEBUG_HFCMULTI_SYNC)
+						printk(KERN_DEBUG "%s: (id=%d) E1 got SLIP (RX)\n", __FUNCTION__, hc->id);
 					/* SLIP */
 					temp = HFC_inb_(hc, R_SLIP) & V_FOSLIP_RX;
 					if (!temp && hc->chan[16].slip_rx)
@@ -1280,11 +1288,11 @@ hfcmulti_interrupt(int intno, void *dev_id, struct pt_regs *regs)
 					hc->chan[16].slip_tx = temp;
 				}
 				temp = HFC_inb_(hc, R_JATT_DIR);
-				switch(!hc->chan[16].sync) {
+				switch(hc->chan[16].sync) {
 					case 0:
 					if ((temp&0x60) == 0x60) {
 						if (debug & DEBUG_HFCMULTI_SYNC)
-							printk(KERN_DEBUG "%s: E1 now in clock sync\n", __FUNCTION__);
+							printk(KERN_DEBUG "%s: (id=%d) E1 now in clock sync\n", __FUNCTION__, hc->id);
 						HFC_outb(hc, R_RX_OFF, hc->chan[16].jitter | V_RX_INIT);
 						HFC_outb(hc, R_TX_OFF, hc->chan[16].jitter | V_RX_INIT);
 						hc->chan[16].sync = 1;
@@ -1295,7 +1303,7 @@ hfcmulti_interrupt(int intno, void *dev_id, struct pt_regs *regs)
 					case 1:
 					if ((temp&0x60) != 0x60) {
 						if (debug & DEBUG_HFCMULTI_SYNC)
-							printk(KERN_DEBUG "%s: E1 lost clock sync\n", __FUNCTION__);
+							printk(KERN_DEBUG "%s: (id=%d) E1 lost clock sync\n", __FUNCTION__, hc->id);
 						hc->chan[16].sync = 0;
 						break;
 					}
@@ -1303,7 +1311,7 @@ hfcmulti_interrupt(int intno, void *dev_id, struct pt_regs *regs)
 					temp = HFC_inb_(hc, R_RX_STA0);
 					if (temp == 0x27) {
 						if (debug & DEBUG_HFCMULTI_SYNC)
-							printk(KERN_DEBUG "%s: E1 now in frame sync\n", __FUNCTION__);
+							printk(KERN_DEBUG "%s: (id=%d) E1 now in frame sync\n", __FUNCTION__, hc->id);
 						hc->chan[16].sync = 2;
 					}
 					break;
@@ -1311,14 +1319,14 @@ hfcmulti_interrupt(int intno, void *dev_id, struct pt_regs *regs)
 					case 2:
 					if ((temp&0x60) != 0x60) {
 						if (debug & DEBUG_HFCMULTI_SYNC)
-							printk(KERN_DEBUG "%s: E1 lost clock & frame sync\n", __FUNCTION__);
+							printk(KERN_DEBUG "%s: (id=%d) E1 lost clock & frame sync\n", __FUNCTION__, hc->id);
 						hc->chan[16].sync = 0;
 						break;
 					}
 					temp = HFC_inb_(hc, R_RX_STA0);
 					if (temp != 0x27) {
 						if (debug & DEBUG_HFCMULTI_SYNC)
-							printk(KERN_DEBUG "%s: E1 lost frame sync\n", __FUNCTION__);
+							printk(KERN_DEBUG "%s: (id=%d) E1 lost frame sync\n", __FUNCTION__, hc->id);
 						hc->chan[16].sync = 1;
 					}
 					break;
@@ -2574,22 +2582,30 @@ hfcmulti_initmode(hfc_multi_t *hc)
 		HFC_outb(hc, R_TX_FR2, V_TX_MF | V_TX_E | V_NEG_E);
 		HFC_outb(hc, R_RX_FR0, V_AUTO_RESYNC | V_AUTO_RECO | 0);
 		HFC_outb(hc, R_RX_FR1, V_RX_MF | V_RX_MF_SYNC);
-		if (test_bit(HFC_CFG_NTMODE, &hc->chan[(i<<2)+2].cfg)) {
-			/* NT mode */
+		if (test_bit(HFC_CHIP_PCM_SLAVE, &hc->chip)) {
+			/* SLAVE (clock master) */
 			if (debug & DEBUG_HFCMULTI_INIT)
-				printk(KERN_DEBUG "%s: E1 port NT-mode\n", __FUNCTION__);
-			r_e1_wr_sta = 0; /* G0 */
+				printk(KERN_DEBUG "%s: E1 port is clock master\n", __FUNCTION__);
 //			HFC_outb(hc, R_SYNC_CTRL, V_SYNC_OFFS | V_PCM_SYNC);
 			HFC_outb(hc, R_SYNC_CTRL, V_EXT_CLK_SYNC | V_PCM_SYNC);
 		} else {
-			/* TE mode */
+			/* MASTER (clock slave) */
+			if (debug & DEBUG_HFCMULTI_INIT)
+				printk(KERN_DEBUG "%s: E1 port is clock slave\n", __FUNCTION__);
+			HFC_outb(hc, R_SYNC_CTRL, V_SYNC_OFFS);
+		}
+		if (test_bit(HFC_CFG_NTMODE, &hc->chan[(i<<2)+2].cfg)) {
+			if (debug & DEBUG_HFCMULTI_INIT)
+				printk(KERN_DEBUG "%s: E1 port is NT-mode\n", __FUNCTION__);
+			r_e1_wr_sta = 0; /* G0 */
+		}else {
 			if (debug & DEBUG_HFCMULTI_INIT)
 				printk(KERN_DEBUG "%s: E1 port is TE-mode\n", __FUNCTION__);
 			r_e1_wr_sta = 0; /* F0 */
-			HFC_outb(hc, R_SYNC_CTRL, V_SYNC_OFFS);
 		}
 		HFC_outb(hc, R_JATT_ATT, 0x9c); /* undoc register */
-		HFC_outb(hc, R_SYNC_OUT, V_IPATS0 | V_IPATS1 | V_IPATS2);
+//		HFC_outb(hc, R_SYNC_OUT, V_IPATS0 | V_IPATS1 | V_IPATS2);
+		HFC_outb(hc, R_SYNC_OUT, V_SYNC_E1_RX | V_IPATS0 | V_IPATS1 | V_IPATS2);
 		HFC_outb(hc, R_PWM_MD, V_PWM0_MD);
 		HFC_outb(hc, R_PWM0, 0x50);
 		HFC_outb(hc, R_PWM1, 0xff);
@@ -3307,6 +3323,8 @@ HFCmulti_init(void)
 //			test_and_set_bit(HFC_CHIP_LEDS, &hc->chip);
 		if (type[HFC_cnt] & 0x800)
 			test_and_set_bit(HFC_CHIP_PCM_SLAVE, &hc->chip);
+		if (type[HFC_cnt] & 0x1000)
+			test_and_set_bit(HFC_CHIP_CLOCK_IGNORE, &hc->chip);
 		if (type[HFC_cnt] & 0x4000)
 			test_and_set_bit(HFC_CHIP_EXRAM_128, &hc->chip);
 		if (type[HFC_cnt] & 0x8000)

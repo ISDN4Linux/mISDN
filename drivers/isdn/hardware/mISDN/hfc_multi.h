@@ -54,7 +54,7 @@ struct hfcmulti_hw {
 	unsigned char	r_irq_ctrl;	
 	unsigned char	r_cirm;	
 	unsigned char	r_ram_sz;
-	unsigned char	r_pcm_mo0;
+	unsigned char	r_pcm_md0;
 	unsigned char	r_irqmsk_misc;
 	unsigned char	r_dtmf;
 	unsigned char	r_st_sync;
@@ -70,21 +70,21 @@ typedef struct hfcmulti_hw	hfcmulti_hw_t;
 #define HFC_CFG_NTMODE		0 /* NT-mode */
 #define HFC_CFG_NONCAP_TX	1 /* S/T TX interface has less capacity */
 #define HFC_CFG_DIS_ECHANNEL	2 /* disable E-channel processing */
-#define HFC_CFG_REG_ECHANNEL	2 /* register E-channel */
-#define HFC_CFG_OPTICAL		3 /* the E1 interface is optical */
-#define HFC_CFG_REPORT_LOS	4 /* the card should report loss of signal */
-#define HFC_CFG_REPORT_AIS	5 /* the card should report alarm ind. sign. */
-#define HFC_CFG_REPORT_SLIP	6 /* the card should report bit slips */
-#define HFC_CFG_DTMF		7 /* enable DTMF-detection */
+#define HFC_CFG_REG_ECHANNEL	3 /* register E-channel */
+#define HFC_CFG_OPTICAL		4 /* the E1 interface is optical */
+#define HFC_CFG_REPORT_LOS	5 /* the card should report loss of signal */
+#define HFC_CFG_REPORT_AIS	6 /* the card should report alarm ind. sign. */
+#define HFC_CFG_REPORT_SLIP	7 /* the card should report bit slips */
+#define HFC_CFG_DTMF		8 /* enable DTMF-detection */
 
 #define HFC_CHIP_EXRAM_128	0 /* external ram 128k */
 #define HFC_CHIP_EXRAM_512	1 /* external ram 256k */
 #define HFC_CHIP_REVISION0	2 /* old fifo handling */
 #define HFC_CHIP_PCM_SLAVE	3 /* PCM is slave */
-#define HFC_CHIP_DTMF		4 /* DTMF decoding is enabled */
-#define HFC_CHIP_ULAW		5 /* ULAW mode */
-#define HFC_CHIP_LEDS		5 /* used LEDs */
-#define HFC_CHIP_CLOCK2		6 /* double clock mode */
+#define HFC_CHIP_CLOCK_IGNORE	4 /* ignore missing PCM clock */
+#define HFC_CHIP_DTMF		5 /* DTMF decoding is enabled */
+#define HFC_CHIP_ULAW		6 /* ULAW mode */
+#define HFC_CHIP_CLOCK2		7 /* double clock mode */
 
 struct hfc_multi {
 	struct list_head	list;
@@ -155,9 +155,9 @@ typedef struct hfc_multi	hfc_multi_t;
 #define R_IRQMSK_MISC		0x11
 #define R_SCI_MSK		0x12
 #define R_IRQ_CTRL		0x13
-#define R_PCM_MO0		0x14
-#define R_PCM_MO1		0x15
-#define R_PCM_MO2		0x15
+#define R_PCM_MD0		0x14
+#define R_PCM_MD1		0x15
+#define R_PCM_MD2		0x15
 #define R_SH0H			0x15
 #define R_SH1H			0x15
 #define R_SH0L			0x15
@@ -194,7 +194,7 @@ typedef struct hfc_multi	hfc_multi_t;
 #define A_ST_WR_STATE		0x30
 #define R_RX_OFF		0x30
 #define A_ST_CTRL0		0x31
-#define R_SYNC_OUT		0x21
+#define R_SYNC_OUT		0x31
 #define A_ST_CTRL1		0x32
 #define A_ST_CTRL2		0x33
 #define A_ST_SQ_WR		0x34
@@ -566,8 +566,8 @@ typedef struct hfc_multi	hfc_multi_t;
 #define V_FOSLIP_TX		0x80
 
 /* chapter 6: PCM interface */
-/* R_PCM_MO0 */
-#define V_PCM_MO		0x01
+/* R_PCM_MD0 */
+#define V_PCM_MD		0x01
 #define V_C4_POL		0x02
 #define V_F0_NEG		0x04
 #define V_F0_LEN		0x08
@@ -974,7 +974,7 @@ struct hfc_register_names {
 	{"R_JATT_ATT",		0x2F},
 	{"A_ST_xx_STA/R_RX_OFF",0x30},
 	{"A_ST_CTRL0",		0x31},
-	{"R_SYNC_OUT",		0x21},
+	{"R_SYNC_OUT",		0x31},
 	{"A_ST_CTRL1",		0x32},
 	{"A_ST_CTRL2",		0x33},
 	{"A_ST_SQ_WR",		0x34},

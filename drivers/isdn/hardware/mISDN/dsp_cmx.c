@@ -1,4 +1,4 @@
-/* $Id: dsp_cmx.c,v 1.8 2004/12/19 16:17:36 jolly Exp $
+/* $Id: dsp_cmx.c,v 1.9 2005/01/29 16:23:24 jolly Exp $
  *
  * Audio crossconnecting/conferrencing (hardware level).
  *
@@ -624,7 +624,7 @@ dsp_cmx_hardware(conference_t *conf, dsp_t *dsp)
 		/* if members have two banks (and not on the same chip) */
 		if (member->dsp->features.pcm_banks>1
 		 && nextm->dsp->features.pcm_banks>1
-		 && member->dsp->features.pcm_id!=nextm->dsp->features.pcm_id) {
+		 && member->dsp->features.hfc_id!=nextm->dsp->features.hfc_id) {
 			/* if both members have same slots with crossed banks */
 			if (member->dsp->pcm_slot_tx>=0
 			 && member->dsp->pcm_slot_rx>=0
@@ -764,7 +764,7 @@ dsp_cmx_hardware(conference_t *conf, dsp_t *dsp)
 			nextm->dsp->pcm_bank_rx = 0;
 			nextm->dsp->pcm_bank_tx = 0;
 			if (dsp_debug & DEBUG_DSP_CMX)
-				printk(KERN_DEBUG "%s adding %s & %s to new PCM slot %d (TX) %d (RX) on same chip or one bank PCM) because both members have not crossed slots\n", __FUNCTION__,
+				printk(KERN_DEBUG "%s adding %s & %s to new PCM slot %d (TX) %d (RX) on same chip or one bank PCM, because both members have not crossed slots\n", __FUNCTION__,
 					member->dsp->inst.name, nextm->dsp->inst.name, member->dsp->pcm_slot_tx,
 					member->dsp->pcm_slot_rx);
 			dsp_cmx_hw_message(member->dsp, HW_PCM_CONN, member->dsp->pcm_slot_tx, member->dsp->pcm_bank_tx, member->dsp->pcm_slot_rx, member->dsp->pcm_bank_rx);
