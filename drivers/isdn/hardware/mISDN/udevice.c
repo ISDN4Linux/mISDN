@@ -1,4 +1,4 @@
-/* $Id: udevice.c,v 0.12 2001/03/27 15:34:20 kkeil Exp $
+/* $Id: udevice.c,v 0.13 2001/03/29 19:14:25 kkeil Exp $
  *
  * Copyright 2000  by Karsten Keil <kkeil@isdn4linux.de>
  */
@@ -402,6 +402,12 @@ hisax_wdata(hisaxdevice_t *dev, void *dp, int len) {
 		off.dinfo = 0;
 		lay = iff->data.i;
 		off.len = 0;
+		if (LAYER_OUTRANGE(lay)) {
+			off.len = -EINVAL;
+			hisax_rdata(dev, &off, 1);
+			break;
+		} else
+			lay = ISDN_LAYER(lay);
 		if ((st = get_stack4id(iff->addr))) {
 			if ((layer = getlayer4lay(st, lay))) {
 				hisaxinstance_t *inst = layer->inst;
@@ -413,6 +419,11 @@ hisax_wdata(hisaxdevice_t *dev, void *dp, int len) {
 					ip = (u_int *)p;
 					*ip++ = inst->obj->id;
 					*ip++ = inst->extentions;
+					*ip++ = inst->id;
+					if (inst->st)
+						*ip++ = inst->st->id;
+					else
+						*ip++ = 0;
 					p = (u_char *)ip;
 					memcpy(p, &inst->pid, sizeof(hisax_pid_t));
 					p += sizeof(hisax_pid_t);
@@ -464,6 +475,13 @@ hisax_wdata(hisaxdevice_t *dev, void *dp, int len) {
 		off.data.p = stbuf;
 		ip = &iff->data.i;
 		lay = iff->data.i;
+		ip++;
+		if (LAYER_OUTRANGE(lay)) {
+			off.len = -EINVAL;
+			hisax_rdata(dev, &off, 1);
+			break;
+		} else
+			lay = ISDN_LAYER(lay);
 		if ((st = get_stack4id(iff->addr))) {
 			if ((layer = getlayer4lay(st, lay))) {
 				hisaxinstance_t *inst = layer->inst;
@@ -471,11 +489,27 @@ hisax_wdata(hisaxdevice_t *dev, void *dp, int len) {
 				ip = (int *)stbuf;
 				while(inst) {
 					if (lay & IF_UP) {
-						*ip++ = inst->up.stat;
 						*ip++ = inst->up.extentions;
+						if (inst->up.owner)
+							*ip++ = inst->up.owner->id;
+						else
+							*ip++ = 0;
+						if (inst->up.peer)
+							*ip++ = inst->up.peer->id;
+						else
+							*ip++ = 0;
+						*ip++ = inst->up.stat;
 					} else if (lay & IF_DOWN) {
-						*ip++ = inst->down.stat;
 						*ip++ = inst->down.extentions;
+						if (inst->down.owner)
+							*ip++ = inst->down.owner->id;
+						else
+							*ip++ = 0;
+						if (inst->down.peer)
+							*ip++ = inst->down.peer->id;
+						else
+							*ip++ = 0;
+						*ip++ = inst->down.stat;
 					}
 					inst = inst->next;
 				}	

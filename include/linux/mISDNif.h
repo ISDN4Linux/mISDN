@@ -1,4 +1,4 @@
-/* $Id: mISDNif.h,v 0.21 2001/03/27 10:23:48 kkeil Exp $
+/* $Id: mISDNif.h,v 0.22 2001/03/29 19:14:25 kkeil Exp $
  *
  */
 
@@ -224,7 +224,7 @@
 #define IF_TYPEMASK	0x07000000
 #define IF_ADDRMASK	0x00FFFFFF
 #define IF_IADDRMASK	0xF0FFFFFF
-#define IF_LAYERMASK	0x00FF0000
+#define IF_LAYERMASK	0x00F00000
 #define IF_TYPE(i)	((i)->stat & IF_TYPEMASK)
 
 #define DINFO_SKB	-1
@@ -283,8 +283,18 @@ typedef struct _layer_info {
 	char		name[HISAX_MAX_IDLEN];
 	int		object_id;
 	int		extentions;
+	int		id;
+	int		st;
 	hisax_pid_t	pid;
 } layer_info_t;
+
+
+typedef struct _interface_info {
+	int		extentions;
+	int		owner;
+	int		peer;
+	int		stat;
+} interface_info_t;
 
 
 /* l3 pointer arrays */
@@ -503,8 +513,8 @@ typedef struct _hisaxinstance {
 	struct _hisaxinstance	*prev;
 	struct _hisaxinstance	*next;
 	char			name[HISAX_MAX_IDLEN];
-	u_int			id;
 	int			extentions;
+	u_int			id;
 	hisax_pid_t		pid;
 	struct _hisaxstack	*st;
 	hisaxobject_t		*obj;

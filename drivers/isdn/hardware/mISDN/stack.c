@@ -1,4 +1,4 @@
-/* $Id: stack.c,v 0.8 2001/03/27 15:34:20 kkeil Exp $
+/* $Id: stack.c,v 0.9 2001/03/29 19:14:25 kkeil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -349,32 +349,41 @@ release_stacks(hisaxobject_t *obj) {
 
 int
 register_layer(hisaxstack_t *st, hisaxinstance_t *inst) {
-	int lay;
+	int count=0;
 	hisaxlayer_t *layer;
+	hisaxinstance_t *itmp;
 
 	if (!st || !inst)
 		return(-EINVAL);
-	lay = inst->pid.layermask;
 	if (core_debug & DEBUG_CORE_FUNC)
 		printk(KERN_DEBUG __FUNCTION__":st(%p) inst(%p/%p) lmask(%x)\n",
-			st, inst, inst->obj, lay);
-	if (!(layer = getlayer4lay(st, lay))) {
+			st, inst, inst->obj, inst->pid.layermask);
+	if (!(layer = getlayer4lay(st, inst->pid.layermask))) {
 		if (!(layer = kmalloc(sizeof(hisaxlayer_t), GFP_ATOMIC))) {
-			int_errtxt("no mem for layer %d", lay);
+			int_errtxt("no mem for layer %d", inst->pid.layermask);
 			return(-ENOMEM);
 		}
 		if (core_debug & DEBUG_CORE_FUNC)
 			printk(KERN_DEBUG __FUNCTION__": create layer(%p)\n",
 				layer); 
 		memset(layer, 0, sizeof(hisaxlayer_t));
-		insertlayer(st, layer, lay);
-	} else
+		insertlayer(st, layer, inst->pid.layermask);
+	} else {
 		if (core_debug & DEBUG_CORE_FUNC)
 			printk(KERN_DEBUG __FUNCTION__": add to layer(%p)\n",
 				layer);
+		itmp = layer->inst;
+		while(itmp) {
+			count++;
+			itmp = itmp->next;
+		}
+	}
 	APPEND_TO_LIST(inst, layer->inst);
 	inst->st = st;
 	inst->obj->refcnt++;
+	inst->id = st->id;
+	inst->id |= get_lowlayer(inst->pid.layermask)<<20;
+	inst->id |= count<8;
 	return(0);
 }
 
