@@ -1,4 +1,4 @@
-/* $Id: hfc_pci.c,v 1.7 2002/05/01 01:00:39 kkeil Exp $
+/* $Id: hfc_pci.c,v 1.8 2002/07/07 21:20:16 kkeil Exp $
 
  * hfc_pci.c     low level driver for CCD's hfc-pci based cards
  *
@@ -36,10 +36,23 @@
 #include "helper.h"
 #include "debug.h"
 
+#ifdef HFC_TENOVIS_TEST
+#include "hfcProc.h"
+#else
+#define HFC_INFO(txt)	printk(KERN_DEBUG txt)
+#endif
 
 extern const char *CardType[];
 
-static const char *hfcpci_revision = "$Revision: 1.7 $";
+#ifdef HFC_TENOVIS
+	#ifdef HFC_TENOVIS_LOOP
+		static const char *hfcpci_revision = "$Revision: 1.8 $";
+	#else
+		static const char *hfcpci_revision = "$Revision: 1.8 $";
+	#endif
+#else
+	static const char *hfcpci_revision = "$Revision: 1.8 $";
+#endif
 
 /* table entry in the PCI devices list */
 typedef struct {
@@ -149,6 +162,8 @@ typedef struct hfcPCI_hw	hfcPCI_hw_t;
 #define	HFC_CFG_PCM		3
 #define HFC_CFG_2HFC		4
 #define HFC_CFG_SLAVEHFC	5
+#define HFC_CFG_NEG_F0		6
+#define HFC_CFG_SW_DD_DU	7
 
 typedef struct _hfc_pci {
 	struct _hfc_pci	*prev;
@@ -229,6 +244,7 @@ reset_hfcpci(hfc_pci_t *hc)
 	u_char	val;
 	int	cnt = 0;
 
+	HFC_INFO("reset_hfcpci: entered\n");
 	val = Read_hfc(hc, HFCPCI_CHIP_ID);
 	printk(KERN_INFO "HFC_PCI: resetting HFC ChipId(%x)\n", val);
 	save_flags(flags);
@@ -267,8 +283,11 @@ reset_hfcpci(hfc_pci_t *hc)
 	hc->hw.sctrl = 0x40;	/* set tx_lo mode, error in datasheet ! */
 	hc->hw.sctrl_r = 0;
 	hc->hw.sctrl_e = HFCPCI_AUTO_AWAKE;	/* S/T Auto awake */
+	hc->hw.mst_m = 0;
 	if (test_bit(HFC_CFG_MASTER, &hc->cfg))
-		hc->hw.mst_m = HFCPCI_MASTER;	/* HFC Master Mode */
+		hc->hw.mst_m |= HFCPCI_MASTER;	/* HFC Master Mode */
+	if (test_bit(HFC_CFG_NEG_F0, &hc->cfg))
+		hc->hw.mst_m |= HFCPCI_F0_NEGATIV;
 	if (hc->hw.nt_mode) {
 		hc->hw.clkdel = CLKDEL_NT;	/* ST-Bit delay for NT-Mode */
 		hc->hw.sctrl |= SCTRL_MODE_NT;	/* NT-MODE */
@@ -305,12 +324,29 @@ reset_hfcpci(hfc_pci_t *hc)
 	/* STIO2 is used as data input, B1+B2 from IOM->ST */
 	/* ST B-channel send disabled -> continous 1s */
 	/* The IOM slots are always enabled */
-	hc->hw.conn = 0x36;	/* set data flow directions */
+	if (test_bit(HFC_CFG_PCM, &hc->cfg)) {
+		/* set data flow directions: connect B1,B2: HFC to/from PCM */
+		hc->hw.conn = 0x09;
+#ifdef HFC_TENOVIS_LOOP
+		Write_hfc(hc, HFCPCI_MST_EMOD, 0xA9); /* IOM mode for loop operation over highway */
+#else
+		Write_hfc(hc, HFCPCI_MST_EMOD, 0x01); /* normal operation */
+#endif
+	} else {
+		hc->hw.conn = 0x36;	/* set data flow directions */ 
+		if (test_bit(HFC_CFG_SW_DD_DU, &hc->cfg)) {
+			Write_hfc(hc, HFCPCI_B1_SSL, 0xC0);
+			Write_hfc(hc, HFCPCI_B2_SSL, 0xC1);
+			Write_hfc(hc, HFCPCI_B1_RSL, 0xC0);
+			Write_hfc(hc, HFCPCI_B2_RSL, 0xC1);
+		} else {
+			Write_hfc(hc, HFCPCI_B1_SSL, 0x80);
+			Write_hfc(hc, HFCPCI_B2_SSL, 0x81);
+			Write_hfc(hc, HFCPCI_B1_RSL, 0x80);
+			Write_hfc(hc, HFCPCI_B2_RSL, 0x81);
+		}
+	}
 	Write_hfc(hc, HFCPCI_CONNECT, hc->hw.conn);
-	Write_hfc(hc, HFCPCI_B1_SSL, 0x80);	/* B1-Slot 0 STIO1 out enabled */
-	Write_hfc(hc, HFCPCI_B2_SSL, 0x81);	/* B2-Slot 1 STIO1 out enabled */
-	Write_hfc(hc, HFCPCI_B1_RSL, 0x80);	/* B1-Slot 0 STIO2 in enabled */
-	Write_hfc(hc, HFCPCI_B2_RSL, 0x81);	/* B2-Slot 1 STIO2 in enabled */
 	val = Read_hfc(hc, HFCPCI_INT_S2);
 	restore_flags(flags);
 }
@@ -1409,9 +1445,16 @@ HFCD_l1hw(hisaxif_t *hif, struct sk_buff *skb)
 		} else if (hh->dinfo == HW_POWERUP) {
 			Write_hfc(hc, HFCPCI_STATES, HFCPCI_DO_ACTION);
 		} else if ((hh->dinfo & HW_TESTLOOP) == HW_TESTLOOP) {
+			u_char	slot;
 			if (1 & hh->dinfo) {
-				Write_hfc(hc, HFCPCI_B1_SSL, 0x80);	/* tx slot */
-				Write_hfc(hc, HFCPCI_B1_RSL, 0x80);	/* rx slot */
+				if (test_bit(HFC_CFG_SW_DD_DU, &hc->cfg))
+					slot = 0xC0;
+				else
+					slot = 0x80;
+				printk(KERN_DEBUG __FUNCTION__ 
+					": Write_hfc: B1_SSL/RSL 0x%x\n", slot);
+				Write_hfc(hc, HFCPCI_B1_SSL, slot);
+				Write_hfc(hc, HFCPCI_B1_RSL, slot);
 				save_flags(flags);
 				cli();
 				hc->hw.conn = (hc->hw.conn & ~7) | 1;
@@ -1419,8 +1462,14 @@ HFCD_l1hw(hisaxif_t *hif, struct sk_buff *skb)
 				restore_flags(flags);
 			}
 			if (2 & hh->dinfo) {
-				Write_hfc(hc, HFCPCI_B2_SSL, 0x81);	/* tx slot */
-				Write_hfc(hc, HFCPCI_B2_RSL, 0x81);	/* rx slot */
+				if (test_bit(HFC_CFG_SW_DD_DU, &hc->cfg))
+					slot = 0xC1;
+				else
+					slot = 0x81;
+				printk(KERN_DEBUG __FUNCTION__ 
+					": Write_hfc: B2_SSL/RSL 0x%x\n", slot);
+				Write_hfc(hc, HFCPCI_B2_SSL, slot);
+				Write_hfc(hc, HFCPCI_B2_RSL, slot);
 				save_flags(flags);
 				cli();
 				hc->hw.conn = (hc->hw.conn & ~0x38) | 0x08;
@@ -1511,10 +1560,15 @@ mode_hfcpci(bchannel_t *bch, int bc, int protocol)
 	fifo2 = bc;
 	pcm_mode = (bc>>24) & 0xff;
 	if (pcm_mode) { /* PCM SLOT USE */
+		if (!test_bit(HFC_CFG_PCM, &hc->cfg))
+			printk(KERN_WARNING __FUNCTION__
+				": pcm channel id without HFC_CFG_PCM\n");
 		rx_slot = (bc>>8) & 0xff;
 		tx_slot = (bc>>16) & 0xff;
 		bc = bc & 0xff;
-	}
+	} else if (test_bit(HFC_CFG_PCM, &hc->cfg) && (protocol != ISDN_PID_NONE))
+		printk(KERN_WARNING __FUNCTION__
+			": no pcm channel id but HFC_CFG_PCM\n");
 	save_flags(flags);
 	cli();
 	if (hc->chanlimit > 1) {
@@ -1639,22 +1693,35 @@ mode_hfcpci(bchannel_t *bch, int bc, int protocol)
 			restore_flags(flags);
 			return(-ENOPROTOOPT);
 	}
-	if (pcm_mode) {
+	if (test_bit(HFC_CFG_PCM, &hc->cfg)) {
 		if (protocol == ISDN_PID_NONE) {
 			rx_slot = 0;
 			tx_slot = 0;
 		} else {
-			rx_slot |= 0x80;
-			tx_slot |= 0x80;
+			if (test_bit(HFC_CFG_SW_DD_DU, &hc->cfg)) {
+				rx_slot |= 0xC0;
+				tx_slot |= 0xC0;
+			} else {
+				rx_slot |= 0x80;
+				tx_slot |= 0x80;
+			}
 		}
 		if (bc & 2) {
 			hc->hw.conn &= 0xc7;
 			hc->hw.conn |= 0x08;
+			printk(KERN_DEBUG __FUNCTION__
+				": Write_hfc: B2_SSL 0x%x\n", tx_slot);
+			printk(KERN_DEBUG __FUNCTION__
+				": Write_hfc: B2_RSL 0x%x\n", rx_slot);
 			Write_hfc(hc, HFCPCI_B2_SSL, tx_slot);
 			Write_hfc(hc, HFCPCI_B2_RSL, rx_slot);
 		} else {
 			hc->hw.conn &= 0xf8;
 			hc->hw.conn |= 0x01;
+			printk(KERN_DEBUG __FUNCTION__
+				": Write_hfc: B1_SSL 0x%x\n", tx_slot);
+			printk(KERN_DEBUG __FUNCTION__
+				": Write_hfc: B1_RSL 0x%x\n", rx_slot);
 			Write_hfc(hc, HFCPCI_B1_SSL, tx_slot);
 			Write_hfc(hc, HFCPCI_B1_RSL, rx_slot);
 		}
@@ -1739,7 +1806,7 @@ hfcpci_l2l1(hisaxif_t *hif, struct sk_buff *skb)
 			bch->next_skb = NULL;
 		}
 		test_and_clear_bit(FLG_TX_BUSY, &bch->Flag);
-		mode_hfcpci(bch, bch->channel, 0);
+		mode_hfcpci(bch, bch->channel, ISDN_PID_NONE);
 		test_and_clear_bit(BC_FLG_ACTIV, &bch->Flag);
 		bch->inst.unlock(bch->inst.data);
 		skb_trim(skb, 0);
@@ -1964,6 +2031,7 @@ hfcB_bh(bchannel_t *bch)
 void
 inithfcpci(hfc_pci_t *hc)
 {
+	HFC_INFO("inithfcpci: entered\n");
 	hc->dch.tqueue.routine = (void *) (void *) hfcD_bh;
 	hc->bch[0].tqueue.routine = (void *) (void *) hfcB_bh;
 	hc->bch[1].tqueue.routine = (void *) (void *) hfcB_bh;
@@ -1988,12 +2056,15 @@ hfcpci_card_msg(hfc_pci_t *hc, int mt, void *arg)
 		debugl1(hc, "HFCPCI: card_msg %x", mt);
 	switch (mt) {
 		case CARD_RESET:
+			HFC_INFO("hfcpci_card_msg: CARD_RESET\n");
 			reset_hfcpci(hc);
 			return (0);
 		case CARD_RELEASE:
+			HFC_INFO("hfcpci_card_msg: CARD_RELEASE\n");
 			release_io_hfcpci(hc);
 			return (0);
 		case CARD_INIT:
+			HFC_INFO("hfcpci_card_msg: CARD_INIT\n");
 			inithfcpci(hc);
 			save_flags(flags);
 			sti();
@@ -2007,6 +2078,7 @@ hfcpci_card_msg(hfc_pci_t *hc, int mt, void *arg)
 			restore_flags(flags);
 			return (0);
 		case CARD_TEST:
+			HFC_INFO("hfcpci_card_msg: CARD_TEST\n");
 			return (0);
 	}
 	return (0);
@@ -2017,6 +2089,8 @@ hfcpci_card_msg(hfc_pci_t *hc, int mt, void *arg)
 static int init_card(hfc_pci_t *hc)
 {
 	int irq_cnt, cnt = 3;
+
+	HFC_INFO("init_card: entered\n");
 
 	irq_cnt = kstat_irqs(hc->irq);
 	printk(KERN_INFO "HFC PCI: IRQ %d count %d\n", hc->irq, irq_cnt);
@@ -2128,6 +2202,31 @@ static int debug;
 MODULE_AUTHOR("Karsten Keil");
 MODULE_PARM(debug, "1i");
 MODULE_PARM(protocol, MODULE_PARM_T);
+
+/* short description of protocol
+ * protocol=<p1>[,p2,p3...]
+ *
+ * Values:
+ * the value has following structure
+ * <bit  3 -  0>  D-channel protocol id
+ * <bit 15 -  4>  Flags for special features
+ * <bit 31 - 16>  Spare (set to 0)
+ *
+ * D-channel protocol ids
+ * 1       1TR6 (not released yet)
+ * 2       DSS1
+ *
+ * Feature Flags
+ * bit 4   0x0010  Net side stack (NT mode)
+ * bit 5   0x0020  point to point line
+ * bit 6   0x0040  PCM slave mode
+ * bit 7   0x0080  use negativ frame pulse
+ * bit 8   0x0100  use setting from the previous HFC driver and add channels to
+ *                 the previous stack, used for the second chip in 2 chip setups
+ * bit 9   0x0200  switch DD/DU interface
+ * bit 10 - 15     reserved
+ */
+ 
 MODULE_PARM(layermask, MODULE_PARM_T);
 #define HFC_init init_module
 #endif
@@ -2501,6 +2600,12 @@ HFC_init(void)
 			test_and_set_bit(HFC_CFG_SLAVE, &card->cfg);
 			test_and_clear_bit(HFC_CFG_MASTER, &card->cfg);
 		}
+		if (protocol[i] & 0x80) {
+			test_and_set_bit(HFC_CFG_NEG_F0, &card->cfg);
+		}
+		if (protocol[i] & 0x200) {
+			test_and_set_bit(HFC_CFG_SW_DD_DU, &card->cfg);
+		}
 		printk(KERN_DEBUG "HFC card %p dch %p bch1 %p bch2 %p\n",
 			card, &card->dch, &card->bch[0], &card->bch[1]);
 		if (setup_hfcpci(card)) {
@@ -2569,6 +2674,11 @@ HFC_init(void)
 				err = 0;
 			return(err);
 		}
+#ifdef HFC_TENOVIS_TEST
+		else{
+			hfc_procCreate(card->hw.pci_io,card->hw.fifos);
+		}
+#endif
 	}
 	printk(KERN_INFO "HFC %d cards installed\n", HFC_cnt);
 	return(0);
@@ -2588,6 +2698,11 @@ cleanup_module(void)
 			HFC_obj.refcnt);
 		release_card(HFC_obj.ilist);
 	}
+
+#ifdef HFC_TENOVIS_TEST
+	hfc_procRelease();
+#endif
+
 	return(0);
 }
 #endif

@@ -1,4 +1,4 @@
-/* $Id: hfc_pci.h,v 1.0 2001/11/02 23:42:26 kkeil Exp $
+/* $Id: hfc_pci.h,v 1.1 2002/07/07 21:20:17 kkeil Exp $
  *
  *  specific defines for CCD's HFC 2BDS0 PCI chips
  *
@@ -153,6 +153,9 @@
 /* bits in HFCD_MST_MODE */
 #define HFCPCI_MASTER	     0x01
 #define HFCPCI_SLAVE         0x00
+#define HFCPCI_F0IO_POSITIV  0x02
+#define HFCPCI_F0_NEGATIV    0x04
+#define HFCPCI_F0_2C4        0x08
 /* remaining bits are for codecs control */
 
 /* bits in HFCD_SCTRL */
