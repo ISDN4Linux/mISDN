@@ -252,8 +252,10 @@ else
     for i in drivers/isdn/hardware/Makefile \
 	drivers/isdn/hardware/Kconfig \
 	drivers/isdn/hardware/mISDN/Makefile \
-	drivers/isdn/hardware/mISDN/Rules.make \
-	drivers/isdn/hardware/mISDN/Kconfig; do
+	drivers/isdn/hardware/mISDN/Rules.mISDN \
+	drivers/isdn/hardware/mISDN/Kconfig \
+	drivers/isdn/Config.in \
+	drivers/isdn/Makefile; do
 	calc_version_file $i 
 	if [ -n "$VERSION_NAME" ] ; then
 	    docp $VERSION_NAME $KERNELDIR/$i
