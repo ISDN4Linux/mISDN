@@ -22,6 +22,10 @@ OBJ_core := hisax_core.o hisax_dev.o
 OBJ_l1 := hisax_l1.o helper.o debug.o fsm.o
 OBJ_l2 := hisax_l2.o tei.o helper.o debug.o fsm.o
 OBJ_l3udss1 := hisax_l3.o helper.o debug.o fsm.o l3_udss1.o
+OBJ_capi := capi.o contr.o listen.o appl.o plci.o cplci.o ncci.o asn1.o \
+            asn1_aoc.o asn1_comp.o asn1_generic.o asn1_diversion.o \
+            asn1_basic_service.o asn1_address.o asn1_enc.o capi_enc.o \
+            supp_serv.o helper.o debug.o fsm.o
 
 LX_OBJS += hisax_core.o
 
@@ -40,6 +44,7 @@ M_OBJS += hisaxl2.o
 M_OBJS += l3udss1.o
 M_OBJS += fritzpci.o
 M_OBJS += sedlfax.o
+M_OBJS += hisaxcapi.o
 
 include $(TOPDIR)/Rules.make
 
@@ -76,3 +81,6 @@ sedlfax.o: $(SEDLFAXOBJ)
 	$(RM) $@
 	$(LD) -r -o $@ $(^:dummy=)
 
+hisaxcapi.o: $(OBJ_capi)
+	$(RM) $@
+	$(LD) -r -o $@ $(^:dummy=)

@@ -1,4 +1,4 @@
-/* $Id: helper.h,v 0.3 2001/02/13 10:42:55 kkeil Exp $
+/* $Id: helper.h,v 0.4 2001/02/21 19:19:15 kkeil Exp $
  *
  *   Basic declarations, defines and prototypes
  *
@@ -8,7 +8,10 @@
 #include <linux/kernel.h>
 #include <linux/skbuff.h>
       
-extern int discard_queue(struct sk_buff_head *);
+#define int_error() \
+        printk(KERN_ERR "hisax: INTERNAL ERROR in %s:%d\n", \
+                       __FILE__, __LINE__)
+                       
 #define APPEND_TO_LIST(item,base) \
 	item->prev = base; \
 	while (item->prev && item->prev->next) \
@@ -28,3 +31,6 @@ extern int discard_queue(struct sk_buff_head *);
 	REMOVE_FROM_LIST(item); \
 	if (item == base) \
 		base = item->next
+
+extern int discard_queue(struct sk_buff_head *);
+
