@@ -1,4 +1,4 @@
-/* $Id: ncci.c,v 1.13 2003/11/09 09:14:24 keil Exp $
+/* $Id: ncci.c,v 1.14 2003/11/11 10:02:23 keil Exp $
  *
  */
 
@@ -188,7 +188,8 @@ static void ncci_disconnect_b3_req(struct FsmInst *fi, int event, void *arg)
 	}
 }
 
-static void ncci_facility_req(struct FsmInst *fi, int event, void *arg)
+static void
+ncci_facility_req(struct FsmInst *fi, int event, void *arg)
 {
 	Ncci_t	*ncci = fi->userdata;
 	_cmsg	*cmsg = arg;
@@ -198,7 +199,11 @@ static void ncci_facility_req(struct FsmInst *fi, int event, void *arg)
 
 	capi_cmsg_answer(cmsg);
 	cmsg->Info = CAPI_NOERROR;
-	if (cmsg->FacilitySelector != 1) { // not DTMF
+	if (cmsg->FacilitySelector == 0) { // Handset
+		int err = ncciL4L3(ncci, PH_CONTROL | REQUEST, HW_POTS_ON, 0, NULL, NULL);
+		if (err)
+			cmsg->Info = CapiFacilityNotSupported;
+	} else if (cmsg->FacilitySelector != 1) { // not DTMF
 		cmsg->Info = CapiIllMessageParmCoding;
 	} else if (p && p[0]) {
 		func = CAPIMSG_U16(p, 1);
@@ -692,7 +697,7 @@ void ncciSendMessage(Ncci_t *ncci, struct sk_buff *skb)
 {
 	int retval = 0;
 
-	// we're not using the Fsm for DATA_B3 for performance reasons
+	// we're not using the cmesg for DATA_B3 for performance reasons
 	switch (CAPICMD(CAPIMSG_COMMAND(skb->data), CAPIMSG_SUBCOMMAND(skb->data))) {
 		case CAPI_DATA_B3_REQ:
 			if (ncci->ncci_m.state == ST_NCCI_N_ACT) {
@@ -799,8 +804,8 @@ int ncci_l3l4(mISDNif_t *hif, struct sk_buff *skb)
 	return(0);
 }
 
-static int ncciL4L3(Ncci_t *ncci, u_int prim, int dtyp, int len, void *arg,
-			struct sk_buff *skb)
+static int
+ncciL4L3(Ncci_t *ncci, u_int prim, int dtyp, int len, void *arg, struct sk_buff *skb)
 {
 	capidebug(CAPI_DBG_NCCI_L3, "%s: NCCI %x prim(%x) dtyp(%x) skb(%p)",
 		__FUNCTION__, ncci->adrNCCI, prim, dtyp, skb);

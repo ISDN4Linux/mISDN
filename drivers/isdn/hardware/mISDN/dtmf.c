@@ -1,4 +1,4 @@
-/* $Id: dtmf.c,v 1.7 2003/08/12 17:08:50 kkeil Exp $
+/* $Id: dtmf.c,v 1.8 2003/11/11 10:02:23 keil Exp $
  *
  * Linux ISDN subsystem, DTMF tone module
  *
@@ -47,7 +47,7 @@ static int debug = 0;
 
 static mISDNobject_t dtmf_obj;
 
-static char *mISDN_dtmf_revision = "$Revision: 1.7 $";
+static char *mISDN_dtmf_revision = "$Revision: 1.8 $";
 
 /*
  * Misc. lookup-tables.
@@ -415,7 +415,7 @@ dtmf_from_up(mISDNif_t *hif, struct sk_buff *skb)
 	hh = mISDN_HEAD_P(skb);
 	switch(hh->prim) {
 		case (PH_CONTROL | REQUEST):
-			if (skb->len >= sizeof(int)) {
+			if ((hh->dinfo == 0) && (skb->len >= sizeof(int))) {
 				data = (int *)skb->data;
 				if (dtmf->debug & DEBUG_DTMF_CTRL)
 					printk(KERN_DEBUG "DTMF: PH_CONTROL REQ data %04x\n",
@@ -423,14 +423,14 @@ dtmf_from_up(mISDNif_t *hif, struct sk_buff *skb)
 				if (*data == DTMF_TONE_START) {
 					test_and_set_bit(FLG_DTMF_ACTIV, &dtmf->Flags);
 					dtmf_reset(dtmf);
+					break;
 				} else if (*data == DTMF_TONE_STOP) {
 					test_and_clear_bit(FLG_DTMF_ACTIV, &dtmf->Flags);
 					dtmf_reset(dtmf);
+					break;
 				}
-				break;
-			} else
-				printk(KERN_ERR "dtmf_from_up: skb too shoort %d\n",
-					skb->len);
+			}
+			/* Fall trough in case of not handled function */
 		default:
 			return(dtmf->inst.down.func(&dtmf->inst.down, skb));
 	}

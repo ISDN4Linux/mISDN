@@ -1,4 +1,4 @@
-/* $Id: w6692.c,v 1.1 2003/11/09 09:33:22 keil Exp $
+/* $Id: w6692.c,v 1.2 2003/11/11 10:02:23 keil Exp $
 
  * w6692.c     low level driver for CCD's hfc-pci based cards
  *
@@ -41,7 +41,7 @@
 
 extern const char *CardType[];
 
-const char *w6692_rev = "$Revision: 1.1 $";
+const char *w6692_rev = "$Revision: 1.2 $";
 
 #define DBUSY_TIMER_VALUE	80
 
@@ -493,10 +493,11 @@ enable_pots(bchannel_t *bch)
 	w6692pci	*card = bch->inst.data;
 
 	if ((card->pots == 0) || (bch->protocol != ISDN_PID_L1_B_64TRANS))
-		return(1);
+		return(-ENODEV);
 	
 	bhw->b_mode |= W_B_MODE_EPCM | W_B_MODE_BSW0;
 	WriteW6692B(card, bch->channel, W_B_MODE, bhw->b_mode);
+	WriteW6692B(card, bch->channel, W_B_CMDR, W_B_CMDR_RRST | W_B_CMDR_XRST);
 	card->pctl |= (bch->channel ? W_PCTL_PCX : 0);
 	WriteW6692(card, W_PCTL, card->pctl);
 	return(0);
@@ -509,9 +510,10 @@ disable_pots(bchannel_t *bch)
 	w6692pci	*card = bch->inst.data;
 
 	if (card->pots == 0)
-		return(1);
+		return(-ENODEV);
 	bhw->b_mode &= ~(W_B_MODE_EPCM | W_B_MODE_BSW0);
 	WriteW6692B(card, bch->channel, W_B_MODE, bhw->b_mode);
+	WriteW6692B(card, bch->channel, W_B_CMDR, W_B_CMDR_RRST | W_B_CMDR_RACT | W_B_CMDR_XRST);
 	return(0);
 }
 
@@ -1038,11 +1040,13 @@ w6692_l2l1B(mISDNif_t *hif, struct sk_buff *skb)
 		}
 		ret = 0;
 	} else if (hh->prim == (PH_CONTROL | REQUEST)) {
+		ret = 0;
 		if (hh->dinfo == HW_POTS_ON) {
-			enable_pots(bch);
+			ret = enable_pots(bch);
 		} else if (hh->dinfo == HW_POTS_OFF) {
-			disable_pots(bch);
-		}
+			ret = disable_pots(bch);
+		} else
+			ret = -EINVAL;
 	} else {
 		printk(KERN_WARNING "%s: unknown prim(%x)\n",
 			__FUNCTION__, hh->prim);

@@ -1,4 +1,4 @@
-/* $Id: appl.c,v 1.5 2003/11/11 09:59:00 keil Exp $
+/* $Id: appl.c,v 1.6 2003/11/11 10:02:23 keil Exp $
  *
  */
 
@@ -140,6 +140,7 @@ void applFacilityReq(Appl_t *appl, struct sk_buff *skb)
 
 	capi_message2cmsg(&cmsg, skb->data);
 	switch (cmsg.FacilitySelector) {
+		case 0x0000: // Handset
 		case 0x0001: // DTMF
 			cplci = applAdr2cplci(appl, CAPIMSG_CONTROL(skb->data));
 			if (cplci && cplci->ncci) {
