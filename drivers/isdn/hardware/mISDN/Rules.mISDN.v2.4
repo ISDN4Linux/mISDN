@@ -4,11 +4,11 @@
 
 O_TARGET := vmlinux-obj.o
 
+export-objs := core.o isac.o
+
 ifdef CONFIG_MISDN_MEMDEBUG
 	export-objs += memdbg.o
 endif
-
-export-objs := core.o isac.o
 
 M_OBJS := $(obj-m)
 
