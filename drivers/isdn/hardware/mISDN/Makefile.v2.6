@@ -24,6 +24,10 @@ ifdef CONFIG_MISDN_HFCPCI
 obj-$(CONFIG_MISDN_DRV) += hfcpci.o
 endif
 
+ifdef CONFIG_MISDN_HFCUSB
+obj-$(CONFIG_MISDN_DRV) += hfcsusb.o
+endif
+
 ifdef CONFIG_MISDN_SPEEDFAX
 obj-$(CONFIG_MISDN_DRV) += sedlfax.o
 obj-$(CONFIG_MISDN_DRV) += faxl3.o
@@ -50,6 +54,7 @@ endif
 sedlfax-objs := sedl_fax.o isar.o
 avmfritz-objs := avm_fritz.o
 hfcpci-objs := hfc_pci.o
+hfcsusb-objs := hfcs_usb.o
 w6692pci-objs := w6692.o
 hfcmulti-objs := hfc_multi.o
 mISDN_isac-objs := isac.o arcofi.o

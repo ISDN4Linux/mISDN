@@ -60,6 +60,13 @@ config HFCMULTI_PCIMEM
 
 endif
 
+config MISDN_HFCUSB
+	bool "Support for HFC-S USB based TAs"
+	depends on USB && EXPERIMENTAL
+	help
+	  Enable support for USB ISDN TAs with Cologne Chip AG's
+	  HFC-S USB ISDN Controller
+
 config MISDN_SPEEDFAX
 	bool "Support for Sedlbauer Speedfax+"
 	depends on PCI || ISA
