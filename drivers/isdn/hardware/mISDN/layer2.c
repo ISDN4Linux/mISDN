@@ -1,4 +1,4 @@
-/* $Id: layer2.c,v 0.16 2001/08/02 14:51:56 kkeil Exp $
+/* $Id: layer2.c,v 0.17 2001/08/02 15:02:06 kkeil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -12,7 +12,7 @@
 #include "helper.h"
 #include "debug.h"
 
-const char *l2_revision = "$Revision: 0.16 $";
+const char *l2_revision = "$Revision: 0.17 $";
 
 static void l2m_debug(struct FsmInst *fi, char *fmt, ...);
 
@@ -310,7 +310,9 @@ sethdraddr(layer2_t *l2, u_char *header, int rsp)
 	int crbit = rsp;
 
 	if (test_bit(FLG_LAPD, &l2->flag)) {
-		*ptr++ = (l2->sapi << 2) | (rsp ? 2 : 0);
+		if (test_bit(FLG_LAPD_NET, &l2->flag))
+			crbit = !crbit;
+		*ptr++ = (l2->sapi << 2) | (crbit ? 2 : 0);
 		*ptr++ = (l2->tei << 1) | 1;
 		return (2);
 	} else {
@@ -701,8 +703,11 @@ tx_ui(layer2_t *l2)
 	int i;
 
 	i = sethdraddr(l2, header, CMD);
+	if (test_bit(FLG_LAPD_NET, &l2->flag))
+		header[1] = 0xff; /* tei 127 */
 	header[i++] = UI;
 	while ((skb = skb_dequeue(&l2->ui_queue))) {
+		skb_pull(skb, HISAX_HEAD_SIZE);
 		memcpy(skb_push(skb, i), header, i);
 		skb_push(skb, HISAX_HEAD_SIZE);
 		enqueue_ui(l2, skb);
@@ -740,8 +745,10 @@ l2_establish(struct FsmInst *fi, int event, void *arg)
 	struct sk_buff *skb = arg;
 	layer2_t *l2 = fi->userdata;
 
-	establishlink(fi);
-	test_and_set_bit(FLG_L3_INIT, &l2->flag);
+	if (!test_bit(FLG_LAPD_NET, &l2->flag)) {
+		establishlink(fi);
+		test_and_set_bit(FLG_L3_INIT, &l2->flag);
+	}
 	dev_kfree_skb(skb);
 }
 
@@ -2086,11 +2093,28 @@ new_l2(hisaxstack_t *st, hisax_pid_t *pid, layer2_t **newl2) {
 		return(-ENOPROTOOPT);
 	}
 	switch(pid->protocol[2]) {
-	    case ISDN_PID_L2_LAPD:
+	    case ISDN_PID_L2_LAPD_NET:
 	    	sprintf(nl2->inst.name, "lapd %x", st->id);
 		test_and_set_bit(FLG_LAPD, &nl2->flag);
+		test_and_set_bit(FLG_LAPD_NET, &nl2->flag);
+		test_and_set_bit(FLG_FIXED_TEI, &nl2->flag);
 		test_and_set_bit(FLG_MOD128, &nl2->flag);
+		nl2->sapi = 0;
+		nl2->tei = 88;
+		nl2->maxlen = MAX_DFRAME_LEN;
+		nl2->window = 1;
+		nl2->T200 = 1000;
+		nl2->N200 = 3;
+		nl2->T203 = 10000;
+		if (create_teimgr(nl2)) {
+			kfree(nl2);
+			return(-EINVAL);
+		}
+		break;
+	    case ISDN_PID_L2_LAPD:
+	    	sprintf(nl2->inst.name, "lapdn %x", st->id);
 		test_and_set_bit(FLG_LAPD, &nl2->flag);
+		test_and_set_bit(FLG_MOD128, &nl2->flag);
 		test_and_set_bit(FLG_ORIG, &nl2->flag);
 		nl2->sapi = 0;
 		nl2->tei = -1;
@@ -2140,7 +2164,8 @@ new_l2(hisaxstack_t *st, hisax_pid_t *pid, layer2_t **newl2) {
 	skb_queue_head_init(&nl2->down_queue);
 	InitWin(nl2);
 	nl2->l2m.fsm = &l2fsm;
-	if (test_bit(FLG_LAPB, &nl2->flag))
+	if (test_bit(FLG_LAPB, &nl2->flag) ||
+		test_bit(FLG_LAPD_NET, &nl2->flag))
 		nl2->l2m.state = ST_L2_4;
 	else
 		nl2->l2m.state = ST_L2_1;
@@ -2338,7 +2363,7 @@ int Isdnl2Init(void)
 	int err;
 
 	isdnl2.name = MName;
-	isdnl2.DPROTO.protocol[2] = ISDN_PID_L2_LAPD;
+	isdnl2.DPROTO.protocol[2] = ISDN_PID_L2_LAPD | ISDN_PID_L2_LAPD_NET;
 	isdnl2.BPROTO.protocol[2] = ISDN_PID_L2_B_X75SLP;
 	isdnl2.own_ctrl = l2_manager;
 	isdnl2.prev = NULL;

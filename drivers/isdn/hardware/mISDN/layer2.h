@@ -1,4 +1,4 @@
-/* $Id: layer2.h,v 0.10 2001/08/02 14:51:56 kkeil Exp $
+/* $Id: layer2.h,v 0.11 2001/08/02 15:02:06 kkeil Exp $
  *
  * Layer 2 defines
  *
@@ -135,3 +135,4 @@ extern void TEIFree(void);
 #define FLG_FIXED_TEI	15
 #define FLG_L2BLOCK	16
 #define FLG_L1_BUSY	17
+#define FLG_LAPD_NET	18

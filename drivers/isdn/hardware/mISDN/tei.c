@@ -1,4 +1,4 @@
-/* $Id: tei.c,v 0.7 2001/08/02 14:51:56 kkeil Exp $
+/* $Id: tei.c,v 0.8 2001/08/02 15:02:06 kkeil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -13,7 +13,7 @@
 #include "debug.h"
 #include <linux/random.h>
 
-const char *tei_revision = "$Revision: 0.7 $";
+const char *tei_revision = "$Revision: 0.8 $";
 
 #define ID_REQUEST	1
 #define ID_ASSIGNED	2
@@ -47,6 +47,7 @@ static char *strTeiState[] =
 enum {
 	EV_IDREQ,
 	EV_ASSIGN,
+	EV_ASSIGN_REQ,
 	EV_DENIED,
 	EV_CHKREQ,
 	EV_REMOVE,
@@ -60,6 +61,7 @@ static char *strTeiEvent[] =
 {
 	"EV_IDREQ",
 	"EV_ASSIGN",
+	"EV_ASSIGN_REQ",
 	"EV_DENIED",
 	"EV_CHKREQ",
 	"EV_REMOVE",
@@ -100,6 +102,8 @@ put_tei_msg(teimgr_t *tm, u_char m_id, unsigned int ri, u_char tei)
 	u_char bp[8];
 
 	bp[0] = (TEI_SAPI << 2);
+	if (test_bit(FLG_LAPD_NET, &tm->l2->flag))
+		bp[0] |= 2; /* CR:=1 for net command */
 	bp[1] = (GROUP_TEI << 1) | 0x1;
 	bp[2] = UI;
 	bp[3] = TEI_ENTITY_ID;
@@ -123,7 +127,7 @@ tei_id_request(struct FsmInst *fi, int event, void *arg)
 
 	if (tm->l2->tei != -1) {
 		tm->tei_m.printdebug(&tm->tei_m,
-			"assign request for allready asigned tei %d",
+			"assign request for allready assigned tei %d",
 			tm->l2->tei);
 		return;
 	}
@@ -138,11 +142,31 @@ tei_id_request(struct FsmInst *fi, int event, void *arg)
 }
 
 static void
+tei_assign_req(struct FsmInst *fi, int event, void *arg)
+{
+	teimgr_t *tm = fi->userdata;
+	u_char *dp = arg;
+
+	if (tm->l2->tei == -1) {
+		tm->tei_m.printdebug(&tm->tei_m,
+			"net tei assign request without tei");
+		return;
+	}
+	tm->ri = ((unsigned int) *dp++ << 8);
+	tm->ri += *dp++;
+	if (tm->debug)
+		tm->tei_m.printdebug(&tm->tei_m,
+			"net assign request ri %d teim %d", tm->ri, *dp);
+	put_tei_msg(tm, ID_ASSIGNED, tm->ri, tm->l2->tei);
+	FsmChangeState(fi, ST_TEI_NOP);
+}
+
+static void
 tei_id_assign(struct FsmInst *fi, int event, void *arg)
 {
 	teimgr_t *otm, *tm = fi->userdata;
-	u_char *dp = arg;
 	struct sk_buff *skb;
+	u_char *dp = arg;
 	int ri, tei;
 
 	ri = ((unsigned int) *dp++ << 8);
@@ -328,7 +352,8 @@ tei_ph_data_ind(teimgr_t *tm, int dtyp, struct sk_buff *skb)
 
 	if (!skb)
 		return(ret);
-	if (test_bit(FLG_FIXED_TEI, &tm->l2->flag))
+	if (test_bit(FLG_FIXED_TEI, &tm->l2->flag) &&
+		!test_bit(FLG_LAPD_NET, &tm->l2->flag))
 		return(ret);
 	skb_pull(skb, HISAX_HEAD_SIZE);
 	if (skb->len < 8) {
@@ -351,6 +376,7 @@ tei_ph_data_ind(teimgr_t *tm, int dtyp, struct sk_buff *skb)
 		return(ret);
 	} else {
 		mt = *(dp+2);
+		tm->tei_m.printdebug(&tm->tei_m, "tei handler mt %x", mt);
 		if (mt == ID_ASSIGNED)
 			FsmEvent(&tm->tei_m, EV_ASSIGN, dp);
 		else if (mt == ID_DENIED)
@@ -359,9 +385,12 @@ tei_ph_data_ind(teimgr_t *tm, int dtyp, struct sk_buff *skb)
 			FsmEvent(&tm->tei_m, EV_CHKREQ, dp);
 		else if (mt == ID_REMOVE)
 			FsmEvent(&tm->tei_m, EV_REMOVE, dp);
+		else if (mt == ID_REQUEST && 
+			test_bit(FLG_LAPD_NET, &tm->l2->flag))
+			FsmEvent(&tm->tei_m, EV_ASSIGN_REQ, dp);
 		else {
 			tm->tei_m.printdebug(&tm->tei_m,
-				"tei handler wrong mt %x\n", mt);
+				"tei handler wrong mt %x", mt);
 			return(ret);
 		}
 	}
@@ -425,6 +454,7 @@ static struct FsmNode TeiFnList[] =
 {
 	{ST_TEI_NOP, EV_IDREQ, tei_id_request},
 	{ST_TEI_NOP, EV_ASSIGN, tei_id_test_dup},
+	{ST_TEI_NOP, EV_ASSIGN_REQ, tei_assign_req},
 	{ST_TEI_NOP, EV_VERIFY, tei_id_verify},
 	{ST_TEI_NOP, EV_REMOVE, tei_id_remove},
 	{ST_TEI_NOP, EV_CHKREQ, tei_id_chk_req},
@@ -461,11 +491,16 @@ create_teimgr(layer2_t *l2) {
 	ntei->l2 = l2;
 	ntei->T202 = 2000;	/* T202  2000 milliseconds */
 	ntei->debug = l2->debug;
-	ntei->tei_m.fsm = &teifsm;
-	ntei->tei_m.state = ST_TEI_NOP;
 	ntei->tei_m.debug = l2->debug;
 	ntei->tei_m.userdata = ntei;
 	ntei->tei_m.printdebug = tei_debug;
+	if (test_bit(FLG_LAPD_NET, &l2->flag)) {
+		ntei->tei_m.fsm = &teifsm;
+		ntei->tei_m.state = ST_TEI_NOP;
+	} else {
+		ntei->tei_m.fsm = &teifsm;
+		ntei->tei_m.state = ST_TEI_NOP;
+	}
 	FsmInitTimer(&ntei->tei_m, &ntei->t202);
 	l2->tm = ntei;
 	return(0);
