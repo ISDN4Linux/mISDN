@@ -1,4 +1,4 @@
-/* $Id: avm_fritz.c,v 1.26 2004/01/29 00:53:13 keil Exp $
+/* $Id: avm_fritz.c,v 1.27 2004/02/16 10:09:53 keil Exp $
  *
  * fritz_pci.c    low level stuff for AVM Fritz!PCI and ISA PnP isdn cards
  *              Thanks to AVM, Berlin for informations
@@ -28,7 +28,7 @@
 #define LOCK_STATISTIC
 #include "hw_lock.h"
 
-static const char *avm_fritz_rev = "$Revision: 1.26 $";
+static const char *avm_fritz_rev = "$Revision: 1.27 $";
 
 enum {
 	AVM_FRITZ_PCI,
@@ -938,7 +938,6 @@ static int init_card(fritzpnppci *fc)
 	if (fc->type == AVM_FRITZ_PNP)
 		shared = 0;
 	lock_dev(fc, 0);
-	reset_avmpcipnp(fc);
 	if (fc->type == AVM_FRITZ_PCIV2) {
 		if (request_irq(fc->irq, avm_fritzv2_interrupt, SA_SHIRQ,
 			"AVM Fritz!PCI", fc)) {
@@ -956,6 +955,7 @@ static int init_card(fritzpnppci *fc)
 			return(-EIO);
 		}
 	}
+	reset_avmpcipnp(fc);
 	while (cnt) {
 		int	ret;
 		mISDN_clear_isac(&fc->dch);
