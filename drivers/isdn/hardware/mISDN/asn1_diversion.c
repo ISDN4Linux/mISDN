@@ -1,4 +1,4 @@
-/* $Id: asn1_diversion.c,v 1.0 2001/11/02 23:42:26 kkeil Exp $
+/* $Id: asn1_diversion.c,v 1.1 2003/11/09 09:12:28 keil Exp $
  *
  */
 
@@ -39,7 +39,7 @@ ParseARGDeactivationDiversion(struct asn1_parm *pc, u_char *p, u_char *end, int 
 	XSEQUENCE_1(ParseBasicService, ASN1_TAG_ENUM, ASN1_NOT_TAGGED, &basicService);
 	XSEQUENCE_1(ParseServedUserNr, ASN1_NOT_TAGGED, ASN1_NOT_TAGGED, &servedUserNr);
 
-	print_msg(PRT_SHOWNUMBERS, "Deactivation Diversion %d (%d), \n",
+	print_asn1msg(PRT_SHOWNUMBERS, "Deactivation Diversion %d (%d), \n",
 		  procedure, basicService);
 	return p - beg;
 }
@@ -82,7 +82,7 @@ ParseARGInterrogationDiversion(struct asn1_parm *pc, u_char *p, u_char *end, int
 	XSEQUENCE_1(ParseBasicService, ASN1_TAG_ENUM, ASN1_NOT_TAGGED, &basicService);
 	XSEQUENCE_1(ParseServedUserNr, ASN1_NOT_TAGGED, ASN1_NOT_TAGGED, &servedUserNr);
 
-	print_msg(PRT_SHOWNUMBERS, "Interrogation Diversion %d (%d), \n",
+	print_asn1msg(PRT_SHOWNUMBERS, "Interrogation Diversion %d (%d), \n",
 		procedure, basicService);
 	return p - beg;
 }
@@ -91,7 +91,7 @@ ParseARGInterrogationDiversion(struct asn1_parm *pc, u_char *p, u_char *end, int
 int 
 ParseRESInterrogationDiversion(struct asn1_parm *pc, u_char *p, u_char *end, int dummy)
 {
-	print_msg(PRT_SHOWNUMBERS, "Interrogation Diversion Result\n");
+	print_asn1msg(PRT_SHOWNUMBERS, "Interrogation Diversion Result\n");
 	return ParseIntResultList(pc, p,  end, &pc->u.retResult.o.resultList);
 }
 
@@ -99,7 +99,7 @@ ParseRESInterrogationDiversion(struct asn1_parm *pc, u_char *p, u_char *end, int
 int 
 ParseARGInterrogateServedUserNumbers(struct asn1_parm *pc, u_char *p, u_char *end, int dummy)
 {
-	print_msg(PRT_SHOWNUMBERS, "Interrogate Served User Numbers\n");
+	print_asn1msg(PRT_SHOWNUMBERS, "Interrogate Served User Numbers\n");
 	return 0;
 }
 #endif
@@ -113,7 +113,7 @@ ParseRESInterrogateServedUserNumbers(struct asn1_parm *pc, u_char *p, u_char *en
 	if (ret < 0)
 		return ret;
 
-	print_msg(PRT_SHOWNUMBERS, "Interrogate Served User Numbers:\n");
+	print_asn1msg(PRT_SHOWNUMBERS, "Interrogate Served User Numbers:\n");
 	
 	return ret;
 }
@@ -144,7 +144,7 @@ ParseARGDiversionInformation(struct asn1_parm *pc, u_char *p, u_char *end, int d
 	XSEQUENCE_OPT_1(ParsePresentedNumberUnscreened, ASN1_NOT_TAGGED, 2 | ASN1_TAG_EXPLICIT, lastDivertingNr);
 	XSEQUENCE_OPT_1(ParseDiversionReason, ASN1_TAG_ENUM, 3 | ASN1_TAG_EXPLICIT, lastDivertingReason);
 //	XSEQUENCE_OPT_1(ParseQ931InformationElement, ASN1_NOT_TAGGED, ASN1_NOT_TAGGED, userInfo);
-	print_msg(PRT_SHOWNUMBERS, "Diversion Information %s(%d) %s\n"
+	print_asn1msg(PRT_SHOWNUMBERS, "Diversion Information %s(%d) %s\n"
 		  "  callingAddress %s originalCalled Nr %s\n"
 		  "  lastDivertingNr %s lastDiverting Reason %s\n",
 		  diversionReason, basicService, servedUserSubaddress, callingAddress,

@@ -1,4 +1,4 @@
-/* $Id: asn1.c,v 1.0 2001/11/02 23:42:26 kkeil Exp $
+/* $Id: asn1.c,v 1.1 2003/11/09 09:12:28 keil Exp $
  *
  */
 
@@ -45,8 +45,8 @@ ParseASN1(u_char *p, u_char *end, int level)
 	CallASN1(ret, p, end, ParseTag(p, end, &tag));
 	CallASN1(ret, p, end, ParseLen(p, end, &len));
 #ifdef ASN1_DEBUG
-	for (j = 0; j < level*5; j++) print_msg(PRT_DEBUG_DECODE, " ");
-	print_msg(PRT_DEBUG_DECODE, "TAG 0x%02x LEN %3d\n", tag, len);
+	for (j = 0; j < level*5; j++) print_asn1msg(PRT_DEBUG_DECODE, " ");
+	print_asn1msg(PRT_DEBUG_DECODE, "TAG 0x%02x LEN %3d\n", tag, len);
 #endif
 	
 	if (tag & ASN1_TAG_CONSTRUCTED) {
@@ -65,15 +65,15 @@ ParseASN1(u_char *p, u_char *end, int level)
 			}
 		}
 	} else {
-		for (j = 0; j < level*5; j++) print_msg(PRT_DEBUG_DECODE, " ");
+		for (j = 0; j < level*5; j++) print_asn1msg(PRT_DEBUG_DECODE, " ");
 		while (len--) {
-			print_msg(PRT_DEBUG_DECODE, "%02x ", *p);
+			print_asn1msg(PRT_DEBUG_DECODE, "%02x ", *p);
 			p++;
 		}
-		print_msg(PRT_DEBUG_DECODE, "\n");
+		print_asn1msg(PRT_DEBUG_DECODE, "\n");
 	}
-	for (j = 0; j < level*5; j++) print_msg(PRT_DEBUG_DECODE, " ");
-	print_msg(PRT_DEBUG_DECODE, "END (%d)\n", p - beg - 2);
+	for (j = 0; j < level*5; j++) print_asn1msg(PRT_DEBUG_DECODE, " ");
+	print_asn1msg(PRT_DEBUG_DECODE, "END (%d)\n", p - beg - 2);
 	return p - beg;
 }
 

@@ -1,4 +1,4 @@
-/* $Id: asn1_comp.c,v 1.0 2001/11/02 23:42:26 kkeil Exp $
+/* $Id: asn1_comp.c,v 1.1 2003/11/09 09:12:28 keil Exp $
  *
  */
 
@@ -113,28 +113,28 @@ ParseReturnErrorComponent(struct asn1_parm *pc, u_char *p, u_char *end, int dumm
 	pc->u.retError.invokeId = invokeId;
 	pc->u.retError.errorValue = errorValue;
 
-        switch (errorValue) {
-        case 0: sprintf(error, "not subscribed"); break;
-        case 3: sprintf(error, "not available"); break;
-        case 4: sprintf(error, "not implemented"); break;
-        case 6: sprintf(error, "invalid served user nr"); break;
-        case 7: sprintf(error, "invalid call state"); break;
-        case 8: sprintf(error, "basic service not provided"); break;
-        case 9: sprintf(error, "not incoming call"); break;
-        case 10: sprintf(error, "supplementary service interaction not allowed"); break;
-        case 11: sprintf(error, "resource unavailable"); break;
-        case 12: sprintf(error, "invalid diverted-to nr"); break;
-        case 14: sprintf(error, "special service nr"); break;
-        case 15: sprintf(error, "diversion to served user nr"); break;
-        case 23: sprintf(error, "incoming call accepted"); break;
-        case 24: sprintf(error, "number of diversions exceeded"); break;
-        case 46: sprintf(error, "not activated"); break;
-        case 48: sprintf(error, "request already accepted"); break;
-        default: sprintf(error, "(%d)", errorValue); break;
-        }
-        print_msg(PRT_DEBUG_DECODE, "ReturnError: %s\n", error);
+	switch (errorValue) {
+		case 0: sprintf(error, "not subscribed"); break;
+		case 3: sprintf(error, "not available"); break;
+		case 4: sprintf(error, "not implemented"); break;
+		case 6: sprintf(error, "invalid served user nr"); break;
+		case 7: sprintf(error, "invalid call state"); break;
+		case 8: sprintf(error, "basic service not provided"); break;
+		case 9: sprintf(error, "not incoming call"); break;
+		case 10: sprintf(error, "supplementary service interaction not allowed"); break;
+		case 11: sprintf(error, "resource unavailable"); break;
+		case 12: sprintf(error, "invalid diverted-to nr"); break;
+		case 14: sprintf(error, "special service nr"); break;
+		case 15: sprintf(error, "diversion to served user nr"); break;
+		case 23: sprintf(error, "incoming call accepted"); break;
+		case 24: sprintf(error, "number of diversions exceeded"); break;
+		case 46: sprintf(error, "not activated"); break;
+		case 48: sprintf(error, "request already accepted"); break;
+		default: sprintf(error, "(%d)", errorValue); break;
+	}
+	print_asn1msg(PRT_DEBUG_DECODE, "ReturnError: %s\n", error);
 
-        return p - beg;
+	return p - beg;
 }
 
 int

@@ -1,4 +1,4 @@
-/* $Id: asn1.h,v 1.1 2003/07/21 12:00:04 kkeil Exp $
+/* $Id: asn1.h,v 1.2 2003/11/09 09:12:28 keil Exp $
  *
  */
 
@@ -101,9 +101,9 @@ struct asn1_parm {
 #undef ASN1_DEBUG
 
 #ifdef ASN1_DEBUG
-#define print_msg(dummy, fmt, args...) printk(fmt, ## args)
+#define print_asn1msg(dummy, fmt, args...) printk(fmt, ## args)
 #else
-#define print_msg(dummy, fmt, args...) 
+#define print_asn1msg(dummy, fmt, args...) 
 #endif
 
 int ParseASN1(u_char *p, u_char *end, int level);
@@ -146,7 +146,7 @@ int ParseLen(u_char *p, u_char *end, int *len);
 	int ret; \
 	u_char *beg; \
         \
-        print_msg(PRT_DEBUG_DECODE, " DEBUG> %s\n", __FUNCTION__); \
+        print_asn1msg(PRT_DEBUG_DECODE, " DEBUG> %s\n", __FUNCTION__); \
 	beg = p; \
 	CallASN1(ret, p, end, ParseTag(p, end, &tag)); \
 	CallASN1(ret, p, end, ParseLen(p, end, &len)); \
@@ -163,7 +163,7 @@ int ParseLen(u_char *p, u_char *end, int *len);
 			        CallASN1(ret, p, end, todo(pc, p, end, arg1)); \
                         } else { \
                                 if (!((the_tag) & ASN1_TAG_OPT)) { \
-                                        print_msg(PRT_DEBUG_DECODE, " DEBUG> err 1 %s:%d\n", __FUNCTION__, __LINE__); \
+                                        print_asn1msg(PRT_DEBUG_DECODE, " DEBUG> err 1 %s:%d\n", __FUNCTION__, __LINE__); \
                 	    	        return -1; \
                                 } \
                         } \
@@ -176,7 +176,7 @@ int ParseLen(u_char *p, u_char *end, int *len);
   	                                CallASN1(ret, p, end, todo(pc, p, end, arg1)); \
                                 } else { \
                                         if (!(the_tag) & ASN1_TAG_OPT) { \
-                                                print_msg(PRT_DEBUG_DECODE, " DEBUG> err 2 %s:%d\n", __FUNCTION__, __LINE__); \
+                                                print_asn1msg(PRT_DEBUG_DECODE, " DEBUG> err 2 %s:%d\n", __FUNCTION__, __LINE__); \
                         	    	        return -1; \
                                         } \
                                 } \
@@ -185,7 +185,7 @@ int ParseLen(u_char *p, u_char *end, int *len);
   	                                CallASN1(ret, p, end, todo(pc, p, end, arg1)); \
                                 } else { \
                                         if (!(the_tag) & ASN1_TAG_OPT) { \
-                                                print_msg(PRT_DEBUG_DECODE, " DEBUG> err 3 %s:%d\n", __FUNCTION__, __LINE__); \
+                                                print_asn1msg(PRT_DEBUG_DECODE, " DEBUG> err 3 %s:%d\n", __FUNCTION__, __LINE__); \
                         	    	        return -1; \
                                         } \
                                 } \
@@ -193,7 +193,7 @@ int ParseLen(u_char *p, u_char *end, int *len);
 		} \
         } else { \
                 if (!(the_tag) & ASN1_TAG_OPT) { \
-                        print_msg(PRT_DEBUG_DECODE, " DEBUG> err 4 %s:%d\n", __FUNCTION__, __LINE__); \
+                        print_asn1msg(PRT_DEBUG_DECODE, " DEBUG> err 4 %s:%d\n", __FUNCTION__, __LINE__); \
 	    	        return -1; \
                 } \
         } \
@@ -222,7 +222,7 @@ int ParseLen(u_char *p, u_char *end, int *len);
 #define XCHOICE(todo, act_tag, the_tag) XCHOICE_1(todo, act_tag, the_tag, -1)
 
 #define XCHOICE_DEFAULT do {\
-          print_msg(PRT_DEBUG_DECODE, " DEBUG> err 5 %s:%d\n", __FUNCTION__, __LINE__); \
+          print_asn1msg(PRT_DEBUG_DECODE, " DEBUG> err 5 %s:%d\n", __FUNCTION__, __LINE__); \
           return -1; \
 	  } while (0)
 
