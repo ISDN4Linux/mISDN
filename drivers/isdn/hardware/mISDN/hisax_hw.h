@@ -1,4 +1,4 @@
-/* $Id: hisax_hw.h,v 0.6 2001/08/02 14:56:28 kkeil Exp $
+/* $Id: hisax_hw.h,v 0.7 2001/09/29 20:05:01 kkeil Exp $
  *
  *   Basic declarations, defines for HiSax hardware drivers
  *
@@ -98,8 +98,9 @@ typedef struct _bchannel_t {
 	int Flag;
 	int debug;
 	hisaxinstance_t inst;
-	u_char (*BC_Read_Reg)(void *, int, u_char);
-	void (*BC_Write_Reg)(void *, int, u_char, u_char);
+	hisaxdevice_t	*dev;
+	u_char		(*BC_Read_Reg)(void *, int, u_char);
+	void		(*BC_Write_Reg)(void *, int, u_char, u_char);
 	struct sk_buff	*next_skb;
 	u_char		*tx_buf;
 	int		tx_idx;

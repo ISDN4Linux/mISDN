@@ -1,4 +1,4 @@
-/* $Id: core.h,v 0.8 2001/05/18 00:48:51 kkeil Exp $
+/* $Id: core.h,v 0.9 2001/09/29 20:05:01 kkeil Exp $
  * 
  * This file is (c) under GNU PUBLIC LICENSE
  *
@@ -13,6 +13,10 @@
 #endif
 
 #define	HISAX_MAJOR		46
+#define HISAX_MINOR_CORE	0
+#define HISAX_MINOR_RAW_MIN	128
+#define HISAX_MINOR_RAW_MAX	255
+
 #define HISAX_DEVBUF_SIZE	8192
 
 /* debugging */
@@ -20,13 +24,16 @@
 #define DEBUG_DUMMY_FUNC	0x0002
 #define DEBUG_DEV_OP		0x0100
 #define DEBUG_MGR_FUNC		0x0200
+#define DEBUG_DEV_TIMER		0x0400
 #define DEBUG_RDATA		0x1000
 #define DEBUG_WDATA		0x2000
 
 /* from hisax_dev.c */
 
-extern int init_hisaxdev(int);
-extern int free_hisaxdev(void);
+extern int		init_hisaxdev(int);
+extern int		free_hisaxdev(void);
+extern hisaxdevice_t	*get_free_rawdevice(void);
+extern int		free_device(hisaxdevice_t *dev);
 
 /* from hisax_stack.c */
 

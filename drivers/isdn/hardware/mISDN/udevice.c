@@ -1,4 +1,4 @@
-/* $Id: udevice.c,v 0.19 2001/08/02 14:51:56 kkeil Exp $
+/* $Id: udevice.c,v 0.20 2001/09/29 20:05:01 kkeil Exp $
  *
  * Copyright 2000  by Karsten Keil <kkeil@isdn4linux.de>
  */
@@ -8,6 +8,7 @@
 #include <linux/poll.h>
 #include <linux/vmalloc.h>
 #include <linux/config.h>
+#include <linux/timer.h>
 #include "hisax_core.h"
 
 #define MAX_HEADER_LEN	4
@@ -15,20 +16,9 @@
 #define FLG_MGR_SETSTACK	1
 #define FLG_MGR_OWNSTACK	2
 
-typedef struct _hisaxdevice {
-	struct _hisaxdevice	*prev;
-	struct _hisaxdevice	*next;
-	struct inode		*inode;
-	struct file		*file;
-	struct wait_queue	*procq;
-	spinlock_t		slock;
-	int			rcnt;
-	int			wcnt;
-	u_char			*rbuf, *rp;
-	u_char			*wbuf, *wp;
-	struct _devicelayer	*layer;
-	struct _devicestack	*stack;
-} hisaxdevice_t;
+#define FLG_MGR_TIMER_INIT	1
+#define	FLG_MGR_TIMER_RUNING	2
+
 
 typedef struct _devicelayer {
 	struct _devicelayer	*prev;
@@ -51,6 +41,15 @@ typedef struct _devicestack {
 	int			extentions;
 } devicestack_t;
 
+typedef struct _hisaxtimer {
+	struct _hisaxtimer	*prev;
+	struct _hisaxtimer	*next;
+	struct _hisaxdevice	*dev;
+	struct timer_list	tl;
+	int			id;
+	int			Flags;
+} hisaxtimer_t;
+
 static hisaxdevice_t	*hisax_devicelist = NULL;
 static rwlock_t	hisax_device_lock = RW_LOCK_UNLOCKED;
 
@@ -61,35 +60,160 @@ static u_char  stbuf[1000];
 static int device_debug = 0;
 
 static int from_up_down(hisaxif_t *, struct sk_buff *);
+static int hisax_wdata(hisaxdevice_t *dev);
+
 // static int from_peer(hisaxif_t *, u_int, int, int, void *);
 // static int to_peer(hisaxif_t *, u_int, int, int, void *);
 
 
+static hisaxdevice_t *
+get_hisaxdevice4minor(int minor)
+{
+	hisaxdevice_t	*dev = hisax_devicelist;
+
+	while(dev) {
+		if (dev->minor == minor)
+			break;
+		dev = dev->next;
+	}
+	return(dev);
+}
+
+static __inline__ void
+p_memcpy_i(hisaxport_t *port, void *src, size_t count)
+{
+	u_char	*p = src;
+	size_t	frag;
+
+	frag = port->buf + port->size - port->ip;
+	if (frag <= count) {
+		memcpy(port->ip, p, frag);
+		count -= frag;
+		port->cnt += frag;
+		port->ip = port->buf;
+	} else
+		frag = 0;
+	if (count) {
+		memcpy(port->ip, p + frag, count);
+		port->cnt += count;
+		port->ip += count;
+	}
+}
+
+static __inline__ void
+p_memcpy_o(hisaxport_t *port, void *dst, size_t count)
+{
+	u_char	*p = dst;
+	size_t	frag;
+
+	frag = port->buf + port->size - port->op;
+	if (frag <= count) {
+		memcpy(p, port->op, frag);
+		count -= frag;
+		port->cnt -= frag;
+		port->op = port->buf;
+	} else
+		frag = 0;
+	if (count) {
+		memcpy(p + frag, port->op, count);
+		port->cnt -= count;
+		port->op += count;
+	}
+}
+
+static __inline__ void
+p_pull_o(hisaxport_t *port, size_t count)
+{
+	size_t	frag;
+
+	frag = port->buf + port->size - port->op;
+	if (frag <= count) {
+		count -= frag;
+		port->cnt -= frag;
+		port->op = port->buf;
+	}
+	if (count) {
+		port->cnt -= count;
+		port->op += count;
+	}
+}
+
+static int
+hisax_rdata_raw(hisaxif_t *hif, struct sk_buff *skb) {
+	hisaxdevice_t	*dev;
+	hisax_head_t	*hh;
+	u_long		flags;
+	int		retval = 0;
+
+	if (!hif || !hif->fdata || !skb)
+		return(-EINVAL);
+	dev = hif->fdata;
+	if (skb->len < HISAX_FRAME_MIN)
+		return(-EINVAL);
+	hh = (hisax_head_t *)skb->data;
+	if (hh->prim == (PH_DATA | INDICATION)) {
+		if (test_bit(FLG_HISAXPORT_OPEN, &dev->rport.Flag)) {
+			skb_pull(skb, HISAX_HEAD_SIZE);
+			spin_lock_irqsave(&dev->rport.lock, flags);
+			if (skb->len < (dev->rport.size - dev->rport.cnt)) {
+				p_memcpy_i(&dev->rport, skb->data, skb->len);
+			} else {
+				skb_push(skb, HISAX_HEAD_SIZE);
+				retval = -ENOSPC;
+			}
+			spin_unlock_irqrestore(&dev->rport.lock, flags);
+			wake_up_interruptible(&dev->rport.procq);
+		} else {
+			printk(KERN_WARNING __FUNCTION__
+				": PH_DATA_IND device(%d) not read open\n",
+				dev->minor);
+			retval = -ENOENT;
+		}
+	} else if (hh->prim == (PH_DATA | CONFIRM)) {
+		test_and_clear_bit(FLG_HISAXPORT_BLOCK, &dev->wport.Flag);
+		hisax_wdata(dev);
+	} else if ((hh->prim == (PH_ACTIVATE | CONFIRM)) ||
+		(hh->prim == (PH_ACTIVATE | INDICATION))) {
+			test_and_set_bit(FLG_HISAXPORT_ENABLED,
+				&dev->wport.Flag);
+			test_and_clear_bit(FLG_HISAXPORT_BLOCK,
+				&dev->wport.Flag);
+	} else if ((hh->prim == (PH_DEACTIVATE | CONFIRM)) ||
+		(hh->prim == (PH_DEACTIVATE | INDICATION))) {
+			test_and_clear_bit(FLG_HISAXPORT_ENABLED,
+				&dev->wport.Flag);
+	} else {
+		printk(KERN_WARNING __FUNCTION__
+			": prim(%x) dinfo(%x) not supported\n",
+			hh->prim, hh->dinfo);
+		retval = -EINVAL;
+	}
+	if (!retval)
+		dev_kfree_skb(skb);
+	return(retval);
+}
+
 static int
 hisax_rdata(hisaxdevice_t *dev, iframe_t *iff, int use_value) {
-	int len = 4*sizeof(u_int);
-	u_char *p;
-	u_long flags;
+	int		len = 4*sizeof(u_int);
+	u_long		flags;
+	hisaxport_t	*port = &dev->rport;
 
 	if (iff->len > 0)
 		len +=  iff->len;
-	spin_lock_irqsave(&dev->slock, flags);
-	if (len < (HISAX_DEVBUF_SIZE - dev->rcnt)) {
-		p = dev->rp + dev->rcnt;
+	spin_lock_irqsave(&port->lock, flags);
+	if (len < (port->size - port->cnt)) {
 		if (len <= 20 && use_value) {
-			memcpy(p, iff, len);
+			p_memcpy_i(port, iff, len);
 		} else {
-			memcpy(p, iff, 4*sizeof(u_int));
-			p += 4*sizeof(u_int);
+			p_memcpy_i(port, iff, 4*sizeof(u_int));
 			if (iff->len>0)
-				memcpy(p, iff->data.p, iff->len);
+				p_memcpy_i(port, iff->data.p, iff->len);
 		}
-		dev->rcnt += len;
 	} else
 		len = -ENOSPC;
-	spin_unlock_irqrestore(&dev->slock, flags);
-	if (len > 0)
-		wake_up_interruptible(&dev->procq);
+	spin_unlock_irqrestore(&port->lock, flags);
+	wake_up_interruptible(&port->procq);
 	return(len);
 }
 
@@ -100,6 +224,9 @@ static devicelayer_t
 	if (device_debug & DEBUG_MGR_FUNC)
 		printk(KERN_DEBUG __FUNCTION__ ": addr:%x\n", addr);
 	while(dl) {
+//		if (device_debug & DEBUG_MGR_FUNC)
+//			printk(KERN_DEBUG __FUNCTION__ ": dl(%p) iaddr:%x\n",
+//				dl, dl->iaddr);
 		if (dl->iaddr == (IF_IADDRMASK & addr))
 			break;
 		dl = dl->next;
@@ -108,7 +235,8 @@ static devicelayer_t
 }
 
 static devicestack_t
-*get_devstack(hisaxdevice_t   *dev, int addr) {
+*get_devstack(hisaxdevice_t   *dev, int addr)
+{
 	devicestack_t *ds = dev->stack;
 
 	if (device_debug & DEBUG_MGR_FUNC)
@@ -119,6 +247,21 @@ static devicestack_t
 		ds = ds->next;
 	}
 	return(ds);
+}
+
+static hisaxtimer_t
+*get_devtimer(hisaxdevice_t   *dev, int id)
+{
+	hisaxtimer_t	*ht = dev->timer;
+
+	if (device_debug & DEBUG_DEV_TIMER)
+		printk(KERN_DEBUG __FUNCTION__ ": dev:%p id:%x\n", dev, id);
+	while(ht) {
+		if (ht->id == id)
+			break;
+		ht = ht->next;
+	}
+	return(ht);
 }
 
 static int
@@ -584,7 +727,8 @@ add_if_req(hisaxdevice_t *dev, iframe_t *iff) {
 }
 
 static int
-del_if_req(hisaxdevice_t *dev, iframe_t *iff) {
+del_if_req(hisaxdevice_t *dev, iframe_t *iff)
+{
 	devicelayer_t *dl;
 
 	if (device_debug & DEBUG_MGR_FUNC)
@@ -592,6 +736,128 @@ del_if_req(hisaxdevice_t *dev, iframe_t *iff) {
 	if (!(dl=get_devlayer(dev, iff->addr)))
 		return(-ENXIO);
 	return(remove_if(dl, iff->addr));
+}
+
+static void
+dev_expire_timer(hisaxtimer_t *ht)
+{
+	iframe_t off;
+
+	if (device_debug & DEBUG_DEV_TIMER)
+		printk(KERN_DEBUG __FUNCTION__": timer(%x)\n",
+			ht->id);
+	if (test_and_clear_bit(FLG_MGR_TIMER_RUNING, &ht->Flags)) {
+		off.dinfo = 0;
+		off.prim = MGR_TIMER | INDICATION;
+		off.addr = ht->id;
+		off.len = 0;
+		hisax_rdata(ht->dev, &off, 0);
+	} else
+		printk(KERN_WARNING __FUNCTION__": timer(%x) not active\n",
+			ht->id);
+}
+
+static int
+dev_init_timer(hisaxdevice_t *dev, iframe_t *iff)
+{
+	hisaxtimer_t	*ht;
+
+	ht = get_devtimer(dev, iff->addr);
+	if (!ht) {
+		ht = kmalloc(sizeof(hisaxtimer_t), GFP_KERNEL);
+		if (!ht)
+			return(-ENOMEM);
+		ht->prev = NULL;
+		ht->next = NULL;
+		ht->dev = dev;
+		ht->id = iff->addr;
+		ht->tl.data = (long) ht;
+		ht->tl.function = (void *) dev_expire_timer;
+		init_timer(&ht->tl);
+		APPEND_TO_LIST(ht, dev->timer);
+		if (device_debug & DEBUG_DEV_TIMER)
+			printk(KERN_DEBUG __FUNCTION__": new(%x)\n",
+				ht->id);
+	} else if (device_debug & DEBUG_DEV_TIMER)
+		printk(KERN_DEBUG __FUNCTION__": old(%x)\n",
+			ht->id);
+	if (timer_pending(&ht->tl)) {
+		printk(KERN_WARNING __FUNCTION__": timer(%x) pending\n",
+			ht->id);
+		del_timer(&ht->tl);
+	}
+	init_timer(&ht->tl);
+	test_and_set_bit(FLG_MGR_TIMER_INIT, &ht->Flags);
+	return(0);
+}
+
+static int
+dev_add_timer(hisaxdevice_t *dev, iframe_t *iff)
+{
+	hisaxtimer_t	*ht;
+
+	ht = get_devtimer(dev, iff->addr);
+	if (!ht) {
+		printk(KERN_WARNING __FUNCTION__": no timer(%x)\n", iff->addr);
+		return(-ENODEV);
+	}
+	if (timer_pending(&ht->tl)) {
+		printk(KERN_WARNING __FUNCTION__": timer(%x) pending\n",
+			ht->id);
+		return(-EBUSY);
+	}
+	if (iff->dinfo < 10) {
+		printk(KERN_WARNING __FUNCTION__": timer(%x): %d ms too short\n",
+			ht->id, iff->dinfo);
+		return(-EINVAL);
+	}
+	if (device_debug & DEBUG_DEV_TIMER)
+		printk(KERN_DEBUG __FUNCTION__": timer(%x) %d ms\n",
+			ht->id, iff->dinfo);
+	init_timer(&ht->tl);
+	ht->tl.expires = jiffies + (iff->dinfo * HZ) / 1000;
+	test_and_set_bit(FLG_MGR_TIMER_RUNING, &ht->Flags);
+	add_timer(&ht->tl);
+	return(0);
+}
+
+static int
+dev_del_timer(hisaxdevice_t *dev, iframe_t *iff)
+{
+	hisaxtimer_t	*ht;
+
+	ht = get_devtimer(dev, iff->addr);
+	if (!ht) {
+		printk(KERN_WARNING __FUNCTION__": no timer(%x)\n", iff->addr);
+		return(-ENODEV);
+	}
+	if (device_debug & DEBUG_DEV_TIMER)
+		printk(KERN_DEBUG __FUNCTION__": timer(%x)\n",
+			ht->id);
+	del_timer(&ht->tl);
+	if (!test_and_clear_bit(FLG_MGR_TIMER_RUNING, &ht->Flags))
+		printk(KERN_WARNING __FUNCTION__": timer(%x) not running\n",
+			ht->id);
+	return(0);
+}
+
+static int
+dev_remove_timer(hisaxdevice_t *dev, int id)
+{
+	hisaxtimer_t	*ht;
+
+	ht = get_devtimer(dev, id);
+	if (!ht)  {
+		printk(KERN_WARNING __FUNCTION__": no timer(%x)\n", id);
+		return(-ENODEV);
+	}
+	if (device_debug & DEBUG_DEV_TIMER)
+		printk(KERN_DEBUG __FUNCTION__": timer(%x)\n",
+			ht->id);
+	del_timer(&ht->tl);
+	REMOVE_FROM_LISTBASE(ht, dev->timer);
+	kfree(ht);
+	return(0);
 }
 
 static int
@@ -683,11 +949,13 @@ wdata_frame(hisaxdevice_t *dev, iframe_t *iff) {
 	if (iff->addr & IF_UP) {
 		hif = &dl->inst.up;
 		if (IF_TYPE(hif) != IF_DOWN) {
+			printk(KERN_WARNING __FUNCTION__": inst.up no down\n");
 			hif = NULL;
 		}
 	} else if (iff->addr & IF_DOWN) {
 		hif = &dl->inst.down;
 		if (IF_TYPE(hif) != IF_UP) {
+			printk(KERN_WARNING __FUNCTION__": inst.down no up\n");
 			hif = NULL;
 		}
 	}
@@ -714,8 +982,7 @@ wdata_frame(hisaxdevice_t *dev, iframe_t *iff) {
 }
 
 static int
-hisax_wdata(hisaxdevice_t *dev, void *dp, int len) {
-	iframe_t	*iff = dp;
+hisax_wdata_if(hisaxdevice_t *dev, iframe_t *iff, int len) {
 	iframe_t        off;
 	hisaxstack_t	*st;
 	devicelayer_t	*dl;
@@ -726,7 +993,8 @@ hisax_wdata(hisaxdevice_t *dev, void *dp, int len) {
 	int		head = 4*sizeof(u_int);
 
 	if (len < head) {
-		printk(KERN_WARNING "hisax: if_frame(%d) too short\n", len);
+		printk(KERN_WARNING __FUNCTION__": frame(%d) too short\n",
+			len);
 		return(len);
 	}
 	if (device_debug & DEBUG_WDATA)
@@ -896,6 +1164,41 @@ hisax_wdata(hisaxdevice_t *dev, void *dp, int len) {
 		off.len = del_if_req(dev, iff);
 		hisax_rdata(dev, &off, 1);
 		break;
+	    case (MGR_INITTIMER | REQUEST):
+		used = head;
+		off.len = dev_init_timer(dev, iff);
+		off.addr = iff->addr;
+		off.prim = MGR_INITTIMER | CONFIRM;
+		off.dinfo = iff->dinfo;
+		hisax_rdata(dev, &off, 0);
+		break;
+	    case (MGR_ADDTIMER | REQUEST):
+		used = head;
+		off.len = dev_add_timer(dev, iff);
+		off.addr = iff->addr;
+		off.prim = MGR_ADDTIMER | CONFIRM;
+		off.dinfo = 0;
+		hisax_rdata(dev, &off, 0);
+		break;
+	    case (MGR_DELTIMER | REQUEST):
+		used = head;
+		off.len = dev_del_timer(dev, iff);
+		off.addr = iff->addr;
+		off.prim = MGR_DELTIMER | CONFIRM;
+		off.dinfo = iff->dinfo;
+		hisax_rdata(dev, &off, 0);
+		break;
+	    case (MGR_REMOVETIMER | REQUEST):
+		used = head;
+		off.len = dev_remove_timer(dev, iff->addr);
+		off.addr = iff->addr;
+		off.prim = MGR_REMOVETIMER | CONFIRM;
+		off.dinfo = 0;
+		hisax_rdata(dev, &off, 0);
+		break;
+	    case (MGR_TIMER | RESPONSE):
+		used = head;
+		break;
 	    case (MGR_STATUS | REQUEST):
 		used = head;
 		off.addr = iff->addr;
@@ -928,37 +1231,284 @@ hisax_wdata(hisaxdevice_t *dev, void *dp, int len) {
 }
 
 static int
+hisax_wdata(hisaxdevice_t *dev) {
+	int	used = 0;
+	u_long	flags;
+
+	spin_lock_irqsave(&dev->wport.lock, flags);
+	if (test_and_set_bit(FLG_HISAXPORT_BUSY, &dev->wport.Flag)) {
+		spin_unlock_irqrestore(&dev->wport.lock, flags);
+		return(0);
+	}
+	while (1) {
+		size_t	frag;
+
+		if (!dev->wport.cnt) {
+			wake_up(&dev->wport.procq);
+			break;
+		}
+		if (dev->minor == HISAX_CORE_DEVICE) {
+			iframe_t	*iff;
+			iframe_t	hlp;
+			int		broken = 0;
+			
+			frag = dev->wport.buf + dev->wport.size
+				- dev->wport.op;
+			if (dev->wport.cnt < IFRAME_HEAD_SIZE) {
+				printk(KERN_WARNING __FUNCTION__": frame(%d,%d) too short\n",
+					dev->wport.cnt, IFRAME_HEAD_SIZE);
+				p_pull_o(&dev->wport, dev->wport.cnt);
+				wake_up(&dev->wport.procq);
+				break;
+			}
+			if (frag < IFRAME_HEAD_SIZE) {
+				broken = 1;
+				p_memcpy_o(&dev->wport, &hlp, IFRAME_HEAD_SIZE);
+				if (hlp.len >0) {
+					if (hlp.len < dev->wport.cnt) {
+						printk(KERN_WARNING __FUNCTION__": framedata(%d/%d)too short\n",
+							dev->wport.cnt, hlp.len);
+						p_pull_o(&dev->wport, dev->wport.cnt);
+						wake_up(&dev->wport.procq);
+						break;
+					}
+				}
+				iff = &hlp;
+			} else {
+				iff = (iframe_t *)dev->wport.op;
+				if (iff->len > 0) {
+					if (dev->wport.cnt < (iff->len + IFRAME_HEAD_SIZE)) {
+						printk(KERN_WARNING __FUNCTION__": frame(%d,%d) too short\n",
+							dev->wport.cnt, IFRAME_HEAD_SIZE + iff->len);
+						p_pull_o(&dev->wport, dev->wport.cnt);
+						wake_up(&dev->wport.procq);
+						break;
+					}
+					if (frag < (iff->len + IFRAME_HEAD_SIZE)) {
+						broken = 1;
+						p_memcpy_o(&dev->wport, &hlp, IFRAME_HEAD_SIZE);
+					}
+				}
+			}
+			if (broken) {
+				if (hlp.len > 0) {
+					iff = vmalloc(IFRAME_HEAD_SIZE + hlp.len);
+					if (!iff) {
+						printk(KERN_WARNING __FUNCTION__": no %d vmem for iff\n",
+							IFRAME_HEAD_SIZE + hlp.len);
+						p_pull_o(&dev->wport, hlp.len);
+						wake_up(&dev->wport.procq);
+						continue;
+					}
+					memcpy(iff, &hlp, IFRAME_HEAD_SIZE);
+					p_memcpy_o(&dev->wport, &iff->data.p,
+						iff->len);
+				} else {
+					iff = &hlp;
+				}
+			}
+			used = IFRAME_HEAD_SIZE;
+			if (iff->len > 0)
+				used += iff->len; 
+			spin_unlock_irqrestore(&dev->wport.lock, flags);
+			hisax_wdata_if(dev, iff, used);
+			if (broken) {
+				if (used>IFRAME_HEAD_SIZE)
+					vfree(iff);
+				spin_lock_irqsave(&dev->wport.lock, flags);
+			} else {
+				spin_lock_irqsave(&dev->wport.lock, flags);
+				p_pull_o(&dev->wport, used);
+			}
+		} else { /* RAW DEVICES */
+			printk(KERN_DEBUG __FUNCTION__": wflg(%x)\n",
+				dev->wport.Flag);
+			if (test_bit(FLG_HISAXPORT_BLOCK, &dev->wport.Flag))
+				break;
+			used = dev->wport.cnt;
+			if (used > MAX_DATA_SIZE)
+				used = MAX_DATA_SIZE;
+			printk(KERN_DEBUG __FUNCTION__": cnt %d/%d\n",
+				used, dev->wport.cnt);
+			if (test_bit(FLG_HISAXPORT_ENABLED, &dev->wport.Flag)) {
+				struct sk_buff	*skb;
+
+				skb = alloc_skb(used + HISAX_HEAD_SIZE,
+					GFP_ATOMIC);
+				if (skb) {
+					skb_reserve(skb, HISAX_HEAD_SIZE);
+					p_memcpy_o(&dev->wport, skb_put(skb,
+						used), used);
+					test_and_set_bit(FLG_HISAXPORT_BLOCK,
+						&dev->wport.Flag);
+					spin_unlock_irqrestore(&dev->wport.lock, flags);
+					used = if_addhead(&dev->wport.pif,
+						PH_DATA | REQUEST, (int)skb, skb);
+					if (used) {
+						printk(KERN_WARNING __FUNCTION__
+							": dev(%d) down err(%d)\n",
+							dev->minor, used);
+						dev_kfree_skb(skb);
+					}
+					spin_lock_irqsave(&dev->wport.lock, flags);
+				} else {
+					printk(KERN_WARNING __FUNCTION__
+						": dev(%d) no skb(%d)\n",
+						dev->minor, used + HISAX_HEAD_SIZE);
+					p_pull_o(&dev->wport, used);
+				}
+			} else {
+				printk(KERN_WARNING __FUNCTION__
+					": dev(%d) wport not enabled\n",
+					dev->minor);
+				p_pull_o(&dev->wport, used);
+			}
+		}
+		wake_up(&dev->wport.procq);
+	}
+	test_and_clear_bit(FLG_HISAXPORT_BUSY, &dev->wport.Flag);
+	spin_unlock_irqrestore(&dev->wport.lock, flags);
+	return(0);
+}
+
+static hisaxdevice_t *
+init_device(u_int minor) {
+	hisaxdevice_t	*dev;
+	u_long		flags;
+
+	dev = kmalloc(sizeof(hisaxdevice_t), GFP_KERNEL);
+	if (device_debug & DEBUG_MGR_FUNC)
+		printk(KERN_DEBUG __FUNCTION__": dev(%d) %p\n",
+			minor, dev); 
+	if (dev) {
+		memset(dev, 0, sizeof(hisaxdevice_t));
+		dev->minor = minor;
+		dev->io_sema = MUTEX;
+		write_lock_irqsave(&hisax_device_lock, flags);
+		APPEND_TO_LIST(dev, hisax_devicelist);
+		write_unlock_irqrestore(&hisax_device_lock, flags);
+	}
+	return(dev);
+}
+
+hisaxdevice_t *
+get_free_rawdevice(void)
+{
+	hisaxdevice_t	*dev;
+	u_int		minor;
+
+	if (device_debug & DEBUG_MGR_FUNC)
+		printk(KERN_DEBUG __FUNCTION__":\n");
+	for (minor=HISAX_MINOR_RAW_MIN; minor<=HISAX_MINOR_RAW_MAX; minor++) {
+		dev = get_hisaxdevice4minor(minor);
+		if (device_debug & DEBUG_MGR_FUNC)
+			printk(KERN_DEBUG __FUNCTION__": dev(%d) %p\n",
+				minor, dev); 
+		if (!dev) {
+			dev = init_device(minor);
+			if (!dev)
+				return(NULL);
+			dev->rport.pif.func = hisax_rdata_raw;
+			dev->rport.pif.fdata = dev;
+			return(dev);
+		}
+	}
+	return(NULL);
+}
+
+int
+free_device(hisaxdevice_t *dev)
+{
+	u_long	flags;
+
+	if (!dev)
+		return(-ENODEV);
+	if (device_debug & DEBUG_MGR_FUNC)
+		printk(KERN_DEBUG __FUNCTION__": dev(%d)\n",
+			dev->minor);
+	/* release related stuff */
+	while(dev->layer)
+		del_layer(dev->layer);
+	while(dev->stack)
+		del_stack(dev->stack);
+	while(dev->timer)
+		dev_remove_timer(dev, dev->timer->id);
+	if (dev->rport.buf)
+		vfree(dev->rport.buf);
+	if (dev->wport.buf)
+		vfree(dev->wport.buf);
+	write_lock_irqsave(&hisax_device_lock, flags);
+	REMOVE_FROM_LISTBASE(dev, hisax_devicelist);
+	write_unlock_irqrestore(&hisax_device_lock, flags);
+	kfree(dev);
+	return(0);
+}
+
+static int
 hisax_open(struct inode *ino, struct file *filep)
 {
-//	u_int		minor = MINOR(ino->i_rdev);
-	hisaxdevice_t 	*newdev;
-	u_long flags;
+	u_int		minor = MINOR(ino->i_rdev);
+	hisaxdevice_t 	*dev = NULL;
+	u_long		flags;
+	int		isnew = 0;
 
 	if (device_debug & DEBUG_DEV_OP)
-		printk(KERN_DEBUG "hisax_open in: %p %p\n", filep, filep->private_data);
-	if ((newdev = (hisaxdevice_t *) kmalloc(sizeof(hisaxdevice_t), GFP_KERNEL))) {
-		memset(newdev, 0, sizeof(hisaxdevice_t));
-		newdev->file = filep;
-		newdev->inode = ino;
-		if (!(newdev->rbuf = vmalloc(HISAX_DEVBUF_SIZE))) {
-			kfree(newdev);
-			return(-ENOMEM);
-		}
-		newdev->rp = newdev->rbuf;
-		if (!(newdev->wbuf = vmalloc(HISAX_DEVBUF_SIZE))) {
-			vfree(newdev->rbuf);
-			kfree(newdev);
-			return(-ENOMEM);
-		}
-		newdev->wp = newdev->wbuf;
-		newdev->slock = SPIN_LOCK_UNLOCKED;
-		hisaxlock_core();
-		write_lock_irqsave(&hisax_device_lock, flags);
-		APPEND_TO_LIST(newdev, hisax_devicelist);
-		write_unlock_irqrestore(&hisax_device_lock, flags);
-		filep->private_data = newdev;
-	} else
+		printk(KERN_DEBUG "hisax_open in: minor(%d) %p %p mode(%x)\n",
+			minor, filep, filep->private_data, filep->f_mode);
+	if (minor) {
+		dev = get_hisaxdevice4minor(minor);
+		if (dev) {
+			if ((dev->open_mode & filep->f_mode) & (FMODE_READ | FMODE_WRITE))
+				return(-EBUSY);
+		} else
+			return(-ENODEV);
+	} else if ((dev = init_device(minor)))
+		isnew = 1;
+	else
 		return(-ENOMEM);
+	dev->open_mode |= filep->f_mode & (FMODE_READ | FMODE_WRITE);
+	if (dev->open_mode & FMODE_READ){
+		if (!dev->rport.buf) {
+			dev->rport.buf = vmalloc(HISAX_DEVBUF_SIZE);
+			if (!dev->rport.buf) {
+				if (isnew) {
+					write_lock_irqsave(&hisax_device_lock, flags);
+					REMOVE_FROM_LISTBASE(dev, hisax_devicelist);
+					write_unlock_irqrestore(&hisax_device_lock, flags);
+					kfree(dev);
+				}
+				return(-ENOMEM);
+			}
+			dev->rport.lock = SPIN_LOCK_UNLOCKED;
+			dev->rport.size = HISAX_DEVBUF_SIZE;
+		}
+		test_and_set_bit(FLG_HISAXPORT_OPEN, &dev->rport.Flag);
+		dev->rport.ip = dev->rport.op = dev->rport.buf;
+		dev->rport.cnt = 0;
+	}
+	if (dev->open_mode & FMODE_WRITE) {
+		if (!dev->wport.buf) {
+			dev->wport.buf = vmalloc(HISAX_DEVBUF_SIZE);
+			if (!dev->wport.buf) {
+				if (isnew) {
+					if (dev->rport.buf)
+						vfree(dev->rport.buf);
+					write_lock_irqsave(&hisax_device_lock, flags);
+					REMOVE_FROM_LISTBASE(dev, hisax_devicelist);
+					write_unlock_irqrestore(&hisax_device_lock, flags);
+					kfree(dev);
+				}
+				return(-ENOMEM);
+			}
+			dev->wport.lock = SPIN_LOCK_UNLOCKED;
+			dev->wport.size = HISAX_DEVBUF_SIZE;
+		}
+		test_and_set_bit(FLG_HISAXPORT_OPEN, &dev->wport.Flag);
+		dev->wport.ip = dev->wport.op = dev->wport.buf;
+		dev->wport.cnt = 0;
+	}
+	hisaxlock_core();
+	filep->private_data = dev;
 	if (device_debug & DEBUG_DEV_OP)
 		printk(KERN_DEBUG "hisax_open out: %p %p\n", filep, filep->private_data);
 	return(0);
@@ -968,7 +1518,6 @@ static int
 hisax_close(struct inode *ino, struct file *filep)
 {
 	hisaxdevice_t	*dev = hisax_devicelist;
-	u_long flags;
 
 	if (device_debug & DEBUG_DEV_OP)
 		printk(KERN_DEBUG "hisax: hisax_close %p %p\n", filep, filep->private_data);
@@ -976,24 +1525,21 @@ hisax_close(struct inode *ino, struct file *filep)
 	while (dev) {
 		if (dev == filep->private_data) {
 			if (device_debug & DEBUG_DEV_OP)
-				printk(KERN_DEBUG "hisax: dev: %p\n", dev);
-			/* release related stuff */
-			while(dev->layer)
-				del_layer(dev->layer);
-			while(dev->stack)
-				del_stack(dev->stack);
+				printk(KERN_DEBUG "hisax: dev(%d) %p mode %x/%x\n",
+					dev->minor, dev, dev->open_mode, filep->f_mode);
+			dev->open_mode &= ~filep->f_mode;
 			read_unlock(&hisax_device_lock);
-			write_lock_irqsave(&hisax_device_lock, flags);
-			vfree(dev->rbuf);
-			vfree(dev->wbuf);
-			dev->rp = dev->rbuf = NULL;
-			dev->wp = dev->wbuf = NULL;
-			dev->rcnt = 0;
-			dev->wcnt = 0;
-			REMOVE_FROM_LISTBASE(dev, hisax_devicelist);
-			write_unlock_irqrestore(&hisax_device_lock, flags);
+			if (filep->f_mode & FMODE_READ) {
+				test_and_clear_bit(FLG_HISAXPORT_OPEN,
+					&dev->rport.Flag);
+			}
+			if (filep->f_mode & FMODE_WRITE) {
+				test_and_clear_bit(FLG_HISAXPORT_OPEN,
+					&dev->wport.Flag);
+			}
 			filep->private_data = NULL;
-			kfree(dev);
+			if (!dev->minor)
+				free_device(dev);
 			hisaxunlock_core();
 			return 0;
 		}
@@ -1004,49 +1550,70 @@ hisax_close(struct inode *ino, struct file *filep)
 	return 0;
 }
 
+static __inline__ ssize_t
+do_hisax_read(struct file *file, char *buf, size_t count, loff_t * off)
+{
+	hisaxdevice_t	*dev = file->private_data;
+	size_t		len, frag;
+	u_long		flags;
+
+	if (off != &file->f_pos)
+		return(-ESPIPE);
+	if (!dev->rport.buf)
+		return -EINVAL;	
+	if (!access_ok(VERIFY_WRITE, buf, count))
+		return(-EFAULT);
+	if (device_debug & DEBUG_DEV_OP)
+		printk(KERN_DEBUG "hisax_read: file(%d) %p count %d\n",
+			dev->minor, file, count);
+	while (!dev->rport.cnt) {
+		if (file->f_flags & O_NONBLOCK)
+			return(-EAGAIN);
+		interruptible_sleep_on(&(dev->rport.procq));
+		if (signal_pending(current))
+			return(-ERESTARTSYS);
+	}
+	spin_lock_irqsave(&dev->rport.lock, flags);
+	if (count < dev->rport.cnt)
+		len = count;
+	else
+		len = dev->rport.cnt;
+	frag = dev->rport.buf + dev->rport.size - dev->rport.op;
+	if (frag <= len) {
+		if (copy_to_user(buf, dev->rport.op, frag)) {
+			spin_unlock_irqrestore(&dev->rport.lock, flags);
+			return(-EFAULT);
+		}
+		len -= frag;
+		dev->rport.op = dev->rport.buf;
+		dev->rport.cnt -= frag;
+	} else
+		frag = 0;
+	if (len) {
+		if (copy_to_user(buf + frag, dev->rport.op, len)) {
+			spin_unlock_irqrestore(&dev->rport.lock, flags);
+			return(-EFAULT);
+		}
+		dev->rport.cnt -= len;
+		dev->rport.op += len;
+	}
+	*off += len + frag;
+	spin_unlock_irqrestore(&dev->rport.lock, flags);
+	return(len + frag);
+}
+
 static ssize_t
 hisax_read(struct file *file, char *buf, size_t count, loff_t * off)
 {
 	hisaxdevice_t	*dev = file->private_data;
-	int len = 0;
-	u_long flags;
+	ssize_t		ret;
 
-	if (off != &file->f_pos)
-		return(-ESPIPE);
 	if (!dev)
 		return(-ENODEV);
-	
-	if (device_debug & DEBUG_DEV_OP)
-		printk(KERN_DEBUG "hisax_read: file %p count %d\n",
-			file, count);
-	spin_lock_irqsave(&dev->slock, flags);
-	if (!dev->rcnt) {
-		spin_unlock_irqrestore(&dev->slock, flags);
-		if (file->f_flags & O_NONBLOCK)
-			return(-EAGAIN);
-		interruptible_sleep_on(&dev->procq);
-		spin_lock_irqsave(&dev->slock, flags);
-		if (!dev->rcnt) {
-			spin_unlock_irqrestore(&dev->slock, flags);
-			return(-EAGAIN);
-		}
-	}
-	if (count < dev->rcnt)
-		len = count;
-	else
-		len = dev->rcnt;
-	if (copy_to_user(buf, dev->rp, len)) {
-		spin_unlock_irqrestore(&dev->slock, flags);
-		return(-EFAULT);
-	}
-	dev->rcnt -= len;
-	if (dev->rcnt)
-		dev->rp += len;
-	else
-		dev->rp = dev->rbuf;
-	spin_unlock_irqrestore(&dev->slock, flags);
-	*off += len;
-	return(len);
+	down(&dev->io_sema);
+	ret = do_hisax_read(file, buf, count, off);
+	up(&dev->io_sema);
+	return(ret);
 }
 
 static loff_t
@@ -1055,67 +1622,93 @@ hisax_llseek(struct file *file, loff_t offset, int orig)
 	return -ESPIPE;
 }
 
+static __inline__ ssize_t
+do_hisax_write(struct file *file, const char *buf, size_t count, loff_t * off)
+{
+	hisaxdevice_t	*dev = file->private_data;
+	size_t		len, frag;
+	u_long		flags;
+
+	if (off != &file->f_pos)
+		return(-ESPIPE);
+	if (device_debug & DEBUG_DEV_OP)
+		printk(KERN_DEBUG "hisax_write: file(%d) %p count %d/%d/%d\n",
+			dev->minor, file, count, dev->wport.cnt, dev->wport.size);
+	if (!dev->wport.buf)
+		return -EINVAL;	
+	if (!access_ok(VERIFY_WRITE, buf, count))
+		return(-EFAULT);
+	if (count > dev->wport.size)
+		return(-ENOSPC);
+	spin_lock_irqsave(&dev->wport.lock, flags);
+	while ((dev->wport.size - dev->wport.cnt) < count) {
+		spin_unlock_irqrestore(&dev->wport.lock, flags);
+		if (file->f_flags & O_NONBLOCK)
+			return(-EAGAIN);
+		interruptible_sleep_on(&(dev->wport.procq));
+		if (signal_pending(current))
+			return(-ERESTARTSYS);
+		spin_lock_irqsave(&dev->wport.lock, flags);
+	}
+	len = count;
+	frag = dev->wport.buf + dev->wport.size - dev->wport.ip;
+	if (frag <= len) {
+		copy_from_user(dev->wport.ip, buf, frag);
+		dev->wport.ip = dev->wport.buf;
+		len -= frag;
+		dev->wport.cnt += frag;
+	} else
+		frag = 0;
+	if (len) {
+		copy_from_user(dev->wport.ip, buf + frag, len);
+		dev->wport.cnt += len;
+		dev->wport.ip += len;
+	}
+	spin_unlock_irqrestore(&dev->wport.lock, flags);
+	hisax_wdata(dev);
+	return(count);
+}
+
 static ssize_t
 hisax_write(struct file *file, const char *buf, size_t count, loff_t * off)
 {
 	hisaxdevice_t	*dev = file->private_data;
-	int used;
-	u_long flags;
+	ssize_t		ret;
 
-	if (off != &file->f_pos)
-		return(-ESPIPE);
 	if (!dev)
 		return(-ENODEV);
-	if (count>HISAX_DEVBUF_SIZE)
-		return(-ENOSPC);
-	if (device_debug & DEBUG_DEV_OP)
-		printk(KERN_DEBUG "hisax_write: file %p count %d\n",
-			file, count);
-	spin_lock_irqsave(&dev->slock, flags);
-	if (dev->wcnt) {
-		spin_unlock_irqrestore(&dev->slock, flags);
-		if (file->f_flags & O_NONBLOCK)
-			return(-EAGAIN);
-		interruptible_sleep_on(&(dev->procq));
-		spin_lock_irqsave(&dev->slock, flags);
-		if (dev->wcnt) {
-			spin_unlock_irqrestore(&dev->slock, flags);
-			return(-EAGAIN);
-		}
-	}
-	copy_from_user(dev->wbuf, buf, count);
-	dev->wcnt += count;
-	dev->wp = dev->wbuf;
-	while (dev->wcnt > 0) {
-		spin_unlock_irqrestore(&dev->slock, flags);
-		used = hisax_wdata(dev, dev->wp, dev->wcnt);
-		spin_lock_irqsave(&dev->slock, flags);
-		dev->wcnt -= used;
-		dev->wp += used;
-	}
-	dev->wcnt = 0; /* if go negatic due to errors */
-	spin_unlock_irqrestore(&dev->slock, flags);
-	wake_up_interruptible(&dev->procq);
-	return(count);
+	down(&dev->io_sema);
+	ret = do_hisax_write(file, buf, count, off);
+	up(&dev->io_sema);
+	return(ret);
 }
 
 static unsigned int
 hisax_poll(struct file *file, poll_table * wait)
 {
-	unsigned int mask = POLLERR;
-	hisaxdevice_t    *dev = file->private_data;
+	unsigned int	mask = POLLERR;
+	hisaxdevice_t	*dev = file->private_data;
+	hisaxport_t	*rport = (file->f_mode & FMODE_READ) ?
+					&dev->rport : NULL;
+	hisaxport_t	*wport = (file->f_mode & FMODE_WRITE) ?
+					&dev->wport : NULL;
 
-	if (device_debug & DEBUG_DEV_OP)
-		printk(KERN_DEBUG "hisax_poll in: file %p\n", file);
 	if (dev) {
-		if (!dev->rcnt)
-			poll_wait(file, &(dev->procq), wait);
-		mask = 0;
-		if (dev->rcnt) {
-			mask |= POLLIN | POLLRDNORM;
+		if (device_debug & DEBUG_DEV_OP)
+			printk(KERN_DEBUG "hisax_poll in: file(%d) %p\n",
+				dev->minor, file);
+		if (rport) {
+			poll_wait(file, &rport->procq, wait);
+			mask = 0;
+			if (rport->cnt)
+				mask |= (POLLIN | POLLRDNORM);
 		}
-		if (!dev->wcnt) {
-			mask |= POLLOUT | POLLWRNORM;
+		if (wport) {
+			poll_wait(file, &wport->procq, wait);
+			if (mask == POLLERR)
+				mask = 0;
+			if (wport->cnt < wport->size)
+				mask |= (POLLOUT | POLLWRNORM);
 		}
 	}
 	if (device_debug & DEBUG_DEV_OP)
@@ -1261,14 +1854,7 @@ int free_hisaxdev(void) {
 	if (hisax_devicelist) {
 		printk(KERN_WARNING "hisax: devices open on remove\n");
 		while (dev) {
-			while(dev->layer)
-				del_layer(dev->layer);
-			while(dev->stack)
-				del_stack(dev->stack);
-			REMOVE_FROM_LISTBASE(dev, hisax_devicelist);
-			vfree(dev->rbuf);
-			vfree(dev->wbuf);
-			kfree(dev);
+			free_device(dev);
 			dev = hisax_devicelist;
 		}
 		err = -EBUSY;

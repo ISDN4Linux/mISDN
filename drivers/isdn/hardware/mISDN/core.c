@@ -1,4 +1,4 @@
-/* $Id: core.c,v 0.18 2001/08/02 14:51:56 kkeil Exp $
+/* $Id: core.c,v 0.19 2001/09/29 20:05:00 kkeil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -213,6 +213,22 @@ debugout(hisaxinstance_t *inst, logdata_t *log)
 	return(0);
 }
 
+static int
+get_hdevice(hisaxdevice_t **dev, int *typ)
+{
+	if (!dev)
+		return(-EINVAL);
+	if (!typ)
+		return(-EINVAL);
+	if (*typ == HISAX_RAW_DEVICE) {
+		*dev = get_free_rawdevice();
+		if (!(*dev))
+			return(-ENODEV);
+		return(0);
+	}
+	return(-EINVAL);
+}
+
 static int central_manager(void *data, u_int prim, void *arg) {
 	hisaxstack_t *st = data;
 
@@ -234,6 +250,10 @@ static int central_manager(void *data, u_int prim, void *arg) {
 	    case MGR_DISCONNECT | REQUEST:
 	    case MGR_DISCONNECT | INDICATION:
 		return(disconnect_if(data, prim, arg));
+	    case MGR_GETDEVICE | REQUEST:
+	    	return(get_hdevice(data, arg));
+	    case MGR_DELDEVICE | REQUEST:
+	    	return(free_device(data));
 	}
 	if (!data)
 		return(-EINVAL);

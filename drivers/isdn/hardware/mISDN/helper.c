@@ -1,4 +1,4 @@
-/* $Id: helper.c,v 0.13 2001/05/18 00:48:51 kkeil Exp $
+/* $Id: helper.c,v 0.14 2001/09/29 20:05:00 kkeil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -96,6 +96,8 @@ free_dchannel(dchannel_t *dch) {
 
 int
 init_bchannel(bchannel_t *bch) {
+	int	devtyp = HISAX_RAW_DEVICE;
+
 	if (!(bch->blog = kmalloc(MAX_BLOG_SPACE, GFP_ATOMIC))) {
 		printk(KERN_WARNING
 			"HiSax: No memory for blog\n");
@@ -125,6 +127,13 @@ init_bchannel(bchannel_t *bch) {
 	bch->tx_len = 0;
 	bch->tx_idx = 0;
 	bch->tqueue.data = bch;
+	if (!bch->dev) {
+		if (bch->inst.obj->ctrl(&bch->dev, MGR_GETDEVICE | REQUEST,
+			&devtyp)) {
+			printk(KERN_WARNING
+				"HiSax: no raw device for bchannel\n");
+		}
+	}
 	return(0);
 }
 
@@ -150,6 +159,11 @@ free_bchannel(bchannel_t *bch) {
 		dev_kfree_skb(bch->next_skb);
 		bch->next_skb = NULL;
 	}
+	if (bch->inst.obj->ctrl(bch->dev, MGR_DELDEVICE | REQUEST, NULL)) {
+		printk(KERN_WARNING
+			"HiSax: del raw device error\n");
+	} else
+		bch->dev = NULL;
 	return(0);
 }
 

@@ -1,4 +1,4 @@
-/* $Id: stack.c,v 0.14 2001/08/02 14:51:56 kkeil Exp $
+/* $Id: stack.c,v 0.15 2001/09/29 20:05:01 kkeil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -178,8 +178,8 @@ get_instance(hisaxstack_t *st, int layer_nr, int protocol)
 		inst = layer->inst;
 		if (inst) {
 			if (core_debug & DEBUG_CORE_FUNC)
-				printk(KERN_DEBUG "get_instance inst(%p) lm %x/%x prot %x/%x\n",
-					inst, inst->pid.layermask, ISDN_LAYER(layer_nr),
+				printk(KERN_DEBUG "get_instance inst(%p, %x) lm %x/%x prot %x/%x\n",
+					inst, inst->id, inst->pid.layermask, ISDN_LAYER(layer_nr),
 					inst->pid.protocol[layer_nr], protocol);
 			if ((inst->pid.layermask & ISDN_LAYER(layer_nr)) &&
 				(inst->pid.protocol[layer_nr] == protocol))
@@ -411,8 +411,8 @@ register_layer(hisaxstack_t *st, hisaxinstance_t *inst) {
 	if (!inst)
 		return(-EINVAL);
 	if (core_debug & DEBUG_CORE_FUNC)
-		printk(KERN_DEBUG __FUNCTION__":st(%p) inst(%p/%p) lmask(%x)\n",
-			st, inst, inst->obj, inst->pid.layermask);
+		printk(KERN_DEBUG __FUNCTION__":st(%p) inst(%p/%p) lmask(%x) id(%x)\n",
+			st, inst, inst->obj, inst->pid.layermask, inst->id);
 	if (inst->id) { /* allready registered */
 		if (inst->st || !st) {
 			int_errtxt("register duplicate %08x %p %p",
@@ -438,6 +438,9 @@ register_layer(hisaxstack_t *st, hisaxinstance_t *inst) {
 	if (!inst->id)
 		refinc++;
 	get_free_instid(st, inst);
+	if (core_debug & DEBUG_CORE_FUNC)
+		printk(KERN_DEBUG __FUNCTION__":inst(%p/%p) id(%x)%s\n",
+			inst, inst->obj, inst->id, refinc ? " changed" : "");
 	if (!inst->id) {
 		int_errtxt("no free inst->id for layer %x", inst->pid.layermask);
 		if (st && layer) {

@@ -1,4 +1,4 @@
-/* $Id: mISDNif.h,v 0.29 2001/08/03 09:04:55 kkeil Exp $
+/* $Id: mISDNif.h,v 0.30 2001/09/29 20:05:01 kkeil Exp $
  *
  */
 
@@ -48,6 +48,13 @@
 #define MGR_SETIF	0x0f3400
 #define MGR_ADDIF	0x0f3500
 #define MGR_RELEASE	0x0f4500
+#define MGR_GETDEVICE	0x0f5100
+#define MGR_DELDEVICE	0x0f5200
+#define MGR_INITTIMER	0x0f8100
+#define MGR_ADDTIMER	0x0f8200
+#define MGR_DELTIMER	0x0f8300
+#define MGR_REMOVETIMER	0x0f8400
+#define MGR_TIMER	0x0f8800
 #define MGR_CONTROL	0x0fe100
 #define MGR_STATUS	0x0fe200
 #define MGR_HASPROTOCOL 0x0fe300
@@ -206,6 +213,7 @@
 #define ISDN_PID_L2_LAPD_NET	0x02000101
 #define ISDN_PID_L2_B_X75SLP	0x42000001
 #define ISDN_PID_L2_B_TRANS	0x42000002
+#define ISDN_PID_L2_B_RAWDEV	0x42100002
 #define ISDN_PID_L3_B_TRANS	0x43000001
 #define ISDN_PID_L3_DSS1USER	0x03000001
 #define ISDN_PID_L3_DSS1NET	0x03000101
@@ -215,6 +223,14 @@
 #define ISDN_PID_BCHANNEL_BIT	0x40000000
 #define ISDN_PID_LAYER_MASK	0x0f000000
 #define ISDN_PID_LAYER(n)	(n<<24)
+
+#define HISAX_CORE_DEVICE	0
+#define HISAX_RAW_DEVICE	128
+
+#define FLG_HISAXPORT_BUSY	1
+#define FLG_HISAXPORT_ENABLED	2
+#define FLG_HISAXPORT_BLOCK	3
+#define FLG_HISAXPORT_OPEN	4
 
 #define MAX_LAYER_NR	7
 #define ISDN_LAYER(n)	(1<<n)
@@ -273,6 +289,7 @@
 #define MAX_HEADER_LEN		4
 #define UPLINK_HEADER_SPACE	22
 #define HISAX_FRAME_MIN		8
+#define IFRAME_HEAD_SIZE	16
 
 /* structure for information exchange between layer/entity boundaries */
 
@@ -597,6 +614,31 @@ typedef struct _hisaxstack {
 	hisaxinstance_t		*mgr;
 	struct _hisaxstack	*child;
 } hisaxstack_t;
+
+typedef struct _hisaxport {
+	struct wait_queue	*procq;
+	spinlock_t		lock;
+	hisaxif_t		pif;
+	int			Flag;
+	int			size;
+	int			cnt;
+	u_char			*buf;
+	u_char			*ip;
+	u_char			*op;
+} hisaxport_t;
+
+typedef struct _hisaxdevice {
+	struct _hisaxdevice	*prev;
+	struct _hisaxdevice	*next;
+	int			minor;
+	struct semaphore	io_sema;
+	int			open_mode;
+	hisaxport_t		rport;
+	hisaxport_t		wport;
+	struct _devicelayer	*layer;
+	struct _devicestack	*stack;
+	struct _hisaxtimer	*timer;
+} hisaxdevice_t;
 
 /* common helper functions */
 extern int put_hisax_header(struct sk_buff *, iframe_t *);
