@@ -1,4 +1,4 @@
-/* $Id: l3_udss1.c,v 0.12 2001/03/04 17:08:33 kkeil Exp $
+/* $Id: l3_udss1.c,v 0.13 2001/03/11 21:05:20 kkeil Exp $
  *
  * EURO/DSS1 D-channel protocol
  *
@@ -25,7 +25,7 @@ static int debug = 0;
 static hisaxobject_t u_dss1;
 
 
-const char *dss1_revision = "$Revision: 0.12 $";
+const char *dss1_revision = "$Revision: 0.13 $";
 
 static int dss1man(l3_process_t *, u_int, void *);
 
@@ -1771,11 +1771,11 @@ static struct stateentry downstatelist[] =
 	{SBIT(6) | SBIT(25),
 	 CC_SETUP | RESPONSE, l3dss1_release_cmpl_req},
 	{SBIT(6) | SBIT(25),
-	 CC_PROCEED_SEND | REQUEST, l3dss1_proceed_req},
+	 CC_PROCEEDING | REQUEST, l3dss1_proceed_req},
 	{SBIT(6),
-	 CC_INFO | REQUEST, l3dss1_setup_ack_req},
+	 CC_SETUP_ACKNOWLEDGE | REQUEST, l3dss1_setup_ack_req},
 	{SBIT(25),
-	 CC_INFO | REQUEST, l3dss1_dummy},
+	 CC_SETUP_ACKNOWLEDGE | REQUEST, l3dss1_dummy},
 	{SBIT(6) | SBIT(9) | SBIT(25),
 	 CC_ALERTING | REQUEST, l3dss1_alert_req},
 	{SBIT(6) | SBIT(7) | SBIT(9) | SBIT(25),
