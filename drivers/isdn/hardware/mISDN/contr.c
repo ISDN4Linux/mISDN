@@ -1,4 +1,4 @@
-/* $Id: contr.c,v 0.5 2001/03/03 18:17:15 kkeil Exp $
+/* $Id: contr.c,v 0.6 2001/03/11 21:23:39 kkeil Exp $
  *
  */
 
@@ -20,6 +20,7 @@ int contrConstr(Contr_t *contr, hisaxstack_t *st, hisaxif_t *hif, hisaxobject_t 
 
 	memset(contr, 0, sizeof(Contr_t));
 	contr->adrController = st->id;
+	sprintf(contr->inst.name, "CAPI %d", st->id);
 	contr->inst.obj = ocapi;
 	APPEND_TO_LIST(contr, ocapi->ilist);
 	while(cst) {

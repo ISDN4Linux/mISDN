@@ -1,4 +1,4 @@
-/* $Id: mISDNif.h,v 0.17 2001/03/11 21:09:07 kkeil Exp $
+/* $Id: mISDNif.h,v 0.18 2001/03/11 21:23:39 kkeil Exp $
  *
  */
 
@@ -489,9 +489,10 @@ typedef struct _hisaxif {
 typedef struct _hisaxinstance {
 	struct _hisaxinstance	*prev;
 	struct _hisaxinstance	*next;
+	char			name[HISAX_MAX_IDLEN];
+	int			extentions;
 	int			layermask;
 	hisax_pid_t		pid;
-	char			id[HISAX_MAX_IDLEN];
 	struct _hisaxstack	*st;
 	hisaxobject_t		*obj;
 	void			*data;

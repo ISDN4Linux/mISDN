@@ -1,4 +1,4 @@
-/* $Id: layer2.c,v 0.9 2001/03/04 17:08:33 kkeil Exp $
+/* $Id: layer2.c,v 0.10 2001/03/11 21:23:39 kkeil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -12,7 +12,7 @@
 #include "helper.h"
 #include "debug.h"
 
-const char *l2_revision = "$Revision: 0.9 $";
+const char *l2_revision = "$Revision: 0.10 $";
 
 static void l2m_debug(struct FsmInst *fi, char *fmt, ...);
 
@@ -1919,7 +1919,7 @@ l2m_debug(struct FsmInst *fi, char *fmt, ...)
 
 	va_start(log.args, fmt);
 	log.fmt = fmt;
-	log.head = l2->inst.id;
+	log.head = l2->inst.name;
 	l2->inst.obj->ctrl(&l2->inst, MGR_DEBUGDATA | REQUEST, &log);
 	va_end(log.args);
 }
@@ -1983,7 +1983,7 @@ create_l2(hisaxstack_t *st, hisaxif_t *hif) {
 	nl2->inst.pid.protocol[lay] = hif->protocol;
 	switch(hif->protocol) {
 	    case ISDN_PID_L2_LAPD:
-	    	sprintf(nl2->inst.id, "lapd %x", st->id);
+	    	sprintf(nl2->inst.name, "lapd %x", st->id);
 		test_and_set_bit(FLG_LAPD, &nl2->flag);
 		test_and_set_bit(FLG_MOD128, &nl2->flag);
 		test_and_set_bit(FLG_LAPD, &nl2->flag);
@@ -2002,7 +2002,7 @@ create_l2(hisaxstack_t *st, hisaxif_t *hif) {
 		break;
 	    case ISDN_PID_L2_B_X75SLP:
 		test_and_set_bit(FLG_LAPB, &nl2->flag);
-		sprintf(nl2->inst.id, "lapb %x", st->id);
+		sprintf(nl2->inst.name, "lapb %x", st->id);
 		nl2->window = 7;
 		nl2->maxlen = MAX_DATA_SIZE;
 		nl2->T200 = 1000;

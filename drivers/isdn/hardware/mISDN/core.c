@@ -1,4 +1,4 @@
-/* $Id: core.c,v 0.10 2001/03/04 17:08:33 kkeil Exp $
+/* $Id: core.c,v 0.11 2001/03/11 21:23:39 kkeil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -18,7 +18,8 @@
 hisaxobject_t	*hisax_objects = NULL;
 int core_debug;
 
-static int debug = 0;
+static int debug;
+static int obj_id;
 
 #ifdef MODULE
 MODULE_AUTHOR("Karsten Keil");
@@ -272,11 +273,13 @@ int HiSax_register(hisaxobject_t *obj) {
 
 	if (!obj)
 		return(-EINVAL);
+	obj->id = obj_id++;
 	APPEND_TO_LIST(obj, hisax_objects);
 	obj->ctrl = central_manager;
 	// register_prop
 	if (debug)
-	        printk(KERN_DEBUG "HiSax_register %s\n", obj->name);
+	        printk(KERN_DEBUG "HiSax_register %s id %x\n", obj->name,
+	        	obj->id);
 	return(0);
 }
 

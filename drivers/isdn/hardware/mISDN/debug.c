@@ -1,4 +1,4 @@
-/* $Id: debug.c,v 0.3 2001/02/13 10:42:55 kkeil Exp $
+/* $Id: debug.c,v 0.4 2001/03/11 21:23:39 kkeil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -45,7 +45,7 @@ debugprint(hisaxinstance_t *inst, char *fmt, ...)
 	logdata_t log;
 
 	va_start(log.args, fmt);
-	log.head = inst->id;
+	log.head = inst->name;
 	log.fmt = fmt;
 	inst->obj->ctrl(inst, MGR_DEBUGDATA | REQUEST, &log);
 	va_end(log.args);

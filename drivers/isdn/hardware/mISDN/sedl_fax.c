@@ -1,4 +1,4 @@
-/* $Id: sedl_fax.c,v 0.12 2001/03/11 21:09:07 kkeil Exp $
+/* $Id: sedl_fax.c,v 0.13 2001/03/11 21:23:39 kkeil Exp $
  *
  * sedl_fax.c  low level stuff for Sedlbauer Speedfax + cards
  *
@@ -40,7 +40,7 @@
 
 extern const char *CardType[];
 
-const char *Sedlfax_revision = "$Revision: 0.12 $";
+const char *Sedlfax_revision = "$Revision: 0.13 $";
 
 const char *Sedlbauer_Types[] =
 	{"None", "speed fax+", "speed fax+ pyramid", "speed fax+ pci"};
@@ -345,7 +345,7 @@ static int init_card(sedl_fax *sf)
 	save_flags(flags);
 	irq_cnt = kstat_irqs(sf->irq);
 	printk(KERN_INFO "%s: IRQ %d count %d cpu%d\n",
-		sf->dch.inst.id, sf->irq, irq_cnt, smp_processor_id());
+		sf->dch.inst.name, sf->irq, irq_cnt, smp_processor_id());
 	lock_dev(sf);
 	sf->in_irq = 1;
 	if (request_irq(sf->irq, irq_func, shared, "speedfax", sf)) {
@@ -370,7 +370,7 @@ static int init_card(sedl_fax *sf)
 		schedule_timeout((10*HZ)/1000);
 		restore_flags(flags);
 		printk(KERN_INFO "%s: IRQ %d count %d cpu%d\n",
-			sf->dch.inst.id, sf->irq, kstat_irqs(sf->irq), smp_processor_id());
+			sf->dch.inst.name, sf->irq, kstat_irqs(sf->irq), smp_processor_id());
 		if (kstat_irqs(sf->irq) == irq_cnt) {
 			printk(KERN_WARNING
 			       "Sedlbauer speedfax: IRQ(%d) getting no interrupts during init %d\n",
@@ -615,7 +615,7 @@ add_if(hisaxinstance_t *inst, int channel, hisaxif_t *hif) {
 		break;
 	    default:
 		printk(KERN_WARNING "speedfax_add_if: inst %s protocol %x not supported\n",
-			inst->id, hif->protocol);
+			inst->name, hif->protocol);
 		return(-EPROTONOSUPPORT);
 	}
 	return(0);
@@ -865,7 +865,7 @@ Speedfax_init(void)
 		card->dch.inst.down.func = dummy_down;
 		card->dch.inst.down.fdata = card;
 		set_dchannel_pid(&pid, protocol[sedl_cnt], layermask[sedl_cnt]);
-		sprintf(card->dch.inst.id, "SFax%d", sedl_cnt+1);
+		sprintf(card->dch.inst.name, "SFax%d", sedl_cnt+1);
 		init_dchannel(&card->dch);
 		for (i=0; i<2; i++) {
 			card->bch[i].channel = i;
@@ -879,7 +879,8 @@ Speedfax_init(void)
 			card->bch[i].inst.lock = lock_dev;
 			card->bch[i].inst.unlock = unlock_dev;
 			card->bch[i].debug = debug;
-			sprintf(card->bch[i].inst.id, "%s B%d", card->dch.inst.id, i+1);
+			sprintf(card->bch[i].inst.name, "%s B%d",
+				card->dch.inst.name, i+1);
 			init_bchannel(&card->bch[i]);
 		}
 		printk(KERN_DEBUG "sfax card %p dch %p bch1 %p bch2 %p\n",

@@ -1,4 +1,4 @@
-/* $Id: udevice.c,v 0.7 2001/03/04 18:17:28 kkeil Exp $
+/* $Id: udevice.c,v 0.8 2001/03/11 21:23:39 kkeil Exp $
  *
  * Copyright 2000  by Karsten Keil <kkeil@isdn4linux.de>
  */
@@ -111,7 +111,7 @@ create_layer(hisaxdevice_t *dev, hisaxstack_t *st, int *ip) {
 	nl->inst.layermask = *ip++;
 	nl->inst.pid.protocol[0] = *ip++;
 	p = (u_char *)ip;
-	strcpy(nl->inst.id, p);
+	strcpy(nl->inst.name, p);
 	p += HISAX_MAX_IDLEN;
 	ip = (int *)p;
 	nl->inst.down.protocol = *ip++;
@@ -148,7 +148,7 @@ del_layer(devicelayer_t *dl) {
 		printk(KERN_DEBUG "del_layer: dl(%p) inst(%p) lay(%x) dev(%p) nexti(%p)\n", 
 			dl, inst, inst->layermask, dev, inst->next);
 		printk(KERN_DEBUG "del_layer iaddr %x inst %s\n",
-			dl->iaddr, inst->id);
+			dl->iaddr, inst->name);
 	}
 	memset(&hif, 0, sizeof(hisaxif_t));
 	hif.fdata = dl;

@@ -1,4 +1,4 @@
-/* $Id: l3_udss1.c,v 0.13 2001/03/11 21:05:20 kkeil Exp $
+/* $Id: l3_udss1.c,v 0.14 2001/03/11 21:23:39 kkeil Exp $
  *
  * EURO/DSS1 D-channel protocol
  *
@@ -25,7 +25,7 @@ static int debug = 0;
 static hisaxobject_t u_dss1;
 
 
-const char *dss1_revision = "$Revision: 0.13 $";
+const char *dss1_revision = "$Revision: 0.14 $";
 
 static int dss1man(l3_process_t *, u_int, void *);
 
@@ -2252,6 +2252,7 @@ create_udss1(hisaxstack_t *st, hisaxif_t *hif) {
 		nl3->dummy->l3 = nl3;
 		L3InitTimer(nl3->dummy, &nl3->dummy->timer);
 	}
+	sprintf(nl3->inst.name, "DSS1 %d", st->id);
 	nl3->inst.pid.protocol[lay] = hif->protocol;
 	nl3->inst.obj = &u_dss1;
 	nl3->inst.layermask = hif->layermask;

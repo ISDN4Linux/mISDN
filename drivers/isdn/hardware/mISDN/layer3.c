@@ -1,4 +1,4 @@
-/* $Id: layer3.c,v 0.8 2001/03/03 18:17:15 kkeil Exp $
+/* $Id: layer3.c,v 0.9 2001/03/11 21:23:39 kkeil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -14,7 +14,7 @@
 #include "helper.h"
 #include "hisaxl3.h"
 
-const char *l3_revision = "$Revision: 0.8 $";
+const char *l3_revision = "$Revision: 0.9 $";
 
 static
 struct Fsm l3fsm = {NULL, 0, 0, NULL, NULL};
@@ -69,7 +69,7 @@ l3m_debug(struct FsmInst *fi, char *fmt, ...)
 
 	va_start(log.args, fmt);
 	log.fmt = fmt;
-	log.head = l3->inst.id;
+	log.head = l3->inst.name;
 	l3->inst.obj->ctrl(&l3->inst, MGR_DEBUGDATA | REQUEST, &log);
 	va_end(log.args);
 }
@@ -81,7 +81,7 @@ l3_debug(layer3_t *l3, char *fmt, ...)
 
 	va_start(log.args, fmt);
 	log.fmt = fmt;
-	log.head = l3->inst.id;
+	log.head = l3->inst.name;
 	l3->inst.obj->ctrl(&l3->inst, MGR_DEBUGDATA | REQUEST, &log);
 	va_end(log.args);
 }
