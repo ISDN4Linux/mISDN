@@ -1,4 +1,4 @@
-/* $Id: l3_udss1.c,v 1.4 2002/05/01 01:00:40 kkeil Exp $
+/* $Id: l3_udss1.c,v 1.5 2002/06/26 08:38:24 kkeil Exp $
  *
  * EURO/DSS1 D-channel protocol
  *
@@ -24,7 +24,7 @@ static int debug = 0;
 static hisaxobject_t u_dss1;
 
 
-const char *dss1_revision = "$Revision: 1.4 $";
+const char *dss1_revision = "$Revision: 1.5 $";
 
 static int dss1man(l3_process_t *, u_int, void *);
 
@@ -864,6 +864,7 @@ l3dss1_connect(l3_process_t *pc, u_char pr, void *arg)
 		return;
 	}
 	L3DelTimer(&pc->timer);	/* T310 */
+	l3dss1_message(pc, MT_CONNECT_ACKNOWLEDGE);
 	newl3state(pc, 10);
 	pc->para.CONNECT.CHANNEL_ID =
 		l3dss1_get_channel_id(pc, skb);
