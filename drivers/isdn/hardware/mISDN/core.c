@@ -1,4 +1,4 @@
-/* $Id: core.c,v 1.10 2003/07/21 12:44:45 kkeil Exp $
+/* $Id: core.c,v 1.11 2003/07/21 13:09:03 kkeil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -18,7 +18,7 @@
 #include <linux/smp_lock.h>
 #endif
 
-static char *mISDN_core_revision = "$Revision: 1.10 $";
+static char *mISDN_core_revision = "$Revision: 1.11 $";
 
 mISDNobject_t	*mISDN_objects = NULL;
 int core_debug;
@@ -54,11 +54,11 @@ typedef struct _mISDN_thread {
 static mISDN_thread_t	mISDN_thread;
 
 static moditem_t modlist[] = {
-	{"mISDNl1", ISDN_PID_L1_TE_S0},
-	{"mISDNl2", ISDN_PID_L2_LAPD},
-	{"mISDNl2", ISDN_PID_L2_B_X75SLP},
+	{"mISDN_l1", ISDN_PID_L1_TE_S0},
+	{"mISDN_l2", ISDN_PID_L2_LAPD},
+	{"mISDN_l2", ISDN_PID_L2_B_X75SLP},
 	{"l3udss1", ISDN_PID_L3_DSS1USER},
-	{"mISDNdtmf", ISDN_PID_L2_B_TRANSDTMF},
+	{"mISDN_dtmf", ISDN_PID_L2_B_TRANSDTMF},
 	{NULL, ISDN_PID_NONE}
 };
 
