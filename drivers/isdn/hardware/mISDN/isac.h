@@ -1,4 +1,4 @@
-/* $Id: isac.h,v 1.2 2003/06/24 21:58:53 kkeil Exp $
+/* $Id: isac.h,v 1.3 2003/07/21 12:00:04 kkeil Exp $
  *
  * isac.h   ISAC specific defines
  *
@@ -133,4 +133,4 @@ extern void ISAC_free(dchannel_t *);
 
 extern void ISAC_interrupt(dchannel_t *, u_char);
 extern void ISAC_clear_pending_ints(dchannel_t *);
-extern int ISAC_l1hw(hisaxif_t *, struct sk_buff *);
+extern int ISAC_l1hw(mISDNif_t *, struct sk_buff *);

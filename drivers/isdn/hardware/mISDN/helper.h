@@ -1,23 +1,23 @@
-/* $Id: helper.h,v 1.6 2003/07/21 11:13:02 kkeil Exp $
+/* $Id: helper.h,v 1.7 2003/07/21 12:00:04 kkeil Exp $
  *
  *   Basic declarations, defines and prototypes
  *
  * This file is (c) under GNU PUBLIC LICENSE
  *
  */
-#ifndef _HISAX_HELPER_H
-#define	_HISAX_HELPER_H
+#ifndef _mISDN_HELPER_H
+#define	_mISDN_HELPER_H
 #include <linux/kernel.h>
 #ifdef MEMDBG
 #include "memdbg.h"
 #endif
 
 #define int_error() \
-        printk(KERN_ERR "hisax: INTERNAL ERROR in %s:%d\n", \
+        printk(KERN_ERR "mISDN: INTERNAL ERROR in %s:%d\n", \
                        __FILE__, __LINE__)
                        
 #define int_errtxt(fmt, arg...) \
-        printk(KERN_ERR "hisax: INTERNAL ERROR in %s:%d " fmt "\n", \
+        printk(KERN_ERR "mISDN: INTERNAL ERROR in %s:%d " fmt "\n", \
                        __FILE__, __LINE__, ## arg)
                        
 #define APPEND_TO_LIST(item,base) \
@@ -82,17 +82,17 @@ alloc_uplinkD_skb(size_t size)
 	return(skb);
 }
 
-extern void	set_dchannel_pid(hisax_pid_t *, int, int);
+extern void	set_dchannel_pid(mISDN_pid_t *, int, int);
 extern int	get_lowlayer(int);
 extern int	get_up_layer(int);
 extern int	get_down_layer(int);
 extern int	layermask2layer(int);
-extern int	get_protocol(hisaxstack_t *, int);
-extern int	HasProtocol(hisaxobject_t *, int);
-extern int	SetHandledPID(hisaxobject_t *, hisax_pid_t *);
-extern void	RemoveUsedPID(hisax_pid_t *, hisax_pid_t *);
+extern int	get_protocol(mISDNstack_t *, int);
+extern int	HasProtocol(mISDNobject_t *, int);
+extern int	SetHandledPID(mISDNobject_t *, mISDN_pid_t *);
+extern void	RemoveUsedPID(mISDN_pid_t *, mISDN_pid_t *);
 
-static inline int HasProtocolP(hisaxobject_t *obj, int *PP)
+static inline int HasProtocolP(mISDNobject_t *obj, int *PP)
 {
 	if (!PP) {
 		int_error();
@@ -101,20 +101,20 @@ static inline int HasProtocolP(hisaxobject_t *obj, int *PP)
 	return(HasProtocol(obj, *PP));
 }
 
-extern __inline__ void hisax_sethead(u_int prim, int dinfo, struct sk_buff *skb)
+extern __inline__ void mISDN_sethead(u_int prim, int dinfo, struct sk_buff *skb)
 {
-	hisax_head_t *hh = HISAX_HEAD_P(skb);
+	mISDN_head_t *hh = mISDN_HEAD_P(skb);
 
 	hh->prim = prim;
 	hh->dinfo = dinfo;
 }
 
-extern __inline__ int if_newhead(hisaxif_t *i, u_int prim, int dinfo,
+extern __inline__ int if_newhead(mISDNif_t *i, u_int prim, int dinfo,
 	struct sk_buff *skb)
 {
 	if (!i->func || !skb)
 		return(-ENXIO);
-	hisax_sethead(prim, dinfo, skb);
+	mISDN_sethead(prim, dinfo, skb);
 	return(i->func(i, skb));
 }
 
@@ -132,11 +132,11 @@ extern __inline__ struct sk_buff *create_link_skb(u_int prim, int dinfo,
 		skb_reserve(skb, reserve);
 	if (len)
 		memcpy(skb_put(skb, len), arg, len);
-	hisax_sethead(prim, dinfo, skb);
+	mISDN_sethead(prim, dinfo, skb);
 	return(skb);
 }
 
-extern __inline__ int if_link(hisaxif_t *i, u_int prim, int dinfo, int len,
+extern __inline__ int if_link(mISDNif_t *i, u_int prim, int dinfo, int len,
 	void *arg, int reserve)
 {
 	struct sk_buff	*skb;
@@ -163,4 +163,4 @@ extern	void		AddvarIE(struct sk_buff *, u_char *);
 extern	void		AddIE(struct sk_buff *, u_char, u_char *);
 extern	void		LogL3Msg(struct sk_buff *);
 
-#endif /* _HISAX_HELPER_H */
+#endif /* _mISDN_HELPER_H */

@@ -1,4 +1,4 @@
-# km_newhisax slave Makefile
+# km_newmISDN slave Makefile
 # (c) 10/2001 Karsten Keil <kkeil@suse.de>
 #
 KDIR = /usr/src/linux
@@ -30,7 +30,7 @@ FINDHPATH += $(MYDIR)/newinclude/linux
 
 MODLIB := $(DESTDIR)$(INSTALL_MOD_PATH)/lib/modules/$(KERNELRELEASE)
 
-newhisax: $(TARGETDIR) depend newhisax_mod 
+newmISDN: $(TARGETDIR) depend newmISDN_mod 
 	$(MAKE) -C $(TARGETDIR) CFLAGS="$(CFLAGS)" MAKING_MODULES=1 modules
 
 dep-files: scripts/mkdep archdep include/linux/version.h
@@ -50,7 +50,7 @@ install: install_mod
 
 install_mod: modules_install
 
-newhisax_mod:
+newmISDN_mod:
 	echo patchlevel $(PATCHLEVEL)
 	mkdir -p modules
 
@@ -58,7 +58,7 @@ else
 
 TARGETMODDIR = ../misc
 
-newhisax_mod:
+newmISDN_mod:
 	echo patchlevel $(PATCHLEVEL)
 
 install: install_mod

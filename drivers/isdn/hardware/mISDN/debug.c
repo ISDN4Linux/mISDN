@@ -1,4 +1,4 @@
-/* $Id: debug.c,v 1.0 2001/11/02 23:42:26 kkeil Exp $
+/* $Id: debug.c,v 1.1 2003/07/21 12:00:04 kkeil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -7,17 +7,17 @@
  */
 
 #define __NO_VERSION__
-#include <linux/hisaxif.h>
+#include <linux/mISDNif.h>
 #include <linux/kernel.h>
 #include <linux/string.h>
 #include "debug.h"
 
-#define HISAX_STATUS_BUFSIZE 4096
+#define mISDN_STATUS_BUFSIZE 4096
 
-static char tmpbuf[HISAX_STATUS_BUFSIZE];
+static char tmpbuf[mISDN_STATUS_BUFSIZE];
 
 void
-vhisaxdebug(int id, char *head, char *fmt, va_list args)
+vmISDNdebug(int id, char *head, char *fmt, va_list args)
 {
 /* if head == NULL the fmt contains the full info */
 	char *p = tmpbuf;
@@ -30,17 +30,17 @@ vhisaxdebug(int id, char *head, char *fmt, va_list args)
 } 
 
 void
-hisaxdebug(int id, char *head, char *fmt, ...)
+mISDNdebug(int id, char *head, char *fmt, ...)
 {
 	va_list args;
 
 	va_start(args, fmt);
-	vhisaxdebug(id, head, fmt, args);
+	vmISDNdebug(id, head, fmt, args);
 	va_end(args);
 }
 
 void
-debugprint(hisaxinstance_t *inst, char *fmt, ...)
+debugprint(mISDNinstance_t *inst, char *fmt, ...)
 {
 	logdata_t log;
 
@@ -52,7 +52,7 @@ debugprint(hisaxinstance_t *inst, char *fmt, ...)
 }
 
 char *
-HiSax_getrev(const char *revision)
+mISDN_getrev(const char *revision)
 {
 	char *rev;
 	char *p;

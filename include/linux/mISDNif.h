@@ -1,9 +1,9 @@
-/* $Id: mISDNif.h,v 1.11 2003/07/21 11:13:02 kkeil Exp $
+/* $Id: mISDNif.h,v 1.12 2003/07/21 12:00:05 kkeil Exp $
  *
  */
 
-#ifndef HISAXIF_H
-#define HISAXIF_H
+#ifndef mISDNIF_H
+#define mISDNIF_H
 
 #include <stdarg.h>
 #include <linux/types.h>
@@ -238,19 +238,19 @@
 #define	ISDN_PID_L3_DF_PTP	0x00100000
 #define ISDN_PID_L3_DF_EXTCID	0x00200000
 
-#define HISAX_CORE_DEVICE	0
-#define HISAX_RAW_DEVICE	128
+#define mISDN_CORE_DEVICE	0
+#define mISDN_RAW_DEVICE	128
 
-#define FLG_HISAXPORT_BUSY	1
-#define FLG_HISAXPORT_ENABLED	2
-#define FLG_HISAXPORT_BLOCK	3
-#define FLG_HISAXPORT_OPEN	4
-#define FLG_HISAXPORT_ONEFRAME	5
+#define FLG_mISDNPORT_BUSY	1
+#define FLG_mISDNPORT_ENABLED	2
+#define FLG_mISDNPORT_BLOCK	3
+#define FLG_mISDNPORT_OPEN	4
+#define FLG_mISDNPORT_ONEFRAME	5
 
 #define MAX_LAYER_NR	7
 #define ISDN_LAYER(n)	(1<<n)
 #define LAYER_OUTRANGE(layer)	((layer<0) || (layer>MAX_LAYER_NR))
-#define HISAX_MAX_IDLEN	16
+#define mISDN_MAX_IDLEN	16
 
 #define IF_NOACTIV	0x00000000
 #define IF_DOWN		0x01000000
@@ -350,17 +350,17 @@ typedef struct _moditem {
 	int	protocol;
 } moditem_t;
 
-typedef struct _hisax_pid {
+typedef struct _mISDN_pid {
 	int	protocol[MAX_LAYER_NR +1];
 	void	*param[MAX_LAYER_NR +1];
 	__u16	global;
 	int	layermask;
-} hisax_pid_t;
+} mISDN_pid_t;
 
 typedef struct _stack_info {
 	u_int		id;
 	int		extentions;
-	hisax_pid_t	pid;
+	mISDN_pid_t	pid;
 	int		mgr;
 	int		instcnt;
 	int		inst[MAX_LAYER_NR +1];
@@ -369,12 +369,12 @@ typedef struct _stack_info {
 } stack_info_t;
 
 typedef struct _layer_info {
-	char		name[HISAX_MAX_IDLEN];
+	char		name[mISDN_MAX_IDLEN];
 	int		object_id;
 	int		extentions;
 	int		id;
 	int		st;
-	hisax_pid_t	pid;
+	mISDN_pid_t	pid;
 } layer_info_t;
 
 
@@ -443,20 +443,20 @@ typedef struct _Q931_info {
 #include <linux/isdn_compat.h>
 #include <linux/skbuff.h>
 
-typedef struct _hisaxif hisaxif_t;
+typedef struct _mISDNif mISDNif_t;
 typedef int	(ctrl_func_t)(void *, u_int, void *);
-typedef int	(if_func_t)(struct _hisaxif *, struct sk_buff *);
+typedef int	(if_func_t)(struct _mISDNif *, struct sk_buff *);
 typedef int	(lock_func_t)(void *, int);
 typedef void	(unlock_func_t)(void *);
 
-typedef struct _hisax_head {
+typedef struct _mISDN_head {
 	u_int	prim;
 	int	dinfo;
-} hisax_head_t;
+} mISDN_head_t;
 
-#define HISAX_HEAD_P(s)	((hisax_head_t *)&s->cb[0])
+#define mISDN_HEAD_P(s)	((mISDN_head_t *)&s->cb[0])
 
-typedef struct _hisax_headext {
+typedef struct _mISDN_headext {
 	u_int	prim;
 	int	dinfo;
 	u_int	what;
@@ -466,105 +466,105 @@ typedef struct _hisax_headext {
 		if_func_t	*iff;
 		void		*func;
 	} func;
-} hisax_headext_t;
+} mISDN_headext_t;
 
-#define HISAX_HEADEXT_P(s) ((hisax_headext_t *)&s->cb[0])
+#define mISDN_HEADEXT_P(s) ((mISDN_headext_t *)&s->cb[0])
 
-typedef struct _hisaxobject {
-	struct _hisaxobject	*prev;
-	struct _hisaxobject	*next;
+typedef struct _mISDNobject {
+	struct _mISDNobject	*prev;
+	struct _mISDNobject	*next;
 	char			*name;
 	int			id;
 	int			refcnt;
-	hisax_pid_t		DPROTO;
-	hisax_pid_t		BPROTO;
+	mISDN_pid_t		DPROTO;
+	mISDN_pid_t		BPROTO;
 	ctrl_func_t		*own_ctrl;
 	ctrl_func_t		*ctrl;
 	void			*ilist;
 	struct module		*owner;
-} hisaxobject_t;
+} mISDNobject_t;
 
-struct _hisaxif {
-	struct _hisaxif		*prev;
-	struct _hisaxif		*next;
+struct _mISDNif {
+	struct _mISDNif		*prev;
+	struct _mISDNif		*next;
 	int			extentions;
 	int			stat;
-	struct _hisaxstack	*st;
-	struct _hisaxinstance	*owner;
-	struct _hisaxinstance	*peer;
+	struct _mISDNstack	*st;
+	struct _mISDNinstance	*owner;
+	struct _mISDNinstance	*peer;
 	if_func_t		*func;
 	void			*fdata;
 };
 
-typedef struct _hisaxinstance {
-	struct _hisaxinstance	*prev;
-	struct _hisaxinstance	*next;
-	char			name[HISAX_MAX_IDLEN];
+typedef struct _mISDNinstance {
+	struct _mISDNinstance	*prev;
+	struct _mISDNinstance	*next;
+	char			name[mISDN_MAX_IDLEN];
 	int			extentions;
 	u_int			id;
-	hisax_pid_t		pid;
-	struct _hisaxstack	*st;
-	hisaxobject_t		*obj;
+	mISDN_pid_t		pid;
+	struct _mISDNstack	*st;
+	mISDNobject_t		*obj;
 	void			*data;
-	hisaxif_t		up;
-	hisaxif_t		down;
+	mISDNif_t		up;
+	mISDNif_t		down;
 	lock_func_t		*lock;
 	unlock_func_t		*unlock;
-} hisaxinstance_t;
+} mISDNinstance_t;
 
-typedef struct _hisaxlayer {
-	struct _hisaxlayer	*prev;
-	struct _hisaxlayer	*next;
-	hisaxinstance_t		*inst;
-} hisaxlayer_t;
+typedef struct _mISDNlayer {
+	struct _mISDNlayer	*prev;
+	struct _mISDNlayer	*next;
+	mISDNinstance_t		*inst;
+} mISDNlayer_t;
 
-typedef struct _hisaxstack {
-	struct _hisaxstack	*prev;
-	struct _hisaxstack	*next;
+typedef struct _mISDNstack {
+	struct _mISDNstack	*prev;
+	struct _mISDNstack	*next;
 	u_int			id;
 	int			extentions;
-	hisax_pid_t		pid;
-	hisaxlayer_t		*lstack;
-	hisaxinstance_t		*mgr;
-	struct _hisaxstack	*child;
-} hisaxstack_t;
+	mISDN_pid_t		pid;
+	mISDNlayer_t		*lstack;
+	mISDNinstance_t		*mgr;
+	struct _mISDNstack	*child;
+} mISDNstack_t;
 
-typedef struct _hisaxport {
+typedef struct _mISDNport {
 	wait_queue_head_t	procq;
 	spinlock_t		lock;
-	hisaxif_t		pif;
+	mISDNif_t		pif;
 	int			Flag;
 	int			size;
 	int			cnt;
 	u_char			*buf;
 	u_char			*ip;
 	u_char			*op;
-} hisaxport_t;
+} mISDNport_t;
 
-typedef struct _hisaxdevice {
-	struct _hisaxdevice	*prev;
-	struct _hisaxdevice	*next;
+typedef struct _mISDNdevice {
+	struct _mISDNdevice	*prev;
+	struct _mISDNdevice	*next;
 	int			minor;
 	struct semaphore	io_sema;
 	int			open_mode;
-	hisaxport_t		rport;
-	hisaxport_t		wport;
+	mISDNport_t		rport;
+	mISDNport_t		wport;
 	struct _devicelayer	*layer;
 	struct _devicestack	*stack;
-	struct _hisaxtimer	*timer;
-} hisaxdevice_t;
+	struct _mISDNtimer	*timer;
+} mISDNdevice_t;
 
 /* common helper functions */
-extern int	put_hisax_header(struct sk_buff *, iframe_t *);
-extern int	bprotocol2pid(void *, hisax_pid_t *);
-extern int	SetIF(hisaxinstance_t *, hisaxif_t *, u_int, void *, void *, void *);
-extern int	ConnectIF(hisaxinstance_t *, hisaxinstance_t *);
-extern int	DisConnectIF(hisaxinstance_t *, hisaxif_t *);
+extern int	put_mISDN_header(struct sk_buff *, iframe_t *);
+extern int	bprotocol2pid(void *, mISDN_pid_t *);
+extern int	SetIF(mISDNinstance_t *, mISDNif_t *, u_int, void *, void *, void *);
+extern int	ConnectIF(mISDNinstance_t *, mISDNinstance_t *);
+extern int	DisConnectIF(mISDNinstance_t *, mISDNif_t *);
 
 /* global exported functions */
 
-extern int	HiSax_register(hisaxobject_t *obj);
-extern int	HiSax_unregister(hisaxobject_t *obj);
+extern int	mISDN_register(mISDNobject_t *obj);
+extern int	mISDN_unregister(mISDNobject_t *obj);
 
 #endif /* __KERNEL__ */
-#endif /* HISAXIF_H */
+#endif /* mISDNIF_H */

@@ -1,8 +1,8 @@
-/* $Id: asn1_enc.c,v 1.0 2001/11/02 23:42:26 kkeil Exp $
+/* $Id: asn1_enc.c,v 1.1 2003/07/21 12:00:04 kkeil Exp $
  *
  */
 
-#include "hisax_capi.h"
+#include "mISDN_capi.h"
 #include "helper.h"
 #include "asn1_enc.h"
 

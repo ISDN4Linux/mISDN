@@ -1,20 +1,20 @@
-/* $Id: layer3.c,v 1.3 2003/07/07 14:29:38 kkeil Exp $
+/* $Id: layer3.c,v 1.4 2003/07/21 12:00:04 kkeil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
  *		This file is (c) under GNU PUBLIC LICENSE
  *		For changes and modifications please read
- *		../../../Documentation/isdn/HiSax.cert
+ *		../../../Documentation/isdn/mISDN.cert
  *
  * Thanks to    Jan den Ouden
  *              Fritz Elfert
  *
  */
 #define __NO_VERSION__
-#include "hisaxl3.h"
+#include "mISDNl3.h"
 #include "helper.h"
 
-const char *l3_revision = "$Revision: 1.3 $";
+const char *l3_revision = "$Revision: 1.4 $";
 
 static
 struct Fsm l3fsm = {NULL, 0, 0, NULL, NULL};
@@ -220,7 +220,7 @@ l3_alloc_skb(int len)
 	struct sk_buff *skb;
 
 	if (!(skb = alloc_skb(len + MAX_HEADER_LEN + IFRAME_HEAD_SIZE, GFP_ATOMIC))) {
-		printk(KERN_WARNING "HiSax: No skb for D-channel\n");
+		printk(KERN_WARNING "mISDN: No skb for D-channel\n");
 		return (NULL);
 	}
 	skb_reserve(skb, MAX_HEADER_LEN + IFRAME_HEAD_SIZE);
@@ -232,7 +232,7 @@ no_l3_proto(struct PStack *st, int pr, void *arg)
 {
 	struct sk_buff *skb = arg;
 
-	HiSax_putstatus(st->l1.hardware, "L3", "no D protocol");
+	mISDN_putstatus(st->l1.hardware, "L3", "no D protocol");
 	if (skb) {
 		dev_kfree_skb(skb);
 	}
@@ -241,7 +241,7 @@ no_l3_proto(struct PStack *st, int pr, void *arg)
 static int
 no_l3_proto_spec(struct PStack *st, isdn_ctrl *ic)
 {
-	printk(KERN_WARNING "HiSax: no specific protocol handler for proto %lu\n",ic->arg & 0xFF);
+	printk(KERN_WARNING "mISDN: no specific protocol handler for proto %lu\n",ic->arg & 0xFF);
 	return(-1);
 }
 */
@@ -278,7 +278,7 @@ l3_process_t
 	l3_process_t *p;
 
 	if (!(p = kmalloc(sizeof(l3_process_t), GFP_ATOMIC))) {
-		printk(KERN_ERR "HiSax can't get memory for cr %d\n", cr);
+		printk(KERN_ERR "mISDN can't get memory for cr %d\n", cr);
 		return (NULL);
 	}
 	memset(p, 0, sizeof(l3_process_t));
@@ -298,7 +298,7 @@ release_l3_process(l3_process_t *p)
 	if (!p)
 		return;
 	l3 = p->l3;
-	hisax_l3up(p, CC_RELEASE_CR | INDICATION, NULL);
+	mISDN_l3up(p, CC_RELEASE_CR | INDICATION, NULL);
 	REMOVE_FROM_LISTBASE(p, l3->proc);
 	StopAllL3Timer(p);
 	kfree(p);
@@ -331,7 +331,7 @@ l3ml3p(layer3_t *l3, int pr)
 }
 
 int
-hisax_l3up(l3_process_t *l3p, u_int prim, struct sk_buff *skb)
+mISDN_l3up(l3_process_t *l3p, u_int prim, struct sk_buff *skb)
 {
 	layer3_t *l3;
 	int err = -EINVAL;
@@ -556,7 +556,7 @@ release_l3(layer3_t *l3)
 }
 
 void
-HiSaxl3New(void)
+mISDNl3New(void)
 {
 	l3fsm.state_count = L3_STATE_COUNT;
 	l3fsm.event_count = L3_EVENT_COUNT;
@@ -566,7 +566,7 @@ HiSaxl3New(void)
 }
 
 void
-HiSaxl3Free(void)
+mISDNl3Free(void)
 {
 	FsmFree(&l3fsm);
 }

@@ -1,8 +1,8 @@
-/* $Id: supp_serv.c,v 1.3 2003/07/07 14:29:38 kkeil Exp $
+/* $Id: supp_serv.c,v 1.4 2003/07/21 12:00:05 kkeil Exp $
  *
  */
 
-#include "hisax_capi.h"
+#include "mISDN_capi.h"
 #include "asn1_comp.h"
 #include "asn1_enc.h"
 #include "dss1.h"
@@ -302,14 +302,14 @@ int applGetSupportedServices(Appl_t *appl, struct FacReqParm *facReqParm,
 			      struct FacConfParm *facConfParm)
 {
 	facConfParm->u.GetSupportedServices.SupplementaryServiceInfo = CapiSuccess;
-	facConfParm->u.GetSupportedServices.SupportedServices = HiSaxSupportedServices;
+	facConfParm->u.GetSupportedServices.SupportedServices = mISDNSupportedServices;
 	return CapiSuccess;
 }
 
 int applFacListen(Appl_t *appl, struct FacReqParm *facReqParm,
 		   struct FacConfParm *facConfParm)
 {
-	if (facReqParm->u.Listen.NotificationMask &~ HiSaxSupportedServices) {
+	if (facReqParm->u.Listen.NotificationMask &~ mISDNSupportedServices) {
 		facConfParm->u.Info.SupplementaryServiceInfo = CapiSupplementaryServiceNotSupported;
 	} else {
 		appl->NotificationMask = facReqParm->u.Listen.NotificationMask;

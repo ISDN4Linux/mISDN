@@ -1,10 +1,10 @@
-/* $Id: layer3.h,v 1.2 2003/07/07 14:29:38 kkeil Exp $
+/* $Id: layer3.h,v 1.3 2003/07/21 12:00:04 kkeil Exp $
  *
  * This file is (c) under GNU PUBLIC LICENSE
  *
  */
 
-#include <linux/hisaxif.h>
+#include <linux/mISDNif.h>
 #include <linux/skbuff.h>
 #include "fsm.h"
 #ifdef MEMDBG
@@ -60,7 +60,7 @@ typedef struct _layer3 {
 	u_int		id;
 	int		debug;
 	u_int		Flag;
-	hisaxinstance_t	inst;
+	mISDNinstance_t	inst;
 	struct sk_buff_head squeue;
 } layer3_t;
 
@@ -82,11 +82,11 @@ extern l3_process_t *getl3proc(layer3_t *, int);
 extern l3_process_t *getl3proc4id(layer3_t *, int);
 extern l3_process_t *new_l3_process(layer3_t *, int, int);
 extern u_char *findie(u_char *, int, u_char, int);
-extern int hisax_l3up(l3_process_t *, u_int, struct sk_buff *);
+extern int mISDN_l3up(l3_process_t *, u_int, struct sk_buff *);
 extern int getcallref(u_char * p);
 extern int newcallref(void);
 extern void init_l3(layer3_t *);
 extern void release_l3(layer3_t *);
-extern void HiSaxl3New(void);
-extern void HiSaxl3Free(void);
+extern void mISDNl3New(void);
+extern void mISDNl3Free(void);
 extern void l3_debug(layer3_t *, char *, ...);

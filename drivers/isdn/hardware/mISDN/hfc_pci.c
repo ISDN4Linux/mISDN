@@ -1,4 +1,4 @@
-/* $Id: hfc_pci.c,v 1.24 2003/07/07 14:29:38 kkeil Exp $
+/* $Id: hfc_pci.c,v 1.25 2003/07/21 12:00:04 kkeil Exp $
 
  * hfc_pci.c     low level driver for CCD's hfc-pci based cards
  *
@@ -31,10 +31,10 @@
 #include <linux/kernel_stat.h>
 #include <linux/delay.h>
 
-#include "hisax_dch.h"
-#include "hisax_bch.h"
+#include "mISDN_dch.h"
+#include "mISDN_bch.h"
 #include "hfc_pci.h"
-#include "hisaxl1.h"
+#include "mISDNl1.h"
 #include "helper.h"
 #include "debug.h"
 #include <linux/isdn_compat.h>
@@ -47,7 +47,7 @@
 
 extern const char *CardType[];
 
-static const char *hfcpci_revision = "$Revision: 1.24 $";
+static const char *hfcpci_revision = "$Revision: 1.25 $";
 
 /* table entry in the PCI devices list */
 typedef struct {
@@ -167,7 +167,7 @@ typedef struct _hfc_pci {
 	u_int		cfg;
 	u_int		irq;
 	hfcPCI_hw_t	hw;
-	hisax_HWlock_t	lock;
+	mISDN_HWlock_t	lock;
 	dchannel_t	dch;
 	bchannel_t	bch[2];
 } hfc_pci_t;
@@ -175,14 +175,14 @@ typedef struct _hfc_pci {
 
 static int lock_dev(void *data, int nowait)
 {
-	register hisax_HWlock_t	*lock = &((hfc_pci_t *)data)->lock;
+	register mISDN_HWlock_t	*lock = &((hfc_pci_t *)data)->lock;
 	
 	return(lock_HW(lock, nowait));
 } 
 
 static void unlock_dev(void *data)
 {
-	register hisax_HWlock_t	*lock = &((hfc_pci_t *)data)->lock;
+	register mISDN_HWlock_t	*lock = &((hfc_pci_t *)data)->lock;
 
 	unlock_HW(lock);
 }
@@ -1035,9 +1035,9 @@ receive_emsg(hfc_pci_t *hc)
 					ptr--;
 					*ptr++ = '\n';
 					*ptr = 0;
-					HiSax_putstatus(hc, NULL, cs->dlog);
+					mISDN_putstatus(hc, NULL, cs->dlog);
 				} else
-					HiSax_putstatus(hc, "LogEcho: ", "warning Frame too big (%d)", total - 3);
+					mISDN_putstatus(hc, "LogEcho: ", "warning Frame too big (%d)", total - 3);
 			}
 		}
 
@@ -1273,16 +1273,16 @@ hfcpci_dbusy_timer(hfc_pci_t *hc)
 /* Layer 1 D-channel hardware access */
 /*************************************/
 static int
-HFCD_l1hw(hisaxif_t *hif, struct sk_buff *skb)
+HFCD_l1hw(mISDNif_t *hif, struct sk_buff *skb)
 {
 	dchannel_t	*dch;
 	hfc_pci_t	*hc;
 	int		ret = -EINVAL;
-	hisax_head_t	*hh;
+	mISDN_head_t	*hh;
 
 	if (!hif || !skb)
 		return(ret);
-	hh = HISAX_HEAD_P(skb);
+	hh = mISDN_HEAD_P(skb);
 	dch = hif->fdata;
 	hc = dch->inst.data;
 	ret = 0;
@@ -1631,15 +1631,15 @@ mode_hfcpci(bchannel_t *bch, int bc, int protocol)
 /* Layer2 -> Layer 1 Transfer */
 /******************************/
 static int
-hfcpci_l2l1(hisaxif_t *hif, struct sk_buff *skb)
+hfcpci_l2l1(mISDNif_t *hif, struct sk_buff *skb)
 {
 	bchannel_t	*bch;
 	int		ret = -EINVAL;
-	hisax_head_t	*hh;
+	mISDN_head_t	*hh;
 
 	if (!hif || !skb)
 		return(ret);
-	hh = HISAX_HEAD_P(skb);
+	hh = mISDN_HEAD_P(skb);
 	bch = hif->fdata;
 	if ((hh->prim == PH_DATA_REQ) ||
 		(hh->prim == (DL_DATA | REQUEST))) {
@@ -1727,7 +1727,7 @@ HW_hfcD_bh(dchannel_t *dch)
 	hfc_pci_t	*hc = dch->inst.data;
 	u_int		prim = PH_SIGNAL | INDICATION;
 	u_int		para = 0;
-	hisaxif_t	*upif = &dch->inst.up;
+	mISDNif_t	*upif = &dch->inst.up;
 
 	if (test_and_clear_bit(D_L1STATECHANGE, &dch->event)) {
 		if (!hc->hw.nt_mode) {
@@ -1888,7 +1888,7 @@ static int init_card(hfc_pci_t *hc)
 	printk(KERN_INFO "HFC PCI: IRQ %d count %d\n", hc->irq, irq_cnt);
 	lock_dev(hc, 0);
 	if (request_irq(hc->irq, hfcpci_interrupt, SA_SHIRQ, "HFC PCI", hc)) {
-		printk(KERN_WARNING "HiSax: couldn't get interrupt %d\n",
+		printk(KERN_WARNING "mISDN: couldn't get interrupt %d\n",
 			hc->irq);
 		unlock_dev(hc);
 		return(-EIO);
@@ -1936,7 +1936,7 @@ SelFreeBChannel(hfc_pci_t *hc, channel_info_t *ci)
 {
 	bchannel_t	*bch;
 	hfc_pci_t	*hfc;
-	hisaxstack_t	*bst;
+	mISDNstack_t	*bst;
 	int		cnr;
 	
 	if (!ci)
@@ -1987,7 +1987,7 @@ static int HFC_cnt;
 static u_int protocol[MAX_CARDS];
 static int layermask[MAX_CARDS];
 
-static hisaxobject_t	HFC_obj;
+static mISDNobject_t	HFC_obj;
 static int debug;
 
 #ifdef MODULE
@@ -2043,7 +2043,7 @@ setup_hfcpci(hfc_pci_t *hc)
 #error "not running on big endian machines now"
 #endif
 	strcpy(tmp, hfcpci_revision);
-	printk(KERN_INFO "HiSax: HFC-PCI driver Rev. %s\n", HiSax_getrev(tmp));
+	printk(KERN_INFO "mISDN: HFC-PCI driver Rev. %s\n", mISDN_getrev(tmp));
 	hc->hw.cirm = 0;
 	hc->dch.ph_state = 0;
 	while (id_list[i].vendor_id) {
@@ -2068,7 +2068,7 @@ setup_hfcpci(hfc_pci_t *hc)
 			return (1);
 		}
 		hc->hw.pci_io = (char *) get_pcibase(dev_hfcpci, 1);
-		printk(KERN_INFO "HiSax: HFC-PCI card manufacturer: %s card name: %s\n", id_list[i].vendor_name, id_list[i].card_name);
+		printk(KERN_INFO "mISDN: HFC-PCI card manufacturer: %s card name: %s\n", id_list[i].vendor_name, id_list[i].card_name);
 	} else {
 		printk(KERN_WARNING "HFC-PCI: No PCI card found\n");
 		return (1);
@@ -2145,7 +2145,7 @@ release_card(hfc_pci_t *hc) {
 static int
 HFC_manager(void *data, u_int prim, void *arg) {
 	hfc_pci_t	*card = HFC_obj.ilist;
-	hisaxinstance_t	*inst = data;
+	mISDNinstance_t	*inst = data;
 	struct sk_buff	*skb;
 	int		channel = -1;
 
@@ -2292,8 +2292,8 @@ HFC_init(void)
 {
 	int		err,i;
 	hfc_pci_t	*card, *prev;
-	hisax_pid_t	pid;
-	hisaxstack_t	*dst;
+	mISDN_pid_t	pid;
+	mISDNstack_t	*dst;
 
 	SET_MODULE_OWNER(&HFC_obj);
 	HFC_obj.name = HFCName;
@@ -2307,14 +2307,14 @@ HFC_init(void)
 				     ISDN_PID_L2_B_RAWDEV;
 	HFC_obj.prev = NULL;
 	HFC_obj.next = NULL;
-	if ((err = HiSax_register(&HFC_obj))) {
+	if ((err = mISDN_register(&HFC_obj))) {
 		printk(KERN_ERR "Can't register HFC PCI error(%d)\n", err);
 		return(err);
 	}
 	while (HFC_cnt < MAX_CARDS) {
 		if (!(card = kmalloc(sizeof(hfc_pci_t), GFP_ATOMIC))) {
 			printk(KERN_ERR "No kmem for HFCcard\n");
-			HiSax_unregister(&HFC_obj);
+			mISDN_unregister(&HFC_obj);
 			return(-ENOMEM);
 		}
 		memset(card, 0, sizeof(hfc_pci_t));
@@ -2363,7 +2363,7 @@ HFC_init(void)
 				int_errtxt("card(%d) no previous HFC",
 					HFC_cnt);
 				if (!HFC_cnt)
-					HiSax_unregister(&HFC_obj);
+					mISDN_unregister(&HFC_obj);
 				else
 					err = 0;
 				return(err);
@@ -2422,7 +2422,7 @@ HFC_init(void)
 			REMOVE_FROM_LISTBASE(card, ((hfc_pci_t *)HFC_obj.ilist));
 			kfree(card);
 			if (!HFC_cnt) {
-				HiSax_unregister(&HFC_obj);
+				mISDN_unregister(&HFC_obj);
 				err = -ENODEV;
 			} else
 				printk(KERN_INFO "HFC %d cards installed\n",
@@ -2438,7 +2438,7 @@ HFC_init(void)
 				printk(KERN_ERR  "MGR_ADDSTACK REQUEST dch err(%d)\n", err);
 				release_card(card);
 				if (!HFC_cnt)
-					HiSax_unregister(&HFC_obj);
+					mISDN_unregister(&HFC_obj);
 				else
 					err = 0;
 				return(err);
@@ -2452,7 +2452,7 @@ HFC_init(void)
 				HFC_obj.ctrl(card->dch.inst.st,
 					MGR_DELSTACK | REQUEST, NULL);
 				if (!HFC_cnt)
-					HiSax_unregister(&HFC_obj);
+					mISDN_unregister(&HFC_obj);
 				else
 					err = 0;
 				return(err);
@@ -2466,7 +2466,7 @@ HFC_init(void)
 					err);
 				HFC_obj.ctrl(dst, MGR_DELSTACK | REQUEST, NULL);
 				if (!HFC_cnt)
-					HiSax_unregister(&HFC_obj);
+					mISDN_unregister(&HFC_obj);
 				else
 					err = 0;
 				return(err);
@@ -2475,7 +2475,7 @@ HFC_init(void)
 		if ((err = init_card(card))) {
 			HFC_obj.ctrl(dst, MGR_DELSTACK | REQUEST, NULL);
 			if (!HFC_cnt)
-				HiSax_unregister(&HFC_obj);
+				mISDN_unregister(&HFC_obj);
 			else
 				err = 0;
 			return(err);
@@ -2490,7 +2490,7 @@ int
 cleanup_module(void)
 {
 	int err;
-	if ((err = HiSax_unregister(&HFC_obj))) {
+	if ((err = mISDN_unregister(&HFC_obj))) {
 		printk(KERN_ERR "Can't unregister HFC PCI error(%d)\n", err);
 		return(err);
 	}

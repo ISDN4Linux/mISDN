@@ -1,4 +1,4 @@
-/* $Id: bchannel.c,v 1.1 2003/06/22 10:39:43 kkeil Exp $
+/* $Id: bchannel.c,v 1.2 2003/07/21 12:00:04 kkeil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -7,9 +7,9 @@
  */
 
 #define __NO_VERSION__
-#include <linux/hisaxif.h>
-#include "hisaxl1.h"
-#include "hisax_bch.h"
+#include <linux/mISDNif.h>
+#include "mISDNl1.h"
+#include "mISDN_bch.h"
 #include "helper.h"
 
 static void
@@ -18,8 +18,8 @@ bchannel_bh(bchannel_t *bch)
 	struct sk_buff	*skb;
 	u_int 		pr;
 	int		ret;
-	hisax_head_t	*hh;
-	hisaxif_t	*hif;
+	mISDN_head_t	*hh;
+	mISDNif_t	*hif;
 
 	if (!bch)
 		return;
@@ -36,7 +36,7 @@ bchannel_bh(bchannel_t *bch)
 	if (test_and_clear_bit(B_XMTBUFREADY, &bch->event)) {
 		skb = bch->next_skb;
 		if (skb) {
-			hh = HISAX_HEAD_P(skb);
+			hh = mISDN_HEAD_P(skb);
 			bch->next_skb = NULL;
 			if (bch->inst.pid.protocol[2] == ISDN_PID_L2_B_TRANS)
 				pr = DL_DATA | CONFIRM;
@@ -76,23 +76,23 @@ bchannel_bh(bchannel_t *bch)
 
 int
 init_bchannel(bchannel_t *bch) {
-	int	devtyp = HISAX_RAW_DEVICE;
+	int	devtyp = mISDN_RAW_DEVICE;
 
 	if (!(bch->blog = kmalloc(MAX_BLOG_SPACE, GFP_ATOMIC))) {
 		printk(KERN_WARNING
-			"HiSax: No memory for blog\n");
+			"mISDN: No memory for blog\n");
 		return(-ENOMEM);
 	}
 	if (!(bch->rx_buf = kmalloc(MAX_DATA_MEM, GFP_ATOMIC))) {
 		printk(KERN_WARNING
-			"HiSax: No memory for bchannel rx_buf\n");
+			"mISDN: No memory for bchannel rx_buf\n");
 		kfree(bch->blog);
 		bch->blog = NULL;
 		return (-ENOMEM);
 	}
 	if (!(bch->tx_buf = kmalloc(MAX_DATA_MEM, GFP_ATOMIC))) {
 		printk(KERN_WARNING
-			"HiSax: No memory for bchannel tx_buf\n");
+			"mISDN: No memory for bchannel tx_buf\n");
 		kfree(bch->blog);
 		bch->blog = NULL;
 		kfree(bch->rx_buf);
@@ -113,7 +113,7 @@ init_bchannel(bchannel_t *bch) {
 		if (bch->inst.obj->ctrl(&bch->dev, MGR_GETDEVICE | REQUEST,
 			&devtyp)) {
 			printk(KERN_WARNING
-				"HiSax: no raw device for bchannel\n");
+				"mISDN: no raw device for bchannel\n");
 		}
 	}
 	return(0);
@@ -143,7 +143,7 @@ free_bchannel(bchannel_t *bch) {
 	}
 	if (bch->inst.obj->ctrl(bch->dev, MGR_DELDEVICE | REQUEST, NULL)) {
 		printk(KERN_WARNING
-			"HiSax: del raw device error\n");
+			"mISDN: del raw device error\n");
 	} else
 		bch->dev = NULL;
 	return(0);

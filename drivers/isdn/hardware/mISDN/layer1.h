@@ -1,4 +1,4 @@
-/* $Id: layer1.h,v 1.1 2003/06/21 21:39:54 kkeil Exp $
+/* $Id: layer1.h,v 1.2 2003/07/21 12:00:04 kkeil Exp $
  *
  * Layer 1 defines
  *
@@ -6,7 +6,7 @@
  *
  */
 
-#include <linux/hisaxif.h>
+#include <linux/mISDNif.h>
 #include "fsm.h"
 #ifdef MEMDBG
 #include "memdbg.h"

@@ -1,22 +1,22 @@
-/* $Id: contr.c,v 1.7 2003/07/21 11:13:02 kkeil Exp $
+/* $Id: contr.c,v 1.8 2003/07/21 12:00:04 kkeil Exp $
  *
  */
 
-#include "hisax_capi.h"
+#include "mISDN_capi.h"
 #include "helper.h"
 #include "debug.h"
 
 #define contrDebug(contr, lev, fmt, args...) \
 	capidebug(lev, fmt, ## args)
 
-int contrConstr(Contr_t *contr, hisaxstack_t *st, hisax_pid_t *pid, hisaxobject_t *ocapi)
+int contrConstr(Contr_t *contr, mISDNstack_t *st, mISDN_pid_t *pid, mISDNobject_t *ocapi)
 { 
 	char		tmp[10];
-	hisaxstack_t	*cst = st->child;
+	mISDNstack_t	*cst = st->child;
 	BInst_t		*binst;
 
 	memset(contr, 0, sizeof(Contr_t));
-	memcpy(&contr->inst.pid, pid, sizeof(hisax_pid_t));
+	memcpy(&contr->inst.pid, pid, sizeof(mISDN_pid_t));
 	contr->adrController = st->id;
 	sprintf(contr->inst.name, "CAPI %d", st->id);
 	contr->inst.obj = ocapi;
@@ -41,8 +41,8 @@ int contrConstr(Contr_t *contr, hisaxstack_t *st, hisax_pid_t *pid, hisaxobject_
 		cst = cst->next;
 	}
 	APPEND_TO_LIST(contr, ocapi->ilist);
-	sprintf(tmp, "HiSax%d", st->id);
-	contr->ctrl = cdrv_if->attach_ctr(&hisax_driver, tmp, contr);
+	sprintf(tmp, "mISDN%d", st->id);
+	contr->ctrl = cdrv_if->attach_ctr(&mISDN_driver, tmp, contr);
 	if (!contr->ctrl)
 		return -ENODEV;
 	contr->adrController = contr->ctrl->cnr;
@@ -55,7 +55,7 @@ int contrConstr(Contr_t *contr, hisaxstack_t *st, hisax_pid_t *pid, hisaxobject_
 void contrDestr(Contr_t *contr)
 {
 	int i;
-	hisaxinstance_t *inst = &contr->inst;
+	mISDNinstance_t *inst = &contr->inst;
 
 	for (i = 0; i < CAPI_MAXAPPL; i++) {
 		if (contr->appls[i]) {
@@ -323,17 +323,17 @@ static Plci_t
 }
 
 int
-contrL3L4(hisaxif_t *hif, struct sk_buff *skb)
+contrL3L4(mISDNif_t *hif, struct sk_buff *skb)
 {
 	Contr_t		*contr;
 	Plci_t		*plci;
 	__u32		*id;
 	int		ret = -EINVAL;
-	hisax_head_t	*hh;
+	mISDN_head_t	*hh;
 
 	if (!hif || !skb)
 		return(ret);
-	hh = HISAX_HEAD_P(skb);
+	hh = mISDN_HEAD_P(skb);
 	contr = hif->fdata;
 	if (hh->prim == (CC_NEW_CR | INDICATION)) {
 		plci = contrNewPlci(contr);
@@ -368,7 +368,7 @@ void contrPutStatus(Contr_t *contr, char *msg)
 	contrDebug(contr, CAPI_DBG_CONTR, "%s: %s", __FUNCTION__, msg);
 }
 
-Contr_t *newContr(hisaxobject_t *ocapi, hisaxstack_t *st, hisax_pid_t *pid)
+Contr_t *newContr(mISDNobject_t *ocapi, mISDNstack_t *st, mISDN_pid_t *pid)
 {
 	Contr_t *contr;
 
@@ -392,7 +392,7 @@ Contr_t *newContr(hisaxobject_t *ocapi, hisaxstack_t *st, hisax_pid_t *pid)
 
 BInst_t *contrSelChannel(Contr_t *contr, u_int channel)
 { 
-	hisaxstack_t	*cst;
+	mISDNstack_t	*cst;
 	BInst_t		*binst;
 	channel_info_t	ci;
 	int		ret;

@@ -1,4 +1,4 @@
-/* $Id: isac.c,v 1.8 2003/07/07 14:29:38 kkeil Exp $
+/* $Id: isac.c,v 1.9 2003/07/21 12:00:04 kkeil Exp $
  *
  * isac.c   ISAC specific routines
  *
@@ -9,10 +9,10 @@
 
 #define __NO_VERSION__
 #include <linux/module.h>
-#include "hisax_dch.h"
+#include "mISDN_dch.h"
 #include "isac.h"
 #include "arcofi.h"
-#include "hisaxl1.h"
+#include "mISDNl1.h"
 #include "helper.h"
 #include "debug.h"
 #ifdef CONFIG_KMOD
@@ -23,7 +23,7 @@
 #define DBUSY_TIMER_VALUE 80
 #define ARCOFI_USE 1
 
-const char *isac_revision = "$Revision: 1.8 $";
+const char *isac_revision = "$Revision: 1.9 $";
 
 #ifdef MODULE
 MODULE_AUTHOR("Karsten Keil");
@@ -53,7 +53,7 @@ isac_new_ph(dchannel_t *dch)
 {
 	u_int		prim = PH_SIGNAL | INDICATION;
 	u_int		para = 0;
-	hisaxif_t	*upif = &dch->inst.up;
+	mISDNif_t	*upif = &dch->inst.up;
 
 	switch (dch->ph_state) {
 		case (ISAC_IND_RS):
@@ -135,7 +135,7 @@ isac_empty_fifo(dchannel_t *dch, int count)
 
 	if (!dch->rx_skb) {
 		if (!(dch->rx_skb = alloc_uplinkD_skb(MAX_DFRAME_LEN_L1))) {
-			printk(KERN_WARNING "HiSax: D receive out of memory\n");
+			printk(KERN_WARNING "mISDN: D receive out of memory\n");
 			dch->write_reg(dch->inst.data, ISAC_CMDR, 0x80);
 			return;
 		}
@@ -274,7 +274,7 @@ isac_retransmit(dchannel_t *dch)
 		dch->tx_idx = 0;
 		isac_fill_fifo(dch);
 	} else {
-		printk(KERN_WARNING "HiSax: ISAC XDU no TX_BUSY\n");
+		printk(KERN_WARNING "mISDN: ISAC XDU no TX_BUSY\n");
 		debugprint(&dch->inst, "ISAC XDU no TX_BUSY");
 		if (test_and_clear_bit(FLG_TX_NEXT, &dch->DFlags)) {
 			if (dch->next_skb) {
@@ -570,15 +570,15 @@ ISAC_interrupt(dchannel_t *dch, u_char val)
 }
 
 int
-ISAC_l1hw(hisaxif_t *hif, struct sk_buff *skb)
+ISAC_l1hw(mISDNif_t *hif, struct sk_buff *skb)
 {
 	dchannel_t	*dch;
 	int		ret = -EINVAL;
-	hisax_head_t	*hh;
+	mISDN_head_t	*hh;
 
 	if (!hif || !skb)
 		return(ret);
-	hh = HISAX_HEAD_P(skb);
+	hh = mISDN_HEAD_P(skb);
 	dch = hif->fdata;
 	ret = 0;
 	if (hh->prim == PH_DATA_REQ) {
@@ -730,7 +730,7 @@ dbusy_timer_handler(dchannel_t *dch)
 			if (dch->tx_idx) {
 				dch->tx_idx = 0;
 			} else {
-				printk(KERN_WARNING "HiSax: ISAC D-Channel Busy no tx_idx\n");
+				printk(KERN_WARNING "mISDN: ISAC D-Channel Busy no tx_idx\n");
 				debugprint(&dch->inst, "D-Channel Busy no tx_idx");
 			}
 			/* Transmitter reset */

@@ -1,8 +1,8 @@
-/* $Id: cplci.c,v 1.8 2003/07/21 11:13:02 kkeil Exp $
+/* $Id: cplci.c,v 1.9 2003/07/21 12:00:04 kkeil Exp $
  *
  */
 
-#include "hisax_capi.h"
+#include "mISDN_capi.h"
 #include "helper.h"
 #include "debug.h"
 #include "dss1.h"

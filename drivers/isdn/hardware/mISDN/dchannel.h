@@ -1,4 +1,4 @@
-/* $Id: dchannel.h,v 1.3 2003/07/18 16:36:03 kkeil Exp $
+/* $Id: dchannel.h,v 1.4 2003/07/21 12:00:04 kkeil Exp $
  *
  *   Basic declarations for dchannel HW
  *
@@ -6,7 +6,7 @@
  *
  */
 
-#include <linux/hisaxif.h>
+#include <linux/mISDNif.h>
 #include <linux/tqueue.h>
 #include <linux/smp.h>
 #include <linux/ptrace.h>
@@ -35,7 +35,7 @@
 #define FLG_HW_INIT		13
 
 typedef struct _dchannel_t {
-	hisaxinstance_t		inst;
+	mISDNinstance_t		inst;
 	u_int			DFlags;
 	u_int			type;
 	u_int			ph_state;

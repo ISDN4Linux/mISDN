@@ -1,11 +1,11 @@
-/* $Id: capi.h,v 1.4 2003/07/21 11:13:02 kkeil Exp $
+/* $Id: capi.h,v 1.5 2003/07/21 12:00:04 kkeil Exp $
  *
  */
 
-#ifndef __HISAX_CAPI_H__
-#define __HISAX_CAPI_H__
+#ifndef __mISDN_CAPI_H__
+#define __mISDN_CAPI_H__
 
-#include <linux/hisaxif.h>
+#include <linux/mISDNif.h>
 #include <linux/skbuff.h>
 #include <linux/timer.h>
 #include <linux/capi.h>
@@ -40,7 +40,7 @@
 #define CAPI_DBG_NCCI_L3	0x08000000
 
 extern struct capi_driver_interface *cdrv_if;                  
-extern struct capi_driver hisax_driver;
+extern struct capi_driver mISDN_driver;
 
 void init_listen(void);
 void init_cplci(void);
@@ -52,7 +52,7 @@ void capidebug(int, char *, ...);
 
 #define SuppServiceCF          0x00000010
 #define SuppServiceTP          0x00000002
-#define HiSaxSupportedServices (SuppServiceCF | SuppServiceTP)
+#define mISDNSupportedServices (SuppServiceCF | SuppServiceTP)
 
 #define CAPIMSG_REQ_DATAHANDLE(m)	(m[18] | (m[19]<<8))
 #define CAPIMSG_RESP_DATAHANDLE(m)	(m[12] | (m[13]<<8))
@@ -157,14 +157,14 @@ struct FacConfParm {
 typedef struct _BInst {
 	struct _BInst	*prev;
 	struct _BInst   *next;
-	hisaxstack_t	*bst;
-	hisaxinstance_t	inst;
+	mISDNstack_t	*bst;
+	mISDNinstance_t	inst;
 } BInst_t;
 
 typedef struct _Contr {
 	struct _Contr	*prev;
 	struct _Contr	*next;
-	hisaxinstance_t	inst;
+	mISDNinstance_t	inst;
 	BInst_t		*binst;
 	struct capi_ctr	*ctrl;
 	__u32		adrController;
@@ -178,8 +178,8 @@ typedef struct _Contr {
 	__u16		lastInvokeId;
 } Contr_t;
 
-Contr_t		*newContr(hisaxobject_t *, hisaxstack_t *, hisax_pid_t *);
-int		contrConstr(Contr_t *, hisaxstack_t *, hisax_pid_t *, hisaxobject_t *);
+Contr_t		*newContr(mISDNobject_t *, mISDNstack_t *, mISDN_pid_t *);
+int		contrConstr(Contr_t *, mISDNstack_t *, mISDN_pid_t *, mISDNobject_t *);
 void		contrDestr(Contr_t *contr);
 void		contrDebug(Contr_t *contr, __u32 level, char *fmt, ...);
 void		contrRegisterAppl(Contr_t *contr, __u16 ApplId, capi_register_params *rp);
@@ -198,7 +198,7 @@ int		contrDummyInd(Contr_t *, __u32, struct sk_buff *);
 DummyProcess_t	*contrNewDummyPc(Contr_t *contr);
 DummyProcess_t	*contrId2DummyPc(Contr_t *contr, __u16 invokeId);
 int		contrL4L3(Contr_t *, u_int, int, struct sk_buff *);
-int		contrL3L4(hisaxif_t *, struct sk_buff *);
+int		contrL3L4(mISDNif_t *, struct sk_buff *);
 BInst_t		*contrSelChannel(Contr_t *, u_int);
 // ---------------------------------------------------------------------------
 // struct Listen
@@ -357,7 +357,7 @@ typedef struct _Ncci {
 void ncciConstr(Ncci_t *ncci, Cplci_t *cplci);
 void ncciDestr(Ncci_t *ncci);
 void ncciSendMessage(Ncci_t *, struct sk_buff *);
-int  ncci_l3l4(hisaxif_t *, struct sk_buff *);
+int  ncci_l3l4(mISDNif_t *, struct sk_buff *);
 void ncciLinkUp(Ncci_t *ncci);
 void ncciLinkDown(Ncci_t *ncci);
 void ncciInitSt(Ncci_t *ncci);

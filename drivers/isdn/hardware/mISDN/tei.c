@@ -1,19 +1,19 @@
-/* $Id: tei.c,v 1.2 2002/09/16 23:49:38 kkeil Exp $
+/* $Id: tei.c,v 1.3 2003/07/21 12:00:05 kkeil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
  *		This file is (c) under GNU PUBLIC LICENSE
  *		For changes and modifications please read
- *		../../../Documentation/isdn/HiSax.cert
+ *		../../../Documentation/isdn/mISDN.cert
  *
  */
 #define __NO_VERSION__
-#include "hisaxl2.h"
+#include "mISDNl2.h"
 #include "helper.h"
 #include "debug.h"
 #include <linux/random.h>
 
-const char *tei_revision = "$Revision: 1.2 $";
+const char *tei_revision = "$Revision: 1.3 $";
 
 #define ID_REQUEST	1
 #define ID_ASSIGNED	2
@@ -113,7 +113,7 @@ put_tei_msg(teimgr_t *tm, u_char m_id, unsigned int ri, u_char tei)
 	bp[7] = (tei << 1) | 1;
 	skb = create_link_skb(MDL_UNITDATA | REQUEST, DINFO_SKB, 8, bp, 0);
 	if (!skb) {
-		printk(KERN_WARNING "HiSax: No skb for TEI manager\n");
+		printk(KERN_WARNING "mISDN: No skb for TEI manager\n");
 		return;
 	}
 	if (tei_l2(tm->l2, skb))
@@ -400,12 +400,12 @@ tei_ph_data_ind(teimgr_t *tm, int dtyp, struct sk_buff *skb)
 int
 l2_tei(teimgr_t *tm, struct sk_buff *skb)
 {
-	hisax_head_t	*hh;
+	mISDN_head_t	*hh;
 	int		ret = -EINVAL;
 
 	if (!tm || !skb)
 		return(ret);
-	hh = HISAX_HEAD_P(skb);
+	hh = mISDN_HEAD_P(skb);
 	printk(KERN_DEBUG "%s: prim(%x)\n", __FUNCTION__, hh->prim);
 	switch(hh->prim) {
 	    case (MDL_UNITDATA | INDICATION):
@@ -416,7 +416,7 @@ l2_tei(teimgr_t *tm, struct sk_buff *skb)
 				tm->tei_m.printdebug(&tm->tei_m,
 					"fixed assign tei %d", tm->l2->tei);
 			skb_trim(skb, 0);
-			hisax_sethead(MDL_ASSIGN | REQUEST, tm->l2->tei, skb);
+			mISDN_sethead(MDL_ASSIGN | REQUEST, tm->l2->tei, skb);
 			if (!tei_l2(tm->l2, skb))
 				return(0);
 //			cs->cardmsg(cs, MDL_ASSIGN | REQUEST, NULL);

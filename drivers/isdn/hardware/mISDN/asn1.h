@@ -1,8 +1,8 @@
-/* $Id: asn1.h,v 1.0 2001/11/02 23:42:26 kkeil Exp $
+/* $Id: asn1.h,v 1.1 2003/07/21 12:00:04 kkeil Exp $
  *
  */
 
-#include <linux/hisaxif.h>
+#include <linux/mISDNif.h>
 #include "helper.h"
 
 #ifndef __ASN1_H__

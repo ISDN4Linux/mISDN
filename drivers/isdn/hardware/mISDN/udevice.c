@@ -1,4 +1,4 @@
-/* $Id: udevice.c,v 1.4 2003/07/07 14:29:38 kkeil Exp $
+/* $Id: udevice.c,v 1.5 2003/07/21 12:00:05 kkeil Exp $
  *
  * Copyright 2000  by Karsten Keil <kkeil@isdn4linux.de>
  *
@@ -10,7 +10,7 @@
 #include <linux/vmalloc.h>
 #include <linux/config.h>
 #include <linux/timer.h>
-#include "hisax_core.h"
+#include "mISDN_core.h"
 
 #define MAX_HEADER_LEN	4
 
@@ -24,11 +24,11 @@
 typedef struct _devicelayer {
 	struct _devicelayer	*prev;
 	struct _devicelayer	*next;
-	hisaxdevice_t		*dev;
-	hisaxinstance_t		inst;
-	hisaxinstance_t		*slave;
-	hisaxif_t		s_up;
-	hisaxif_t		s_down;
+	mISDNdevice_t		*dev;
+	mISDNinstance_t		inst;
+	mISDNinstance_t		*slave;
+	mISDNif_t		s_up;
+	mISDNif_t		s_down;
 	int			iaddr;
 	int			lm_st;
 	int			Flags;
@@ -37,40 +37,40 @@ typedef struct _devicelayer {
 typedef struct _devicestack {
 	struct _devicestack	*prev;
 	struct _devicestack	*next;
-	hisaxdevice_t		*dev;
-	hisaxstack_t		*st;
+	mISDNdevice_t		*dev;
+	mISDNstack_t		*st;
 	int			extentions;
 } devicestack_t;
 
-typedef struct _hisaxtimer {
-	struct _hisaxtimer	*prev;
-	struct _hisaxtimer	*next;
-	struct _hisaxdevice	*dev;
+typedef struct _mISDNtimer {
+	struct _mISDNtimer	*prev;
+	struct _mISDNtimer	*next;
+	struct _mISDNdevice	*dev;
 	struct timer_list	tl;
 	int			id;
 	int			Flags;
-} hisaxtimer_t;
+} mISDNtimer_t;
 
-static hisaxdevice_t	*hisax_devicelist = NULL;
-static rwlock_t	hisax_device_lock = RW_LOCK_UNLOCKED;
+static mISDNdevice_t	*mISDN_devicelist = NULL;
+static rwlock_t	mISDN_device_lock = RW_LOCK_UNLOCKED;
 
-static hisaxobject_t	udev_obj;
+static mISDNobject_t	udev_obj;
 static char MName[] = "UserDevice";
 static u_char  stbuf[1000];
 
 static int device_debug = 0;
 
-static int from_up_down(hisaxif_t *, struct sk_buff *);
-static int hisax_wdata(hisaxdevice_t *dev);
+static int from_up_down(mISDNif_t *, struct sk_buff *);
+static int mISDN_wdata(mISDNdevice_t *dev);
 
-// static int from_peer(hisaxif_t *, u_int, int, int, void *);
-// static int to_peer(hisaxif_t *, u_int, int, int, void *);
+// static int from_peer(mISDNif_t *, u_int, int, int, void *);
+// static int to_peer(mISDNif_t *, u_int, int, int, void *);
 
 
-static hisaxdevice_t *
-get_hisaxdevice4minor(int minor)
+static mISDNdevice_t *
+get_mISDNdevice4minor(int minor)
 {
-	hisaxdevice_t	*dev = hisax_devicelist;
+	mISDNdevice_t	*dev = mISDN_devicelist;
 
 	while(dev) {
 		if (dev->minor == minor)
@@ -81,7 +81,7 @@ get_hisaxdevice4minor(int minor)
 }
 
 static __inline__ void
-p_memcpy_i(hisaxport_t *port, void *src, size_t count)
+p_memcpy_i(mISDNport_t *port, void *src, size_t count)
 {
 	u_char	*p = src;
 	size_t	frag;
@@ -102,7 +102,7 @@ p_memcpy_i(hisaxport_t *port, void *src, size_t count)
 }
 
 static __inline__ void
-p_memcpy_o(hisaxport_t *port, void *dst, size_t count)
+p_memcpy_o(mISDNport_t *port, void *dst, size_t count)
 {
 	u_char	*p = dst;
 	size_t	frag;
@@ -123,7 +123,7 @@ p_memcpy_o(hisaxport_t *port, void *dst, size_t count)
 }
 
 static __inline__ void
-p_pull_o(hisaxport_t *port, size_t count)
+p_pull_o(mISDNport_t *port, size_t count)
 {
 	size_t	frag;
 
@@ -140,7 +140,7 @@ p_pull_o(hisaxport_t *port, size_t count)
 }
 
 static size_t
-next_frame_len(hisaxport_t *port)
+next_frame_len(mISDNport_t *port)
 {
 	size_t		len;
 	int		*lp;
@@ -169,18 +169,18 @@ next_frame_len(hisaxport_t *port)
 }
 
 static int
-hisax_rdata_raw(hisaxif_t *hif, struct sk_buff *skb) {
-	hisaxdevice_t	*dev;
-	hisax_head_t	*hh;
+mISDN_rdata_raw(mISDNif_t *hif, struct sk_buff *skb) {
+	mISDNdevice_t	*dev;
+	mISDN_head_t	*hh;
 	u_long		flags;
 	int		retval = 0;
 
 	if (!hif || !hif->fdata || !skb)
 		return(-EINVAL);
 	dev = hif->fdata;
-	hh = HISAX_HEAD_P(skb);
+	hh = mISDN_HEAD_P(skb);
 	if (hh->prim == (PH_DATA | INDICATION)) {
-		if (test_bit(FLG_HISAXPORT_OPEN, &dev->rport.Flag)) {
+		if (test_bit(FLG_mISDNPORT_OPEN, &dev->rport.Flag)) {
 			spin_lock_irqsave(&dev->rport.lock, flags);
 			if (skb->len < (dev->rport.size - dev->rport.cnt)) {
 				p_memcpy_i(&dev->rport, skb->data, skb->len);
@@ -195,17 +195,17 @@ hisax_rdata_raw(hisaxif_t *hif, struct sk_buff *skb) {
 			retval = -ENOENT;
 		}
 	} else if (hh->prim == (PH_DATA | CONFIRM)) {
-		test_and_clear_bit(FLG_HISAXPORT_BLOCK, &dev->wport.Flag);
-		hisax_wdata(dev);
+		test_and_clear_bit(FLG_mISDNPORT_BLOCK, &dev->wport.Flag);
+		mISDN_wdata(dev);
 	} else if ((hh->prim == (PH_ACTIVATE | CONFIRM)) ||
 		(hh->prim == (PH_ACTIVATE | INDICATION))) {
-			test_and_set_bit(FLG_HISAXPORT_ENABLED,
+			test_and_set_bit(FLG_mISDNPORT_ENABLED,
 				&dev->wport.Flag);
-			test_and_clear_bit(FLG_HISAXPORT_BLOCK,
+			test_and_clear_bit(FLG_mISDNPORT_BLOCK,
 				&dev->wport.Flag);
 	} else if ((hh->prim == (PH_DEACTIVATE | CONFIRM)) ||
 		(hh->prim == (PH_DEACTIVATE | INDICATION))) {
-			test_and_clear_bit(FLG_HISAXPORT_ENABLED,
+			test_and_clear_bit(FLG_mISDNPORT_ENABLED,
 				&dev->wport.Flag);
 	} else {
 		printk(KERN_WARNING "%s: prim(%x) dinfo(%x) not supported\n",
@@ -218,10 +218,10 @@ hisax_rdata_raw(hisaxif_t *hif, struct sk_buff *skb) {
 }
 
 static int
-hisax_rdata(hisaxdevice_t *dev, iframe_t *iff, int use_value) {
+mISDN_rdata(mISDNdevice_t *dev, iframe_t *iff, int use_value) {
 	int		len = 4*sizeof(u_int);
 	u_long		flags;
-	hisaxport_t	*port = &dev->rport;
+	mISDNport_t	*port = &dev->rport;
 
 	if (iff->len > 0)
 		len +=  iff->len;
@@ -246,7 +246,7 @@ hisax_rdata(hisaxdevice_t *dev, iframe_t *iff, int use_value) {
 }
 
 static devicelayer_t
-*get_devlayer(hisaxdevice_t   *dev, int addr) {
+*get_devlayer(mISDNdevice_t   *dev, int addr) {
 	devicelayer_t *dl = dev->layer;
 
 	if (device_debug & DEBUG_MGR_FUNC)
@@ -263,7 +263,7 @@ static devicelayer_t
 }
 
 static devicestack_t
-*get_devstack(hisaxdevice_t   *dev, int addr)
+*get_devstack(mISDNdevice_t   *dev, int addr)
 {
 	devicestack_t *ds = dev->stack;
 
@@ -277,10 +277,10 @@ static devicestack_t
 	return(ds);
 }
 
-static hisaxtimer_t
-*get_devtimer(hisaxdevice_t   *dev, int id)
+static mISDNtimer_t
+*get_devtimer(mISDNdevice_t   *dev, int id)
 {
-	hisaxtimer_t	*ht = dev->timer;
+	mISDNtimer_t	*ht = dev->timer;
 
 	if (device_debug & DEBUG_DEV_TIMER)
 		printk(KERN_DEBUG "%s: dev:%p id:%x\n", __FUNCTION__, dev, id);
@@ -293,7 +293,7 @@ static hisaxtimer_t
 }
 
 static int
-stack_inst_flg(hisaxdevice_t *dev, hisaxstack_t *st, int bit, int clear)
+stack_inst_flg(mISDNdevice_t *dev, mISDNstack_t *st, int bit, int clear)
 {
 	int ret = -1;
 	devicelayer_t *dl = dev->layer;
@@ -312,14 +312,14 @@ stack_inst_flg(hisaxdevice_t *dev, hisaxstack_t *st, int bit, int clear)
 }
 
 static int
-new_devstack(hisaxdevice_t *dev, stack_info_t *si)
+new_devstack(mISDNdevice_t *dev, stack_info_t *si)
 {
 	int		err;
-	hisaxstack_t	*st;
-	hisaxinstance_t	inst;
+	mISDNstack_t	*st;
+	mISDNinstance_t	inst;
 	devicestack_t	*nds;
 
-	memset(&inst, 0, sizeof(hisaxinstance_t));
+	memset(&inst, 0, sizeof(mISDNinstance_t));
 	st = get_stack4id(si->id);
 	if (si->extentions & EXT_STACK_CLONE) {
 		if (st) {
@@ -342,10 +342,10 @@ new_devstack(hisaxdevice_t *dev, stack_info_t *si)
 	memset(nds, 0, sizeof(devicestack_t));
 	nds->dev = dev;
 	if (si->extentions & EXT_STACK_CLONE) {
-//		memcpy(&inst.st->pid, &st->pid, sizeof(hisax_pid_t));
+//		memcpy(&inst.st->pid, &st->pid, sizeof(mISDN_pid_t));
 		inst.st->child = st->child;
 	} else {
-		memcpy(&inst.st->pid, &si->pid, sizeof(hisax_pid_t));
+		memcpy(&inst.st->pid, &si->pid, sizeof(mISDN_pid_t));
 	}
 	nds->extentions = si->extentions;
 	inst.st->extentions |= si->extentions;
@@ -355,10 +355,10 @@ new_devstack(hisaxdevice_t *dev, stack_info_t *si)
 	return(inst.st->id);
 }
 
-static hisaxstack_t *
+static mISDNstack_t *
 sel_channel(u_int addr, u_int channel)
 {
-	hisaxstack_t	*st;
+	mISDNstack_t	*st;
 	channel_info_t	ci;
 
 	st = get_stack4id(addr);
@@ -372,14 +372,14 @@ sel_channel(u_int addr, u_int channel)
 }
 
 static int
-create_layer(hisaxdevice_t *dev, layer_info_t *linfo, int *adr)
+create_layer(mISDNdevice_t *dev, layer_info_t *linfo, int *adr)
 {
-	hisaxlayer_t	*layer;
-	hisaxstack_t	*st;
+	mISDNlayer_t	*layer;
+	mISDNstack_t	*st;
 	int		i, ret;
 	devicelayer_t	*nl;
-	hisaxobject_t	*obj;
-	hisaxinstance_t *inst = NULL;
+	mISDNobject_t	*obj;
+	mISDNinstance_t *inst = NULL;
 
 	if (!(st = get_stack4id(linfo->st))) {
 		int_error();
@@ -413,7 +413,7 @@ create_layer(hisaxdevice_t *dev, layer_info_t *linfo, int *adr)
 	} else if ((layer = getlayer4lay(st, linfo->pid.layermask))) {
 		if (!(linfo->extentions & EXT_INST_MIDDLE)) {
 			printk(KERN_WARNING
-				"HiSax create_layer st(%x) LM(%x) inst not empty(%p)\n",
+				"mISDN create_layer st(%x) LM(%x) inst not empty(%p)\n",
 				st->id, linfo->pid.layermask, layer);
 			return(-EBUSY);
 		}
@@ -425,10 +425,10 @@ create_layer(hisaxdevice_t *dev, layer_info_t *linfo, int *adr)
 	memset(nl, 0, sizeof(devicelayer_t));
 	if (device_debug & DEBUG_MGR_FUNC)
 		printk(KERN_DEBUG
-			"HiSax create_layer LM(%x) nl(%p) nl inst(%p)\n",
+			"mISDN create_layer LM(%x) nl(%p) nl inst(%p)\n",
 			linfo->pid.layermask, nl, &nl->inst);
 	nl->dev = dev;
-	memcpy(&nl->inst.pid, &linfo->pid, sizeof(hisax_pid_t));
+	memcpy(&nl->inst.pid, &linfo->pid, sizeof(mISDN_pid_t));
 	strcpy(nl->inst.name, linfo->name);
 	nl->inst.extentions = linfo->extentions;
 	for (i=0; i<= MAX_LAYER_NR; i++) {
@@ -460,7 +460,7 @@ create_layer(hisaxdevice_t *dev, layer_info_t *linfo, int *adr)
 
 static int
 remove_if(devicelayer_t *dl, int stat) {
-	hisaxif_t *hif,*phif,*shif;
+	mISDNif_t *hif,*phif,*shif;
 	int err;
 
 	if (device_debug & DEBUG_MGR_FUNC)
@@ -483,8 +483,8 @@ remove_if(devicelayer_t *dl, int stat) {
 	}
 	err = udev_obj.ctrl(hif->peer, MGR_DISCONNECT | REQUEST, hif);
 	if (phif) {
-		memcpy(phif, shif, sizeof(hisaxif_t));
-		memset(shif, 0, sizeof(hisaxif_t));
+		memcpy(phif, shif, sizeof(mISDNif_t));
+		memset(shif, 0, sizeof(mISDNif_t));
 	}
 	REMOVE_FROM_LIST(hif);
 	return(err);
@@ -493,7 +493,7 @@ remove_if(devicelayer_t *dl, int stat) {
 static int
 del_stack(devicestack_t *ds)
 {
-	hisaxdevice_t	*dev;
+	mISDNdevice_t	*dev;
 
 	if (!ds) {
 		int_error();
@@ -518,8 +518,8 @@ del_stack(devicestack_t *ds)
 
 static int
 del_layer(devicelayer_t *dl) {
-	hisaxinstance_t *inst = &dl->inst;
-	hisaxdevice_t	*dev = dl->dev;
+	mISDNinstance_t *inst = &dl->inst;
+	mISDNdevice_t	*dev = dl->dev;
 	int		i;
 
 	if (device_debug & DEBUG_MGR_FUNC) {
@@ -571,8 +571,8 @@ del_layer(devicelayer_t *dl) {
 	return(0);
 }
 
-static hisaxinstance_t *
-clone_instance(devicelayer_t *dl, hisaxstack_t  *st, hisaxinstance_t *peer) {
+static mISDNinstance_t *
+clone_instance(devicelayer_t *dl, mISDNstack_t  *st, mISDNinstance_t *peer) {
 	int		err;
 
 	if (dl->slave) {
@@ -584,7 +584,7 @@ clone_instance(devicelayer_t *dl, hisaxstack_t  *st, hisaxinstance_t *peer) {
 		printk(KERN_WARNING "%s: peer cannot clone\n", __FUNCTION__);
 		return(NULL);
 	}
-	dl->slave = (hisaxinstance_t *)st;
+	dl->slave = (mISDNinstance_t *)st;
 	if ((err = peer->obj->own_ctrl(peer, MGR_CLONELAYER | REQUEST,
 		&dl->slave))) {
 		dl->slave = NULL;
@@ -596,13 +596,13 @@ clone_instance(devicelayer_t *dl, hisaxstack_t  *st, hisaxinstance_t *peer) {
 }
 
 static int
-connect_if_req(hisaxdevice_t *dev, iframe_t *iff) {
+connect_if_req(mISDNdevice_t *dev, iframe_t *iff) {
 	devicelayer_t *dl;
 	interface_info_t *ifi = (interface_info_t *)&iff->data.p;
-	hisaxinstance_t *owner;
-	hisaxinstance_t *peer;
-	hisaxinstance_t *pp;
-	hisaxif_t	*hifp;
+	mISDNinstance_t *owner;
+	mISDNinstance_t *peer;
+	mISDNinstance_t *pp;
+	mISDNif_t	*hifp;
 	int		stat;
 
 	if (device_debug & DEBUG_MGR_FUNC)
@@ -639,29 +639,29 @@ connect_if_req(hisaxdevice_t *dev, iframe_t *iff) {
 			return(-EINVAL);
 		}
 		if (stat == IF_UP) {
-			memcpy(&owner->up, hifp, sizeof(hisaxif_t));
-			memcpy(&dl->s_up, hifp, sizeof(hisaxif_t));
+			memcpy(&owner->up, hifp, sizeof(mISDNif_t));
+			memcpy(&dl->s_up, hifp, sizeof(mISDNif_t));
 			owner->up.owner = owner;
 			hifp->peer = owner;
 			hifp->func = from_up_down;
 			hifp->fdata = dl;
 			hifp = &pp->down;
-			memcpy(&owner->down, hifp, sizeof(hisaxif_t));
-			memcpy(&dl->s_down, hifp, sizeof(hisaxif_t));
+			memcpy(&owner->down, hifp, sizeof(mISDNif_t));
+			memcpy(&dl->s_down, hifp, sizeof(mISDNif_t));
 			owner->down.owner = owner;
 			hifp->peer = owner;
 			hifp->func = from_up_down;
 			hifp->fdata = dl;
 		} else {
-			memcpy(&owner->down, hifp, sizeof(hisaxif_t));
-			memcpy(&dl->s_down, hifp, sizeof(hisaxif_t));
+			memcpy(&owner->down, hifp, sizeof(mISDNif_t));
+			memcpy(&dl->s_down, hifp, sizeof(mISDNif_t));
 			owner->up.owner = owner;
 			hifp->peer = owner;
 			hifp->func = from_up_down;
 			hifp->fdata = dl;
 			hifp = &pp->up;
-			memcpy(&owner->up, hifp, sizeof(hisaxif_t));
-			memcpy(&dl->s_up, hifp, sizeof(hisaxif_t));
+			memcpy(&owner->up, hifp, sizeof(mISDNif_t));
+			memcpy(&dl->s_up, hifp, sizeof(mISDNif_t));
 			owner->down.owner = owner;
 			hifp->peer = owner;
 			hifp->func = from_up_down;
@@ -695,12 +695,12 @@ connect_if_req(hisaxdevice_t *dev, iframe_t *iff) {
 }
 
 static int
-set_if_req(hisaxdevice_t *dev, iframe_t *iff) {
-	hisaxif_t *hif,*phif,*shif;
+set_if_req(mISDNdevice_t *dev, iframe_t *iff) {
+	mISDNif_t *hif,*phif,*shif;
 	int stat;
 	interface_info_t *ifi = (interface_info_t *)&iff->data.p;
 	devicelayer_t *dl;
-	hisaxinstance_t *inst, *peer;
+	mISDNinstance_t *inst, *peer;
 
 	if (device_debug & DEBUG_MGR_FUNC)
 		printk(KERN_DEBUG "%s: addr:%x own(%x) peer(%x)\n",
@@ -744,16 +744,16 @@ set_if_req(hisaxdevice_t *dev, iframe_t *iff) {
 	}
 	hif->stat = stat;
 	hif->owner = inst;
-	memcpy(shif, phif, sizeof(hisaxif_t));
-	memset(phif, 0, sizeof(hisaxif_t));
+	memcpy(shif, phif, sizeof(mISDNif_t));
+	memset(phif, 0, sizeof(mISDNif_t));
 	return(peer->obj->own_ctrl(peer, iff->prim, hif));
 }
 
 static int
-add_if_req(hisaxdevice_t *dev, iframe_t *iff) {
-	hisaxif_t *hif;
+add_if_req(mISDNdevice_t *dev, iframe_t *iff) {
+	mISDNif_t *hif;
 	interface_info_t *ifi = (interface_info_t *)&iff->data.p;
-	hisaxinstance_t *inst, *peer;
+	mISDNinstance_t *inst, *peer;
 
 	if (device_debug & DEBUG_MGR_FUNC)
 		printk(KERN_DEBUG "%s: addr:%x own(%x) peer(%x)\n",
@@ -781,7 +781,7 @@ add_if_req(hisaxdevice_t *dev, iframe_t *iff) {
 }
 
 static int
-del_if_req(hisaxdevice_t *dev, iframe_t *iff)
+del_if_req(mISDNdevice_t *dev, iframe_t *iff)
 {
 	devicelayer_t *dl;
 
@@ -793,7 +793,7 @@ del_if_req(hisaxdevice_t *dev, iframe_t *iff)
 }
 
 static void
-dev_expire_timer(hisaxtimer_t *ht)
+dev_expire_timer(mISDNtimer_t *ht)
 {
 	iframe_t off;
 
@@ -804,20 +804,20 @@ dev_expire_timer(hisaxtimer_t *ht)
 		off.prim = MGR_TIMER | INDICATION;
 		off.addr = ht->id;
 		off.len = 0;
-		hisax_rdata(ht->dev, &off, 0);
+		mISDN_rdata(ht->dev, &off, 0);
 	} else
 		printk(KERN_WARNING "%s: timer(%x) not active\n",
 			__FUNCTION__, ht->id);
 }
 
 static int
-dev_init_timer(hisaxdevice_t *dev, iframe_t *iff)
+dev_init_timer(mISDNdevice_t *dev, iframe_t *iff)
 {
-	hisaxtimer_t	*ht;
+	mISDNtimer_t	*ht;
 
 	ht = get_devtimer(dev, iff->addr);
 	if (!ht) {
-		ht = kmalloc(sizeof(hisaxtimer_t), GFP_ATOMIC);
+		ht = kmalloc(sizeof(mISDNtimer_t), GFP_ATOMIC);
 		if (!ht)
 			return(-ENOMEM);
 		ht->prev = NULL;
@@ -843,9 +843,9 @@ dev_init_timer(hisaxdevice_t *dev, iframe_t *iff)
 }
 
 static int
-dev_add_timer(hisaxdevice_t *dev, iframe_t *iff)
+dev_add_timer(mISDNdevice_t *dev, iframe_t *iff)
 {
-	hisaxtimer_t	*ht;
+	mISDNtimer_t	*ht;
 
 	ht = get_devtimer(dev, iff->addr);
 	if (!ht) {
@@ -874,9 +874,9 @@ dev_add_timer(hisaxdevice_t *dev, iframe_t *iff)
 }
 
 static int
-dev_del_timer(hisaxdevice_t *dev, iframe_t *iff)
+dev_del_timer(mISDNdevice_t *dev, iframe_t *iff)
 {
-	hisaxtimer_t	*ht;
+	mISDNtimer_t	*ht;
 
 	ht = get_devtimer(dev, iff->addr);
 	if (!ht) {
@@ -895,9 +895,9 @@ dev_del_timer(hisaxdevice_t *dev, iframe_t *iff)
 }
 
 static int
-dev_remove_timer(hisaxdevice_t *dev, int id)
+dev_remove_timer(mISDNdevice_t *dev, int id)
 {
-	hisaxtimer_t	*ht;
+	mISDNtimer_t	*ht;
 
 	ht = get_devtimer(dev, id);
 	if (!ht)  {
@@ -916,7 +916,7 @@ static int
 get_status(iframe_t *off)
 {
 	status_info_t	*si = (status_info_t *)off->data.p;
-	hisaxinstance_t	*inst;
+	mISDNinstance_t	*inst;
 	int err;
 
 	if (!(inst = get_instance4id(off->addr & IF_ADDRMASK))) {
@@ -935,7 +935,7 @@ get_status(iframe_t *off)
 static void
 get_layer_info(iframe_t *frm)
 {
-	hisaxinstance_t *inst;
+	mISDNinstance_t *inst;
 	layer_info_t	*li = (layer_info_t *)frm->data.p;
 	
 	if (!(inst = get_instance4id(frm->addr & IF_ADDRMASK))) {
@@ -951,15 +951,15 @@ get_layer_info(iframe_t *frm)
 	li->id = inst->id;
 	if (inst->st)
 		li->st = inst->st->id;
-	memcpy(&li->pid, &inst->pid, sizeof(hisax_pid_t));
+	memcpy(&li->pid, &inst->pid, sizeof(mISDN_pid_t));
 	frm->len = sizeof(layer_info_t);
 }
 
 static void
 get_if_info(iframe_t *frm)
 {
-	hisaxinstance_t		*inst;
-	hisaxif_t		*hif;
+	mISDNinstance_t		*inst;
+	mISDNif_t		*hif;
 	interface_info_t	*ii = (interface_info_t *)frm->data.p;
 	
 	if (!(inst = get_instance4id(frm->addr & IF_ADDRMASK))) {
@@ -989,8 +989,8 @@ get_if_info(iframe_t *frm)
 }
 
 static int
-wdata_frame(hisaxdevice_t *dev, iframe_t *iff) {
-	hisaxif_t *hif = NULL;
+wdata_frame(mISDNdevice_t *dev, iframe_t *iff) {
+	mISDNif_t *hif = NULL;
 	devicelayer_t *dl;
 	int err=-ENXIO;
 
@@ -1027,17 +1027,17 @@ wdata_frame(hisaxdevice_t *dev, iframe_t *iff) {
 				__FUNCTION__, err);
 	} else {
 		if (device_debug & DEBUG_WDATA)
-			printk(KERN_DEBUG "hisax: no matching interface\n");
+			printk(KERN_DEBUG "mISDN: no matching interface\n");
 	}
 	return(err);
 }
 
 static int
-hisax_wdata_if(hisaxdevice_t *dev, iframe_t *iff, int len) {
+mISDN_wdata_if(mISDNdevice_t *dev, iframe_t *iff, int len) {
 	iframe_t        off;
-	hisaxstack_t	*st;
+	mISDNstack_t	*st;
 	devicelayer_t	*dl;
-	hisaxlayer_t    *layer;
+	mISDNlayer_t    *layer;
 	int		lay;
 	int		err = 0;
 	int		used = 0;
@@ -1049,7 +1049,7 @@ hisax_wdata_if(hisaxdevice_t *dev, iframe_t *iff, int len) {
 		return(len);
 	}
 	if (device_debug & DEBUG_WDATA)
-		printk(KERN_DEBUG "hisax_wdata: %x:%x %x %d\n",
+		printk(KERN_DEBUG "mISDN_wdata: %x:%x %x %d\n",
 			iff->addr, iff->prim, iff->dinfo, iff->len);
 	switch(iff->prim) {
 	    case (MGR_GETSTACK | REQUEST):
@@ -1064,10 +1064,10 @@ hisax_wdata_if(hisaxdevice_t *dev, iframe_t *iff, int len) {
 			off.data.p = stbuf;
 			get_stack_info(&off);
 		}
-		hisax_rdata(dev, &off, 0);
+		mISDN_rdata(dev, &off, 0);
 		break;
 	    case (MGR_SETSTACK | REQUEST):
-		used = head + sizeof(hisax_pid_t);
+		used = head + sizeof(mISDN_pid_t);
 		if (len<used)
 			return(len);
 		off.addr = iff->addr;
@@ -1081,7 +1081,7 @@ hisax_wdata_if(hisaxdevice_t *dev, iframe_t *iff, int len) {
 				off.len = err;
 		} else
 			off.len = -ENODEV;
-		hisax_rdata(dev, &off, 1);
+		mISDN_rdata(dev, &off, 1);
 		break;
 	    case (MGR_NEWSTACK | REQUEST):
 		used = head + iff->len;
@@ -1096,7 +1096,7 @@ hisax_wdata_if(hisaxdevice_t *dev, iframe_t *iff, int len) {
 			off.len = err;
  		else
  			off.dinfo = err;
-		hisax_rdata(dev, &off, 1);
+		mISDN_rdata(dev, &off, 1);
 		break;	
 	    case (MGR_CLEARSTACK | REQUEST):
 		used = head;
@@ -1111,7 +1111,7 @@ hisax_wdata_if(hisaxdevice_t *dev, iframe_t *iff, int len) {
 				off.len = err;
 		} else
 			off.len = -ENODEV;
-		hisax_rdata(dev, &off, 1);
+		mISDN_rdata(dev, &off, 1);
 		break;
 	    case (MGR_SELCHANNEL | REQUEST):
 		used = head;
@@ -1125,7 +1125,7 @@ hisax_wdata_if(hisaxdevice_t *dev, iframe_t *iff, int len) {
 			off.dinfo = 0;
 			off.len = -ENODEV;
 		}
-		hisax_rdata(dev, &off, 1);
+		mISDN_rdata(dev, &off, 1);
 		break;
 	    case (MGR_GETLAYERID | REQUEST):
 		used = head;
@@ -1136,7 +1136,7 @@ hisax_wdata_if(hisaxdevice_t *dev, iframe_t *iff, int len) {
 		off.len = 0;
 		if (LAYER_OUTRANGE(lay)) {
 			off.len = -EINVAL;
-			hisax_rdata(dev, &off, 1);
+			mISDN_rdata(dev, &off, 1);
 			break;
 		} else
 			lay = ISDN_LAYER(lay);
@@ -1146,7 +1146,7 @@ hisax_wdata_if(hisaxdevice_t *dev, iframe_t *iff, int len) {
 					off.dinfo = layer->inst->id;
 			}
 		}
-		hisax_rdata(dev, &off, 0);
+		mISDN_rdata(dev, &off, 0);
 		break;
 	    case (MGR_GETLAYER | REQUEST):
 		used = head;
@@ -1156,7 +1156,7 @@ hisax_wdata_if(hisaxdevice_t *dev, iframe_t *iff, int len) {
 		off.len = 0;
 		off.data.p = stbuf;
 		get_layer_info(&off);
-		hisax_rdata(dev, &off, 0);
+		mISDN_rdata(dev, &off, 0);
 		break;
 	    case (MGR_NEWLAYER | REQUEST):
 		used = head + sizeof(layer_info_t);
@@ -1168,7 +1168,7 @@ hisax_wdata_if(hisaxdevice_t *dev, iframe_t *iff, int len) {
 		off.data.p = stbuf;
 		off.len = create_layer(dev, (layer_info_t *)&iff->data.i,
 			(int *)stbuf);
-		hisax_rdata(dev, &off, 0);
+		mISDN_rdata(dev, &off, 0);
 		break;	
 	    case (MGR_DELLAYER | REQUEST):
 		used = head;
@@ -1179,7 +1179,7 @@ hisax_wdata_if(hisaxdevice_t *dev, iframe_t *iff, int len) {
 			off.len = del_layer(dl);
 		else
 			off.len = -ENXIO;
-		hisax_rdata(dev, &off, 1);
+		mISDN_rdata(dev, &off, 1);
 		break;
 	    case (MGR_GETIF | REQUEST):
 		used = head;
@@ -1189,7 +1189,7 @@ hisax_wdata_if(hisaxdevice_t *dev, iframe_t *iff, int len) {
 		off.len = 0;
 		off.data.p = stbuf;
 		get_if_info(&off);
-		hisax_rdata(dev, &off, 0);
+		mISDN_rdata(dev, &off, 0);
 		break;
 	    case (MGR_CONNECT | REQUEST):
 		used = head + sizeof(interface_info_t);
@@ -1199,7 +1199,7 @@ hisax_wdata_if(hisaxdevice_t *dev, iframe_t *iff, int len) {
 		off.prim = MGR_CONNECT | CONFIRM;
 		off.dinfo = 0;
 		off.len = connect_if_req(dev, iff);
-		hisax_rdata(dev, &off, 1);
+		mISDN_rdata(dev, &off, 1);
 		break;
 	    case (MGR_SETIF | REQUEST):
 		used = head + iff->len;
@@ -1209,7 +1209,7 @@ hisax_wdata_if(hisaxdevice_t *dev, iframe_t *iff, int len) {
 		off.prim = MGR_SETIF | CONFIRM;
 		off.dinfo = 0;
 		off.len = set_if_req(dev, iff);
-		hisax_rdata(dev, &off, 1);
+		mISDN_rdata(dev, &off, 1);
 		break;
 	    case (MGR_ADDIF | REQUEST):
 		used = head + iff->len;
@@ -1219,7 +1219,7 @@ hisax_wdata_if(hisaxdevice_t *dev, iframe_t *iff, int len) {
 		off.prim = MGR_ADDIF | CONFIRM;
 		off.dinfo = 0;
 		off.len = add_if_req(dev, iff);
-		hisax_rdata(dev, &off, 1);
+		mISDN_rdata(dev, &off, 1);
 		break;
 	    case (MGR_DISCONNECT | REQUEST):
 		used = head;
@@ -1227,7 +1227,7 @@ hisax_wdata_if(hisaxdevice_t *dev, iframe_t *iff, int len) {
 		off.prim = MGR_DISCONNECT | CONFIRM;
 		off.dinfo = 0;
 		off.len = del_if_req(dev, iff);
-		hisax_rdata(dev, &off, 1);
+		mISDN_rdata(dev, &off, 1);
 		break;
 	    case (MGR_INITTIMER | REQUEST):
 		used = head;
@@ -1235,7 +1235,7 @@ hisax_wdata_if(hisaxdevice_t *dev, iframe_t *iff, int len) {
 		off.addr = iff->addr;
 		off.prim = MGR_INITTIMER | CONFIRM;
 		off.dinfo = iff->dinfo;
-		hisax_rdata(dev, &off, 0);
+		mISDN_rdata(dev, &off, 0);
 		break;
 	    case (MGR_ADDTIMER | REQUEST):
 		used = head;
@@ -1243,7 +1243,7 @@ hisax_wdata_if(hisaxdevice_t *dev, iframe_t *iff, int len) {
 		off.addr = iff->addr;
 		off.prim = MGR_ADDTIMER | CONFIRM;
 		off.dinfo = 0;
-		hisax_rdata(dev, &off, 0);
+		mISDN_rdata(dev, &off, 0);
 		break;
 	    case (MGR_DELTIMER | REQUEST):
 		used = head;
@@ -1251,7 +1251,7 @@ hisax_wdata_if(hisaxdevice_t *dev, iframe_t *iff, int len) {
 		off.addr = iff->addr;
 		off.prim = MGR_DELTIMER | CONFIRM;
 		off.dinfo = iff->dinfo;
-		hisax_rdata(dev, &off, 0);
+		mISDN_rdata(dev, &off, 0);
 		break;
 	    case (MGR_REMOVETIMER | REQUEST):
 		used = head;
@@ -1259,7 +1259,7 @@ hisax_wdata_if(hisaxdevice_t *dev, iframe_t *iff, int len) {
 		off.addr = iff->addr;
 		off.prim = MGR_REMOVETIMER | CONFIRM;
 		off.dinfo = 0;
-		hisax_rdata(dev, &off, 0);
+		mISDN_rdata(dev, &off, 0);
 		break;
 	    case (MGR_TIMER | RESPONSE):
 		used = head;
@@ -1271,9 +1271,9 @@ hisax_wdata_if(hisaxdevice_t *dev, iframe_t *iff, int len) {
 		off.dinfo = 0;
 		off.data.p = stbuf;
 		if (get_status(&off))
-			hisax_rdata(dev, &off, 1);
+			mISDN_rdata(dev, &off, 1);
 		else
-			hisax_rdata(dev, &off, 0);
+			mISDN_rdata(dev, &off, 0);
 		break;
 	    case (MGR_SETDEVOPT | REQUEST):
 	    	used = head;
@@ -1281,32 +1281,32 @@ hisax_wdata_if(hisaxdevice_t *dev, iframe_t *iff, int len) {
 	    	off.prim = MGR_SETDEVOPT | CONFIRM;
 	    	off.dinfo = 0;
 	    	off.len = 0;
-	    	if (iff->dinfo == FLG_HISAXPORT_ONEFRAME) {
-	    		test_and_set_bit(FLG_HISAXPORT_ONEFRAME,
+	    	if (iff->dinfo == FLG_mISDNPORT_ONEFRAME) {
+	    		test_and_set_bit(FLG_mISDNPORT_ONEFRAME,
 	    			&dev->rport.Flag);
 	    	} else if (!iff->dinfo) {
-	    		test_and_clear_bit(FLG_HISAXPORT_ONEFRAME,
+	    		test_and_clear_bit(FLG_mISDNPORT_ONEFRAME,
 	    			&dev->rport.Flag);
 	    	} else {
 	    		off.len = -EINVAL;
 	    	}
-	    	hisax_rdata(dev, &off, 0);
+	    	mISDN_rdata(dev, &off, 0);
 	    	break;
 	    case (MGR_GETDEVOPT | REQUEST):
 	    	used = head;
 	    	off.addr = iff->addr;
 	    	off.prim = MGR_GETDEVOPT | CONFIRM;
 	    	off.len = 0;
-	    	if (test_bit(FLG_HISAXPORT_ONEFRAME, &dev->rport.Flag))
-	    		off.dinfo = FLG_HISAXPORT_ONEFRAME;
+	    	if (test_bit(FLG_mISDNPORT_ONEFRAME, &dev->rport.Flag))
+	    		off.dinfo = FLG_mISDNPORT_ONEFRAME;
 	    	else
 	    		off.dinfo = 0;
-	    	hisax_rdata(dev, &off, 0);
+	    	mISDN_rdata(dev, &off, 0);
 	    	break;
 	    default:
 		used = head + iff->len;
 		if (len<used) {
-			printk(KERN_WARNING "hisax_wdata: framelen error prim %x %d/%d\n",
+			printk(KERN_WARNING "mISDN_wdata: framelen error prim %x %d/%d\n",
 				iff->prim, len, used);
 			used=len;
 		} else if (iff->addr & IF_TYPEMASK) {
@@ -1315,7 +1315,7 @@ hisax_wdata_if(hisaxdevice_t *dev, iframe_t *iff, int len) {
 				if (device_debug & DEBUG_WDATA)
 					printk(KERN_DEBUG "wdata_frame returns error %d\n", err);
 		} else {
-			printk(KERN_WARNING "hisax: prim %x addr %x not implemented\n",
+			printk(KERN_WARNING "mISDN: prim %x addr %x not implemented\n",
 				iff->prim, iff->addr);
 		}
 		break;
@@ -1324,12 +1324,12 @@ hisax_wdata_if(hisaxdevice_t *dev, iframe_t *iff, int len) {
 }
 
 static int
-hisax_wdata(hisaxdevice_t *dev) {
+mISDN_wdata(mISDNdevice_t *dev) {
 	int	used = 0;
 	u_long	flags;
 
 	spin_lock_irqsave(&dev->wport.lock, flags);
-	if (test_and_set_bit(FLG_HISAXPORT_BUSY, &dev->wport.Flag)) {
+	if (test_and_set_bit(FLG_mISDNPORT_BUSY, &dev->wport.Flag)) {
 		spin_unlock_irqrestore(&dev->wport.lock, flags);
 		return(0);
 	}
@@ -1340,7 +1340,7 @@ hisax_wdata(hisaxdevice_t *dev) {
 			wake_up(&dev->wport.procq);
 			break;
 		}
-		if (dev->minor == HISAX_CORE_DEVICE) {
+		if (dev->minor == mISDN_CORE_DEVICE) {
 			iframe_t	*iff;
 			iframe_t	hlp;
 			int		broken = 0;
@@ -1405,7 +1405,7 @@ hisax_wdata(hisaxdevice_t *dev) {
 			if (iff->len > 0)
 				used += iff->len; 
 			spin_unlock_irqrestore(&dev->wport.lock, flags);
-			hisax_wdata_if(dev, iff, used);
+			mISDN_wdata_if(dev, iff, used);
 			if (broken) {
 				if (used>IFRAME_HEAD_SIZE)
 					vfree(iff);
@@ -1417,21 +1417,21 @@ hisax_wdata(hisaxdevice_t *dev) {
 		} else { /* RAW DEVICES */
 			printk(KERN_DEBUG "%s: wflg(%x)\n",
 				__FUNCTION__, dev->wport.Flag);
-			if (test_bit(FLG_HISAXPORT_BLOCK, &dev->wport.Flag))
+			if (test_bit(FLG_mISDNPORT_BLOCK, &dev->wport.Flag))
 				break;
 			used = dev->wport.cnt;
 			if (used > MAX_DATA_SIZE)
 				used = MAX_DATA_SIZE;
 			printk(KERN_DEBUG "%s: cnt %d/%d\n",
 				__FUNCTION__, used, dev->wport.cnt);
-			if (test_bit(FLG_HISAXPORT_ENABLED, &dev->wport.Flag)) {
+			if (test_bit(FLG_mISDNPORT_ENABLED, &dev->wport.Flag)) {
 				struct sk_buff	*skb;
 
 				skb = alloc_skb(used, GFP_ATOMIC);
 				if (skb) {
 					p_memcpy_o(&dev->wport, skb_put(skb,
 						used), used);
-					test_and_set_bit(FLG_HISAXPORT_BLOCK,
+					test_and_set_bit(FLG_mISDNPORT_BLOCK,
 						&dev->wport.Flag);
 					spin_unlock_irqrestore(&dev->wport.lock, flags);
 					used = if_newhead(&dev->wport.pif,
@@ -1458,43 +1458,43 @@ hisax_wdata(hisaxdevice_t *dev) {
 		}
 		wake_up(&dev->wport.procq);
 	}
-	test_and_clear_bit(FLG_HISAXPORT_BUSY, &dev->wport.Flag);
+	test_and_clear_bit(FLG_mISDNPORT_BUSY, &dev->wport.Flag);
 	spin_unlock_irqrestore(&dev->wport.lock, flags);
 	return(0);
 }
 
-static hisaxdevice_t *
+static mISDNdevice_t *
 init_device(u_int minor) {
-	hisaxdevice_t	*dev;
+	mISDNdevice_t	*dev;
 	u_long		flags;
 
-	dev = kmalloc(sizeof(hisaxdevice_t), GFP_KERNEL);
+	dev = kmalloc(sizeof(mISDNdevice_t), GFP_KERNEL);
 	if (device_debug & DEBUG_MGR_FUNC)
 		printk(KERN_DEBUG "%s: dev(%d) %p\n",
 			__FUNCTION__, minor, dev); 
 	if (dev) {
-		memset(dev, 0, sizeof(hisaxdevice_t));
+		memset(dev, 0, sizeof(mISDNdevice_t));
 		dev->minor = minor;
 		init_waitqueue_head(&dev->rport.procq);
 		init_waitqueue_head(&dev->wport.procq);
 		init_MUTEX(&dev->io_sema);
-		write_lock_irqsave(&hisax_device_lock, flags);
-		APPEND_TO_LIST(dev, hisax_devicelist);
-		write_unlock_irqrestore(&hisax_device_lock, flags);
+		write_lock_irqsave(&mISDN_device_lock, flags);
+		APPEND_TO_LIST(dev, mISDN_devicelist);
+		write_unlock_irqrestore(&mISDN_device_lock, flags);
 	}
 	return(dev);
 }
 
-hisaxdevice_t *
+mISDNdevice_t *
 get_free_rawdevice(void)
 {
-	hisaxdevice_t	*dev;
+	mISDNdevice_t	*dev;
 	u_int		minor;
 
 	if (device_debug & DEBUG_MGR_FUNC)
 		printk(KERN_DEBUG "%s:\n", __FUNCTION__);
-	for (minor=HISAX_MINOR_RAW_MIN; minor<=HISAX_MINOR_RAW_MAX; minor++) {
-		dev = get_hisaxdevice4minor(minor);
+	for (minor=mISDN_MINOR_RAW_MIN; minor<=mISDN_MINOR_RAW_MAX; minor++) {
+		dev = get_mISDNdevice4minor(minor);
 		if (device_debug & DEBUG_MGR_FUNC)
 			printk(KERN_DEBUG "%s: dev(%d) %p\n",
 				__FUNCTION__, minor, dev); 
@@ -1502,7 +1502,7 @@ get_free_rawdevice(void)
 			dev = init_device(minor);
 			if (!dev)
 				return(NULL);
-			dev->rport.pif.func = hisax_rdata_raw;
+			dev->rport.pif.func = mISDN_rdata_raw;
 			dev->rport.pif.fdata = dev;
 			return(dev);
 		}
@@ -1511,7 +1511,7 @@ get_free_rawdevice(void)
 }
 
 int
-free_device(hisaxdevice_t *dev)
+free_device(mISDNdevice_t *dev)
 {
 	u_long	flags;
 
@@ -1530,26 +1530,26 @@ free_device(hisaxdevice_t *dev)
 		vfree(dev->rport.buf);
 	if (dev->wport.buf)
 		vfree(dev->wport.buf);
-	write_lock_irqsave(&hisax_device_lock, flags);
-	REMOVE_FROM_LISTBASE(dev, hisax_devicelist);
-	write_unlock_irqrestore(&hisax_device_lock, flags);
+	write_lock_irqsave(&mISDN_device_lock, flags);
+	REMOVE_FROM_LISTBASE(dev, mISDN_devicelist);
+	write_unlock_irqrestore(&mISDN_device_lock, flags);
 	kfree(dev);
 	return(0);
 }
 
 static int
-hisax_open(struct inode *ino, struct file *filep)
+mISDN_open(struct inode *ino, struct file *filep)
 {
 	u_int		minor = MINOR(ino->i_rdev);
-	hisaxdevice_t 	*dev = NULL;
+	mISDNdevice_t 	*dev = NULL;
 	u_long		flags;
 	int		isnew = 0;
 
 	if (device_debug & DEBUG_DEV_OP)
-		printk(KERN_DEBUG "hisax_open in: minor(%d) %p %p mode(%x)\n",
+		printk(KERN_DEBUG "mISDN_open in: minor(%d) %p %p mode(%x)\n",
 			minor, filep, filep->private_data, filep->f_mode);
 	if (minor) {
-		dev = get_hisaxdevice4minor(minor);
+		dev = get_mISDNdevice4minor(minor);
 		if (dev) {
 			if ((dev->open_mode & filep->f_mode) & (FMODE_READ | FMODE_WRITE))
 				return(-EBUSY);
@@ -1562,91 +1562,91 @@ hisax_open(struct inode *ino, struct file *filep)
 	dev->open_mode |= filep->f_mode & (FMODE_READ | FMODE_WRITE);
 	if (dev->open_mode & FMODE_READ){
 		if (!dev->rport.buf) {
-			dev->rport.buf = vmalloc(HISAX_DEVBUF_SIZE);
+			dev->rport.buf = vmalloc(mISDN_DEVBUF_SIZE);
 			if (!dev->rport.buf) {
 				if (isnew) {
-					write_lock_irqsave(&hisax_device_lock, flags);
-					REMOVE_FROM_LISTBASE(dev, hisax_devicelist);
-					write_unlock_irqrestore(&hisax_device_lock, flags);
+					write_lock_irqsave(&mISDN_device_lock, flags);
+					REMOVE_FROM_LISTBASE(dev, mISDN_devicelist);
+					write_unlock_irqrestore(&mISDN_device_lock, flags);
 					kfree(dev);
 				}
 				return(-ENOMEM);
 			}
 			dev->rport.lock = SPIN_LOCK_UNLOCKED;
-			dev->rport.size = HISAX_DEVBUF_SIZE;
+			dev->rport.size = mISDN_DEVBUF_SIZE;
 		}
-		test_and_set_bit(FLG_HISAXPORT_OPEN, &dev->rport.Flag);
+		test_and_set_bit(FLG_mISDNPORT_OPEN, &dev->rport.Flag);
 		dev->rport.ip = dev->rport.op = dev->rport.buf;
 		dev->rport.cnt = 0;
 	}
 	if (dev->open_mode & FMODE_WRITE) {
 		if (!dev->wport.buf) {
-			dev->wport.buf = vmalloc(HISAX_DEVBUF_SIZE);
+			dev->wport.buf = vmalloc(mISDN_DEVBUF_SIZE);
 			if (!dev->wport.buf) {
 				if (isnew) {
 					if (dev->rport.buf)
 						vfree(dev->rport.buf);
-					write_lock_irqsave(&hisax_device_lock, flags);
-					REMOVE_FROM_LISTBASE(dev, hisax_devicelist);
-					write_unlock_irqrestore(&hisax_device_lock, flags);
+					write_lock_irqsave(&mISDN_device_lock, flags);
+					REMOVE_FROM_LISTBASE(dev, mISDN_devicelist);
+					write_unlock_irqrestore(&mISDN_device_lock, flags);
 					kfree(dev);
 				}
 				return(-ENOMEM);
 			}
 			dev->wport.lock = SPIN_LOCK_UNLOCKED;
-			dev->wport.size = HISAX_DEVBUF_SIZE;
+			dev->wport.size = mISDN_DEVBUF_SIZE;
 		}
-		test_and_set_bit(FLG_HISAXPORT_OPEN, &dev->wport.Flag);
+		test_and_set_bit(FLG_mISDNPORT_OPEN, &dev->wport.Flag);
 		dev->wport.ip = dev->wport.op = dev->wport.buf;
 		dev->wport.cnt = 0;
 	}
-	hisaxlock_core();
+	mISDNlock_core();
 	filep->private_data = dev;
 	if (device_debug & DEBUG_DEV_OP)
-		printk(KERN_DEBUG "hisax_open out: %p %p\n", filep, filep->private_data);
+		printk(KERN_DEBUG "mISDN_open out: %p %p\n", filep, filep->private_data);
 	return(0);
 }
 
 static int
-hisax_close(struct inode *ino, struct file *filep)
+mISDN_close(struct inode *ino, struct file *filep)
 {
-	hisaxdevice_t	*dev = hisax_devicelist;
+	mISDNdevice_t	*dev = mISDN_devicelist;
 
 	if (device_debug & DEBUG_DEV_OP)
-		printk(KERN_DEBUG "hisax: hisax_close %p %p\n", filep, filep->private_data);
-	read_lock(&hisax_device_lock);
+		printk(KERN_DEBUG "mISDN: mISDN_close %p %p\n", filep, filep->private_data);
+	read_lock(&mISDN_device_lock);
 	while (dev) {
 		if (dev == filep->private_data) {
 			if (device_debug & DEBUG_DEV_OP)
-				printk(KERN_DEBUG "hisax: dev(%d) %p mode %x/%x\n",
+				printk(KERN_DEBUG "mISDN: dev(%d) %p mode %x/%x\n",
 					dev->minor, dev, dev->open_mode, filep->f_mode);
 			dev->open_mode &= ~filep->f_mode;
-			read_unlock(&hisax_device_lock);
+			read_unlock(&mISDN_device_lock);
 			if (filep->f_mode & FMODE_READ) {
-				test_and_clear_bit(FLG_HISAXPORT_OPEN,
+				test_and_clear_bit(FLG_mISDNPORT_OPEN,
 					&dev->rport.Flag);
 			}
 			if (filep->f_mode & FMODE_WRITE) {
-				test_and_clear_bit(FLG_HISAXPORT_OPEN,
+				test_and_clear_bit(FLG_mISDNPORT_OPEN,
 					&dev->wport.Flag);
 			}
 			filep->private_data = NULL;
 			if (!dev->minor)
 				free_device(dev);
-			hisaxunlock_core();
+			mISDNunlock_core();
 			return 0;
 		}
 		dev = dev->next;
 	}
-	read_unlock(&hisax_device_lock);
-	printk(KERN_WARNING "hisax: No private data while closing device\n");
+	read_unlock(&mISDN_device_lock);
+	printk(KERN_WARNING "mISDN: No private data while closing device\n");
 	return 0;
 }
 
 static __inline__ ssize_t
-do_hisax_read(struct file *file, char *buf, size_t count, loff_t * off)
+do_mISDN_read(struct file *file, char *buf, size_t count, loff_t * off)
 {
-	hisaxdevice_t	*dev = file->private_data;
+	mISDNdevice_t	*dev = file->private_data;
 	size_t		len, frag;
 	u_long		flags;
 
@@ -1657,7 +1657,7 @@ do_hisax_read(struct file *file, char *buf, size_t count, loff_t * off)
 	if (!access_ok(VERIFY_WRITE, buf, count))
 		return(-EFAULT);
 	if (device_debug & DEBUG_DEV_OP)
-		printk(KERN_DEBUG "hisax_read: file(%d) %p max %d\n",
+		printk(KERN_DEBUG "mISDN_read: file(%d) %p max %d\n",
 			dev->minor, file, count);
 	while (!dev->rport.cnt) {
 		if (file->f_flags & O_NONBLOCK)
@@ -1667,7 +1667,7 @@ do_hisax_read(struct file *file, char *buf, size_t count, loff_t * off)
 			return(-ERESTARTSYS);
 	}
 	spin_lock_irqsave(&dev->rport.lock, flags);
-	if (test_bit(FLG_HISAXPORT_ONEFRAME, &dev->rport.Flag)) {
+	if (test_bit(FLG_mISDNPORT_ONEFRAME, &dev->rport.Flag)) {
 		len = next_frame_len(&dev->rport);
 		if (!len) {
 			spin_unlock_irqrestore(&dev->rport.lock, flags);
@@ -1705,42 +1705,42 @@ do_hisax_read(struct file *file, char *buf, size_t count, loff_t * off)
 	*off += len + frag;
 	spin_unlock_irqrestore(&dev->rport.lock, flags);
 	if (device_debug & DEBUG_DEV_OP)
-		printk(KERN_DEBUG "hisax_read: file(%d) %d\n",
+		printk(KERN_DEBUG "mISDN_read: file(%d) %d\n",
 			dev->minor, len + frag);
 	return(len + frag);
 }
 
 static ssize_t
-hisax_read(struct file *file, char *buf, size_t count, loff_t * off)
+mISDN_read(struct file *file, char *buf, size_t count, loff_t * off)
 {
-	hisaxdevice_t	*dev = file->private_data;
+	mISDNdevice_t	*dev = file->private_data;
 	ssize_t		ret;
 
 	if (!dev)
 		return(-ENODEV);
 	down(&dev->io_sema);
-	ret = do_hisax_read(file, buf, count, off);
+	ret = do_mISDN_read(file, buf, count, off);
 	up(&dev->io_sema);
 	return(ret);
 }
 
 static loff_t
-hisax_llseek(struct file *file, loff_t offset, int orig)
+mISDN_llseek(struct file *file, loff_t offset, int orig)
 {
 	return -ESPIPE;
 }
 
 static __inline__ ssize_t
-do_hisax_write(struct file *file, const char *buf, size_t count, loff_t * off)
+do_mISDN_write(struct file *file, const char *buf, size_t count, loff_t * off)
 {
-	hisaxdevice_t	*dev = file->private_data;
+	mISDNdevice_t	*dev = file->private_data;
 	size_t		len, frag;
 	u_long		flags;
 
 	if (off != &file->f_pos)
 		return(-ESPIPE);
 	if (device_debug & DEBUG_DEV_OP)
-		printk(KERN_DEBUG "hisax_write: file(%d) %p count %d/%d/%d\n",
+		printk(KERN_DEBUG "mISDN_write: file(%d) %p count %d/%d/%d\n",
 			dev->minor, file, count, dev->wport.cnt, dev->wport.size);
 	if (!dev->wport.buf)
 		return -EINVAL;	
@@ -1773,37 +1773,37 @@ do_hisax_write(struct file *file, const char *buf, size_t count, loff_t * off)
 		dev->wport.ip += len;
 	}
 	spin_unlock_irqrestore(&dev->wport.lock, flags);
-	hisax_wdata(dev);
+	mISDN_wdata(dev);
 	return(count);
 }
 
 static ssize_t
-hisax_write(struct file *file, const char *buf, size_t count, loff_t * off)
+mISDN_write(struct file *file, const char *buf, size_t count, loff_t * off)
 {
-	hisaxdevice_t	*dev = file->private_data;
+	mISDNdevice_t	*dev = file->private_data;
 	ssize_t		ret;
 
 	if (!dev)
 		return(-ENODEV);
 	down(&dev->io_sema);
-	ret = do_hisax_write(file, buf, count, off);
+	ret = do_mISDN_write(file, buf, count, off);
 	up(&dev->io_sema);
 	return(ret);
 }
 
 static unsigned int
-hisax_poll(struct file *file, poll_table * wait)
+mISDN_poll(struct file *file, poll_table * wait)
 {
 	unsigned int	mask = POLLERR;
-	hisaxdevice_t	*dev = file->private_data;
-	hisaxport_t	*rport = (file->f_mode & FMODE_READ) ?
+	mISDNdevice_t	*dev = file->private_data;
+	mISDNport_t	*rport = (file->f_mode & FMODE_READ) ?
 					&dev->rport : NULL;
-	hisaxport_t	*wport = (file->f_mode & FMODE_WRITE) ?
+	mISDNport_t	*wport = (file->f_mode & FMODE_WRITE) ?
 					&dev->wport : NULL;
 
 	if (dev) {
 		if (device_debug & DEBUG_DEV_OP)
-			printk(KERN_DEBUG "hisax_poll in: file(%d) %p\n",
+			printk(KERN_DEBUG "mISDN_poll in: file(%d) %p\n",
 				dev->minor, file);
 		if (rport) {
 			poll_wait(file, &rport->procq, wait);
@@ -1820,34 +1820,34 @@ hisax_poll(struct file *file, poll_table * wait)
 		}
 	}
 	if (device_debug & DEBUG_DEV_OP)
-		printk(KERN_DEBUG "hisax_poll out: file %p mask %x\n",
+		printk(KERN_DEBUG "mISDN_poll out: file %p mask %x\n",
 			file, mask);
 	return(mask);
 }
 
-static struct file_operations hisax_fops =
+static struct file_operations mISDN_fops =
 {
-	llseek:		hisax_llseek,
-	read:		hisax_read,
-	write:		hisax_write,
-	poll:		hisax_poll,
-//	ioctl:		hisax_ioctl,
-	open:		hisax_open,
-	release:	hisax_close,
+	llseek:		mISDN_llseek,
+	read:		mISDN_read,
+	write:		mISDN_write,
+	poll:		mISDN_poll,
+//	ioctl:		mISDN_ioctl,
+	open:		mISDN_open,
+	release:	mISDN_close,
 };
 
 static int
-from_up_down(hisaxif_t *hif, struct sk_buff *skb) {
+from_up_down(mISDNif_t *hif, struct sk_buff *skb) {
 	
 	devicelayer_t *dl;
 	iframe_t off;
-	hisax_head_t *hh; 
+	mISDN_head_t *hh; 
 	int retval = -EINVAL;
 
 	if (!hif || !hif->fdata || !skb)
 		return(-EINVAL);
 	dl = hif->fdata;
-	hh = HISAX_HEAD_P(skb);
+	hh = mISDN_HEAD_P(skb);
 	off.data.p = skb->data;
 	off.len = skb->len;
 	off.addr = dl->iaddr | IF_TYPE(hif);
@@ -1856,7 +1856,7 @@ from_up_down(hisaxif_t *hif, struct sk_buff *skb) {
 	if (device_debug & DEBUG_RDATA)
 		printk(KERN_DEBUG "from_up_down: %x(%x) dinfo:%x len:%d\n",
 			off.prim, off.addr, off.dinfo, off.len);
-	retval = hisax_rdata(dl->dev, &off, 0);
+	retval = mISDN_rdata(dl->dev, &off, 0);
 	if (retval == (4*sizeof(u_int) + off.len)) {
 		dev_kfree_skb(skb);
 		retval = 0;
@@ -1867,7 +1867,7 @@ from_up_down(hisaxif_t *hif, struct sk_buff *skb) {
 
 
 static int
-set_if(devicelayer_t *dl, u_int prim, hisaxif_t *hif)
+set_if(devicelayer_t *dl, u_int prim, mISDNif_t *hif)
 {
 	int err = 0;
 
@@ -1877,8 +1877,8 @@ set_if(devicelayer_t *dl, u_int prim, hisaxif_t *hif)
 
 static int
 udev_manager(void *data, u_int prim, void *arg) {
-	hisaxinstance_t *inst = data;
-	hisaxdevice_t	*dev = hisax_devicelist;
+	mISDNinstance_t *inst = data;
+	mISDNdevice_t	*dev = mISDN_devicelist;
 	devicelayer_t	*dl = NULL;
 	int err = -EINVAL;
 
@@ -1887,7 +1887,7 @@ udev_manager(void *data, u_int prim, void *arg) {
 			data, prim, arg);
 	if (!data)
 		return(-EINVAL);
-	read_lock(&hisax_device_lock);
+	read_lock(&mISDN_device_lock);
 	while(dev) {
 		dl = dev->layer;
 		while(dl) {
@@ -1927,11 +1927,11 @@ udev_manager(void *data, u_int prim, void *arg) {
 		break;
 	}
 out:
-	read_unlock(&hisax_device_lock);
+	read_unlock(&mISDN_device_lock);
 	return(err);
 }
 
-int init_hisaxdev (int debug) {
+int init_mISDNdev (int debug) {
 	int err,i;
 
 	udev_obj.name = MName;
@@ -1943,33 +1943,33 @@ int init_hisaxdev (int debug) {
 	udev_obj.prev = NULL;
 	udev_obj.next = NULL;
 	device_debug = debug;
-	if (register_chrdev(HISAX_MAJOR, "hisax", &hisax_fops)) {
-		printk(KERN_WARNING "hisax: Could not register devices\n");
+	if (register_chrdev(mISDN_MAJOR, "mISDN", &mISDN_fops)) {
+		printk(KERN_WARNING "mISDN: Could not register devices\n");
 		return(-EIO);
 	}
-	if ((err = HiSax_register(&udev_obj))) {
+	if ((err = mISDN_register(&udev_obj))) {
 		printk(KERN_ERR "Can't register %s error(%d)\n", MName, err);
 	}
 	return(err);
 }
 
-int free_hisaxdev(void) {
+int free_mISDNdev(void) {
 	int 		err = 0;
-	hisaxdevice_t	*dev = hisax_devicelist;
+	mISDNdevice_t	*dev = mISDN_devicelist;
 
-	if (hisax_devicelist) {
-		printk(KERN_WARNING "hisax: devices open on remove\n");
+	if (mISDN_devicelist) {
+		printk(KERN_WARNING "mISDN: devices open on remove\n");
 		while (dev) {
 			free_device(dev);
-			dev = hisax_devicelist;
+			dev = mISDN_devicelist;
 		}
 		err = -EBUSY;
 	}
-	if ((err = HiSax_unregister(&udev_obj))) {
+	if ((err = mISDN_unregister(&udev_obj))) {
 		printk(KERN_ERR "Can't unregister UserDevice(%d)\n", err);
 	}
-	if ((err = unregister_chrdev(HISAX_MAJOR, "hisax"))) {
-		printk(KERN_WARNING "hisax: devices busy on remove\n");
+	if ((err = unregister_chrdev(mISDN_MAJOR, "mISDN"))) {
+		printk(KERN_WARNING "mISDN: devices busy on remove\n");
 	}
 	return(err);
 }

@@ -1,4 +1,4 @@
-/* $Id: avm_fritz.c,v 1.10 2003/07/07 14:29:38 kkeil Exp $
+/* $Id: avm_fritz.c,v 1.11 2003/07/21 12:00:04 kkeil Exp $
  *
  * fritz_pci.c    low level stuff for AVM Fritz!PCI and ISA PnP isdn cards
  *              Thanks to AVM, Berlin for informations
@@ -14,10 +14,10 @@
 #include <linux/isapnp.h>
 #include <linux/kernel_stat.h>
 #include <linux/delay.h>
-#include "hisax_dch.h"
-#include "hisax_bch.h"
+#include "mISDN_dch.h"
+#include "mISDN_bch.h"
 #include "isac.h"
-#include "hisaxl1.h"
+#include "mISDNl1.h"
 #include "helper.h"
 #include "debug.h"
 
@@ -25,7 +25,7 @@
 #define LOCK_STATISTIC
 #include "hw_lock.h"
 
-static const char *avm_pci_rev = "$Revision: 1.10 $";
+static const char *avm_pci_rev = "$Revision: 1.11 $";
 
 enum {
 	AVM_FRITZ_PCI,
@@ -133,7 +133,7 @@ typedef struct _fritzpnppci {
 	u_int			type;
 	u_int			irq;
 	u_int			addr;
-	hisax_HWlock_t		lock;
+	mISDN_HWlock_t		lock;
 	isac_chip_t		isac;
 	hdlc_hw_t		hdlc[2];
 	dchannel_t		dch;
@@ -143,14 +143,14 @@ typedef struct _fritzpnppci {
 
 static int lock_dev(void *data, int nowait)
 {
-	register hisax_HWlock_t	*lock = &((fritzpnppci *)data)->lock;
+	register mISDN_HWlock_t	*lock = &((fritzpnppci *)data)->lock;
 
 	return(lock_HW(lock, nowait));
 } 
 
 static void unlock_dev(void *data)
 {
-	register hisax_HWlock_t *lock = &((fritzpnppci *)data)->lock;
+	register mISDN_HWlock_t *lock = &((fritzpnppci *)data)->lock;
 
 	unlock_HW(lock);
 }
@@ -719,15 +719,15 @@ avm_pcipnp_interrupt(int intno, void *dev_id, struct pt_regs *regs)
 }
 
 static int
-hdlc_down(hisaxif_t *hif, struct sk_buff *skb)
+hdlc_down(mISDNif_t *hif, struct sk_buff *skb)
 {
 	bchannel_t	*bch;
 	int		ret = -EINVAL;
-	hisax_head_t	*hh;
+	mISDN_head_t	*hh;
 
 	if (!hif || !skb)
 		return(ret);
-	hh = HISAX_HEAD_P(skb);
+	hh = mISDN_HEAD_P(skb);
 	bch = hif->fdata;
 	if ((hh->prim == PH_DATA_REQ) ||
 		(hh->prim == (DL_DATA | REQUEST))) {
@@ -840,7 +840,7 @@ static int init_card(fritzpnppci *fc)
 	lock_dev(fc, 0);
 	if (request_irq(fc->irq, avm_pcipnp_interrupt, SA_SHIRQ,
 		"AVM Fritz!PCI", fc)) {
-		printk(KERN_WARNING "HiSax: couldn't get interrupt %d\n",
+		printk(KERN_WARNING "mISDN: couldn't get interrupt %d\n",
 			fc->irq);
 		unlock_dev(fc);
 		return(-EIO);
@@ -849,7 +849,7 @@ static int init_card(fritzpnppci *fc)
 		int	ret;
 		ISAC_clear_pending_ints(&fc->dch);
 		if ((ret=ISAC_init(&fc->dch))) {
-			printk(KERN_WARNING "HiSax: ISAC_init failed with %d\n", ret);
+			printk(KERN_WARNING "mISDN: ISAC_init failed with %d\n", ret);
 			break;
 		}
 		clear_pending_hdlc_ints(fc);
@@ -894,7 +894,7 @@ static int fritz_cnt;
 static u_int protocol[MAX_CARDS];
 static int layermask[MAX_CARDS];
 
-static hisaxobject_t	fritz;
+static mISDNobject_t	fritz;
 static int debug;
 
 #ifdef MODULE
@@ -935,7 +935,7 @@ setup_fritz(fritzpnppci *fc)
 
 	if (check_region((fc->addr), 32)) {
 		printk(KERN_WARNING
-		       "HiSax: %s config port %x-%x already in use\n",
+		       "mISDN: %s config port %x-%x already in use\n",
 		       "AVM Fritz!PCI",
 		       fc->addr,
 		       fc->addr + 31);
@@ -991,7 +991,7 @@ setup_fritz(fritzpnppci *fc)
 	  	printk(KERN_WARNING "AVM unknown type %d\n", fc->type);
 	  	return(-ENODEV);
 	}
-	printk(KERN_INFO "HiSax: %s config irq:%d base:0x%X\n",
+	printk(KERN_INFO "mISDN: %s config irq:%d base:0x%X\n",
 		(fc->type == AVM_FRITZ_PCI) ? "AVM Fritz!PCI" :
 		(fc->type == AVM_FRITZ_PCIV2) ? "AVM Fritz!PCIv2" : "AVM Fritz!PnP",
 		fc->irq, fc->addr);
@@ -1040,7 +1040,7 @@ release_card(fritzpnppci *card)
 static int
 fritz_manager(void *data, u_int prim, void *arg) {
 	fritzpnppci	*card = fritz.ilist;
-	hisaxinstance_t	*inst = data;
+	mISDNinstance_t	*inst = data;
 	struct sk_buff	*skb;
 	int		channel = -1;
 
@@ -1178,7 +1178,7 @@ fritz_manager(void *data, u_int prim, void *arg) {
 static int __devinit setup_instance(fritzpnppci *card)
 {
 	int		i, err;
-	hisax_pid_t	pid;
+	mISDN_pid_t	pid;
 	
 	pci_set_drvdata(card->pdev, card);
 	APPEND_TO_LIST(card, ((fritzpnppci *)fritz.ilist));
@@ -1272,7 +1272,7 @@ static int __devinit fritzpci_probe(struct pci_dev *pdev, const struct pci_devic
 		return(err);
 	}
 
-	printk(KERN_INFO "hisax_fcpcipnp: found adapter %s at %s\n",
+	printk(KERN_INFO "mISDN_fcpcipnp: found adapter %s at %s\n",
 	       (char *) ent->driver_data, pdev->slot_name);
 
 	card->addr = pci_resource_start(pdev, 1);
@@ -1299,7 +1299,7 @@ static int __devinit fritzpnp_probe(struct pci_dev *pdev, const struct isapnp_de
 	card->addr = pdev->resource[0].start;
 	card->irq = pdev->irq_resource[0].start;
 
-	printk(KERN_INFO "hisax_fcpcipnp: found adapter %s at IO %#x irq %d\n",
+	printk(KERN_INFO "mISDN_fcpcipnp: found adapter %s at IO %#x irq %d\n",
 	       (char *) ent->driver_data, card->addr, card->irq);
 
 	err = setup_instance(card);
@@ -1336,7 +1336,7 @@ static int __init Fritz_init(void)
 	char tmp[64];
 
 	strcpy(tmp, avm_pci_rev);
-	printk(KERN_INFO "AVM Fritz PCI/PnP driver Rev. %s\n", HiSax_getrev(tmp));
+	printk(KERN_INFO "AVM Fritz PCI/PnP driver Rev. %s\n", mISDN_getrev(tmp));
 
 	SET_MODULE_OWNER(&fritz);
 	fritz.name = FritzName;
@@ -1347,7 +1347,7 @@ static int __init Fritz_init(void)
 	fritz.BPROTO.protocol[2] = ISDN_PID_L2_B_TRANS;
 	fritz.prev = NULL;
 	fritz.next = NULL;
-	if ((err = HiSax_register(&fritz))) {
+	if ((err = mISDN_register(&fritz))) {
 		printk(KERN_ERR "Can't register Fritz PCI error(%d)\n", err);
 		return(err);
 	}
@@ -1381,7 +1381,7 @@ static int __init Fritz_init(void)
 static void __exit Fritz_cleanup(void)
 {
 	int err;
-	if ((err = HiSax_unregister(&fritz))) {
+	if ((err = mISDN_unregister(&fritz))) {
 		printk(KERN_ERR "Can't unregister Fritz PCI error(%d)\n", err);
 	}
 	while(fritz.ilist) {

@@ -1,20 +1,20 @@
-/* $Id: layer1.c,v 1.3 2003/07/21 11:13:02 kkeil Exp $
+/* $Id: layer1.c,v 1.4 2003/07/21 12:00:04 kkeil Exp $
  *
- * hisax_l1.c     common low level stuff for I.430 layer1
+ * mISDN_l1.c     common low level stuff for I.430 layer1
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
  *		This file is (c) under GNU PUBLIC LICENSE
  *		For changes and modifications please read
- *		../../../Documentation/isdn/HiSax.cert
+ *		../../../Documentation/isdn/mISDN.cert
  *
  */
 
-static char *l1_revision = "$Revision: 1.3 $";
+static char *l1_revision = "$Revision: 1.4 $";
 
 #include <linux/config.h>
 #include <linux/module.h>
-#include "hisaxl1.h"
+#include "mISDNl1.h"
 #include "helper.h"
 #include "debug.h"
 
@@ -26,7 +26,7 @@ typedef struct _layer1 {
 	struct FsmTimer timer;
 	int debug;
 	int delay;
-	hisaxinstance_t	inst;
+	mISDNinstance_t	inst;
 } layer1_t;
 
 /* l1 status_info */
@@ -43,7 +43,7 @@ typedef struct _status_info_l1 {
 } status_info_l1_t;
 
 static int debug = 0;
-static hisaxobject_t isdnl1;
+static mISDNobject_t isdnl1;
 
 #define TIMER3_VALUE 7000
 
@@ -78,7 +78,7 @@ static char *strL1SState[] =
 	"ST_L1_F8",
 };
 
-#ifdef HISAX_UINTERFACE
+#ifdef mISDN_UINTERFACE
 static
 struct Fsm l1fsm_u =
 {NULL, 0, 0, NULL, NULL};
@@ -233,7 +233,7 @@ l1_info2_ind(struct FsmInst *fi, int event, void *arg)
 {
 	layer1_t *l1 = fi->userdata;
 
-#ifdef HISAX_UINTERFACE
+#ifdef mISDN_UINTERFACE
 	if (test_bit(FLG_L1_UINT, &l1->Flags))
 		FsmChangeState(fi, ST_L1_SYNC2);
 	else
@@ -247,7 +247,7 @@ l1_info4_ind(struct FsmInst *fi, int event, void *arg)
 {
 	layer1_t *l1 = fi->userdata;
 
-#ifdef HISAX_UINTERFACE
+#ifdef mISDN_UINTERFACE
 	if (test_bit(FLG_L1_UINT, &l1->Flags))
 		FsmChangeState(fi, ST_L1_TRANS);
 	else
@@ -276,7 +276,7 @@ l1_timer3(struct FsmInst *fi, int event, void *arg)
 			l1up(l1, PH_CONTROL | INDICATION, 0, 4, &db);
 		l1up(l1, PH_DEACTIVATE | INDICATION, 0, 0, NULL);
 	}
-#ifdef HISAX_UINTERFACE
+#ifdef mISDN_UINTERFACE
 	if (!test_bit(FLG_L1_UINT, &l1->Flags))
 #endif
 	if (l1->l1m.state != ST_L1_F6) {
@@ -384,7 +384,7 @@ static struct FsmNode L1SFnList[] =
 
 #define L1S_FN_COUNT (sizeof(L1SFnList)/sizeof(struct FsmNode))
 
-#ifdef HISAX_UINTERFACE
+#ifdef mISDN_UINTERFACE
 static void
 l1_deact_req_u(struct FsmInst *fi, int event, void *arg)
 {
@@ -492,16 +492,16 @@ static struct FsmNode L1BFnList[] =
 #define L1B_FN_COUNT (sizeof(L1BFnList)/sizeof(struct FsmNode))
 
 static int
-l1from_up(hisaxif_t *hif, struct sk_buff *skb)
+l1from_up(mISDNif_t *hif, struct sk_buff *skb)
 {
 	layer1_t	*l1;
-	hisax_head_t	*hh;
+	mISDN_head_t	*hh;
 	int		err = 0;
 
 	if (!hif || !hif->fdata || !skb)
 		return(-EINVAL);
 	l1 = hif->fdata;
-	hh = HISAX_HEAD_P(skb);
+	hh = mISDN_HEAD_P(skb);
 	switch(hh->prim) {
 		case (PH_DATA | REQUEST):
 		case (PH_CONTROL | REQUEST):
@@ -527,7 +527,7 @@ l1from_up(hisaxif_t *hif, struct sk_buff *skb)
 			break;
 		default:
 			if (l1->debug)
-				hisaxdebug(l1->inst.st->id, NULL,
+				mISDNdebug(l1->inst.st->id, NULL,
 					"l1from_up msg %x unhandled", hh->prim);
 			err = -EINVAL;
 			break;
@@ -538,16 +538,16 @@ l1from_up(hisaxif_t *hif, struct sk_buff *skb)
 }
 
 static int
-l1from_down(hisaxif_t *hif,  struct sk_buff *skb)
+l1from_down(mISDNif_t *hif,  struct sk_buff *skb)
 {
 	layer1_t	*l1;
-	hisax_head_t	*hh;
+	mISDN_head_t	*hh;
 	int		err = 0;
 
 	if (!hif || !hif->fdata || !skb)
 		return(-EINVAL);
 	l1 = hif->fdata;
-	hh = HISAX_HEAD_P(skb);
+	hh = mISDN_HEAD_P(skb);
 	if (hh->prim == PH_DATA_IND) {
 		if (test_bit(FLG_L1_ACTTIMER, &l1->Flags))
 			FsmEvent(&l1->l1m, EV_TIMER_ACT, NULL);
@@ -568,13 +568,13 @@ l1from_down(hisaxif_t *hif,  struct sk_buff *skb)
 		else if (hh->dinfo == HW_POWERUP)
 			FsmEvent(&l1->l1m, EV_POWER_UP, NULL);
 		else if (l1->debug)
-			hisaxdebug(l1->inst.st->id, NULL,
+			mISDNdebug(l1->inst.st->id, NULL,
 				"l1from_down ctrl ind %x unhandled", hh->dinfo);
 	} else if (hh->prim == (PH_CONTROL | CONFIRM)) {
 		if (hh->dinfo == HW_DEACTIVATE) 
 			FsmEvent(&l1->l1m, EV_DEACT_CNF, NULL);
 		else if (l1->debug)
-			hisaxdebug(l1->inst.st->id, NULL,
+			mISDNdebug(l1->inst.st->id, NULL,
 				"l1from_down ctrl cnf %x unhandled", hh->dinfo);
 	} else if (hh->prim == (PH_SIGNAL | INDICATION)) {
 		if (hh->dinfo == ANYSIGNAL)
@@ -588,11 +588,11 @@ l1from_down(hisaxif_t *hif,  struct sk_buff *skb)
 		else if (hh->dinfo == INFO4_P10)
 			FsmEvent(&l1->l1m, EV_INFO4_IND, NULL);
 		else if (l1->debug)
-			hisaxdebug(l1->inst.st->id, NULL,
+			mISDNdebug(l1->inst.st->id, NULL,
 				"l1from_down sig %x unhandled", hh->dinfo);
 	} else {
 		if (l1->debug)
-			hisaxdebug(l1->inst.st->id, NULL,
+			mISDNdebug(l1->inst.st->id, NULL,
 				"l1from_down msg %x unhandled", hh->prim);
 		err = -EINVAL;
 	}
@@ -603,7 +603,7 @@ l1from_down(hisaxif_t *hif,  struct sk_buff *skb)
 
 static void
 release_l1(layer1_t *l1) {
-	hisaxinstance_t	*inst = &l1->inst;
+	mISDNinstance_t	*inst = &l1->inst;
 
 	FsmDelTimer(&l1->timer, 0);
 	if (inst->up.peer) {
@@ -620,7 +620,7 @@ release_l1(layer1_t *l1) {
 }
 
 static int
-new_l1(hisaxstack_t *st, hisax_pid_t *pid) {
+new_l1(mISDNstack_t *st, mISDN_pid_t *pid) {
 	layer1_t *nl1;
 	int err;
 
@@ -631,7 +631,7 @@ new_l1(hisaxstack_t *st, hisax_pid_t *pid) {
 		return(-ENOMEM);
 	}
 	memset(nl1, 0, sizeof(layer1_t));
-	memcpy(&nl1->inst.pid, pid, sizeof(hisax_pid_t));
+	memcpy(&nl1->inst.pid, pid, sizeof(mISDN_pid_t));
 	nl1->inst.obj = &isdnl1;
 	nl1->inst.data = nl1;
 	if (!SetHandledPID(&isdnl1, &nl1->inst.pid)) {
@@ -702,7 +702,7 @@ MODULE_LICENSE("GPL");
 
 static int
 l1_manager(void *data, u_int prim, void *arg) {
-	hisaxinstance_t *inst = data;
+	mISDNinstance_t *inst = data;
 	layer1_t *l1l = isdnl1.ilist;
 
 	printk(KERN_DEBUG "l1_manager data:%p prim:%x arg:%p\n", data, prim, arg);
@@ -764,7 +764,7 @@ int Isdnl1Init(void)
 {
 	int err;
 
-	printk(KERN_INFO "ISDN L1 driver version %s\n", HiSax_getrev(l1_revision));
+	printk(KERN_INFO "ISDN L1 driver version %s\n", mISDN_getrev(l1_revision));
 	SET_MODULE_OWNER(&isdnl1);
 	isdnl1.name = MName;
 	isdnl1.DPROTO.protocol[1] = ISDN_PID_L1_TE_S0;
@@ -772,7 +772,7 @@ int Isdnl1Init(void)
 	isdnl1.prev = NULL;
 	isdnl1.next = NULL;
 	isdnl1.ilist = NULL;
-#ifdef HISAX_UINTERFACE
+#ifdef mISDN_UINTERFACE
 	isdnl1.DPROTO.protocol[1] |= ISDN_PID_L1_TE_U;
 	l1fsm_u.state_count = L1U_STATE_COUNT;
 	l1fsm_u.event_count = L1_EVENT_COUNT;
@@ -790,9 +790,9 @@ int Isdnl1Init(void)
 	l1fsm_b.strEvent = strL1Event;
 	l1fsm_b.strState = strL1BState;
 	FsmNew(&l1fsm_b, L1BFnList, L1B_FN_COUNT);
-	if ((err = HiSax_register(&isdnl1))) {
+	if ((err = mISDN_register(&isdnl1))) {
 		printk(KERN_ERR "Can't register %s error(%d)\n", MName, err);
-#ifdef HISAX_UINTERFACE
+#ifdef mISDN_UINTERFACE
 		FsmFree(&l1fsm_u);
 #endif
 		FsmFree(&l1fsm_s);
@@ -806,15 +806,15 @@ void cleanup_module(void)
 {
 	int err;
 
-	if ((err = HiSax_unregister(&isdnl1))) {
+	if ((err = mISDN_unregister(&isdnl1))) {
 		printk(KERN_ERR "Can't unregister ISDN layer 1 error(%d)\n", err);
 	}
 	if(isdnl1.ilist) {
-		printk(KERN_WARNING "hisaxl1 inst list not empty\n");
+		printk(KERN_WARNING "mISDNl1 inst list not empty\n");
 		while(isdnl1.ilist)
 			release_l1(isdnl1.ilist);
 	}
-#ifdef HISAX_UINTERFACE
+#ifdef mISDN_UINTERFACE
 	FsmFree(&l1fsm_u);
 #endif
 	FsmFree(&l1fsm_s);

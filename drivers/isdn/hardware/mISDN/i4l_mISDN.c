@@ -1,4 +1,4 @@
-/* $Id: i4l_mISDN.c,v 1.2 2003/07/21 11:13:02 kkeil Exp $
+/* $Id: i4l_mISDN.c,v 1.3 2003/07/21 12:00:04 kkeil Exp $
  *
  * interface for old I4L hardware drivers to the CAPI driver
  *
@@ -15,20 +15,20 @@
 #include <linux/isdnif.h>
 #include <linux/delay.h>
 #include <asm/semaphore.h>
-#include <linux/hisaxif.h>
+#include <linux/mISDNif.h>
 #include "fsm.h"
 #include "helper.h"
 #include "dss1.h"
 #include "debug.h"
 
-static char *i4lcapi_revision = "$Revision: 1.2 $";
+static char *i4lcapi_revision = "$Revision: 1.3 $";
 
 /* data struct */
 typedef struct _i4l_channel	i4l_channel_t;
 typedef struct _i4l_capi	i4l_capi_t;
 
 struct _i4l_channel {
-	hisaxinstance_t		inst;
+	mISDNinstance_t		inst;
 	i4l_capi_t		*drv;
 	int			nr;
 	u_int			Flags;
@@ -44,8 +44,8 @@ struct _i4l_capi {
 	i4l_capi_t		*prev;
 	i4l_capi_t		*next;
 	isdn_if			*interface;
-	hisaxinstance_t		inst;
-	hisax_pid_t		pid;
+	mISDNinstance_t		inst;
+	mISDN_pid_t		pid;
 	int			idx;
 	int			locks;
 	int			debug;
@@ -148,7 +148,7 @@ i4lm_debug(struct FsmInst *fi, char *fmt, ...)
 
 #define MAX_CARDS	8
 static i4l_capi_t	*drvmap[MAX_CARDS];
-static hisaxobject_t	I4Lcapi;
+static mISDNobject_t	I4Lcapi;
 
 static int debug;
 
@@ -239,7 +239,7 @@ release_card(int idx) {
 	i4l_capi_t	*ic = drvmap[idx];
 	i4l_channel_t	*ch;
 	int		i;
-	hisaxinstance_t	*inst;
+	mISDNinstance_t	*inst;
 
 	if (!ic)
 		return;
@@ -271,15 +271,15 @@ static int
 sendup(i4l_channel_t *ch, int Dchannel, int prim, struct sk_buff *skb)
 {
 	int		ret;
-	hisax_headext_t	*hhe;
-	hisaxinstance_t	*I;
+	mISDN_headext_t	*hhe;
+	mISDNinstance_t	*I;
 
 	if (!skb) {
 		skb = alloc_skb(8, GFP_ATOMIC);
 		if (!skb)
 			return(-ENOMEM);
 	}
-	hhe = HISAX_HEADEXT_P(skb);
+	hhe = mISDN_HEADEXT_P(skb);
 	hhe->prim = prim;
 	hhe->dinfo = ch->l4id;
 	if (ch->drv->debug & 0x4)
@@ -558,7 +558,7 @@ i4l_icall(struct FsmInst *fi, int event, void *arg)
 	i4l_lock_drv(ch->drv);
 	if ((skb = alloc_skb(sizeof(int *) + 8, GFP_ATOMIC))) {
 		int	**idp = (int **)skb_put(skb, sizeof(idp));
-		hisax_head_t *hh = HISAX_HEAD_P(skb);
+		mISDN_head_t *hh = mISDN_HEAD_P(skb);
 
 		*idp = &ch->l4id;
 		hh->prim = CC_NEW_CR | INDICATION;
@@ -964,17 +964,17 @@ capi_releaseb(struct FsmInst *fi, int event, void *arg)
 }
 
 static int
-Dchannel_i4l(hisaxif_t *hif, struct sk_buff *skb)
+Dchannel_i4l(mISDNif_t *hif, struct sk_buff *skb)
 {
 	int		i, ret = -EINVAL;
-	hisax_head_t	*hh;
+	mISDN_head_t	*hh;
 	i4l_capi_t	*ic;
 	i4l_channel_t	*ch;
 
 	if (!hif || !skb)
 		return(ret);
 	ic = hif->fdata;
-	hh = HISAX_HEAD_P(skb);
+	hh = mISDN_HEAD_P(skb);
 	if (ic->debug & 0x2)
 		printk(KERN_DEBUG "%s: prim(%x) id(%x)\n", __FUNCTION__, hh->prim, hh->dinfo);
 	if (!ic)
@@ -1046,16 +1046,16 @@ Dchannel_i4l(hisaxif_t *hif, struct sk_buff *skb)
 }
 
 static int
-Bchannel_i4l(hisaxif_t *hif, struct sk_buff *skb)
+Bchannel_i4l(mISDNif_t *hif, struct sk_buff *skb)
 {
 	i4l_channel_t	*ch;
 	int		ret = -EINVAL;
-	hisax_head_t	*hh;
+	mISDN_head_t	*hh;
 
 	if (!hif || !skb)
 		return(ret);
 	ch = hif->fdata;
-	hh = HISAX_HEAD_P(skb);
+	hh = mISDN_HEAD_P(skb);
 	if (ch->drv->debug & 0x20)
 		printk(KERN_DEBUG  "%s: prim(%x)\n", __FUNCTION__, hh->prim);
 	switch(hh->prim) {
@@ -1094,7 +1094,7 @@ I4Lcapi_receive_skb_callback(int drvidx, int channel, struct sk_buff *skb)
 {
 	i4l_capi_t	*ic = drvmap[drvidx];
 	i4l_channel_t	*ch;
-	hisax_headext_t	*hhe = HISAX_HEADEXT_P(skb);
+	mISDN_headext_t	*hhe = mISDN_HEADEXT_P(skb);
 	int		ret;
 
 	if (!ic) {
@@ -1143,7 +1143,7 @@ i4l_sent_pkt(i4l_capi_t *drv, isdn_ctrl *c)
 	i4l_channel_t	*ch = drv->ch;
 	struct sk_buff	*skb;
 	int		ret;
-	hisax_headext_t	*hhe;
+	mISDN_headext_t	*hhe;
 
 	if (c->arg < 0)
 		return -1;
@@ -1158,7 +1158,7 @@ i4l_sent_pkt(i4l_capi_t *drv, isdn_ctrl *c)
 	if (skb_queue_len(&ch->sendq))
 		sendqueued(ch);
 	skb_trim(skb, 0);
-	hhe = HISAX_HEADEXT_P(skb);
+	hhe = mISDN_HEADEXT_P(skb);
 	hhe->prim |= CONFIRM;
 	if (in_interrupt()) {
 		hhe->func.iff = ch->inst.up.func;
@@ -1315,7 +1315,7 @@ I4Lcapi_status_callback(isdn_ctrl *c)
 static int
 I4Lcapi_manager(void *data, u_int prim, void *arg) {
 	i4l_capi_t	*card = I4Lcapi.ilist;
-	hisaxinstance_t	*inst = data;
+	mISDNinstance_t	*inst = data;
 	i4l_channel_t	*channel = NULL;
 	int		nr_ch = -2;
 
@@ -1533,7 +1533,7 @@ I4Lcapi_init(void)
 {
 	int err;
 
-	printk(KERN_INFO "I4L CAPI interface modul version %s\n", HiSax_getrev(i4lcapi_revision));
+	printk(KERN_INFO "I4L CAPI interface modul version %s\n", mISDN_getrev(i4lcapi_revision));
 	SET_MODULE_OWNER(&I4Lcapi);
 	I4Lcapi.name = I4L_capi_name;
 	I4Lcapi.own_ctrl = I4Lcapi_manager;
@@ -1551,7 +1551,7 @@ I4Lcapi_init(void)
 	i4lfsm_s.strEvent = strI4LEvent;
 	i4lfsm_s.strState = strI4LState;
 	FsmNew(&i4lfsm_s, I4LFnList, I4L_FN_COUNT);
-	if ((err = HiSax_register(&I4Lcapi))) {
+	if ((err = mISDN_register(&I4Lcapi))) {
 		printk(KERN_ERR "Can't register I4L CAPI error(%d)\n", err);
 		FsmFree(&i4lfsm_s);
 		return(err);
@@ -1569,7 +1569,7 @@ I4Lcapi_cleanup(void)
 {
 	
 	int err;
-	if ((err = HiSax_unregister(&I4Lcapi))) {
+	if ((err = mISDN_unregister(&I4Lcapi))) {
 		printk(KERN_ERR "Can't unregister I4Lcapi error(%d)\n", err);
 		return;
 	}

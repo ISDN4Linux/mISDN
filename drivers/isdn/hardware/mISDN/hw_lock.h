@@ -1,4 +1,4 @@
-/* $Id: hw_lock.h,v 1.3 2003/06/22 12:03:36 kkeil Exp $
+/* $Id: hw_lock.h,v 1.4 2003/07/21 12:00:04 kkeil Exp $
  *
  * hw_lock.h  Hardware locking inline routines
  *
@@ -64,7 +64,7 @@
 #ifndef __hw_lock__
 #define __hw_lock__
 
-typedef struct _hisax_HWlock {
+typedef struct _mISDN_HWlock {
 	u_long			flags;
 	spinlock_t		lock;
 #ifdef SPIN_DEBUG
@@ -80,7 +80,7 @@ typedef struct _hisax_HWlock {
 	u_int			irq_ok;
 	u_int			irq_fail;
 #endif
-} hisax_HWlock_t;
+} mISDN_HWlock_t;
 
 #define STATE_FLAG_BUSY		1
 #define STATE_FLAG_INIRQ	2
@@ -90,7 +90,7 @@ typedef struct _hisax_HWlock {
  * returns 0 if the lock was aquired
  * returns 1 if nowait != 0 and the lock is not aquired 
  */
-static inline int lock_HW(hisax_HWlock_t *lock, int nowait)
+static inline int lock_HW(mISDN_HWlock_t *lock, int nowait)
 {
 	register u_long	flags;
 #ifdef LOCK_STATISTIC
@@ -148,7 +148,7 @@ static inline int lock_HW(hisax_HWlock_t *lock, int nowait)
 	return(0);
 } 
 
-static inline void unlock_HW(hisax_HWlock_t *lock)
+static inline void unlock_HW(mISDN_HWlock_t *lock)
 {
 	if (!test_and_clear_bit(STATE_FLAG_BUSY, &lock->state)) {
 		printk(KERN_ERR "lock_HW: STATE_FLAG_BUSY not locked state(%x)\n",
@@ -161,7 +161,7 @@ static inline void unlock_HW(hisax_HWlock_t *lock)
 	spin_unlock_irqrestore(&lock->lock, lock->flags);
 }
 
-static inline void lock_HW_init(hisax_HWlock_t *lock)
+static inline void lock_HW_init(mISDN_HWlock_t *lock)
 {
 	spin_lock_init(&lock->lock);
 	lock->state = 0;

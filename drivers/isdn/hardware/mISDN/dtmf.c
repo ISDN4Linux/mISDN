@@ -1,4 +1,4 @@
-/* $Id: dtmf.c,v 1.2 2003/07/21 11:13:02 kkeil Exp $
+/* $Id: dtmf.c,v 1.3 2003/07/21 12:00:04 kkeil Exp $
  *
  * Linux ISDN subsystem, DTMF tone module
  *
@@ -17,7 +17,7 @@
 
 #include <linux/config.h>
 #include <linux/module.h>
-#include "hisaxl1.h"
+#include "mISDNl1.h"
 #include "helper.h"
 #include "debug.h"
 
@@ -31,7 +31,7 @@ typedef struct _dtmf {
 	char		last;
 	int		idx;
 	int		buf[DTMF_NPOINTS];
-	hisaxinstance_t	inst;
+	mISDNinstance_t	inst;
 } dtmf_t;
 
 #define	FLG_DTMF_ULAW	1
@@ -45,9 +45,9 @@ static int debug = 0;
 #define DEBUG_DTMF_DETECT	0x100
 #define DEBUG_DTMF_KOEFF	0x200
 
-static hisaxobject_t dtmf_obj;
+static mISDNobject_t dtmf_obj;
 
-static char *hisax_dtmf_revision = "$Revision: 1.2 $";
+static char *mISDN_dtmf_revision = "$Revision: 1.3 $";
 
 /*
  * Misc. lookup-tables.
@@ -399,10 +399,10 @@ dtmf_reset(dtmf_t *dtmf)
 }
 
 static int
-dtmf_from_up(hisaxif_t *hif, struct sk_buff *skb)
+dtmf_from_up(mISDNif_t *hif, struct sk_buff *skb)
 {
 	dtmf_t		*dtmf;
-	hisax_head_t	*hh;
+	mISDN_head_t	*hh;
 	int		*data;
 	int		err = 0;
 
@@ -412,7 +412,7 @@ dtmf_from_up(hisaxif_t *hif, struct sk_buff *skb)
 	if (!dtmf->inst.down.func) {
 		return(-ENXIO);
 	}
-	hh = HISAX_HEAD_P(skb);
+	hh = mISDN_HEAD_P(skb);
 	switch(hh->prim) {
 		case (PH_CONTROL | REQUEST):
 			if (skb->len >= sizeof(int)) {
@@ -440,10 +440,10 @@ dtmf_from_up(hisaxif_t *hif, struct sk_buff *skb)
 }
 
 static int
-dtmf_from_down(hisaxif_t *hif,  struct sk_buff *skb)
+dtmf_from_down(mISDNif_t *hif,  struct sk_buff *skb)
 {
 	dtmf_t		*dtmf;
-	hisax_head_t	*hh;
+	mISDN_head_t	*hh;
 
 	if (!hif || !hif->fdata || !skb)
 		return(-EINVAL);
@@ -451,7 +451,7 @@ dtmf_from_down(hisaxif_t *hif,  struct sk_buff *skb)
 	if (!dtmf->inst.up.func) {
 		return(-ENXIO);
 	}
-	hh = HISAX_HEAD_P(skb);
+	hh = mISDN_HEAD_P(skb);
 	switch(hh->prim) {
 		case (PH_DATA | CONFIRM):
 			hh->prim = DL_DATA | CONFIRM;
@@ -480,7 +480,7 @@ dtmf_from_down(hisaxif_t *hif,  struct sk_buff *skb)
 
 static void
 release_dtmf(dtmf_t *dtmf) {
-	hisaxinstance_t	*inst = &dtmf->inst;
+	mISDNinstance_t	*inst = &dtmf->inst;
 
 	if (inst->up.peer) {
 		inst->up.peer->obj->ctrl(inst->up.peer,
@@ -496,7 +496,7 @@ release_dtmf(dtmf_t *dtmf) {
 }
 
 static int
-new_dtmf(hisaxstack_t *st, hisax_pid_t *pid) {
+new_dtmf(mISDNstack_t *st, mISDN_pid_t *pid) {
 	dtmf_t *n_dtmf;
 	int err;
 
@@ -507,7 +507,7 @@ new_dtmf(hisaxstack_t *st, hisax_pid_t *pid) {
 		return(-ENOMEM);
 	}
 	memset(n_dtmf, 0, sizeof(dtmf_t));
-	memcpy(&n_dtmf->inst.pid, pid, sizeof(hisax_pid_t));
+	memcpy(&n_dtmf->inst.pid, pid, sizeof(mISDN_pid_t));
 	n_dtmf->inst.obj = &dtmf_obj;
 	n_dtmf->inst.data = n_dtmf;
 	if (!SetHandledPID(&dtmf_obj, &n_dtmf->inst.pid)) {
@@ -561,7 +561,7 @@ MODULE_LICENSE("GPL");
 
 static int
 dtmf_manager(void *data, u_int prim, void *arg) {
-	hisaxinstance_t *inst = data;
+	mISDNinstance_t *inst = data;
 	dtmf_t *dtmf_l = dtmf_obj.ilist;
 
 	if (debug & DEBUG_DTMF_MGR)
@@ -623,7 +623,7 @@ static int dtmf_init(void)
 {
 	int err;
 
-	printk(KERN_INFO "DTMF modul version %s\n", HiSax_getrev(hisax_dtmf_revision));
+	printk(KERN_INFO "DTMF modul version %s\n", mISDN_getrev(mISDN_dtmf_revision));
 	SET_MODULE_OWNER(&dtmf_obj);
 	dtmf_obj.name = MName;
 	dtmf_obj.BPROTO.protocol[2] = ISDN_PID_L2_B_TRANSDTMF;
@@ -631,7 +631,7 @@ static int dtmf_init(void)
 	dtmf_obj.prev = NULL;
 	dtmf_obj.next = NULL;
 	dtmf_obj.ilist = NULL;
-	if ((err = HiSax_register(&dtmf_obj))) {
+	if ((err = mISDN_register(&dtmf_obj))) {
 		printk(KERN_ERR "Can't register %s error(%d)\n", MName, err);
 	}
 	return(err);
@@ -641,7 +641,7 @@ static void dtmf_cleanup(void)
 {
 	int err;
 
-	if ((err = HiSax_unregister(&dtmf_obj))) {
+	if ((err = mISDN_unregister(&dtmf_obj))) {
 		printk(KERN_ERR "Can't unregister DTMF error(%d)\n", err);
 	}
 	if(dtmf_obj.ilist) {

@@ -1,8 +1,8 @@
-/* $Id: ncci.c,v 1.7 2003/07/21 11:13:02 kkeil Exp $
+/* $Id: ncci.c,v 1.8 2003/07/21 12:00:05 kkeil Exp $
  *
  */
 
-#include "hisax_capi.h"
+#include "mISDN_capi.h"
 #include "helper.h"
 #include "debug.h"
 #include "dss1.h"
@@ -368,11 +368,11 @@ void ncciConstr(Ncci_t *ncci, Cplci_t *cplci)
 
 void ncciInitSt(Ncci_t *ncci)
 {
-	hisax_pid_t pid;
+	mISDN_pid_t pid;
 	int retval;
 	Cplci_t *cplci = ncci->cplci;
 
-	memset(&pid, 0, sizeof(hisax_pid_t));
+	memset(&pid, 0, sizeof(mISDN_pid_t));
 	pid.layermask = ISDN_LAYER(1) | ISDN_LAYER(2) | ISDN_LAYER(3) |
 		ISDN_LAYER(4);
 	if (test_bit(PLCI_FLAG_OUTGOING, &cplci->plci->flags))
@@ -417,7 +417,7 @@ void ncciInitSt(Ncci_t *ncci)
 		return;
 	}
 	capidebug(CAPI_DBG_NCCI, "ncciInitSt ncci->binst(%p)\n", ncci->binst);
-	memset(&ncci->binst->inst.pid, 0, sizeof(hisax_pid_t));
+	memset(&ncci->binst->inst.pid, 0, sizeof(mISDN_pid_t));
 	ncci->binst->inst.data = ncci;
 	ncci->binst->inst.pid.layermask = ISDN_LAYER(4);
 	ncci->binst->inst.pid.protocol[4] = ISDN_PID_L4_B_CAPI20;
@@ -693,15 +693,15 @@ void ncciSendMessage(Ncci_t *ncci, struct sk_buff *skb)
 }
 
 
-int ncci_l3l4(hisaxif_t *hif, struct sk_buff *skb)
+int ncci_l3l4(mISDNif_t *hif, struct sk_buff *skb)
 {
 	Ncci_t *ncci;
 	int		ret = -EINVAL;
-	hisax_head_t	*hh;
+	mISDN_head_t	*hh;
 
 	if (!hif || !skb)
 		return(ret);
-	hh = HISAX_HEAD_P(skb);
+	hh = mISDN_HEAD_P(skb);
 	ncci = hif->fdata;
 	switch (hh->prim) {
 		// we're not using the Fsm for DL_DATA for performance reasons

@@ -1,4 +1,4 @@
-/* $Id: layer2.h,v 1.0 2001/11/02 23:42:26 kkeil Exp $
+/* $Id: layer2.h,v 1.1 2003/07/21 12:00:04 kkeil Exp $
  *
  * Layer 2 defines
  *
@@ -6,7 +6,7 @@
  *
  */
 
-#include <linux/hisaxif.h>
+#include <linux/mISDNif.h>
 #include <linux/skbuff.h>
 #include "fsm.h"
 #ifdef MEMDBG
@@ -46,8 +46,8 @@ typedef struct _layer2 {
 	struct FsmTimer	t200, t203;
 	int		T200, N200, T203;
 	int		debug;
-	hisaxinstance_t	inst;
-	hisaxif_t	*cloneif;
+	mISDNinstance_t	inst;
+	mISDNif_t	*cloneif;
 	struct sk_buff	*windowar[MAX_WINDOW];
 	struct sk_buff	*down_skb;
 	struct sk_buff_head i_queue;
@@ -86,7 +86,7 @@ typedef struct _status_info_l2 {
 	int	tei_debug;
 } status_info_l2_t;
 
-/* from hisax_l2.c */
+/* from mISDN_l2.c */
 extern int tei_l2(layer2_t *l2, struct sk_buff *skb);
 
 /* from tei.c */

@@ -1,4 +1,4 @@
-/* $Id: bchannel.h,v 1.3 2003/06/27 15:19:42 kkeil Exp $
+/* $Id: bchannel.h,v 1.4 2003/07/21 12:00:04 kkeil Exp $
  *
  *   Basic declarations, defines for Bchannel hardware
  *
@@ -6,7 +6,7 @@
  *
  */
 
-#include <linux/hisaxif.h>
+#include <linux/mISDNif.h>
 #include <linux/tqueue.h>
 #include <linux/smp.h>
 #include <linux/ptrace.h>
@@ -44,9 +44,9 @@ typedef struct _bchannel_t {
 	int			protocol;
 	int			Flag;
 	int			debug;
-	hisaxstack_t		*st;
-	hisaxinstance_t		inst;
-	hisaxdevice_t		*dev;
+	mISDNstack_t		*st;
+	mISDNinstance_t		inst;
+	mISDNdevice_t		*dev;
 	void			*hw;
 	u_char			(*Read_Reg)(void *, int, u_char);
 	void			(*Write_Reg)(void *, int, u_char, u_char);

@@ -1,4 +1,4 @@
-/* $Id: isar.c,v 1.10 2003/07/07 14:29:38 kkeil Exp $
+/* $Id: isar.c,v 1.11 2003/07/21 12:00:04 kkeil Exp $
  *
  * isar.c   ISAR (Siemens PSB 7110) specific routines
  *
@@ -10,9 +10,9 @@
 
 #define __NO_VERSION__
 #include <linux/delay.h>
-#include "hisaxl1.h"
+#include "mISDNl1.h"
 #include "helper.h"
-#include "hisax_bch.h"
+#include "mISDN_bch.h"
 #include "isar.h"
 #include "debug.h"
 
@@ -45,7 +45,7 @@ waitforHIA(bchannel_t *bch, int timeout)
 		timeout--;
 	}
 	if (!timeout)
-		printk(KERN_WARNING "HiSax: ISAR waitforHIA timeout\n");
+		printk(KERN_WARNING "mISDN: ISAR waitforHIA timeout\n");
 	return(timeout);
 }
 
@@ -471,7 +471,7 @@ send_DLE_ETX(bchannel_t *bch)
 		skb_queue_tail(&bch->rqueue, skb);
 		bch_sched_event(bch, B_RCVBUFREADY);
 	} else {
-		printk(KERN_WARNING "HiSax: skb out of memory\n");
+		printk(KERN_WARNING "mISDN: skb out of memory\n");
 	}
 }
 
@@ -524,7 +524,7 @@ isar_rcv_frame(bchannel_t *bch)
 			skb_queue_tail(&bch->rqueue, skb);
 			bch_sched_event(bch, B_RCVBUFREADY);
 		} else {
-			printk(KERN_WARNING "HiSax: skb out of memory\n");
+			printk(KERN_WARNING "mISDN: skb out of memory\n");
 			bch->Write_Reg(bch->inst.data, 1, ISAR_IIA, 0);
 		}
 		break;
@@ -602,7 +602,7 @@ isar_rcv_frame(bchannel_t *bch)
 					bch_sched_event(bch, B_LL_NOCARRIER);
 				}
 			} else {
-				printk(KERN_WARNING "HiSax: skb out of memory\n");
+				printk(KERN_WARNING "mISDN: skb out of memory\n");
 				bch->Write_Reg(bch->inst.data, 1, ISAR_IIA, 0);
 			}
 			break;
@@ -1582,15 +1582,15 @@ isar_setup(bchannel_t *bch)
 }
 
 int
-isar_down(hisaxif_t *hif, struct sk_buff *skb)
+isar_down(mISDNif_t *hif, struct sk_buff *skb)
 {
 	bchannel_t	*bch;
 	int		ret = -EINVAL;
-	hisax_head_t	*hh;
+	mISDN_head_t	*hh;
 
 	if (!hif || !skb)
 		return(ret);
-	hh = HISAX_HEAD_P(skb);
+	hh = mISDN_HEAD_P(skb);
 	bch = hif->fdata;
 	ret = 0;
 	if ((hh->prim == PH_DATA_REQ) ||

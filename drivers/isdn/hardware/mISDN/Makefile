@@ -11,72 +11,72 @@ O_TARGET := vmlinux-obj.o
 
 # multi objects
 
-SEDLFAXOBJ := sedl_fax.o debug.o helper.o fsm.o isar.o hisax_dch.o hisax_bch.o
+SEDLFAXOBJ := sedl_fax.o debug.o helper.o fsm.o isar.o mISDN_dch.o mISDN_bch.o
 
-FRITZOBJ := fritz_pci.o debug.o helper.o fsm.o hisax_dch.o hisax_bch.o
+FRITZOBJ := fritz_pci.o debug.o helper.o fsm.o mISDN_dch.o mISDN_bch.o
 
-HFC_PCIOBJ := hfc_pci.o debug.o helper.o hisax_dch.o hisax_bch.o
+HFC_PCIOBJ := hfc_pci.o debug.o helper.o mISDN_dch.o mISDN_bch.o
 
-hisaxisac-objs := isac.o arcofi.o debug.o
+mISDNisac-objs := isac.o arcofi.o debug.o
 
-OBJ_core := hisax_core.o hisax_stack.o hisax_dev.o helper.o
-OBJ_l1 := hisax_l1.o helper.o debug.o fsm.o
-OBJ_l2 := hisax_l2.o tei.o helper.o debug.o fsm.o
-OBJ_l3udss1 := hisax_l3.o helper.o l3helper.o debug.o fsm.o l3_udss1.o
+OBJ_core := mISDN_core.o mISDN_stack.o mISDN_dev.o helper.o
+OBJ_l1 := mISDN_l1.o helper.o debug.o fsm.o
+OBJ_l2 := mISDN_l2.o tei.o helper.o debug.o fsm.o
+OBJ_l3udss1 := mISDN_l3.o helper.o l3helper.o debug.o fsm.o l3_udss1.o
 OBJ_capi := capi.o contr.o listen.o appl.o plci.o cplci.o ncci.o asn1.o \
             asn1_aoc.o asn1_comp.o asn1_generic.o asn1_diversion.o \
             asn1_basic_service.o asn1_address.o asn1_enc.o capi_enc.o \
             supp_serv.o helper.o l3helper.o debug.o fsm.o
-OBJ_dtmf := hisax_dtmf.o helper.o debug.o
+OBJ_dtmf := mISDN_dtmf.o helper.o debug.o
 
 ifdef CONFIG_I4L_CAPI_LAYER
 i4lcapi-objs := i4l_capi.o helper.o l3helper.o debug.o fsm.o
 endif
 
-LX_OBJS += hisax_core.o
+LX_OBJS += mISDN_core.o
 
 ifdef MEMDBG
 EXTRA_CFLAGS += -DMEMDBG
 MX_OBJS += memdbg.o
 endif
 
-#ifeq ($(CONFIG_ISDN_DRV_HISAX),y)
-#  O_TARGET += hisax.o
+#ifeq ($(CONFIG_ISDN_DRV_mISDN),y)
+#  O_TARGET += mISDN.o
 #else
-#  ifeq ($(CONFIG_ISDN_DRV_HISAX),m)
-#    O_TARGET += hisax.o
-#    M_OBJS += hisax.o
+#  ifeq ($(CONFIG_ISDN_DRV_mISDN),m)
+#    O_TARGET += mISDN.o
+#    M_OBJS += mISDN.o
 #  endif
 #endif
 
-export-objs := hisax_core.o isac.o
+export-objs := mISDN_core.o isac.o
 
-obj-$(CONFIG_ISDN_DRV_NEWHISAX) :=
-obj-$(CONFIG_ISDN_DRV_NEWHISAX) += hisaxcore.o
+obj-$(CONFIG_ISDN_DRV_NEWmISDN) :=
+obj-$(CONFIG_ISDN_DRV_NEWmISDN) += mISDNcore.o
 
-obj-$(CONFIG_ISDN_DRV_NEWHISAX) += hisaxisac.o
+obj-$(CONFIG_ISDN_DRV_NEWmISDN) += mISDNisac.o
 
-obj-$(CONFIG_ISDN_DRV_NEWHISAX) += fritzpci.o
-obj-$(CONFIG_ISDN_DRV_NEWHISAX) += sedlfax.o
-obj-$(CONFIG_ISDN_DRV_NEWHISAX) += hfcpci.o
+obj-$(CONFIG_ISDN_DRV_NEWmISDN) += fritzpci.o
+obj-$(CONFIG_ISDN_DRV_NEWmISDN) += sedlfax.o
+obj-$(CONFIG_ISDN_DRV_NEWmISDN) += hfcpci.o
 
-obj-$(CONFIG_ISDN_DRV_NEWHISAX) += hisaxl1.o
-obj-$(CONFIG_ISDN_DRV_NEWHISAX) += hisaxl2.o
-obj-$(CONFIG_ISDN_DRV_NEWHISAX) += l3udss1.o
-obj-$(CONFIG_ISDN_DRV_NEWHISAX) += hisaxcapi.o
-obj-$(CONFIG_ISDN_DRV_NEWHISAX) += hisaxdtmf.o
-obj-$(CONFIG_ISDN_DRV_NEWHISAX) += i4lcapi.o
+obj-$(CONFIG_ISDN_DRV_NEWmISDN) += mISDNl1.o
+obj-$(CONFIG_ISDN_DRV_NEWmISDN) += mISDNl2.o
+obj-$(CONFIG_ISDN_DRV_NEWmISDN) += l3udss1.o
+obj-$(CONFIG_ISDN_DRV_NEWmISDN) += mISDNcapi.o
+obj-$(CONFIG_ISDN_DRV_NEWmISDN) += mISDNdtmf.o
+obj-$(CONFIG_ISDN_DRV_NEWmISDN) += i4lcapi.o
 
 M_OBJS := $(obj-m)
 
 include $(TOPDIR)/Rules.make
 
 
-hisaxcore.o: $(OBJ_core)
+mISDNcore.o: $(OBJ_core)
 	$(RM) $@
 	$(LD) -r -o $@ $(filter-out $(MODVERFILE) dummy ,$^)
 
-hisaxisac.o: $(hisaxisac-objs)
+mISDNisac.o: $(mISDNisac-objs)
 	$(RM) $@
 	$(LD) -r -o $@ $(filter-out $(MODVERFILE) dummy ,$^)
 
@@ -92,11 +92,11 @@ hfcpci.o: $(HFC_PCIOBJ)
 	$(RM) $@
 	$(LD) -r -o $@ $(filter-out $(MODVERFILE) dummy ,$^)
 
-hisaxl1.o: $(OBJ_l1)
+mISDNl1.o: $(OBJ_l1)
 	$(RM) $@
 	$(LD) -r -o $@ $(filter-out $(MODVERFILE) dummy ,$^)
 
-hisaxl2.o: $(OBJ_l2)
+mISDNl2.o: $(OBJ_l2)
 	$(RM) $@
 	$(LD) -r -o $@ $(filter-out $(MODVERFILE) dummy ,$^)
 
@@ -104,11 +104,11 @@ l3udss1.o: $(OBJ_l3udss1)
 	$(RM) $@
 	$(LD) -r -o $@ $(filter-out $(MODVERFILE) dummy ,$^)
 
-hisaxcapi.o: $(OBJ_capi)
+mISDNcapi.o: $(OBJ_capi)
 	$(RM) $@
 	$(LD) -r -o $@ $(filter-out $(MODVERFILE) dummy ,$^)
 
-hisaxdtmf.o: $(OBJ_dtmf)
+mISDNdtmf.o: $(OBJ_dtmf)
 	$(RM) $@
 	$(LD) -r -o $@ $(filter-out $(MODVERFILE) dummy ,$^)
 

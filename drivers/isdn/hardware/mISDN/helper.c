@@ -1,4 +1,4 @@
-/* $Id: helper.c,v 1.6 2003/07/21 11:13:02 kkeil Exp $
+/* $Id: helper.c,v 1.7 2003/07/21 12:00:04 kkeil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -7,20 +7,20 @@
  */
 
 #define __NO_VERSION__
-#include <linux/hisaxif.h>
+#include <linux/mISDNif.h>
 #include "helper.h"
 
 #undef	DEBUG_LM
 #undef	DEBUG_IF
 
 void
-set_dchannel_pid(hisax_pid_t *pid, int protocol, int layermask)
+set_dchannel_pid(mISDN_pid_t *pid, int protocol, int layermask)
 {
 	if (!layermask)
 		layermask = ISDN_LAYER(0)| ISDN_LAYER(1) | ISDN_LAYER(2) |
 			ISDN_LAYER(3) | ISDN_LAYER(4);
 	
-	memset(pid, 0, sizeof(hisax_pid_t));
+	memset(pid, 0, sizeof(mISDN_pid_t));
 	pid->layermask = layermask;
 	if (layermask & ISDN_LAYER(0))
 		pid->protocol[0] = ISDN_PID_L0_TE_S0;
@@ -37,7 +37,7 @@ set_dchannel_pid(hisax_pid_t *pid, int protocol, int layermask)
 }
 
 int
-bprotocol2pid(void *bp, hisax_pid_t *pid)
+bprotocol2pid(void *bp, mISDN_pid_t *pid)
 {
 	__u8	*p = bp;
 	__u16	*w = bp;
@@ -70,7 +70,7 @@ bprotocol2pid(void *bp, hisax_pid_t *pid)
 }
 
 int
-HasProtocol(hisaxobject_t *obj, int protocol)
+HasProtocol(mISDNobject_t *obj, int protocol)
 {
 	int layer;
 	int pmask;
@@ -97,11 +97,11 @@ HasProtocol(hisaxobject_t *obj, int protocol)
 }
 
 int
-SetHandledPID(hisaxobject_t *obj, hisax_pid_t *pid)
+SetHandledPID(mISDNobject_t *obj, mISDN_pid_t *pid)
 {
 	int layer;
 	int ret = 0;
-	hisax_pid_t sav;
+	mISDN_pid_t sav;
 
 	if (!obj || !pid) {
 		int_error();
@@ -110,8 +110,8 @@ SetHandledPID(hisaxobject_t *obj, hisax_pid_t *pid)
 #ifdef DEBUG_LM
 	printk(KERN_DEBUG "%s: %s LM(%x)\n", __FUNCTION__, obj->name, pid->layermask);
 #endif
-	memcpy(&sav, pid, sizeof(hisax_pid_t));
-	memset(pid, 0, sizeof(hisax_pid_t));
+	memcpy(&sav, pid, sizeof(mISDN_pid_t));
+	memset(pid, 0, sizeof(mISDN_pid_t));
 	pid->global = sav.global;
 	if (!sav.layermask) {
 		printk(KERN_WARNING "%s: no layermask in pid\n", __FUNCTION__);
@@ -136,7 +136,7 @@ SetHandledPID(hisaxobject_t *obj, hisax_pid_t *pid)
 }
 
 void
-RemoveUsedPID(hisax_pid_t *pid, hisax_pid_t *used)
+RemoveUsedPID(mISDN_pid_t *pid, mISDN_pid_t *used)
 {
 	int layer;
 
@@ -173,7 +173,7 @@ layermask2layer(int layermask) {
 }
 
 int
-get_protocol(hisaxstack_t *st, int layer)
+get_protocol(mISDNstack_t *st, int layer)
 {
 
 	if (!st){
@@ -235,10 +235,10 @@ int get_up_layer(int layermask) {
 }
 
 int
-SetIF(hisaxinstance_t *owner, hisaxif_t *hif, u_int prim, void *upfunc,
+SetIF(mISDNinstance_t *owner, mISDNif_t *hif, u_int prim, void *upfunc,
 	void *downfunc, void *data)
 {
-	hisaxif_t *own_hif;
+	mISDNif_t *own_hif;
 
 	if (!owner) {
 		int_error();
@@ -284,9 +284,9 @@ SetIF(hisaxinstance_t *owner, hisaxif_t *hif, u_int prim, void *upfunc,
 }
 
 int
-ConnectIF(hisaxinstance_t *owner, hisaxinstance_t *peer)
+ConnectIF(mISDNinstance_t *owner, mISDNinstance_t *peer)
 {
-	hisaxif_t *hif;
+	mISDNif_t *hif;
 
 	if (!owner) {
 		int_error();
@@ -312,7 +312,7 @@ ConnectIF(hisaxinstance_t *owner, hisaxinstance_t *peer)
 	return(peer->obj->own_ctrl(peer, MGR_SETIF | REQUEST, hif));
 }
 
-int DisConnectIF(hisaxinstance_t *inst, hisaxif_t *hif) {
+int DisConnectIF(mISDNinstance_t *inst, mISDNif_t *hif) {
 	
 	if (hif) {
 		if (hif->next && hif->next->owner) {

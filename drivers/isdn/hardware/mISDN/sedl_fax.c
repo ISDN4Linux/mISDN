@@ -1,4 +1,4 @@
-/* $Id: sedl_fax.c,v 1.9 2003/06/27 15:19:42 kkeil Exp $
+/* $Id: sedl_fax.c,v 1.10 2003/07/21 12:00:05 kkeil Exp $
  *
  * sedl_fax.c  low level stuff for Sedlbauer Speedfax + cards
  *
@@ -32,11 +32,11 @@
 #include <linux/kernel_stat.h>
 #include <linux/delay.h>
 #include <asm/semaphore.h>
-#include "hisax_dch.h"
-#include "hisax_bch.h"
+#include "mISDN_dch.h"
+#include "mISDN_bch.h"
 #include "isac.h"
 #include "isar.h"
-#include "hisaxl1.h"
+#include "mISDNl1.h"
 #include "helper.h"
 #include "debug.h"
 
@@ -46,7 +46,7 @@
 
 extern const char *CardType[];
 
-const char *Sedlfax_revision = "$Revision: 1.9 $";
+const char *Sedlfax_revision = "$Revision: 1.10 $";
 
 const char *Sedlbauer_Types[] =
 	{"None", "speed fax+", "speed fax+ pyramid", "speed fax+ pci"};
@@ -113,7 +113,7 @@ typedef struct _sedl_fax {
 	u_int			addr;
 	u_int			isac;
 	u_int			isar;
-	hisax_HWlock_t		lock;
+	mISDN_HWlock_t		lock;
 	isar_reg_t		ir;
 	isac_chip_t		isac_hw;
 	isar_hw_t		isar_hw[2];
@@ -123,14 +123,14 @@ typedef struct _sedl_fax {
 
 static int lock_dev(void *data, int nowait)
 {
-	register hisax_HWlock_t	*lock = &((sedl_fax *)data)->lock;
+	register mISDN_HWlock_t	*lock = &((sedl_fax *)data)->lock;
 	
 	return(lock_HW(lock, nowait));
 } 
 
 static void unlock_dev(void *data)
 {
-	register hisax_HWlock_t	*lock = &((sedl_fax *)data)->lock;
+	register mISDN_HWlock_t	*lock = &((sedl_fax *)data)->lock;
 
 	unlock_HW(lock);
 }
@@ -419,7 +419,7 @@ static int init_card(sedl_fax *sf)
 		sf->dch.inst.name, sf->irq, irq_cnt, smp_processor_id());
 	lock_dev(sf, 0);
 	if (request_irq(sf->irq, irq_func, shared, "speedfax", sf)) {
-		printk(KERN_WARNING "HiSax: couldn't get interrupt %d\n",
+		printk(KERN_WARNING "mISDN: couldn't get interrupt %d\n",
 			sf->irq);
 		unlock_dev(sf);
 		return(-EIO);
@@ -429,7 +429,7 @@ static int init_card(sedl_fax *sf)
 
 		ISAC_clear_pending_ints(&sf->dch);
 		if ((ret=ISAC_init(&sf->dch))) {
-			printk(KERN_WARNING "HiSax: ISAC_init failed with %d\n", ret);
+			printk(KERN_WARNING "mISDN: ISAC_init failed with %d\n", ret);
 			break;
 		}
 		init_isar(&sf->bch[0]);
@@ -469,7 +469,7 @@ static int init_card(sedl_fax *sf)
 #define MAX_CARDS	4
 #define MODULE_PARM_T	"1-4i"
 static int sedl_cnt;
-static hisaxobject_t	speedfax;
+static mISDNobject_t	speedfax;
 static int debug;
 static u_int protocol[MAX_CARDS];
 static u_int io[MAX_CARDS];
@@ -503,7 +503,7 @@ setup_speedfax(sedl_fax *sf, u_int io_cfg, u_int irq_cfg)
 	u16 sub_vendor_id, sub_id;
 
 	strcpy(tmp, Sedlfax_revision);
-	printk(KERN_INFO "HiSax: Sedlbauer speedfax driver Rev. %s\n", HiSax_getrev(tmp));
+	printk(KERN_INFO "mISDN: Sedlbauer speedfax driver Rev. %s\n", mISDN_getrev(tmp));
 	
  	sf->subtyp = 0;
 	bytecnt = 16;
@@ -565,7 +565,7 @@ setup_speedfax(sedl_fax *sf, u_int io_cfg, u_int irq_cfg)
 	
 	if (check_region(sf->cfg, bytecnt)) {
 		printk(KERN_WARNING
-			"HiSax: %s config port %x-%x already in use\n",
+			"mISDN: %s config port %x-%x already in use\n",
 			 Sedlbauer_Types[sf->subtyp],
 			sf->cfg,
 			sf->cfg + bytecnt);
@@ -666,7 +666,7 @@ release_card(sedl_fax *card) {
 static int
 speedfax_manager(void *data, u_int prim, void *arg) {
 	sedl_fax	*card = speedfax.ilist;
-	hisaxinstance_t	*inst=data;
+	mISDNinstance_t	*inst=data;
 	int		channel = -1;
 	struct sk_buff	*skb;
 
@@ -817,7 +817,7 @@ Speedfax_init(void)
 {
 	int err,i;
 	sedl_fax *card;
-	hisax_pid_t pid;
+	mISDN_pid_t pid;
 
 	SET_MODULE_OWNER(&speedfax);
 	speedfax.name = SpeedfaxName;
@@ -833,14 +833,14 @@ Speedfax_init(void)
 	speedfax.prev = NULL;
 	speedfax.next = NULL;
 	
-	if ((err = HiSax_register(&speedfax))) {
+	if ((err = mISDN_register(&speedfax))) {
 		printk(KERN_ERR "Can't register Speedfax error(%d)\n", err);
 		return(err);
 	}
 	while (sedl_cnt < MAX_CARDS) {
 		if (!(card = kmalloc(sizeof(sedl_fax), GFP_ATOMIC))) {
 			printk(KERN_ERR "No kmem for card\n");
-			HiSax_unregister(&speedfax);
+			mISDN_unregister(&speedfax);
 			return(-ENOMEM);
 		}
 		memset(card, 0, sizeof(sedl_fax));
@@ -886,7 +886,7 @@ Speedfax_init(void)
 			kfree(card);
 			card = NULL;
 			if (!sedl_cnt) {
-				HiSax_unregister(&speedfax);
+				mISDN_unregister(&speedfax);
 				err = -ENODEV;
 			} else
 				printk(KERN_INFO "sedlfax %d cards installed\n",
@@ -900,7 +900,7 @@ Speedfax_init(void)
 			printk(KERN_ERR  "MGR_ADDSTACK REQUEST dch err(%d)\n", err);
 			release_card(card);
 			if (!sedl_cnt)
-				HiSax_unregister(&speedfax);
+				mISDN_unregister(&speedfax);
 			else
 				err = 0;
 			return(err);
@@ -911,7 +911,7 @@ Speedfax_init(void)
 				printk(KERN_ERR "MGR_ADDSTACK bchan error %d\n", err);
 				speedfax.ctrl(card->dch.inst.st, MGR_DELSTACK | REQUEST, NULL);
 				if (!sedl_cnt)
-					HiSax_unregister(&speedfax);
+					mISDN_unregister(&speedfax);
 				else
 					err = 0;
 				return(err);
@@ -921,7 +921,7 @@ Speedfax_init(void)
 			printk(KERN_ERR  "MGR_SETSTACK REQUEST dch err(%d)\n", err);
 			speedfax.ctrl(card->dch.inst.st, MGR_DELSTACK | REQUEST, NULL);
 			if (!sedl_cnt)
-				HiSax_unregister(&speedfax);
+				mISDN_unregister(&speedfax);
 			else
 				err = 0;
 			return(err);
@@ -929,7 +929,7 @@ Speedfax_init(void)
 		if ((err = init_card(card))) {
 			speedfax.ctrl(card->dch.inst.st, MGR_DELSTACK | REQUEST, NULL);
 			if (!sedl_cnt)
-				HiSax_unregister(&speedfax);
+				mISDN_unregister(&speedfax);
 			else
 				err = 0;
 			return(err);
@@ -944,7 +944,7 @@ int
 cleanup_module(void)
 {
 	int err;
-	if ((err = HiSax_unregister(&speedfax))) {
+	if ((err = mISDN_unregister(&speedfax))) {
 		printk(KERN_ERR "Can't unregister Speedfax PCI error(%d)\n", err);
 		return(err);
 	}

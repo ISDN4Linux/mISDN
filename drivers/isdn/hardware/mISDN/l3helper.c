@@ -1,4 +1,4 @@
-/* $Id: l3helper.c,v 1.1 2003/07/18 16:36:03 kkeil Exp $
+/* $Id: l3helper.c,v 1.2 2003/07/21 12:00:04 kkeil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -9,7 +9,7 @@
  */
 
 #define __NO_VERSION__
-#include <linux/hisaxif.h>
+#include <linux/mISDNif.h>
 #include "dss1.h"
 #include "helper.h"
 
@@ -58,7 +58,7 @@ alloc_l3msg(int len, u_char type)
 	Q931_info_t	*qi;
 
 	if (!(skb = alloc_skb(len + MAX_HEADER_LEN + L3_EXTRA_SIZE, GFP_ATOMIC))) {
-		printk(KERN_WARNING "HiSax: No skb for L3\n");
+		printk(KERN_WARNING "mISDN: No skb for L3\n");
 		return (NULL);
 	}
 	skb_reserve(skb, MAX_HEADER_LEN);
@@ -148,9 +148,9 @@ void LogL3Msg(struct sk_buff *skb)
 	u16		*ies;
 	int		i,j;
 	Q931_info_t	*qi = (Q931_info_t *)skb->data;
-	hisax_head_t	*hh;
+	mISDN_head_t	*hh;
 
-	hh = HISAX_HEAD_P(skb);
+	hh = mISDN_HEAD_P(skb);
 	printk(KERN_DEBUG "L3Msg prim(%x) id(%x) len(%d)\n",
 		hh->prim, hh->dinfo, skb->len);
 	if (skb->len < sizeof(Q931_info_t))

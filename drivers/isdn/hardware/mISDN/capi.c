@@ -1,21 +1,21 @@
-/* $Id: capi.c,v 1.3 2003/07/21 11:13:02 kkeil Exp $
+/* $Id: capi.c,v 1.4 2003/07/21 12:00:04 kkeil Exp $
  *
  */
 
 #include <linux/module.h>
 #include <linux/vmalloc.h>
 #include <asm/uaccess.h>
-#include "hisax_capi.h"
+#include "mISDN_capi.h"
 #include "helper.h"
 #include "debug.h"
 
-static char *capi_revision = "$Revision: 1.3 $";
+static char *capi_revision = "$Revision: 1.4 $";
 
 static int debug = 0;
-static hisaxobject_t capi_obj;
+static mISDNobject_t capi_obj;
 
 
-static char MName[] = "HiSax Capi 2.0";
+static char MName[] = "mISDN Capi 2.0";
 
 #ifdef MODULE
 MODULE_AUTHOR("Karsten Keil");
@@ -43,7 +43,7 @@ void capidebug(int level, char *fmt, ...)
 // ---------------------------------------------------------------------------
 // registration to kernelcapi
 
-int hisax_load_firmware(struct capi_ctr *ctrl, capiloaddata *data)
+int mISDN_load_firmware(struct capi_ctr *ctrl, capiloaddata *data)
 {
 	Contr_t *contr = ctrl->driverdata;
 	u_char *tmp;
@@ -71,7 +71,7 @@ int hisax_load_firmware(struct capi_ctr *ctrl, capiloaddata *data)
 	return 0;
 }
 
-void hisax_reset_ctr(struct capi_ctr *ctrl)
+void mISDN_reset_ctr(struct capi_ctr *ctrl)
 {
 	Contr_t *contr = ctrl->driverdata;
 
@@ -80,13 +80,13 @@ void hisax_reset_ctr(struct capi_ctr *ctrl)
 	contrReset(contr);
 }
 
-void hisax_remove_ctr(struct capi_ctr *ctrl)
+void mISDN_remove_ctr(struct capi_ctr *ctrl)
 {
 	if (CAPI_DBG_INFO & debug)
 		printk(KERN_DEBUG "%s\n", __FUNCTION__);
 }
 
-static char *hisax_procinfo(struct capi_ctr *ctrl)
+static char *mISDN_procinfo(struct capi_ctr *ctrl)
 {
 	Contr_t *contr = (ctrl->driverdata);
 
@@ -98,7 +98,7 @@ static char *hisax_procinfo(struct capi_ctr *ctrl)
 	return contr->infobuf;
 }
 
-void hisax_register_appl(struct capi_ctr *ctrl,
+void mISDN_register_appl(struct capi_ctr *ctrl,
 			 __u16 ApplId, capi_register_params *rp)
 {
 	Contr_t *contr = ctrl->driverdata;
@@ -108,7 +108,7 @@ void hisax_register_appl(struct capi_ctr *ctrl,
 	contrRegisterAppl(contr, ApplId, rp);
 }
 
-void hisax_release_appl(struct capi_ctr *ctrl, __u16 ApplId)
+void mISDN_release_appl(struct capi_ctr *ctrl, __u16 ApplId)
 {
 	Contr_t *contr = ctrl->driverdata;
 
@@ -117,19 +117,19 @@ void hisax_release_appl(struct capi_ctr *ctrl, __u16 ApplId)
 	contrReleaseAppl(contr, ApplId);
 }
 
-void hisax_send_message(struct capi_ctr *ctrl, struct sk_buff *skb)
+void mISDN_send_message(struct capi_ctr *ctrl, struct sk_buff *skb)
 {
 	Contr_t *contr = ctrl->driverdata;
 
 	contrSendMessage(contr, skb);
 }
 
-static int hisax_read_proc(char *page, char **start, off_t off,
+static int mISDN_read_proc(char *page, char **start, off_t off,
 		int count, int *eof, struct capi_ctr *ctrl)
 {
        int len = 0;
 
-       len += sprintf(page+len, "hisax_read_proc\n");
+       len += sprintf(page+len, "mISDN_read_proc\n");
        if (off+count >= len)
           *eof = 1;
        if (len < off)
@@ -140,17 +140,17 @@ static int hisax_read_proc(char *page, char **start, off_t off,
 
 struct capi_driver_interface *cdrv_if;                  
 
-struct capi_driver hisax_driver = {
-       "hisax",
+struct capi_driver mISDN_driver = {
+       "mISDN",
        "0.01",
-       hisax_load_firmware,
-       hisax_reset_ctr,
-       hisax_remove_ctr,
-       hisax_register_appl,
-       hisax_release_appl,
-       hisax_send_message,
-       hisax_procinfo,
-       hisax_read_proc,
+       mISDN_load_firmware,
+       mISDN_reset_ctr,
+       mISDN_remove_ctr,
+       mISDN_register_appl,
+       mISDN_release_appl,
+       mISDN_send_message,
+       mISDN_procinfo,
+       mISDN_read_proc,
        0,
        0,
 };
@@ -158,9 +158,9 @@ struct capi_driver hisax_driver = {
 int CapiNew(void)
 {
 	printk(KERN_INFO "new %s instance\n", MName);
-	cdrv_if = attach_capi_driver(&hisax_driver);
+	cdrv_if = attach_capi_driver(&mISDN_driver);
 	if (!cdrv_if) {
-		printk(KERN_ERR "hisax: failed to attach capi_driver\n");
+		printk(KERN_ERR "mISDN: failed to attach capi_driver\n");
 		return -EIO;
 	}
 	init_listen();
@@ -171,7 +171,7 @@ int CapiNew(void)
 
 static int
 capi20_manager(void *data, u_int prim, void *arg) {
-	hisaxinstance_t *inst = data;
+	mISDNinstance_t *inst = data;
 	int	found=0;
 	BInst_t *binst = NULL;
 	Contr_t *ctrl = (Contr_t *)capi_obj.ilist;
@@ -266,7 +266,7 @@ int Capi20Init(void)
 {
 	int err;
 
-	printk(KERN_INFO "%s driver file version %s\n", MName, HiSax_getrev(capi_revision));
+	printk(KERN_INFO "%s driver file version %s\n", MName, mISDN_getrev(capi_revision));
 	SET_MODULE_OWNER(&capi_obj);
 	capi_obj.name = MName;
 	capi_obj.DPROTO.protocol[4] = ISDN_PID_L4_CAPI20;
@@ -278,9 +278,9 @@ int Capi20Init(void)
 	capi_obj.ilist = NULL;
 	if ((err = CapiNew()))
 		return(err);
-	if ((err = HiSax_register(&capi_obj))) {
+	if ((err = mISDN_register(&capi_obj))) {
 		printk(KERN_ERR "Can't register %s error(%d)\n", MName, err);
-		detach_capi_driver(&hisax_driver);
+		detach_capi_driver(&mISDN_driver);
 		free_listen();
 		free_cplci();
 		free_ncci();
@@ -294,17 +294,17 @@ void cleanup_module(void)
 	int err;
 	Contr_t *contr;
 
-	if ((err = HiSax_unregister(&capi_obj))) {
+	if ((err = mISDN_unregister(&capi_obj))) {
 		printk(KERN_ERR "Can't unregister User DSS1 error(%d)\n", err);
 	}
 	if (capi_obj.ilist) {
-		printk(KERN_WARNING "hisaxl3 contrlist not empty\n");
+		printk(KERN_WARNING "mISDNl3 contrlist not empty\n");
 		while((contr = capi_obj.ilist)) {
 			contrDestr(contr);
 			kfree(contr);
 		}
 	}
-	detach_capi_driver(&hisax_driver);
+	detach_capi_driver(&mISDN_driver);
 	free_listen();
 	free_cplci();
 	free_ncci();

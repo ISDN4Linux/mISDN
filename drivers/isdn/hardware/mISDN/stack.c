@@ -1,4 +1,4 @@
-/* $Id: stack.c,v 1.2 2002/09/16 23:49:38 kkeil Exp $
+/* $Id: stack.c,v 1.3 2003/07/21 12:00:05 kkeil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -6,15 +6,15 @@
  *
  */
 
-#include "hisax_core.h"
+#include "mISDN_core.h"
 
-hisaxstack_t	*hisax_stacklist = NULL;
-hisaxinstance_t	*hisax_instlist = NULL;
+mISDNstack_t	*mISDN_stacklist = NULL;
+mISDNinstance_t	*mISDN_instlist = NULL;
 
 int
 get_stack_cnt(void) {
 	int cnt = 0;
-	hisaxstack_t *st = hisax_stacklist;
+	mISDNstack_t *st = mISDN_stacklist;
 
 	while(st) {
 		cnt++;
@@ -25,9 +25,9 @@ get_stack_cnt(void) {
 
 void
 get_stack_info(iframe_t *frm) {
-	hisaxstack_t *cst, *st;
+	mISDNstack_t *cst, *st;
 	stack_info_t *si;
-	hisaxlayer_t *lay;
+	mISDNlayer_t *lay;
 
 	st = get_stack4id(frm->addr);
 	if (!st)
@@ -41,7 +41,7 @@ get_stack_info(iframe_t *frm) {
 			si->mgr = st->mgr->id;
 		else
 			si->mgr = 0;
-		memcpy(&si->pid, &st->pid, sizeof(hisax_pid_t));
+		memcpy(&si->pid, &st->pid, sizeof(mISDN_pid_t));
 		si->instcnt = 0;
 		lay = st->lstack;
 		while(lay) {
@@ -65,13 +65,13 @@ get_stack_info(iframe_t *frm) {
 }
 
 static int
-get_free_stackid(hisaxstack_t *mst, int flag) {
+get_free_stackid(mISDNstack_t *mst, int flag) {
 	int id=1;
-	hisaxstack_t *st;
+	mISDNstack_t *st;
 
 	if (!mst) {
 		while(id<127) {
-			st = hisax_stacklist;
+			st = mISDN_stacklist;
 			while (st) {
 				if (st->id == id)
 					break;
@@ -86,7 +86,7 @@ get_free_stackid(hisaxstack_t *mst, int flag) {
 		id = mst->id | FLG_CLONE_STACK;
 		while(id < CLONE_ID_MAX) {
 			id += CLONE_ID_INC;
-			st = hisax_stacklist;
+			st = mISDN_stacklist;
 			while (st) {
 				if (st->id == id)
 					break;
@@ -112,10 +112,10 @@ get_free_stackid(hisaxstack_t *mst, int flag) {
 	return(0);
 }
 
-hisaxstack_t *
+mISDNstack_t *
 get_stack4id(int id)
 {
-	hisaxstack_t *cst, *st = hisax_stacklist;
+	mISDNstack_t *cst, *st = mISDN_stacklist;
 
 	
 	if (core_debug & DEBUG_CORE_FUNC)
@@ -136,11 +136,11 @@ get_stack4id(int id)
 	return(NULL);
 }
 
-hisaxlayer_t *
-getlayer4lay(hisaxstack_t *st, int layermask)
+mISDNlayer_t *
+getlayer4lay(mISDNstack_t *st, int layermask)
 {
-	hisaxlayer_t	*layer;
-	hisaxinstance_t	*inst;
+	mISDNlayer_t	*layer;
+	mISDNinstance_t	*inst;
 
 	if (!st) {
 		int_error();
@@ -156,11 +156,11 @@ getlayer4lay(hisaxstack_t *st, int layermask)
 	return(layer);
 }
 
-hisaxinstance_t *
-get_instance(hisaxstack_t *st, int layer_nr, int protocol)
+mISDNinstance_t *
+get_instance(mISDNstack_t *st, int layer_nr, int protocol)
 {
-	hisaxlayer_t	*layer;
-	hisaxinstance_t	*inst=NULL;
+	mISDNlayer_t	*layer;
+	mISDNinstance_t	*inst=NULL;
 
 	if (core_debug & DEBUG_CORE_FUNC)
 		printk(KERN_DEBUG "get_instance st(%p) lnr(%d) prot(%x)\n",
@@ -196,10 +196,10 @@ out:
 	return(inst);
 }
 
-hisaxinstance_t *
+mISDNinstance_t *
 get_instance4id(int id)
 {
-	hisaxinstance_t *inst = hisax_instlist;
+	mISDNinstance_t *inst = mISDN_instlist;
 
 	while(inst) {
 		if (inst->id == id)
@@ -210,7 +210,7 @@ get_instance4id(int id)
 }
 
 int
-get_layermask(hisaxlayer_t *layer)
+get_layermask(mISDNlayer_t *layer)
 {
 	int mask = 0;
 
@@ -220,9 +220,9 @@ get_layermask(hisaxlayer_t *layer)
 }
 
 int
-insertlayer(hisaxstack_t *st, hisaxlayer_t *layer, int layermask)
+insertlayer(mISDNstack_t *st, mISDNlayer_t *layer, int layermask)
 {
-	hisaxlayer_t *item;
+	mISDNlayer_t *item;
 	
 	if (core_debug & DEBUG_CORE_FUNC)
 		printk(KERN_DEBUG "%s(%p, %p, %x)\n",
@@ -251,19 +251,19 @@ insertlayer(hisaxstack_t *st, hisaxlayer_t *layer, int layermask)
 	return(0);
 }
 
-hisaxstack_t *
-new_stack(hisaxstack_t *master, hisaxinstance_t *inst)
+mISDNstack_t *
+new_stack(mISDNstack_t *master, mISDNinstance_t *inst)
 {
-	hisaxstack_t *newst;
+	mISDNstack_t *newst;
 
 	if (core_debug & DEBUG_CORE_FUNC)
 		printk(KERN_DEBUG "create %s stack inst(%p)\n",
 			master ? "child" : "master", inst);
-	if (!(newst = kmalloc(sizeof(hisaxstack_t), GFP_ATOMIC))) {
-		printk(KERN_ERR "kmalloc hisax_stack failed\n");
+	if (!(newst = kmalloc(sizeof(mISDNstack_t), GFP_ATOMIC))) {
+		printk(KERN_ERR "kmalloc mISDN_stack failed\n");
 		return(NULL);
 	}
-	memset(newst, 0, sizeof(hisaxstack_t));
+	memset(newst, 0, sizeof(mISDNstack_t));
 	if (!master) {
 		if (inst && inst->st) {
 			newst->id = get_free_stackid(inst->st, FLG_CLONE_STACK);
@@ -277,7 +277,7 @@ new_stack(hisaxstack_t *master, hisaxinstance_t *inst)
 	if (master) {
 		APPEND_TO_LIST(newst, master->child);
 	} else {
-		APPEND_TO_LIST(newst, hisax_stacklist);
+		APPEND_TO_LIST(newst, mISDN_stacklist);
 	}
 	if (core_debug & DEBUG_CORE_FUNC)
 		printk(KERN_DEBUG "Stack id %x added\n", newst->id);
@@ -288,9 +288,9 @@ new_stack(hisaxstack_t *master, hisaxinstance_t *inst)
 
 
 static int
-release_layers(hisaxstack_t *st, u_int prim) {
-	hisaxinstance_t *inst;
-	hisaxlayer_t    *layer;
+release_layers(mISDNstack_t *st, u_int prim) {
+	mISDNinstance_t *inst;
+	mISDNlayer_t    *layer;
 	int cnt = 0;
 
 	while((layer = st->lstack)) {
@@ -313,9 +313,9 @@ release_layers(hisaxstack_t *st, u_int prim) {
 }
 
 int
-release_stack(hisaxstack_t *st) {
+release_stack(mISDNstack_t *st) {
 	int err;
-	hisaxstack_t *cst;
+	mISDNstack_t *cst;
 
 	if (core_debug & DEBUG_CORE_FUNC)
 		printk(KERN_DEBUG "%s: st(%p)\n", __FUNCTION__, st);
@@ -334,19 +334,19 @@ release_stack(hisaxstack_t *st) {
 		printk(KERN_WARNING "release_stack err(%d)\n", err);
 		return(err);
 	}
-	REMOVE_FROM_LISTBASE(st, hisax_stacklist);
+	REMOVE_FROM_LISTBASE(st, mISDN_stacklist);
 	kfree(st);
 	return(0);
 }
 
 void
-release_stacks(hisaxobject_t *obj) {
-	hisaxstack_t *st, *tmp;
-	hisaxlayer_t *layer;
-	hisaxinstance_t *inst;
+release_stacks(mISDNobject_t *obj) {
+	mISDNstack_t *st, *tmp;
+	mISDNlayer_t *layer;
+	mISDNinstance_t *inst;
 	int rel;
 
-	st = hisax_stacklist;
+	st = mISDN_stacklist;
 	if (core_debug & DEBUG_CORE_FUNC)
 		printk(KERN_DEBUG "%s: obj(%p) %s\n",
 			__FUNCTION__, obj, obj->name);
@@ -381,8 +381,8 @@ release_stacks(hisaxobject_t *obj) {
 
 
 static void
-get_free_instid(hisaxstack_t *st, hisaxinstance_t *inst) {
-	hisaxinstance_t *il = hisax_instlist;
+get_free_instid(mISDNstack_t *st, mISDNinstance_t *inst) {
+	mISDNinstance_t *il = mISDN_instlist;
 
 	inst->id = get_lowlayer(inst->pid.layermask)<<20;
 	inst->id |= FLG_INSTANCE;
@@ -396,7 +396,7 @@ get_free_instid(hisaxstack_t *st, hisaxinstance_t *inst) {
 					return;
 				}
 				inst->id += INST_ID_INC;
-				il = hisax_instlist;
+				il = mISDN_instlist;
 				continue;
 			}
 			il = il->next;
@@ -405,8 +405,8 @@ get_free_instid(hisaxstack_t *st, hisaxinstance_t *inst) {
 }
 
 int
-register_layer(hisaxstack_t *st, hisaxinstance_t *inst) {
-	hisaxlayer_t	*layer = NULL;
+register_layer(mISDNstack_t *st, mISDNinstance_t *inst) {
+	mISDNlayer_t	*layer = NULL;
 	int		refinc = 0;
 
 	if (!inst)
@@ -429,11 +429,11 @@ register_layer(hisaxstack_t *st, hisaxinstance_t *inst) {
 					st->id, layer->inst->id);
 				return(-EBUSY);
 			}
-		} else if (!(layer = kmalloc(sizeof(hisaxlayer_t), GFP_ATOMIC))) {
+		} else if (!(layer = kmalloc(sizeof(mISDNlayer_t), GFP_ATOMIC))) {
 			int_errtxt("no mem for layer %x", inst->pid.layermask);
 			return(-ENOMEM);
 		}
-		memset(layer, 0, sizeof(hisaxlayer_t));
+		memset(layer, 0, sizeof(mISDNlayer_t));
 		insertlayer(st, layer, inst->pid.layermask);
 		layer->inst = inst;
 	}
@@ -454,13 +454,13 @@ register_layer(hisaxstack_t *st, hisaxinstance_t *inst) {
 	inst->st = st;
 	if (refinc)
 		inst->obj->refcnt++;
-	APPEND_TO_LIST(inst, hisax_instlist);
+	APPEND_TO_LIST(inst, mISDN_instlist);
 	return(0);
 }
 
 int
-unregister_instance(hisaxinstance_t *inst) {
-	hisaxlayer_t *layer;
+unregister_instance(mISDNinstance_t *inst) {
+	mISDNlayer_t *layer;
 	int err = 0;
 
 	if (!inst)
@@ -481,7 +481,7 @@ unregister_instance(hisaxinstance_t *inst) {
 		if (inst->st && (inst->st->mgr != inst))
 			inst->st = NULL;
 	}
-	REMOVE_FROM_LISTBASE(inst, hisax_instlist);
+	REMOVE_FROM_LISTBASE(inst, mISDN_instlist);
 	inst->prev = inst->next = NULL;
 	inst->id = 0;
 	inst->obj->refcnt--;
@@ -489,21 +489,21 @@ unregister_instance(hisaxinstance_t *inst) {
 }
 
 int
-set_stack(hisaxstack_t *st, hisax_pid_t *pid) {
+set_stack(mISDNstack_t *st, mISDN_pid_t *pid) {
 	int err;
-	hisaxinstance_t *inst;
-	hisaxlayer_t *hl;
+	mISDNinstance_t *inst;
+	mISDNlayer_t *hl;
 
 	if (!st || !pid) {
 		int_error();
 		return(-EINVAL);
 	}
-	memcpy(&st->pid, pid, sizeof(hisax_pid_t));
+	memcpy(&st->pid, pid, sizeof(mISDN_pid_t));
 	if (!st->mgr || !st->mgr->obj || !st->mgr->obj->ctrl) {
 		int_error();
 		return(-EINVAL);
 	}
-	memcpy(&st->mgr->pid, pid, sizeof(hisax_pid_t));
+	memcpy(&st->mgr->pid, pid, sizeof(mISDN_pid_t));
 	if (!SetHandledPID(st->mgr->obj, &st->mgr->pid)) {
 		int_error();
 		return(-ENOPROTOOPT);
@@ -547,12 +547,12 @@ set_stack(hisaxstack_t *st, hisax_pid_t *pid) {
 }
 
 int
-clear_stack(hisaxstack_t *st) {
+clear_stack(mISDNstack_t *st) {
 
 	if (!st)
 		return(-EINVAL);
 	if (core_debug & DEBUG_CORE_FUNC)
 		printk(KERN_DEBUG "%s: st(%p)\n", __FUNCTION__, st);
-	memset(&st->pid, 0, sizeof(hisax_pid_t));
+	memset(&st->pid, 0, sizeof(mISDN_pid_t));
 	return(release_layers(st, MGR_UNREGLAYER | REQUEST));
 }

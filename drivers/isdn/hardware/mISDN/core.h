@@ -1,4 +1,4 @@
-/* $Id: core.h,v 1.1 2001/12/05 14:23:39 kkeil Exp $
+/* $Id: core.h,v 1.2 2003/07/21 12:00:04 kkeil Exp $
  * 
  * This file is (c) under GNU PUBLIC LICENSE
  *
@@ -6,18 +6,18 @@
 
 #include <linux/slab.h>
 #include <linux/string.h>
-#include <linux/hisaxif.h>
+#include <linux/mISDNif.h>
 #include "helper.h"
 #ifdef MEMDBG
 #include "memdbg.h"
 #endif
 
-#define	HISAX_MAJOR		46
-#define HISAX_MINOR_CORE	0
-#define HISAX_MINOR_RAW_MIN	128
-#define HISAX_MINOR_RAW_MAX	255
+#define	mISDN_MAJOR		46
+#define mISDN_MINOR_CORE	0
+#define mISDN_MINOR_RAW_MIN	128
+#define mISDN_MINOR_RAW_MAX	255
 
-#define HISAX_DEVBUF_SIZE	8192
+#define mISDN_DEVBUF_SIZE	8192
 
 /* debugging */
 #define DEBUG_CORE_FUNC		0x0001
@@ -28,38 +28,38 @@
 #define DEBUG_RDATA		0x1000
 #define DEBUG_WDATA		0x2000
 
-/* from hisax_dev.c */
+/* from mISDN_dev.c */
 
-extern int		init_hisaxdev(int);
-extern int		free_hisaxdev(void);
-extern hisaxdevice_t	*get_free_rawdevice(void);
-extern int		free_device(hisaxdevice_t *dev);
+extern int		init_mISDNdev(int);
+extern int		free_mISDNdev(void);
+extern mISDNdevice_t	*get_free_rawdevice(void);
+extern int		free_device(mISDNdevice_t *dev);
 
-/* from hisax_stack.c */
+/* from mISDN_stack.c */
 
-extern hisaxstack_t	*hisax_stacklist;
-extern hisaxinstance_t	*hisax_instlist;
+extern mISDNstack_t	*mISDN_stacklist;
+extern mISDNinstance_t	*mISDN_instlist;
 
 extern void		get_stack_info(iframe_t *);
 extern int		get_stack_cnt(void);
-extern hisaxstack_t	*get_stack4id(int);
-extern hisaxstack_t	*new_stack(hisaxstack_t *, hisaxinstance_t *);
-extern int		release_stack(hisaxstack_t *);
-extern void		release_stacks(hisaxobject_t *);
-extern int		set_stack(hisaxstack_t *, hisax_pid_t *);
-extern int		clear_stack(hisaxstack_t *);
-extern hisaxlayer_t	*getlayer4lay(hisaxstack_t *, int);
-extern hisaxinstance_t	*get_instance(hisaxstack_t *, int, int);
+extern mISDNstack_t	*get_stack4id(int);
+extern mISDNstack_t	*new_stack(mISDNstack_t *, mISDNinstance_t *);
+extern int		release_stack(mISDNstack_t *);
+extern void		release_stacks(mISDNobject_t *);
+extern int		set_stack(mISDNstack_t *, mISDN_pid_t *);
+extern int		clear_stack(mISDNstack_t *);
+extern mISDNlayer_t	*getlayer4lay(mISDNstack_t *, int);
+extern mISDNinstance_t	*get_instance(mISDNstack_t *, int, int);
 
-/* from hisax_core.c */
+/* from mISDN_core.c */
 
-extern hisaxobject_t	*hisax_objects;
+extern mISDNobject_t	*mISDN_objects;
 extern int core_debug;
 
-extern void		hisaxlock_core(void);
-extern void		hisaxunlock_core(void);
-extern int		register_layer(hisaxstack_t *, hisaxinstance_t *);
-extern int		unregister_instance(hisaxinstance_t *);
-extern hisaxinstance_t	*get_next_instance(hisaxstack_t *, hisax_pid_t *);
-extern hisaxobject_t	*get_object(int);
-extern hisaxinstance_t	*get_instance4id(int);
+extern void		mISDNlock_core(void);
+extern void		mISDNunlock_core(void);
+extern int		register_layer(mISDNstack_t *, mISDNinstance_t *);
+extern int		unregister_instance(mISDNinstance_t *);
+extern mISDNinstance_t	*get_next_instance(mISDNstack_t *, mISDN_pid_t *);
+extern mISDNobject_t	*get_object(int);
+extern mISDNinstance_t	*get_instance4id(int);

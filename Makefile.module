@@ -5,9 +5,9 @@
 DESTDIR = 
 KDIR := /usr/src/linux
 
-TARGET := newhisax
+TARGET := newmISDN
 TARGETS := Rules.make arch scripts .config include $(TARGET)
-TARGETDIR := drivers/isdn/hisax
+TARGETDIR := drivers/isdn/mISDN
 
 default: $(TARGETS)
 
@@ -43,7 +43,7 @@ $(TARGET):
 
 install: $(TARGETS)
 	$(MAKE) -f Makefile KDIR=$(KDIR) TARGETDIR=$(TARGETDIR) install_mod
-	install newinclude/linux/hisaxif.h /usr/include/linux
+	install newinclude/linux/mISDNif.h /usr/include/linux
 
 modlist:
 	$(MAKE) -f Makefile KDIR=$(KDIR) TARGETDIR=$(TARGETDIR) modlist

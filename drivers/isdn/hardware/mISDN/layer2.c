@@ -1,23 +1,23 @@
-/* $Id: layer2.c,v 1.7 2003/07/21 11:13:02 kkeil Exp $
+/* $Id: layer2.c,v 1.8 2003/07/21 12:00:04 kkeil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
  *		This file is (c) under GNU PUBLIC LICENSE
  *		For changes and modifications please read
- *		../../../Documentation/isdn/HiSax.cert
+ *		../../../Documentation/isdn/mISDN.cert
  *
  */
 #include <linux/module.h>
-#include "hisaxl2.h"
+#include "mISDNl2.h"
 #include "helper.h"
 #include "debug.h"
 
-static char *l2_revision = "$Revision: 1.7 $";
+static char *l2_revision = "$Revision: 1.8 $";
 
 static void l2m_debug(struct FsmInst *fi, char *fmt, ...);
 
 static int debug = 0;
-static hisaxobject_t isdnl2;
+static mISDNobject_t isdnl2;
 
 static
 struct Fsm l2fsm = {NULL, 0, 0, NULL, NULL};
@@ -116,7 +116,7 @@ l2up_create(layer2_t *l2, u_int prim, int dinfo, int len, void *arg)
 
 static int
 l2down_skb(layer2_t *l2, struct sk_buff *skb) {
-	hisaxif_t *down = &l2->inst.down;
+	mISDNif_t *down = &l2->inst.down;
 	int ret = -ENXIO;
 
 	if (down->func)
@@ -129,7 +129,7 @@ l2down_skb(layer2_t *l2, struct sk_buff *skb) {
 static int
 l2down_raw(layer2_t *l2, struct sk_buff *skb)
 {
-	hisax_head_t *hh = HISAX_HEAD_P(skb);
+	mISDN_head_t *hh = mISDN_HEAD_P(skb);
 
 	if (hh->prim == PH_DATA_REQ) {
 		if (test_and_set_bit(FLG_L1_BUSY, &l2->flag)) {
@@ -144,7 +144,7 @@ l2down_raw(layer2_t *l2, struct sk_buff *skb)
 static int
 l2down(layer2_t *l2, u_int prim, int dinfo, struct sk_buff *skb)
 {
-	hisax_sethead(prim, dinfo, skb);
+	mISDN_sethead(prim, dinfo, skb);
 	return(l2down_raw(l2, skb));
 }
 
@@ -164,17 +164,17 @@ l2down_create(layer2_t *l2, u_int prim, int dinfo, int len, void *arg)
 }
 
 static int
-l2_chain_down(hisaxif_t *hif, struct sk_buff *skb) {
+l2_chain_down(mISDNif_t *hif, struct sk_buff *skb) {
 	if (!hif || !hif->fdata)
 		return(-EINVAL);
 	return(l2down_raw(hif->fdata, skb));
 }
 
 static int
-ph_data_confirm(hisaxif_t *up, hisax_head_t *hh, struct sk_buff *skb) {
+ph_data_confirm(mISDNif_t *up, mISDN_head_t *hh, struct sk_buff *skb) {
 	layer2_t *l2 = up->fdata;
 	struct sk_buff *nskb = skb; 
-	hisaxif_t *next = up->next;
+	mISDNif_t *next = up->next;
 	int ret = -EAGAIN;
 
 	if (test_bit(FLG_L1_BUSY, &l2->flag)) {
@@ -662,11 +662,11 @@ l2_mdl_assign(struct FsmInst *fi, int event, void *arg)
 {
 	layer2_t	*l2 = fi->userdata;
 	struct sk_buff	*skb = arg;
-	hisax_head_t	*hh;
+	mISDN_head_t	*hh;
 
 	FsmChangeState(fi, ST_L2_3);
 	skb_trim(skb, 0);
-	hh = HISAX_HEAD_P(skb);
+	hh = mISDN_HEAD_P(skb);
 	hh->prim = MDL_ASSIGN | INDICATION;
 	hh->dinfo = 0;
 	if (l2_tei(l2->tm, skb))
@@ -1239,7 +1239,7 @@ l2_got_tei(struct FsmInst *fi, int event, void *arg)
 {
 	layer2_t	*l2 = fi->userdata;
 	struct sk_buff	*skb = arg;
-	hisax_head_t	*hh = HISAX_HEAD_P(skb);
+	mISDN_head_t	*hh = mISDN_HEAD_P(skb);
 
 	l2->tei = hh->dinfo;
 	dev_kfree_skb(skb);
@@ -1762,7 +1762,7 @@ static struct FsmNode L2FnList[] =
 #define L2_FN_COUNT (sizeof(L2FnList)/sizeof(struct FsmNode))
 
 static int
-ph_data_indication(layer2_t *l2, hisax_head_t *hh, struct sk_buff *skb) {
+ph_data_indication(layer2_t *l2, mISDN_head_t *hh, struct sk_buff *skb) {
 	u_char *datap = skb->data;
 	int ret = -EINVAL;
 	int psapi, ptei;
@@ -1831,17 +1831,17 @@ ph_data_indication(layer2_t *l2, hisax_head_t *hh, struct sk_buff *skb) {
 }
 
 static int
-l2from_down(hisaxif_t *hif, struct sk_buff *askb)
+l2from_down(mISDNif_t *hif, struct sk_buff *askb)
 {
 	layer2_t	*l2;
 	int 		ret = -EINVAL;
 	struct sk_buff	*cskb = askb;
-	hisax_head_t	*hh, sh;
+	mISDN_head_t	*hh, sh;
 
 	if (!hif || !askb)
 		return(-EINVAL);
 	l2 = hif->fdata;
-	hh = HISAX_HEAD_P(askb);
+	hh = mISDN_HEAD_P(askb);
 	printk(KERN_DEBUG "%s: prim(%x)\n", __FUNCTION__, hh->prim);
 	if (!l2) {
 		if (hif->next && hif->next->func)
@@ -1917,15 +1917,15 @@ l2from_down(hisaxif_t *hif, struct sk_buff *askb)
 }
 
 static int
-l2from_up(hisaxif_t *hif, struct sk_buff *skb) {
+l2from_up(mISDNif_t *hif, struct sk_buff *skb) {
 	layer2_t	*l2;
-	hisax_head_t	*hh;
+	mISDN_head_t	*hh;
 	int		ret = -EINVAL;
 
 	if (!hif || !skb)
 		return(ret);
 	l2 = hif->fdata;
-	hh = HISAX_HEAD_P(skb);
+	hh = mISDN_HEAD_P(skb);
 	printk(KERN_DEBUG "%s: prim(%x)\n", __FUNCTION__, hh->prim);
 	if (!l2)
 		return(ret);
@@ -1980,12 +1980,12 @@ l2from_up(hisaxif_t *hif, struct sk_buff *skb) {
 int
 tei_l2(layer2_t *l2, struct sk_buff *skb)
 {
-	hisax_head_t	*hh;
+	mISDN_head_t	*hh;
 	int		ret = -EINVAL;
 
 	if (!l2 || !skb)
 		return(ret);
-	hh = HISAX_HEAD_P(skb);
+	hh = mISDN_HEAD_P(skb);
 	printk(KERN_DEBUG "%s: prim(%x)\n", __FUNCTION__, hh->prim);
 	switch(hh->prim) {
 	    case (MDL_UNITDATA | REQUEST):
@@ -2023,7 +2023,7 @@ l2m_debug(struct FsmInst *fi, char *fmt, ...)
 static void
 release_l2(layer2_t *l2)
 {
-	hisaxinstance_t  *inst = &l2->inst;
+	mISDNinstance_t  *inst = &l2->inst;
 
 	FsmDelTimer(&l2->t200, 21);
 	FsmDelTimer(&l2->t203, 16);
@@ -2057,7 +2057,7 @@ release_l2(layer2_t *l2)
 }
 
 static int
-new_l2(hisaxstack_t *st, hisax_pid_t *pid, layer2_t **newl2) {
+new_l2(mISDNstack_t *st, mISDN_pid_t *pid, layer2_t **newl2) {
 	layer2_t *nl2;
 	int err;
 	u_char *p;
@@ -2072,7 +2072,7 @@ new_l2(hisaxstack_t *st, hisax_pid_t *pid, layer2_t **newl2) {
 	nl2->debug = debug;
 	nl2->inst.obj = &isdnl2;
 	nl2->inst.extentions = EXT_INST_CLONE;
-	memcpy(&nl2->inst.pid, pid, sizeof(hisax_pid_t));
+	memcpy(&nl2->inst.pid, pid, sizeof(mISDN_pid_t));
 	if (!SetHandledPID(&isdnl2, &nl2->inst.pid)) {
 		int_error();
 		return(-ENOPROTOOPT);
@@ -2184,22 +2184,22 @@ new_l2(hisaxstack_t *st, hisax_pid_t *pid, layer2_t **newl2) {
 }
 
 static int
-clone_l2(layer2_t *l2, hisaxinstance_t **new_ip) {
+clone_l2(layer2_t *l2, mISDNinstance_t **new_ip) {
 	int err;
 	layer2_t	*nl2;
-	hisaxif_t	*nif;
-	hisaxstack_t	*st;
+	mISDNif_t	*nif;
+	mISDNstack_t	*st;
 
 	if (!l2)
 		return(-EINVAL);
 	if (!new_ip)
 		return(-EINVAL);
-	st = (hisaxstack_t *)*new_ip;
+	st = (mISDNstack_t *)*new_ip;
 	if (!st)
 		return(-EINVAL);
 	if (!l2->inst.down.peer)
 		return(-EINVAL);
-	if (!(nif = kmalloc(sizeof(hisaxif_t), GFP_ATOMIC))) {
+	if (!(nif = kmalloc(sizeof(mISDNif_t), GFP_ATOMIC))) {
 		printk(KERN_ERR "clone l2 no if mem\n");
 		return(-ENOMEM);
 	}
@@ -2209,7 +2209,7 @@ clone_l2(layer2_t *l2, hisaxinstance_t **new_ip) {
 		printk(KERN_ERR "clone l2 failed err(%d)\n", err);
 		return(err);
 	}
-	memset(nif, 0, sizeof(hisaxif_t));
+	memset(nif, 0, sizeof(mISDNif_t));
 	nl2->cloneif = nif;
 	nif->func = l2from_down;
 	nif->fdata = nl2;
@@ -2278,7 +2278,7 @@ MODULE_PARM(debug, "1i");
 
 static int
 l2_manager(void *data, u_int prim, void *arg) {
-	hisaxinstance_t *inst = data;
+	mISDNinstance_t *inst = data;
 	layer2_t *l2l = isdnl2.ilist;;
 
 	printk(KERN_DEBUG "%s: data:%p prim:%x arg:%p\n", __FUNCTION__,
@@ -2316,7 +2316,7 @@ l2_manager(void *data, u_int prim, void *arg) {
 			return(-EINVAL);
 		}
 		if (arg) {
-			hisaxif_t *hif = arg;
+			mISDNif_t *hif = arg;
 			if (hif->stat & IF_UP) {
 				hif->fdata = l2l;
 				hif->func = l2_chain_down;
@@ -2356,7 +2356,7 @@ int Isdnl2Init(void)
 {
 	int err;
 
-	printk(KERN_INFO "ISDN L2 driver version %s\n", HiSax_getrev(l2_revision));
+	printk(KERN_INFO "ISDN L2 driver version %s\n", mISDN_getrev(l2_revision));
 	SET_MODULE_OWNER(&isdnl2);
 	isdnl2.name = MName;
 	isdnl2.DPROTO.protocol[2] = ISDN_PID_L2_LAPD |
@@ -2372,7 +2372,7 @@ int Isdnl2Init(void)
 	l2fsm.strState = strL2State;
 	FsmNew(&l2fsm, L2FnList, L2_FN_COUNT);
 	TEIInit();
-	if ((err = HiSax_register(&isdnl2))) {
+	if ((err = mISDN_register(&isdnl2))) {
 		printk(KERN_ERR "Can't register %s error(%d)\n", MName, err);
 		FsmFree(&l2fsm);
 	}
@@ -2384,11 +2384,11 @@ void cleanup_module(void)
 {
 	int err;
 
-	if ((err = HiSax_unregister(&isdnl2))) {
+	if ((err = mISDN_unregister(&isdnl2))) {
 		printk(KERN_ERR "Can't unregister ISDN layer 2 error(%d)\n", err);
 	}
 	if(isdnl2.ilist) {
-		printk(KERN_WARNING "hisaxl2 l2 list not empty\n");
+		printk(KERN_WARNING "mISDNl2 l2 list not empty\n");
 		while(isdnl2.ilist)
 			release_l2(isdnl2.ilist);
 	}
