@@ -1,4 +1,4 @@
-/* $Id: dsp.h,v 1.5 2004/06/17 12:31:11 keil Exp $
+/* $Id: dsp.h,v 1.6 2004/08/28 12:35:26 jolly Exp $
  *
  * Audio support data for ISDN4Linux.
  *
@@ -35,6 +35,10 @@
 #include <linux/tqueue.h>
 #endif
 #include <linux/timer.h>
+
+#ifdef MISDN_MEMDEBUG
+#include "memdbg.h"
+#endif
 
 extern int dsp_options;
 extern int dsp_debug;

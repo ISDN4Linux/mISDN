@@ -1,4 +1,4 @@
-/* $Id: dsp_core.c,v 1.9 2004/06/17 12:31:11 keil Exp $
+/* $Id: dsp_core.c,v 1.10 2004/08/28 12:35:26 jolly Exp $
  *
  * Author       Andreas Eversberg (jolly@jolly.de)
  * Based on source code structure by
@@ -161,7 +161,7 @@ or if cmx is currently using software.
  
  */
 
-const char *dsp_revision = "$Revision: 1.9 $";
+const char *dsp_revision = "$Revision: 1.10 $";
 
 #include <linux/delay.h>
 #include <linux/config.h>
@@ -552,10 +552,10 @@ dsp_from_down(mISDNif_t *hif,  struct sk_buff *skb)
 			/* we send data only if software or if we have some
 			 * or if we cannot do tones with hardware
 			 */
-			if ((dsp->pcm_slot_tx<0 && !dsp->features.hfc_loops)
-			 || dsp->R_tx != dsp->W_tx
-			 || dsp->echo == 1
-			 || (dsp->tone.tone && dsp->tone.software)) {
+			if ((dsp->pcm_slot_tx<0 && !dsp->features.hfc_loops) /* software crossconnects OR software loops */
+			 || dsp->R_tx != dsp->W_tx /* data in buffer */
+			 || (dsp->echo==1 && dsp->pcm_slot_tx<0) /* software echo */
+			 || (dsp->tone.tone && dsp->tone.software)) { /* software loops */
 				/* schedule sending skb->len bytes */
 				dsp->tx_pending = skb->len;
 				schedule_work(&dsp->sendwork);
@@ -564,7 +564,7 @@ dsp_from_down(mISDNif_t *hif,  struct sk_buff *skb)
 				/* if receive is not allowed */
 				dev_kfree_skb(skb);
 				unlock_HW(&dsp_lock);
-				break;
+				return(0);
 			}
 			unlock_HW(&dsp_lock);
 			hh->prim = DL_DATA | INDICATION;

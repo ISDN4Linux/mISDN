@@ -1,4 +1,4 @@
-/* $Id: dsp_cmx.c,v 1.6 2004/06/17 12:31:11 keil Exp $
+/* $Id: dsp_cmx.c,v 1.7 2004/08/28 12:35:26 jolly Exp $
  *
  * Audio crossconnecting/conferrencing (hardware level).
  *
@@ -396,6 +396,7 @@ void
 dsp_cmx_hardware(conference_t *conf, dsp_t *dsp)
 {
 	conf_member_t *member, *nextm;
+	dsp_t *finddsp;
 	int memb = 0, i, ii, i1, i2;
 	int freeunits[8];
 	u_char freeslots[256];
@@ -419,16 +420,68 @@ dsp_cmx_hardware(conference_t *conf, dsp_t *dsp)
 			dsp_cmx_hw_message(dsp, HW_CONF_SPLIT, 0, 0, 0, 0);
 			dsp->hfc_conf = -1;
 		}
-		/* remove PCM slot if assigned */
-		if (dsp->pcm_slot_tx>=0 || dsp->pcm_slot_rx>=0) {
-			if (dsp_debug & DEBUG_DSP_CMX)
-				printk(KERN_DEBUG "%s removing %s from PCM slot %d (TX) %d (RX) because dsp is split\n", __FUNCTION__, dsp->inst.name, dsp->pcm_slot_tx, dsp->pcm_slot_rx);
-			dsp_cmx_hw_message(dsp, HW_PCM_DISC, 0, 0, 0, 0);
-			dsp->pcm_slot_tx = -1;
-			dsp->pcm_bank_tx = -1;
-			dsp->pcm_slot_rx = -1;
-			dsp->pcm_bank_rx = -1;
+		if (!dsp->echo) {
+			/* NO ECHO: remove PCM slot if assigned */
+			if (dsp->pcm_slot_tx>=0 || dsp->pcm_slot_rx>=0) {
+				if (dsp_debug & DEBUG_DSP_CMX)
+					printk(KERN_DEBUG "%s removing %s from PCM slot %d (TX) %d (RX) because dsp is split (no echo)\n", __FUNCTION__, dsp->inst.name, dsp->pcm_slot_tx, dsp->pcm_slot_rx);
+				dsp_cmx_hw_message(dsp, HW_PCM_DISC, 0, 0, 0, 0);
+				dsp->pcm_slot_tx = -1;
+				dsp->pcm_bank_tx = -1;
+				dsp->pcm_slot_rx = -1;
+				dsp->pcm_bank_rx = -1;
+			}
+			return;
 		}
+		/* ECHO: already echo */
+		if (dsp->pcm_slot_tx>=0 && dsp->pcm_slot_rx<0
+		 && dsp->pcm_bank_tx==2 && dsp->pcm_bank_rx==2)
+			return;
+		/* ECHO: if slot already assigned */
+		if (dsp->pcm_slot_tx>=0) {
+			dsp->pcm_slot_rx = dsp->pcm_slot_tx;
+			dsp->pcm_bank_tx = 2; /* loop */
+			dsp->pcm_bank_rx = 2;
+			if (dsp_debug & DEBUG_DSP_CMX)
+				printk(KERN_DEBUG "%s refresh %s for echo using slot %d\n", __FUNCTION__, dsp->inst.name, dsp->pcm_slot_tx);
+			dsp_cmx_hw_message(dsp, HW_PCM_CONN, dsp->pcm_slot_tx, 2, dsp->pcm_slot_rx, 2);
+			return;
+		}
+		/* ECHO: find slot */
+		dsp->pcm_slot_tx = -1;
+		dsp->pcm_slot_rx = -1;
+		memset(freeslots, 1, sizeof(freeslots));
+		list_for_each_entry(finddsp, &dsp_obj.ilist, list) {
+			 if (finddsp->features.pcm_id==dsp->features.pcm_id) {
+				if (finddsp->pcm_slot_rx>=0
+				 && finddsp->pcm_slot_rx<sizeof(freeslots))
+					freeslots[finddsp->pcm_slot_tx] = 0;
+				if (finddsp->pcm_slot_tx>=0
+				 && finddsp->pcm_slot_tx<sizeof(freeslots))
+					freeslots[finddsp->pcm_slot_rx] = 0;
+			}
+		}
+		i = 0;
+		ii = dsp->features.pcm_slots;
+		while(i < ii) {
+			if (freeslots[i])
+				break;
+			i++;
+		}
+		if (i == ii) {
+			if (dsp_debug & DEBUG_DSP_CMX)
+				printk(KERN_DEBUG "%s no slot available for echo\n", __FUNCTION__);
+			/* no more slots available */
+			return;
+		}
+		/* assign free slot */
+		dsp->pcm_slot_tx = i;
+		dsp->pcm_slot_rx = i;
+		dsp->pcm_bank_tx = 2; /* loop */
+		dsp->pcm_bank_rx = 2;
+		if (dsp_debug & DEBUG_DSP_CMX)
+			printk(KERN_DEBUG "%s assign echo for %s using slot %d\n", __FUNCTION__, dsp->inst.name, dsp->pcm_slot_tx);
+		dsp_cmx_hw_message(dsp, HW_PCM_CONN, dsp->pcm_slot_tx, 2, dsp->pcm_slot_rx, 2);
 		return;
 	}
 
@@ -476,8 +529,14 @@ dsp_cmx_hardware(conference_t *conf, dsp_t *dsp)
 			conf->software = 1;
 			return;
 		}
-		/* check if member has echo */
+		/* check if member has echo turned on */
 		if (member->dsp->echo) {
+			if (dsp_debug & DEBUG_DSP_CMX)
+				printk(KERN_DEBUG "%s dsp %s cannot form a conf, because echo is turned on\n", __FUNCTION__, member->dsp->inst.name);
+			goto conf_software;
+		}
+		/* check if member has tx_mix turned on */
+		if (member->dsp->tx_mix) {
 			if (dsp_debug & DEBUG_DSP_CMX)
 				printk(KERN_DEBUG "%s dsp %s cannot form a conf, because tx_mix is turned on\n", __FUNCTION__, member->dsp->inst.name);
 			goto conf_software;
@@ -485,12 +544,12 @@ dsp_cmx_hardware(conference_t *conf, dsp_t *dsp)
 		/* check if member changes volume at an not suppoted level */
 		if (member->dsp->tx_volume) {
 			if (dsp_debug & DEBUG_DSP_CMX)
-				printk(KERN_DEBUG "%s dsp %s cannot form a conf, because tx_volumen is changed\n", __FUNCTION__, member->dsp->inst.name);
+				printk(KERN_DEBUG "%s dsp %s cannot form a conf, because tx_volume is changed\n", __FUNCTION__, member->dsp->inst.name);
 			goto conf_software;
 		}
 		if (member->dsp->rx_volume) {
 			if (dsp_debug & DEBUG_DSP_CMX)
-				printk(KERN_DEBUG "%s dsp %s cannot form a conf, because rx_volumen is changed\n", __FUNCTION__, member->dsp->inst.name);
+				printk(KERN_DEBUG "%s dsp %s cannot form a conf, because rx_volume is changed\n", __FUNCTION__, member->dsp->inst.name);
 			goto conf_software;
 		}
 		/* check if encryption is enabled */

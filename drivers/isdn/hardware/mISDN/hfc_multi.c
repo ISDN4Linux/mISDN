@@ -108,7 +108,7 @@
 
 extern const char *CardType[];
 
-static const char *hfcmulti_revision = "$Revision: 1.13 $";
+static const char *hfcmulti_revision = "$Revision: 1.14 $";
 
 static int HFC_cnt;
 
@@ -152,18 +152,22 @@ static const PCI_ENTRY id_list[] =
 	{0x1397, 0x1397, 0x08B4, 0xB520, VENDOR_CCD,
 	 "HFC-4S IOB4ST", 4, 1, 2},
 	{0x1397, 0x1397, 0x08B4, 0xB620, VENDOR_CCD,
-	 "HFC-4S Beronet", 4, 1, 2},
+	 "HFC-4S", 4, 1, 2},
+	{0x1397, 0x1397, 0x08B4, 0xB560, VENDOR_CCD,
+	 "HFC-4S Beronet Card", 4, 1, 2},
 	{0x1397, 0x1397, 0x16B8, 0xB521, VENDOR_CCD,
 	 "HFC-8S IOB4ST Recording", 8, 1, 0},
 	{0x1397, 0x1397, 0x16B8, 0xB522, VENDOR_CCD,
 	 "HFC-8S IOB8ST", 8, 1, 0},
 	{0x1397, 0x1397, 0x16B8, 0xB622, VENDOR_CCD,
+	 "HFC-8S", 8, 1, 0},
+	{0x1397, 0x1397, 0x16B8, 0xB562, VENDOR_CCD,
 	 "HFC-8S Beronet Card", 8, 1, 0},
 	{0x1397, 0x1397, 0x30B1, 0xB523, VENDOR_CCD,
 	 "HFC-E1 IOB1E1", 1, 0, 1}, /* E1 only supports single clock */
-	{0x1397, 0x1397, 0x30B1, 0xB523, VENDOR_CCD,
-	 "HFC-E1 IOB2E1", 1, 0, 1}, /* E1 only supports single clock */
 	{0x1397, 0x1397, 0x30B1, 0xC523, VENDOR_CCD,
+	 "HFC-E1", 1, 0, 1}, /* E1 only supports single clock */
+	{0x1397, 0x1397, 0x30B1, 0xB563, VENDOR_CCD,
 	 "HFC-E1 Beronet Card", 1, 0, 1}, /* E1 only supports single clock */
 	{0, 0, 0, 0, NULL, NULL, 0, 0, 0},
 };
@@ -750,7 +754,7 @@ next_frame:
 				dchannel_sched_event(dch, D_XMTBUFREADY);
 				goto next_frame;
 			} else
-				printk(KERN_WARNING "%s: tx irq TX_NEXT without skb\n", __FUNCTION__);
+				printk(KERN_WARNING "%s: tx irq TX_NEXT without skb (dch ch=%d)\n", __FUNCTION__, ch);
 		}
 		test_and_clear_bit(FLG_TX_BUSY, &dch->DFlags);
 		dch->tx_idx = dch->tx_len = 0;
@@ -765,7 +769,7 @@ next_frame:
 				bch_sched_event(bch, B_XMTBUFREADY);
 				goto next_frame;
 			} else
-				printk(KERN_WARNING "%s: tx irq TX_NEXT without skb\n", __FUNCTION__);
+				printk(KERN_WARNING "%s: tx irq TX_NEXT without skb (bch ch=%d)\n", __FUNCTION__, ch);
 		}
 		test_and_clear_bit(BC_FLG_TX_BUSY, &bch->Flag);
 		bch->tx_idx = bch->tx_len = 0;
@@ -897,12 +901,12 @@ next_frame:
 				return;
 			}
 			memcpy(skb_put(skb, (*idx)-3), buf, (*idx)-3);
-//			if (debug & DEBUG_HFCMULTI_FIFO) {
-//				temp = 0;
-//				while(temp < (*idx)-3)
-//					printk("%02x ", skb->data[temp++]);
-//				printk("\n");
-//			}
+			if (debug & DEBUG_HFCMULTI_FIFO) {
+				temp = 0;
+				while(temp < (*idx)-3)
+					printk("%02x ", skb->data[temp++]);
+				printk("\n");
+			}
 			if (dch) {
 				if (debug & DEBUG_HFCMULTI_FIFO)
 					printk(KERN_DEBUG "%s: sending D-channel frame to user space.\n", __FUNCTION__); 
@@ -3112,7 +3116,10 @@ HFCmulti_init(void)
 			hc->slots = 64;
 		if (type[HFC_cnt] & 0x20000)
 			hc->slots = 128;
-		sprintf(hc->name, (hc->type==1)?"HFC-E1":"HFC-%dS#%d", hc->type, HFC_cnt+1);
+		if (hc->type == 1)
+			sprintf(hc->name, "HFC-E1#%d", HFC_cnt+1);
+		else
+			sprintf(hc->name, "HFC-%dS#%d", hc->type, HFC_cnt+1);
 
 		if (debug & DEBUG_HFCMULTI_INIT)
 			printk(KERN_DEBUG "%s: (after APPEND_TO_LIST)\n", __FUNCTION__);
