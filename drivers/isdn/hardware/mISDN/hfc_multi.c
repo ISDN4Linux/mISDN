@@ -100,7 +100,7 @@
 
 extern const char *CardType[];
 
-static const char *hfcmulti_revision = "$Revision: 1.1 $";
+static const char *hfcmulti_revision = "$Revision: 1.2 $";
 
 static int HFC_cnt;
 

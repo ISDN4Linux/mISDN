@@ -1169,5 +1169,3 @@ static void _HFC_wait(hfc_multi_t *a, char *function, int line)
 
 #endif /* HFC_REGISTER_MAP */
 
-
-
