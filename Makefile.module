@@ -13,8 +13,9 @@ default: $(TARGETS)
 
 all: $(TARGETS)
 
-Rules.make: $(KDIR)/Rules.make
+Rules.make: $(KDIR)/Rules.make Rules.make.ext
 	cp -pf $(KDIR)/Rules.make .
+	cat Rules.make.ext >> Rules.make
 
 .config: $(KDIR)/.config
 	cp -pf $(KDIR)/.config .
@@ -42,3 +43,6 @@ $(TARGET):
 install: $(TARGETS)
 	$(MAKE) -f Makefile KDIR=$(KDIR) TARGETDIR=$(TARGETDIR) install_mod
 	install newinclude/linux/hisaxif.h /usr/include/linux
+
+modlist:
+	$(MAKE) -f Makefile KDIR=$(KDIR) TARGETDIR=$(TARGETDIR) modlist

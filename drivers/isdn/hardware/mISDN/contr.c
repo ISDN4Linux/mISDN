@@ -1,4 +1,4 @@
-/* $Id: contr.c,v 0.10 2001/10/31 23:04:42 kkeil Exp $
+/* $Id: contr.c,v 0.11 2001/11/01 00:42:35 kkeil Exp $
  *
  */
 
@@ -25,7 +25,7 @@ int contrConstr(Contr_t *contr, hisaxstack_t *st, hisax_pid_t *pid, hisaxobject_
 		return(-ENOPROTOOPT);
 	}
 	while(cst) {
-		if (!(binst = kmalloc(sizeof(BInst_t), GFP_KERNEL))) {
+		if (!(binst = kmalloc(sizeof(BInst_t), GFP_ATOMIC))) {
 			printk(KERN_ERR "no mem for Binst\n");
 			int_error();
 			return -ENOMEM;
@@ -147,7 +147,7 @@ void contrRegisterAppl(Contr_t *contr, __u16 ApplId, capi_register_params *rp)
 		int_error();
 		return;
 	}
-	appl = kmalloc(sizeof(Appl_t), GFP_KERNEL);
+	appl = kmalloc(sizeof(Appl_t), GFP_ATOMIC);
 	if (!appl) {
 		int_error();
 		return;
@@ -394,7 +394,7 @@ BInst_t *contrSelChannel(Contr_t *contr, int channr)
 		if (!cst)
 			return(NULL);
 		while(cst) {
-			if (!(binst = kmalloc(sizeof(BInst_t), GFP_KERNEL))) {
+			if (!(binst = kmalloc(sizeof(BInst_t), GFP_ATOMIC))) {
 				printk(KERN_ERR "no mem for Binst\n");
 				int_error();
 				return(NULL);

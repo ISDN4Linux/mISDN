@@ -1,4 +1,4 @@
-/* $Id: isar.c,v 0.14 2001/08/02 14:51:56 kkeil Exp $
+/* $Id: isar.c,v 0.15 2001/11/01 00:42:35 kkeil Exp $
  *
  * isar.c   ISAR (Siemens PSB 7110) specific routines
  *
@@ -216,7 +216,7 @@ isar_load_firmware(bchannel_t *bch, u_char *buf, int size)
 	cnt = 0;
 	/* disable ISAR IRQ */
 	bch->BC_Write_Reg(bch->inst.data, 0, ISAR_IRQBIT, 0);
-	if (!(msg = kmalloc(256, GFP_KERNEL))) {
+	if (!(msg = kmalloc(256, GFP_ATOMIC))) {
 		printk(KERN_ERR"isar_load_firmware no buffer\n");
 		bch->inst.unlock(bch->inst.data);
 		return (1);

@@ -1,4 +1,4 @@
-/* $Id: udevice.c,v 0.24 2001/10/31 23:02:59 kkeil Exp $
+/* $Id: udevice.c,v 0.25 2001/11/01 00:42:35 kkeil Exp $
  *
  * Copyright 2000  by Karsten Keil <kkeil@isdn4linux.de>
  */
@@ -801,7 +801,7 @@ dev_init_timer(hisaxdevice_t *dev, iframe_t *iff)
 
 	ht = get_devtimer(dev, iff->addr);
 	if (!ht) {
-		ht = kmalloc(sizeof(hisaxtimer_t), GFP_KERNEL);
+		ht = kmalloc(sizeof(hisaxtimer_t), GFP_ATOMIC);
 		if (!ht)
 			return(-ENOMEM);
 		ht->prev = NULL;
