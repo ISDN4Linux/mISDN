@@ -1,4 +1,4 @@
-/* $Id: x25_l3.h,v 1.1 2003/12/10 23:01:16 keil Exp $
+/* $Id: x25_l3.h,v 1.2 2004/01/11 14:07:36 keil Exp $
  *
  * Layer 3 X.25 defines
  *
@@ -63,7 +63,7 @@ struct _x25_l3 {
 	int			up_headerlen;
 	int			maxdatalen;
 	x25_B3_cfg_t		B3cfg;
-	u_int			state;
+	u_long			state;
 	u_int			debug;
 	spinlock_t		lock;
 	u_char			cause[2];
@@ -84,7 +84,7 @@ struct _x25_channel {
 	__u32			ncci;
 	u_char			*ncpi_data;
 	u_int			ncpi_len;
-	u_int			state;
+	u_long			state;
 	u_int			debug;
 	spinlock_t		lock;
 	u_int			pr;
