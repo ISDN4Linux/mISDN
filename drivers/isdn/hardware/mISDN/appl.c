@@ -1,4 +1,4 @@
-/* $Id: appl.c,v 1.10 2003/12/13 00:36:16 keil Exp $
+/* $Id: appl.c,v 1.11 2004/01/11 14:02:26 keil Exp $
  *
  *  Applications are owned by the controller and only
  *  handle this controller, multiplexing multiple
@@ -21,7 +21,7 @@ static struct list_head	garbage_applications = LIST_HEAD_INIT(garbage_applicatio
 int
 ApplicationConstr(Controller_t *contr, __u16 ApplId, capi_register_params *rp)
 {
-	Application_t	*appl = kmalloc(sizeof(Application_t), GFP_KERNEL);
+	Application_t	*appl = kmalloc(sizeof(Application_t), GFP_ATOMIC);
 
 	if (!appl) {
 		return(-ENOMEM);
@@ -30,7 +30,7 @@ ApplicationConstr(Controller_t *contr, __u16 ApplId, capi_register_params *rp)
 	INIT_LIST_HEAD(&appl->head);
 	appl->contr = contr;
 	appl->maxplci = contr->maxplci;
-	appl->AppPlcis  = kmalloc(appl->maxplci * sizeof(AppPlci_t *), GFP_KERNEL);
+	appl->AppPlcis  = kmalloc(appl->maxplci * sizeof(AppPlci_t *), GFP_ATOMIC);
 	if (!appl->AppPlcis) {
 		kfree(appl);
 		return(-ENOMEM);
