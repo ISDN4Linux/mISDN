@@ -1,8 +1,11 @@
-/* $Id: fsm.h,v 1.1 2004/01/26 22:21:30 keil Exp $
+/* $Id: fsm.h,v 1.2 2004/01/30 23:46:37 keil Exp $
  *
  * This file is (c) under GNU PUBLIC LICENSE
  *
  */
+
+#ifndef _MISDN_FSM_H
+#define _MISDN_FSM_H
 
 #include <linux/timer.h>
 
@@ -47,3 +50,5 @@ extern void mISDN_FsmInitTimer(struct FsmInst *, struct FsmTimer *);
 extern int mISDN_FsmAddTimer(struct FsmTimer *, int, int, void *, int);
 extern void mISDN_FsmRestartTimer(struct FsmTimer *, int, int, void *, int);
 extern void mISDN_FsmDelTimer(struct FsmTimer *, int);
+
+#endif

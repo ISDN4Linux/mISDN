@@ -1,12 +1,12 @@
-/* $Id: x25_l3.h,v 1.2 2004/01/11 14:07:36 keil Exp $
+/* $Id: x25_l3.h,v 1.3 2004/01/30 23:46:37 keil Exp $
  *
  * Layer 3 X.25 defines
  *
  * This file is (c) under GNU PUBLIC LICENSE
  *
  */
-#ifndef _L3_X23_H
-#define _L3_X23_H
+#ifndef _L3_X25_H
+#define _L3_X25_H
 #include "m_capi.h"
 
 typedef struct _x25_l3		x25_l3_t;

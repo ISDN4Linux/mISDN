@@ -1,4 +1,4 @@
-/* $Id: m_capi.h,v 1.9 2004/01/26 22:21:30 keil Exp $
+/* $Id: m_capi.h,v 1.10 2004/01/30 23:46:37 keil Exp $
  *
  * Rewritten CAPI Layer (Layer4 in mISDN)
  * 
@@ -162,9 +162,12 @@ struct _ConfQueue {
 };
 
 struct Bprotocol {
-	__u16 B1;
-	__u16 B2;
-	__u16 B3;
+	__u16	B1;
+	__u16	B2;
+	__u16	B3;
+	__u8	B1cfg[16];
+	__u8	B2cfg[16];
+	__u8	B3cfg[80];
 };
 
 // ---------------------------------------------------------------------------

@@ -1,4 +1,4 @@
-/* $Id: sedl_fax.c,v 1.18 2004/01/29 00:54:41 keil Exp $
+/* $Id: sedl_fax.c,v 1.19 2004/01/30 23:46:37 keil Exp $
  *
  * sedl_fax.c  low level stuff for Sedlbauer Speedfax + cards
  *
@@ -50,7 +50,7 @@
 
 extern const char *CardType[];
 
-const char *Sedlfax_revision = "$Revision: 1.18 $";
+const char *Sedlfax_revision = "$Revision: 1.19 $";
 
 const char *Sedlbauer_Types[] =
 	{"None", "speed fax+", "speed fax+ pyramid", "speed fax+ pci"};
@@ -945,8 +945,9 @@ static int __init Speedfax_init(void)
 				      ISDN_PID_L1_B_64HDLC |
 				      ISDN_PID_L1_B_T30FAX |
 				      ISDN_PID_L1_B_MODEM_ASYNC;
-	speedfax.BPROTO.protocol[2] = ISDN_PID_L2_B_TRANS;
-// 				      ISDN_PID_L2_B_TRANSDTMF;
+	speedfax.BPROTO.protocol[2] = ISDN_PID_L2_B_TRANS |
+				      ISDN_PID_L2_B_T30;
+
 	speedfax.prev = NULL;
 	speedfax.next = NULL;
 	

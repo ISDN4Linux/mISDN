@@ -1,4 +1,4 @@
-/* $Id: app_plci.c,v 1.8 2004/01/26 22:21:30 keil Exp $
+/* $Id: app_plci.c,v 1.9 2004/01/30 23:46:37 keil Exp $
  *
  */
 
@@ -157,10 +157,33 @@ __u16 AppPlciCheckBprotocol(AppPlci_t *aplci, _cmsg *cmsg)
 	sprot = ctrl->profile.support3;
 	if (!test_bit(cmsg->B3protocol, &sprot))
 		return CapiB3ProtocolNotSupported;
-
 	aplci->Bprotocol.B1 = cmsg->B1protocol;
 	aplci->Bprotocol.B2 = cmsg->B2protocol;
 	aplci->Bprotocol.B3 = cmsg->B3protocol;
+	if (cmsg->B1configuration && cmsg->B1configuration[0]) {
+		if (cmsg->B1configuration[0] > 15) {
+			int_errtxt("B1cfg too large(%d)", cmsg->B1configuration[0]);
+			return CapiB1ProtocolParameterNotSupported;
+		}
+		memcpy(&aplci->Bprotocol.B1cfg[0], cmsg->B1configuration, cmsg->B1configuration[0] + 1);
+	} else
+		aplci->Bprotocol.B1cfg[0] = 0;
+	if (cmsg->B2configuration && cmsg->B2configuration[0]) {
+		if (cmsg->B2configuration[0] > 15) {
+			int_errtxt("B2cfg too large(%d)", cmsg->B2configuration[0]);
+			return CapiB2ProtocolParameterNotSupported;
+		}
+		memcpy(&aplci->Bprotocol.B2cfg[0], cmsg->B2configuration, cmsg->B2configuration[0] + 1);
+	} else
+		aplci->Bprotocol.B2cfg[0] = 0;
+	if (cmsg->B3configuration && cmsg->B3configuration[0]) {
+		if (cmsg->B3configuration[0] > 79) {
+			int_errtxt("B3cfg too large(%d)", cmsg->B3configuration[0]);
+			return CapiB3ProtocolParameterNotSupported;
+		}
+		memcpy(&aplci->Bprotocol.B3cfg[0], cmsg->B3configuration, cmsg->B3configuration[0] + 1);
+	} else
+		aplci->Bprotocol.B3cfg[0] = 0;
 	return 0;
 }
 
@@ -1211,12 +1234,16 @@ AppPlciLinkUp(AppPlci_t *aplci)
 	}
 	pid.protocol[1] = (1 << aplci->Bprotocol.B1) |
 		ISDN_PID_LAYER(1) | ISDN_PID_BCHANNEL_BIT;
+	if (aplci->Bprotocol.B1cfg[0])
+		pid.param[1] = &aplci->Bprotocol.B1cfg[0];
 	if (aplci->Bprotocol.B2 > 23) {
 		int_errtxt("wrong B2 prot %x", aplci->Bprotocol.B2);
 		return(0x3002);
 	}
 	pid.protocol[2] = (1 << aplci->Bprotocol.B2) |
 		ISDN_PID_LAYER(2) | ISDN_PID_BCHANNEL_BIT;
+	if (aplci->Bprotocol.B2cfg[0])
+		pid.param[2] = &aplci->Bprotocol.B2cfg[0];
 	/* handle DTMF TODO */
 	if ((pid.protocol[2] == ISDN_PID_L2_B_TRANS) &&
 		(pid.protocol[1] == ISDN_PID_L1_B_64TRANS))
@@ -1227,6 +1254,8 @@ AppPlciLinkUp(AppPlci_t *aplci)
 	}
 	pid.protocol[3] = (1 << aplci->Bprotocol.B3) |
 		ISDN_PID_LAYER(3) | ISDN_PID_BCHANNEL_BIT;
+	if (aplci->Bprotocol.B3cfg[0])
+		pid.param[3] = &aplci->Bprotocol.B3cfg[0];
 	capidebug(CAPI_DBG_PLCI, "AppPlciLinkUp B1(%x) B2(%x) B3(%x) global(%d) ch(%x)",
    		pid.protocol[1], pid.protocol[2], pid.protocol[3], pid.global, 
 		aplci->channel);
