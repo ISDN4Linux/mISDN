@@ -1,4 +1,4 @@
-/* $Id: mISDNif.h,v 0.8 2001/02/22 09:49:10 kkeil Exp $
+/* $Id: mISDNif.h,v 0.9 2001/02/27 17:45:44 kkeil Exp $
  *
  */
 
@@ -29,6 +29,8 @@
 #define MGR_GETSTACK	0x0f0100
 #define MGR_ADDSTACK	0x0f0200
 #define MGR_DELSTACK	0x0f0300
+#define MGR_SETSTACK	0x0f0400
+#define MGR_CLEARSTACK	0x0f0500
 #define MGR_GETLAYER	0x0f1100
 #define MGR_ADDLAYER	0x0f1200
 #define MGR_DELLAYER	0x0f1300
@@ -36,9 +38,10 @@
 #define MGR_ADDIF	0x0f2200
 #define MGR_DELIF	0x0f2300
 #define MGR_SETIF	0x0f2400
-#define MGR_RELEASE	0x0f0400
+#define MGR_RELEASE	0x0f2500
 #define MGR_CONTROL	0x0fe100
 #define MGR_STATUS	0x0fe200
+#define MGR_LOADFIRM	0x0ff000
 #define MGR_LOGDATA	0x0ff100
 #define MGR_DEBUGDATA	0x0ff200
 
@@ -133,7 +136,7 @@
 #define CC_TIMEOUT		0x031200
 #define CC_NEW_CR		0x03f000
 #define CC_RELEASE_CR		0x03f100
-
+#define CC_B3_DATA		0x133000
 
 #define LAYER_MASK	0x0F0000
 #define COMMAND_MASK	0x00FF00
@@ -182,21 +185,24 @@
 #define ISDN_PID_L1_NT_S0	0x01000101
 #define ISDN_PID_L1_TE_U	0x01000002
 #define ISDN_PID_L1_NT_U	0x01000102
-#define ISDN_PID_L1_B_64HDLC	0x81000000
-#define ISDN_PID_L1_B_64TRANS	0x81000001
-#define ISDN_PID_L1_B_TRANS_TTS	0x81010001
-#define ISDN_PID_L1_B_TRANS_TTR	0x81020001
-#define ISDN_PID_L1_B_TRANS_TT	0x81030001
-#define ISDN_PID_L1_B_V32	0x81000008
-#define ISDN_PID_L1_B_FAX	0x81000004
+#define ISDN_PID_L1_B_64HDLC	0x41000000
+#define ISDN_PID_L1_B_64TRANS	0x41000001
+#define ISDN_PID_L1_B_TRANS_TTS	0x41000101
+#define ISDN_PID_L1_B_TRANS_TTR	0x41000201
+#define ISDN_PID_L1_B_TRANS_TT	0x41000301
+#define ISDN_PID_L1_B_V32	0x41000008
+#define ISDN_PID_L1_B_FAX	0x41000004
 #define ISDN_PID_L2_LAPD	0x02000001
-#define ISDN_PID_L2_B_X75SLP	0x82000000
-#define ISDN_PID_L2_B_TRANS	0x82000001
-#define ISDN_PID_L3_B_TRANS	0x83000000
+#define ISDN_PID_L2_B_X75SLP	0x42000000
+#define ISDN_PID_L2_B_TRANS	0x42000001
+#define ISDN_PID_L3_B_TRANS	0x43000000
 #define ISDN_PID_L3_DSS1USER	0x03000001
 #define ISDN_PID_CAPI20		0x04000001
 
-#define ISDN_PID_BCHANNEL_BIT	0x80000000
+#define ISDN_PID_BCHANNEL_BIT	0x40000000
+#define ISDN_PID_LAYER1		0x01000000
+#define ISDN_PID_LAYER2		0x02000000
+#define ISDN_PID_LAYER3		0x03000000
 
 #define MAX_LAYER	4
 #define HISAX_MAX_IDLEN	16
@@ -255,6 +261,19 @@ typedef struct _moditem {
 	int	layer;
 	int	protocol;
 } moditem_t;
+
+#define PROTO_PARA_PID		1
+#define PROTO_PARA_BPROTOCOL	2
+
+typedef struct _hisax_pid {
+	u_int	B1;
+	u_int	B2;
+	u_int	B3;
+	void	*B1p;
+	void	*B2p;
+	void	*B3p;
+	void	*global;
+} hisax_pid_t;
 
 typedef struct _bsetup {
 	int	channel;
@@ -499,14 +518,20 @@ typedef struct _hisaxstack {
 	struct _hisaxstack	*prev;
 	struct _hisaxstack	*next;
 	u_int			id;
+	hisax_pid_t		pid;
 	int			protocols[MAX_LAYER+1];
 	hisaxinstance_t		*inst[MAX_LAYER+1];
 	hisaxinstance_t		*mgr;
 	struct _hisaxstack	*child;
 } hisaxstack_t;
 
-int HiSax_register(hisaxobject_t *obj);
-int HiSax_unregister(hisaxobject_t *obj);
+extern int bprotocol2pid(void *, hisax_pid_t *);
+extern int HasProtocol(hisaxinstance_t *, int);
+extern int DelIF(hisaxinstance_t *, hisaxif_t *, void *, void *);
+/* global functions */
+
+extern int HiSax_register(hisaxobject_t *obj);
+extern int HiSax_unregister(hisaxobject_t *obj);
 
 #endif /* __KERNEL__ */
 #endif /* HISAXIF_H */

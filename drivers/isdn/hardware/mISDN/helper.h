@@ -1,4 +1,4 @@
-/* $Id: helper.h,v 0.4 2001/02/21 19:19:15 kkeil Exp $
+/* $Id: helper.h,v 0.5 2001/02/27 17:45:44 kkeil Exp $
  *
  *   Basic declarations, defines and prototypes
  *
@@ -33,4 +33,3 @@
 		base = item->next
 
 extern int discard_queue(struct sk_buff_head *);
-

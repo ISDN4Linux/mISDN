@@ -1,4 +1,4 @@
-/* $Id: isar.h,v 0.2 2001/02/11 22:54:20 kkeil Exp $
+/* $Id: isar.h,v 0.3 2001/02/27 17:45:44 kkeil Exp $
  *
  * isar.h   ISAR (Siemens PSB 7110) specific defines
  *
@@ -212,3 +212,4 @@ extern void isar_int_main(bchannel_t *bch);
 extern int init_isar(bchannel_t *bch);
 extern void free_isar(bchannel_t *bch);
 extern int isar_down(hisaxif_t *, u_int, u_int, int, void *);
+extern int isar_load_firmware(bchannel_t *bch, u_char *buf, int size);

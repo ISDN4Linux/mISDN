@@ -1,4 +1,4 @@
-/* $Id: capi.h,v 0.2 2001/02/22 05:54:39 kkeil Exp $
+/* $Id: capi.h,v 0.3 2001/02/27 17:45:44 kkeil Exp $
  *
  */
 
@@ -139,11 +139,17 @@ struct FacConfParm {
 // ---------------------------------------------------------------------------
 // struct Contr
 
+typedef struct _BInst {
+	struct _BInst	*prev;
+	struct _BInst   *next;
+	hisaxinstance_t	inst;
+} BInst_t;
+
 typedef struct _Contr {
 	struct _Contr	*prev;
 	struct _Contr	*next;
 	hisaxinstance_t	inst;
-	hisaxinstance_t *ch_list;
+	BInst_t		*binst;
 	struct capi_ctr	*ctrl;
 	__u32		adrController;
 	int		b3_mode;
@@ -162,7 +168,7 @@ void		contrDebug(Contr_t *contr, __u32 level, char *fmt, ...);
 void		contrRegisterAppl(Contr_t *contr, __u16 ApplId, capi_register_params *rp);
 void		contrReleaseAppl(Contr_t *contr, __u16 ApplId);
 void		contrSendMessage(Contr_t *contr, struct sk_buff *skb);
-void		contrLoadFirmware(Contr_t *contr);
+void		contrLoadFirmware(Contr_t *, int, void *);
 void		contrReset(Contr_t *contr);
 void		contrRecvCmsg(Contr_t *contr, _cmsg *cmsg);
 void		contrAnswerCmsg(Contr_t *contr, _cmsg *cmsg, __u16 Info);
@@ -176,6 +182,7 @@ DummyProcess_t	*contrNewDummyPc(Contr_t *contr);
 DummyProcess_t	*contrId2DummyPc(Contr_t *contr, __u16 invokeId);
 int		contrL4L3(Contr_t *, __u32, l3msg_t *);
 int		contrL3L4(hisaxif_t *, u_int, u_int, int, void *);
+BInst_t		*contrSelChannel(Contr_t *, int);
 // ---------------------------------------------------------------------------
 // struct Listen
 
@@ -300,16 +307,16 @@ void cplciRecvCmsg(Cplci_t *cplci, _cmsg *cmsg);
 void cplciCmsgHeader(Cplci_t *cplci, _cmsg *cmsg, __u8 cmd, __u8 subcmd);
 void cplciLinkUp(Cplci_t *cplci);
 void cplciLinkDown(Cplci_t *cplci);
-int cplciFacSuspendReq(Cplci_t *cplci, struct FacReqParm *facReqParm,
+int  cplciFacSuspendReq(Cplci_t *cplci, struct FacReqParm *facReqParm,
 		       struct FacConfParm *facConfParm);
-int cplciFacResumeReq(Cplci_t *cplci, struct FacReqParm *facReqParm,
+int  cplciFacResumeReq(Cplci_t *cplci, struct FacReqParm *facReqParm,
 		      struct FacConfParm *facConfParm);
 
 // ---------------------------------------------------------------------------
 // Ncci_t
 
 typedef struct _Ncci {
-	hisaxinstance_t	*inst;
+	BInst_t		*binst;
 	__u32		adrNCCI;
 	Contr_t		*contr;
 	Cplci_t		*cplci;
@@ -332,6 +339,7 @@ void ncciLinkUp(Ncci_t *ncci);
 void ncciLinkDown(Ncci_t *ncci);
 void ncciInitSt(Ncci_t *ncci);
 void ncciReleaseSt(Ncci_t *ncci);
+void ncciSetInterface(hisaxif_t *);
 __u16 ncciSelectBprotocol(Ncci_t *ncci);
 void ncciRecvCmsg(Ncci_t *ncci, _cmsg *cmsg);
 void ncciCmsgHeader(Ncci_t *ncci, _cmsg *cmsg, __u8 cmd, __u8 subcmd);

@@ -1,4 +1,4 @@
-/* $Id: contr.c,v 0.2 2001/02/22 05:54:39 kkeil Exp $
+/* $Id: contr.c,v 0.3 2001/02/27 17:45:44 kkeil Exp $
  *
  */
 
@@ -16,21 +16,27 @@ int contrConstr(Contr_t *contr, hisaxstack_t *st, hisaxif_t *hif, hisaxobject_t 
 	char tmp[10];
 	int lay, err;
 	hisaxstack_t *cst = st->child;
-	hisaxinstance_t	*inst;
+	BInst_t	*binst;
 
 	memset(contr, 0, sizeof(Contr_t));
 	contr->adrController = st->id;
 	contr->inst.obj = ocapi;
 	APPEND_TO_LIST(contr, ocapi->ilist);
 	while(cst) {
-		if (!(inst = kmalloc(sizeof(hisaxinstance_t), GFP_KERNEL))) {
-			printk(KERN_ERR "no mem for inst\n");
+		if (!(binst = kmalloc(sizeof(BInst_t), GFP_KERNEL))) {
+			printk(KERN_ERR "no mem for Binst\n");
 			int_error();
 			return -ENOMEM;
 		}
-		inst->st = cst;
-		inst->obj = ocapi;
-		APPEND_TO_LIST(inst, contr->ch_list);
+		memset(binst, 0, sizeof(BInst_t));
+		binst->inst.st = cst;
+		binst->inst.data = binst;
+		binst->inst.obj = ocapi;
+		binst->inst.layer = 4;
+		binst->inst.down.stat = IF_NOACTIV;
+		binst->inst.down.protocol = ISDN_PID_NONE;
+		binst->inst.down.layer = 3;
+		APPEND_TO_LIST(binst, contr->binst);
 		cst = cst->next;
 	}
 	sprintf(tmp, "HiSax%d", contr->adrController);
@@ -69,27 +75,30 @@ void contrDestr(Contr_t *contr)
 		if (contr->appls[i]) {
 			applDestr(contr->appls[i]);
 			kfree(contr->appls[i]);
+			contr->appls[i] = NULL;
 		}
 	}
 	for (i = 0; i < CAPI_MAXPLCI; i++) {
 		if (contr->plcis[i]) {
 			plciDestr(contr->plcis[i]);
 			kfree(contr->plcis[i]);
+			contr->plcis[i] = NULL;
 		}
 	}
 	for (i = 0; i < CAPI_MAXDUMMYPCS; i++) {
 		if (contr->dummy_pcs[i]) {
 			dummyPcDestr(contr->dummy_pcs[i]);
 			kfree(contr->dummy_pcs[i]);
+			contr->dummy_pcs[i] = NULL;
 		}
 	}
 	if (contr->ctrl)
 		cdrv_if->detach_ctr(contr->ctrl);
 	
-	while (contr->ch_list) {
-		hisaxinstance_t *inst = contr->ch_list;
-		REMOVE_FROM_LISTBASE(inst, contr->ch_list);
-		kfree(inst);
+	while (contr->binst) {
+		BInst_t *binst = contr->binst;
+		REMOVE_FROM_LISTBASE(binst, contr->binst);
+		kfree(binst);
 	}
 	REMOVE_FROM_LISTBASE(contr, base);
 	contr->inst.obj->ilist = base;
@@ -166,7 +175,7 @@ void contrReleaseAppl(Contr_t *contr, __u16 ApplId)
 	}
 	applDestr(appl);
 	kfree(appl);
-	contr->appls[ApplId - 1] = 0;
+	contr->appls[ApplId - 1] = NULL;
 	contr->ctrl->appl_released(contr->ctrl, ApplId);
 }
 
@@ -184,9 +193,14 @@ void contrSendMessage(Contr_t *contr, struct sk_buff *skb)
 	applSendMessage(appl, skb);
 }
 
-void contrLoadFirmware(Contr_t *contr)
+void contrLoadFirmware(Contr_t *contr, int len, void *data)
 {
-	contrRun(contr); // loading firmware is not necessary, so we just go running
+	l3msg_t fmsg;
+	
+	fmsg.id = len;
+	fmsg.arg = data;
+	contr->inst.obj->ctrl(contr->inst.st, MGR_LOADFIRM | REQUEST, &fmsg);	
+	contrRun(contr);
 }
 
 void contrReset(Contr_t *contr)
@@ -202,13 +216,6 @@ void contrReset(Contr_t *contr)
 		contr->appls[ApplId - 1] = NULL;
 	}
 
-/*
-	if (contr->l4.st) {
-		release_st(contr->l4.st);
-		kfree(contr->l4.st);
-		contr->l4.st = 0;
-	}
-*/
 	contr->ctrl->reseted(contr->ctrl);
 }
 
@@ -291,7 +298,7 @@ void contrDelPlci(Contr_t *contr, Plci_t *plci)
 	}
 	plciDestr(plci);
 	kfree(plci);
-	contr->plcis[i-1] = 0;
+	contr->plcis[i-1] = NULL;
 }
 
 static Plci_t
@@ -340,8 +347,8 @@ contrL3L4(hisaxif_t *hif, u_int prim, u_int nr, int dtyp, void *arg)
 int contrL4L3(Contr_t *contr, __u32 prim, l3msg_t *l3msg) {
 	int err = -EINVAL;
 
-	if (contr->inst.up.func) {
-		err = contr->inst.up.func(&contr->inst.up, prim, 0,
+	if (contr->inst.down.func) {
+		err = contr->inst.down.func(&contr->inst.down, prim, 0,
 			DTYPE_L3MSGP, l3msg);
 	}
 	return(err);
@@ -379,6 +386,41 @@ void delContr(Contr_t *contr)
 {
 	contrDestr(contr);
 	kfree(contr);
+}
+
+BInst_t *contrSelChannel(Contr_t *contr, int channr)
+{ 
+	hisaxstack_t *cst;
+	BInst_t	*binst;
+
+	if (!contr->binst) {
+		cst = contr->inst.st->child;
+		if (!cst)
+			return(NULL);
+		while(cst) {
+			if (!(binst = kmalloc(sizeof(BInst_t), GFP_KERNEL))) {
+				printk(KERN_ERR "no mem for Binst\n");
+				int_error();
+				return(NULL);
+			}
+			memset(binst, 0, sizeof(BInst_t));
+			binst->inst.st = cst;
+			binst->inst.data = binst;
+			binst->inst.obj = contr->inst.obj;
+			binst->inst.layer = 4;
+			binst->inst.down.stat = IF_NOACTIV;
+			binst->inst.down.protocol = ISDN_PID_NONE;
+			binst->inst.down.layer = 3;
+			APPEND_TO_LIST(binst, contr->binst);
+			cst = cst->next;
+		}
+	}
+	binst = NULL;
+	if (channr == 1)
+		binst = contr->binst;
+	else if (channr == 2)
+		binst = contr->binst->next;
+	return(binst);
 }
 
 #if 0

@@ -1,10 +1,9 @@
-/* $Id: asn1.h,v 0.1 2001/02/21 19:22:35 kkeil Exp $
+/* $Id: asn1.h,v 0.2 2001/02/27 17:45:44 kkeil Exp $
  *
  */
 
 #ifndef __ASN1_H__
 #define __ASN1_H__
-#include <linux/types.h>
 #include "helper.h"
 
 typedef enum {

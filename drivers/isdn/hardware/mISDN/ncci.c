@@ -1,4 +1,4 @@
-/* $Id: ncci.c,v 0.2 2001/02/22 05:54:40 kkeil Exp $
+/* $Id: ncci.c,v 0.3 2001/02/27 17:45:44 kkeil Exp $
  *
  */
 
@@ -321,7 +321,6 @@ void ncciConstr(Ncci_t *ncci, Cplci_t *cplci)
 	ncci->ncci_m.userdata   = ncci;
 	ncci->ncci_m.printdebug = ncci_debug;
 
-//	ncci->l4.l3l4 = ncci_l3l4st;
 	ncci->adrNCCI = 0x10000 | cplci->adrPLCI;
 	ncci->cplci = cplci;
 	ncci->contr = cplci->contr;
@@ -330,50 +329,67 @@ void ncciConstr(Ncci_t *ncci, Cplci_t *cplci)
 	if (ncci->window > CAPI_MAXDATAWINDOW) {
 		ncci->window = CAPI_MAXDATAWINDOW;
 	}
-
-
 }
 
 void ncciInitSt(Ncci_t *ncci)
 {
-#if 0
-	struct StackParams sp;
+	hisax_pid_t pid;
 	int retval;
 	Cplci_t *cplci = ncci->cplci;
 
-	ncci->l4.st = kmalloc(sizeof(struct PStack), GFP_ATOMIC);
-	if (!ncci->l4.st) {
+	memset(&pid, 0, sizeof(hisax_pid_t));
+	pid.B1 = cplci->Bprotocol.B1protocol | ISDN_PID_LAYER1 | ISDN_PID_BCHANNEL_BIT;
+	pid.B2 = cplci->Bprotocol.B2protocol | ISDN_PID_LAYER2 | ISDN_PID_BCHANNEL_BIT;
+	pid.B3 = cplci->Bprotocol.B3protocol | ISDN_PID_LAYER3 | ISDN_PID_BCHANNEL_BIT;
+	printk(KERN_DEBUG "ncciInitSt B1(%x) B2(%x) B3(%x) ch(%x)\n",
+		pid.B1, pid.B2, pid.B3, cplci->bchannel);
+	printk(KERN_DEBUG "ncciInitSt ch(%d) cplci->contr->binst(%p)\n",
+		cplci->bchannel & 3, cplci->contr->binst);
+	if ((cplci->bchannel & 0xf4) == 0x80) {
+		ncci->binst = contrSelChannel(cplci->contr, cplci->bchannel & 3);
+	} else {
+		printk(KERN_WARNING "ncciInitSt channel %x not supported\n",
+			cplci->bchannel);
+	}
+	if (!ncci->binst) {
 		int_error();
 		return;
-	}
-	memset(ncci->l4.st, 0, sizeof(struct PStack));
-	sp.b1_mode = cplci->Bprotocol.B1protocol;
-	sp.b2_mode = cplci->Bprotocol.B2protocol;
-	sp.b3_mode = cplci->Bprotocol.B3protocol;
+	}		
+#if 0
 	sp.headroom = 22; // reserve space for DATA_B3 IND message in skb's
-	retval = init_st(&ncci->l4, cplci->contr->cs, &sp, cplci->bchannel);
+#endif
+	ncci->binst->inst.data = ncci;
+	ncci->binst->inst.layer = 4;
+	ncci->binst->inst.protocol = ISDN_PID_CAPI20;
+	retval = ncci->binst->inst.obj->ctrl(ncci->binst->inst.st,
+		MGR_ADDLAYER | INDICATION, &ncci->binst->inst); 
 	if (retval) {
 		int_error();
 		return;
 	}
-	if (sp.b2_mode != B2_MODE_TRANS || !test_bit(PLCI_FLAG_OUTGOING, &cplci->plci->flags)) {
+	retval = ncci->binst->inst.obj->ctrl(ncci->binst->inst.st,
+		MGR_SETSTACK | REQUEST, &pid);
+	if (retval) {
+		int_error();
+		return;
+	}
+//	if (sp.b2_mode != B2_MODE_TRANS || !test_bit(PLCI_FLAG_OUTGOING, &cplci->plci->flags)) {
 		// listen for e.g. SABME
 		ncciL4L3(ncci, PH_ACTIVATE | REQUEST, 0, 0);
-	}
-#endif
+//	}
 }
 
 void ncciReleaseSt(Ncci_t *ncci)
 {
-#if 0
- 	if (!ncci->l4.st) {
- 		int_error();
+	int retval;
+
+	ncciL4L3(ncci, PH_DEACTIVATE | REQUEST, 0, 0);
+	retval = ncci->binst->inst.obj->ctrl(ncci->binst->inst.st,
+		MGR_CLEARSTACK, NULL);
+	if (retval) {
+		int_error();
 		return;
 	}
-	release_st(ncci->l4.st);
-	kfree(ncci->l4.st);
-	ncci->l4.st = 0;
-#endif
 }
 
 void ncciLinkUp(Ncci_t *ncci)
@@ -385,11 +401,9 @@ void ncciLinkUp(Ncci_t *ncci)
 
 void ncciLinkDown(Ncci_t *ncci)
 {
-#if 0
-	if (ncci->l4.st)
+	if (ncci->binst)
 		ncciReleaseSt(ncci);
 	FsmEvent(&ncci->ncci_m, EV_NCCI_DL_DOWN_IND, 0);
-#endif	
 }
 
 __u16 ncciSelectBprotocol(Ncci_t *ncci)
@@ -403,13 +417,11 @@ __u16 ncciSelectBprotocol(Ncci_t *ncci)
 
 void ncciDestr(Ncci_t *ncci)
 {
-#if 0
-	if (ncci->l4.st)
+	if (ncci->binst)
 		ncciReleaseSt(ncci);
-#endif
 	if (ncci->appl)
 		ncci->contr->ctrl->free_ncci(ncci->contr->ctrl, 
-					     ncci->appl->ApplId, ncci->adrNCCI);
+			ncci->appl->ApplId, ncci->adrNCCI);
 }
 
 void ncciDataInd(Ncci_t *ncci, int pr, void *arg)
@@ -604,6 +616,7 @@ static int ncci_l3l4(hisaxif_t *hif, u_int prim, u_int nr, int dtyp, void *arg)
 
 	switch (prim) {
 		// we're not using the Fsm for DL_DATA for performance reasons
+		case PH_DATA | INDICATION:
 		case DL_DATA | INDICATION: 
 			if (ncci->ncci_m.state == ST_NCCI_N_ACT) {
 				ncciDataInd(ncci, prim, arg);
@@ -611,38 +624,48 @@ static int ncci_l3l4(hisaxif_t *hif, u_int prim, u_int nr, int dtyp, void *arg)
 				dev_kfree_skb(skb);
 			}
 			break;
-		case DL_DATA | CONFIRM: 
+		case PH_DATA | CONFIRM:
+		case DL_DATA | CONFIRM:
 			if (ncci->ncci_m.state == ST_NCCI_N_ACT) {
 				ncciDataConf(ncci, prim, arg);
 			}
 			break;
+		case PH_ACTIVATE | INDICATION:
 		case DL_ESTABLISH | INDICATION:
 			FsmEvent(&ncci->ncci_m, EV_NCCI_DL_ESTABLISH_IND, arg);
 			break;
+		case PH_ACTIVATE | CONFIRM:
 		case DL_ESTABLISH | CONFIRM:
 			FsmEvent(&ncci->ncci_m, EV_NCCI_DL_ESTABLISH_CONF, arg);
 			break;
+		case PH_DEACTIVATE | INDICATION:
 		case DL_RELEASE | INDICATION:
 			FsmEvent(&ncci->ncci_m, EV_NCCI_DL_RELEASE_IND, arg);
 			break;
+		case PH_DEACTIVATE | CONFIRM:
 		case DL_RELEASE | CONFIRM:
 			FsmEvent(&ncci->ncci_m, EV_NCCI_DL_RELEASE_CONF, arg);
 			break;
 		default:
-			printk("pr %#x\n", prim);
+			printk("ncci_l3l4 prim(%x) dtyp(%x) arg(%p)\n",
+				prim, dtyp, arg);
 			int_error();
 	}
 	return(0);
 }
 
+void ncciSetInterface(hisaxif_t *hif) {
+	hif->func = ncci_l3l4;
+}
+
 
 static int ncciL4L3(Ncci_t *ncci, u_int prim, int dtyp, void *arg)
 {
-	if (!ncci->inst->down.func) {
+	if (!ncci->binst || !ncci->binst->inst.down.func) {
 		int_error();
 		return -EINVAL;
 	}
-	return(ncci->inst->down.func(&ncci->inst->down, prim, 0, dtyp, arg));
+	return(ncci->binst->inst.down.func(&ncci->binst->inst.down, prim, 0, dtyp, arg));
 }
 
 void init_ncci(void)

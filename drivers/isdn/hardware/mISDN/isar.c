@@ -1,4 +1,4 @@
-/* $Id: isar.c,v 0.4 2001/02/22 09:49:10 kkeil Exp $
+/* $Id: isar.c,v 0.5 2001/02/27 17:45:44 kkeil Exp $
  *
  * isar.c   ISAR (Siemens PSB 7110) specific routines
  *
@@ -1452,7 +1452,7 @@ modeisar(bchannel_t *bch, bsetup_t *bs)
 		}
 	}
 	if (bch->debug & L1_DEB_HSCX)
-		debugprint(&bch->inst, "isar dp%d protocol %d->%d ichan %d",
+		debugprint(&bch->inst, "isar dp%d protocol %x->%x ichan %d",
 			bch->hw.isar.dpath, bch->protocol, bs->protocol[0], bs->channel);
 	bch->protocol = bs->protocol[0];
 	setup_pump(bch);
@@ -1606,7 +1606,8 @@ isar_down(hisaxif_t *hif, u_int prim, u_int nr, int len, void *arg)
 	bchannel_t *bch = hif->fdata;
 	int ret = 0;
 
-	if (prim == PH_DATA_REQ) {
+	if ((prim == PH_DATA_REQ) ||
+		(prim == (CC_B3_DATA | REQUEST))) {
 		struct sk_buff *skb = arg;
 
 		if (bch->next_skb) {

@@ -1,4 +1,4 @@
-/* $Id: plci.c,v 0.2 2001/02/22 05:54:40 kkeil Exp $
+/* $Id: plci.c,v 0.3 2001/02/27 17:45:44 kkeil Exp $
  *
  */
 
@@ -119,7 +119,10 @@ void plciNewCrInd(Plci_t *plci, struct l3_process *l3_pc)
 
 void plciNewCrReq(Plci_t *plci)
 {
-	plciL4L3(plci, CC_NEW_CR | REQUEST, NULL);
+	l3msg_t l3msg;
+	l3msg.id = plci->adrPLCI;
+	l3msg.arg = NULL;
+	plciL4L3(plci, CC_NEW_CR | REQUEST, &l3msg);
 }
 
 int plciL4L3(Plci_t *plci, __u32 prim, void *arg)

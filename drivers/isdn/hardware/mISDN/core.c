@@ -1,4 +1,4 @@
-/* $Id: core.c,v 0.6 2001/02/22 10:14:16 kkeil Exp $
+/* $Id: core.c,v 0.7 2001/02/27 17:45:44 kkeil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -91,12 +91,33 @@ register_instance(hisaxstack_t *st, hisaxinstance_t *inst) {
 	if (!st || !inst)
 		return(-EINVAL);
 	lay = inst->layer;
+	if (debug & DEBUG_CORE_FUNC)
+		printk(KERN_DEBUG "register_instance st(%p) inst(%p) lay(%d)\n",
+			st, inst, lay);
 	if ((lay>MAX_LAYER) || (lay<0))
 		return(-EINVAL);
 	APPEND_TO_LIST(inst, st->inst[lay]);
 	st->protocols[lay] = inst->protocol;
 	inst->st = st;
 	inst->obj->refcnt++;
+	return(0);
+}
+
+static int
+unregister_instance(hisaxstack_t *st, hisaxinstance_t *inst) {
+	int lay;
+
+	if (!st || !inst)
+		return(-EINVAL);
+	lay = inst->layer;
+	if (debug & DEBUG_CORE_FUNC)
+		printk(KERN_DEBUG "unregister_instance st(%p) inst(%p) lay(%d)\n",
+			st, inst, lay);
+	if ((lay>MAX_LAYER) || (lay<0))
+		return(-EINVAL);
+	REMOVE_FROM_LISTBASE(inst, st->inst[lay]);
+	st->protocols[lay] = ISDN_PID_NONE;
+	inst->obj->refcnt--;
 	return(0);
 }
 
@@ -222,19 +243,40 @@ debugout(hisaxinstance_t *inst, logdata_t *log)
 static int central_manager(void *data, u_int prim, void *arg) {
 	hisaxstack_t *st = data;
 
-	if (!data)
+	if ((prim != (MGR_ADDSTACK | REQUEST)) && !data)
 		return(-EINVAL);
 	switch(prim) {
 	    case MGR_ADDSTACK | REQUEST:
-	    	if (!(st = create_stack(data, arg)))
-	    		return(-EINVAL);
-	    	return(0);
+		if (!(st = new_stack(arg, data))) {
+			return(-EINVAL);
+		} else {
+			hisaxinstance_t *inst = arg;
+			
+			if (inst)
+				inst->st = st;
+		}
+		return(0);
+	    case MGR_SETSTACK | REQUEST:
+		return(set_stack(st, arg));
+	    case MGR_CLEARSTACK | REQUEST:
+		return(clear_stack(st));
 	    case MGR_ADDLAYER | INDICATION:
 		return(register_instance(st, arg));
+	    case MGR_ADDLAYER | REQUEST:
+		if (!register_instance(st, arg)) {
+			hisaxinstance_t *inst = arg;
+			return(inst->obj->own_ctrl(st, MGR_ADDLAYER | CONFIRM, arg));
+		}
+	    case MGR_DELLAYER | REQUEST:
+		return(unregister_instance(st, arg));
 	    case MGR_ADDIF | REQUEST:
 		return(add_stack_if(st, arg));
 	    case MGR_DELIF | REQUEST:
 		return(del_stack_if(st, arg));
+	    case MGR_LOADFIRM | REQUEST:
+	    	if (st->mgr && st->mgr->obj && st->mgr->obj->own_ctrl)
+	    		return(st->mgr->obj->own_ctrl(st, prim, arg));
+	    	break;
 	    case MGR_DEBUGDATA | REQUEST:
 	    	return(debugout(data, arg));
 	    default:

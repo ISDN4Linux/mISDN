@@ -1,4 +1,4 @@
-/* $Id: layer3.h,v 0.6 2001/02/21 19:15:14 kkeil Exp $
+/* $Id: layer3.h,v 0.7 2001/02/27 17:45:44 kkeil Exp $
  *
  * This file is (c) under GNU PUBLIC LICENSE
  *
@@ -99,8 +99,9 @@ extern void L3DelTimer(L3Timer_t *);
 extern int L3AddTimer(L3Timer_t *, int, int);
 extern void StopAllL3Timer(l3_process_t *);
 extern void release_l3_process(l3_process_t *);
-extern l3_process_t *new_l3_process(layer3_t *, int, int);
 extern l3_process_t *getl3proc(layer3_t *, int);
+extern l3_process_t *getl3proc4id(layer3_t *, int);
+extern l3_process_t *new_l3_process(layer3_t *, int, int);
 extern u_char *findie(u_char *, int, u_char, int);
 extern int hisax_l3up(l3_process_t *, u_int, void *);
 extern int getcallref(u_char * p);

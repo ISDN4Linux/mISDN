@@ -1,4 +1,4 @@
-/* $Id: helper.c,v 0.3 2001/02/13 10:42:55 kkeil Exp $
+/* $Id: helper.c,v 0.4 2001/02/27 17:45:44 kkeil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -36,6 +36,7 @@ init_dchannel(dchannel_t *dch) {
 		printk(KERN_WARNING
 			"HiSax: No memory for dchannel rx_buf\n");
 		kfree(dch->dlog);
+		dch->dlog = NULL;
 		return(-ENOMEM);
 	}
 	dch->rx_idx = 0;
@@ -43,7 +44,9 @@ init_dchannel(dchannel_t *dch) {
 		printk(KERN_WARNING
 			"HiSax: No memory for dchannel tx_buf\n");
 		kfree(dch->dlog);
+		dch->dlog = NULL;
 		kfree(dch->rx_buf);
+		dch->rx_buf = NULL;
 		return(-ENOMEM);
 	}
 	dch->tx_idx = 0;
@@ -123,4 +126,69 @@ free_bchannel(bchannel_t *bch) {
 		bch->next_skb = NULL;
 	}
 	return(0);
+}
+
+int bprotocol2pid(void *bp, hisax_pid_t *pid) {
+	__u8		*p = bp;
+	__u16		*w = bp;
+
+	p += 6;
+	pid->B1 = *w;
+	pid->B1 |= ISDN_PID_LAYER1 | ISDN_PID_BCHANNEL_BIT;
+	if (*p)
+		pid->B1p = p;
+	else
+		pid->B1p = NULL;
+	w++;
+	p += *p;
+	p++;
+	pid->B2 = *w;
+	pid->B2 |= ISDN_PID_LAYER2 | ISDN_PID_BCHANNEL_BIT;
+	if (*p)
+		pid->B2p = p;
+	else
+		pid->B2p = NULL;
+	w++;
+	p += *p;
+	p++;
+	pid->B3 = *w;
+	pid->B3 |= ISDN_PID_LAYER3 | ISDN_PID_BCHANNEL_BIT;
+	if (*p)
+		pid->B3p = p;
+	else
+		pid->B3p = NULL;
+	p += *p;
+	p++;
+	if (*p)
+		pid->global = p;
+	else
+		pid->global = NULL;
+	return(0);
+}
+
+int HasProtocol(hisaxinstance_t *inst, int proto) {
+	int i;
+
+	if (!inst || !inst->obj) {
+		int_error();
+		return(0);
+	}
+	for (i=0; i<inst->obj->protcnt; i++) {
+		if (proto == inst->obj->protocols[i])
+			return(1);
+	}
+	return(0); 
+}
+
+int DelIF(hisaxinstance_t *inst, hisaxif_t *mif, void *func, void *data) {
+	hisaxif_t hif;
+
+	hif.protocol = mif->protocol;
+	hif.layer = mif->layer;
+	hif.fdata = data;
+	hif.func = func;
+	mif->protocol = ISDN_PID_NONE;
+	mif->stat = IF_NOACTIV;
+	inst->obj->ctrl(inst->st, MGR_ADDIF | REQUEST, mif);
+	return(inst->obj->ctrl(inst->st, MGR_DELIF | REQUEST, &hif));
 }

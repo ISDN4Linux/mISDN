@@ -1,4 +1,4 @@
-/* $Id: l3_udss1.c,v 0.8 2001/02/21 21:29:36 kkeil Exp $
+/* $Id: l3_udss1.c,v 0.9 2001/02/27 17:45:44 kkeil Exp $
  *
  * EURO/DSS1 D-channel protocol
  *
@@ -25,7 +25,7 @@ static int debug = 0;
 static hisaxobject_t u_dss1;
 
 
-const char *dss1_revision = "$Revision: 0.8 $";
+const char *dss1_revision = "$Revision: 0.9 $";
 
 static int dss1man(l3_process_t *, u_int, void *);
 
@@ -992,7 +992,7 @@ l3dss1_setup_ack(l3_process_t *pc, u_char pr, void *arg)
 	L3AddTimer(&pc->timer, T304, CC_T304);
 	if (ret) /* STATUS for none mandatory IE errors after actions are taken */
 		l3dss1_std_ie_err(pc, ret);
-	hisax_l3up(pc, CC_INFO | INDICATION, &pc->para.SETUP_ACKNOWLEDGE);
+	hisax_l3up(pc, CC_SETUP_ACKNOWLEDGE | INDICATION, &pc->para.SETUP_ACKNOWLEDGE);
 }
 
 static void
@@ -1121,7 +1121,12 @@ l3dss1_setup(l3_process_t *pc, u_char pr, void *arg)
 	L3AddTimer(&pc->timer, T_CTRL, CC_TCTRL);
 	if (err) /* STATUS for none mandatory IE errors after actions are taken */
 		l3dss1_std_ie_err(pc, err);
-	hisax_l3up(pc, CC_SETUP | INDICATION, &pc->para.SETUP);
+	if (hisax_l3up(pc, CC_NEW_CR | INDICATION, &pc->id)) {
+		if (pc->l3->debug & L3_DEB_WARN)
+			l3_debug(pc->l3, "cannot register SETUP CR");
+		release_l3_process(pc);
+	} else
+		hisax_l3up(pc, CC_SETUP | INDICATION, &pc->para.SETUP);
 }
 
 static void
@@ -2081,6 +2086,7 @@ dss1_fromdown(hisaxif_t *hif, u_int prim, u_int nr, int dtyp, void *arg) {
 static int
 dss1_fromup(hisaxif_t *hif, u_int prim, u_int nr, int dtyp, void *arg) {
 	layer3_t *l3;
+	l3msg_t *msg = arg;
 	int i, cr;
 	l3_process_t *proc;
 
@@ -2090,12 +2096,21 @@ dss1_fromup(hisaxif_t *hif, u_int prim, u_int nr, int dtyp, void *arg) {
 	if ((DL_ESTABLISH | REQUEST) == prim) {
 		l3_msg(l3, prim, l3->msgnr++, 0, NULL);
 		return(0);
-	} else if (((CC_SETUP | REQUEST) == prim) || ((CC_RESUME | REQUEST) == prim)) {
+	}
+	if (!msg) {
+		printk(KERN_WARNING "dss1_fromup no arg prim(%x)\n", prim);
+		return(-EINVAL);
+	}
+	if ((CC_NEW_CR | REQUEST) == prim) {
 		cr = newcallref();
 		cr |= 0x80;
-		proc = new_l3_process(l3, cr, N303);
+		if ((proc = new_l3_process(l3, cr, N303))) {
+			proc->id = msg->id;
+			return(0);
+		}
+		return(-ENOMEM);
 	} else {
-		proc = arg;
+		proc = getl3proc4id(l3, msg->id);
 	}
 	if (!proc) {
 		printk(KERN_ERR "HiSax dss1 fromup without proc pr=%04x\n", prim);
@@ -2115,7 +2130,7 @@ dss1_fromup(hisaxif_t *hif, u_int prim, u_int nr, int dtyp, void *arg) {
 			l3_debug(l3, "dss1down state %d prim %#x",
 				proc->state, prim);
 		}
-		downstatelist[i].rout(proc, prim, arg);
+		downstatelist[i].rout(proc, prim, msg->arg);
 	}
 	return(0);
 }
@@ -2154,6 +2169,8 @@ release_udss1(layer3_t *l3)
 	hisaxinstance_t  *inst = &l3->inst;
 	hisaxif_t	hif;
 
+	printk(KERN_DEBUG "release_udss1 refcnt %d l3(%p) inst(%p)\n",
+		u_dss1.refcnt, l3, inst);
 	release_l3(l3);
 	memset(&hif, 0, sizeof(hisaxif_t));
 	hif.fdata = l3;
@@ -2249,13 +2266,13 @@ create_udss1(hisaxstack_t *st, hisaxif_t *hif) {
 	nl3->inst.down.stat = IF_UP;
 	err = u_dss1.ctrl(st, MGR_ADDIF | REQUEST, &nl3->inst.down);
 	if (err) {
-		release_l3(nl3);
+		release_udss1(nl3);
 		printk(KERN_ERR "udss1 down interface request failed %d\n", err);
 		return(NULL);
 	}
 	err = u_dss1.ctrl(st, MGR_ADDIF | REQUEST, &nl3->inst.up);
 	if (err) {
-		release_l3(nl3);
+		release_udss1(nl3);
 		printk(KERN_ERR "udss1 up interface request failed %d\n", err);
 		return(NULL);
 	}
@@ -2334,7 +2351,7 @@ udss1_manager(void *data, u_int prim, void *arg) {
 	hisaxstack_t *st = data;
 	layer3_t *l3l = dss1list;
 
-//	printk(KERN_DEBUG "udss1_manager data:%p prim:%x arg:%p\n", data, prim, arg);
+	printk(KERN_DEBUG "udss1_manager data:%p prim:%x arg:%p\n", data, prim, arg);
 	if (!data)
 		return(-EINVAL);
 	while(l3l) {

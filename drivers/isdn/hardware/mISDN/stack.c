@@ -1,4 +1,4 @@
-/* $Id: stack.c,v 0.1 2001/02/22 10:12:54 kkeil Exp $
+/* $Id: stack.c,v 0.2 2001/02/27 17:45:44 kkeil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -114,34 +114,26 @@ get_stack4id(int id)
 }
 
 hisaxstack_t *
-create_stack(hisaxinstance_t *inst, hisaxstack_t *master) {
+new_stack(hisaxinstance_t *inst, hisaxstack_t *master) {
 	hisaxstack_t *newst;
-	int err;
 
-	if (!inst)
-		return(NULL);
 	if (core_debug & DEBUG_CORE_FUNC)
-		printk(KERN_DEBUG "create %s stack for %s\n",
-			master ? "child" : "master", inst->obj->name);
+		printk(KERN_DEBUG "create %s stack inst(%p)\n",
+			master ? "child" : "master", inst);
 	if (!(newst = kmalloc(sizeof(hisaxstack_t), GFP_ATOMIC))) {
 		printk(KERN_ERR "kmalloc hisax_stack failed\n");
 		return(NULL);
 	}
 	memset(newst, 0, sizeof(hisaxstack_t));
-	register_instance(newst, inst);
 	newst->id = get_free_stackid(master);
-	if ((err = inst->obj->own_ctrl(newst, MGR_ADDLAYER | CONFIRM, NULL))) {
-		printk(KERN_ERR "hisax_stack register failed err %d\n", err);
-		kfree(newst);
-		inst->obj->refcnt--;
-		return(NULL);
-	}
+	newst->mgr = inst;
 	if (master) {
 		APPEND_TO_LIST(newst, master->child);
 	} else {
 		APPEND_TO_LIST(newst, hisax_stacklist);
 	}
-	printk(KERN_INFO "Stack for %s.%d added\n", inst->obj->name, newst->id);
+	if (core_debug & DEBUG_CORE_FUNC)
+		printk(KERN_DEBUG "Stack id %x added\n", newst->id);
 	return(newst);
 }
 
@@ -216,3 +208,35 @@ release_stacks(hisaxobject_t *obj) {
 			obj->name, obj->refcnt);
 }
 
+int
+set_stack(hisaxstack_t *st, hisax_pid_t *pid) {
+
+	if (!st || !pid) {
+		int_error();
+		return(-EINVAL);
+	}
+	memcpy(&st->pid, pid, sizeof(hisax_pid_t));
+	if (!st->mgr || !st->mgr->obj || !st->mgr->obj->own_ctrl) {
+		int_error();
+		return(-EINVAL);
+	}
+	st->protocols[1] = st->pid.B1;
+	st->protocols[2] = st->pid.B2;
+	st->protocols[3] = st->pid.B3;
+	return(st->mgr->obj->own_ctrl(st, MGR_SETSTACK | REQUEST, &st->pid));
+}
+
+int
+clear_stack(hisaxstack_t *st) {
+	int i;
+
+	if (!st)
+		return(-EINVAL);
+	for (i=0; i<=MAX_LAYER; i++) {
+		if (st->inst[i])
+			st->inst[i]->obj->own_ctrl(st, MGR_DELLAYER | REQUEST,
+				st->inst[i]);
+		st->protocols[i] = ISDN_PID_NONE;
+	}
+	return(0);
+}

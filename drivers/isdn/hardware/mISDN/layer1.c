@@ -1,4 +1,4 @@
-/* $Id: layer1.c,v 0.4 2001/02/21 21:29:36 kkeil Exp $
+/* $Id: layer1.c,v 0.5 2001/02/27 17:45:44 kkeil Exp $
  *
  * hisax_l1.c     common low level stuff for I.430 layer1
  *
@@ -10,7 +10,7 @@
  *
  */
 
-const char *l1_revision = "$Revision: 0.4 $";
+const char *l1_revision = "$Revision: 0.5 $";
 
 #include <linux/config.h>
 #include <linux/module.h>
@@ -781,7 +781,7 @@ l1_manager(void *data, u_int prim, void *arg) {
 	    	break;
 	    		
 	    default:
-		printk(KERN_WARNING "fritz_manager prim %x not handled\n", prim);
+		printk(KERN_WARNING "l1_manager prim %x not handled\n", prim);
 		return(-EINVAL);
 	}
 	return(0);

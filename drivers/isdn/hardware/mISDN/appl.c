@@ -1,4 +1,4 @@
-/* $Id: appl.c,v 0.2 2001/02/22 05:54:39 kkeil Exp $
+/* $Id: appl.c,v 0.3 2001/02/27 17:45:44 kkeil Exp $
  *
  */
 
@@ -29,6 +29,7 @@ void applDestr(Appl_t *appl)
 		if (appl->cplcis[i]) {
 			cplciDestr(appl->cplcis[i]);
 			kfree(appl->cplcis[i]);
+			appl->cplcis[i] = NULL;
 		}
 	}
 }
@@ -178,7 +179,7 @@ void applDelCplci(Appl_t *appl, Cplci_t *cplci)
 	}
 	cplciDestr(cplci);
 	kfree(cplci);
-	appl->cplcis[i-1] = 0;
+	appl->cplcis[i-1] = NULL;
 }
 
 #define CLASS_I4L                   0x00

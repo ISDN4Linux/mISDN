@@ -1,4 +1,4 @@
-/* $Id: listen.c,v 0.2 2001/02/22 05:54:40 kkeil Exp $
+/* $Id: listen.c,v 0.3 2001/02/27 17:45:44 kkeil Exp $
  *
  */
 
@@ -136,7 +136,7 @@ void listenConstr(Listen_t *listen, Contr_t *contr, __u16 ApplId)
 {
 	listen->listen_m.fsm = &listen_fsm;
 	listen->listen_m.state = ST_LISTEN_L_0;
-	listen->listen_m.debug = 0;
+	listen->listen_m.debug = 1;
 	listen->listen_m.userdata = listen;
 	listen->listen_m.printdebug = listen_debug;
 

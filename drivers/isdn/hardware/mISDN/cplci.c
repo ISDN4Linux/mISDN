@@ -1,4 +1,4 @@
-/* $Id: cplci.c,v 0.2 2001/02/22 05:54:39 kkeil Exp $
+/* $Id: cplci.c,v 0.3 2001/02/27 17:45:44 kkeil Exp $
  *
  */
 
@@ -855,7 +855,7 @@ void cplciConstr(Cplci_t *cplci, Appl_t *appl, Plci_t *plci)
 	cplci->contr = plci->contr;
 	cplci->plci_m.fsm        = &plci_fsm;
 	cplci->plci_m.state      = ST_PLCI_P_0;
-	cplci->plci_m.debug      = 0;
+	cplci->plci_m.debug      = 1;
 	cplci->plci_m.userdata   = cplci;
 	cplci->plci_m.printdebug = cplci_debug;
 	cplci->bchannel = -1;
@@ -869,6 +869,7 @@ void cplciDestr(Cplci_t *cplci)
 	if (cplci->ncci) {
 		ncciDestr(cplci->ncci);
 		kfree(cplci->ncci);
+		cplci->ncci = NULL;
 	}
 }
 
@@ -888,6 +889,8 @@ void cplci_l3l4(Cplci_t *cplci, int pr, void *arg)
 	} p;
 	
 	p.setup = arg;
+	printk(KERN_DEBUG "cplci_l3l4: cplci(%x) plci(%x) pr(%x) arg(%p)\n",
+		cplci->adrPLCI, cplci->plci->adrPLCI, pr, arg);
 	switch (pr) {
 		case CC_SETUP | INDICATION:
 			cplciInfoIndIE(cplci, IE_DISPLAY, CAPI_INFOMASK_DISPLAY,

@@ -1,13 +1,15 @@
-/* $Id: capi.c,v 0.2 2001/02/22 05:54:39 kkeil Exp $
+/* $Id: capi.c,v 0.3 2001/02/27 17:45:44 kkeil Exp $
  *
  */
 
 #include <linux/module.h>
+#include <linux/vmalloc.h>
+#include <asm/uaccess.h>
 #include "hisax_capi.h"
 #include "helper.h"
 #include "debug.h"
 
-const char *capi_revision = "$Revision: 0.2 $";
+const char *capi_revision = "$Revision: 0.3 $";
 
 static int debug = 0;
 static hisaxobject_t capi_obj;
@@ -45,9 +47,26 @@ void capidebug(int level, char *fmt, ...)
 int hisax_load_firmware(struct capi_ctr *ctrl, capiloaddata *data)
 {
 	Contr_t *contr = ctrl->driverdata;
+	u_char *tmp;
+	int retval;
 
-	printk(KERN_INFO __FUNCTION__ "\n");
-	contrLoadFirmware(contr);
+	printk(KERN_INFO __FUNCTION__ " firm user(%d) len(%d)\n",
+		data->firmware.user, data->firmware.len);
+	printk(KERN_INFO __FUNCTION__ "  cfg user(%d) len(%d)\n",
+		data->configuration.user, data->configuration.len);
+	if (data->firmware.user) {
+		tmp = vmalloc(data->firmware.len);
+		if (!tmp)
+			return(-ENOMEM);
+		retval = copy_from_user(tmp, data->firmware.data,
+			data->firmware.len);
+		if (retval)
+			return(retval);
+	} else
+		tmp = data->firmware.data;
+	contrLoadFirmware(contr, data->firmware.len, tmp);
+	if (data->firmware.user)
+		vfree(tmp);
 	return 0;
 }
 
@@ -62,7 +81,7 @@ void hisax_reset_ctr(struct capi_ctr *ctrl)
 void hisax_remove_ctr(struct capi_ctr *ctrl)
 {
 	printk(KERN_INFO __FUNCTION__ "\n");
-	int_error();
+//	int_error();
 }
 
 static char *hisax_procinfo(struct capi_ctr *ctrl)
@@ -151,17 +170,21 @@ int CapiNew(void)
 }
 
 static int
-add_if_contr(Contr_t *ctrl, hisaxif_t *hif) {
+add_if_contr(Contr_t *ctrl, hisaxinstance_t *inst, hisaxif_t *hif) {
 	int err;
-	hisaxinstance_t *inst = &ctrl->inst;
 
 	printk(KERN_DEBUG "capi add_if lay %d/%x prot %x\n", hif->layer,
 		hif->stat, hif->protocol);
 	if (IF_TYPE(hif) == IF_UP) {
 		printk(KERN_WARNING "capi add_if here is no UP interface\n");
 	} else if (IF_TYPE(hif) == IF_DOWN) {
-		hif->fdata = ctrl;
-		hif->func = contrL3L4;
+		if (inst == &ctrl->inst) {
+			hif->fdata = ctrl;
+			hif->func = contrL3L4;
+		} else {
+			hif->fdata = inst->data;
+			ncciSetInterface(hif);
+		}
 		if (inst->down.stat == IF_NOACTIV) {
 			inst->down.stat = IF_UP;
 			inst->down.protocol =
@@ -200,32 +223,48 @@ del_if(hisaxinstance_t *inst, hisaxif_t *hif) {
 static int
 capi20_manager(void *data, u_int prim, void *arg) {
 	hisaxstack_t *st = data;
+	hisaxinstance_t *inst = NULL;
+	BInst_t *binst;
 	Contr_t *ctrl = (Contr_t *)capi_obj.ilist;
 
-//	printk(KERN_DEBUG "capi20_manager data:%p prim:%x arg:%p\n", data, prim, arg);
+	printk(KERN_DEBUG "capi20_manager data:%p prim:%x arg:%p\n", data, prim, arg);
 	if (!data)
 		return(-EINVAL);
 	while(ctrl) {
-		if (ctrl->inst.st == st)
+		if (ctrl->inst.st == st) {
+			inst = &ctrl->inst;
+			break;
+		}
+		binst = ctrl->binst;
+		while(binst) {
+			if (binst->inst.st == st) {
+				inst = &binst->inst;
+				break;
+			}
+		}
+		if (inst)
 			break;
 		ctrl = ctrl->next;
 	}
 	switch(prim) {
 	    case MGR_ADDIF | REQUEST:
-		if (!ctrl)
-			ctrl = newContr(&capi_obj, st, arg);
 		if (!ctrl) {
-			printk(KERN_WARNING "capi20_manager create_ctrl failed\n");
-			return(-EINVAL);
+			ctrl = newContr(&capi_obj, st, arg);
+			if (!ctrl) {
+				printk(KERN_WARNING "capi20_manager create_ctrl failed\n");
+				return(-EINVAL);
+			} else {
+				inst = &ctrl->inst;
+			}
 		}
-		return(add_if_contr(ctrl, arg));
+		return(add_if_contr(ctrl, inst, arg));
 		break;
 	    case MGR_DELIF | REQUEST:
 		if (!ctrl) {
 			printk(KERN_WARNING "capi20_manager delif no instance\n");
 			return(-EINVAL);
 		}
-		return(del_if(&ctrl->inst, arg));
+		return(del_if(inst, arg));
 		break;
 	    case MGR_RELEASE | INDICATION:
 	    	if (ctrl) {
