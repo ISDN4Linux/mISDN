@@ -1,4 +1,4 @@
-/* $Id: dsp_audio.c,v 1.1 2003/10/24 21:23:05 keil Exp $
+/* $Id: dsp_audio.c,v 1.2 2003/11/09 09:43:10 keil Exp $
  *
  * Audio support data for ISDN4Linux.
  *
@@ -152,14 +152,10 @@ signed long dsp_audio_alaw_to_s32[256] =
 	0x0000327c, 0xffffcd84, 0x0000032c, 0xfffffcd4
 };
 
+signed long *dsp_audio_law_to_s32;
 
-/* signed 16-bit -> alaw */
-unsigned char dsp_audio_s16_to_ulaw[65536];
-
-
-/* signed 16-bit -> alaw */
-unsigned char dsp_audio_s16_to_alaw[65536];
-
+/* signed 16-bit -> law */
+unsigned char dsp_audio_s16_to_law[65536];
 
 /* table is used to generate s16_to_alaw */
 static short dsp_audio_alaw_relations[512] =
@@ -268,203 +264,76 @@ unsigned char dsp_audio_alaw_to_ulaw[256] =
 	0xb5, 0x35, 0xee, 0x6e, 0x96, 0x16, 0xd2, 0x52
 };
 
-/* ulaw -> alaw */
-unsigned char dsp_audio_ulaw_to_alaw[256] =
-{
-	0xab, 0x55, 0xd5, 0x15, 0x95, 0x75, 0xf5, 0x35,
-	0xb5, 0x45, 0xc5, 0x05, 0x85, 0x65, 0xe5, 0x25,
-	0xa5, 0x5d, 0xdd, 0x1d, 0x9d, 0x7d, 0xfd, 0x3d,
-	0xbd, 0x4d, 0xcd, 0x0d, 0x8d, 0x6d, 0xed, 0x2d,
-	0xad, 0x51, 0xd1, 0x11, 0x91, 0x71, 0xf1, 0x31,
-	0xb1, 0x41, 0xc1, 0x01, 0x81, 0x61, 0xe1, 0x21,
-	0x59, 0xd9, 0x19, 0x99, 0x79, 0xf9, 0x39, 0xb9,
-	0x49, 0xc9, 0x09, 0x89, 0x69, 0xe9, 0x29, 0xa9,
-	0xd7, 0x17, 0x97, 0x77, 0xf7, 0x37, 0xb7, 0x47,
-	0xc7, 0x07, 0x87, 0x67, 0xe7, 0x27, 0xa7, 0xdf,
-	0x9f, 0x7f, 0xff, 0x3f, 0xbf, 0x4f, 0xcf, 0x0f,
-	0x8f, 0x6f, 0xef, 0x2f, 0x53, 0x13, 0x73, 0x33,
-	0xb3, 0x43, 0xc3, 0x03, 0x83, 0x63, 0xe3, 0x23,
-	0xa3, 0x5b, 0xdb, 0x1b, 0x9b, 0x7b, 0xfb, 0x3b,
-	0xbb, 0xbb, 0x4b, 0x4b, 0xcb, 0xcb, 0x0b, 0x0b,
-	0x8b, 0x8b, 0x6b, 0x6b, 0xeb, 0xeb, 0x2b, 0x2b,
-	0xab, 0x54, 0xd4, 0x14, 0x94, 0x74, 0xf4, 0x34,
-	0xb4, 0x44, 0xc4, 0x04, 0x84, 0x64, 0xe4, 0x24,
-	0xa4, 0x5c, 0xdc, 0x1c, 0x9c, 0x7c, 0xfc, 0x3c,
-	0xbc, 0x4c, 0xcc, 0x0c, 0x8c, 0x6c, 0xec, 0x2c,
-	0xac, 0x50, 0xd0, 0x10, 0x90, 0x70, 0xf0, 0x30,
-	0xb0, 0x40, 0xc0, 0x00, 0x80, 0x60, 0xe0, 0x20,
-	0x58, 0xd8, 0x18, 0x98, 0x78, 0xf8, 0x38, 0xb8,
-	0x48, 0xc8, 0x08, 0x88, 0x68, 0xe8, 0x28, 0xa8,
-	0xd6, 0x16, 0x96, 0x76, 0xf6, 0x36, 0xb6, 0x46,
-	0xc6, 0x06, 0x86, 0x66, 0xe6, 0x26, 0xa6, 0xde,
-	0x9e, 0x7e, 0xfe, 0x3e, 0xbe, 0x4e, 0xce, 0x0e,
-	0x8e, 0x6e, 0xee, 0x2e, 0x52, 0x12, 0x72, 0x32,
-	0xb2, 0x42, 0xc2, 0x02, 0x82, 0x62, 0xe2, 0x22,
-	0xa2, 0x5a, 0xda, 0x1a, 0x9a, 0x7a, 0xfa, 0x3a,
-	0xba, 0xba, 0x4a, 0x4a, 0xca, 0xca, 0x0a, 0x0a,
-	0x8a, 0x8a, 0x6a, 0x6a, 0xea, 0xea, 0x2a, 0x2a
-};
-
-/* flip bit order */
-unsigned char flip[256] =
-{
-0x00, 0x80, 0x40, 0xc0, 0x20, 0xa0, 0x60, 0xe0, 
-0x10, 0x90, 0x50, 0xd0, 0x30, 0xb0, 0x70, 0xf0,
-0x08, 0x88, 0x48, 0xc8, 0x28, 0xa8, 0x68, 0xe8, 
-0x18, 0x98, 0x58, 0xd8, 0x38, 0xb8, 0x78, 0xf8,
-0x04, 0x84, 0x44, 0xc4, 0x24, 0xa4, 0x64, 0xe4, 
-0x14, 0x94, 0x54, 0xd4, 0x34, 0xb4, 0x74, 0xf4,
-0x0c, 0x8c, 0x4c, 0xcc, 0x2c, 0xac, 0x6c, 0xec, 
-0x1c, 0x9c, 0x5c, 0xdc, 0x3c, 0xbc, 0x7c, 0xfc,
-0x02, 0x82, 0x42, 0xc2, 0x22, 0xa2, 0x62, 0xe2, 
-0x12, 0x92, 0x52, 0xd2, 0x32, 0xb2, 0x72, 0xf2,
-0x0a, 0x8a, 0x4a, 0xca, 0x2a, 0xaa, 0x6a, 0xea, 
-0x1a, 0x9a, 0x5a, 0xda, 0x3a, 0xba, 0x7a, 0xfa,
-0x06, 0x86, 0x46, 0xc6, 0x26, 0xa6, 0x66, 0xe6, 
-0x16, 0x96, 0x56, 0xd6, 0x36, 0xb6, 0x76, 0xf6,
-0x0e, 0x8e, 0x4e, 0xce, 0x2e, 0xae, 0x6e, 0xee, 
-0x1e, 0x9e, 0x5e, 0xde, 0x3e, 0xbe, 0x7e, 0xfe,
-0x01, 0x81, 0x41, 0xc1, 0x21, 0xa1, 0x61, 0xe1, 
-0x11, 0x91, 0x51, 0xd1, 0x31, 0xb1, 0x71, 0xf1,
-0x09, 0x89, 0x49, 0xc9, 0x29, 0xa9, 0x69, 0xe9, 
-0x19, 0x99, 0x59, 0xd9, 0x39, 0xb9, 0x79, 0xf9,
-0x05, 0x85, 0x45, 0xc5, 0x25, 0xa5, 0x65, 0xe5, 
-0x15, 0x95, 0x55, 0xd5, 0x35, 0xb5, 0x75, 0xf5,
-0x0d, 0x8d, 0x4d, 0xcd, 0x2d, 0xad, 0x6d, 0xed, 
-0x1d, 0x9d, 0x5d, 0xdd, 0x3d, 0xbd, 0x7d, 0xfd,
-0x03, 0x83, 0x43, 0xc3, 0x23, 0xa3, 0x63, 0xe3, 
-0x13, 0x93, 0x53, 0xd3, 0x33, 0xb3, 0x73, 0xf3,
-0x0b, 0x8b, 0x4b, 0xcb, 0x2b, 0xab, 0x6b, 0xeb, 
-0x1b, 0x9b, 0x5b, 0xdb, 0x3b, 0xbb, 0x7b, 0xfb,
-0x07, 0x87, 0x47, 0xc7, 0x27, 0xa7, 0x67, 0xe7, 
-0x17, 0x97, 0x57, 0xd7, 0x37, 0xb7, 0x77, 0xf7,
-0x0f, 0x8f, 0x4f, 0xcf, 0x2f, 0xaf, 0x6f, 0xef, 
-0x1f, 0x9f, 0x5f, 0xdf, 0x3f, 0xbf, 0x7f, 0xff,
-};
-
-unsigned char alawsilence=0x2a, ulawsilence=0xff;
+unsigned char silence;
 
 
-/***************
- * flip tables *
- ***************/
+/*****************************************************
+ * generate table for conversion of s16 to alaw/ulaw *
+ *****************************************************/
 
 void
-dsp_audio_flip_tables(int noflip)
-{
-	signed long s32[256];
-	unsigned char law[256];
-	int i;
-
-	if (noflip)
-		return;
-
-	/* flip alaw-relations */
-	i = 0;
-	while(i < 256) {
-		dsp_audio_alaw_relations[(i<<1)|1] =
-			flip[dsp_audio_alaw_relations[(i<<1)|1]];
-		i++;
-	}
-
-	/* flip alaw->ulaw */
-	i = 0;
-	while(i < 256) {
-		law[i] = flip[dsp_audio_alaw_to_ulaw[flip[i]]];
-		i++;
-	}
-	i = 0;
-	while(i < 256) {
-		dsp_audio_alaw_to_ulaw[law[i]] = law[i];
-		i++;
-	}
-	
-	/* flip ulaw->alaw */
-	i = 0;
-	while(i < 256) {
-		law[i] = flip[dsp_audio_ulaw_to_alaw[flip[i]]];
-		i++;
-	}
-	i = 0;
-	while(i < 256) {
-		dsp_audio_ulaw_to_alaw[law[i]] = law[i];
-		i++;
-	}
-	
-	/* flip alaw->s32 */
-	i = 0;
-	while(i < 256) {
-		s32[i] = dsp_audio_alaw_to_s32[flip[i]];
-		i++;
-	}
-	i = 0;
-	while(i < 256) {
-		dsp_audio_alaw_to_s32[i] = s32[i];
-		i++;
-	}
-	
-	/* flip ulaw->s32 */
-	i = 0;
-	while(i < 256) {
-		s32[i] = dsp_audio_ulaw_to_s32[flip[i]];
-		i++;
-	}
-	i = 0;
-	while(i < 256) {
-		dsp_audio_ulaw_to_s32[i] = s32[i];
-		i++;
-	}
-
-	/* flip silence */
-	alawsilence = flip[alawsilence];
-	ulawsilence = flip[ulawsilence];
-}
-
-
-/******************************************************
- * generate tables for conversion of s16 to alaw/ulaw *
- ******************************************************/
-
-void
-dsp_audio_generate_s2law_tables(int noflip)
+dsp_audio_generate_s2law_table(void)
 {
 	int i, j;
 
-	/* generating alaw-table */
-	i = j = 0;
-	while(i < 65536) {
-		if (i-32768 > dsp_audio_alaw_relations[j<<1])
-			j++;
-		if (j>255)
-			j=255;
-		dsp_audio_s16_to_alaw[(i-32768) & 0xffff]
-			 = dsp_audio_alaw_relations[(j<<1)|1];
-		i++;
+	if (options & DSP_OPT_ULAW) {
+		/* generating ulaw-table */
+		i = j = 0;
+		while(i < 32768) {
+			if (i-32768 > dsp_audio_law_to_s32[j])
+				j++;
+			dsp_audio_s16_to_law[(i-32768) & 0xffff] = j;
+			i++;
+		}
+		j = 255;
+		while(i < 65536) {
+			if (i-0x32768 > dsp_audio_law_to_s32[j])
+				j--;
+			dsp_audio_s16_to_law[(i-32768) & 0xffff] = j;
+			i++;
+		}
+	} else {
+		/* generating alaw-table */
+		i = j = 0;
+		while(i < 65536) {
+			if (i-32768 > dsp_audio_alaw_relations[j<<1])
+				j++;
+			if (j>255)
+				j=255;
+			dsp_audio_s16_to_law[(i-32768) & 0xffff]
+				 = dsp_audio_alaw_relations[(j<<1)|1];
+			i++;
+		}
 	}
+}
 
-	/* generating ulaw-table */
-	i = j = 0;
-	while(i < 32768) {
-		if (noflip) {
-			if (i-32768 > dsp_audio_ulaw_to_s32[j])
-				j++;
-		} else {
-			if (i-32768 > dsp_audio_ulaw_to_s32[flip[j]])
-				j++;
+
+/* mix 2*law -> law */
+unsigned char dsp_audio_mix_law[65536];
+
+/******************************************************
+ * generate mix table to mix two law samples into one *
+ ******************************************************/
+
+void
+dsp_audio_generate_mix_table(void)
+{
+	int i, j;
+	signed long sample;
+
+	i = 0;
+	while(i < 256) {
+		j = 0;
+		while(j < 256) {
+			sample = dsp_audio_law_to_s32[i];
+			sample += dsp_audio_law_to_s32[j];
+			if (sample > 32767)
+				sample = 32767;
+			if (sample < -32768)
+				sample = -32768;
+			dsp_audio_mix_law[(i<<8)|j] = dsp_audio_s16_to_law[sample & 0xffff];
+			j++;
 		}
-		dsp_audio_s16_to_ulaw[(i-32768) & 0xffff] = j;
-		i++;
-	}
-	j = 255;
-	while(i < 65536) {
-		if (noflip) {
-			if (i-0x32768 > dsp_audio_ulaw_to_s32[j])
-				j--;
-		} else {
-			if (i-0x32768 > dsp_audio_ulaw_to_s32[flip[j]])
-				j--;
-		}
-		dsp_audio_s16_to_ulaw[(i-32768) & 0xffff] = j;
 		i++;
 	}
 }
@@ -474,75 +343,40 @@ dsp_audio_generate_s2law_tables(int noflip)
  * generate different volume changes *
  *************************************/
 
-static unsigned char dsp_audio_alaw_reduce8[256];
-static unsigned char dsp_audio_alaw_reduce7[256];
-static unsigned char dsp_audio_alaw_reduce6[256];
-static unsigned char dsp_audio_alaw_reduce5[256];
-static unsigned char dsp_audio_alaw_reduce4[256];
-static unsigned char dsp_audio_alaw_reduce3[256];
-static unsigned char dsp_audio_alaw_reduce2[256];
-static unsigned char dsp_audio_alaw_reduce1[256];
-static unsigned char dsp_audio_alaw_increase1[256];
-static unsigned char dsp_audio_alaw_increase2[256];
-static unsigned char dsp_audio_alaw_increase3[256];
-static unsigned char dsp_audio_alaw_increase4[256];
-static unsigned char dsp_audio_alaw_increase5[256];
-static unsigned char dsp_audio_alaw_increase6[256];
-static unsigned char dsp_audio_alaw_increase7[256];
-static unsigned char dsp_audio_alaw_increase8[256];
-static unsigned char dsp_audio_ulaw_reduce8[256];
-static unsigned char dsp_audio_ulaw_reduce7[256];
-static unsigned char dsp_audio_ulaw_reduce6[256];
-static unsigned char dsp_audio_ulaw_reduce5[256];
-static unsigned char dsp_audio_ulaw_reduce4[256];
-static unsigned char dsp_audio_ulaw_reduce3[256];
-static unsigned char dsp_audio_ulaw_reduce2[256];
-static unsigned char dsp_audio_ulaw_reduce1[256];
-static unsigned char dsp_audio_ulaw_increase1[256];
-static unsigned char dsp_audio_ulaw_increase2[256];
-static unsigned char dsp_audio_ulaw_increase3[256];
-static unsigned char dsp_audio_ulaw_increase4[256];
-static unsigned char dsp_audio_ulaw_increase5[256];
-static unsigned char dsp_audio_ulaw_increase6[256];
-static unsigned char dsp_audio_ulaw_increase7[256];
-static unsigned char dsp_audio_ulaw_increase8[256];
+static unsigned char dsp_audio_reduce8[256];
+static unsigned char dsp_audio_reduce7[256];
+static unsigned char dsp_audio_reduce6[256];
+static unsigned char dsp_audio_reduce5[256];
+static unsigned char dsp_audio_reduce4[256];
+static unsigned char dsp_audio_reduce3[256];
+static unsigned char dsp_audio_reduce2[256];
+static unsigned char dsp_audio_reduce1[256];
+static unsigned char dsp_audio_increase1[256];
+static unsigned char dsp_audio_increase2[256];
+static unsigned char dsp_audio_increase3[256];
+static unsigned char dsp_audio_increase4[256];
+static unsigned char dsp_audio_increase5[256];
+static unsigned char dsp_audio_increase6[256];
+static unsigned char dsp_audio_increase7[256];
+static unsigned char dsp_audio_increase8[256];
 
-unsigned char *dsp_audio_alaw_change[16] = {
-	dsp_audio_alaw_reduce8,
-	dsp_audio_alaw_reduce7,
-	dsp_audio_alaw_reduce6,
-	dsp_audio_alaw_reduce5,
-	dsp_audio_alaw_reduce4,
-	dsp_audio_alaw_reduce3,
-	dsp_audio_alaw_reduce2,
-	dsp_audio_alaw_reduce1,
-	dsp_audio_alaw_increase1,
-	dsp_audio_alaw_increase2,
-	dsp_audio_alaw_increase3,
-	dsp_audio_alaw_increase4,
-	dsp_audio_alaw_increase5,
-	dsp_audio_alaw_increase6,
-	dsp_audio_alaw_increase7,
-	dsp_audio_alaw_increase8,
-};
-
-unsigned char *dsp_audio_ulaw_change[16] = {
-	dsp_audio_ulaw_reduce8,
-	dsp_audio_ulaw_reduce7,
-	dsp_audio_ulaw_reduce6,
-	dsp_audio_ulaw_reduce5,
-	dsp_audio_ulaw_reduce4,
-	dsp_audio_ulaw_reduce3,
-	dsp_audio_ulaw_reduce2,
-	dsp_audio_ulaw_reduce1,
-	dsp_audio_ulaw_increase1,
-	dsp_audio_ulaw_increase2,
-	dsp_audio_ulaw_increase3,
-	dsp_audio_ulaw_increase4,
-	dsp_audio_ulaw_increase5,
-	dsp_audio_ulaw_increase6,
-	dsp_audio_ulaw_increase7,
-	dsp_audio_ulaw_increase8,
+static unsigned char *dsp_audio_volume_change[16] = {
+	dsp_audio_reduce8,
+	dsp_audio_reduce7,
+	dsp_audio_reduce6,
+	dsp_audio_reduce5,
+	dsp_audio_reduce4,
+	dsp_audio_reduce3,
+	dsp_audio_reduce2,
+	dsp_audio_reduce1,
+	dsp_audio_increase1,
+	dsp_audio_increase2,
+	dsp_audio_increase3,
+	dsp_audio_increase4,
+	dsp_audio_increase5,
+	dsp_audio_increase6,
+	dsp_audio_increase7,
+	dsp_audio_increase8,
 };
 
 void
@@ -553,119 +387,63 @@ dsp_audio_generate_volume_changes(void)
 
 	i = 0;
 	while(i < 256) {
-		dsp_audio_alaw_reduce8[i] = dsp_audio_s16_to_alaw[(dsp_audio_alaw_to_s32[i]>>8) & 0xffff];
-		dsp_audio_alaw_reduce7[i] = dsp_audio_s16_to_alaw[(dsp_audio_alaw_to_s32[i]>>7) & 0xffff];
-		dsp_audio_alaw_reduce6[i] = dsp_audio_s16_to_alaw[(dsp_audio_alaw_to_s32[i]>>6) & 0xffff];
-		dsp_audio_alaw_reduce5[i] = dsp_audio_s16_to_alaw[(dsp_audio_alaw_to_s32[i]>>5) & 0xffff];
-		dsp_audio_alaw_reduce4[i] = dsp_audio_s16_to_alaw[(dsp_audio_alaw_to_s32[i]>>4) & 0xffff];
-		dsp_audio_alaw_reduce3[i] = dsp_audio_s16_to_alaw[(dsp_audio_alaw_to_s32[i]>>3) & 0xffff];
-		dsp_audio_alaw_reduce2[i] = dsp_audio_s16_to_alaw[(dsp_audio_alaw_to_s32[i]>>2) & 0xffff];
-		dsp_audio_alaw_reduce1[i] = dsp_audio_s16_to_alaw[(dsp_audio_alaw_to_s32[i]>>1) & 0xffff];
-		sample = dsp_audio_alaw_to_s32[i] << 1;
+		dsp_audio_reduce8[i] = dsp_audio_s16_to_law[(dsp_audio_law_to_s32[i]>>8) & 0xffff];
+		dsp_audio_reduce7[i] = dsp_audio_s16_to_law[(dsp_audio_law_to_s32[i]>>7) & 0xffff];
+		dsp_audio_reduce6[i] = dsp_audio_s16_to_law[(dsp_audio_law_to_s32[i]>>6) & 0xffff];
+		dsp_audio_reduce5[i] = dsp_audio_s16_to_law[(dsp_audio_law_to_s32[i]>>5) & 0xffff];
+		dsp_audio_reduce4[i] = dsp_audio_s16_to_law[(dsp_audio_law_to_s32[i]>>4) & 0xffff];
+		dsp_audio_reduce3[i] = dsp_audio_s16_to_law[(dsp_audio_law_to_s32[i]>>3) & 0xffff];
+		dsp_audio_reduce2[i] = dsp_audio_s16_to_law[(dsp_audio_law_to_s32[i]>>2) & 0xffff];
+		dsp_audio_reduce1[i] = dsp_audio_s16_to_law[(dsp_audio_law_to_s32[i]>>1) & 0xffff];
+		sample = dsp_audio_law_to_s32[i] << 1;
 		if (sample < -32768)
 			sample = -32768;
 		else if (sample > 32767)
 			sample = 32767;
-		dsp_audio_alaw_increase1[i] = dsp_audio_s16_to_alaw[sample & 0xffff];
-		sample = dsp_audio_alaw_to_s32[i] << 2;
+		dsp_audio_increase1[i] = dsp_audio_s16_to_law[sample & 0xffff];
+		sample = dsp_audio_law_to_s32[i] << 2;
 		if (sample < -32768)
 			sample = -32768;
 		else if (sample > 32767)
 			sample = 32767;
-		dsp_audio_alaw_increase2[i] = dsp_audio_s16_to_alaw[sample & 0xffff];
-		sample = dsp_audio_alaw_to_s32[i] << 3;
+		dsp_audio_increase2[i] = dsp_audio_s16_to_law[sample & 0xffff];
+		sample = dsp_audio_law_to_s32[i] << 3;
 		if (sample < -32768)
 			sample = -32768;
 		else if (sample > 32767)
 			sample = 32767;
-		dsp_audio_alaw_increase3[i] = dsp_audio_s16_to_alaw[sample & 0xffff];
-		sample = dsp_audio_alaw_to_s32[i] << 4;
+		dsp_audio_increase3[i] = dsp_audio_s16_to_law[sample & 0xffff];
+		sample = dsp_audio_law_to_s32[i] << 4;
 		if (sample < -32768)
 			sample = -32768;
 		else if (sample > 32767)
 			sample = 32767;
-		dsp_audio_alaw_increase4[i] = dsp_audio_s16_to_alaw[sample & 0xffff];
-		sample = dsp_audio_alaw_to_s32[i] << 5;
+		dsp_audio_increase4[i] = dsp_audio_s16_to_law[sample & 0xffff];
+		sample = dsp_audio_law_to_s32[i] << 5;
 		if (sample < -32768)
 			sample = -32768;
 		else if (sample > 32767)
 			sample = 32767;
-		dsp_audio_alaw_increase5[i] = dsp_audio_s16_to_alaw[sample & 0xffff];
-		sample = dsp_audio_alaw_to_s32[i] << 6;
+		dsp_audio_increase5[i] = dsp_audio_s16_to_law[sample & 0xffff];
+		sample = dsp_audio_law_to_s32[i] << 6;
 		if (sample < -32768)
 			sample = -32768;
 		else if (sample > 32767)
 			sample = 32767;
-		dsp_audio_alaw_increase6[i] = dsp_audio_s16_to_alaw[sample & 0xffff];
-		sample = dsp_audio_alaw_to_s32[i] << 7;
+		dsp_audio_increase6[i] = dsp_audio_s16_to_law[sample & 0xffff];
+		sample = dsp_audio_law_to_s32[i] << 7;
 		if (sample < -32768)
 			sample = -32768;
 		else if (sample > 32767)
 			sample = 32767;
-		dsp_audio_alaw_increase7[i] = dsp_audio_s16_to_alaw[sample & 0xffff];
-		sample = dsp_audio_alaw_to_s32[i] << 8;
+		dsp_audio_increase7[i] = dsp_audio_s16_to_law[sample & 0xffff];
+		sample = dsp_audio_law_to_s32[i] << 8;
 		if (sample < -32768)
 			sample = -32768;
 		else if (sample > 32767)
 			sample = 32767;
-		dsp_audio_alaw_increase8[i] = dsp_audio_s16_to_alaw[sample & 0xffff];
+		dsp_audio_increase8[i] = dsp_audio_s16_to_law[sample & 0xffff];
 
-		dsp_audio_ulaw_reduce8[i] = dsp_audio_s16_to_ulaw[(dsp_audio_ulaw_to_s32[i]>>8) & 0xffff];
-		dsp_audio_ulaw_reduce7[i] = dsp_audio_s16_to_ulaw[(dsp_audio_ulaw_to_s32[i]>>7) & 0xffff];
-		dsp_audio_ulaw_reduce6[i] = dsp_audio_s16_to_ulaw[(dsp_audio_ulaw_to_s32[i]>>6) & 0xffff];
-		dsp_audio_ulaw_reduce5[i] = dsp_audio_s16_to_ulaw[(dsp_audio_ulaw_to_s32[i]>>5) & 0xffff];
-		dsp_audio_ulaw_reduce4[i] = dsp_audio_s16_to_ulaw[(dsp_audio_ulaw_to_s32[i]>>4) & 0xffff];
-		dsp_audio_ulaw_reduce3[i] = dsp_audio_s16_to_ulaw[(dsp_audio_ulaw_to_s32[i]>>3) & 0xffff];
-		dsp_audio_ulaw_reduce2[i] = dsp_audio_s16_to_ulaw[(dsp_audio_ulaw_to_s32[i]>>2) & 0xffff];
-		dsp_audio_ulaw_reduce1[i] = dsp_audio_s16_to_ulaw[(dsp_audio_ulaw_to_s32[i]>>1) & 0xffff];
-		sample = dsp_audio_ulaw_to_s32[i] << 1;
-		if (sample < -32768)
-			sample = -32768;
-		else if (sample > 32767)
-			sample = 32767;
-		dsp_audio_ulaw_increase1[i] = dsp_audio_s16_to_ulaw[sample & 0xffff];
-		sample = dsp_audio_ulaw_to_s32[i] << 2;
-		if (sample < -32768)
-			sample = -32768;
-		else if (sample > 32767)
-			sample = 32767;
-		dsp_audio_ulaw_increase2[i] = dsp_audio_s16_to_ulaw[sample & 0xffff];
-		sample = dsp_audio_ulaw_to_s32[i] << 3;
-		if (sample < -32768)
-			sample = -32768;
-		else if (sample > 32767)
-			sample = 32767;
-		dsp_audio_ulaw_increase3[i] = dsp_audio_s16_to_ulaw[sample & 0xffff];
-		sample = dsp_audio_ulaw_to_s32[i] << 4;
-		if (sample < -32768)
-			sample = -32768;
-		else if (sample > 32767)
-			sample = 32767;
-		dsp_audio_ulaw_increase4[i] = dsp_audio_s16_to_ulaw[sample & 0xffff];
-		sample = dsp_audio_ulaw_to_s32[i] << 5;
-		if (sample < -32768)
-			sample = -32768;
-		else if (sample > 32767)
-			sample = 32767;
-		dsp_audio_ulaw_increase5[i] = dsp_audio_s16_to_ulaw[sample & 0xffff];
-		sample = dsp_audio_ulaw_to_s32[i] << 6;
-		if (sample < -32768)
-			sample = -32768;
-		else if (sample > 32767)
-			sample = 32767;
-		dsp_audio_ulaw_increase6[i] = dsp_audio_s16_to_ulaw[sample & 0xffff];
-		sample = dsp_audio_ulaw_to_s32[i] << 7;
-		if (sample < -32768)
-			sample = -32768;
-		else if (sample > 32767)
-			sample = 32767;
-		dsp_audio_ulaw_increase7[i] = dsp_audio_s16_to_ulaw[sample & 0xffff];
-		sample = dsp_audio_ulaw_to_s32[i] << 8;
-		if (sample < -32768)
-			sample = -32768;
-		else if (sample > 32767)
-			sample = 32767;
-		dsp_audio_ulaw_increase8[i] = dsp_audio_s16_to_ulaw[sample & 0xffff];
 		i++;
 	}
 }
@@ -679,7 +457,7 @@ dsp_audio_generate_volume_changes(void)
  * -8 to 8, which is a shift to the power of 2. 0 == no volume, 3 == volume*8
  */
 void
-dsp_change_volume(struct sk_buff *skb, int volume, int ulaw)
+dsp_change_volume(struct sk_buff *skb, int volume)
 {
 	unsigned char *volume_change;
 	int i, ii;
@@ -699,7 +477,7 @@ dsp_change_volume(struct sk_buff *skb, int volume, int ulaw)
 		if (shift > 15)
 			shift = 15;
 	}
-	volume_change = (ulaw)?dsp_audio_ulaw_change[shift]:dsp_audio_alaw_change[shift];
+	volume_change = dsp_audio_volume_change[shift];
 	i = 0;
 	ii = skb->len;
 	p = skb->data;

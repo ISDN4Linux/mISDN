@@ -1,4 +1,4 @@
-/* $Id: dsp.h,v 1.1 2003/10/24 21:23:05 keil Exp $
+/* $Id: dsp.h,v 1.2 2003/11/09 09:43:10 keil Exp $
  *
  * Audio support data for ISDN4Linux.
  *
@@ -19,30 +19,39 @@
 #define DEBUG_DSP_CMX		0x0010
 #define DEBUG_DSP_TONE		0x0020
 
+/* options may be:
+ *
+ * bit 0 = use ulaw instead of alaw
+ * bit 1 = disable hfc hardware accelleration
+ *
+ */
+#define DSP_OPT_ULAW		(1<<0)
+#define DSP_OPT_NOHARDWARE	(1<<1)
+//#define DSP_OPT_NOFLIP		(1<<2)
+
 #ifdef HAS_WORKQUEUE
 #include <linux/workqueue.h>
 #else
 #include <linux/tqueue.h>
 #endif
 
+extern int options;
+
 /***************
  * audio stuff *
  ***************/
 
-extern signed long dsp_audio_ulaw_to_s32[256];
 extern signed long dsp_audio_alaw_to_s32[256];
-extern unsigned char dsp_audio_s16_to_ulaw[65536];
-extern unsigned char dsp_audio_s16_to_alaw[65536];
+extern signed long dsp_audio_ulaw_to_s32[256];
+extern signed long *dsp_audio_law_to_s32;
+extern unsigned char dsp_audio_s16_to_law[65536];
 extern unsigned char dsp_audio_alaw_to_ulaw[256];
-extern unsigned char dsp_audio_ulaw_to_alaw[256];
-extern unsigned char flip[256];
-extern unsigned char *dsp_audio_alaw_change[16];
-extern unsigned char *dsp_audio_ulaw_change[16];
-extern void dsp_audio_generate_s2law_tables(int noflip);
-extern void dsp_audio_flip_tables(int noflip);
-extern void dsp_audio_flip_and_generate_ulaw_samples(int noflip);
+extern unsigned char dsp_audio_mix_law[65536];
+extern void dsp_audio_generate_s2law_table(void);
+extern void dsp_audio_generate_mix_table(void);
+extern void dsp_audio_generate_ulaw_samples(void);
 extern void dsp_audio_generate_volume_changes(void);
-extern unsigned char ulawsilence, alawsilence;
+extern unsigned char silence;
 
 
 /*************
@@ -53,7 +62,9 @@ extern unsigned char ulawsilence, alawsilence;
 #define CMX_BUFF_HALF	0x2000	/* CMX_BUFF_SIZE / 2 */
 #define CMX_BUFF_MASK	0x3fff	/* CMX_BUFF_SIZE - 1 */
 
-#define SEND_LEN	64	/* chunk length for mixed data to card */
+// jolly patch start
+#define SEND_LEN	64	/* initial chunk length for mixed data to card */
+// jolly patch stop
 
 /* the structure of conferences:
  *
@@ -138,7 +149,6 @@ typedef struct _dsp {
 	tone_t		tone;
 	dtmf_t		dtmf;
 	int		tx_volume, rx_volume;
-	int		ulaw;
 	struct work_struct sendwork; /* event for sending data */
 	int		R_tx, W_tx; /* pointers of transmit buffer */
 	int		R_rx, W_rx; /* pointers of receive buffer and conference buffer */
@@ -148,7 +158,7 @@ typedef struct _dsp {
 
 
 
-extern void dsp_change_volume(struct sk_buff *skb, int volume, int ulaw);
+extern void dsp_change_volume(struct sk_buff *skb, int volume);
 
 extern conference_t *Conf_list;
 extern void dsp_cmx_debug(dsp_t *dsp);

@@ -1,4 +1,4 @@
-/* $Id: dsp_tones.c,v 1.1 2003/10/24 21:23:05 keil Exp $ 
+/* $Id: dsp_tones.c,v 1.2 2003/11/09 09:43:10 keil Exp $ 
  *
  * Audio support data for ISDN4Linux.
  *
@@ -14,32 +14,23 @@
 #include "debug.h"
 #include "dsp.h"
 
-#define ALAW_S sample_alaw_silence
-#define ULAW_S sample_ulaw_silence
+#define DATA_S sample_silence
 #define SIZE_S &sizeof_silence
-#define ALAW_GA sample_alaw_german_all
-#define ULAW_GA sample_ulaw_german_all
+#define DATA_GA sample_german_all
 #define SIZE_GA &sizeof_german_all
-#define ALAW_GO sample_alaw_german_old
-#define ULAW_GO sample_ulaw_german_old
+#define DATA_GO sample_german_old
 #define SIZE_GO &sizeof_german_old
-#define ALAW_DT sample_alaw_american_dialtone
-#define ULAW_DT sample_ulaw_american_dialtone
+#define DATA_DT sample_american_dialtone
 #define SIZE_DT &sizeof_american_dialtone
-#define ALAW_RI sample_alaw_american_ringing
-#define ULAW_RI sample_ulaw_american_ringing
+#define DATA_RI sample_american_ringing
 #define SIZE_RI &sizeof_american_ringing
-#define ALAW_BU sample_alaw_american_busy
-#define ULAW_BU sample_ulaw_american_busy
+#define DATA_BU sample_american_busy
 #define SIZE_BU &sizeof_american_busy
-#define ALAW_S1 sample_alaw_special1
-#define ULAW_S1 sample_ulaw_special1
+#define DATA_S1 sample_special1
 #define SIZE_S1 &sizeof_special1
-#define ALAW_S2 sample_alaw_special2
-#define ULAW_S2 sample_ulaw_special2
+#define DATA_S2 sample_special2
 #define SIZE_S2 &sizeof_special2
-#define ALAW_S3 sample_alaw_special3
-#define ULAW_S3 sample_ulaw_special3
+#define DATA_S3 sample_special3
 #define SIZE_S3 &sizeof_special3
 
 /***************/
@@ -48,7 +39,7 @@
 
 /* all tones are alaw encoded */
 
-static unsigned char sample_alaw_german_all[]= {
+static unsigned char sample_german_all[]= {
 	0x80,0xab,0x81,0x6d,0xfd,0xdd,0x5d,0x9d,
 	0x4d,0xd1,0x89,0x88,0xd0,0x4c,0x9c,0x5c,
 	0xdc,0xfc,0x6c,
@@ -86,10 +77,9 @@ static unsigned char sample_alaw_german_all[]= {
 	0x4d,0xd1,0x89,0x88,0xd0,0x4c,0x9c,0x5c,
 	0xdc,0xfc,0x6c,
 };
-static unsigned char sample_ulaw_german_all[sizeof(sample_alaw_german_all)];
-static unsigned long sizeof_german_all = sizeof(sample_alaw_german_all);
+static unsigned long sizeof_german_all = sizeof(sample_german_all);
 
-static unsigned char sample_alaw_german_old[]= {
+static unsigned char sample_german_old[]= {
 	0x2d,0x59,0x3d,0x0d,0xdd,0x9d,0x89,0xbd,
 	0x6c,0xe0,0x7c,0xbc,0x5c,0x1c,0x08,0x0c,
 	0x2d,0x59,0x3d,0x0d,0xdd,0x9d,0x89,0xbd,
@@ -123,10 +113,9 @@ static unsigned char sample_alaw_german_old[]= {
 	0x2d,0x59,0x3d,0x0d,0xdd,0x9d,0x89,0xbd,
 	0x6c,0xe0,0x7c,0xbc,0x5c,0x1c,0x08,0x0c,
 };
-static unsigned char sample_ulaw_german_old[sizeof(sample_alaw_german_old)];
-static unsigned long sizeof_german_old = sizeof(sample_alaw_german_old);
+static unsigned long sizeof_german_old = sizeof(sample_german_old);
 
-static unsigned char sample_alaw_american_dialtone[]= {
+static unsigned char sample_american_dialtone[]= {
 	0x2a,0xd0,0x9c,0x64,0x44,0xb4,0x44,0x64,0x9c,0xac,
 	0x9e,0xb1,0xbd,0x25,0x85,0x05,0x85,0x25,0x3d,0x11,
 	0x47,0x20,0xec,0x3c,0x1c,0xdc,0x1c,0xbc,0xec,0x00,
@@ -208,10 +197,9 @@ static unsigned char sample_alaw_american_dialtone[]= {
 	0x46,0x10,0x3c,0x24,0x84,0x04,0x84,0x24,0xbc,0xb0,
 	0x9f,0xad,0x9d,0x65,0x45,0xb5,0x45,0x65,0x9d,0xd1,
 };
-static unsigned char sample_ulaw_american_dialtone[sizeof(sample_alaw_american_dialtone)];
-static unsigned long sizeof_american_dialtone = sizeof(sample_alaw_american_dialtone);
+static unsigned long sizeof_american_dialtone = sizeof(sample_american_dialtone);
 
-static unsigned char sample_alaw_american_ringing[]= {
+static unsigned char sample_american_ringing[]= {
 	0x2a,0x42,0xee,0x2e,0x1a,0x73,0x87,0x29,0x49,0x79,
 	0x79,0xc9,0xf7,0x0b,0x96,0x18,0x00,0xf0,0x70,0xb0,
 	0xe0,0x28,0x3f,0xd9,0xf1,0x2d,0x6d,0x6d,0xad,0x01,
@@ -233,10 +221,9 @@ static unsigned char sample_alaw_american_ringing[]= {
 	0xe1,0xb1,0x71,0xf1,0x01,0x19,0x97,0x0a,0xf6,0xc8,
 	0x78,0x78,0x48,0x28,0x86,0x72,0x1b,0x2f,0xef,0x43,
 };
-static unsigned char sample_ulaw_american_ringing[sizeof(sample_alaw_american_ringing)];
-static unsigned long sizeof_american_ringing = sizeof(sample_alaw_american_ringing);
+static unsigned long sizeof_american_ringing = sizeof(sample_american_ringing);
 
-static unsigned char sample_alaw_american_busy[]= {
+static unsigned char sample_american_busy[]= {
 	0x2a,0x67,0x77,0x27,0xfe,0x18,0x70,0xec,0x8c,0x2c,
 	0x80,0x2f,0x71,0x3d,0xa5,0xe5,0xdd,0x6d,0x37,0x10,
 	0xdc,0x04,0xc4,0x84,0x7c,0x60,0x41,0xdd,0xc5,0xb5,
@@ -278,10 +265,9 @@ static unsigned char sample_alaw_american_busy[]= {
 	0xdd,0x11,0x36,0x6c,0xdc,0xe4,0xa4,0x3c,0x70,0x2e,
 	0x81,0x2d,0x8d,0xed,0x71,0x19,0xff,0x26,0x76,0x66,
 };
-static unsigned char sample_ulaw_american_busy[sizeof(sample_alaw_american_busy)];
-static unsigned long sizeof_american_busy = sizeof(sample_alaw_american_busy);
+static unsigned long sizeof_american_busy = sizeof(sample_american_busy);
 
-static unsigned char sample_alaw_special1[]= {
+static unsigned char sample_special1[]= {
 	0xa4,0x2a,0x64,0xb4,0x7d,0xd8,0x05,0x45,
 	0x8c,0xd1,0x44,0xc4,0xf1,0xcc,0xb5,0x05,
 	0x48,0x9d,0xb4,0xe4,0x1e,0x24,0xb5,0x5d,
@@ -323,10 +309,9 @@ static unsigned char sample_alaw_special1[]= {
 	0xb4,0x9c,0xf0,0x04,0x45,0xcd,0x8d,0xc5,
 	0x04,0xd0,0x7c,0x44,0x65,0xd9,0xa5,0xb5,
 };
-static unsigned char sample_ulaw_special1[sizeof(sample_alaw_special1)];
-static unsigned long sizeof_special1 = sizeof(sample_alaw_special1);
+static unsigned long sizeof_special1 = sizeof(sample_special1);
 
-static unsigned char sample_alaw_special2[]= {
+static unsigned char sample_special2[]= {
 	0x25,0xd0,0xd9,0x45,0xc4,0x84,0xc5,0x2a,
 	0xd8,0x85,0x24,0x44,0xb5,0xd1,0xcc,0x9d,
 	0xcc,0xb4,0xb5,0x9d,0x24,0xd1,0xd8,0x44,
@@ -363,10 +348,9 @@ static unsigned char sample_alaw_special2[]= {
 	0xc5,0x85,0xc4,0x2a,0xd9,0x84,0x25,0x45,
 	0xb4,0xd0,0xcd,0x9c,0xcd,0xb5,0xb4,0x9c,
 };
-static unsigned char sample_ulaw_special2[sizeof(sample_alaw_special2)];
-static unsigned long sizeof_special2 = sizeof(sample_alaw_special2);
+static unsigned long sizeof_special2 = sizeof(sample_special2);
 
-static unsigned char sample_alaw_special3[]= {
+static unsigned char sample_special3[]= {
 	0xd9,0x44,0xd9,0xb5,0xcc,0x44,0x25,0x85,
 	0xc4,0x9c,0xb5,0xd1,0xb4,0x2a,0xc5,0xd0,
 	0x24,0x9d,0xcd,0x84,0xd8,0x45,0xd8,0xb4,
@@ -403,10 +387,9 @@ static unsigned char sample_alaw_special3[]= {
 	0xcd,0x45,0x24,0x84,0xc5,0x9d,0xb4,0xd0,
 	0xb5,0x2b,0xc4,0xd1,0x25,0x9c,0xcc,0x85,
 };
-static unsigned char sample_ulaw_special3[sizeof(sample_alaw_special3)];
-static unsigned long sizeof_special3 = sizeof(sample_alaw_special3);
+static unsigned long sizeof_special3 = sizeof(sample_special3);
 
-static unsigned char sample_alaw_silence[]= {
+static unsigned char sample_silence[]= {
 	0x2a,0x2a,0x2a,0x2a,0x2a,0x2a,0x2a,0x2a,
 	0x2a,0x2a,0x2a,0x2a,0x2a,0x2a,0x2a,0x2a,
 	0x2a,0x2a,0x2a,0x2a,0x2a,0x2a,0x2a,0x2a,
@@ -440,59 +423,23 @@ static unsigned char sample_alaw_silence[]= {
 	0x2a,0x2a,0x2a,0x2a,0x2a,0x2a,0x2a,0x2a,
 	0x2a,0x2a,0x2a,0x2a,0x2a,0x2a,0x2a,0x2a,
 };
-static unsigned char sample_ulaw_silence[]= {
-	0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,
-	0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,
-	0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,
-	0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,
-	0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,
-	0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,
-	0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,
-	0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,
-	0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,
-	0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,
-	0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,
-	0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,
-	0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,
-	0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,
-	0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,
-	0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,
-	0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,
-	0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,
-	0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,
-	0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,
-	0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,
-	0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,
-	0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,
-	0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,
-	0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,
-	0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,
-	0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,
-	0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,
-	0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,
-	0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,
-	0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,
-	0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,
-};
-static unsigned char sample_ulaw_silence[sizeof(sample_alaw_silence)];
-static unsigned long sizeof_silence = sizeof(sample_alaw_silence);
+static unsigned long sizeof_silence = sizeof(sample_silence);
 
 struct tones_samples {
 	unsigned long *len;
-	unsigned char *data_alaw;
-	unsigned char *data_ulaw;
+	unsigned char *data;
 };
 static struct 
 tones_samples samples[] = {
-	{&sizeof_german_all, sample_alaw_german_all, sample_ulaw_german_all},
-	{&sizeof_german_old, sample_alaw_german_old, sample_ulaw_german_old},
-	{&sizeof_american_dialtone, sample_alaw_american_dialtone, sample_ulaw_american_dialtone},
-	{&sizeof_american_ringing, sample_alaw_american_ringing, sample_ulaw_american_ringing},
-	{&sizeof_american_busy, sample_alaw_american_busy, sample_ulaw_american_busy},
-	{&sizeof_special1, sample_alaw_special1, sample_ulaw_special1},
-	{&sizeof_special2, sample_alaw_special2, sample_ulaw_special2},
-	{&sizeof_special3, sample_alaw_special3, sample_ulaw_special3},
-	{NULL, NULL, NULL},
+	{&sizeof_german_all, sample_german_all},
+	{&sizeof_german_old, sample_german_old},
+	{&sizeof_american_dialtone, sample_american_dialtone},
+	{&sizeof_american_ringing, sample_american_ringing},
+	{&sizeof_american_busy, sample_american_busy},
+	{&sizeof_special1, sample_special1},
+	{&sizeof_special2, sample_special2},
+	{&sizeof_special3, sample_special3},
+	{NULL, NULL},
 };
 
 /***********************************
@@ -500,7 +447,7 @@ tones_samples samples[] = {
  ***********************************/
 
 void 
-dsp_audio_flip_and_generate_ulaw_samples(int noflip)
+dsp_audio_generate_ulaw_samples(void)
 {
 	int i,j;
 
@@ -508,11 +455,8 @@ dsp_audio_flip_and_generate_ulaw_samples(int noflip)
 	while(samples[i].len) {
 		j = 0;
 		while(j < (*samples[i].len)) {
-			if (!noflip)
-				samples[i].data_alaw[j] = 
-					flip[samples[i].data_alaw[j]];
-			samples[i].data_ulaw[j] = 
-				dsp_audio_alaw_to_ulaw[samples[i].data_alaw[j]];
+			samples[i].data[j] = 
+				dsp_audio_alaw_to_ulaw[samples[i].data[j]];
 			j++;
 		}
 		i++;
@@ -526,134 +470,112 @@ dsp_audio_flip_and_generate_ulaw_samples(int noflip)
 
 struct pattern {
 	int tone;
-	unsigned char *alaw[10];
-	unsigned char *ulaw[10];
+	unsigned char *data[10];
 	unsigned long *siz[10];
 	unsigned long seq[10];
 } pattern[] = {
 	{TONE_GERMAN_DIALTONE,
-	{ALAW_GA,0,0,0,0,0,0,0,0,0},
-	{ULAW_GA,0,0,0,0,0,0,0,0,0},
+	{DATA_GA,0,0,0,0,0,0,0,0,0},
 	{SIZE_GA,0,0,0,0,0,0,0,0,0},
 	{1900,0,0,0,0,0,0,0,0,0}},
 
 	{TONE_GERMAN_OLDDIALTONE,
-	{ALAW_GO,0,0,0,0,0,0,0,0,0},
-	{ULAW_GO,0,0,0,0,0,0,0,0,0},
+	{DATA_GO,0,0,0,0,0,0,0,0,0},
 	{SIZE_GO,0,0,0,0,0,0,0,0,0},
 	{1998,0,0,0,0,0,0,0,0,0}},
 
 	{TONE_AMERICAN_DIALTONE,
-	{ALAW_DT,0,0,0,0,0,0,0,0,0},
-	{ULAW_DT,0,0,0,0,0,0,0,0,0},
+	{DATA_DT,0,0,0,0,0,0,0,0,0},
 	{SIZE_DT,0,0,0,0,0,0,0,0,0},
 	{8000,0,0,0,0,0,0,0,0,0}},
 
 	{TONE_GERMAN_DIALPBX,
-	{ALAW_GA,ALAW_S,ALAW_GA,ALAW_S,ALAW_GA,ALAW_S,0,0,0,0},
-	{ULAW_GA,ULAW_S,ULAW_GA,ULAW_S,ULAW_GA,ULAW_S,0,0,0,0},
+	{DATA_GA,DATA_S,DATA_GA,DATA_S,DATA_GA,DATA_S,0,0,0,0},
 	{SIZE_GA,SIZE_S,SIZE_GA,SIZE_S,SIZE_GA,SIZE_S,0,0,0,0},
 	{1995,2005,1995,2005,1995,12005,0,0,0,0}},
 
 	{TONE_GERMAN_OLDDIALPBX,
-	{ALAW_GO,ALAW_S,ALAW_GO,ALAW_S,ALAW_GO,ALAW_S,0,0,0,0},
-	{ULAW_GO,ULAW_S,ULAW_GO,ULAW_S,ULAW_GO,ULAW_S,0,0,0,0},
+	{DATA_GO,DATA_S,DATA_GO,DATA_S,DATA_GO,DATA_S,0,0,0,0},
 	{SIZE_GO,SIZE_S,SIZE_GO,SIZE_S,SIZE_GO,SIZE_S,0,0,0,0},
 	{1998,2002,1998,2002,1998,12002,0,0,0,0}},
 
 	{TONE_AMERICAN_DIALPBX,
-	{ALAW_DT,ALAW_S,ALAW_DT,ALAW_S,ALAW_DT,ALAW_S,0,0,0,0},
-	{ULAW_DT,ULAW_S,ULAW_DT,ULAW_S,ULAW_DT,ULAW_S,0,0,0,0},
+	{DATA_DT,DATA_S,DATA_DT,DATA_S,DATA_DT,DATA_S,0,0,0,0},
 	{SIZE_DT,SIZE_S,SIZE_DT,SIZE_S,SIZE_DT,SIZE_S,0,0,0,0},
 	{2000,2000,2000,2000,2000,12000,0,0,0,0}},
 
 	{TONE_GERMAN_RINGING,
-	{ALAW_GA,ALAW_S,0,0,0,0,0,0,0,0},
-	{ULAW_GA,ULAW_S,0,0,0,0,0,0,0,0},
+	{DATA_GA,DATA_S,0,0,0,0,0,0,0,0},
 	{SIZE_GA,SIZE_S,0,0,0,0,0,0,0,0},
 	{7999,32001,0,0,0,0,0,0,0,0}},
 
 	{TONE_GERMAN_OLDRINGING,
-	{ALAW_GO,ALAW_S,0,0,0,0,0,0,0,0},
-	{ULAW_GO,ULAW_S,0,0,0,0,0,0,0,0},
+	{DATA_GO,DATA_S,0,0,0,0,0,0,0,0},
 	{SIZE_GO,SIZE_S,0,0,0,0,0,0,0,0},
 	{7992,40008,0,0,0,0,0,0,0,0}},
 
 	{TONE_AMERICAN_RINGING,
-	{ALAW_RI,ALAW_S,0,0,0,0,0,0,0,0},
-	{ULAW_RI,ULAW_S,0,0,0,0,0,0,0,0},
+	{DATA_RI,DATA_S,0,0,0,0,0,0,0,0},
 	{SIZE_RI,SIZE_S,0,0,0,0,0,0,0,0},
 	{8000,32000,0,0,0,0,0,0,0,0}},
 
 	{TONE_GERMAN_RINGPBX,
-	{ALAW_GA,ALAW_S,ALAW_GA,ALAW_S,0,0,0,0,0,0},
-	{ULAW_GA,ULAW_S,ULAW_GA,ULAW_S,0,0,0,0,0,0},
+	{DATA_GA,DATA_S,DATA_GA,DATA_S,0,0,0,0,0,0},
 	{SIZE_GA,SIZE_S,SIZE_GA,SIZE_S,0,0,0,0,0,0},
 	{3990,4010,3990,28010,0,0,0,0,0,0}},
 
 	{TONE_GERMAN_OLDRINGPBX,
-	{ALAW_GO,ALAW_S,ALAW_GA,ALAW_S,0,0,0,0,0,0},
-	{ULAW_GO,ULAW_S,ULAW_GA,ULAW_S,0,0,0,0,0,0},
+	{DATA_GO,DATA_S,DATA_GA,DATA_S,0,0,0,0,0,0},
 	{SIZE_GO,SIZE_S,SIZE_GA,SIZE_S,0,0,0,0,0,0},
 	{3996,4040,3996,28004,0,0,0,0,0,0}},
 
 	{TONE_AMERICAN_RINGPBX,
-	{ALAW_RI,ALAW_S,ALAW_RI,ALAW_S,0,0,0,0,0,0},
-	{ULAW_RI,ULAW_S,ULAW_RI,ULAW_S,0,0,0,0,0,0},
+	{DATA_RI,DATA_S,DATA_RI,DATA_S,0,0,0,0,0,0},
 	{SIZE_RI,SIZE_S,SIZE_RI,SIZE_S,0,0,0,0,0,0},
 	{4000,4000,4000,28000,0,0,0,0,0,0}},
 
 	{TONE_GERMAN_BUSY,
-	{ALAW_GA,ALAW_S,0,0,0,0,0,0,0,0},
-	{ULAW_GA,ULAW_S,0,0,0,0,0,0,0,0},
+	{DATA_GA,DATA_S,0,0,0,0,0,0,0,0},
 	{SIZE_GA,SIZE_S,0,0,0,0,0,0,0,0},
 	{3990,4010,0,0,0,0,0,0,0,0}},
 
 	{TONE_GERMAN_OLDBUSY,
-	{ALAW_GO,ALAW_S,0,0,0,0,0,0,0,0},
-	{ULAW_GO,ULAW_S,0,0,0,0,0,0,0,0},
+	{DATA_GO,DATA_S,0,0,0,0,0,0,0,0},
 	{SIZE_GO,SIZE_S,0,0,0,0,0,0,0,0},
 	{999,5001,0,0,0,0,0,0,0,0}},
 
 	{TONE_AMERICAN_BUSY,
-	{ALAW_BU,ALAW_S,0,0,0,0,0,0,0,0},
-	{ULAW_BU,ULAW_S,0,0,0,0,0,0,0,0},
+	{DATA_BU,DATA_S,0,0,0,0,0,0,0,0},
 	{SIZE_BU,SIZE_S,0,0,0,0,0,0,0,0},
 	{4000,4000,0,0,0,0,0,0,0,0}},
 
 	{TONE_GERMAN_HANGUP,
-	{ALAW_GA,ALAW_S,0,0,0,0,0,0,0,0},
-	{ULAW_GA,ULAW_S,0,0,0,0,0,0,0,0},
+	{DATA_GA,DATA_S,0,0,0,0,0,0,0,0},
 	{SIZE_GA,SIZE_S,0,0,0,0,0,0,0,0},
 	{3990,4010,0,0,0,0,0,0,0,0}},
 
 	{TONE_GERMAN_OLDHANGUP,
-	{ALAW_GO,ALAW_S,0,0,0,0,0,0,0,0},
-	{ULAW_GO,ULAW_S,0,0,0,0,0,0,0,0},
+	{DATA_GO,DATA_S,0,0,0,0,0,0,0,0},
 	{SIZE_GO,SIZE_S,0,0,0,0,0,0,0,0},
 	{999,3001,0,0,0,0,0,0,0,0}},
 
 	{TONE_AMERICAN_HANGUP,
-	{ALAW_DT,0,0,0,0,0,0,0,0,0},
-	{ULAW_DT,0,0,0,0,0,0,0,0,0},
+	{DATA_DT,0,0,0,0,0,0,0,0,0},
 	{SIZE_DT,0,0,0,0,0,0,0,0,0},
 	{8000,0,0,0,0,0,0,0,0,0}},
 
 	{TONE_SPECIAL_INFO,
-	{ALAW_S1,ALAW_S2,ALAW_S3,ALAW_S,0,0,0,0,0,0},
-	{ULAW_S1,ULAW_S2,ULAW_S3,ULAW_S,0,0,0,0,0,0},
+	{DATA_S1,DATA_S2,DATA_S3,DATA_S,0,0,0,0,0,0},
 	{SIZE_S1,SIZE_S2,SIZE_S3,SIZE_S,0,0,0,0,0,0},
 	{2666,2666,2666,8002,0,0,0,0,0,0}},
 
 	{TONE_GERMAN_GASSENBESETZT,
-	{ALAW_GA,ALAW_S,0,0,0,0,0,0,0,0},
-	{ULAW_GA,ULAW_S,0,0,0,0,0,0,0,0},
+	{DATA_GA,DATA_S,0,0,0,0,0,0,0,0},
 	{SIZE_GA,SIZE_S,0,0,0,0,0,0,0,0},
 	{1995,2005,0,0,0,0,0,0,0,0}},
 
 	{TONE_GERMAN_AUFSCHALTTON,
-	{ALAW_GO,ALAW_S,ALAW_GO,ALAW_S,0,0,0,0,0,0},
-	{ULAW_GO,ULAW_S,ULAW_GO,ULAW_S,0,0,0,0,0,0},
+	{DATA_GO,DATA_S,DATA_GO,DATA_S,0,0,0,0,0,0},
 	{SIZE_GO,SIZE_S,SIZE_GO,SIZE_S,0,0,0,0,0,0},
 	{999,3001,999,11001,0,0,0,0,0,0}},
 
@@ -673,7 +595,6 @@ struct pattern {
  * memcpy per function call, or two memcpy if the tone sequence changes.
  *
  * pattern - the type of the pattern
- * ulaw - must be set to use ulaw rather than alaw
  * count - the sample from the beginning of the pattern (phase)
  * len - the number of bytes
  *
@@ -690,7 +611,7 @@ void dsp_tone_copy(dsp_t *dsp, unsigned char *data, int len)
  
 	/* if we have no tone, we copy silence */
 	if (!tone->tone) {
-		memset(data, (dsp->ulaw)?ulawsilence:alawsilence, len);
+		memset(data, silence, len);
 		return;
 	}
 
@@ -719,7 +640,7 @@ void dsp_tone_copy(dsp_t *dsp, unsigned char *data, int len)
 		}
 		/* calculate start and number of samples */
 		start = count % (*pat->siz[index]);
-		s = ((dsp->ulaw)?pat->ulaw[index]:pat->alaw[index]) + start;
+		s = pat->data[index] + start;
 		rest = pat->seq[index] - start;
 		num = (rest>len)?len:rest;
 		/* copy memory */

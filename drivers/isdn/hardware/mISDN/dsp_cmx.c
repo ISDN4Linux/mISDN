@@ -1,4 +1,4 @@
-/* $Id: dsp_cmx.c,v 1.1 2003/10/24 21:23:05 keil Exp $
+/* $Id: dsp_cmx.c,v 1.2 2003/11/09 09:43:10 keil Exp $
  *
  * Linux ISDN subsystem, audio cmx (hardware level).
  *
@@ -146,8 +146,6 @@
 
 conference_t *Conf_list = NULL;
 
-#warning remove debug "1" "2" u.s.w
-
 /*
  * debug cmx memory structure
  */
@@ -162,7 +160,7 @@ dsp_cmx_debug(dsp_t *dsp)
 	odsp = (dsp_t *)dsp_obj.ilist;
 	while(odsp)
 	{
-		printk(KERN_DEBUG "* DSP 0x%lx echo=%d ulaw=%d txmix=%d", (unsigned long)odsp, odsp->echo, odsp->ulaw, odsp->tx_mix);
+		printk(KERN_DEBUG "* %s echo=%d txmix=%d", odsp->inst.name, odsp->echo, odsp->tx_mix);
 		if (odsp->conf)
 			printk(" (Conf %d)", odsp->conf->id);
 		if (dsp == odsp)
@@ -179,7 +177,7 @@ dsp_cmx_debug(dsp_t *dsp)
 		member = conf->mlist;
 		while(member)
 		{
-			printk(KERN_DEBUG "  - member = 0x%lx(dsp)%s\n", (unsigned long)member->dsp, (member->dsp==dsp)?" *this*":"");
+			printk(KERN_DEBUG "  - member = %s %s\n", member->dsp->inst.name, (member->dsp==dsp)?" *this*":"");
 			member = member->next;
 		}
 		conf = conf->next;
@@ -220,9 +218,7 @@ static int
 dsp_cmx_add_conf_member(dsp_t *dsp, conference_t *conf)
 {
 	conf_member_t *member;
-	unsigned char zero;
 
-printk(KERN_DEBUG "x\n");
 	if (!conf || !dsp) {
 		printk(KERN_WARNING "%s: conf or dsp is 0.\n", __FUNCTION__);
 		return(-EINVAL);
@@ -239,28 +235,23 @@ printk(KERN_DEBUG "x\n");
 		return(-EINVAL);
 	}
 
-printk(KERN_DEBUG "xx\n");
 	if (!(member = vmalloc(sizeof(conf_member_t)))) {
 		printk(KERN_ERR "vmalloc conf_member_t failed\n");
 		return(-ENOMEM);
 	}
-printk(KERN_DEBUG "xxx\n");
 	memset(member, 0, sizeof(conf_member_t));
-	zero = (dsp->ulaw)?ulawsilence:alawsilence;
-	memset(dsp->rx_buff, zero, sizeof(dsp->rx_buff));
+	memset(dsp->rx_buff, silence, sizeof(dsp->rx_buff));
 	member->dsp = dsp;
 	/* set initial values */
 	dsp->W_rx = conf->W_max;
 	dsp->R_rx = conf->W_max;
 
-printk(KERN_DEBUG "xxxx\n");
 	APPEND_TO_LIST(member, ((conf_member_t *)conf->mlist));
 
 	/* zero conf-buffer if we change from 2 to 3 members */
 	if (conf->mlist->next) if (!conf->mlist->next->next)
 		memset(conf->conf_buff, 0, sizeof(conf->conf_buff));
 
-printk(KERN_DEBUG "xxxxx\n");
 	dsp->conf = conf;
 	dsp->member = member;
 
@@ -620,43 +611,34 @@ add_to_conf:
 			if (dsp->debug & DEBUG_DSP_CMX)
 				printk(KERN_DEBUG "conference doesn't exist yet, creating.\n");
 			/* the conference doesn't exist, so we create */
-printk(KERN_DEBUG "1\n");
 			conf = dsp_cmx_new_conf(dsp->conf_id);
-printk(KERN_DEBUG "2\n");
 			if (!conf)
 				return(-EINVAL);
 		}
-printk(KERN_DEBUG "3\n");
 		member1 = NULL;
 		member2 = NULL;
 		if (conf->mlist)
 		if (conf->mlist->next)
 		if (!conf->mlist->next->next) {
-printk(KERN_DEBUG "4\n");
 			member1 = conf->mlist;
 			member2 = conf->mlist->next;
 		}
 		/* add conference member */
-printk(KERN_DEBUG "5\n");
 		err = dsp_cmx_add_conf_member(dsp, conf);
-printk(KERN_DEBUG "6\n");
 		if (err)
 			return(err);
 
 		/* if we are alone, we do nothing! */
 		if (!conf->next) {
-printk(KERN_DEBUG "7\n");
 			if (dsp->debug & DEBUG_DSP_CMX)
 				printk(KERN_DEBUG "we are alone in this conference, so exit.\n");
 			return(0);
 		}
-printk(KERN_DEBUG "8\n");
 
 		/* check changes in hardware settings */
 		new = dsp_cmx_hfc(conf, dsp->debug);
 		old = conf->solution;
 		if (new<=0 && old>0) {
-printk(KERN_DEBUG "81\n");
 			if (dsp->debug & DEBUG_DSP_CMX)
 				printk(KERN_DEBUG "hw conference has become too complex, so we remove it.\n");
 			/* conferrence will get removed due to complexity of conference */
@@ -668,9 +650,7 @@ printk(KERN_DEBUG "81\n");
 			conf->solution = -1; /* software from now on */
 			conf->hfc_id = 0; /* conf is not supported by a hfc chip */
 		}
-printk(KERN_DEBUG "9\n");
 		if (new!=0 && old==0) {
-printk(KERN_DEBUG "91\n");
 			if (dsp->debug & DEBUG_DSP_CMX)
 				printk(KERN_DEBUG "hw crossconnect has become too complex, so we remove simple crossconnect.\n");
 			/* crossconnect will get removed due to complexity of conference */
@@ -680,9 +660,7 @@ printk(KERN_DEBUG "91\n");
 			conf->solution = -1; /* software from now on */
 			conf->hfc_id = 0; /* conf is not supported by a hfc chip */
 		}
-printk(KERN_DEBUG "a\n");
 		if (new>0) {
-printk(KERN_DEBUG "a1\n");
 			if (dsp->debug & DEBUG_DSP_CMX)
 				printk(KERN_DEBUG "hw conference becomes possible.\n");
 			/* conference is now possible */
@@ -694,9 +672,7 @@ printk(KERN_DEBUG "a1\n");
 			conf->solution = new; /* conference from now on */
 			conf->hfc_id = dsp->hfc_id; /*conf is supported by hfc chip*/
 		}
-printk(KERN_DEBUG "b\n");
 		if (new==0) {
-printk(KERN_DEBUG "b1\n");
 			if (dsp->debug & DEBUG_DSP_CMX)
 				printk(KERN_DEBUG "hw crossconnect has become possible.\n");
 			/* crossconnect is now possible */
@@ -711,7 +687,6 @@ printk(KERN_DEBUG "b1\n");
 			conf->solution = 0; /* hard crossconnect from now on */
 			conf->hfc_id = dsp->hfc_id; /*cross is supported by hfc chip*/
 		}
-printk(KERN_DEBUG "c\n");
 	}
 
 	return(0);
@@ -732,9 +707,6 @@ dsp_cmx_receive(dsp_t *dsp, struct sk_buff *skb)
 	int len = skb->len;
 	int w, ww, i, ii;
 	int W_min, W_max;
-	signed long *decode_law;
-
-	decode_law = (dsp->ulaw)?dsp_audio_ulaw_to_s32:dsp_audio_alaw_to_s32;
 
 	/* check if we have sompen */
 	if (len < 1)
@@ -792,7 +764,7 @@ dsp_cmx_receive(dsp_t *dsp, struct sk_buff *skb)
 	}
 
 #ifdef CMX_DEBUG
-	printk(KERN_DEBUG "cmx_receive(dsp=%lx): W_rx(dsp)=%05x W_min=%05x W_max=%05x largest=%05x\n", dsp, dsp->W_rx, W_min, W_max, dsp->largest);
+	printk(KERN_DEBUG "cmx_receive(dsp=%lx): W_rx(dsp)=%05x W_min=%05x W_max=%05x largest=%05x %s\n", dsp, dsp->W_rx, W_min, W_max, dsp->largest, dsp->inst.name);
 #endif
 
 	/* -> if data is not too fast (exceed maximum queue):
@@ -825,13 +797,13 @@ dsp_cmx_receive(dsp_t *dsp, struct sk_buff *skb)
 			ii = len;
 			/* loop until done or old W_max is reached */
 			while(i<ii && w!=ww) {
-				c[w] += decode_law[*p++]; /* add to existing */
+				c[w] += dsp_audio_law_to_s32[*p++]; /* add to existing */
 				w = (w+1) & CMX_BUFF_MASK;
 				i++;
 			}
 			/* loop the rest */
 			while(i < ii) {
-				c[w] = decode_law[*p++]; /* write to new */
+				c[w] = dsp_audio_law_to_s32[*p++]; /* write to new */
 				w = (w+1) & CMX_BUFF_MASK;
 				i++;
 			}
@@ -842,7 +814,7 @@ dsp_cmx_receive(dsp_t *dsp, struct sk_buff *skb)
 		dsp->W_rx = (dsp->W_rx + len) & CMX_BUFF_MASK;
 	} else {
 		if (dsp->debug & DEBUG_DSP_CMX)
-			printk(KERN_DEBUG "receiving too fast (rx_buff).\n");
+			printk(KERN_DEBUG "CMX: receiving too fast (rx_buff).\n");
 	}
 }
 
@@ -860,17 +832,8 @@ struct sk_buff
 	unsigned char *d, *o, *p, *q;
 	struct sk_buff *nskb;
 	int r, rr, t, tt;
-	unsigned char *encode_law, zero;
-	signed long *decode_law, *odecode_law;
-//	unsigned short *mix_law;
-
-	decode_law = (dsp->ulaw)?dsp_audio_ulaw_to_s32:dsp_audio_alaw_to_s32;
-	encode_law = (dsp->ulaw)?dsp_audio_s16_to_ulaw:dsp_audio_s16_to_alaw;
-//	mix_law = (dsp->ulaw)?dsp_audio_s16_to_ulaw:dsp_audio_s16_to_alaw;
-	zero = (dsp->ulaw)?ulawsilence:alawsilence;
 
 	/* PREPARE RESULT */
-//printk("a");
 	nskb = alloc_skb(len, GFP_ATOMIC);
 	if (!nskb) {
 		printk(KERN_ERR "FATAL ERROR in mISDN_dsp.o: cannot alloc %d bytes\n", len);
@@ -891,18 +854,19 @@ struct sk_buff
 	else
 		rr = dsp->W_rx;
 	/* calculate actual r (if r+len would overrun rr) */
-	if (((rr - r - len) & CMX_BUFF_MASK) >= CMX_BUFF_HALF)
+	if (((rr - r - len) & CMX_BUFF_MASK) >= CMX_BUFF_HALF) {
 		/* r is set "len" bytes before W_min */
 		r = (rr - len) & CMX_BUFF_MASK;
-	else
+		if (dsp->debug & DEBUG_DSP_CMX)
+			printk(KERN_DEBUG "CMX: sending too fast (tx_buff).\n");
+	} else
 		/* rr is set "len" bytes after R_rx */
 		rr = (r + len) & CMX_BUFF_MASK;
 	dsp->R_rx = rr;
 	/* now: rr is exactly "len" bytes after r now */
 #ifdef CMX_DEBUG
-	printk(KERN_DEBUG "CMX_SEND(dsp=%lx) %d bytes from tx:0x%05x-0x%05x rx:0x%05x-0x%05x echo=%d\n", dsp, len, t, tt, r, rr, dsp->echo);
+	printk(KERN_DEBUG "CMX_SEND(dsp=%lx) %d bytes from tx:0x%05x-0x%05x rx:0x%05x-0x%05x echo=%d %s\n", dsp, len, t, tt, r, rr, dsp->echo, dsp->inst.name);
 #endif
-//printk("b");
 
 	/* STEP 2.0: PROCESS TONES/TX-DATA ONLY */
 	if (dsp->tone.tone) {
@@ -925,9 +889,7 @@ struct sk_buff
 		}
 	}
 	/* STEP 2.1: PROCESS DATA (one member / no conf) */
-//printk("c");
 	if (!conf) {
-//printk("d");
 		single:
 		/* -> if echo is NOT enabled */
 		if (!dsp->echo) {
@@ -938,19 +900,13 @@ struct sk_buff
 				r = (r+1) & CMX_BUFF_MASK;
 			}
 			if(r != rr)
-				memset(d, zero, (rr-r)&CMX_BUFF_MASK);
+				memset(d, silence, (rr-r)&CMX_BUFF_MASK);
 		/* -> if echo is enabled */
 		} else {
 //printk(KERN_DEBUG "echo krach:%x %x %x %x ulaw=%d\n", r, rr, t, tt,dsp->ulaw);
 			/* -> mix tx-data with echo if available, or use echo only */
 			while(r!=rr && t!=tt) {
-#warning miximg can be optimized using *d++ = alaw_mix[(p[t]<<8)|q[r]]
-				sample = decode_law[p[t]] + decode_law[q[r]];
-				if (sample < -32768)
-					sample = -32768;
-				else if (sample > 32767)
-					sample = 32767;
-				*d++ = encode_law[sample & 0xffff]; /* tx-data + echo */
+				*d++ = dsp_audio_mix_law[(p[t]<<8)|q[r]];
 				t = (t+1) & CMX_BUFF_MASK;
 				r = (r+1) & CMX_BUFF_MASK;
 			}
@@ -963,31 +919,20 @@ struct sk_buff
 		return(nskb);
 	}
 	if (!conf->mlist->next) {
-//printk(".");
 		goto single;
 	}
-//printk("e");
 	/* STEP 2.2: PROCESS DATA (two members) */
 	if (!conf->mlist->next->next) {
-//printk("f");
 		/* "other" becomes other party */
 		other = conf->mlist->dsp;
 		if (other == member)
 			other = conf->mlist->next->dsp;
 		o = other->rx_buff; /* received data */
-		odecode_law = (other->ulaw)?dsp_audio_ulaw_to_s32:dsp_audio_alaw_to_s32;
-//printk("+");
 		/* -> if echo is NOT enabled */
 		if (!dsp->echo) {
-//printk("-");
 			/* -> copy other member's rx-data, if tx-data is available, mix */
 			while(r!=rr && t!=tt) {
-				sample = decode_law[p[t]] + odecode_law[o[r]];
-				if (sample < -32768)
-					sample = -32768;
-				else if (sample > 32767)
-					sample = 32767;
-				*d++ = encode_law[sample & 0xffff]; /* tx-data + echo */
+				*d++ = dsp_audio_mix_law[(p[t]<<8)|o[r]];
 				t = (t+1) & CMX_BUFF_MASK;
 				r = (r+1) & CMX_BUFF_MASK;
 			}
@@ -997,68 +942,59 @@ struct sk_buff
 			}
 		/* -> if echo is enabled */
 		} else {
-//printk("*");
 			/* -> mix other member's rx-data with echo, if tx-data is available, mix */
 			while(r!=rr && t!=tt) {
-				sample = decode_law[p[t]] + odecode_law[o[r]] + decode_law[q[r]];
+				sample = dsp_audio_law_to_s32[p[t]] + dsp_audio_law_to_s32[o[r]] + dsp_audio_law_to_s32[q[r]];
 				if (sample < -32768)
 					sample = -32768;
 				else if (sample > 32767)
 					sample = 32767;
-				*d++ = encode_law[sample & 0xffff]; /* tx-data + rx_data + echo */
+				*d++ = dsp_audio_s16_to_law[sample & 0xffff]; /* tx-data + rx_data + echo */
 				t = (t+1) & CMX_BUFF_MASK;
 				r = (r+1) & CMX_BUFF_MASK;
 			}
-//printk("/");
 			while(r != rr) {
-				sample = odecode_law[o[r]] + decode_law[q[r]];
-				if (sample < -32768)
-					sample = -32768;
-				else if (sample > 32767)
-					sample = 32767;
-				*d++ = encode_law[sample & 0xffff]; /* rx-data + echo */
+				*d++ = dsp_audio_mix_law[(o[r]<<8)|q[r]];
 				r = (r+1) & CMX_BUFF_MASK;
 			}
 		}
-//printk("&");
 		dsp->R_tx = t;
 		return(nskb);
 	}
-//printk("g");
 	/* STEP 2.3: PROCESS DATA (three or more members) */
 	c = conf->conf_buff;
 	/* -> if echo is NOT enabled */
 	if (!dsp->echo) {
 		/* -> substract rx-data from conf-data, if tx-data is available, mix */
 		while(r!=rr && t!=tt) {
-			sample = decode_law[p[t]] + c[r] - decode_law[q[r]];
+			sample = dsp_audio_law_to_s32[p[t]] + c[r] - dsp_audio_law_to_s32[q[r]];
 			if (sample < -32768)
 				sample = -32768;
 			else if (sample > 32767)
 				sample = 32767;
-			*d++ = encode_law[sample & 0xffff]; /* conf-rx+tx */
+			*d++ = dsp_audio_s16_to_law[sample & 0xffff]; /* conf-rx+tx */
 			t = (t+1) & CMX_BUFF_MASK;
 			r = (r+1) & CMX_BUFF_MASK;
 		}
 		while(r != rr) {
-			sample = c[r] - decode_law[q[r]];
+			sample = c[r] - dsp_audio_law_to_s32[q[r]];
 			if (sample < -32768)
 				sample = -32768;
 			else if (sample > 32767)
 				sample = 32767;
-			*d++ = encode_law[sample & 0xffff]; /* conf-rx */
+			*d++ = dsp_audio_s16_to_law[sample & 0xffff]; /* conf-rx */
 			r = (r+1) & CMX_BUFF_MASK;
 		}
 	/* -> if echo is enabled */
 	} else {
 		/* -> encode conf-data, if tx-data is available, mix */
 		while(r!=rr && t!=tt) {
-			sample = decode_law[p[t]] + c[r];
+			sample = dsp_audio_law_to_s32[p[t]] + c[r];
 			if (sample < -32768)
 				sample = -32768;
 			else if (sample > 32767)
 				sample = 32767;
-			*d++ = encode_law[sample & 0xffff]; /* conf(echo)+tx */
+			*d++ = dsp_audio_s16_to_law[sample & 0xffff]; /* conf(echo)+tx */
 			t = (t+1) & CMX_BUFF_MASK;
 			r = (r+1) & CMX_BUFF_MASK;
 		}
@@ -1068,7 +1004,7 @@ struct sk_buff
 				sample = -32768;
 			else if (sample > 32767)
 				sample = 32767;
-			*d++ = encode_law[sample & 0xffff]; /* conf(echo) */
+			*d++ = dsp_audio_s16_to_law[sample & 0xffff]; /* conf(echo) */
 			r = (r+1) & CMX_BUFF_MASK;
 		}
 	}
@@ -1108,7 +1044,7 @@ dsp_cmx_transmit(dsp_t *dsp, struct sk_buff *skb)
 	dsp->W_tx = ww;
 
 #ifdef CMX_DEBUG
-	printk(KERN_DEBUG "cmx_transmit(dsp=%lx) %d bytes to 0x%x-0x%x.\n", dsp, (ww-w)&CMX_BUFF_MASK, w, ww);
+	printk(KERN_DEBUG "cmx_transmit(dsp=%lx) %d bytes to 0x%x-0x%x. %s\n", dsp, (ww-w)&CMX_BUFF_MASK, w, ww, dsp->inst.name);
 #endif
 
 	/* copy transmit data to tx-buffer */

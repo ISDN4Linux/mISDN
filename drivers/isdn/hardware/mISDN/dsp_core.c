@@ -1,4 +1,4 @@
-/* $Id: dsp_core.c,v 1.2 2003/11/09 09:20:41 keil Exp $
+/* $Id: dsp_core.c,v 1.3 2003/11/09 09:43:10 keil Exp $
  *
  * Author       Andreas Eversberg (jolly@jolly.de)
  * Based on source code structure by
@@ -168,7 +168,7 @@ die daten der struktur
 	- loop
 #endif
 
-const char *dsp_revision = "$Revision: 1.2 $";
+const char *dsp_revision = "$Revision: 1.3 $";
 
 #include <linux/delay.h>
 #include <linux/config.h>
@@ -185,18 +185,7 @@ mISDNobject_t dsp_obj;
 static mISDN_HWlock_t dsp_lock;
 
 static int debug = 0;
-static int options = 0;
-
-/* options may be:
- *
- * bit 0 = use ulaw instead of alaw
- * bit 1 = disable hfc hardware accelleration
- * bit 2 = disable flipping of card's data bit order
- *
- */
-#define DSP_OPT_ULAW		(1<<0)
-#define DSP_OPT_NOHARDWARE	(1<<1)
-#define DSP_OPT_NOFLIP		(1<<2)
+int options = 0;
 
 #ifdef MODULE
 MODULE_AUTHOR("Andreas Eversberg");
@@ -227,7 +216,7 @@ sendevent(dsp_t *dsp)
 		}
 		/* change volume if requested */
 		if (dsp->tx_volume)
-			dsp_change_volume(nskb, dsp->tx_volume, dsp->ulaw);
+			dsp_change_volume(nskb, dsp->tx_volume);
 		/* send subsequent requests to card */
 		unlock_HW(&dsp_lock);
 		if (dsp->inst.down.func(&dsp->inst.down, nskb)) {
@@ -351,7 +340,6 @@ bedenke activate un deactivate.
 			if (dsp->conf_id)
 				ret = dsp_cmx(dsp);
 			break;
-#warning bedenke in pbx: volume -8 ... 8 (auch doku)  auch >8 sollte 0 sein
 		case CMX_ECHO_ON: /* enable echo */
 			dsp->echo = 1;
 			if (dsp->debug & DEBUG_DSP_CORE)
@@ -428,7 +416,6 @@ dsp_from_up(mISDNif_t *hif, struct sk_buff *skb)
 		return(-ENXIO);
 
 	hh = mISDN_HEAD_P(skb);
-#warning #entweder kein l2 oder PH in DL wandeln
 	switch(hh->prim) {
 		case DL_DATA | RESPONSE:
 		case PH_DATA | RESPONSE:
@@ -450,7 +437,7 @@ dsp_from_up(mISDNif_t *hif, struct sk_buff *skb)
 		case DL_ESTABLISH | REQUEST:
 		case PH_ACTIVATE | REQUEST:
 			if (dsp->debug & DEBUG_DSP_CORE)
-				printk(KERN_DEBUG "%s: activating b_channel\n", __FUNCTION__);
+				printk(KERN_DEBUG "%s: activating b_channel %s\n", __FUNCTION__, dsp->inst.name);
 			lock_HW(&dsp_lock, 0);
 			dsp->tx_pending = 0;
 			if (dsp->dtmf.hardware || dsp->dtmf.software)
@@ -461,7 +448,7 @@ dsp_from_up(mISDNif_t *hif, struct sk_buff *skb)
 		case DL_RELEASE | REQUEST:
 		case PH_DEACTIVATE | REQUEST:
 			if (dsp->debug & DEBUG_DSP_CORE)
-				printk(KERN_DEBUG "%s: releasign b_channel\n", __FUNCTION__);
+				printk(KERN_DEBUG "%s: releasing b_channel %s\n", __FUNCTION__, dsp->inst.name);
 			lock_HW(&dsp_lock, 0);
 			dsp->tx_pending = 0;
 			unlock_HW(&dsp_lock);
@@ -469,7 +456,7 @@ dsp_from_up(mISDNif_t *hif, struct sk_buff *skb)
 			return(dsp->inst.down.func(&dsp->inst.down, skb));
 		default:
 			if (dsp->debug & DEBUG_DSP_CORE)
-				printk(KERN_DEBUG "%s: msg %x unhandled\n", __FUNCTION__, hh->prim);
+				printk(KERN_DEBUG "%s: msg %x unhandled %s\n", __FUNCTION__, hh->prim, dsp->inst.name);
 			ret = -EINVAL;
 			break;
 	}
@@ -510,16 +497,13 @@ dsp_from_down(mISDNif_t *hif,  struct sk_buff *skb)
 			break;
 		case PH_DATA | INDICATION:
 		case DL_DATA | INDICATION:
-//#warning remove
-//hh->prim = DL_DATA | INDICATION;
-//return(dsp->inst.up.func(&dsp->inst.up, skb));
 			lock_HW(&dsp_lock, 0);
 			/* check if dtmf soft decoding is turned on */
 			if (dsp->dtmf.software) {
-				digits = dsp_dtmf_goertzel_decode(dsp, skb->data, skb->len, dsp->ulaw);
+				digits = dsp_dtmf_goertzel_decode(dsp, skb->data, skb->len, (options&DSP_OPT_ULAW)?1:0);
 				if (digits) while(*digits) {
 					if (dsp->debug & DEBUG_DSP_DTMF)
-						printk(KERN_DEBUG "%s: sending software decoded digit(%c) to upper layer\n", __FUNCTION__, *digits);
+						printk(KERN_DEBUG "%s: sending software decoded digit(%c) to upper layer %s\n", __FUNCTION__, *digits, dsp->inst.name);
 					cont = DTMF_TONE_VAL | *digits;
 					nskb = create_link_skb(PH_CONTROL | INDICATION, 0, sizeof(int), &cont, 0);
 					unlock_HW(&dsp_lock);
@@ -533,7 +517,7 @@ dsp_from_down(mISDNif_t *hif,  struct sk_buff *skb)
 			}
 			/* change volume if requested */
 			if (dsp->rx_volume)
-				dsp_change_volume(skb, dsp->rx_volume, dsp->ulaw);
+				dsp_change_volume(skb, dsp->rx_volume);
 			/* process data from card at cmx */
 			dsp_cmx_receive(dsp, skb);
 			if (dsp->rx_disabled) {
@@ -547,7 +531,7 @@ dsp_from_down(mISDNif_t *hif,  struct sk_buff *skb)
 		case PH_CONTROL | INDICATION:
 			lock_HW(&dsp_lock, 0);
 			if (dsp->debug & DEBUG_DSP_CORE)
-				printk(KERN_DEBUG "%s: PH_CONTROL received: %x\n", __FUNCTION__, hh->dinfo);
+				printk(KERN_DEBUG "%s: PH_CONTROL received: %x %s\n", __FUNCTION__, hh->dinfo, dsp->inst.name);
 			switch (hh->dinfo) {
 				case HW_HFC_COEFF: /* getting coefficients */
 				if (dsp->dtmf.hardware == 2)
@@ -557,7 +541,7 @@ dsp_from_down(mISDNif_t *hif,  struct sk_buff *skb)
 						int k;
 						struct sk_buff *nskb;
 						if (dsp->debug & DEBUG_DSP_DTMF)
-							printk(KERN_DEBUG "%s: now sending software decoded digit(%c) to upper layer\n", __FUNCTION__, *digits);
+							printk(KERN_DEBUG "%s: now sending software decoded digit(%c) to upper layer %s\n", __FUNCTION__, *digits, dsp->inst.name);
 						k = *digits | DTMF_TONE_VAL;
 						nskb = create_link_skb(PH_CONTROL | INDICATION, 0, sizeof(int), &k, 0);
 						unlock_HW(&dsp_lock);
@@ -573,7 +557,7 @@ dsp_from_down(mISDNif_t *hif,  struct sk_buff *skb)
 
 				default:
 				if (dsp->debug & DEBUG_DSP_CORE)
-					printk(KERN_DEBUG "%s: ctrl ind %x unhandled\n", __FUNCTION__, hh->dinfo);
+					printk(KERN_DEBUG "%s: ctrl ind %x unhandled %s\n", __FUNCTION__, hh->dinfo, dsp->inst.name);
 				ret = -EINVAL;
 			}
 			unlock_HW(&dsp_lock);
@@ -581,7 +565,7 @@ dsp_from_down(mISDNif_t *hif,  struct sk_buff *skb)
 		case PH_ACTIVATE | CONFIRM:
 			lock_HW(&dsp_lock, 0);
 			if (dsp->debug & DEBUG_DSP_CORE)
-				printk(KERN_DEBUG "%s: b_channel is now active\n", __FUNCTION__);
+				printk(KERN_DEBUG "%s: b_channel is now active %s\n", __FUNCTION__, dsp->inst.name);
 			/* bchannel now active */
 			dsp->b_active = 1;
 			dsp->W_tx = dsp->R_tx = 0; /* clear TX buffer */
@@ -596,14 +580,14 @@ dsp_from_down(mISDNif_t *hif,  struct sk_buff *skb)
 			schedule_work(&dsp->sendwork);
 			unlock_HW(&dsp_lock);
 			if (dsp->debug & DEBUG_DSP_CORE)
-				printk(KERN_DEBUG "%s: done with activation, sending confirm to user space.\n", __FUNCTION__);
+				printk(KERN_DEBUG "%s: done with activation, sending confirm to user space. %s\n", __FUNCTION__, dsp->inst.name);
 			/* send activation to upper layer */
 			hh->prim = DL_ESTABLISH | CONFIRM;
 			return(dsp->inst.up.func(&dsp->inst.up, skb));
 		case PH_DEACTIVATE | CONFIRM:
 			lock_HW(&dsp_lock, 0);
 			if (dsp->debug & DEBUG_DSP_CORE)
-				printk(KERN_DEBUG "%s: b_channel is now inactive\n", __FUNCTION__);
+				printk(KERN_DEBUG "%s: b_channel is now inactive %s\n", __FUNCTION__, dsp->inst.name);
 			/* bchannel now inactive */
 			dsp->b_active = 0;
 			if (dsp->conf_id)
@@ -613,7 +597,7 @@ dsp_from_down(mISDNif_t *hif,  struct sk_buff *skb)
 			return(dsp->inst.up.func(&dsp->inst.up, skb));
 		default:
 			if (dsp->debug & DEBUG_DSP_CORE)
-				printk(KERN_DEBUG "%s: msg %x unhandled\n", __FUNCTION__, hh->prim);
+				printk(KERN_DEBUG "%s: msg %x unhandled %s\n", __FUNCTION__, hh->prim, dsp->inst.name);
 			ret = -EINVAL;
 	}
 	if (!ret)
@@ -633,13 +617,13 @@ release_dsp(dsp_t *dsp)
 
 #ifdef HAS_WORKQUEUE
 	if (dsp->sendwork.pending)
-		printk(KERN_ERR "%s: pending sendwork: %lx\n", __FUNCTION__, dsp->sendwork.pending);
+		printk(KERN_ERR "%s: pending sendwork: %lx %s\n", __FUNCTION__, dsp->sendwork.pending, dsp->inst.name);
 #else
 	if (dsp->sendwork.sync)
-		printk(KERN_ERR "%s: pending sendwork: %lx\n", __FUNCTION__, dsp->sendwork.sync);
+		printk(KERN_ERR "%s: pending sendwork: %lx %s\n", __FUNCTION__, dsp->sendwork.sync, dsp->inst.name);
 #endif
 	if (debug & DEBUG_DSP_MGR)
-		printk(KERN_DEBUG "%s: removing conferences\n", __FUNCTION__);
+		printk(KERN_DEBUG "%s: removing conferences %s\n", __FUNCTION__, dsp->inst.name);
 	conf = dsp->conf;
 	if (conf) {
 		dsp_cmx_del_conf_member(dsp);
@@ -649,7 +633,7 @@ release_dsp(dsp_t *dsp)
 	}
 
 	if (debug & DEBUG_DSP_MGR)
-		printk(KERN_DEBUG "%s: disconnecting instances\n", __FUNCTION__);
+		printk(KERN_DEBUG "%s: disconnecting instances %s\n", __FUNCTION__, dsp->inst.name);
 	if (inst->up.peer) {
 		inst->up.peer->obj->ctrl(inst->up.peer,
 			MGR_DISCONNECT | REQUEST, &inst->up);
@@ -660,7 +644,7 @@ release_dsp(dsp_t *dsp)
 	}
 
 	if (debug & DEBUG_DSP_MGR)
-		printk(KERN_DEBUG "%s: remove & destroy object\n", __FUNCTION__);
+		printk(KERN_DEBUG "%s: remove & destroy object %s\n", __FUNCTION__, dsp->inst.name);
 	REMOVE_FROM_LISTBASE(dsp, ((dsp_t *)dsp_obj.ilist));
 	dsp_obj.ctrl(inst, MGR_UNREGLAYER | REQUEST, NULL);
 	vfree(dsp);
@@ -699,15 +683,15 @@ new_dsp(mISDNstack_t *st, mISDN_pid_t *pid)
 		vfree(ndsp);
 		return(err);
 	}
-	strcpy(ndsp->inst.name, "DSP");
-	strchr(ndsp->inst.name, '\0')[-1] = '\0';
+	sprintf(ndsp->inst.name, "DSP_S%x/C%x",
+		(st->id&0xff), (st->id&0xff00)>>8);
 	ndsp->debug = debug;
 	ndsp->inst.up.owner = &ndsp->inst;
 	ndsp->inst.down.owner = &ndsp->inst;
-	if (options & DSP_OPT_ULAW) {
-		/* use ulaw instead of alaw */
-		ndsp->ulaw = 1;
-	}
+// jolly patch start
+	/* set frame size to start */
+	ndsp->largest = SEND_LEN << 1;
+// jolly patch stop
 #ifdef WITH_HARDWARE
 	if (!(options & DSP_OPT_NOHARDWARE)) {
 		/* check if b-channel is on hfc_chip (0 = no chip) */
@@ -720,12 +704,12 @@ new_dsp(mISDNstack_t *st, mISDN_pid_t *pid)
 	APPEND_TO_LIST(ndsp, ((dsp_t *)dsp_obj.ilist));
 	err = dsp_obj.ctrl(st, MGR_REGLAYER | INDICATION, &ndsp->inst);
 	if (err) {
-		printk(KERN_ERR "%s: failed to register layer\n", __FUNCTION__);
+		printk(KERN_ERR "%s: failed to register layer %s\n", __FUNCTION__, ndsp->inst.name);
 		REMOVE_FROM_LISTBASE(ndsp, ((dsp_t *)dsp_obj.ilist));
 		goto free_mem;
 	} else {
 		if (debug & DEBUG_DSP_MGR)
-			printk(KERN_DEBUG "%s: dsp instance created\n", __FUNCTION__);
+			printk(KERN_DEBUG "%s: dsp instance created %s\n", __FUNCTION__, ndsp->inst.name);
 	}
 	return(err);
 }
@@ -818,7 +802,7 @@ static int dsp_init(void)
 	/* fill mISDN object (dsp_obj) */
 	memset(&dsp_obj, 0, sizeof(dsp_obj));
 #ifdef MODULE
-	SET_MODULE_OWNER(&dsp_obj);
+	SET_MODULE_OWNER(dsp_obj);
 #endif
 	dsp_obj.name = DSPName;
 	dsp_obj.BPROTO.protocol[3] = ISDN_PID_L3_B_DSP;
@@ -828,9 +812,12 @@ static int dsp_init(void)
 	dsp_obj.ilist = NULL;
 
 	/* initialize audio tables */
-	dsp_audio_flip_tables(options & DSP_OPT_NOFLIP);
-	dsp_audio_generate_s2law_tables(options & DSP_OPT_NOFLIP);
-	dsp_audio_flip_and_generate_ulaw_samples(options & DSP_OPT_NOFLIP);
+	silence = (options&DSP_OPT_ULAW)?0xff:0x2a;
+	dsp_audio_law_to_s32 = (options&DSP_OPT_ULAW)?dsp_audio_ulaw_to_s32:dsp_audio_alaw_to_s32;
+	dsp_audio_generate_s2law_table();
+	dsp_audio_generate_mix_table();
+	if (options & DSP_OPT_ULAW)
+		dsp_audio_generate_ulaw_samples();
 	dsp_audio_generate_volume_changes();
 
 	/* init global lock */
