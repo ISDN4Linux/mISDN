@@ -1,4 +1,4 @@
-/* $Id: l3_udss1.c,v 1.26 2004/06/17 12:31:12 keil Exp $
+/* $Id: l3_udss1.c,v 1.27 2005/03/03 19:03:03 jolly Exp $
  *
  * EURO/DSS1 D-channel protocol
  *
@@ -24,7 +24,7 @@ static int debug = 0;
 static mISDNobject_t u_dss1;
 
 
-const char *dss1_revision = "$Revision: 1.26 $";
+const char *dss1_revision = "$Revision: 1.27 $";
 
 static int dss1man(l3_process_t *, u_int, void *);
 
@@ -763,7 +763,15 @@ l3dss1_information_req(l3_process_t *pc, u_char pr, void *arg)
 	}
 
 	if (arg) {
-		SendMsg(pc, arg, 2);
+		SendMsg(pc, arg, -1);
+	}
+}
+
+static void
+l3dss1_notify_req(l3_process_t *pc, u_char pr, void *arg)
+{
+	if (arg) {
+		SendMsg(pc, arg, -1);
 	}
 }
 
@@ -771,7 +779,7 @@ static void
 l3dss1_progress_req(l3_process_t *pc, u_char pr, void *arg)
 {
 	if (arg) {
-		SendMsg(pc, arg, 10);
+		SendMsg(pc, arg, -1);
 	}
 }
 
@@ -1747,6 +1755,8 @@ static struct stateentry downstatelist[] =
 	{SBIT(2) | SBIT(3) | SBIT(4) | SBIT(7) | SBIT(8) | SBIT(9) |
 		SBIT(10) | SBIT(11) | SBIT(12) | SBIT(15) | SBIT(25),
 	 CC_INFORMATION | REQUEST, l3dss1_information_req},
+	{SBIT(10),
+	 CC_NOTIFY | REQUEST, l3dss1_notify_req},
 	{SBIT(10),
 	 CC_PROGRESS | REQUEST, l3dss1_progress_req},
 	{SBIT(0),
