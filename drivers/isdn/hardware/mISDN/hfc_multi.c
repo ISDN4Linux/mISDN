@@ -108,7 +108,7 @@
 
 extern const char *CardType[];
 
-static const char *hfcmulti_revision = "$Revision: 1.18 $";
+static const char *hfcmulti_revision = "$Revision: 1.19 $";
 
 static int HFC_cnt;
 
@@ -348,6 +348,8 @@ init_chip(hfc_multi_t *hc)
 		HFC_outb(hc, R_PCM_MO1, 0x10);
 	if (hc->slots == 128)
 		HFC_outb(hc, R_PCM_MO1, 0x20);
+	HFC_outb(hc, R_PCM_MO0, hc->hw.r_pcm_mo0 | 0xa0);
+	HFC_outb(hc, R_PCM_MO2, 0x00);
 	HFC_outb(hc, R_PCM_MO0, hc->hw.r_pcm_mo0 | 0x00);
 	while (i < 256) {
 		HFC_outb_(hc, R_SLOT, i);
@@ -2494,9 +2496,10 @@ hfcmulti_initmode(hfc_multi_t *hc)
 		if (test_bit(HFC_CFG_NTMODE, &hc->chan[(i<<2)+2].cfg)) {
 			/* NT mode */
 			if (debug & DEBUG_HFCMULTI_INIT)
-				printk(KERN_DEBUG "%s: E1 port LT-mode\n", __FUNCTION__);
+				printk(KERN_DEBUG "%s: E1 port NT-mode\n", __FUNCTION__);
 			r_e1_wr_sta = 1; /* G1 */
-			HFC_outb(hc, R_SYNC_CTRL, V_SYNC_OFFS | V_PCM_SYNC);
+//			HFC_outb(hc, R_SYNC_CTRL, V_SYNC_OFFS | V_PCM_SYNC);
+			HFC_outb(hc, R_SYNC_CTRL, V_EXT_CLK_SYNC | V_PCM_SYNC);
 		} else {
 			/* TE mode */
 			if (debug & DEBUG_HFCMULTI_INIT)
@@ -2669,14 +2672,12 @@ SelFreeBChannel(hfc_multi_t *hc, int ch, channel_info_t *ci)
 /* find pci device and set it up */
 /*********************************/
 
-/* this variable is used as card index when more than one cards are present */
-static struct pci_dev *dev_hfcmulti = NULL;
-
 static int
 setup_pci(hfc_multi_t *hc)
 {
 	int i;
-	struct pci_dev *tmp_hfcmulti = NULL;
+	struct pci_dev *tmp_dev = NULL;
+	hfc_multi_t *hc_tmp, *next;
 
 	/* go into 0-state (we might already be due to zero-filled-object */
 	i = 0;
@@ -2689,40 +2690,49 @@ setup_pci(hfc_multi_t *hc)
 	/* loop all card ids */
 	i = 0;
 	while (id_list[i].vendor_id) {
-//		printk(KERN_DEBUG "setup_pci(): investigating card entry %d\n", i);
 		/* only the given type is searched */
 		if (id_list[i].type != hc->type) {
 			i++;
 			continue;
 		}
-		tmp_hfcmulti = pci_find_subsys(id_list[i].vendor_id, id_list[i].device_id, id_list[i].vendor_sub, id_list[i].device_sub, dev_hfcmulti);
-		if (tmp_hfcmulti) {
+		if (debug & DEBUG_HFCMULTI_INIT)
+			printk(KERN_DEBUG "setup_pci(): investigating card entry %d (looking for type %d)\n", i, hc->type);
+		inuse:
+		tmp_dev = pci_find_subsys(id_list[i].vendor_id, id_list[i].device_id, id_list[i].vendor_sub, id_list[i].device_sub, tmp_dev);
+		if (tmp_dev) {
+			/* skip if already in use */
+			list_for_each_entry_safe(hc_tmp, next, &HFCM_obj.ilist, list) {
+				if (hc_tmp->pci_dev == tmp_dev) {
+					if (debug & DEBUG_HFCMULTI_INIT)
+						printk(KERN_INFO "setup_pci(): found a pci card: '%s' card name: '%s', but already in use, so we skip.\n", id_list[i].vendor_name, id_list[i].card_name);
+					goto inuse;
+				}
+			}
 			break;
 		}
 		i++;
 	}
-	if (!tmp_hfcmulti) {
+	if (!tmp_dev) {
 		printk(KERN_WARNING "HFC-multi: No PCI card found\n");
 		return (-ENODEV);
 	}
 
 	/* found a card */
 	printk(KERN_INFO "HFC-multi: card manufacturer: '%s' card name: '%s' clock: %s\n", id_list[i].vendor_name, id_list[i].card_name, (id_list[i].clock2)?"double":"normal");
-	dev_hfcmulti = tmp_hfcmulti;	/* old device */
-	hc->pci_dev = dev_hfcmulti;
+	hc->pci_dev = tmp_dev;
 	if (id_list[i].clock2)
 		test_and_set_bit(HFC_CHIP_CLOCK2, &hc->chip);
 	if (hc->pci_dev->irq <= 0) {
 		printk(KERN_WARNING "HFC-multi: No IRQ for PCI card found.\n");
 		return (-EIO);
 	}
-	if (pci_enable_device(dev_hfcmulti)) {
+	if (pci_enable_device(hc->pci_dev)) {
 		printk(KERN_WARNING "HFC-multi: Error enabling PCI card.\n");
 		return (-EIO);
 	}
 	hc->leds = id_list[i].leds;
 #ifdef CONFIG_HFCMULTI_PCIMEM
-	hc->pci_membase = (char *) get_pcibase(dev_hfcmulti, 1);
+	hc->pci_membase = (char *) get_pcibase(hc->pci_dev, 1);
 	if (!hc->pci_membase) {
 		printk(KERN_WARNING "HFC-multi: No IO-Memory for PCI card found\n");
 		return (-EIO);
@@ -2736,7 +2746,7 @@ setup_pci(hfc_multi_t *hc)
 	printk(KERN_INFO "%s: defined at MEMBASE %#x IRQ %d HZ %d leds-type %d\n", hc->name, (u_int) hc->pci_membase, hc->pci_dev->irq, HZ, hc->leds);
 	pci_write_config_word(hc->pci_dev, PCI_COMMAND, PCI_ENA_MEMIO);
 #else
-	hc->pci_iobase = (u_int) get_pcibase(dev_hfcmulti, 0);
+	hc->pci_iobase = (u_int) get_pcibase(hc->pci_dev, 0);
 	if (!hc->pci_iobase) {
 		printk(KERN_WARNING "HFC-multi: No IO for PCI card found\n");
 		return (-EIO);
@@ -3368,7 +3378,7 @@ HFCmulti_init(void)
 						err = -EINVAL;
 						goto free_channels;
 					}
-					if (hc->masterclk < 0) {
+					if (hc->masterclk >= 0) {
 						printk(KERN_ERR "Error: Master clock for port(%d) of card(%d) already defined for port(%d)\n", pt+1, HFC_cnt+1, hc->masterclk+1);
 						err = -EINVAL;
 						goto free_channels;
