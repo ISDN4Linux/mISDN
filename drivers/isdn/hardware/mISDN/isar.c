@@ -1,4 +1,4 @@
-/* $Id: isar.c,v 1.6 2003/06/22 10:39:43 kkeil Exp $
+/* $Id: isar.c,v 1.7 2003/06/22 12:03:36 kkeil Exp $
  *
  * isar.c   ISAR (Siemens PSB 7110) specific routines
  *
@@ -200,7 +200,7 @@ isar_load_firmware(bchannel_t *bch, u_char *buf, int size)
 		u_short d_key;
 	} *blk_head;
 		
-	bch->inst.lock(bch->inst.data);
+	bch->inst.lock(bch->inst.data, 0);
 #define	BLK_HEAD_SIZE 6
 	if (1 != (ret = ISARVersion(bch, "Testing"))) {
 		printk(KERN_ERR"isar_load_firmware wrong isar version %d\n", ret);
@@ -341,7 +341,7 @@ isar_load_firmware(bchannel_t *bch, u_char *buf, int size)
 	while (cnt--)
 		mdelay(1);
 	ih->reg->iis = 0;
-	bch->inst.lock(bch->inst.data);
+	bch->inst.lock(bch->inst.data, 0);
 	if (!sendmsg(bch, ISAR_HIS_DIAG, ISAR_CTRL_STST, 0, NULL)) {
 		printk(KERN_ERR"isar sendmsg self tst failed\n");
 		ret = 1;goto reterrflg_l;
@@ -365,7 +365,7 @@ isar_load_firmware(bchannel_t *bch, u_char *buf, int size)
 			ih->reg->cmsb, ih->reg->clsb, ih->reg->par[0]);
 		ret = 1;goto reterrflg;
 	}
-	bch->inst.lock(bch->inst.data);
+	bch->inst.lock(bch->inst.data, 0);
 	ih->reg->iis = 0;
 	if (!sendmsg(bch, ISAR_HIS_DIAG, ISAR_CTRL_SWVER, 0, NULL)) {
 		printk(KERN_ERR"isar RQST SVN failed\n");
@@ -393,14 +393,14 @@ isar_load_firmware(bchannel_t *bch, u_char *buf, int size)
 		}
 	}
 	bch->debug = debug;
-	bch->inst.lock(bch->inst.data);
+	bch->inst.lock(bch->inst.data, 0);
 	isar_setup(bch);
 	ret = 0;
 reterrflg_l:
 	bch->inst.unlock(bch->inst.data);
 reterrflg:
 	restore_flags(flags);
-	bch->inst.lock(bch->inst.data);
+	bch->inst.lock(bch->inst.data, 0);
 reterror:
 	bch->debug = debug;
 	if (ret)
@@ -1592,7 +1592,7 @@ isar_down(hisaxif_t *hif, struct sk_buff *skb)
 			debugprint(&bch->inst, " l2l1 next_skb exist this shouldn't happen");
 			return(-EBUSY);
 		}
-		bch->inst.lock(bch->inst.data);
+		bch->inst.lock(bch->inst.data, 0);
 		if (test_and_set_bit(BC_FLG_TX_BUSY, &bch->Flag)) {
 			test_and_set_bit(BC_FLG_TX_NEXT, &bch->Flag);
 			bch->next_skb = skb;
@@ -1613,7 +1613,7 @@ isar_down(hisaxif_t *hif, struct sk_buff *skb)
 		if (test_and_set_bit(BC_FLG_ACTIV, &bch->Flag))
 			ret = 0;
 		else {
-			bch->inst.lock(bch->inst.data);
+			bch->inst.lock(bch->inst.data, 0);
 			ret = modeisar(bch, bch->channel,
 				bch->inst.pid.protocol[1], NULL);
 			bch->inst.unlock(bch->inst.data);
@@ -1623,7 +1623,7 @@ isar_down(hisaxif_t *hif, struct sk_buff *skb)
 	} else if ((hh->prim == (PH_DEACTIVATE | REQUEST)) ||
 		(hh->prim == (DL_RELEASE | REQUEST)) ||
 		(hh->prim == (MGR_DISCONNECT | REQUEST))) {
-		bch->inst.lock(bch->inst.data);
+		bch->inst.lock(bch->inst.data, 0);
 		if (test_and_clear_bit(BC_FLG_TX_NEXT, &bch->Flag)) {
 			dev_kfree_skb(bch->next_skb);
 			bch->next_skb = NULL;
@@ -1643,7 +1643,7 @@ isar_down(hisaxif_t *hif, struct sk_buff *skb)
 		val = (int *)skb->data;
 		if ((*val & ~TOUCH_TONE_MASK)==TOUCH_TONE_VAL) {
 			if (bch->protocol == ISDN_PID_L1_B_TRANS_TTS) {
-				bch->inst.lock(bch->inst.data);
+				bch->inst.lock(bch->inst.data, 0);
 				isar_pump_cmd(bch, PCTRL_CMD_TDTMF, (*val & 0xff));
 				bch->inst.unlock(bch->inst.data);
 				skb_trim(skb, 0);

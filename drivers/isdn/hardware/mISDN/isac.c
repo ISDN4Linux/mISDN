@@ -1,4 +1,4 @@
-/* $Id: isac.c,v 1.4 2003/06/21 21:39:54 kkeil Exp $
+/* $Id: isac.c,v 1.5 2003/06/22 12:03:36 kkeil Exp $
  *
  * isac.c   ISAC specific routines
  *
@@ -23,7 +23,7 @@
 #define DBUSY_TIMER_VALUE 80
 #define ARCOFI_USE 1
 
-const char *isac_revision = "$Revision: 1.4 $";
+const char *isac_revision = "$Revision: 1.5 $";
 
 #ifdef MODULE
 MODULE_AUTHOR("Karsten Keil");
@@ -55,7 +55,7 @@ isac_new_ph(dchannel_t *dch)
 	switch (dch->ph_state) {
 		case (ISAC_IND_RS):
 		case (ISAC_IND_EI):
-			dch->inst.lock(dch->inst.data);
+			dch->inst.lock(dch->inst.data,0);
 			ph_command(dch, ISAC_CMD_DUI);
 			dch->inst.unlock(dch->inst.data);
 			prim = PH_CONTROL | INDICATION;
@@ -474,7 +474,7 @@ ISAC_l1hw(hisaxif_t *hif, struct sk_buff *skb)
 			debugprint(&dch->inst, " l2l1 next_skb exist this shouldn't happen");
 			return(-EBUSY);
 		}
-		dch->inst.lock(dch->inst.data);
+		dch->inst.lock(dch->inst.data,0);
 		if (test_and_set_bit(FLG_TX_BUSY, &dch->DFlags)) {
 			test_and_set_bit(FLG_TX_NEXT, &dch->DFlags);
 			dch->next_skb = skb;
@@ -490,7 +490,7 @@ ISAC_l1hw(hisaxif_t *hif, struct sk_buff *skb)
 				DINFO_SKB, skb));
 		}
 	} else if (hh->prim == (PH_SIGNAL | REQUEST)) {
-		dch->inst.lock(dch->inst.data);
+		dch->inst.lock(dch->inst.data,0);
 		if (hh->dinfo == INFO3_P8)
 			ph_command(dch, ISAC_CMD_AR8);
 		else if (hh->dinfo == INFO3_P10)
@@ -499,7 +499,7 @@ ISAC_l1hw(hisaxif_t *hif, struct sk_buff *skb)
 			ret = -EINVAL;
 		dch->inst.unlock(dch->inst.data);
 	} else if (hh->prim == (PH_CONTROL | REQUEST)) {
-		dch->inst.lock(dch->inst.data);
+		dch->inst.lock(dch->inst.data,0);
 		if (hh->dinfo == HW_RESET) {
 			if ((dch->ph_state == ISAC_IND_EI) ||
 				(dch->ph_state == ISAC_IND_DR) ||
@@ -588,7 +588,11 @@ dbusy_timer_handler(dchannel_t *dch)
 	int	rbch, star;
 
 	if (test_bit(FLG_DBUSY_TIMER, &dch->DFlags)) {
-		dch->inst.lock(dch->inst.data);
+		if (dch->inst.lock(dch->inst.data, 1)) {
+			dch->dbusytimer.expires = jiffies + 1;
+			add_timer(&dch->dbusytimer);
+			return;
+		}
 		rbch = dch->read_reg(dch->inst.data, ISAC_RBCH);
 		star = dch->read_reg(dch->inst.data, ISAC_STAR);
 		if (dch->debug) 

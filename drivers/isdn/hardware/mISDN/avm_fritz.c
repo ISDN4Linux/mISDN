@@ -1,4 +1,4 @@
-/* $Id: avm_fritz.c,v 1.6 2003/06/22 10:39:43 kkeil Exp $
+/* $Id: avm_fritz.c,v 1.7 2003/06/22 12:03:36 kkeil Exp $
  *
  * fritz_pci.c    low level stuff for AVM Fritz!PCI and ISA PnP isdn cards
  *              Thanks to AVM, Berlin for informations
@@ -24,7 +24,7 @@
 #define LOCK_STATISTIC
 #include "hw_lock.h"
 
-static const char *avm_pci_rev = "$Revision: 1.6 $";
+static const char *avm_pci_rev = "$Revision: 1.7 $";
 
 #define ISDN_CTYPE_FRITZPCI 1
 
@@ -123,19 +123,17 @@ typedef struct _fritzpnppci {
 } fritzpnppci;
 
 
-static void lock_dev(void *data)
+static int lock_dev(void *data, int nowait)
 {
-	fritzpnppci		*card = data;
-	register hisax_HWlock_t	*lock = &card->lock;
-	
-	lock_HW(lock);
+	register hisax_HWlock_t	*lock = &((fritzpnppci *)data)->lock;
+
+	return(lock_HW(lock, nowait));
 } 
 
 static void unlock_dev(void *data)
 {
-	fritzpnppci		*card = data;
-	register hisax_HWlock_t	*lock = &card->lock;
-	
+	register hisax_HWlock_t *lock = &((fritzpnppci *)data)->lock;
+
 	unlock_HW(lock);
 }
 
@@ -647,7 +645,7 @@ hdlc_down(hisaxif_t *hif, struct sk_buff *skb)
 			debugprint(&bch->inst, " l2l1 next_skb exist this shouldn't happen");
 			return(-EBUSY);
 		}
-		bch->inst.lock(bch->inst.data);
+		bch->inst.lock(bch->inst.data, 0);
 		if (test_and_set_bit(BC_FLG_TX_BUSY, &bch->Flag)) {
 			test_and_set_bit(BC_FLG_TX_NEXT, &bch->Flag);
 			bch->next_skb = skb;
@@ -668,7 +666,7 @@ hdlc_down(hisaxif_t *hif, struct sk_buff *skb)
 		if (test_and_set_bit(BC_FLG_ACTIV, &bch->Flag))
 			ret = 0;
 		else {
-			bch->inst.lock(bch->inst.data);
+			bch->inst.lock(bch->inst.data,0);
 			ret = modehdlc(bch, bch->channel,
 				bch->inst.pid.protocol[1]);
 			bch->inst.unlock(bch->inst.data);
@@ -678,7 +676,7 @@ hdlc_down(hisaxif_t *hif, struct sk_buff *skb)
 	} else if ((hh->prim == (PH_DEACTIVATE | REQUEST)) ||
 		(hh->prim == (DL_RELEASE | REQUEST)) ||
 		(hh->prim == (MGR_DISCONNECT | REQUEST))) {
-		bch->inst.lock(bch->inst.data);
+		bch->inst.lock(bch->inst.data,0);
 		if (test_and_clear_bit(BC_FLG_TX_NEXT, &bch->Flag)) {
 			dev_kfree_skb(bch->next_skb);
 			bch->next_skb = NULL;
@@ -768,7 +766,7 @@ static int init_card(fritzpnppci *fc)
 	save_flags(flags);
 	irq_cnt = kstat_irqs(fc->irq);
 	printk(KERN_INFO "AVM Fritz!PCI: IRQ %d count %d\n", fc->irq, irq_cnt);
-	lock_dev(fc);
+	lock_dev(fc, 0);
 	if (request_irq(fc->irq, avm_pcipnp_interrupt, SA_SHIRQ,
 		"AVM Fritz!PCI", fc)) {
 		printk(KERN_WARNING "HiSax: couldn't get interrupt %d\n",
@@ -813,7 +811,7 @@ static int init_card(fritzpnppci *fc)
 		} else {
 			return(0);
 		}
-		lock_dev(fc);
+		lock_dev(fc, 0);
 	}
 	unlock_dev(fc);
 	return(-EIO);
@@ -942,7 +940,7 @@ setup_fritz(fritzpnppci *fc, u_int io_cfg, u_int irq_cfg)
 	fc->dch.read_fifo = &ReadISACfifo;
 	fc->dch.write_fifo = &WriteISACfifo;
 	fc->dch.hw = &fc->isac;
-	lock_dev(fc);
+	lock_dev(fc, 0);
 #ifdef SPIN_DEBUG
 	printk(KERN_ERR "spin_lock_adr=%p now(%p)\n", &fc->lock.busy_adr, fc->lock.busy_adr);
 	printk(KERN_ERR "busy_lock_adr=%p now(%p)\n", &fc->lock.busy_adr, fc->lock.busy_adr);
@@ -954,7 +952,13 @@ setup_fritz(fritzpnppci *fc, u_int io_cfg, u_int irq_cfg)
 static void
 release_card(fritzpnppci *card) {
 
-	lock_dev(card);
+#ifdef LOCK_STATISTIC
+	printk(KERN_INFO "try_ok(%d) try_wait(%d) try_mult(%d) try_inirq(%d)\n",
+		card->lock.try_ok, card->lock.try_wait, card->lock.try_mult, card->lock.try_inirq);
+	printk(KERN_INFO "irq_ok(%d) irq_fail(%d)\n",
+		card->lock.irq_ok, card->lock.irq_fail);
+#endif
+	lock_dev(card, 0);
 	outb(0, card->addr + 2);
 	free_irq(card->irq, card);
 	modehdlc(&card->bch[0], 0, ISDN_PID_NONE);

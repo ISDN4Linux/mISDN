@@ -1,4 +1,4 @@
-/* $Id: hw_lock.h,v 1.2 2003/06/22 10:39:43 kkeil Exp $
+/* $Id: hw_lock.h,v 1.3 2003/06/22 12:03:36 kkeil Exp $
  *
  * hw_lock.h  Hardware locking inline routines
  *
@@ -54,7 +54,7 @@
  * The following routines handle the lock in the entry point from upper layers and other
  * none IRQ cases (module init/exit stuff).
  *
- * They never called directly, but via the wrappers assigned to theinstance
+ * They never called directly, but via the wrappers assigned to the instance
  * inst.lock / inst.unlock pointers.
  *
  * Here are two defines which can be used for DEBUGING and PROFILING
@@ -86,7 +86,11 @@ typedef struct _hisax_HWlock {
 #define STATE_FLAG_INIRQ	2
 
 
-static inline void lock_HW(hisax_HWlock_t *lock)
+/*
+ * returns 0 if the lock was aquired
+ * returns 1 if nowait != 0 and the lock is not aquired 
+ */
+static inline int lock_HW(hisax_HWlock_t *lock, int nowait)
 {
 	register u_long	flags;
 #ifdef LOCK_STATISTIC
@@ -103,8 +107,15 @@ static inline void lock_HW(hisax_HWlock_t *lock)
 #ifdef SPIN_DEBUG
 		lock->spin_adr = NULL;
 #endif
+		if (nowait) {
+#ifdef LOCK_STATISTIC
+			lock->try_wait++;
+#endif 
+			return(1);
+		}
 		/* delay 1 jiffie is enought */
 		if (in_interrupt()) {
+			/* Should never happen */
 #ifdef LOCK_STATISTIC
 			lock->try_inirq++;
 #endif
@@ -134,6 +145,7 @@ static inline void lock_HW(hisax_HWlock_t *lock)
 	if (!wait)
 		lock->try_ok++;
 #endif
+	return(0);
 } 
 
 static inline void unlock_HW(hisax_HWlock_t *lock)

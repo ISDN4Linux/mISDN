@@ -1,4 +1,4 @@
-/* $Id: mISDNif.h,v 1.4 2003/06/21 21:39:54 kkeil Exp $
+/* $Id: mISDNif.h,v 1.5 2003/06/22 12:03:36 kkeil Exp $
  *
  */
 
@@ -622,7 +622,7 @@ typedef struct _hisaxinstance {
 	void			*data;
 	hisaxif_t		up;
 	hisaxif_t		down;
-	void			(*lock)(void *);
+	int			(*lock)(void *, int);
 	void			(*unlock)(void *);
 } hisaxinstance_t;
 

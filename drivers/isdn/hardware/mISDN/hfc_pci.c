@@ -1,4 +1,4 @@
-/* $Id: hfc_pci.c,v 1.20 2003/06/22 10:39:43 kkeil Exp $
+/* $Id: hfc_pci.c,v 1.21 2003/06/22 12:03:36 kkeil Exp $
 
  * hfc_pci.c     low level driver for CCD's hfc-pci based cards
  *
@@ -47,7 +47,7 @@
 
 extern const char *CardType[];
 
-static const char *hfcpci_revision = "$Revision: 1.20 $";
+static const char *hfcpci_revision = "$Revision: 1.21 $";
 
 /* table entry in the PCI devices list */
 typedef struct {
@@ -173,11 +173,11 @@ typedef struct _hfc_pci {
 } hfc_pci_t;
 
 
-static void lock_dev(void *data)
+static int lock_dev(void *data, int nowait)
 {
 	register hisax_HWlock_t	*lock = &((hfc_pci_t *)data)->lock;
 	
-	lock_HW(lock);
+	return(lock_HW(lock, nowait));
 } 
 
 static void unlock_dev(void *data)
@@ -1290,7 +1290,7 @@ HFCD_l1hw(hisaxif_t *hif, struct sk_buff *skb)
 			printk(KERN_WARNING "%s: next_skb exist ERROR",	__FUNCTION__);
 			return(-EBUSY);
 		}
-		dch->inst.lock(dch->inst.data);
+		dch->inst.lock(dch->inst.data, 0);
 		if (test_and_set_bit(FLG_TX_BUSY, &dch->DFlags)) {
 			test_and_set_bit(FLG_TX_NEXT, &dch->DFlags);
 			dch->next_skb = skb;
@@ -1307,7 +1307,7 @@ HFCD_l1hw(hisaxif_t *hif, struct sk_buff *skb)
 				hh->dinfo, skb));
 		}
 	} else if (hh->prim == (PH_SIGNAL | REQUEST)) {
-		dch->inst.lock(dch->inst.data);
+		dch->inst.lock(dch->inst.data, 0);
 		if ((hh->dinfo == INFO3_P8) || (hh->dinfo == INFO3_P10)) {
 			if (test_bit(HFC_CFG_MASTER, &hc->cfg))
 				hc->hw.mst_m |= HFCPCI_MASTER;
@@ -1316,7 +1316,7 @@ HFCD_l1hw(hisaxif_t *hif, struct sk_buff *skb)
 			ret = -EINVAL;
 		dch->inst.unlock(dch->inst.data);
 	} else if (hh->prim == (PH_CONTROL | REQUEST)) {
-		dch->inst.lock(dch->inst.data);
+		dch->inst.lock(dch->inst.data, 0);
 		if (hh->dinfo == HW_RESET) {
 			Write_hfc(hc, HFCPCI_STATES, HFCPCI_LOAD_STATE | 3);	/* HFC ST 3 */
 			udelay(6);
@@ -1382,7 +1382,7 @@ HFCD_l1hw(hisaxif_t *hif, struct sk_buff *skb)
 		dch->inst.unlock(dch->inst.data);
 	} else if (hh->prim == (PH_ACTIVATE | REQUEST)) {
 		if (hc->hw.nt_mode) {
-			dch->inst.lock(dch->inst.data);
+			dch->inst.lock(dch->inst.data, 0);
 			Write_hfc(hc, HFCPCI_STATES, HFCPCI_LOAD_STATE | 0); /* G0 */
 			udelay(6);
 			Write_hfc(hc, HFCPCI_STATES, HFCPCI_LOAD_STATE | 1); /* G1 */
@@ -1401,7 +1401,7 @@ HFCD_l1hw(hisaxif_t *hif, struct sk_buff *skb)
 		}
 	} else if (hh->prim == (PH_DEACTIVATE | REQUEST)) {
 		if (hc->hw.nt_mode) {
-			dch->inst.lock(dch->inst.data);
+			dch->inst.lock(dch->inst.data, 0);
 			hc->hw.mst_m &= ~HFCPCI_MASTER;
 			Write_hfc(hc, HFCPCI_MST_MODE, hc->hw.mst_m);
 			discard_queue(&dch->rqueue);
@@ -1647,7 +1647,7 @@ hfcpci_l2l1(hisaxif_t *hif, struct sk_buff *skb)
 				__FUNCTION__);
 			return(-EBUSY);
 		}
-		bch->inst.lock(bch->inst.data);
+		bch->inst.lock(bch->inst.data, 0);
 		if (test_and_set_bit(BC_FLG_TX_BUSY, &bch->Flag)) {
 			test_and_set_bit(BC_FLG_TX_NEXT, &bch->Flag);
 			bch->next_skb = skb;
@@ -1673,7 +1673,7 @@ hfcpci_l2l1(hisaxif_t *hif, struct sk_buff *skb)
 		if (test_and_set_bit(BC_FLG_ACTIV, &bch->Flag))
 			ret = 0;
 		else {
-			bch->inst.lock(bch->inst.data);
+			bch->inst.lock(bch->inst.data, 0);
 			ret = mode_hfcpci(bch, bch->channel,
 				bch->inst.pid.protocol[1]);
 			bch->inst.unlock(bch->inst.data);
@@ -1687,7 +1687,7 @@ hfcpci_l2l1(hisaxif_t *hif, struct sk_buff *skb)
 	} else if ((hh->prim == (PH_DEACTIVATE | REQUEST)) ||
 		(hh->prim == (DL_RELEASE | REQUEST)) ||
 		(hh->prim == (MGR_DISCONNECT | REQUEST))) {
-		bch->inst.lock(bch->inst.data);
+		bch->inst.lock(bch->inst.data, 0);
 		if (test_and_clear_bit(BC_FLG_TX_NEXT, &bch->Flag)) {
 			dev_kfree_skb(bch->next_skb);
 			bch->next_skb = NULL;
@@ -1759,7 +1759,7 @@ HW_hfcD_bh(dchannel_t *dch)
 			if (dch->debug)
 				printk(KERN_DEBUG "%s: NT newstate %x\n",
 					__FUNCTION__, dch->ph_state);
-			dch->inst.lock(dch->inst.data);
+			dch->inst.lock(dch->inst.data, 0);
 			switch (dch->ph_state) {
 				case (2):
 					if (hc->hw.nt_timer < 0) {
@@ -1885,7 +1885,7 @@ static int init_card(hfc_pci_t *hc)
 
 	irq_cnt = kstat_irqs(hc->irq);
 	printk(KERN_INFO "HFC PCI: IRQ %d count %d\n", hc->irq, irq_cnt);
-	lock_dev(hc);
+	lock_dev(hc, 0);
 	if (request_irq(hc->irq, hfcpci_interrupt, SA_SHIRQ, "HFC PCI", hc)) {
 		printk(KERN_WARNING "HiSax: couldn't get interrupt %d\n",
 			hc->irq);
@@ -1924,7 +1924,7 @@ static int init_card(hfc_pci_t *hc)
 		} else {
 			return(0);
 		}
-		lock_dev(hc);
+		lock_dev(hc, 0);
 	}
 	unlock_dev(hc);
 	return(-EIO);
@@ -2104,7 +2104,7 @@ setup_hfcpci(hfc_pci_t *hc)
 	hc->hw.timer.function = (void *) hfcpci_Timer;
 	hc->hw.timer.data = (long) hc;
 	init_timer(&hc->hw.timer);
-	lock_dev(hc);
+	lock_dev(hc, 0);
 #ifdef SPIN_DEBUG
 	printk(KERN_ERR "spin_lock_adr=%p now(%p)\n", &hc->lock.spin_adr, hc->lock.spin_adr);
 	printk(KERN_ERR "busy_lock_adr=%p now(%p)\n", &hc->lock.busy_adr, hc->lock.busy_adr);
@@ -2117,7 +2117,13 @@ setup_hfcpci(hfc_pci_t *hc)
 static void
 release_card(hfc_pci_t *hc) {
 
-	lock_dev(hc);
+#ifdef LOCK_STATISTIC
+	printk(KERN_INFO "try_ok(%d) try_wait(%d) try_mult(%d) try_inirq(%d)\n",
+		hc->lock.try_ok, hc->lock.try_wait, hc->lock.try_mult, hc->lock.try_inirq);
+	printk(KERN_INFO "irq_ok(%d) irq_fail(%d)\n",
+		hc->lock.irq_ok, hc->lock.irq_fail);
+#endif
+	lock_dev(hc, 0);
 	free_irq(hc->irq, hc);
 	mode_hfcpci(&hc->bch[0], 1, ISDN_PID_NONE);
 	mode_hfcpci(&hc->bch[1], 2, ISDN_PID_NONE);
