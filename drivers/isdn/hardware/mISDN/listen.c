@@ -1,4 +1,4 @@
-/* $Id: listen.c,v 1.0 2001/11/02 23:42:27 kkeil Exp $
+/* $Id: listen.c,v 1.1 2002/09/17 10:43:35 kkeil Exp $
  *
  */
 
@@ -149,6 +149,7 @@ void listenConstr(Listen_t *listen, Contr_t *contr, __u16 ApplId)
 
 void listenDestr(Listen_t *listen)
 {
+	printk(KERN_DEBUG "%s\n", __FUNCTION__);
 }
 
 void listenSendMessage(Listen_t *listen, struct sk_buff *skb)

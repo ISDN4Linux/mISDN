@@ -1,4 +1,4 @@
-/* $Id: dss1.h,v 1.0 2001/11/02 23:42:26 kkeil Exp $
+/* $Id: dss1.h,v 1.1 2002/09/17 10:43:35 kkeil Exp $
  *
  *  DSS1 (Euro) D-channel protocol defines
  *
@@ -125,6 +125,7 @@
 #define CAUSE_STATUS_RESPONSE	30
 #define CAUSE_NORMALUNSPECIFIED	31
 #define CAUSE_TEMPORARY_FAILURE	41
+#define CAUSE_RESOURCES_UNAVAIL 47
 #define CAUSE_INVALID_CALLREF	81
 #define CAUSE_MANDATORY_IE_MISS	96
 #define CAUSE_MT_NOTIMPLEMENTED	97

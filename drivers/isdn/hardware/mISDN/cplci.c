@@ -1,4 +1,4 @@
-/* $Id: cplci.c,v 1.3 2002/09/16 23:49:38 kkeil Exp $
+/* $Id: cplci.c,v 1.4 2002/09/17 10:43:35 kkeil Exp $
  *
  */
 
@@ -929,19 +929,20 @@ void cplciConstr(Cplci_t *cplci, Appl_t *appl, Plci_t *plci)
 
 void cplciDestr(Cplci_t *cplci)
 {
-	RELEASE_t	rel;
-	unsigned char	cause[4];
+	RELEASE_COMPLETE_t	relc;
+	unsigned char		cause[4];
 
 	if (cplci->plci) {
+		printk(KERN_DEBUG "%s plci state %s\n", __FUNCTION__,
+			str_st_plci[cplci->plci_m.state]);
 		if (cplci->plci_m.state != ST_PLCI_P_0) {
-//			plciL4L3(cplci->plci, CC_STATUS_ENQUIRY | REQUEST, 0, NULL);
-			memset(&rel, 0, sizeof(RELEASE_t));
+			memset(&relc, 0, sizeof(RELEASE_COMPLETE_t));
 			cause[0] = 2;
 			cause[1] = 0x80;
-			cause[2] = 0x80 | CAUSE_NORMALUNSPECIFIED;
-			rel.CAUSE = cause;
-			plciL4L3(cplci->plci, CC_RELEASE | REQUEST,
-				sizeof(RELEASE_t), &rel);
+			cause[2] = 0x80 | CAUSE_RESOURCES_UNAVAIL;
+			relc.CAUSE = cause;
+			plciL4L3(cplci->plci, CC_RELEASE_COMPLETE | REQUEST,
+				sizeof(RELEASE_COMPLETE_t), &relc);
 		}
  		plciDetachCplci(cplci->plci, cplci);
 	}
