@@ -1,4 +1,4 @@
-/* $Id: udevice.c,v 0.6 2001/03/04 17:08:33 kkeil Exp $
+/* $Id: udevice.c,v 0.7 2001/03/04 18:17:28 kkeil Exp $
  *
  * Copyright 2000  by Karsten Keil <kkeil@isdn4linux.de>
  */
@@ -738,6 +738,7 @@ int init_hisaxdev (int debug) {
 		udev_obj.DPROTO.protocol[i] = ISDN_PID_ANY;
 		udev_obj.BPROTO.protocol[i] = ISDN_PID_ANY;
 	}
+	udev_obj.own_ctrl = udev_manager;
 	udev_obj.prev = NULL;
 	udev_obj.next = NULL;
 	device_debug = debug;
