@@ -46,6 +46,10 @@ mISDN_l2.o: $(mISDN_l2-objs)
 	$(RM) $@
 	$(LD) -r -o $@ $(filter-out $(MODVERFILE) dummy ,$^)
 
+mISDN_x25dte.o: $(mISDN_x25dte-objs)
+	$(RM) $@
+	$(LD) -r -o $@ $(filter-out $(MODVERFILE) dummy ,$^)
+
 l3udss1.o: $(l3udss1-objs)
 	$(RM) $@
 	$(LD) -r -o $@ $(filter-out $(MODVERFILE) dummy ,$^)

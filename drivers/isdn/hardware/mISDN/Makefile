@@ -11,6 +11,7 @@ obj-$(CONFIG_MISDN_DRV) += mISDN_core.o
 obj-$(CONFIG_MISDN_DRV) += mISDN_isac.o
 obj-$(CONFIG_MISDN_DRV) += mISDN_l1.o
 obj-$(CONFIG_MISDN_DRV) += mISDN_l2.o
+obj-$(CONFIG_MISDN_DRV) += mISDN_x25dte.o
 obj-$(CONFIG_MISDN_DRV) += l3udss1.o
 obj-$(CONFIG_MISDN_DRV) += mISDN_capi.o
 obj-$(CONFIG_MISDN_DRV) += mISDN_dtmf.o
@@ -59,6 +60,7 @@ mISDN_capi-objs := capi.o contr.o listen.o appl.o plci.o app_plci.o ncci.o asn1.
                    supp_serv.o helper.o l3helper.o debug.o fsm.o
 mISDN_dtmf-objs := dtmf.o helper.o debug.o
 mISDN_dsp-objs := dsp_core.o dsp_cmx.o dsp_tones.o dsp_dtmf.o dsp_audio.o helper.o debug.o
+mISDN_x25dte-objs := x25_dte.o x25_l3.o helper.o debug.o fsm.o
 I4LmISDN-objs := i4l_mISDN.o helper.o l3helper.o debug.o fsm.o
 
 include Rules.mISDN

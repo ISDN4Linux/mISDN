@@ -1,4 +1,4 @@
-/* $Id: m_capi.h,v 1.3 2003/12/03 14:32:45 keil Exp $
+/* $Id: m_capi.h,v 1.4 2003/12/10 23:01:16 keil Exp $
  *
  * Rewritten CAPI Layer (Layer4 in mISDN)
  * 
@@ -273,7 +273,8 @@ struct _Ncci {
 
 #define NCCI_STATE_FCTRL	1
 #define NCCI_STATE_BUSY		2
-#define	NCCI_STATE_APPLRELEASED	3
+#define NCCI_STATE_L3TRANS	4
+#define	NCCI_STATE_APPLRELEASED	0x80
 
 // ---------------------------------------------------------------------------
 // struct SSProcess_t

@@ -1,4 +1,4 @@
-/* $Id: ncci.c,v 1.17 2003/12/03 14:32:45 keil Exp $
+/* $Id: ncci.c,v 1.18 2003/12/10 23:01:16 keil Exp $
  *
  */
 
@@ -11,6 +11,18 @@
 static int	ncciL4L3(Ncci_t *, u_int, int, int, void *, struct sk_buff *);
 static void	ncciInitSt(Ncci_t *);
 static void	ncciReleaseSt(Ncci_t *);
+
+static char	logbuf[8000];
+
+void
+log_skbdata(struct sk_buff *skb)
+{
+	char *t = logbuf;
+
+	t += sprintf(t, "skbdata(%d):", skb->len);
+	QuickHex(t, skb->data, skb->len);
+	printk(KERN_DEBUG "%s\n", logbuf);
+}
 
 // --------------------------------------------------------------------
 // NCCI state machine
@@ -654,6 +666,7 @@ ncciInitSt(Ncci_t *ncci)
 	if (pid.protocol[3] == ISDN_PID_L3_B_TRANS) {
 		ncci->binst->inst.pid.protocol[3] = ISDN_PID_L3_B_TRANS;
 		ncci->binst->inst.pid.layermask |= ISDN_LAYER(3);
+		test_and_set_bit(NCCI_STATE_L3TRANS, &ncci->state);
 	}
 	retval = ncci->binst->inst.obj->ctrl(ncci->binst->bst,
 		MGR_REGLAYER | INDICATION, &ncci->binst->inst); 
@@ -838,7 +851,7 @@ ncciDataReq(Ncci_t *ncci, struct sk_buff *skb)
 	}
 	if (i == ncci->window) {
 		int_error();
-		err = CAPI_SENDQUEUEFULL;
+		capierr = CAPI_SENDQUEUEFULL;
 		goto fail;
 	}
 	mISDN_HEAD_DINFO(skb) = ControllerNextId(ncci->contr);
@@ -958,11 +971,45 @@ ncciDataResp(Ncci_t *ncci, struct sk_buff *skb)
 	dev_kfree_skb(skb);
 }
 
+int
+ncci_l4l3_direct(Ncci_t *ncci, struct sk_buff *skb) {
+	int		prim, dinfo, ret;
+
+	if (ncci->ncci_m.debug)
+		log_skbdata(skb);
+	if (skb->len < CAPIMSG_BASELEN) {
+		int_error();
+		ret = -EINVAL;
+	} else {
+		prim = CAPIMSG_CMD(skb->data);
+		dinfo = CAPIMSG_MSGID(skb->data);
+// should use an other statemachine
+		skb_pull(skb, CAPIMSG_BASELEN);
+		if (ncci->ncci_m.debug)
+			log_skbdata(skb);
+		ret = if_newhead(&ncci->binst->inst.down, prim, dinfo, skb);
+		if (prim == CAPI_DISCONNECT_B3_RESP) {
+			FsmChangeState(&ncci->ncci_m, ST_NCCI_N_0);
+			ncciDestr(ncci);
+		}
+	}
+	if (ret) {
+		int_error();
+		dev_kfree_skb(skb);
+	}
+	return(0);
+}
+
 void
 ncciGetCmsg(Ncci_t *ncci, _cmsg *cmsg)
 {
 	int	retval = 0;
 
+	if (!test_bit(NCCI_STATE_L3TRANS, &ncci->state)) {
+		int_error();
+		cmsg_free(cmsg);
+		return;
+	}
 	switch (CMSGCMD(cmsg)) {
 		case CAPI_CONNECT_B3_REQ:
 			retval = FsmEvent(&ncci->ncci_m, EV_AP_CONNECT_B3_REQ, cmsg);
@@ -1004,6 +1051,10 @@ ncciSendMessage(Ncci_t *ncci, struct sk_buff *skb)
 {
 	_cmsg	*cmsg;
 
+	if (!test_bit(NCCI_STATE_L3TRANS, &ncci->state)) {
+		ncci_l4l3_direct(ncci, skb);
+		return;
+	}
 	// we're not using the cmsg for DATA_B3 for performance reasons
 	switch (CAPICMD(CAPIMSG_COMMAND(skb->data), CAPIMSG_SUBCOMMAND(skb->data))) {
 		case CAPI_DATA_B3_REQ:
@@ -1030,6 +1081,86 @@ ncciSendMessage(Ncci_t *ncci, struct sk_buff *skb)
 	dev_kfree_skb(skb);
 }
 
+static int
+ncci_l3l4_direct(Ncci_t *ncci, mISDN_head_t *hh, struct sk_buff *skb)
+{
+	struct sk_buff	*nskb;
+	__u16		msgnr,tlen, prim = hh->prim;
+
+	capidebug(CAPI_DBG_NCCI_L3, "%s: NCCI %x prim(%x) dinfo (%x) skb(%p) s(%x)",
+		__FUNCTION__, ncci->addr, hh->prim, hh->dinfo, skb, ncci->state);
+	if (ncci->ncci_m.debug)
+		log_skbdata(skb);
+	switch (hh->prim) {
+		case CAPI_CONNECT_B3_IND:
+			if (ncci->addr == 0xffffffff) {
+				ncci->addr = CAPIMSG_U32(skb->data, 0);
+				ncci->addr &= 0xffff0000;
+				ncci->addr |= ncci->AppPlci->addr;
+#ifdef OLDCAPI_DRIVER_INTERFACE
+				ncci->contr->ctrl->new_ncci(ncci->contr->ctrl, ncci->appl->ApplId, ncci->addr, ncci->window);
+#endif
+			} else {
+				int_error();
+				return(-EBUSY);
+			}
+			capimsg_setu32(skb->data, 0, ncci->addr);
+		case CAPI_DATA_B3_IND:
+		case CAPI_CONNECT_B3_ACTIVE_IND:
+		case CAPI_DISCONNECT_B3_IND:
+		case CAPI_FACILITY_IND:
+		case CAPI_MANUFACTURER_IND:
+			msgnr = ncci->appl->MsgId++;
+			break;
+		case CAPI_CONNECT_B3_CONF:
+			if (ncci->addr == 0xffffffff) {
+				ncci->addr = CAPIMSG_U32(skb->data, 0);
+#ifdef OLDCAPI_DRIVER_INTERFACE
+				ncci->contr->ctrl->new_ncci(ncci->contr->ctrl, ncci->appl->ApplId, ncci->addr, ncci->window);
+#endif
+			}
+		case CAPI_DATA_B3_CONF:
+		case CAPI_DISCONNECT_B3_CONF:
+		case CAPI_FACILITY_CONF:
+		case CAPI_MANUFACTURER_CONF:
+			msgnr = hh->dinfo & 0xffff;
+			break;
+		default:
+			int_error();
+			return(-EINVAL);
+	}
+	if (skb_headroom(skb) < CAPIMSG_BASELEN) {
+		capidebug(CAPI_DBG_NCCI_L3, "%s: only %d bytes headroom, need %d",
+			__FUNCTION__, skb_headroom(skb), CAPIMSG_BASELEN);
+		nskb = skb_realloc_headroom(skb, CAPIMSG_BASELEN);
+		if (!nskb) {
+			int_error();
+			return(-ENOMEM);
+		}
+		dev_kfree_skb(skb);
+		#warning TODO adjust DATA_B3_IND data
+      	} else { 
+		nskb = skb;
+	}
+	skb_push(nskb, CAPIMSG_BASELEN);
+	if (prim == CAPI_DATA_B3_IND)
+		tlen = CAPI_B3_DATA_IND_HEADER_SIZE;
+	else
+		tlen = nskb->len + CAPIMSG_BASELEN;
+	CAPIMSG_SETLEN(nskb->data, tlen);
+	CAPIMSG_SETAPPID(nskb->data, ncci->appl->ApplId);
+	CAPIMSG_SETCOMMAND(nskb->data, (prim>>8) & 0xff);
+	CAPIMSG_SETSUBCOMMAND(nskb->data, prim & 0xff); 
+	CAPIMSG_SETMSGID(nskb->data, msgnr);
+	if (ncci->ncci_m.debug)
+		log_skbdata(nskb);
+#ifdef OLDCAPI_DRIVER_INTERFACE
+	ncci->contr->ctrl->handle_capimsg(ncci->contr->ctrl, ncci->appl->ApplId, nskb);
+#else
+	capi_ctr_handle_message(ncci->contr->ctrl, ncci->appl->ApplId, nskb);
+#endif
+	return(0);
+}
 
 int
 ncci_l3l4(mISDNif_t *hif, struct sk_buff *skb)
@@ -1042,8 +1173,10 @@ ncci_l3l4(mISDNif_t *hif, struct sk_buff *skb)
 		return(ret);
 	hh = mISDN_HEAD_P(skb);
 	ncci = hif->fdata;
-	capidebug(CAPI_DBG_NCCI_L3, "%s: NCCI %x prim(%x) dinfo (%x) skb(%p)",
-		__FUNCTION__, ncci->addr, hh->prim, hh->dinfo, skb);
+	if (!test_bit(NCCI_STATE_L3TRANS, &ncci->state))
+		return(ncci_l3l4_direct(ncci, hh, skb));
+	capidebug(CAPI_DBG_NCCI_L3, "%s: NCCI %x prim(%x) dinfo (%x) skb(%p) s(%x)",
+		__FUNCTION__, ncci->addr, hh->prim, hh->dinfo, skb, ncci->state);
 	switch (hh->prim) {
 		// we're not using the Fsm for DL_DATA for performance reasons
 		case DL_DATA | INDICATION: 
