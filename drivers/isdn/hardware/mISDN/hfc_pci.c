@@ -1,4 +1,4 @@
-/* $Id: hfc_pci.c,v 1.4 2001/11/26 17:19:26 kkeil Exp $
+/* $Id: hfc_pci.c,v 1.5 2001/12/02 13:08:08 kkeil Exp $
 
  * hfc_pci.c     low level driver for CCD's hfc-pci based cards
  *
@@ -39,7 +39,7 @@
 
 extern const char *CardType[];
 
-static const char *hfcpci_revision = "$Revision: 1.4 $";
+static const char *hfcpci_revision = "$Revision: 1.5 $";
 
 /* table entry in the PCI devices list */
 typedef struct {
@@ -2099,7 +2099,7 @@ SelFreeBChannel(hfc_pci_t *hc, channel_info_t *ci)
 		bch = &hfc->bch[cnr & 1];
 		if (!(ci->channel & (~CHANNEL_NUMBER))) {
 			/* only number is set */
-			if ((ci->channel & CHANNEL_NUMBER) == (cnr + 1)) {
+			if ((ci->channel & 0x3) == (cnr + 1)) {
 				if (bch->protocol != ISDN_PID_NONE)
 					return(-EBUSY);
 				bch->channel = (cnr & 1) ? 2 : 1;

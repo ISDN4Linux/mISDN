@@ -1,4 +1,4 @@
-/* $Id: sedl_fax.c,v 1.2 2001/11/22 17:28:44 kkeil Exp $
+/* $Id: sedl_fax.c,v 1.3 2001/12/02 13:08:08 kkeil Exp $
  *
  * sedl_fax.c  low level stuff for Sedlbauer Speedfax + cards
  *
@@ -40,7 +40,7 @@
 
 extern const char *CardType[];
 
-const char *Sedlfax_revision = "$Revision: 1.2 $";
+const char *Sedlfax_revision = "$Revision: 1.3 $";
 
 const char *Sedlbauer_Types[] =
 	{"None", "speed fax+", "speed fax+ pyramid", "speed fax+ pci"};
@@ -820,15 +820,6 @@ Speedfax_init(void)
 				err = 0;
 			return(err);
 		}
-		if ((err = speedfax.ctrl(card->dch.inst.st, MGR_SETSTACK | REQUEST, &pid))) {
-			printk(KERN_ERR  "MGR_SETSTACK REQUEST dch err(%d)\n", err);
-			speedfax.ctrl(card->dch.inst.st, MGR_DELSTACK | REQUEST, NULL);
-			if (!sedl_cnt)
-				HiSax_unregister(&speedfax);
-			else
-				err = 0;
-			return(err);
-		}
 		for (i=0; i<2; i++) {
 			if ((err = speedfax.ctrl(card->dch.inst.st,
 				MGR_NEWSTACK | REQUEST, &card->bch[i].inst))) {
@@ -840,6 +831,15 @@ Speedfax_init(void)
 					err = 0;
 				return(err);
 			}
+		}
+		if ((err = speedfax.ctrl(card->dch.inst.st, MGR_SETSTACK | REQUEST, &pid))) {
+			printk(KERN_ERR  "MGR_SETSTACK REQUEST dch err(%d)\n", err);
+			speedfax.ctrl(card->dch.inst.st, MGR_DELSTACK | REQUEST, NULL);
+			if (!sedl_cnt)
+				HiSax_unregister(&speedfax);
+			else
+				err = 0;
+			return(err);
 		}
 		if ((err = init_card(card))) {
 			speedfax.ctrl(card->dch.inst.st, MGR_DELSTACK | REQUEST, NULL);
