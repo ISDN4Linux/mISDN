@@ -84,5 +84,11 @@ typedef struct wait_queue *wait_queue_head_t;
 #define init_waitqueue_entry(q,p)		((q)->task)=(p)
 #endif /* COMPAT_HAS_NEW_WAITQ */
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,10)
+#define	OLD_PCI_REGISTER_DRIVER	1
+#else
+#undef	OLD_PCI_REGISTER_DRIVER
+#endif
+
 #endif /* __KERNEL__ */
 #endif /* _LINUX_ISDN_COMPAT_H */

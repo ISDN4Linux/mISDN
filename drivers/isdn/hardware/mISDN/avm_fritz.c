@@ -1,4 +1,4 @@
-/* $Id: avm_fritz.c,v 1.29 2004/06/17 12:31:11 keil Exp $
+/* $Id: avm_fritz.c,v 1.30 2005/03/09 03:04:07 keil Exp $
  *
  * fritz_pci.c    low level stuff for AVM Fritz!PCI and ISA PnP isdn cards
  *              Thanks to AVM, Berlin for informations
@@ -28,7 +28,7 @@
 #define LOCK_STATISTIC
 #include "hw_lock.h"
 
-static const char *avm_fritz_rev = "$Revision: 1.29 $";
+static const char *avm_fritz_rev = "$Revision: 1.30 $";
 
 enum {
 	AVM_FRITZ_PCI,
@@ -1329,7 +1329,7 @@ static int __devinit fritzpci_probe(struct pci_dev *pdev, const struct pci_devic
 	}
 
 	printk(KERN_INFO "mISDN_fcpcipnp: found adapter %s at %s\n",
-	       (char *) ent->driver_data, pdev->slot_name);
+	       (char *) ent->driver_data, pci_name(pdev));
 
 	card->addr = pci_resource_start(pdev, 1);
 	card->irq = pdev->irq;
@@ -1456,7 +1456,10 @@ static char FritzName[] = "AVM Fritz";
 
 static int __init Fritz_init(void)
 {
-	int	err, pci_nr_found;
+	int	err;
+#ifdef OLD_PCI_REGISTER_DRIVER
+	int	pci_nr_found;
+#endif
 
 	printk(KERN_INFO "AVM Fritz PCI/PnP driver Rev. %s\n", mISDN_getrev(avm_fritz_rev));
 #ifdef MODULE
@@ -1476,24 +1479,30 @@ static int __init Fritz_init(void)
 	err = pci_register_driver(&fcpci_driver);
 	if (err < 0)
 		goto out;
+#ifdef OLD_PCI_REGISTER_DRIVER
 	pci_nr_found = err;
+#endif
 #if defined(CONFIG_PNP)
 	err = pnp_register_driver(&fcpnp_driver);
 	if (err < 0)
 		goto out_unregister_pci;
 #endif
 #if !defined(CONFIG_HOTPLUG) || defined(MODULE)
+#ifdef OLD_PCI_REGISTER_DRIVER
 	if (pci_nr_found + err == 0) {
 		err = -ENODEV;
 		goto out_unregister_isapnp;
 	}
 #endif
+#endif
 	return 0;
 
 #if !defined(CONFIG_HOTPLUG) || defined(MODULE)
+#ifdef OLD_PCI_REGISTER_DRIVER
  out_unregister_isapnp:
 #if defined(CONFIG_PNP)
 	pnp_unregister_driver(&fcpnp_driver);
+#endif
 #endif
 #endif
  out_unregister_pci:

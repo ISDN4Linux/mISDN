@@ -1,4 +1,4 @@
-/* $Id: sedl_fax.c,v 1.21 2004/06/17 12:31:12 keil Exp $
+/* $Id: sedl_fax.c,v 1.22 2005/03/09 03:04:07 keil Exp $
  *
  * sedl_fax.c  low level stuff for Sedlbauer Speedfax + cards
  *
@@ -50,7 +50,7 @@
 
 extern const char *CardType[];
 
-const char *Sedlfax_revision = "$Revision: 1.21 $";
+const char *Sedlfax_revision = "$Revision: 1.22 $";
 
 const char *Sedlbauer_Types[] =
 	{"None", "speed fax+", "speed fax+ pyramid", "speed fax+ pci"};
@@ -812,7 +812,7 @@ static int __devinit sedlpci_probe(struct pci_dev *pdev, const struct pci_device
 	}
 
 	printk(KERN_INFO "mISDN: sedlpci found adapter %s at %s\n",
-	       (char *) ent->driver_data, pdev->slot_name);
+	       (char *) ent->driver_data, pci_name(pdev));
 
 	card->cfg = pci_resource_start(pdev, 0);
 	card->irq = pdev->irq;
@@ -937,7 +937,10 @@ static struct isapnp_driver sedlpnp_driver = {
 
 static int __init Speedfax_init(void)
 {
-	int err, pci_nr_found;
+	int	err;
+#ifdef OLD_PCI_REGISTER_DRIVER
+	int	pci_nr_found;
+#endif
 
 #ifdef MODULE
 	speedfax.owner = THIS_MODULE;
@@ -960,24 +963,30 @@ static int __init Speedfax_init(void)
 	err = pci_register_driver(&sedlpci_driver);
 	if (err < 0)
 		goto out;
+#ifdef OLD_PCI_REGISTER_DRIVER
 	pci_nr_found = err;
+#endif
 #if defined(CONFIG_PNP)
 	err = pnp_register_driver(&sedlpnp_driver);
 	if (err < 0)
 		goto out_unregister_pci;
 #endif
+#ifdef OLD_PCI_REGISTER_DRIVER
 #if !defined(CONFIG_HOTPLUG) || defined(MODULE)
 	if (pci_nr_found + err == 0) {
 		err = -ENODEV;
 		goto out_unregister_isapnp;
 	}
 #endif
+#endif
 	return 0;
 
+#ifdef OLD_PCI_REGISTER_DRIVER
 #if !defined(CONFIG_HOTPLUG) || defined(MODULE)
  out_unregister_isapnp:
 #if defined(CONFIG_PNP)
 	pnp_unregister_driver(&sedlpnp_driver);
+#endif
 #endif
 #endif
  out_unregister_pci:
