@@ -23,6 +23,10 @@ ifdef CONFIG_MISDN_SPEEDFAX
 obj-$(CONFIG_MISDN_DRV) += sedlfax.o
 endif
 
+ifdef CONFIG_MISDN_W6692
+obj-$(CONFIG_MISDN_DRV) += w6692pci.o
+endif
+
 ifdef CONFIG_MISDN_DSP
 obj-$(CONFIG_MISDN_DRV) += mISDN_dsp.o
 endif
@@ -36,6 +40,7 @@ endif
 sedlfax-objs := sedl_fax.o debug.o helper.o fsm.o isar.o dchannel.o bchannel.o
 avmfritz-objs := avm_fritz.o debug.o helper.o fsm.o dchannel.o bchannel.o
 hfcpci-objs := hfc_pci.o debug.o helper.o dchannel.o bchannel.o
+w6692pci-objs := w6692.o debug.o helper.o dchannel.o bchannel.o
 mISDN_isac-objs := isac.o arcofi.o debug.o
 mISDN_core-objs := core.o stack.o udevice.o helper.o
 mISDN_l1-objs := layer1.o helper.o debug.o fsm.o

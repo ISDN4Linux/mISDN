@@ -31,6 +31,10 @@ sedlfax.o: $(sedlfax-objs)
 	$(RM) $@
 	$(LD) -r -o $@ $(filter-out $(MODVERFILE) dummy ,$^)
 
+w6692pci.o: $(w6692pci-objs)
+	$(RM) $@
+	$(LD) -r -o $@ $(filter-out $(MODVERFILE) dummy ,$^)
+
 hfcpci.o: $(hfcpci-objs)
 	$(RM) $@
 	$(LD) -r -o $@ $(filter-out $(MODVERFILE) dummy ,$^)

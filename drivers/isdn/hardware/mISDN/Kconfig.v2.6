@@ -32,6 +32,12 @@ config MISDN_SPEEDFAX
 	help
 	  Enable support for Sedlbauer Speedfax+.
 
+config MISDN_W6692
+	bool "Support for Winbond 6692 based cards"
+	depends on PCI
+	help
+	  Enable support for Winbond 6692 PCI chip based cards.
+
 config MISDN_DSP
 	bool "Digital Audio Processing of transparent data"
 	help
