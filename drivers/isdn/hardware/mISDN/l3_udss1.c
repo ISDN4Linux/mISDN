@@ -1,4 +1,4 @@
-/* $Id: l3_udss1.c,v 1.14 2003/11/09 09:22:17 keil Exp $
+/* $Id: l3_udss1.c,v 1.15 2003/11/09 16:03:19 keil Exp $
  *
  * EURO/DSS1 D-channel protocol
  *
@@ -24,7 +24,7 @@ static int debug = 0;
 static mISDNobject_t u_dss1;
 
 
-const char *dss1_revision = "$Revision: 1.14 $";
+const char *dss1_revision = "$Revision: 1.15 $";
 
 static int dss1man(l3_process_t *, u_int, void *);
 
@@ -570,11 +570,11 @@ l3dss1_get_cause(l3_process_t *pc, struct sk_buff *skb) {
 
 	if (qi->cause) {
 		p = skb->data;
-		p += L3_EXTRA_SIZE + qi->channel_id;
+		p += L3_EXTRA_SIZE + qi->cause;
 		p++;
 		l = *p++;
 		if (l>30) {
-			return(-1);
+			return(-30);
 		}
 		if (l)
 			l--;
@@ -751,6 +751,27 @@ l3dss1_status_enq_req(l3_process_t *pc, u_char pr, void *arg)
 	if (arg)
 		dev_kfree_skb(arg);
 	l3dss1_message(pc, MT_STATUS_ENQUIRY);
+}
+
+static void
+l3dss1_information_req(l3_process_t *pc, u_char pr, void *arg)
+{
+	if (pc->state == 2) {
+		L3DelTimer(&pc->timer);
+		L3AddTimer(&pc->timer, T304, CC_T304);
+	}
+
+	if (arg) {
+		SendMsg(pc, arg, 2);
+	}
+}
+
+static void
+l3dss1_progress_req(l3_process_t *pc, u_char pr, void *arg)
+{
+	if (arg) {
+		SendMsg(pc, arg, 10);
+	}
 }
 
 static void
@@ -1701,6 +1722,9 @@ l3dss1_dl_reset(l3_process_t *pc, u_char pr, void *arg)
 	nskb = skb_clone(skb, GFP_ATOMIC);
 	l3dss1_disconnect_req(pc, pr, skb);
 	if (nskb) {
+// jolly patch start: frage
+#warning jolly asks: wieso verschicken wir ein REQUEST nach oben? wenn das nicht ok ist, dann schaue nach allen REQUESTS, da hier mehrere sind.
+// jolly patch stop
 		if (mISDN_l3up(pc, CC_DISCONNECT | REQUEST, nskb))
 			dev_kfree_skb(nskb);
 	}
@@ -1714,7 +1738,10 @@ l3dss1_dl_release(l3_process_t *pc, u_char pr, void *arg)
         pc->cause = 0x1b;          /* Destination out of order */
         pc->para.loc = 0;
 #endif
-	mISDN_l3up(pc, DL_RELEASE | INDICATION, NULL);
+// jolly patch start: shouldn't we use CC_RELEASE_COMPLETE (cause 27=0x1b) instead and do ONE DL_RLEASE for the complete port, not for all processes ?
+//	mISDN_l3up(pc, DL_RELEASE | INDICATION, NULL);
+// hier muesste man eine message mit cause generieren.
+// jolly patch_stop:
 	release_l3_process(pc);
 }
 
@@ -1739,6 +1766,13 @@ static struct stateentry downstatelist[] =
 {
 	{SBIT(0),
 	 CC_SETUP | REQUEST, l3dss1_setup_req},
+// jolly patch start: wie soll ich sonst wählen :=)
+	{SBIT(2) | SBIT(3) | SBIT(4) | SBIT(7) | SBIT(8) | SBIT(9) |
+		SBIT(10) | SBIT(11) | SBIT(12) | SBIT(15) | SBIT(25),
+	 CC_INFORMATION | REQUEST, l3dss1_information_req},
+	{SBIT(10),
+	 CC_PROGRESS | REQUEST, l3dss1_progress_req},
+// jolly patch stop
 	{SBIT(0),
 	 CC_RESUME | REQUEST, l3dss1_resume_req},
 	{SBIT(1) | SBIT(2) | SBIT(3) | SBIT(4) | SBIT(6) | SBIT(7) |
@@ -2101,6 +2135,14 @@ dss1_fromup(mISDNif_t *hif, struct sk_buff *skb)
 	printk(KERN_DEBUG  "%s: prim(%x)\n", __FUNCTION__, hh->prim);
 	if (!l3)
 		return(ret);
+// jolly patch start: warum eingentlich nicht?
+// kke weil die user Seite kein DL_RELEASE kennt lt Q.920/921/931
+//	if ((DL_RELEASE | REQUEST) == hh->prim) {
+//		l3_msg(l3, hh->prim, 0, 0, NULL);
+//		dev_kfree_skb(skb);
+//		return(0);
+//	}
+// jolly patch stop
 	if ((DL_ESTABLISH | REQUEST) == hh->prim) {
 		l3_msg(l3, hh->prim, 0, 0, NULL);
 		dev_kfree_skb(skb);
