@@ -1,4 +1,4 @@
-/* $Id: layer3.h,v 0.9 2001/03/03 18:17:15 kkeil Exp $
+/* $Id: layer3.h,v 0.10 2001/08/02 14:51:56 kkeil Exp $
  *
  * This file is (c) under GNU PUBLIC LICENSE
  *
@@ -105,7 +105,7 @@ extern l3_process_t *getl3proc(layer3_t *, int);
 extern l3_process_t *getl3proc4id(layer3_t *, int);
 extern l3_process_t *new_l3_process(layer3_t *, int, int);
 extern u_char *findie(u_char *, int, u_char, int);
-extern int hisax_l3up(l3_process_t *, u_int, int, void *);
+extern int hisax_l3up(l3_process_t *, struct sk_buff *, u_int, int, void *);
 extern int getcallref(u_char * p);
 extern int newcallref(void);
 extern void init_l3(layer3_t *);

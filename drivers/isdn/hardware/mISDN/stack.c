@@ -1,4 +1,4 @@
-/* $Id: stack.c,v 0.13 2001/07/19 21:52:39 kkeil Exp $
+/* $Id: stack.c,v 0.14 2001/08/02 14:51:56 kkeil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -405,7 +405,7 @@ get_free_instid(hisaxstack_t *st, hisaxinstance_t *inst) {
 
 int
 register_layer(hisaxstack_t *st, hisaxinstance_t *inst) {
-	hisaxlayer_t	*layer;
+	hisaxlayer_t	*layer = NULL;
 	int		refinc = 0;
 
 	if (!inst)

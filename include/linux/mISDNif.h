@@ -1,4 +1,4 @@
-/* $Id: mISDNif.h,v 0.26 2001/07/10 16:01:03 kkeil Exp $
+/* $Id: mISDNif.h,v 0.27 2001/08/02 14:51:56 kkeil Exp $
  *
  */
 
@@ -269,6 +269,7 @@
 #define MAX_DATA_MEM		2080
 #define MAX_HEADER_LEN		4
 #define UPLINK_HEADER_SPACE	22
+#define HISAX_FRAME_MIN		8
 
 /* structure for information exchange between layer/entity boundaries */
 
@@ -527,6 +528,14 @@ typedef struct _FACILITY {
 
 
 #ifdef __KERNEL__
+#include <linux/skbuff.h>
+
+typedef struct _hisax_head {
+	u_int	prim;
+	int	dinfo;
+} hisax_head_t;
+
+#define HISAX_HEAD_SIZE		sizeof(hisax_head_t)
 
 typedef struct _hisaxobject {
 	struct _hisaxobject	*prev;
@@ -549,7 +558,7 @@ typedef struct _hisaxif {
 	struct _hisaxstack	*st;
 	struct _hisaxinstance	*owner;
 	struct _hisaxinstance	*peer;
-	int			(*func)(struct _hisaxif *, u_int, int, int, void *);
+	int			(*func)(struct _hisaxif *, struct sk_buff *);
 	void			*fdata;
 } hisaxif_t;
 
@@ -587,6 +596,7 @@ typedef struct _hisaxstack {
 } hisaxstack_t;
 
 /* common helper functions */
+extern int put_hisax_header(struct sk_buff *, iframe_t *);
 extern int bprotocol2pid(void *, hisax_pid_t *);
 extern int get_protocol(hisaxstack_t *, int);
 extern int HasProtocol(hisaxobject_t *, int);

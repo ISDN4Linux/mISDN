@@ -1,4 +1,4 @@
-/* $Id: isac.c,v 0.4 2001/03/03 18:17:15 kkeil Exp $
+/* $Id: isac.c,v 0.5 2001/08/02 14:51:56 kkeil Exp $
  *
  * isac.c   ISAC specific routines
  *
@@ -85,7 +85,7 @@ isac_new_ph(dchannel_t *dch)
 			return;
 	}
 	while(upif) {
-		upif->func(upif, prim, 0, 4, (void *)para);
+		if_link(upif, prim, para, 0, NULL, 0);
 		upif = upif->next;
 	}
 }
@@ -95,14 +95,9 @@ isac_rcv(dchannel_t *dch)
 {
 	struct sk_buff	*skb;
 	int		err;
-	hisaxif_t	*upif;
 
 	while ((skb = skb_dequeue(&dch->rqueue))) {
-		if (!(upif = &dch->inst.up)) {
-			dev_kfree_skb(skb);
-			continue;
-		}
-		err = upif->func(upif, PH_DATA_IND, DINFO_SKB, 0, skb);
+		err = if_addhead(&dch->inst.up, PH_DATA_IND, DINFO_SKB, skb);
 		if (err < 0) {
 			printk(KERN_WARNING "HiSax: isac deliver err %d\n", err);
 			dev_kfree_skb(skb);
@@ -115,6 +110,7 @@ isac_bh(dchannel_t *dch)
 {
 	if (!dch)
 		return;
+	printk(KERN_DEBUG __FUNCTION__": event %x\n", dch->event);
 #if 0
 	if (test_and_clear_bit(D_CLEARBUSY, &dch->event)) {
 		if (dch->debug)
@@ -133,8 +129,16 @@ isac_bh(dchannel_t *dch)
 
 		if (skb) {
 			dch->next_skb = NULL;
-			dch->inst.up.func(&dch->inst.up, PH_DATA_CNF,
-				DINFO_SKB, 0, skb);
+			skb_trim(skb, 0);
+			if (skb_headroom(skb) < HISAX_HEAD_SIZE) {
+				int_errtxt("skb %p %d/%d\n",
+					skb, skb_headroom(skb),
+					skb_tailroom(skb));
+				skb_reserve(skb, HISAX_HEAD_SIZE);
+			}
+			if (if_addhead(&dch->inst.up, PH_DATA_CNF, DINFO_SKB,
+				skb))
+				dev_kfree_skb(skb);
 		}
 	}
 	if (test_and_clear_bit(D_RCVBUFREADY, &dch->event))
@@ -258,7 +262,7 @@ isac_interrupt(dchannel_t *dch, u_char val)
 			isac_empty_fifo(dch, count);
 			if ((count = dch->rx_idx) > 0) {
 				dch->rx_idx = 0;
-				if (!(skb = alloc_skb(count, GFP_ATOMIC)))
+				if (!(skb = alloc_uplink_skb(count)))
 					printk(KERN_WARNING "HiSax: D receive out of memory\n");
 				else {
 					memcpy(skb_put(skb, count), dch->rx_buf, count);
@@ -491,55 +495,62 @@ isac_interrupt(dchannel_t *dch, u_char val)
 }
 
 int
-ISAC_l1hw(hisaxif_t *hif, u_int prim, int dinfo, int len, void *arg)
+ISAC_l1hw(hisaxif_t *hif, struct sk_buff *skb)
 {
-	dchannel_t *dch = hif->fdata;
-	struct sk_buff *skb = arg;
-	u_int	val = (u_int)arg;
-	u_char	tl;
-	int	ret = 0;
+	dchannel_t	*dch;
+	u_char		tl;
+	int ret = -EINVAL;
+	hisax_head_t	*hh;
 
-	
-	if (prim == PH_DATA_REQ) {
+	if (!hif || !skb)
+		return(ret);
+	hh = (hisax_head_t *)skb->data;
+	if (skb->len < HISAX_FRAME_MIN)
+		return(ret);
+	dch = hif->fdata;
+	ret = 0;
+	if (hh->prim == PH_DATA_REQ) {
 		if (dch->next_skb) {
 			debugprint(&dch->inst, " l2l1 next_skb exist this shouldn't happen");
 			return(-EBUSY);
 		}
+		skb_pull(skb, HISAX_HEAD_SIZE);
 		dch->inst.lock(dch->inst.data);
 		if (test_and_set_bit(FLG_TX_BUSY, &dch->DFlags)) {
 			test_and_set_bit(FLG_TX_NEXT, &dch->DFlags);
 			dch->next_skb = skb;
 			dch->inst.unlock(dch->inst.data);
+			return(0);
 		} else {
 			dch->tx_len = skb->len;
 			memcpy(dch->tx_buf, skb->data, dch->tx_len);
 			dch->tx_idx = 0;
 			isac_fill_fifo(dch);
 			dch->inst.unlock(dch->inst.data);
-			dch->inst.up.func(&dch->inst.up, PH_DATA_CNF,
-				DINFO_SKB, 0, skb);
+			return(if_addhead(&dch->inst.up, PH_DATA_CNF,
+				DINFO_SKB, skb));
 		}
-	} else if (prim == (PH_SIGNAL | REQUEST)) {
+	} else if (hh->prim == (PH_SIGNAL | REQUEST)) {
 		dch->inst.lock(dch->inst.data);
-		if (val == INFO3_P8)
+		if (hh->dinfo == INFO3_P8)
 			ph_command(dch, ISAC_CMD_AR8);
-		else if (val == INFO3_P10)
+		else if (hh->dinfo == INFO3_P10)
 			ph_command(dch, ISAC_CMD_AR10);
 		else
 			ret = -EINVAL;
 		dch->inst.unlock(dch->inst.data);
-	} else if (prim == (PH_CONTROL | REQUEST)) {
+	} else if (hh->prim == (PH_CONTROL | REQUEST)) {
 		dch->inst.lock(dch->inst.data);
-		if (val == HW_RESET) {
+		if (hh->dinfo == HW_RESET) {
 			if ((dch->hw.isac.ph_state == ISAC_IND_EI) ||
 				(dch->hw.isac.ph_state == ISAC_IND_DR) ||
 				(dch->hw.isac.ph_state == ISAC_IND_RS))
 			        ph_command(dch, ISAC_CMD_TIM);
 			else
 				ph_command(dch, ISAC_CMD_RS);
-		} else if (val == HW_POWERUP) {
+		} else if (hh->dinfo == HW_POWERUP) {
 			ph_command(dch, ISAC_CMD_TIM);
-		} else if (val == HW_DEACTIVATE) {
+		} else if (hh->dinfo == HW_DEACTIVATE) {
 			discard_queue(&dch->rqueue);
 			if (dch->next_skb) {
 				dev_kfree_skb(dch->next_skb);
@@ -551,11 +562,11 @@ ISAC_l1hw(hisaxif_t *hif, u_int prim, int dinfo, int len, void *arg)
 				del_timer(&dch->dbusytimer);
 			if (test_and_clear_bit(FLG_L1_DBUSY, &dch->DFlags))
 				isac_sched_event(dch, D_CLEARBUSY);
-		} else if ((val & HW_TESTLOOP) == HW_TESTLOOP) {
+		} else if ((hh->dinfo & HW_TESTLOOP) == HW_TESTLOOP) {
 			tl = 0;
-			if (1 & val)
+			if (1 & hh->dinfo)
 				tl |= 0x0c;
-			if (2 & val)
+			if (2 & hh->dinfo)
 				tl |= 0x3;
 			if (test_bit(HW_IOM1, &dch->DFlags)) {
 				/* IOM 1 Mode */
@@ -576,15 +587,19 @@ ISAC_l1hw(hisaxif_t *hif, u_int prim, int dinfo, int len, void *arg)
 			}
 		} else {
 			if (dch->debug & L1_DEB_WARN)
-				debugprint(&dch->inst, "isac_l1hw unknown ctrl %x", val);
+				debugprint(&dch->inst, "isac_l1hw unknown ctrl %x",
+					hh->dinfo);
 			ret = -EINVAL;
 		}
 		dch->inst.unlock(dch->inst.data);
 	} else {
 		if (dch->debug & L1_DEB_WARN)
-			debugprint(&dch->inst, "isac_l1hw unknown prim %x", prim);
+			debugprint(&dch->inst, "isac_l1hw unknown prim %x",
+				hh->prim);
 		ret = -EINVAL;
 	}
+	if (!ret)
+		dev_kfree_skb(skb);
 	return(ret);
 }
 

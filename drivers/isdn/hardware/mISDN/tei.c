@@ -1,4 +1,4 @@
-/* $Id: tei.c,v 0.6 2001/03/11 21:23:39 kkeil Exp $
+/* $Id: tei.c,v 0.7 2001/08/02 14:51:56 kkeil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -9,10 +9,11 @@
  */
 #define __NO_VERSION__
 #include "hisaxl2.h"
+#include "helper.h"
 #include "debug.h"
 #include <linux/random.h>
 
-const char *tei_revision = "$Revision: 0.6 $";
+const char *tei_revision = "$Revision: 0.7 $";
 
 #define ID_REQUEST	1
 #define ID_ASSIGNED	2
@@ -78,12 +79,17 @@ random_ri(void)
 static teimgr_t *
 findtei(teimgr_t *tm, int tei)
 {
-	teimgr_t *ptr = NULL;
+	static teimgr_t *ptr = NULL;
+	struct sk_buff *skb;
 
 	if (tei == 127)
 		return (NULL);
-	if (!tei_l2(tm->l2, MDL_FINDTEI | REQUEST, tei, sizeof(void), &ptr))
+	skb = create_link_skb(MDL_FINDTEI | REQUEST, tei, sizeof(void), &ptr, 0);
+	if (!skb)
+		return (NULL);
+	if (!tei_l2(tm->l2, skb))
 		return(ptr);
+	dev_kfree_skb(skb);
 	return (NULL);
 }
 
@@ -91,23 +97,23 @@ static void
 put_tei_msg(teimgr_t *tm, u_char m_id, unsigned int ri, u_char tei)
 {
 	struct sk_buff *skb;
-	u_char *bp;
+	u_char bp[8];
 
-	if (!(skb = alloc_skb(8, GFP_ATOMIC))) {
-		printk(KERN_WARNING "HiSax: No skb for TEI manager\n");
-		return;
-	}
-	bp = skb_put(skb, 3);
 	bp[0] = (TEI_SAPI << 2);
 	bp[1] = (GROUP_TEI << 1) | 0x1;
 	bp[2] = UI;
-	bp = skb_put(skb, 5);
-	bp[0] = TEI_ENTITY_ID;
-	bp[1] = ri >> 8;
-	bp[2] = ri & 0xff;
-	bp[3] = m_id;
-	bp[4] = (tei << 1) | 1;
-	tei_l2(tm->l2, MDL_UNITDATA | REQUEST, DINFO_SKB, 0, skb);
+	bp[3] = TEI_ENTITY_ID;
+	bp[4] = ri >> 8;
+	bp[5] = ri & 0xff;
+	bp[6] = m_id;
+	bp[7] = (tei << 1) | 1;
+	skb = create_link_skb(MDL_UNITDATA | REQUEST, DINFO_SKB, 8, bp, 0);
+	if (!skb) {
+		printk(KERN_WARNING "HiSax: No skb for TEI manager\n");
+		return;
+	}
+	if (tei_l2(tm->l2, skb))
+		dev_kfree_skb(skb);
 }
 
 static void
@@ -136,6 +142,7 @@ tei_id_assign(struct FsmInst *fi, int event, void *arg)
 {
 	teimgr_t *otm, *tm = fi->userdata;
 	u_char *dp = arg;
+	struct sk_buff *skb;
 	int ri, tei;
 
 	ri = ((unsigned int) *dp++ << 8);
@@ -149,12 +156,21 @@ tei_id_assign(struct FsmInst *fi, int event, void *arg)
 		if (ri != otm->ri) {
 			tm->tei_m.printdebug(fi,
 				"possible duplicate assignment tei %d", tei);
-			tei_l2(otm->l2, MDL_ERROR | RESPONSE, 0, 0, NULL);
+			skb = create_link_skb(MDL_ERROR | RESPONSE, 0, 0,
+				NULL, 0);
+			if (!skb)
+				return;
+			if (tei_l2(otm->l2, skb))
+				dev_kfree_skb(skb);
 		}
 	} else if (ri == tm->ri) {
 		FsmDelTimer(&tm->t202, 1);
 		FsmChangeState(fi, ST_TEI_NOP);
-		tei_l2(tm->l2, MDL_ASSIGN | REQUEST, 0, 4, &tei);
+		skb = create_link_skb(MDL_ASSIGN | REQUEST, tei, 0, NULL, 0);
+		if (!skb)
+			return;
+		if (tei_l2(tm->l2, skb))
+			dev_kfree_skb(skb);
 //		cs->cardmsg(cs, MDL_ASSIGN | REQUEST, NULL);
 	}
 }
@@ -220,6 +236,7 @@ tei_id_remove(struct FsmInst *fi, int event, void *arg)
 {
 	teimgr_t *tm = fi->userdata;
 	u_char *dp = arg;
+	struct sk_buff *skb;
 	int tei;
 
 	tei = *(dp+3) >> 1;
@@ -228,7 +245,11 @@ tei_id_remove(struct FsmInst *fi, int event, void *arg)
 	if ((tm->l2->tei != -1) && ((tei == GROUP_TEI) || (tei == tm->l2->tei))) {
 		FsmDelTimer(&tm->t202, 5);
 		FsmChangeState(&tm->tei_m, ST_TEI_NOP);
-		tei_l2(tm->l2, MDL_REMOVE | REQUEST, 0, 0, NULL);
+		skb = create_link_skb(MDL_REMOVE | REQUEST, 0, 0, NULL, 0);
+		if (!skb)
+			return;
+		if (tei_l2(tm->l2, skb))
+			dev_kfree_skb(skb);
 //		cs->cardmsg(cs, MDL_REMOVE | REQUEST, NULL);
 	}
 }
@@ -251,6 +272,7 @@ static void
 tei_id_req_tout(struct FsmInst *fi, int event, void *arg)
 {
 	teimgr_t *tm = fi->userdata;
+	struct sk_buff *skb;
 
 	if (--tm->N202) {
 		tm->ri = random_ri();
@@ -261,7 +283,11 @@ tei_id_req_tout(struct FsmInst *fi, int event, void *arg)
 		FsmAddTimer(&tm->t202, tm->T202, EV_T202, NULL, 3);
 	} else {
 		tm->tei_m.printdebug(fi, "assign req failed");
-		tei_l2(tm->l2, MDL_ERROR | RESPONSE, 0, 0, NULL);
+		skb = create_link_skb(MDL_ERROR | REQUEST, 0, 0, NULL, 0);
+		if (!skb)
+			return;
+		if (tei_l2(tm->l2, skb))
+			dev_kfree_skb(skb);
 //		cs->cardmsg(cs, MDL_REMOVE | REQUEST, NULL);
 		FsmChangeState(fi, ST_TEI_NOP);
 	}
@@ -271,6 +297,7 @@ static void
 tei_id_ver_tout(struct FsmInst *fi, int event, void *arg)
 {
 	teimgr_t *tm = fi->userdata;
+	struct sk_buff *skb;
 
 	if (--tm->N202) {
 		if (tm->debug)
@@ -282,16 +309,19 @@ tei_id_ver_tout(struct FsmInst *fi, int event, void *arg)
 	} else {
 		tm->tei_m.printdebug(fi, "verify req for tei %d failed",
 			tm->l2->tei);
-		tei_l2(tm->l2, MDL_REMOVE | REQUEST, 0, 0, NULL);
+		skb = create_link_skb(MDL_REMOVE | REQUEST, 0, 0, NULL, 0);
+		if (!skb)
+			return;
+		if (tei_l2(tm->l2, skb))
+			dev_kfree_skb(skb);
 //		cs->cardmsg(cs, MDL_REMOVE | REQUEST, NULL);
 		FsmChangeState(fi, ST_TEI_NOP);
 	}
 }
 
 static int
-tei_ph_data_ind(teimgr_t *tm, int dtyp, void *arg)
+tei_ph_data_ind(teimgr_t *tm, int dtyp, struct sk_buff *skb)
 {
-	struct sk_buff *skb = arg;
 	u_char *dp;
 	int mt;
 	int ret = -EINVAL;
@@ -300,6 +330,7 @@ tei_ph_data_ind(teimgr_t *tm, int dtyp, void *arg)
 		return(ret);
 	if (test_bit(FLG_FIXED_TEI, &tm->l2->flag))
 		return(ret);
+	skb_pull(skb, HISAX_HEAD_SIZE);
 	if (skb->len < 8) {
 		tm->tei_m.printdebug(&tm->tei_m,
 			"short mgr frame %ld/8", skb->len);
@@ -339,29 +370,39 @@ tei_ph_data_ind(teimgr_t *tm, int dtyp, void *arg)
 }
 
 int
-l2_tei(teimgr_t *tm, u_int prim, int dinfo, int len, void *arg)
+l2_tei(teimgr_t *tm, struct sk_buff *skb)
 {
-	if (!tm)
-		return(-EINVAL);
-	switch (prim) {
+	hisax_head_t	*hh;
+	int		ret = -EINVAL;
+
+	if (!tm || !skb)
+		return(ret);
+	hh = (hisax_head_t *)skb->data;
+	printk(KERN_DEBUG __FUNCTION__ ": prim(%x)\n", hh->prim);
+	if (skb->len < HISAX_FRAME_MIN)
+		return(ret);
+	switch(hh->prim) {
 	    case (MDL_UNITDATA | INDICATION):
-	    	return(tei_ph_data_ind(tm, dinfo, arg));
+	    	return(tei_ph_data_ind(tm, hh->dinfo, skb));
 	    case (MDL_ASSIGN | INDICATION):
 		if (test_bit(FLG_FIXED_TEI, &tm->l2->flag)) {
 			if (tm->debug)
 				tm->tei_m.printdebug(&tm->tei_m,
 					"fixed assign tei %d", tm->l2->tei);
-			tei_l2(tm->l2, MDL_ASSIGN | REQUEST, 0,
-				tm->l2->tei, NULL);
+			skb_trim(skb, HISAX_HEAD_SIZE);
+			hisax_newhead(MDL_ASSIGN | REQUEST, tm->l2->tei, skb);
+			if (!tei_l2(tm->l2, skb))
+				return(0);
 //			cs->cardmsg(cs, MDL_ASSIGN | REQUEST, NULL);
 		} else
-			FsmEvent(&tm->tei_m, EV_IDREQ, arg);
+			FsmEvent(&tm->tei_m, EV_IDREQ, NULL);
 		break;
 	    case (MDL_ERROR | REQUEST):
 	    	if (!test_bit(FLG_FIXED_TEI, &tm->l2->flag))
-			FsmEvent(&tm->tei_m, EV_VERIFY, arg);
+			FsmEvent(&tm->tei_m, EV_VERIFY, NULL);
 		break;
 	}
+	dev_kfree_skb(skb);
 	return(0);
 }
 
@@ -370,7 +411,7 @@ tei_debug(struct FsmInst *fi, char *fmt, ...)
 {
 	teimgr_t	*tm = fi->userdata;
 	logdata_t	log;
-	char		head[16];
+	char		head[24];
 
 	va_start(log.args, fmt);
 	sprintf(head,"tei %s", tm->l2->inst.name);

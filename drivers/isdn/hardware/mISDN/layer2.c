@@ -1,4 +1,4 @@
-/* $Id: layer2.c,v 0.15 2001/05/18 00:48:51 kkeil Exp $
+/* $Id: layer2.c,v 0.16 2001/08/02 14:51:56 kkeil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -12,7 +12,7 @@
 #include "helper.h"
 #include "debug.h"
 
-const char *l2_revision = "$Revision: 0.15 $";
+const char *l2_revision = "$Revision: 0.16 $";
 
 static void l2m_debug(struct FsmInst *fi, char *fmt, ...);
 
@@ -103,74 +103,94 @@ static char *strL2Event[] =
 static int l2addrsize(layer2_t *l2);
 
 static int
-l2up(layer2_t *l2, u_int prim, int dinfo, int len, void *arg) {
-	hisaxif_t *up = &l2->inst.up;
-	int err = -EINVAL;
-
-	if (up->func)
-		err = up->func(up, prim, dinfo, len, arg);
-	return(err);
+l2up(layer2_t *l2, u_int prim, int dinfo, struct sk_buff *skb)
+{
+	return(if_newhead(&l2->inst.up, prim, dinfo, skb));
 }
 
 static int
-l2down(layer2_t *l2, u_int prim, int dinfo, int len, void *arg) {
+l2up_create(layer2_t *l2, u_int prim, int dinfo, int len, void *arg)
+{
+	return(if_link(&l2->inst.up, prim, dinfo, len, arg, 0));
+}
+
+static int
+l2down_skb(layer2_t *l2, struct sk_buff *skb) {
 	hisaxif_t *down = &l2->inst.down;
-	int err = -EINVAL;
-
-	if (down->func) {
-		if (prim == PH_DATA_REQ) {
-			if (test_and_set_bit(FLG_L1_BUSY, &l2->flag)) {
-				skb_queue_tail(&l2->down_queue, arg);
-				return(0);
-			}
-			l2->down_skb = arg;
-		}
-		err = down->func(down, prim, dinfo, len, arg);
-	} else
-		printk(KERN_WARNING "l2down: no down func prim %x\n", prim);
-	return(err);
-}
-
-static int
-l2_chain_down(hisaxif_t *hif, u_int prim, int dinfo, int len, void *arg) {
-	if (!hif || !hif->fdata)
-		return(-EINVAL);
-	return(l2down(hif->fdata, prim, dinfo, len, arg));
-}
-
-static int
-l2down_phd(layer2_t *l2, struct sk_buff *skb) {
-	hisaxif_t *down = &l2->inst.down;
-	int ret = -EINVAL;
+	int ret = -ENXIO;
 
 	if (down->func)
-		ret = down->func(down, PH_DATA_REQ, DINFO_SKB, 0, skb);
+		ret = down->func(down, skb);
 	if (ret)
 		printk(KERN_WARNING "l2down_phd: error %d\n", ret);
 	return(ret);
 }
 
 static int
-ph_data_confirm(hisaxif_t *up, int dinfo, int len, void *arg) {
+l2down_raw(layer2_t *l2, struct sk_buff *skb)
+{
+	hisax_head_t *hh = (hisax_head_t *)skb->data;
+
+	if (hh->prim == PH_DATA_REQ) {
+		if (test_and_set_bit(FLG_L1_BUSY, &l2->flag)) {
+			skb_queue_tail(&l2->down_queue, skb);
+			return(0);
+		}
+		l2->down_skb = skb;
+	}
+	return(l2down_skb(l2, skb));
+}
+
+static int
+l2down(layer2_t *l2, u_int prim, int dinfo, struct sk_buff *skb)
+{
+	hisax_newhead(prim, dinfo, skb);
+	return(l2down_raw(l2, skb));
+}
+
+static int
+l2down_create(layer2_t *l2, u_int prim, int dinfo, int len, void *arg)
+{
+	struct sk_buff	*skb;
+	int		err;
+
+	skb = create_link_skb(prim, dinfo, len, arg, 0);
+	if (!skb)
+		return(-ENOMEM);
+	err = l2down_raw(l2, skb);
+	if (err)
+		dev_kfree_skb(skb);
+	return(err);
+}
+
+static int
+l2_chain_down(hisaxif_t *hif, struct sk_buff *skb) {
+	if (!hif || !hif->fdata)
+		return(-EINVAL);
+	return(l2down_raw(hif->fdata, skb));
+}
+
+static int
+ph_data_confirm(hisaxif_t *up, hisax_head_t *hh, struct sk_buff *skb) {
 	layer2_t *l2 = up->fdata;
-	struct sk_buff *skb = arg; 
+	struct sk_buff *nskb = skb; 
 	hisaxif_t *next = up->next;
 	int ret = -EAGAIN;
 
 	if (test_bit(FLG_L1_BUSY, &l2->flag)) {
 		if (skb == l2->down_skb) {
-			if ((skb = skb_dequeue(&l2->down_queue))) {
-				l2->down_skb = skb;
-				if (l2down_phd(l2, skb)) {
-					dev_kfree_skb(skb);
+			if ((nskb = skb_dequeue(&l2->down_queue))) {
+				l2->down_skb = nskb;
+				if (l2down_skb(l2, nskb)) {
+					dev_kfree_skb(nskb);
 					l2->down_skb = NULL;
 				}
 			} else
 				l2->down_skb = NULL;
 			if (next)
-				ret = next->func(next, PH_DATA_CNF, dinfo, len, arg);
+				ret = next->func(next, skb);
 			if (ret) {
-				dev_kfree_skb(arg);
+				dev_kfree_skb(skb);
 				ret = 0;
 			}
 			if (!l2->down_skb) {
@@ -180,12 +200,12 @@ ph_data_confirm(hisaxif_t *up, int dinfo, int len, void *arg) {
 		}
 	}
 	if (ret && next)
-		ret = next->func(next, PH_DATA_CNF, dinfo, len, arg);
+		ret = next->func(next, skb);
 	if (!test_and_set_bit(FLG_L1_BUSY, &l2->flag)) {
-		if ((skb = skb_dequeue(&l2->down_queue))) {
-			l2->down_skb = skb;
-			if (l2down_phd(l2, skb)) {
-				dev_kfree_skb(skb);
+		if ((nskb = skb_dequeue(&l2->down_queue))) {
+			l2->down_skb = nskb;
+			if (l2down_skb(l2, nskb)) {
+				dev_kfree_skb(nskb);
 				l2->down_skb = NULL;
 				test_and_clear_bit(FLG_L1_BUSY, &l2->flag);
 			}
@@ -197,7 +217,9 @@ ph_data_confirm(hisaxif_t *up, int dinfo, int len, void *arg) {
 
 static int
 l2mgr(layer2_t *l2, u_int prim, void *arg) {
-	printk(KERN_DEBUG "l2mgr: prim %x %p\n", prim, arg);
+	long c = (long)arg;
+
+	printk(KERN_DEBUG "l2mgr: prim %x %c\n", prim, (char)c);
 	return(0);
 }
 
@@ -282,7 +304,7 @@ l2addrsize(layer2_t *l2)
 }
 
 static int
-sethdraddr(layer2_t *l2, u_char * header, int rsp)
+sethdraddr(layer2_t *l2, u_char *header, int rsp)
 {
 	u_char *ptr = header;
 	int crbit = rsp;
@@ -305,7 +327,8 @@ sethdraddr(layer2_t *l2, u_char * header, int rsp)
 inline static void
 enqueue_super(layer2_t *l2, struct sk_buff *skb)
 {
-	l2down(l2, PH_DATA | REQUEST, DINFO_SKB, 0, skb);
+	if (l2down(l2, PH_DATA | REQUEST, DINFO_SKB, skb))
+		dev_kfree_skb(skb);
 }
 
 #define enqueue_ui(a, b) enqueue_super(a, b)
@@ -477,7 +500,7 @@ setva(layer2_t *l2, unsigned int nr)
 			l2->va %= 128;
 		else
 			l2->va %= 8;
-		l2up(l2, DL_DATA | CONFIRM, DINFO_SKB, 0, l2->windowar[l2->sow]);
+		l2up(l2, DL_DATA | CONFIRM, DINFO_SKB, l2->windowar[l2->sow]);
 		dev_kfree_skb(l2->windowar[l2->sow]);
 		l2->windowar[l2->sow] = NULL;
 		l2->sow = (l2->sow + 1) % l2->window;
@@ -485,21 +508,26 @@ setva(layer2_t *l2, unsigned int nr)
 }
 
 static void
-send_uframe(layer2_t *l2, u_char cmd, u_char cr)
+send_uframe(layer2_t *l2, struct sk_buff *skb, u_char cmd, u_char cr)
 {
-	struct sk_buff *skb;
 	u_char tmp[MAX_HEADER_LEN];
 	int i;
 
 	i = sethdraddr(l2, tmp, cr);
 	tmp[i++] = cmd;
-	if (!(skb = alloc_skb(i, GFP_ATOMIC))) {
-		printk(KERN_WARNING "isdnl2 can't alloc sbbuff for send_uframe\n");
+	if (skb)
+		skb_trim(skb, 0);
+	else if ((skb = alloc_skb(i + HISAX_HEAD_SIZE, GFP_ATOMIC)))
+		skb_reserve(skb, HISAX_HEAD_SIZE);
+	else {
+		printk(KERN_WARNING __FUNCTION__": can't alloc skbuff\n");
 		return;
 	}
 	memcpy(skb_put(skb, i), tmp, i);
+	skb_push(skb, HISAX_HEAD_SIZE);
 	enqueue_super(l2, skb);
 }
+
 
 inline u_char
 get_PollFlag(layer2_t *l2, struct sk_buff * skb)
@@ -548,15 +576,15 @@ st5_dl_release_l2l3(layer2_t *l2)
 	} else {
 		pr = DL_RELEASE | INDICATION;
 	}
-	l2up(l2, pr, 0, 0, NULL);
+	l2up_create(l2, pr, 0, 0, NULL);
 }
 
 inline void
 lapb_dl_release_l2l3(layer2_t *l2, int f)
 {
 	if (test_bit(FLG_LAPB, &l2->flag))
-		l2down(l2, PH_DEACTIVATE | REQUEST, 0, 0, NULL);
-	l2up(l2, DL_RELEASE | f, 0, 0, NULL);
+		l2down_create(l2, PH_DEACTIVATE | REQUEST, 0, 0, NULL);
+	l2up_create(l2, DL_RELEASE | f, 0, 0, NULL);
 }
 
 static void
@@ -568,7 +596,7 @@ establishlink(struct FsmInst *fi)
 	clear_exception(l2);
 	l2->rc = 0;
 	cmd = (test_bit(FLG_MOD128, &l2->flag) ? SABME : SABM) | 0x10;
-	send_uframe(l2, cmd, CMD);
+	send_uframe(l2, NULL, cmd, CMD);
 	FsmDelTimer(&l2->t203, 1);
 	restart_t200(l2, 1);
 	test_and_clear_bit(FLG_PEND_REL, &l2->flag);
@@ -586,6 +614,7 @@ l2_mdl_error_ua(struct FsmInst *fi, int event, void *arg)
 		l2mgr(l2, MDL_ERROR | INDICATION, (void *) 'C');
 	else
 		l2mgr(l2, MDL_ERROR | INDICATION, (void *) 'D');
+	
 }
 
 static void
@@ -621,16 +650,24 @@ l2_st8_mdl_error_dm(struct FsmInst *fi, int event, void *arg)
 static void
 l2_go_st3(struct FsmInst *fi, int event, void *arg)
 {
+	dev_kfree_skb((struct sk_buff *)arg);
 	FsmChangeState(fi, ST_L2_3); 
 }
 
 static void
 l2_mdl_assign(struct FsmInst *fi, int event, void *arg)
 {
-	layer2_t *l2 = fi->userdata;
+	layer2_t	*l2 = fi->userdata;
+	struct sk_buff	*skb = arg;
+	hisax_head_t	*hh;
 
-	FsmChangeState(fi, ST_L2_3); 
-	l2_tei(l2->tm, MDL_ASSIGN | INDICATION, 0, 0, NULL);
+	FsmChangeState(fi, ST_L2_3);
+	skb_trim(skb, 0);
+	hh = (hisax_head_t *)skb_put(skb, HISAX_HEAD_SIZE);
+	hh->prim = MDL_ASSIGN | INDICATION;
+	hh->dinfo = 0;
+	if (l2_tei(l2->tm, skb))
+		dev_kfree_skb(skb);
 }
 
 static void
@@ -641,7 +678,10 @@ l2_queue_ui_assign(struct FsmInst *fi, int event, void *arg)
 
 	skb_queue_tail(&l2->ui_queue, skb);
 	FsmChangeState(fi, ST_L2_2);
-	l2_tei(l2->tm, MDL_ASSIGN | INDICATION, 0, 0, NULL);
+	if ((skb = create_link_skb(MDL_ASSIGN | INDICATION, 0, 0, NULL, 0))) {
+		if (l2_tei(l2->tm, skb))
+			dev_kfree_skb(skb);
+	}
 }
 
 static void
@@ -664,6 +704,7 @@ tx_ui(layer2_t *l2)
 	header[i++] = UI;
 	while ((skb = skb_dequeue(&l2->ui_queue))) {
 		memcpy(skb_push(skb, i), header, i);
+		skb_push(skb, HISAX_HEAD_SIZE);
 		enqueue_ui(l2, skb);
 	}
 }
@@ -685,69 +726,85 @@ l2_got_ui(struct FsmInst *fi, int event, void *arg)
 	struct sk_buff *skb = arg;
 
 	skb_pull(skb, l2headersize(l2, 1));
-	l2up(l2, DL_UNITDATA | INDICATION, DINFO_SKB, 0, skb);
-/*	^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/*
  *		in states 1-3 for broadcast
  */
+	skb_push(skb, HISAX_HEAD_SIZE);
+	if (l2up(l2, DL_UNITDATA | INDICATION, DINFO_SKB, skb))
+		dev_kfree_skb(skb);
 }
 
 static void
 l2_establish(struct FsmInst *fi, int event, void *arg)
 {
+	struct sk_buff *skb = arg;
 	layer2_t *l2 = fi->userdata;
 
 	establishlink(fi);
 	test_and_set_bit(FLG_L3_INIT, &l2->flag);
+	dev_kfree_skb(skb);
 }
 
 static void
 l2_discard_i_setl3(struct FsmInst *fi, int event, void *arg)
 {
+	struct sk_buff *skb = arg;
 	layer2_t *l2 = fi->userdata;
 
 	discard_queue(&l2->i_queue);
 	test_and_set_bit(FLG_L3_INIT, &l2->flag);
 	test_and_clear_bit(FLG_PEND_REL, &l2->flag);
-}
+	dev_kfree_skb(skb);
+} 
 
 static void
 l2_l3_reestablish(struct FsmInst *fi, int event, void *arg)
 {
+	struct sk_buff *skb = arg;
 	layer2_t *l2 = fi->userdata;
 
 	discard_queue(&l2->i_queue);
 	establishlink(fi);
 	test_and_set_bit(FLG_L3_INIT, &l2->flag);
+	dev_kfree_skb(skb);
 }
 
 static void
 l2_release(struct FsmInst *fi, int event, void *arg)
 {
 	layer2_t *l2 = fi->userdata;
+	struct sk_buff *skb = arg;
 
-	l2up(l2, DL_RELEASE | CONFIRM, 0, 0, NULL);
+	skb_trim(skb, HISAX_HEAD_SIZE);
+	if (l2up(l2, DL_RELEASE | CONFIRM, 0, skb))
+		dev_kfree_skb(skb);
 }
 
 static void
 l2_pend_rel(struct FsmInst *fi, int event, void *arg)
 {
+	struct sk_buff *skb = arg;
 	layer2_t *l2 = fi->userdata;
 
 	test_and_set_bit(FLG_PEND_REL, &l2->flag);
+	dev_kfree_skb(skb);
 }
 
 static void
 l2_disconnect(struct FsmInst *fi, int event, void *arg)
 {
 	layer2_t *l2 = fi->userdata;
+	struct sk_buff *skb = arg;
 
 	discard_queue(&l2->i_queue);
 	freewin(l2);
 	FsmChangeState(fi, ST_L2_6);
 	l2->rc = 0;
-	send_uframe(l2, DISC | 0x10, CMD);
+	send_uframe(l2, NULL, DISC | 0x10, CMD);
 	FsmDelTimer(&l2->t203, 1);
 	restart_t200(l2, 2);
+	if (skb)
+		dev_kfree_skb(skb);
 }
 
 static void
@@ -756,7 +813,7 @@ l2_start_multi(struct FsmInst *fi, int event, void *arg)
 	layer2_t *l2 = fi->userdata;
 	struct sk_buff *skb = arg;
 
-	send_uframe(l2, UA | get_PollFlagFree(l2, skb), RSP);
+	send_uframe(l2, NULL, UA | get_PollFlag(l2, skb), RSP);
 
 	clear_exception(l2);
 	l2->vs = 0;
@@ -765,8 +822,10 @@ l2_start_multi(struct FsmInst *fi, int event, void *arg)
 	l2->sow = 0;
 	FsmChangeState(fi, ST_L2_7);
 	FsmAddTimer(&l2->t203, l2->T203, EV_L2_T203, NULL, 3);
-
-	l2up(l2, DL_ESTABLISH | INDICATION, 0, 0, NULL);
+	skb_trim(skb, 0);
+	skb_push(skb, HISAX_HEAD_SIZE);
+	if (l2up(l2, DL_ESTABLISH | INDICATION, 0, skb))
+		dev_kfree_skb(skb);
 }
 
 static void
@@ -775,7 +834,7 @@ l2_send_UA(struct FsmInst *fi, int event, void *arg)
 	layer2_t *l2 = fi->userdata;
 	struct sk_buff *skb = arg;
 
-	send_uframe(l2, UA | get_PollFlagFree(l2, skb), RSP);
+	send_uframe(l2, skb, UA | get_PollFlag(l2, skb), RSP);
 }
 
 static void
@@ -784,7 +843,7 @@ l2_send_DM(struct FsmInst *fi, int event, void *arg)
 	layer2_t *l2 = fi->userdata;
 	struct sk_buff *skb = arg;
 
-	send_uframe(l2, DM | get_PollFlagFree(l2, skb), RSP);
+	send_uframe(l2, skb, DM | get_PollFlag(l2, skb), RSP);
 }
 
 static void
@@ -794,7 +853,7 @@ l2_restart_multi(struct FsmInst *fi, int event, void *arg)
 	struct sk_buff *skb = arg;
 	int est = 0;
 
-	send_uframe(l2, UA | get_PollFlagFree(l2, skb), RSP);
+	send_uframe(l2, skb, UA | get_PollFlag(l2, skb), RSP);
 
 	l2mgr(l2, MDL_ERROR | INDICATION, (void *) 'F');
 
@@ -813,7 +872,7 @@ l2_restart_multi(struct FsmInst *fi, int event, void *arg)
 	FsmRestartTimer(&l2->t203, l2->T203, EV_L2_T203, NULL, 3);
 
 	if (est)
-		l2up(l2, DL_ESTABLISH | INDICATION, 0, 0, NULL);
+		l2up_create(l2, DL_ESTABLISH | INDICATION, 0, 0, NULL);
 
 	if (skb_queue_len(&l2->i_queue) && cansend(l2))
 		FsmEvent(fi, EV_L2_ACK_PULL, NULL);
@@ -829,7 +888,7 @@ l2_stop_multi(struct FsmInst *fi, int event, void *arg)
 	FsmDelTimer(&l2->t203, 3);
 	stop_t200(l2, 4);
 
-	send_uframe(l2, UA | get_PollFlagFree(l2, skb), RSP);
+	send_uframe(l2, skb, UA | get_PollFlag(l2, skb), RSP);
 	discard_queue(&l2->i_queue);
 	freewin(l2);
 	lapb_dl_release_l2l3(l2, INDICATION);
@@ -848,7 +907,7 @@ l2_connected(struct FsmInst *fi, int event, void *arg)
 	}
 	dev_kfree_skb(skb);
 	if (test_and_clear_bit(FLG_PEND_REL, &l2->flag))
-		l2_disconnect(fi, event, arg);
+		l2_disconnect(fi, event, NULL);
 	if (test_and_clear_bit(FLG_L3_INIT, &l2->flag)) {
 		pr = DL_ESTABLISH | CONFIRM;
 	} else if (l2->vs != l2->va) {
@@ -864,7 +923,7 @@ l2_connected(struct FsmInst *fi, int event, void *arg)
 	FsmChangeState(fi, ST_L2_7);
 	FsmAddTimer(&l2->t203, l2->T203, EV_L2_T203, NULL, 4);
 	if (pr != -1)
-		l2up(l2, pr, 0, 0, NULL);
+		l2up_create(l2, pr, 0, 0, NULL);
 
 	if (skb_queue_len(&l2->i_queue) && cansend(l2))
 		FsmEvent(fi, EV_L2_ACK_PULL, NULL);
@@ -909,7 +968,7 @@ l2_st5_dm_release(struct FsmInst *fi, int event, void *arg)
 	 	if (!test_bit(FLG_L3_INIT, &l2->flag))
 			discard_queue(&l2->i_queue);
 		if (test_bit(FLG_LAPB, &l2->flag))
-			l2down(l2, PH_DEACTIVATE | REQUEST, 0, 0, NULL);
+			l2down_create(l2, PH_DEACTIVATE | REQUEST, 0, 0, NULL);
 		st5_dl_release_l2l3(l2);
 		FsmChangeState(fi, ST_L2_4);
 	}
@@ -928,7 +987,7 @@ l2_st6_dm_release(struct FsmInst *fi, int event, void *arg)
 	}
 }
 
-inline void
+void
 enquiry_cr(layer2_t *l2, u_char typ, u_char cr, u_char pf)
 {
 	struct sk_buff *skb;
@@ -941,11 +1000,13 @@ enquiry_cr(layer2_t *l2, u_char typ, u_char cr, u_char pf)
 		tmp[i++] = (l2->vr << 1) | (pf ? 1 : 0);
 	} else
 		tmp[i++] = (l2->vr << 5) | typ | (pf ? 0x10 : 0);
-	if (!(skb = alloc_skb(i, GFP_ATOMIC))) {
+	if (!(skb = alloc_skb(i + HISAX_HEAD_SIZE, GFP_ATOMIC))) {
 		printk(KERN_WARNING "isdnl2 can't alloc sbbuff for enquiry_cr\n");
 		return;
-	}
+	} else
+		skb_reserve(skb, HISAX_HEAD_SIZE);
 	memcpy(skb_put(skb, i), tmp, i);
+	skb_push(skb, HISAX_HEAD_SIZE);
 	enqueue_super(l2, skb);
 }
 
@@ -1138,7 +1199,9 @@ l2_got_iframe(struct FsmInst *fi, int event, void *arg)
 		else
 			test_and_set_bit(FLG_ACK_PEND, &l2->flag);
 		skb_pull(skb, l2headersize(l2, 0));
-		l2up(l2, DL_DATA | INDICATION, DINFO_SKB, 0, skb);
+		skb_push(skb, HISAX_HEAD_SIZE);
+		if (l2up(l2, DL_DATA | INDICATION, DINFO_SKB, skb))
+			dev_kfree_skb(skb);
 	} else {
 		/* n(s)!=v(r) */
 		dev_kfree_skb(skb);
@@ -1173,10 +1236,12 @@ l2_got_iframe(struct FsmInst *fi, int event, void *arg)
 static void
 l2_got_tei(struct FsmInst *fi, int event, void *arg)
 {
-	layer2_t *l2 = fi->userdata;
+	layer2_t	*l2 = fi->userdata;
+	struct sk_buff	*skb = arg;
+	hisax_head_t	*hh = (hisax_head_t *)skb->data;
 
-	l2->tei = *((int *)arg);
-
+	l2->tei = hh->dinfo;
+	dev_kfree_skb(skb);
 	if (fi->state == ST_L2_3) {
 		establishlink(fi);
 		test_and_set_bit(FLG_L3_INIT, &l2->flag);
@@ -1200,13 +1265,13 @@ l2_st5_tout_200(struct FsmInst *fi, int event, void *arg)
 		discard_queue(&l2->i_queue);
 		l2mgr(l2, MDL_ERROR | INDICATION, (void *) 'G');
 		if (test_bit(FLG_LAPB, &l2->flag))
-			l2down(l2, PH_DEACTIVATE | REQUEST, 0, 0, NULL);
+			l2down_create(l2, PH_DEACTIVATE | REQUEST, 0, 0, NULL);
 		st5_dl_release_l2l3(l2);
 	} else {
 		l2->rc++;
 		FsmAddTimer(&l2->t200, l2->T200, EV_L2_T200, NULL, 9);
-		send_uframe(l2, (test_bit(FLG_MOD128, &l2->flag) ? SABME : SABM)
-			    | 0x10, CMD);
+		send_uframe(l2, NULL, (test_bit(FLG_MOD128, &l2->flag) ?
+			SABME : SABM) | 0x10, CMD);
 	}
 }
 
@@ -1227,7 +1292,7 @@ l2_st6_tout_200(struct FsmInst *fi, int event, void *arg)
 		l2->rc++;
 		FsmAddTimer(&l2->t200, l2->T200, EV_L2_T200,
 			    NULL, 9);
-		send_uframe(l2, DISC | 0x10, CMD);
+		send_uframe(l2, NULL, DISC | 0x10, CMD);
 	}
 }
 
@@ -1328,19 +1393,27 @@ l2_pull_iqueue(struct FsmInst *fi, int event, void *arg)
 	}
 	restore_flags(flags);
 
-	p1 = skb->data - skb->head;
+	p1 = skb_headroom(skb);
+	skb_pull(skb, HISAX_HEAD_SIZE);
 	if (p1 >= i)
 		memcpy(skb_push(skb, i), header, i);
 	else {
 		printk(KERN_WARNING
 		"isdnl2 pull_iqueue skb header(%d/%d) too short\n", i, p1);
 		oskb = skb;
-		skb = alloc_skb(oskb->len + i, GFP_ATOMIC);
+		skb = alloc_skb(oskb->len + i + HISAX_HEAD_SIZE, GFP_ATOMIC);
+		if (!skb) {
+			dev_kfree_skb(oskb);
+			printk(KERN_WARNING __FUNCTION__": no skb mem\n");
+			return;
+		}
+		skb_reserve(skb, HISAX_HEAD_SIZE);
 		memcpy(skb_put(skb, i), header, i);
 		memcpy(skb_put(skb, oskb->len), oskb->data, oskb->len);
 		dev_kfree_skb(oskb);
 	}
-	l2down(l2, PH_DATA_REQ, DINFO_SKB, 0, skb);
+	skb_push(skb, HISAX_HEAD_SIZE);
+	l2down(l2, PH_DATA_REQ, DINFO_SKB, skb);
 	test_and_clear_bit(FLG_ACK_PEND, &l2->flag);
 	if (!test_and_set_bit(FLG_T200_RUN, &l2->flag)) {
 		FsmDelTimer(&l2->t203, 13);
@@ -1423,20 +1496,25 @@ static void
 l2_st24_tei_remove(struct FsmInst *fi, int event, void *arg)
 {
 	layer2_t *l2 = fi->userdata;
+	struct sk_buff *skb = arg;
 
 	discard_queue(&l2->ui_queue);
 	l2->tei = -1;
 	FsmChangeState(fi, ST_L2_1);
+	dev_kfree_skb(skb);
 }
 
 static void
 l2_st3_tei_remove(struct FsmInst *fi, int event, void *arg)
 {
 	layer2_t *l2 = fi->userdata;
+	struct sk_buff *skb = arg;
 
 	discard_queue(&l2->ui_queue);
 	l2->tei = -1;
-	l2up(l2, DL_RELEASE | INDICATION, 0, 0, NULL);
+	skb_trim(skb, HISAX_HEAD_SIZE);
+	if (l2up(l2, DL_RELEASE | INDICATION, 0, skb))
+		dev_kfree_skb(skb);
 	FsmChangeState(fi, ST_L2_1);
 }
 
@@ -1444,6 +1522,7 @@ static void
 l2_st5_tei_remove(struct FsmInst *fi, int event, void *arg)
 {
 	layer2_t *l2 = fi->userdata;
+	struct sk_buff *skb = arg;
 
 	discard_queue(&l2->i_queue);
 	discard_queue(&l2->ui_queue);
@@ -1452,17 +1531,20 @@ l2_st5_tei_remove(struct FsmInst *fi, int event, void *arg)
 	stop_t200(l2, 17);
 	st5_dl_release_l2l3(l2);
 	FsmChangeState(fi, ST_L2_1);
+	dev_kfree_skb(skb);
 }
 
 static void
 l2_st6_tei_remove(struct FsmInst *fi, int event, void *arg)
 {
 	layer2_t *l2 = fi->userdata;
+	struct sk_buff *skb = arg;
 
 	discard_queue(&l2->ui_queue);
 	l2->tei = -1;
 	stop_t200(l2, 18);
-	l2up(l2, DL_RELEASE | CONFIRM, 0, 0, NULL);
+	if (l2up(l2, DL_RELEASE | CONFIRM, 0, skb))
+		dev_kfree_skb(skb);
 	FsmChangeState(fi, ST_L2_1);
 }
 
@@ -1470,6 +1552,7 @@ static void
 l2_tei_remove(struct FsmInst *fi, int event, void *arg)
 {
 	layer2_t *l2 = fi->userdata;
+	struct sk_buff *skb = arg;
 
 	discard_queue(&l2->i_queue);
 	discard_queue(&l2->ui_queue);
@@ -1477,7 +1560,8 @@ l2_tei_remove(struct FsmInst *fi, int event, void *arg)
 	l2->tei = -1;
 	stop_t200(l2, 17);
 	FsmDelTimer(&l2->t203, 19);
-	l2up(l2, DL_RELEASE | INDICATION, 0, 0, NULL);
+	if (l2up(l2, DL_RELEASE | INDICATION, 0, skb))
+		dev_kfree_skb(skb);
 	FsmChangeState(fi, ST_L2_1);
 }
 
@@ -1485,17 +1569,21 @@ static void
 l2_st14_persistant_da(struct FsmInst *fi, int event, void *arg)
 {
 	layer2_t *l2 = fi->userdata;
+	struct sk_buff *skb = arg;
 	
 	discard_queue(&l2->i_queue);
 	discard_queue(&l2->ui_queue);
 	if (test_and_clear_bit(FLG_ESTAB_PEND, &l2->flag))
-		l2up(l2, DL_RELEASE | INDICATION, 0, 0, NULL);
+		if (!l2up(l2, DL_RELEASE | INDICATION, 0, skb))
+			return;
+	dev_kfree_skb(skb);
 }
 
 static void
 l2_st5_persistant_da(struct FsmInst *fi, int event, void *arg)
 {
 	layer2_t *l2 = fi->userdata;
+	struct sk_buff *skb = arg;
 
 	discard_queue(&l2->i_queue);
 	discard_queue(&l2->ui_queue);
@@ -1503,16 +1591,19 @@ l2_st5_persistant_da(struct FsmInst *fi, int event, void *arg)
 	stop_t200(l2, 19);
 	st5_dl_release_l2l3(l2);
 	FsmChangeState(fi, ST_L2_4);
+	dev_kfree_skb(skb);
 }
 
 static void
 l2_st6_persistant_da(struct FsmInst *fi, int event, void *arg)
 {
 	layer2_t *l2 = fi->userdata;
+	struct sk_buff *skb = arg;
 
 	discard_queue(&l2->ui_queue);
 	stop_t200(l2, 20);
-	l2up(l2, DL_RELEASE | CONFIRM, 0, 0, NULL);
+	if (l2up(l2, DL_RELEASE | CONFIRM, 0, skb))
+		dev_kfree_skb(skb);
 	FsmChangeState(fi, ST_L2_4);
 }
 
@@ -1520,13 +1611,15 @@ static void
 l2_persistant_da(struct FsmInst *fi, int event, void *arg)
 {
 	layer2_t *l2 = fi->userdata;
+	struct sk_buff *skb = arg;
 
 	discard_queue(&l2->i_queue);
 	discard_queue(&l2->ui_queue);
 	freewin(l2);
 	stop_t200(l2, 19);
 	FsmDelTimer(&l2->t203, 19);
-	l2up(l2, DL_RELEASE | INDICATION, 0, 0, NULL);
+	if (l2up(l2, DL_RELEASE | INDICATION, 0, skb))
+		dev_kfree_skb(skb);
 	FsmChangeState(fi, ST_L2_4);
 }
 
@@ -1534,22 +1627,28 @@ static void
 l2_set_own_busy(struct FsmInst *fi, int event, void *arg)
 {
 	layer2_t *l2 = fi->userdata;
+	struct sk_buff *skb = arg;
 
 	if(!test_and_set_bit(FLG_OWN_BUSY, &l2->flag)) {
 		enquiry_cr(l2, RNR, RSP, 0);
 		test_and_clear_bit(FLG_ACK_PEND, &l2->flag);
 	}
+	if (skb)
+		dev_kfree_skb(skb);
 }
 
 static void
 l2_clear_own_busy(struct FsmInst *fi, int event, void *arg)
 {
 	layer2_t *l2 = fi->userdata;
+	struct sk_buff *skb = arg;
 
 	if(!test_and_clear_bit(FLG_OWN_BUSY, &l2->flag)) {
 		enquiry_cr(l2, RR, RSP, 0);
 		test_and_clear_bit(FLG_ACK_PEND, &l2->flag);
 	}
+	if (skb)
+		dev_kfree_skb(skb);
 }
 
 static void
@@ -1665,30 +1764,18 @@ static struct FsmNode L2FnList[] =
 #define L2_FN_COUNT (sizeof(L2FnList)/sizeof(struct FsmNode))
 
 static int
-ph_data_indication(hisaxif_t *hif, int dinfo, int len, void *arg) {
-	layer2_t *l2 = hif->fdata;
-	struct sk_buff *skb = arg;
+ph_data_indication(layer2_t *l2, hisax_head_t *hh, struct sk_buff *skb) {
 	u_char *datap;
 	int ret = -EINVAL;
-	int err = -EINVAL;
 	int psapi, ptei;
 	int l;
 	int c = 0;
 
-	if (!skb) {
-		printk(KERN_WARNING "l2 ph_data_indication no data frame\n");
-		if (hif->next)
-			ret = hif->next->func(hif->next, PH_DATA_IND, dinfo,
-				len, arg);
-		return(ret);
-	}
-	datap = skb->data;
+	
+	datap = skb_pull(skb, HISAX_HEAD_SIZE);
 	l = l2addrsize(l2);
 	if (skb->len <= l) {
 		FsmEvent(&l2->l2m, EV_L2_FRAME_ERROR, (void *) 'N');
-		if (hif->next)
-			ret = hif->next->func(hif->next, PH_DATA_IND, dinfo,
-				len, arg);
 		return(ret);
 	}
 	if (test_bit(FLG_LAPD, &l2->flag)) {
@@ -1700,29 +1787,15 @@ ph_data_indication(hisaxif_t *hif, int dinfo, int len, void *arg) {
 		}
 		psapi >>= 2;
 		ptei >>= 1;
-		if ((psapi != l2->sapi) && (psapi != TEI_SAPI)) {
-			if (hif->next)
-				ret = hif->next->func(hif->next, PH_DATA_IND,
-					dinfo, len, arg);
+		if ((psapi != l2->sapi) && (psapi != TEI_SAPI))
 			return(ret);
-		}
 		if (ptei == GROUP_TEI) {
-			if (hif->next) {
-				if ((skb = skb_clone(arg, GFP_ATOMIC))) {
-					err = hif->next->func(hif->next,
-						PH_DATA_IND, dinfo, len, skb);
-					if (err)
-						dev_kfree_skb(skb);
-				}
-				skb = arg;
+			if (psapi == TEI_SAPI) {
+				skb_push(skb, HISAX_HEAD_SIZE);
+				hh->prim = MDL_UNITDATA | INDICATION;
+				return(l2_tei(l2->tm, skb));
 			}
-			if (psapi == TEI_SAPI)
-				return(l2_tei(l2->tm,
-					MDL_UNITDATA | INDICATION, dinfo, len, skb));
 		} else if ((ptei != l2->tei) || (psapi == TEI_SAPI)) {
-			if (hif->next)
-				ret = hif->next->func(hif->next,  PH_DATA_IND,
-					dinfo, len, arg);
 			return(ret);
 		}
 	} else
@@ -1757,163 +1830,187 @@ ph_data_indication(hisaxif_t *hif, int dinfo, int len, void *arg) {
 	if (c) {
 		printk(KERN_WARNING "l2 D-channel frame error %c\n",c);
 		FsmEvent(&l2->l2m, EV_L2_FRAME_ERROR, (void *)(long)c);
-		if (err)
-			return(err);
-	}
-	if (ret) {
-		dev_kfree_skb(skb);
-		ret = 0;
 	}
 	return(ret);
 }
 
 static int
-l2from_down(hisaxif_t *hif, u_int prim, int dinfo, int len, void *arg) {
-	layer2_t *l2;
-	int ret = -EINVAL;
-	int *iarg;
+l2from_down(hisaxif_t *hif, struct sk_buff *askb)
+{
+	layer2_t	*l2;
+	int 		ret = -EINVAL;
+	struct sk_buff	*cskb = askb;
+	hisax_head_t	*hh, sh;
 
-	printk(KERN_DEBUG __FUNCTION__ ": prim(%x)\n", prim);
-	if (!hif)
+	if (!hif || !askb)
 		return(-EINVAL);
 	l2 = hif->fdata;
+	hh = (hisax_head_t *)askb->data;
+	printk(KERN_DEBUG __FUNCTION__ ": prim(%x)\n", hh->prim);
+	if (askb->len < HISAX_FRAME_MIN)
+		return(-EINVAL);
 	if (!l2) {
-		if (hif->next)
-			ret = hif->next->func(hif->next, prim, dinfo, len, arg);
+		if (hif->next && hif->next->func)
+			ret = hif->next->func(hif->next, askb);
 		return(ret);
 	}
-	switch (prim) {
-		case (PH_DATA_IND):
-			return(ph_data_indication(hif, dinfo, len, arg));
-		case (PH_DATA | CONFIRM):
-			return(ph_data_confirm(hif, dinfo, len, arg));
-		case (PH_CONTROL | INDICATION):
-			iarg = arg;
-			if (len == 4) {
-				if (*iarg == HW_D_BLOCKED)
-					test_and_set_bit(FLG_DCHAN_BUSY,
-						&l2->flag);
-				else if (*iarg == HW_D_NOBLOCKED)
-					test_and_clear_bit(FLG_DCHAN_BUSY,
-						&l2->flag);
-				else
-					break;
-				ret = 0;
+	if (hh->prim == (PH_DATA | CONFIRM))
+		return(ph_data_confirm(hif, hh, askb));
+	if (hh->prim == (MDL_FINDTEI | REQUEST)) {
+		if (test_bit(FLG_LAPD, &l2->flag)) {
+			if (l2->tei == hh->dinfo) {
+				void *p = ((u_char *)askb->data + HISAX_HEAD_SIZE);
+				teimgr_t **tp = p;
+				if (tp) {
+					*tp = l2->tm;
+					dev_kfree_skb(askb);
+					return(0);
+				}
 			}
+		}
+		if (hif->next && hif->next->func)
+			ret = hif->next->func(hif->next, askb);
+		return(ret);
+	}
+	if (hif->next) {
+		if (hif->next->func) {
+			if (!(cskb = skb_clone(askb, GFP_ATOMIC)))
+				return(hif->next->func(hif->next, askb));
+			else
+				sh = *hh;
+		}
+	}
+	switch (hh->prim) {
+		case (PH_DATA_IND):
+			ret = ph_data_indication(l2, hh, cskb);
+			break;
+		case (PH_CONTROL | INDICATION):
+			if (hh->dinfo == HW_D_BLOCKED)
+				test_and_set_bit(FLG_DCHAN_BUSY, &l2->flag);
+			else if (hh->dinfo == HW_D_NOBLOCKED)
+				test_and_clear_bit(FLG_DCHAN_BUSY, &l2->flag);
+			else
+				break;
 			break;
 		case (PH_ACTIVATE | CONFIRM):
 		case (PH_ACTIVATE | INDICATION):
 			test_and_set_bit(FLG_L1_ACTIV, &l2->flag);
 			if (test_and_clear_bit(FLG_ESTAB_PEND, &l2->flag))
-				FsmEvent(&l2->l2m, EV_L2_DL_ESTABLISH_REQ, arg);
-			ret = 0; 
+				ret = FsmEvent(&l2->l2m, EV_L2_DL_ESTABLISH_REQ, cskb);
 			break;
 		case (PH_DEACTIVATE | INDICATION):
 		case (PH_DEACTIVATE | CONFIRM):
 			test_and_clear_bit(FLG_L1_ACTIV, &l2->flag);
-			FsmEvent(&l2->l2m, EV_L1_DEACTIVATE, arg);
+			ret = FsmEvent(&l2->l2m, EV_L1_DEACTIVATE, cskb);
 			ret = 0;
 			break;
-		case (MDL_FINDTEI | REQUEST):
-			if (test_bit(FLG_LAPD, &l2->flag)) {
-				if (l2->tei == dinfo) {
-					teimgr_t **p = arg;
-					if (p) {
-						*p = l2->tm;
-						return(0);
-					}
-				}
-			}
-			break;
 		default:
-			l2m_debug(&l2->l2m, "l2 unknown pr %x", prim);
+			l2m_debug(&l2->l2m, "l2 unknown pr %x", hh->prim);
 			ret = -EINVAL;
 			break;
 	}
-	if (hif->next)
-		ret = hif->next->func(hif->next, prim, dinfo, len, arg);
+	if (ret) {
+		dev_kfree_skb(cskb);
+		ret = 0;
+	}
+	if (hif->next && hif->next->func) {
+		*hh = sh;
+		ret = hif->next->func(hif->next, askb);
+	}
 	return(ret);
 }
 
 static int
-l2from_up(hisaxif_t *hif, u_int prim, int dinfo, int len, void *arg) {
-	layer2_t *l2;
+l2from_up(hisaxif_t *hif, struct sk_buff *skb) {
+	layer2_t	*l2;
+	hisax_head_t	*hh;
+	int		ret = -EINVAL;
 
-	printk(KERN_DEBUG __FUNCTION__ ": prim(%x)\n", prim);
-	if (!hif || !hif->fdata)
-		return(-EINVAL);
+	if (!hif || !skb)
+		return(ret);
 	l2 = hif->fdata;
-	switch (prim) {
+	hh = (hisax_head_t *)skb->data;
+	printk(KERN_DEBUG __FUNCTION__ ": prim(%x)\n", hh->prim);
+	if (skb->len < HISAX_FRAME_MIN)
+		return(ret);
+	if (!l2)
+		return(ret);
+	switch (hh->prim) {
 		case (DL_DATA | REQUEST):
-			if (FsmEvent(&l2->l2m, EV_L2_DL_DATA, arg)) {
-				dev_kfree_skb((struct sk_buff *) arg);
-			}
+			ret = FsmEvent(&l2->l2m, EV_L2_DL_DATA, skb);
 			break;
 		case (DL_UNITDATA | REQUEST):
-			if (FsmEvent(&l2->l2m, EV_L2_DL_UNITDATA, arg)) {
-				dev_kfree_skb((struct sk_buff *) arg);
-			}
+			ret = FsmEvent(&l2->l2m, EV_L2_DL_UNITDATA, skb);
 			break;
 		case (DL_ESTABLISH | REQUEST):
 			if (test_bit(FLG_L1_ACTIV, &l2->flag)) {
 				if (test_bit(FLG_LAPD, &l2->flag) ||
 					test_bit(FLG_ORIG, &l2->flag)) {
-					FsmEvent(&l2->l2m, EV_L2_DL_ESTABLISH_REQ, arg);
+					ret = FsmEvent(&l2->l2m,
+						EV_L2_DL_ESTABLISH_REQ, skb);
 				}
 			} else {
 				if (test_bit(FLG_LAPD, &l2->flag) ||
 					test_bit(FLG_ORIG, &l2->flag)) {
-					test_and_set_bit(FLG_ESTAB_PEND, &l2->flag);
+					test_and_set_bit(FLG_ESTAB_PEND,
+						&l2->flag);
 				}
-				l2down(l2, PH_ACTIVATE | REQUEST, 0, 0, NULL);
+				ret = l2down(l2, PH_ACTIVATE | REQUEST, 0, skb);
 			}
 			break;
 		case (DL_RELEASE | REQUEST):
-			if (test_bit(FLG_LAPB, &l2->flag)) {
-				l2down(l2, PH_DEACTIVATE | REQUEST, 0, 0, NULL);
-			}
-			FsmEvent(&l2->l2m, EV_L2_DL_RELEASE_REQ, arg);
+			if (test_bit(FLG_LAPB, &l2->flag))
+				l2down_create(l2, PH_DEACTIVATE | REQUEST,
+					0, 0, NULL);
+			ret = FsmEvent(&l2->l2m, EV_L2_DL_RELEASE_REQ, skb);
 			break;
 		case (MDL_ASSIGN | REQUEST):
-			FsmEvent(&l2->l2m, EV_L2_MDL_ASSIGN, arg);
+			ret = FsmEvent(&l2->l2m, EV_L2_MDL_ASSIGN, skb);
 			break;
 		case (MDL_REMOVE | REQUEST):
-			FsmEvent(&l2->l2m, EV_L2_MDL_REMOVE, arg);
+			ret = FsmEvent(&l2->l2m, EV_L2_MDL_REMOVE, skb);
 			break;
 		case (MDL_ERROR | RESPONSE):
-			FsmEvent(&l2->l2m, EV_L2_MDL_ERROR, arg);
+			ret = FsmEvent(&l2->l2m, EV_L2_MDL_ERROR, skb);
 		case (MDL_STATUS | REQUEST):
-			l2up(l2, MDL_STATUS | CONFIRM, dinfo, 0, (void *)l2->tei);
+			l2up_create(l2, MDL_STATUS | CONFIRM, hh->dinfo, 1,
+				(void *)l2->tei);
 			break;
 		default:
-			l2m_debug(&l2->l2m, "l2 unknown pr %04x", prim);
-			return(-EINVAL);
+			l2m_debug(&l2->l2m, "l2 unknown pr %04x", hh->prim);
 	}
-	return(0);
+	return(ret);
 }
 
 int
-tei_l2(layer2_t *l2, u_int prim, int dinfo, int len, void *arg)
+tei_l2(layer2_t *l2, struct sk_buff *skb)
 {
-	if (!l2)
-		return(-EINVAL);
-	switch(prim) {
+	hisax_head_t	*hh = (hisax_head_t *)skb->data;
+	int		ret = -EINVAL;
+
+	if (!l2 || !skb)
+		return(ret);
+	printk(KERN_DEBUG __FUNCTION__ ": prim(%x)\n", hh->prim);
+	if (skb->len < HISAX_FRAME_MIN)
+		return(ret);
+	switch(hh->prim) {
 	    case (MDL_UNITDATA | REQUEST):
-		return(l2down(l2, PH_DATA_REQ, dinfo, len, arg));
+		ret = l2down(l2, PH_DATA_REQ, hh->dinfo, skb);
+		break;
 	    case (MDL_ASSIGN | REQUEST):
-		FsmEvent(&l2->l2m, EV_L2_MDL_ASSIGN, arg);
+		ret = FsmEvent(&l2->l2m, EV_L2_MDL_ASSIGN, skb);
 		break;
 	    case (MDL_REMOVE | REQUEST):
-		FsmEvent(&l2->l2m, EV_L2_MDL_REMOVE, arg);
+		ret = FsmEvent(&l2->l2m, EV_L2_MDL_REMOVE, skb);
 		break;
 	    case (MDL_ERROR | RESPONSE):
-		FsmEvent(&l2->l2m, EV_L2_MDL_ERROR, arg);
+		ret = FsmEvent(&l2->l2m, EV_L2_MDL_ERROR, skb);
 		break;
 	    case (MDL_FINDTEI | REQUEST):
-	    	return(l2down(l2, prim, dinfo, len, arg));
+	    	ret = l2down_skb(l2, skb);
 		break;
 	}
-	return(0);
+	return(ret);
 }
 
 static void

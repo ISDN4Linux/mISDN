@@ -1,4 +1,4 @@
-/* $Id: capi.h,v 0.6 2001/03/26 11:40:02 kkeil Exp $
+/* $Id: capi.h,v 0.7 2001/08/02 14:51:56 kkeil Exp $
  *
  */
 
@@ -180,11 +180,11 @@ struct _Plci	*contrNewPlci(Contr_t *contr);
 struct _Appl	*contrId2appl(Contr_t *contr, __u16 ApplId);
 struct _Plci	*contrAdr2plci(Contr_t *contr, __u32 adr);
 void		contrDelPlci(Contr_t *contr, struct _Plci *plci);
-void		contrDummyInd(Contr_t *, __u32, void *);
+int		contrDummyInd(Contr_t *, __u32, struct sk_buff *);
 DummyProcess_t	*contrNewDummyPc(Contr_t *contr);
 DummyProcess_t	*contrId2DummyPc(Contr_t *contr, __u16 invokeId);
-int		contrL4L3(Contr_t *, __u32, int, int, void *);
-int		contrL3L4(hisaxif_t *, u_int, int, int, void *);
+int		contrL4L3(Contr_t *, u_int, int, struct sk_buff *);
+int		contrL3L4(hisaxif_t *, struct sk_buff *);
 BInst_t		*contrSelChannel(Contr_t *, int);
 // ---------------------------------------------------------------------------
 // struct Listen
@@ -274,7 +274,7 @@ typedef struct _Plci {
 void plciConstr(Plci_t *plci, Contr_t *contr, __u32 adrPLCI);
 void plciDestr(Plci_t *plci);
 void plciDebug(Plci_t *plci, __u32 level, char *fmt, ...);
-void plci_l3l4(Plci_t *plci, int pr, void *arg);
+int  plci_l3l4(Plci_t *, int, struct sk_buff *);
 void plciAttachCplci(Plci_t *plci, struct _Cplci *cplci);
 void plciDetachCplci(Plci_t *plci, struct _Cplci *cplci);
 void plciNewCrInd(Plci_t *plci, void *);
@@ -341,8 +341,8 @@ typedef struct _Ncci {
 
 void ncciConstr(Ncci_t *ncci, Cplci_t *cplci);
 void ncciDestr(Ncci_t *ncci);
-void ncciSendMessage(Ncci_t *ncci, struct sk_buff *skb);
-int  ncci_l3l4(hisaxif_t *, u_int, int, int, void *);
+void ncciSendMessage(Ncci_t *, struct sk_buff *);
+int  ncci_l3l4(hisaxif_t *, struct sk_buff *);
 void ncciLinkUp(Ncci_t *ncci);
 void ncciLinkDown(Ncci_t *ncci);
 void ncciInitSt(Ncci_t *ncci);

@@ -1,4 +1,4 @@
-/* $Id: layer2.h,v 0.9 2001/05/18 00:48:52 kkeil Exp $
+/* $Id: layer2.h,v 0.10 2001/08/02 14:51:56 kkeil Exp $
  *
  * Layer 2 defines
  *
@@ -87,10 +87,10 @@ typedef struct _status_info_l2 {
 } status_info_l2_t;
 
 /* from hisax_l2.c */
-extern int tei_l2(layer2_t *l2, u_int prim, int dinfo, int len, void *arg);
+extern int tei_l2(layer2_t *l2, struct sk_buff *skb);
 
 /* from tei.c */
-extern int l2_tei(teimgr_t *tm, u_int prim, int dinfo, int len, void *arg);
+extern int l2_tei(teimgr_t *tm, struct sk_buff *skb);
 extern int create_teimgr(layer2_t *l2);
 extern void release_tei(teimgr_t *tm);
 extern int TEIInit(void);

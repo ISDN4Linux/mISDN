@@ -1,10 +1,12 @@
-/* $Id: asn1.h,v 0.2 2001/02/27 17:45:44 kkeil Exp $
+/* $Id: asn1.h,v 0.3 2001/08/02 14:51:56 kkeil Exp $
  *
  */
 
+#include <linux/hisaxif.h>
+#include "helper.h"
+
 #ifndef __ASN1_H__
 #define __ASN1_H__
-#include "helper.h"
 
 typedef enum {
 	invoke       = 1,

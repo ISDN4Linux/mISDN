@@ -1,4 +1,4 @@
-/* $Id: supp_serv.c,v 0.3 2001/03/03 18:17:16 kkeil Exp $
+/* $Id: supp_serv.c,v 0.4 2001/08/02 14:51:56 kkeil Exp $
  *
  */
 
@@ -275,9 +275,24 @@ void encodeInvokeComponentLength(__u8 *msg, __u8 *p)
 
 static int dummy_L4L3(DummyProcess_t *dpc, __u32 prim, int len, void *arg) {
 	Contr_t *contr = dpc->contr;
+#define	MY_RESERVE	8
+	int	err;
+	struct sk_buff *skb;
 
-	return(contrL4L3(contr, prim, contr->adrController | DUMMY_CR_FLAG,
-		len, arg));
+	if (!(skb = alloc_skb(len + HISAX_HEAD_SIZE + MY_RESERVE, GFP_ATOMIC))) {
+		printk(KERN_WARNING __FUNCTION__": no skb size %d+%d+%d\n",
+			len, HISAX_HEAD_SIZE, MY_RESERVE);
+		return(-ENOMEM);
+	} else
+		skb_reserve(skb, MY_RESERVE + HISAX_HEAD_SIZE);
+	if (len)
+		memcpy(skb_put(skb, len), arg, len);
+	skb_push(skb, HISAX_HEAD_SIZE);
+	err = contrL4L3(contr, prim, contr->adrController | DUMMY_CR_FLAG,
+		skb);
+	if (err)
+		dev_kfree_skb(skb);
+	return(err);
 }
 
 DummyProcess_t *applNewDummyPc(Appl_t *appl, __u16 Function, __u32 Handle)
@@ -708,13 +723,18 @@ void contrDummyFacility(Contr_t *contr, FACILITY_t *fac)
 }
 
 
-void contrDummyInd(Contr_t *contr, __u32 prim, void *arg)
+int contrDummyInd(Contr_t *contr, __u32 prim, struct sk_buff *skb)
 {
+	int ret = -EINVAL;
+
 	switch (prim) {
 		case CC_FACILITY | INDICATION:
-			contrDummyFacility(contr, arg);
+			contrDummyFacility(contr, (FACILITY_t *)skb->data);
+			dev_kfree_skb(skb);
+			ret = 0;
 			break;
 		default:
 			int_error();
 	}
+	return(ret);
 }

@@ -1,4 +1,4 @@
-/* $Id: avm_fritz.c,v 0.16 2001/05/18 00:48:51 kkeil Exp $
+/* $Id: avm_fritz.c,v 0.17 2001/08/02 14:51:56 kkeil Exp $
  *
  * fritz_pci.c    low level stuff for AVM Fritz!PCI and ISA PnP isdn cards
  *              Thanks to AVM, Berlin for informations
@@ -18,7 +18,7 @@
 #include "helper.h"
 #include "debug.h"
 
-static const char *avm_pci_rev = "$Revision: 0.16 $";
+static const char *avm_pci_rev = "$Revision: 0.17 $";
 
 #define ISDN_CTYPE_FRITZPCI 1
 
@@ -260,10 +260,9 @@ write_ctrl(bchannel_t *bch, int which) {
 static int
 modehdlc(bchannel_t *bch, int bc, int protocol)
 {
-	fritzpnppci *fc = bch->inst.data;
 	int hdlc = bch->channel;
 
-	if (fc->dch.debug & L1_DEB_HSCX)
+	if (bch->debug & L1_DEB_HSCX)
 		debugprint(&bch->inst, "hdlc %c protocol %x-->%x ch %d-->%d",
 			'A' + hdlc, bch->protocol, protocol, hdlc, bc);
 	bch->hw.hdlc.ctrl.ctrl = 0;
@@ -573,38 +572,42 @@ avm_pcipnp_interrupt(int intno, void *dev_id, struct pt_regs *regs)
 }
 
 static int
-hdlc_down(hisaxif_t *hif, u_int prim, int dinfo, int len, void *arg)
+hdlc_down(hisaxif_t *hif, struct sk_buff *skb)
 {
 	bchannel_t	*bch;
-	struct sk_buff	*skb = arg;
-	int ret = 0;
+	int		ret = -EINVAL;
+	hisax_head_t	*hh;
 
-	if (!hif || !hif->fdata)
-		return(-EINVAL);
+	if (!hif || !skb)
+		return(ret);
+	hh = (hisax_head_t *)skb->data;
+	if (skb->len < HISAX_FRAME_MIN)
+		return(ret);
 	bch = hif->fdata;
-	if ((prim == PH_DATA_REQ) ||
-		(prim == (DL_DATA | REQUEST))) {
-
+	if ((hh->prim == PH_DATA_REQ) ||
+		(hh->prim == (DL_DATA | REQUEST))) {
 		if (bch->next_skb) {
 			debugprint(&bch->inst, " l2l1 next_skb exist this shouldn't happen");
 			return(-EBUSY);
 		}
+		skb_pull(skb, HISAX_HEAD_SIZE);
 		bch->inst.lock(bch->inst.data);
 		if (test_and_set_bit(FLG_TX_BUSY, &bch->Flag)) {
 			test_and_set_bit(FLG_TX_NEXT, &bch->Flag);
 			bch->next_skb = skb;
 			bch->inst.unlock(bch->inst.data);
+			return(0);
 		} else {
 			bch->tx_len = skb->len;
 			memcpy(bch->tx_buf, skb->data, bch->tx_len);
 			bch->tx_idx = 0;
 			hdlc_fill_fifo(bch);
 			bch->inst.unlock(bch->inst.data);
-			bch->inst.up.func(&bch->inst.up, prim | CONFIRM,
-				DINFO_SKB, 0, skb);
+			return(if_addhead(&bch->inst.up, hh->prim | CONFIRM,
+				DINFO_SKB, skb));
 		}
-	} else if ((prim == (PH_ACTIVATE | REQUEST)) ||
-		(prim == (DL_ESTABLISH  | REQUEST))) {
+	} else if ((hh->prim == (PH_ACTIVATE | REQUEST)) ||
+		(hh->prim == (DL_ESTABLISH  | REQUEST))) {
 		if (test_and_set_bit(BC_FLG_ACTIV, &bch->Flag))
 			ret = 0;
 		else {
@@ -613,11 +616,11 @@ hdlc_down(hisaxif_t *hif, u_int prim, int dinfo, int len, void *arg)
 				bch->inst.pid.protocol[1]);
 			bch->inst.unlock(bch->inst.data);
 		}
-		bch->inst.up.func(&bch->inst.up, prim | CONFIRM, 0,
-			ret, NULL);
-	} else if ((prim == (PH_DEACTIVATE | REQUEST)) ||
-		(prim == (DL_RELEASE | REQUEST)) ||
-		(prim == (MGR_DISCONNECT | REQUEST))) {
+		skb_trim(skb, HISAX_HEAD_SIZE);
+		return(if_newhead(&bch->inst.up, hh->prim | CONFIRM, ret, skb));
+	} else if ((hh->prim == (PH_DEACTIVATE | REQUEST)) ||
+		(hh->prim == (DL_RELEASE | REQUEST)) ||
+		(hh->prim == (MGR_DISCONNECT | REQUEST))) {
 		bch->inst.lock(bch->inst.data);
 		if (test_and_clear_bit(FLG_TX_NEXT, &bch->Flag)) {
 			dev_kfree_skb(bch->next_skb);
@@ -627,13 +630,17 @@ hdlc_down(hisaxif_t *hif, u_int prim, int dinfo, int len, void *arg)
 		modehdlc(bch, bch->channel, 0);
 		test_and_clear_bit(BC_FLG_ACTIV, &bch->Flag);
 		bch->inst.unlock(bch->inst.data);
-		if (prim != (MGR_DISCONNECT | REQUEST))
-			bch->inst.up.func(&bch->inst.up, prim | CONFIRM, 0,
-				0, NULL);
+		skb_trim(skb, HISAX_HEAD_SIZE);
+		if (hh->prim != (MGR_DISCONNECT | REQUEST))
+			if (!if_newhead(&bch->inst.up, hh->prim | CONFIRM, 0, skb))
+				return(0);
+		ret = 0;
 	} else {
-		printk(KERN_WARNING "hdlc_down unknown prim(%x)\n", prim);
+		printk(KERN_WARNING "hdlc_down unknown prim(%x)\n", hh->prim);
 		ret = -EINVAL;
 	}
+	if (!ret)
+		dev_kfree_skb(skb);
 	return(ret);
 }
 
@@ -658,7 +665,8 @@ hdlc_bh(bchannel_t *bch)
 				pr = DL_DATA | CONFIRM;
 			else
 				pr = PH_DATA | CONFIRM;
-			bch->inst.up.func(&bch->inst.up, pr, DINFO_SKB, 0, skb);
+			if (if_addhead(&bch->inst.up, pr, DINFO_SKB, skb))
+				dev_kfree_skb(skb);
 		}
 	}
 	if (test_and_clear_bit(B_RCVBUFREADY, &bch->event)) {
@@ -667,8 +675,7 @@ hdlc_bh(bchannel_t *bch)
 				pr = DL_DATA | INDICATION;
 			else
 				pr = PH_DATA | INDICATION;
-			ret = bch->inst.up.func(&bch->inst.up, pr, DINFO_SKB,
-				0, skb);
+			ret = if_addhead(&bch->inst.up, pr, DINFO_SKB, skb);
 			if (ret < 0) {
 				printk(KERN_WARNING "hdlc_bh deliver err %d\n",
 					ret);
@@ -943,10 +950,10 @@ release_card(fritzpnppci *card) {
 
 static int
 fritz_manager(void *data, u_int prim, void *arg) {
-	fritzpnppci *card = fritz.ilist;
-	hisaxinstance_t *inst = data;
-	int channel = -1;
-	int val;
+	fritzpnppci	*card = fritz.ilist;
+	hisaxinstance_t	*inst = data;
+	struct sk_buff	*skb;
+	int		channel = -1;
 
 	if (!data) {
 		printk(KERN_ERR __FUNCTION__": no data prim %x arg %p\n",
@@ -988,14 +995,19 @@ fritz_manager(void *data, u_int prim, void *arg) {
 			return(-ENODEV);
 		} else {
 			if (channel == 2) {
-				val = HW_DEACTIVATE;
 				inst->down.fdata = &card->dch;
-				ISAC_l1hw(&inst->down, PH_CONTROL | REQUEST, 0,
-					4, &val);
+				if ((skb = create_link_skb(PH_CONTROL | REQUEST,
+					HW_DEACTIVATE, 0, NULL, 0))) {
+					if (ISAC_l1hw(&inst->down, skb))
+						dev_kfree_skb(skb);
+				}
 			} else {
 				inst->down.fdata = &card->bch[channel];
-				hdlc_down(&inst->down, MGR_DISCONNECT | REQUEST,
-					0, 0, NULL);
+				if ((skb = create_link_skb(MGR_DISCONNECT | REQUEST,
+					0, 0, NULL, 0))) {
+					if (hdlc_down(&inst->down, skb))
+						dev_kfree_skb(skb);
+				}
 			}
 			fritz.ctrl(inst->up.peer, MGR_DISCONNECT | REQUEST,
 				&inst->up);
@@ -1049,15 +1061,17 @@ fritz_manager(void *data, u_int prim, void *arg) {
 		}
 		if ((channel!=2) && (inst->pid.global == 2)) {
 			inst->down.fdata = &card->bch[channel];
-			hdlc_down(&inst->down, PH_ACTIVATE | REQUEST,
-				0, 0, NULL);
+			if ((skb = create_link_skb(PH_ACTIVATE | REQUEST,
+				0, 0, NULL, 0))) {
+				if (hdlc_down(&inst->down, skb))
+					dev_kfree_skb(skb);
+			}
 			if (inst->pid.protocol[2] == ISDN_PID_L2_B_TRANS)
-				val = DL_ESTABLISH;
+				if_link(&inst->up, DL_ESTABLISH | INDICATION,
+					0, 0, NULL, 0);
 			else
-				val = PH_ACTIVATE;
-			if (inst->up.func)
-				inst->up.func(&inst->up, val | INDICATION,
-					0, 0, NULL);
+				if_link(&inst->up, PH_ACTIVATE | INDICATION,
+					0, 0, NULL, 0);
 		}
 		break;
 	    default:

@@ -1,4 +1,4 @@
-/* $Id: udevice.c,v 0.18 2001/07/10 16:01:03 kkeil Exp $
+/* $Id: udevice.c,v 0.19 2001/08/02 14:51:56 kkeil Exp $
  *
  * Copyright 2000  by Karsten Keil <kkeil@isdn4linux.de>
  */
@@ -60,7 +60,7 @@ static u_char  stbuf[1000];
 
 static int device_debug = 0;
 
-static int from_up_down(hisaxif_t *, u_int, int, int, void *);
+static int from_up_down(hisaxif_t *, struct sk_buff *);
 // static int from_peer(hisaxif_t *, u_int, int, int, void *);
 // static int to_peer(hisaxif_t *, u_int, int, int, void *);
 
@@ -674,9 +674,7 @@ static int
 wdata_frame(hisaxdevice_t *dev, iframe_t *iff) {
 	hisaxif_t *hif = NULL;
 	devicelayer_t *dl;
-	int sub, len, err=-ENXIO;
-	struct sk_buff *skb;
-	u_char	*dp;
+	int err=-ENXIO;
 
 	if (device_debug & DEBUG_WDATA)
 		printk(KERN_DEBUG __FUNCTION__": addr:%x\n", iff->addr);
@@ -694,38 +692,20 @@ wdata_frame(hisaxdevice_t *dev, iframe_t *iff) {
 		}
 	}
 	if (hif) {
-		if (!hif->func) {
-			printk(KERN_ERR "hisax no interface func for %p\n",
-				hif);
-			return(-EINVAL);
-		} 
-		sub =iff->prim & SUBCOMMAND_MASK;
-		if (CMD_IS_DATA(iff->prim)) {
-			if ((sub == REQUEST) || (sub == INDICATION)) {
-				if (iff->len <= 0) {
-					printk(KERN_WARNING
-						"hisax data len(%d) to short\n",
-						iff->len);
-					return(-EINVAL);
-				}
-				len = iff->len;
-				if (!(skb = alloc_skb(len + MAX_HEADER_LEN, GFP_ATOMIC))) {
-					printk(KERN_WARNING "hisax: alloc_skb failed\n");
-					return(-ENOMEM);
-				} else
-					skb_reserve(skb, MAX_HEADER_LEN);
-				dp = &iff->data.b[0];
-				memcpy(skb_put(skb, len), dp, len);
-				err = hif->func(hif, iff->prim, DINFO_SKB, 0, skb);
-				if (err)
-					dev_kfree_skb(skb);
-				return(err);
-			}
-		}
 		if (device_debug & DEBUG_WDATA)
-			printk(KERN_DEBUG "wdata_frame: hif %p f:%p d:%p s:%p o:%p p:%p\n",
-				hif, hif->func, hif->fdata, hif->st, hif->owner, hif->peer);
-		err = hif->func(hif, iff->prim, iff->dinfo, iff->len, &iff->data.b[0]);
+			printk(KERN_DEBUG __FUNCTION__": pr(%x) di(%x) l(%d)\n",
+				iff->prim, iff->dinfo, iff->len);
+		if (iff->len < 0) {
+			printk(KERN_WARNING
+				__FUNCTION__":data negativ(%d)\n",
+				iff->len);
+			return(-EINVAL);
+		}
+		err = if_link(hif, iff->prim, iff->dinfo, iff->len,
+			&iff->data.b[0], UPLINK_HEADER_SPACE);
+		if (device_debug & DEBUG_WDATA && err)
+			printk(KERN_DEBUG __FUNCTION__": if_link ret(%x)\n",
+				err);
 	} else {
 		if (device_debug & DEBUG_WDATA)
 			printk(KERN_DEBUG "hisax: no matching interface\n");
@@ -1156,69 +1136,33 @@ static struct file_operations hisax_fops =
 };
 
 static int
-from_up_down(hisaxif_t *hif, u_int prim, int dinfo, int len, void *arg) {
+from_up_down(hisaxif_t *hif, struct sk_buff *skb) {
 	
 	devicelayer_t *dl;
 	iframe_t off;
+	hisax_head_t *hh; 
 	int retval = -EINVAL;
-	u_int sub;
-	struct sk_buff *skb;
 
-	if (!hif || !hif->fdata)
+	if (!hif || !hif->fdata || !skb)
 		return(-EINVAL);
 	dl = hif->fdata;
-	sub = prim & SUBCOMMAND_MASK;
+	if (skb->len < HISAX_FRAME_MIN)
+		return(-EINVAL);
+	hh = (hisax_head_t *)skb->data;
+	off.data.p = skb_pull(skb, sizeof(hisax_head_t));
+	off.len = skb->len;
 	off.addr = dl->iaddr | IF_TYPE(hif);
-	off.prim = prim;
-	off.len = 0;
-	off.dinfo = dinfo;
+	off.prim = hh->prim;
+	off.dinfo = hh->dinfo;
 	if (device_debug & DEBUG_RDATA)
 		printk(KERN_DEBUG "from_up_down: %x(%x) dinfo:%x len:%d\n",
-			off.prim, off.addr, dinfo, len);
-	if (CMD_IS_DATA(prim)) {
-		if (dinfo == DINFO_SKB) {
-			if ((sub == REQUEST) || (sub == INDICATION)) {
-				if (!(skb = arg))
-					return(-EINVAL);
-				off.len = skb->len;
-				off.data.p = skb->data;
-				retval = hisax_rdata(dl->dev, &off, 0);
-				if (!retval) {
-					if (sub == REQUEST)
-						sub = CONFIRM;
-					else if (sub == INDICATION)
-						sub = RESPONSE;
-					prim &= ~SUBCOMMAND_MASK;
-					prim |= sub; 
-					if (IF_TYPE(hif) == IF_UP)
-						retval = dl->inst.up.func(
-							&dl->inst.up, prim,
-							dinfo, len, arg);
-					else if (IF_TYPE(hif) == IF_DOWN)
-						retval = dl->inst.down.func(
-							&dl->inst.down, prim,
-							dinfo, len, arg);
-					if (retval) {
-						dev_kfree_skb(skb);
-						retval = 0;
-					}
-				}
-			} else {
-				retval = hisax_rdata(dl->dev, &off, 0);
-				if ((skb = arg)) {
-					dev_kfree_skb(skb);
-				}
-			}
-		} else {
-			printk(KERN_WARNING
-				"from_up_down: data prim(%x) no skb type(%x)\n",
-				prim, len);
-		}
-	} else {
-		off.data.p = arg;
-		off.len = len;
-		retval = hisax_rdata(dl->dev, &off, 0);
-	}
+			off.prim, off.addr, off.dinfo, off.len);
+	retval = hisax_rdata(dl->dev, &off, 0);
+	if (retval == (4*sizeof(u_int) + off.len)) {
+		dev_kfree_skb(skb);
+		retval = 0;
+	} else if (retval == 0)
+		retval = -ENOSPC;
 	return(retval);
 }
 

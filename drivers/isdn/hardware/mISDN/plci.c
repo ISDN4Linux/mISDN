@@ -1,4 +1,4 @@
-/* $Id: plci.c,v 0.4 2001/03/03 18:17:16 kkeil Exp $
+/* $Id: plci.c,v 0.5 2001/08/02 14:51:56 kkeil Exp $
  *
  */
 
@@ -59,27 +59,30 @@ void plciHandleSetupInd(Plci_t *plci, int pr, SETUP_t *setup)
 	}
 }
 
-void plci_l3l4(Plci_t *plci, int pr, void *arg)
+int plci_l3l4(Plci_t *plci, int pr, struct sk_buff *skb)
 {
 	__u16 applId;
 	Cplci_t *cplci;
 
 	switch (pr) {
-	case CC_SETUP | INDICATION:
-		plciHandleSetupInd(plci, pr, arg);
-		break;
-	case CC_RELEASE_CR | INDICATION:
-		if (plci->nAppl == 0) {
-			contrDelPlci(plci->contr, plci);
-		}
-		break;
-	default:
-		for (applId = 1; applId <= CAPI_MAXAPPL; applId++) {
-			cplci = plci->cplcis[applId - 1];
-			if (cplci) 
-				cplci_l3l4(cplci, pr, arg);
-		}
+		case CC_SETUP | INDICATION:
+			plciHandleSetupInd(plci, pr, (SETUP_t *)skb->data);
+			break;
+		case CC_RELEASE_CR | INDICATION:
+			if (plci->nAppl == 0) {
+				contrDelPlci(plci->contr, plci);
+			}
+			break;
+		default:
+			for (applId = 1; applId <= CAPI_MAXAPPL; applId++) {
+				cplci = plci->cplcis[applId - 1];
+				if (cplci) 
+					cplci_l3l4(cplci, pr, skb->data);
+			}
+			break;
 	}
+	dev_kfree_skb(skb);
+	return(0);
 }
 
 void plciAttachCplci(Plci_t *plci, Cplci_t *cplci)
@@ -125,6 +128,22 @@ void plciNewCrReq(Plci_t *plci)
 
 int plciL4L3(Plci_t *plci, __u32 prim, int len, void *arg)
 {
- 	return(contrL4L3(plci->contr, prim, plci->adrPLCI, len, arg));
+#define	MY_RESERVE	8
+	int	err;
+	struct sk_buff *skb;
+
+	if (!(skb = alloc_skb(len + HISAX_HEAD_SIZE + MY_RESERVE, GFP_ATOMIC))) {
+		printk(KERN_WARNING __FUNCTION__": no skb size %d+%d+%d\n",
+			len, HISAX_HEAD_SIZE, MY_RESERVE);
+		return(-ENOMEM);
+	} else
+		skb_reserve(skb, MY_RESERVE + HISAX_HEAD_SIZE);
+	if (len)
+		memcpy(skb_put(skb, len), arg, len);
+	skb_push(skb, HISAX_HEAD_SIZE);
+	err = contrL4L3(plci->contr, prim, plci->adrPLCI, skb);
+	if (err)
+		dev_kfree_skb(skb);
+	return(err);
 }
 

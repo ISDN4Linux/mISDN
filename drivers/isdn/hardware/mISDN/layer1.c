@@ -1,4 +1,4 @@
-/* $Id: layer1.c,v 0.13 2001/04/11 16:38:57 kkeil Exp $
+/* $Id: layer1.c,v 0.14 2001/08/02 14:51:56 kkeil Exp $
  *
  * hisax_l1.c     common low level stuff for I.430 layer1
  *
@@ -10,12 +10,12 @@
  *
  */
 
-const char *l1_revision = "$Revision: 0.13 $";
+const char *l1_revision = "$Revision: 0.14 $";
 
 #include <linux/config.h>
 #include <linux/module.h>
-#include "helper.h"
 #include "hisaxl1.h"
+#include "helper.h"
 #include "debug.h"
 
 typedef struct _layer1 {
@@ -165,35 +165,15 @@ l1m_debug(struct FsmInst *fi, char *fmt, ...)
 }
 
 static int
-l1up(layer1_t *l1, u_int prim, int dinfo, int len, void *arg) {
-	int		err = -EINVAL;
-	hisaxif_t	*upif = &l1->inst.up;
-
-	if (upif->func) {
-		err = upif->func(upif, prim, dinfo, len, arg);
-		if (err < 0) {
-			printk(KERN_WARNING "HiSax: l1up err %d\n", err);
-			return(err);
-		}
-	} else
-		printk(KERN_ERR "l1up no func\n");
-	return(err);	
+l1up(layer1_t *l1, u_int prim, int dinfo, int len, void *arg)
+{
+	return(if_link(&l1->inst.up, prim, dinfo, len, arg, 0));
 }
 
 static int
-l1down(layer1_t *l1, u_int prim, int dinfo, int len, void *arg) {
-	int		err = -EINVAL;
-	hisaxif_t	*downif = &l1->inst.down;
-
-	if (downif->func) {
-		err = downif->func(downif, prim, dinfo, len, arg);
-		if (err < 0) {
-			printk(KERN_WARNING "HiSax: l1down err %d\n", err);
-			return(err);
-		}
-	} else
-		printk(KERN_ERR "l1down no func\n");
-	return(err);	
+l1down(layer1_t *l1, u_int prim, int dinfo, int len, void *arg)
+{
+	return(if_link(&l1->inst.down, prim, dinfo, len, arg, 0));
 }
 
 static void
@@ -209,8 +189,7 @@ l1_deact_cnf(struct FsmInst *fi, int event, void *arg)
 
 	FsmChangeState(fi, ST_L1_F3);
 	if (test_bit(FLG_L1_ACTIVATING, &l1->Flags))
-		l1down(l1, PH_CONTROL | REQUEST,
-			0, 4, (void *)HW_POWERUP);
+		l1down(l1, PH_CONTROL | REQUEST, HW_POWERUP, 0, NULL);
 }
 
 static void
@@ -230,8 +209,7 @@ l1_power_up_s(struct FsmInst *fi, int event, void *arg)
 
 	if (test_bit(FLG_L1_ACTIVATING, &l1->Flags)) {
 		FsmChangeState(fi, ST_L1_F4);
-		l1down(l1, PH_SIGNAL | REQUEST,
-			0, 4, (void *)INFO3_P8);
+		l1down(l1, PH_SIGNAL | REQUEST, INFO3_P8, 0, NULL);
 		FsmRestartTimer(&l1->timer, TIMER3_VALUE, EV_TIMER3, NULL, 2);
 		test_and_set_bit(FLG_L1_T3RUN, &l1->Flags);
 	} else
@@ -261,8 +239,7 @@ l1_info2_ind(struct FsmInst *fi, int event, void *arg)
 	else
 #endif
 		FsmChangeState(fi, ST_L1_F6);
-	l1down(l1, PH_SIGNAL | REQUEST, 0,
-		4, (void *)INFO3_P8);
+	l1down(l1, PH_SIGNAL | REQUEST, INFO3_P8, 0, NULL);
 }
 
 static void
@@ -276,8 +253,7 @@ l1_info4_ind(struct FsmInst *fi, int event, void *arg)
 	else
 #endif
 		FsmChangeState(fi, ST_L1_F7);
-	l1down(l1, PH_SIGNAL | REQUEST, 0,
-		4, (void *)INFO3_P8);
+	l1down(l1, PH_SIGNAL | REQUEST, INFO3_P8, 0, NULL);
 	if (test_and_clear_bit(FLG_L1_DEACTTIMER, &l1->Flags))
 		FsmDelTimer(&l1->timer, 4);
 	if (!test_bit(FLG_L1_ACTIVATED, &l1->Flags)) {
@@ -305,8 +281,7 @@ l1_timer3(struct FsmInst *fi, int event, void *arg)
 #endif
 	if (l1->l1m.state != ST_L1_F6) {
 		FsmChangeState(fi, ST_L1_F3);
-		l1down(l1, PH_CONTROL | REQUEST,
-			0, 4, (void *)HW_POWERUP);
+		l1down(l1, PH_CONTROL | REQUEST, HW_POWERUP, 0, NULL);
 	}
 }
 
@@ -334,8 +309,7 @@ l1_timer_deact(struct FsmInst *fi, int event, void *arg)
 	if (test_and_clear_bit(FLG_L1_DBLOCKED, &l1->Flags))
 		l1up(l1, PH_CONTROL | INDICATION, 0, 4, &db);
 	l1up(l1, PH_DEACTIVATE | INDICATION, 0, 0, NULL);
-	l1down(l1, PH_CONTROL | REQUEST, 0, 4,
-		(void *)HW_DEACTIVATE);
+	l1down(l1, PH_CONTROL | REQUEST, HW_DEACTIVATE, 0, NULL);
 }
 
 static void
@@ -343,8 +317,7 @@ l1_activate_s(struct FsmInst *fi, int event, void *arg)
 {
 	layer1_t *l1 = fi->userdata;
 
-	l1down(l1, PH_CONTROL | REQUEST, 0, 4,
-		(void *)HW_RESET);
+	l1down(l1, PH_CONTROL | REQUEST, HW_RESET, 0, NULL);
 }
 
 static void
@@ -420,8 +393,7 @@ l1_deact_req_u(struct FsmInst *fi, int event, void *arg)
 	FsmChangeState(fi, ST_L1_RESET);
 	FsmRestartTimer(&l1->timer, 550, EV_TIMER_DEACT, NULL, 2);
 	test_and_set_bit(FLG_L1_DEACTTIMER, &l1->Flags);
-	l1down(l1, PH_CONTROL | REQUEST, 0, 4,
-		(void *)HW_POWERUP);
+	l1down(l1, PH_CONTROL | REQUEST, HW_POWERUP, 0, NULL);
 }
 
 static void
@@ -444,8 +416,7 @@ l1_activate_u(struct FsmInst *fi, int event, void *arg)
 {
 	layer1_t *l1 = fi->userdata;
 
-	l1down(l1, PH_SIGNAL | REQUEST, 0, 4,
-		(void *)INFO1);
+	l1down(l1, PH_SIGNAL | REQUEST, INFO1, 0, NULL);
 }
 
 static struct FsmNode L1UFnList[] =
@@ -521,85 +492,117 @@ static struct FsmNode L1BFnList[] =
 #define L1B_FN_COUNT (sizeof(L1BFnList)/sizeof(struct FsmNode))
 
 static int
-l1from_up(hisaxif_t *hif, u_int prim, int dinfo, int len, void *arg) {
-	layer1_t *l1;
+l1from_up(hisaxif_t *hif, struct sk_buff *skb)
+{
+	layer1_t	*l1;
+	hisax_head_t	*hh;
+	int		err = 0;
 
-	if (!hif || !hif->fdata)
+	if (!hif || !hif->fdata || !skb)
 		return(-EINVAL);
 	l1 = hif->fdata;
-	switch(prim) {
+	if (skb->len < HISAX_FRAME_MIN)
+		return(-EINVAL);
+	hh = (hisax_head_t *)skb->data;
+	switch(hh->prim) {
 		case (PH_DATA | REQUEST):
 		case (PH_CONTROL | REQUEST):
-			return(l1down(l1, prim, dinfo, len, arg));
+			if (l1->inst.down.func)
+				return(l1->inst.down.func(&l1->inst.down,
+					skb));
+			else
+				err = -ENXIO;
 			break;
 		case (PH_ACTIVATE | REQUEST):
 			if (test_bit(FLG_L1_ACTIVATED, &l1->Flags))
 				l1up(l1, PH_ACTIVATE | CONFIRM, 0, 0, NULL);
 			else {
 				test_and_set_bit(FLG_L1_ACTIVATING, &l1->Flags);
-				FsmEvent(&l1->l1m, EV_PH_ACTIVATE, arg);
+				FsmEvent(&l1->l1m, EV_PH_ACTIVATE, NULL);
 			}
 			break;
 		case (MDL_FINDTEI | REQUEST):
-			return(l1up(l1, prim, dinfo, len, arg));
+			if (l1->inst.up.func)
+				return(l1->inst.up.func(&l1->inst.up, skb));
+			else
+				err = -ENXIO;
+			break;
 		default:
 			if (l1->debug)
 				hisaxdebug(l1->inst.st->id, NULL,
-					"l1from_up msg %x unhandled", prim);
-			return(-EINVAL);
+					"l1from_up msg %x unhandled", hh->prim);
+			err = -EINVAL;
 			break;
 	}
-	return(0);
+	if (!err)
+		dev_kfree_skb(skb);
+	return(err);
 }
 
 static int
-l1from_down(hisaxif_t *hif, u_int prim, int dinfo, int len, void *arg) {
-	layer1_t *l1;
-	u_int val = (u_int)arg;
+l1from_down(hisaxif_t *hif,  struct sk_buff *skb)
+{
+	layer1_t	*l1;
+	hisax_head_t	*hh;
+	int		err = 0;
 
-	if (!hif || !hif->fdata)
+	if (!hif || !hif->fdata || !skb)
 		return(-EINVAL);
 	l1 = hif->fdata;
-	if (prim == PH_DATA_IND) {
+	if (skb->len < HISAX_FRAME_MIN)
+		return(-EINVAL);
+	hh = (hisax_head_t *)skb->data;
+	if (hh->prim == PH_DATA_IND) {
 		if (test_bit(FLG_L1_ACTTIMER, &l1->Flags))
-			FsmEvent(&l1->l1m, EV_TIMER_ACT, NULL);	
-		return(l1up(l1, prim, dinfo, len, arg));
-	} else if (prim == PH_DATA_CNF) {
-		return(l1up(l1, prim, dinfo, len, arg));
-	} else if (prim == (PH_CONTROL | INDICATION)) {
-		if (val == HW_RESET)
-			FsmEvent(&l1->l1m, EV_RESET_IND, arg);
-		else if (val == HW_DEACTIVATE)
-			FsmEvent(&l1->l1m, EV_DEACT_IND, arg);
-		else if (val == HW_POWERUP)
-			FsmEvent(&l1->l1m, EV_POWER_UP, arg);
-	} else if (prim == (PH_CONTROL | CONFIRM)) {
-		if (val == HW_DEACTIVATE) 
-			FsmEvent(&l1->l1m, EV_DEACT_CNF, arg);
-	} else if (prim == (PH_SIGNAL | INDICATION)) {
-		if (val == ANYSIGNAL)
-			FsmEvent(&l1->l1m, EV_ANYSIG_IND, arg);
-		else if (val == LOSTFRAMING)
-			FsmEvent(&l1->l1m, EV_ANYSIG_IND, arg);
-		else if (val == INFO2)
-			FsmEvent(&l1->l1m, EV_INFO2_IND, arg);
-		else if (val == INFO4_P8)
-			FsmEvent(&l1->l1m, EV_INFO4_IND, arg);
-		else if (val == INFO4_P10)
-			FsmEvent(&l1->l1m, EV_INFO4_IND, arg);
-		else {
-			if (l1->debug)
-				hisaxdebug(l1->inst.st->id, NULL,
-					"l1from_down sig %x unhandled", val);
-			return(-EINVAL);
-		}
+			FsmEvent(&l1->l1m, EV_TIMER_ACT, NULL);
+		if (l1->inst.up.func)
+			return(l1->inst.up.func(&l1->inst.up, skb));
+		else
+			err = -ENXIO;
+	} else if (hh->prim == PH_DATA_CNF) {
+		if (l1->inst.up.func)
+			return(l1->inst.up.func(&l1->inst.up, skb));
+		else
+			err = -ENXIO;
+	} else if (hh->prim == (PH_CONTROL | INDICATION)) {
+		if (hh->dinfo == HW_RESET)
+			FsmEvent(&l1->l1m, EV_RESET_IND, NULL);
+		else if (hh->dinfo == HW_DEACTIVATE)
+			FsmEvent(&l1->l1m, EV_DEACT_IND, NULL);
+		else if (hh->dinfo == HW_POWERUP)
+			FsmEvent(&l1->l1m, EV_POWER_UP, NULL);
+		else if (l1->debug)
+			hisaxdebug(l1->inst.st->id, NULL,
+				"l1from_down ctrl ind %x unhandled", hh->dinfo);
+	} else if (hh->prim == (PH_CONTROL | CONFIRM)) {
+		if (hh->dinfo == HW_DEACTIVATE) 
+			FsmEvent(&l1->l1m, EV_DEACT_CNF, NULL);
+		else if (l1->debug)
+			hisaxdebug(l1->inst.st->id, NULL,
+				"l1from_down ctrl cnf %x unhandled", hh->dinfo);
+	} else if (hh->prim == (PH_SIGNAL | INDICATION)) {
+		if (hh->dinfo == ANYSIGNAL)
+			FsmEvent(&l1->l1m, EV_ANYSIG_IND, NULL);
+		else if (hh->dinfo == LOSTFRAMING)
+			FsmEvent(&l1->l1m, EV_ANYSIG_IND, NULL);
+		else if (hh->dinfo == INFO2)
+			FsmEvent(&l1->l1m, EV_INFO2_IND, NULL);
+		else if (hh->dinfo == INFO4_P8)
+			FsmEvent(&l1->l1m, EV_INFO4_IND, NULL);
+		else if (hh->dinfo == INFO4_P10)
+			FsmEvent(&l1->l1m, EV_INFO4_IND, NULL);
+		else if (l1->debug)
+			hisaxdebug(l1->inst.st->id, NULL,
+				"l1from_down sig %x unhandled", hh->dinfo);
 	} else {
 		if (l1->debug)
 			hisaxdebug(l1->inst.st->id, NULL,
-				"l1from_down msg %x unhandled", prim);
-		return(-EINVAL);
+				"l1from_down msg %x unhandled", hh->prim);
+		err = -EINVAL;
 	}
-	return(0);
+	if (!err)
+		dev_kfree_skb(skb);
+	return(err);
 }
 
 static void

@@ -1,13 +1,13 @@
-/* $Id: ncci.c,v 0.7 2001/03/26 11:40:02 kkeil Exp $
+/* $Id: ncci.c,v 0.8 2001/08/02 14:51:56 kkeil Exp $
  *
  */
 
-#include "helper.h"
 #include "hisax_capi.h"
+#include "helper.h"
 #include "debug.h"
 #include "dss1.h"
 
-static int ncciL4L3(Ncci_t *, u_int, int, int, void *);
+static int ncciL4L3(Ncci_t *, u_int, int, int, void *, struct sk_buff *);
 
 // --------------------------------------------------------------------
 // NCCI state machine
@@ -126,7 +126,7 @@ static void ncci_connect_b3_req(struct FsmInst *fi, int event, void *arg)
 	printk(KERN_DEBUG "ncci_connect_b3_req NCCI %x cmsg->Info(%x)\n",
 		ncci->adrNCCI, cmsg->Info);
 	if (cmsg->Info < 0x1000) 
-		ncciL4L3(ncci, DL_ESTABLISH | REQUEST, 0, 0, NULL);
+		ncciL4L3(ncci, DL_ESTABLISH | REQUEST, 0, 0, NULL, NULL);
 }
 
 static void ncci_connect_b3_ind(struct FsmInst *fi, int event, void *arg)
@@ -180,7 +180,7 @@ static void ncci_disconnect_b3_req(struct FsmInst *fi, int event, void *arg)
 		ncciRecvCmsg(ncci, cmsg);
 	} else {
 		ncciRecvCmsg(ncci, cmsg);
-		ncciL4L3(ncci, DL_RELEASE | REQUEST, 0, 0, NULL);
+		ncciL4L3(ncci, DL_RELEASE | REQUEST, 0, 0, NULL, NULL);
 	}
 }
 
@@ -407,7 +407,7 @@ void ncciReleaseSt(Ncci_t *ncci)
 {
 	int retval;
 
-	ncciL4L3(ncci, PH_DEACTIVATE | REQUEST, 0, 0, NULL);
+	ncciL4L3(ncci, PH_DEACTIVATE | REQUEST, 0, 0, NULL, NULL);
 	retval = ncci->binst->inst.obj->ctrl(ncci->binst->inst.st,
 		MGR_CLEARSTACK | REQUEST, NULL);
 
@@ -458,12 +458,10 @@ void ncciDestr(Ncci_t *ncci)
 	}
 }
 
-void ncciDataInd(Ncci_t *ncci, int pr, void *arg)
+void ncciDataInd(Ncci_t *ncci, int pr, struct sk_buff *skb)
 {
-	struct sk_buff *skb, *nskb;
+	struct sk_buff *nskb;
 	int i;
-
-	skb = arg;
 
 	for (i = 0; i < CAPI_MAXDATAWINDOW; i++) {
 		if (ncci->recv_skb_handles[i] == 0)
@@ -537,17 +535,16 @@ void ncciDataReq(Ncci_t *ncci, struct sk_buff *skb)
 			skb = skb_dequeue(&ncci->squeue);
 		}
 	}
-	ncciL4L3(ncci, DL_DATA | REQUEST, DINFO_SKB, 0, skb);
-	return;
+	if (!ncciL4L3(ncci, DL_DATA | REQUEST, DINFO_SKB, 0, NULL, skb))
+		return;
 
  fail: /* FIXME send error CONFIRM */
  	int_error();
 	dev_kfree_skb(skb);
 }
 
-int ncciDataConf(Ncci_t *ncci, int pr, void *arg)
+int ncciDataConf(Ncci_t *ncci, int pr, struct sk_buff *skb)
 {
-	struct sk_buff *skb = arg;
 	_cmsg cmsg;
 	int i;
 
@@ -569,7 +566,11 @@ int ncciDataConf(Ncci_t *ncci, int pr, void *arg)
 	if (ncci->Flags & NCCI_FLG_FCTRL) {
 		if (skb_queue_len(&ncci->squeue)) {
 			skb = skb_dequeue(&ncci->squeue);
-			ncciL4L3(ncci, DL_DATA | REQUEST, DINFO_SKB, 0, skb);
+			if (ncciL4L3(ncci, DL_DATA | REQUEST, DINFO_SKB,
+				0, NULL, skb)) {
+				int_error();
+				dev_kfree_skb(skb);
+			}
 		} else
 			test_and_clear_bit(NCCI_FLG_BUSY, &ncci->Flags);
 	}
@@ -649,58 +650,64 @@ void ncciSendMessage(Ncci_t *ncci, struct sk_buff *skb)
 }
 
 
-int ncci_l3l4(hisaxif_t *hif, u_int prim, int dinfo, int len, void *arg)
+int ncci_l3l4(hisaxif_t *hif, struct sk_buff *skb)
 {
 	Ncci_t *ncci;
-	struct sk_buff *skb = arg;
+	int		ret = -EINVAL;
+	hisax_head_t	*hh;
 
-	if (!hif || !hif->fdata)
-		return(-EINVAL);
+	if (!hif || !skb)
+		return(ret);
+	if (skb->len < HISAX_FRAME_MIN)
+		return(ret);
+	hh = (hisax_head_t *)skb->data;
+	skb_pull(skb, HISAX_HEAD_SIZE);
 	ncci = hif->fdata;
-
-	switch (prim) {
+	switch (hh->prim) {
 		// we're not using the Fsm for DL_DATA for performance reasons
 		case DL_DATA | INDICATION: 
 			if (ncci->ncci_m.state == ST_NCCI_N_ACT) {
-				ncciDataInd(ncci, prim, arg);
-			} else {
-				dev_kfree_skb(skb);
-			}
+				ncciDataInd(ncci, hh->prim, skb);
+				return(0);
+			} 
 			break;
 		case DL_DATA | CONFIRM:
 			if (ncci->ncci_m.state == ST_NCCI_N_ACT) {
-				return(ncciDataConf(ncci, prim, arg));
+				return(ncciDataConf(ncci, hh->prim, skb));
 			}
 			break;
 		case DL_ESTABLISH | INDICATION:
-			FsmEvent(&ncci->ncci_m, EV_NCCI_DL_ESTABLISH_IND, arg);
+			FsmEvent(&ncci->ncci_m, EV_NCCI_DL_ESTABLISH_IND, skb);
 			break;
 		case DL_ESTABLISH | CONFIRM:
-			FsmEvent(&ncci->ncci_m, EV_NCCI_DL_ESTABLISH_CONF, arg);
+			FsmEvent(&ncci->ncci_m, EV_NCCI_DL_ESTABLISH_CONF, skb);
 			break;
 		case DL_RELEASE | INDICATION:
-			FsmEvent(&ncci->ncci_m, EV_NCCI_DL_RELEASE_IND, arg);
+			FsmEvent(&ncci->ncci_m, EV_NCCI_DL_RELEASE_IND, skb);
 			break;
 		case DL_RELEASE | CONFIRM:
-			FsmEvent(&ncci->ncci_m, EV_NCCI_DL_RELEASE_CONF, arg);
+			FsmEvent(&ncci->ncci_m, EV_NCCI_DL_RELEASE_CONF, skb);
 			break;
 		default:
-			printk(KERN_DEBUG __FUNCTION__ ": unknown prim(%x) dinfo(%x) len(%d) arg(%p)\n",
-				prim, dinfo, len, arg);
+			printk(KERN_DEBUG __FUNCTION__ ": unknown prim(%x) dinfo(%x) len(%d) skb(%p)\n",
+				hh->prim, hh->dinfo, skb->len, skb);
 			int_error();
+			return(-EINVAL);
 	}
+	dev_kfree_skb(skb);
 	return(0);
 }
 
-static int ncciL4L3(Ncci_t *ncci, u_int prim, int dtyp, int len, void *arg)
+static int ncciL4L3(Ncci_t *ncci, u_int prim, int dtyp, int len, void *arg,
+			struct sk_buff *skb)
 {
 	printk(KERN_DEBUG __FUNCTION__ ": NCCI %x prim(%x)\n",
 		ncci->adrNCCI, prim);
-	if (!ncci->binst || !ncci->binst->inst.down.func) {
-		int_error();
-		return -EINVAL;
-	}
-	return(ncci->binst->inst.down.func(&ncci->binst->inst.down, prim, dtyp, len, arg));
+	if (skb)
+		return(if_addhead(&ncci->binst->inst.down, prim, dtyp, skb));
+	else
+		return(if_link(&ncci->binst->inst.down, prim, dtyp,
+			len, arg, 8));
 }
 
 void init_ncci(void)

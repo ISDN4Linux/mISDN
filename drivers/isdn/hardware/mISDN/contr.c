@@ -1,4 +1,4 @@
-/* $Id: contr.c,v 0.8 2001/03/27 10:23:48 kkeil Exp $
+/* $Id: contr.c,v 0.9 2001/08/02 14:51:56 kkeil Exp $
  *
  */
 
@@ -312,42 +312,48 @@ static Plci_t
 }
 
 int
-contrL3L4(hisaxif_t *hif, u_int prim, int dinfo, int len, void *arg)
+contrL3L4(hisaxif_t *hif, struct sk_buff *skb)
 {
-	Contr_t	*contr;
-	Plci_t	*plci;
-	__u32	*id = arg;
+	Contr_t		*contr;
+	Plci_t		*plci;
+	__u32		*id;
+	int		ret = -EINVAL;
+	hisax_head_t	*hh;
 
-	if (!hif || !hif->fdata)
-		return(-EINVAL);
+	if (!hif || !skb)
+		return(ret);
+	if (skb->len < HISAX_FRAME_MIN)
+		return(ret);
+	hh = (hisax_head_t *)skb->data;
 	contr = hif->fdata;
-	if (prim == (CC_NEW_CR | INDICATION)) {
-		if (!arg)
-			return(-EINVAL);
+	skb_pull(skb, HISAX_HEAD_SIZE);
+	if (hh->prim == (CC_NEW_CR | INDICATION)) {
 		plci = contrNewPlci(contr);
 		if (!plci)
 			return(-EBUSY);
-		*id = plci->adrPLCI;
-	} else if ((dinfo & ~CONTROLER_MASK) == DUMMY_CR_FLAG) {
-		contrDummyInd(contr, prim, arg);
+		if (skb->len >= sizeof(void)) {
+			id = (__u32 *)skb->data;
+			*id = plci->adrPLCI;
+			dev_kfree_skb(skb);
+			ret = 0;
+		}
+	} else if ((hh->dinfo & ~CONTROLER_MASK) == DUMMY_CR_FLAG) {
+		ret = contrDummyInd(contr, hh->prim, skb);
 	} else {
-		if (!(plci = contrGetPLCI4addr(contr, dinfo))) {
-			contrDebug(contr, LL_DEB_WARN, __FUNCTION__ ": unknown plci prim(%x) id(%x)", prim, dinfo);
+		if (!(plci = contrGetPLCI4addr(contr, hh->dinfo))) {
+			contrDebug(contr, LL_DEB_WARN, __FUNCTION__
+			": unknown plci prim(%x) id(%x)",
+			hh->prim, hh->dinfo);
 			return(-ENODEV);
 		}
-		plci_l3l4(plci, prim, arg);
+		ret = plci_l3l4(plci, hh->prim, skb);
 	}
-	return(0);
+	return(ret);
 }
 
-int contrL4L3(Contr_t *contr, __u32 prim, int dinfo, int len, void *arg) {
-	int err = -EINVAL;
-
-	if (contr->inst.down.func) {
-		err = contr->inst.down.func(&contr->inst.down, prim, dinfo,
-			len, arg);
-	}
-	return(err);
+int contrL4L3(Contr_t *contr, u_int prim, int dinfo, struct sk_buff *skb)
+{
+	return(if_newhead(&contr->inst.down, prim, dinfo, skb));
 }
 
 void contrPutStatus(Contr_t *contr, char *msg)
