@@ -1,4 +1,4 @@
-/* $Id: hfc_pci.c,v 1.11 2002/07/08 12:33:04 kkeil Exp $
+/* $Id: hfc_pci.c,v 1.12 2002/07/08 12:53:57 kkeil Exp $
 
  * hfc_pci.c     low level driver for CCD's hfc-pci based cards
  *
@@ -42,7 +42,7 @@
 
 extern const char *CardType[];
 
-static const char *hfcpci_revision = "$Revision: 1.11 $";
+static const char *hfcpci_revision = "$Revision: 1.12 $";
 
 /* table entry in the PCI devices list */
 typedef struct {
@@ -320,10 +320,10 @@ reset_hfcpci(hfc_pci_t *hc)
 	} else {
 		hc->hw.conn = 0x36;	/* set data flow directions */ 
 		if (test_bit(HFC_CFG_SW_DD_DU, &hc->cfg)) {
-			Write_hfc(hc, HFCPCI_B1_SSL, 0xC0);  modified by Schmidt, Tenovis 
-			Write_hfc(hc, HFCPCI_B2_SSL, 0xC1);  modified by Schmidt, Tenovis
-			Write_hfc(hc, HFCPCI_B1_RSL, 0xC0);  modified by Schmidt, Tenovis
-			Write_hfc(hc, HFCPCI_B2_RSL, 0xC1);  modified by Schmidt, Tenovis
+			Write_hfc(hc, HFCPCI_B1_SSL, 0xC0);
+			Write_hfc(hc, HFCPCI_B2_SSL, 0xC1);
+			Write_hfc(hc, HFCPCI_B1_RSL, 0xC0);
+			Write_hfc(hc, HFCPCI_B2_RSL, 0xC1);
 		} else {
 			Write_hfc(hc, HFCPCI_B1_SSL, 0x80);
 			Write_hfc(hc, HFCPCI_B2_SSL, 0x81);
