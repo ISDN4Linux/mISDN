@@ -1,4 +1,4 @@
-/* $Id: isar.c,v 1.13 2003/07/27 11:14:19 kkeil Exp $
+/* $Id: isar.c,v 1.14 2003/08/01 22:15:53 kkeil Exp $
  *
  * isar.c   ISAR (Siemens PSB 7110) specific routines
  *
@@ -400,6 +400,9 @@ isar_load_firmware(bchannel_t *bch, u_char *buf, int size)
 	bch->debug = debug;
 	bch->inst.lock(bch->inst.data, 0);
 	isar_setup(bch);
+	bch->inst.unlock(bch->inst.data);
+	bch->inst.obj->own_ctrl(&bch->inst, MGR_LOADFIRM | CONFIRM, NULL);
+	bch->inst.lock(bch->inst.data, 0);
 	ret = 0;
 reterrflg_l:
 	bch->inst.unlock(bch->inst.data);
@@ -519,7 +522,7 @@ isar_rcv_frame(bchannel_t *bch)
 	    case ISDN_PID_L1_B_64TRANS:
 	    case ISDN_PID_L2_B_TRANSDTMF:
 	    case ISDN_PID_L1_B_V32:
-		if ((skb = dev_alloc_skb(ih->reg->clsb))) {
+		if ((skb = alloc_stack_skb(ih->reg->clsb, bch->up_headerlen))) {
 			rcv_mbox(bch, ih->reg, (u_char *)skb_put(skb, ih->reg->clsb));
 			skb_queue_tail(&bch->rqueue, skb);
 			bch_sched_event(bch, B_RCVBUFREADY);
@@ -557,7 +560,7 @@ isar_rcv_frame(bchannel_t *bch)
 					if (bch->debug & L1_DEB_WARN)
 						debugprint(&bch->inst, "isar frame to short %d",
 							bch->rx_idx);
-				} else if (!(skb = dev_alloc_skb(bch->rx_idx-2))) {
+				} else if (!(skb = alloc_stack_skb(bch->rx_idx-2, bch->up_headerlen))) {
 					printk(KERN_WARNING "ISAR: receive out of memory\n");
 				} else {
 					memcpy(skb_put(skb, bch->rx_idx-2),
@@ -584,7 +587,7 @@ isar_rcv_frame(bchannel_t *bch)
 			if (bch->debug & L1_DEB_HSCX)
 				debugprint(&bch->inst, "isar_rcv_frame: raw(%d) dle(%d)",
 					ih->reg->clsb, bch->rx_idx);
-			if ((skb = dev_alloc_skb(bch->rx_idx))) {
+			if ((skb = alloc_stack_skb(bch->rx_idx, bch->up_headerlen))) {
 				insert_dle((u_char *)skb_put(skb, bch->rx_idx),
 					bch->rx_buf, ih->reg->clsb);
 				skb_queue_tail(&bch->rqueue, skb);
@@ -640,7 +643,7 @@ isar_rcv_frame(bchannel_t *bch)
 					if (bch->debug & L1_DEB_WARN)
 						debugprint(&bch->inst, "isar frame to short %d",
 							bch->rx_idx);
-				} else if (!(skb = dev_alloc_skb(bch->rx_idx))) {
+				} else if (!(skb = alloc_stack_skb(bch->rx_idx, bch->up_headerlen))) {
 					printk(KERN_WARNING "ISAR: receive out of memory\n");
 				} else {
 					insert_dle((u_char *)skb_put(skb, len),

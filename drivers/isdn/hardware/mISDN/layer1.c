@@ -1,4 +1,4 @@
-/* $Id: layer1.c,v 1.6 2003/07/27 11:14:19 kkeil Exp $
+/* $Id: layer1.c,v 1.7 2003/08/01 22:15:53 kkeil Exp $
  *
  * mISDN_l1.c     common low level stuff for I.430 layer1
  *
@@ -10,7 +10,7 @@
  *
  */
 
-static char *l1_revision = "$Revision: 1.6 $";
+static char *l1_revision = "$Revision: 1.7 $";
 
 #include <linux/config.h>
 #include <linux/module.h>
@@ -632,8 +632,7 @@ new_l1(mISDNstack_t *st, mISDN_pid_t *pid) {
 	}
 	memset(nl1, 0, sizeof(layer1_t));
 	memcpy(&nl1->inst.pid, pid, sizeof(mISDN_pid_t));
-	nl1->inst.obj = &isdnl1;
-	nl1->inst.data = nl1;
+	init_mISDNinstance(&nl1->inst, &isdnl1, nl1);
 	if (!SetHandledPID(&isdnl1, &nl1->inst.pid)) {
 		int_error();
 		return(-ENOPROTOOPT);
@@ -657,8 +656,6 @@ new_l1(mISDNstack_t *st, mISDN_pid_t *pid) {
 	nl1->l1m.userint = 0;
 	nl1->l1m.printdebug = l1m_debug;
 	FsmInitTimer(&nl1->l1m, &nl1->timer);
-	nl1->inst.up.owner = &nl1->inst;
-	nl1->inst.down.owner = &nl1->inst;
 	APPEND_TO_LIST(nl1, ((layer1_t *)isdnl1.ilist));
 	err = isdnl1.ctrl(st, MGR_REGLAYER | INDICATION, &nl1->inst);
 	if (err) {

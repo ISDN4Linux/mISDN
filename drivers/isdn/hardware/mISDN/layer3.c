@@ -1,4 +1,4 @@
-/* $Id: layer3.c,v 1.6 2003/07/27 11:14:19 kkeil Exp $
+/* $Id: layer3.c,v 1.7 2003/08/01 22:15:53 kkeil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -14,7 +14,7 @@
 #include "layer3.h"
 #include "helper.h"
 
-const char *l3_revision = "$Revision: 1.6 $";
+const char *l3_revision = "$Revision: 1.7 $";
 
 static
 struct Fsm l3fsm = {NULL, 0, 0, NULL, NULL};
@@ -214,18 +214,6 @@ StopAllL3Timer(l3_process_t *pc)
 	}
 }
 
-struct sk_buff *
-l3_alloc_skb(int len)
-{
-	struct sk_buff *skb;
-
-	if (!(skb = alloc_skb(len + MAX_HEADER_LEN + IFRAME_HEAD_SIZE, GFP_ATOMIC))) {
-		printk(KERN_WARNING "mISDN: No skb for D-channel\n");
-		return (NULL);
-	}
-	skb_reserve(skb, MAX_HEADER_LEN + IFRAME_HEAD_SIZE);
-	return (skb);
-}
 /*
 static void
 no_l3_proto(struct PStack *st, int pr, void *arg)

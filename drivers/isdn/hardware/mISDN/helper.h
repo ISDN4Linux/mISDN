@@ -1,4 +1,4 @@
-/* $Id: helper.h,v 1.8 2003/07/27 11:14:19 kkeil Exp $
+/* $Id: helper.h,v 1.9 2003/08/01 22:15:52 kkeil Exp $
  *
  *   Basic declarations, defines and prototypes
  *
@@ -70,15 +70,15 @@ discard_queue(struct sk_buff_head *q)
 }
 
 static inline struct sk_buff *
-alloc_uplinkD_skb(size_t size)
+alloc_stack_skb(size_t size, size_t reserve)
 {
 	struct sk_buff *skb;
 
-	if (!(skb = alloc_skb(size + L3_EXTRA_SIZE, GFP_ATOMIC)))
-		printk(KERN_WARNING "%s(%d): no skb size\n", __FUNCTION__,
-			size);
+	if (!(skb = alloc_skb(size + reserve, GFP_ATOMIC)))
+		printk(KERN_WARNING "%s(%d,%d): no skb size\n", __FUNCTION__,
+			size, reserve);
 	else
-		skb_reserve(skb, L3_EXTRA_SIZE);
+		skb_reserve(skb, reserve);
 	return(skb);
 }
 
@@ -91,6 +91,7 @@ extern int	get_protocol(mISDNstack_t *, int);
 extern int	HasProtocol(mISDNobject_t *, u_int);
 extern int	SetHandledPID(mISDNobject_t *, mISDN_pid_t *);
 extern void	RemoveUsedPID(mISDN_pid_t *, mISDN_pid_t *);
+extern void	init_mISDNinstance(mISDNinstance_t *, mISDNobject_t *, void *);
 
 static inline int HasProtocolP(mISDNobject_t *obj, int *PP)
 {

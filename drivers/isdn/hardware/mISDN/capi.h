@@ -1,4 +1,4 @@
-/* $Id: capi.h,v 1.7 2003/07/28 12:05:47 kkeil Exp $
+/* $Id: capi.h,v 1.8 2003/08/01 22:15:52 kkeil Exp $
  *
  */
 
@@ -37,6 +37,8 @@
 #define CAPI_DBG_LISTEN_STATE	0x00000200
 #define CAPI_DBG_LISTEN_INFO	0x00000400
 #define CAPI_DBG_CONTR		0x00010000
+#define CAPI_DBG_CONTR_INFO	0x00040000
+#define CAPI_DBG_CONTR_MSG	0x00080000
 #define CAPI_DBG_PLCI		0x00100000
 #define CAPI_DBG_PLCI_STATE	0x00200000
 #define CAPI_DBG_PLCI_INFO	0x00400000
@@ -59,17 +61,18 @@ void free_cplci(void);
 void free_ncci(void);
 void capidebug(int, char *, ...);
 
-#define SuppServiceCF          0x00000010
-#define SuppServiceTP          0x00000002
-#define mISDNSupportedServices (SuppServiceCF | SuppServiceTP)
+#define CAPI_B3_DATA_IND_HEADER_SIZE	22
+#define SuppServiceCF			0x00000010
+#define SuppServiceTP			0x00000002
+#define mISDNSupportedServices		(SuppServiceCF | SuppServiceTP)
 
 #define CAPIMSG_REQ_DATAHANDLE(m)	(m[18] | (m[19]<<8))
 #define CAPIMSG_RESP_DATAHANDLE(m)	(m[12] | (m[13]<<8))
 
-#define CMSGCMD(cmsg) CAPICMD((cmsg)->Command, (cmsg)->Subcommand)
+#define CMSGCMD(cmsg)			CAPICMD((cmsg)->Command, (cmsg)->Subcommand)
 
-#define CAPI_MAXPLCI 5
-#define CAPI_MAXDUMMYPCS 16
+#define CAPI_MAXPLCI			5
+#define CAPI_MAXDUMMYPCS		16
 
 struct Bprotocol {
 	__u16 B1protocol;
@@ -176,9 +179,6 @@ typedef struct _Contr {
 	mISDNinstance_t		inst;
 	BInst_t			*binst;
 	struct capi_ctr		*ctrl;
-#ifndef OLDCAPI_DRIVER_INTERFACE
-	struct list_head	ncci_head;
-#endif
 	__u32			adrController;
 	int			b3_mode;
 	u_int			debug;

@@ -1,4 +1,4 @@
-/* $Id: l3_udss1.c,v 1.12 2003/07/27 11:14:19 kkeil Exp $
+/* $Id: l3_udss1.c,v 1.13 2003/08/01 22:15:53 kkeil Exp $
  *
  * EURO/DSS1 D-channel protocol
  *
@@ -24,7 +24,7 @@ static int debug = 0;
 static mISDNobject_t u_dss1;
 
 
-const char *dss1_revision = "$Revision: 1.12 $";
+const char *dss1_revision = "$Revision: 1.13 $";
 
 static int dss1man(l3_process_t *, u_int, void *);
 
@@ -176,7 +176,7 @@ static struct sk_buff
 		lx++;
 	if (pc->callref == -1) /* dummy cr */
 		lx = 3;
-	if (!(skb = l3_alloc_skb(len + lx)))
+	if (!(skb = alloc_stack_skb(len + lx, pc->l3->down_headerlen)))
 		return(NULL);
 	p = skb_put(skb, lx);
 	*p++ = 8;
@@ -2206,8 +2206,8 @@ release_udss1(layer3_t *l3)
 static int
 new_udss1(mISDNstack_t *st, mISDN_pid_t *pid)
 {
-	layer3_t *nl3;
-	int err;
+	layer3_t	*nl3;
+	int		err;
 
 	if (!st || !pid)
 		return(-EINVAL);
@@ -2218,7 +2218,7 @@ new_udss1(mISDNstack_t *st, mISDN_pid_t *pid)
 	memset(nl3, 0, sizeof(layer3_t));
 	memcpy(&nl3->inst.pid, pid, sizeof(mISDN_pid_t));
 	nl3->debug = debug;
-	nl3->inst.obj = &u_dss1;
+	init_mISDNinstance(&nl3->inst, &u_dss1, nl3);
 	if (!SetHandledPID(&u_dss1, &nl3->inst.pid)) {
 		int_error();
 		return(-ENOPROTOOPT);
@@ -2239,33 +2239,28 @@ new_udss1(mISDNstack_t *st, mISDN_pid_t *pid)
 		release_l3(nl3);
 		kfree(nl3);
 		return(-ENOMEM);
-	} else {
-		nl3->global->state = 0;
-		nl3->global->callref = 0;
-		nl3->global->next = NULL;
-		nl3->global->n303 = N303;
-		nl3->global->l3 = nl3;
-		nl3->global->t303skb = NULL;
-		L3InitTimer(nl3->global, &nl3->global->timer);
 	}
+	nl3->global->state = 0;
+	nl3->global->callref = 0;
+	nl3->global->next = NULL;
+	nl3->global->n303 = N303;
+	nl3->global->l3 = nl3;
+	nl3->global->t303skb = NULL;
+	L3InitTimer(nl3->global, &nl3->global->timer);
 	if (!(nl3->dummy = kmalloc(sizeof(l3_process_t), GFP_ATOMIC))) {
 		printk(KERN_ERR "mISDN can't get memory for dss1 dummy CR\n");
 		release_l3(nl3);
 		kfree(nl3);
 		return(-ENOMEM);
-	} else {
-		nl3->dummy->state = 0;
-		nl3->dummy->callref = -1;
-		nl3->dummy->next = NULL;
-		nl3->dummy->n303 = N303;
-		nl3->dummy->l3 = nl3;
-		nl3->dummy->t303skb = NULL;
-		L3InitTimer(nl3->dummy, &nl3->dummy->timer);
 	}
+	nl3->dummy->state = 0;
+	nl3->dummy->callref = -1;
+	nl3->dummy->next = NULL;
+	nl3->dummy->n303 = N303;
+	nl3->dummy->l3 = nl3;
+	nl3->dummy->t303skb = NULL;
+	L3InitTimer(nl3->dummy, &nl3->dummy->timer);
 	sprintf(nl3->inst.name, "DSS1 %d", st->id);
-	nl3->inst.up.owner = &nl3->inst;
-	nl3->inst.down.owner = &nl3->inst;
-	nl3->inst.data = nl3;
 	nl3->p_mgr = dss1man;
 	APPEND_TO_LIST(nl3, ((layer3_t *)u_dss1.ilist));
 	err = u_dss1.ctrl(st, MGR_REGLAYER | INDICATION, &nl3->inst);
@@ -2273,6 +2268,15 @@ new_udss1(mISDNstack_t *st, mISDN_pid_t *pid)
 		release_l3(nl3);
 		REMOVE_FROM_LISTBASE(nl3, ((layer3_t *)u_dss1.ilist));
 		kfree(nl3);
+	} else {
+		mISDN_stPara_t	stp;
+
+	    	if (st->para.down_headerlen)
+		    	nl3->down_headerlen = st->para.down_headerlen;
+		stp.maxdatalen = 0;
+		stp.up_headerlen = L3_EXTRA_SIZE;
+		stp.down_headerlen = 0;
+		u_dss1.ctrl(st, MGR_ADDSTPARA | REQUEST, &stp);
 	}
 	return(err);
 }
@@ -2285,7 +2289,6 @@ MODULE_AUTHOR("Karsten Keil");
 MODULE_LICENSE("GPL");
 #endif
 MODULE_PARM(debug, "1i");
-#define UDSS1Init init_module
 #endif
 
 static int
@@ -2293,7 +2296,8 @@ udss1_manager(void *data, u_int prim, void *arg) {
 	mISDNinstance_t *inst = data;
 	layer3_t *l3l = u_dss1.ilist;
 
-	printk(KERN_DEBUG "udss1_manager data:%p prim:%x arg:%p\n", data, prim, arg);
+	if (debug & 0x1000)
+		printk(KERN_DEBUG "udss1_manager data:%p prim:%x arg:%p\n", data, prim, arg);
 	if (!data)
 		return(-EINVAL);
 	while(l3l) {
@@ -2301,41 +2305,36 @@ udss1_manager(void *data, u_int prim, void *arg) {
 			break;
 		l3l = l3l->next;
 	}
-	switch(prim) {
-	    case MGR_NEWLAYER | REQUEST:
+	if (prim == (MGR_NEWLAYER | REQUEST))
 		return(new_udss1(data, arg));
+	if (!l3l) {
+		if (debug & 0x1)
+			printk(KERN_WARNING "udss1_manager prim(%x) no instance\n", prim);
+		return(-EINVAL);
+	}
+	switch(prim) {
+	    case MGR_ADDSTPARA | INDICATION:
+	    	l3l->down_headerlen = ((mISDN_stPara_t *)arg)->down_headerlen;
+	    case MGR_CLRSTPARA | INDICATION:
+		break;
 	    case MGR_CONNECT | REQUEST:
-		if (!l3l) {
-			printk(KERN_WARNING "udss1_manager connect no instance\n");
-			return(-EINVAL);
-		}
 		return(ConnectIF(inst, arg));
 	    case MGR_SETIF | REQUEST:
 	    case MGR_SETIF | INDICATION:
-		if (!l3l) {
-			printk(KERN_WARNING "udss1_manager setif no instance\n");
-			return(-EINVAL);
-		}
 		return(SetIF(inst, arg, prim, dss1_fromup, dss1_fromdown, l3l));
 	    case MGR_DISCONNECT | REQUEST:
 	    case MGR_DISCONNECT | INDICATION:
-		if (!l3l) {
-			printk(KERN_WARNING "udss1_manager disconnect no instance\n");
-			return(-EINVAL);
-		}
 		return(DisConnectIF(inst, arg));
-		break;
 	    case MGR_RELEASE | INDICATION:
 	    case MGR_UNREGLAYER | REQUEST:
-	    	if (l3l) {
+	    	if (debug & 0x1000)
 			printk(KERN_DEBUG "release_udss1 id %x\n", l3l->inst.st->id);
-	    		release_udss1(l3l);
-	    	} else 
-	    		printk(KERN_WARNING "udss1_manager release no instance\n");
+	    	release_udss1(l3l);
 	    	break;
 	    		
 	    default:
-		printk(KERN_WARNING "udss1 prim %x not handled\n", prim);
+	    	if (debug & 0x1)
+			printk(KERN_WARNING "udss1 prim %x not handled\n", prim);
 		return(-EINVAL);
 	}
 	return(0);
@@ -2365,7 +2364,7 @@ int UDSS1Init(void)
 }
 
 #ifdef MODULE
-void cleanup_module(void)
+void UDSS1_cleanup(void)
 {
 	int err;
 
@@ -2379,4 +2378,7 @@ void cleanup_module(void)
 	}
 	mISDNl3Free();
 }
+
+module_init(UDSS1Init);
+module_exit(UDSS1_cleanup);
 #endif

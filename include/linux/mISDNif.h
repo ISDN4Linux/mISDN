@@ -1,4 +1,4 @@
-/* $Id: mISDNif.h,v 1.14 2003/07/28 12:05:47 kkeil Exp $
+/* $Id: mISDNif.h,v 1.15 2003/08/01 22:15:53 kkeil Exp $
  *
  */
 
@@ -40,6 +40,8 @@
 #define MGR_UNREGLAYER	0x0f1700
 #define MGR_SELCHANNEL	0x0f1800
 #define MGR_SETSTACK_NW	0x0f1900
+#define MGR_ADDSTPARA	0x0f1A00
+#define MGR_CLRSTPARA	0x0f1B00
 #define MGR_GETLAYER	0x0f2100
 #define MGR_GETLAYERID	0x0f2200
 #define MGR_NEWLAYER	0x0f2300
@@ -51,6 +53,7 @@
 #define MGR_SETIF	0x0f3400
 #define MGR_ADDIF	0x0f3500
 #define MGR_QUEUEIF	0x0f3600
+#define MGR_CTRLREADY	0x0f4100
 #define MGR_RELEASE	0x0f4500
 #define MGR_GETDEVICE	0x0f5100
 #define MGR_DELDEVICE	0x0f5200
@@ -61,7 +64,6 @@
 #define MGR_DELTIMER	0x0f8300
 #define MGR_REMOVETIMER	0x0f8400
 #define MGR_TIMER	0x0f8800
-#define MGR_CTRLREADY	0x0f9100
 #define MGR_CONTROL	0x0fe100
 #define MGR_STATUS	0x0fe200
 #define MGR_HASPROTOCOL 0x0fe300
@@ -213,9 +215,6 @@
 #define ISDN_PID_L1_NT_U	0x01000200
 #define ISDN_PID_L1_B_64HDLC	0x41000001
 #define ISDN_PID_L1_B_64TRANS	0x41000002
-//#define ISDN_PID_L1_B_TRANS_TTS	0x41100002
-//#define ISDN_PID_L1_B_TRANS_TTR	0x41200002
-//#define ISDN_PID_L1_B_TRANS_TT	0x41300002
 #define ISDN_PID_L1_B_V32	0x41000100
 #define ISDN_PID_L1_B_FAX	0x41000010
 #define ISDN_PID_L2_LAPD	0x02000001
@@ -354,36 +353,45 @@ typedef struct _moditem {
 
 typedef struct _mISDN_pid {
 	int	protocol[MAX_LAYER_NR +1];
-	void	*param[MAX_LAYER_NR +1];
+	u_char	*param[MAX_LAYER_NR +1];
 	__u16	global;
 	int	layermask;
+	int	maxplen;
+	u_char	*pbuf;
 } mISDN_pid_t;
+
+typedef struct _mISDN_stPara {
+	int	maxdatalen;
+	int	up_headerlen;
+	int	down_headerlen;
+} mISDN_stPara_t;
 
 typedef struct _stack_info {
 	u_int		id;
-	int		extentions;
 	mISDN_pid_t	pid;
-	int		mgr;
+	mISDN_stPara_t	para;
+	u_int		extentions;
+	u_int		mgr;
 	int		instcnt;
 	int		inst[MAX_LAYER_NR +1];
 	int		childcnt;
-	int		child[2];
+	u_int		child[2];
 } stack_info_t;
 
 typedef struct _layer_info {
 	char		name[mISDN_MAX_IDLEN];
 	int		object_id;
 	int		extentions;
-	int		id;
-	int		st;
+	u_int		id;
+	u_int		st;
 	mISDN_pid_t	pid;
 } layer_info_t;
 
 
 typedef struct _interface_info {
 	int		extentions;
-	int		owner;
-	int		peer;
+	u_int		owner;
+	u_int		peer;
 	int		stat;
 } interface_info_t;
 
@@ -445,7 +453,13 @@ typedef struct _Q931_info {
 #include <linux/isdn_compat.h>
 #include <linux/skbuff.h>
 
-typedef struct _mISDNif mISDNif_t;
+typedef struct _mISDNobject	mISDNobject_t;
+typedef struct _mISDNinstance	mISDNinstance_t;
+typedef struct _mISDNlayer	mISDNlayer_t;
+typedef struct _mISDNstack	mISDNstack_t;
+typedef struct _mISDNport	mISDNport_t;
+typedef struct _mISDNdevice	mISDNdevice_t;
+typedef struct _mISDNif		mISDNif_t;
 typedef int	(ctrl_func_t)(void *, u_int, void *);
 typedef int	(if_func_t)(struct _mISDNif *, struct sk_buff *);
 typedef int	(lock_func_t)(void *, int);
@@ -472,9 +486,10 @@ typedef struct _mISDN_headext {
 
 #define mISDN_HEADEXT_P(s) ((mISDN_headext_t *)&s->cb[0])
 
-typedef struct _mISDNobject {
-	struct _mISDNobject	*prev;
-	struct _mISDNobject	*next;
+/* Basic struct of a mISDN component */
+struct _mISDNobject {
+	mISDNobject_t		*prev;
+	mISDNobject_t		*next;
 	char			*name;
 	int			id;
 	int			refcnt;
@@ -484,54 +499,63 @@ typedef struct _mISDNobject {
 	ctrl_func_t		*ctrl;
 	void			*ilist;
 	struct module		*owner;
-} mISDNobject_t;
+};
 
+/* the interface between two mISDNinstances */
 struct _mISDNif {
-	struct _mISDNif		*prev;
-	struct _mISDNif		*next;
+	mISDNif_t		*prev;
+	mISDNif_t		*next;
 	int			extentions;
 	int			stat;
-	struct _mISDNstack	*st;
-	struct _mISDNinstance	*owner;
-	struct _mISDNinstance	*peer;
+	mISDNstack_t		*st;
+	mISDNinstance_t		*owner;
+	mISDNinstance_t		*peer;
 	if_func_t		*func;
 	void			*fdata;
 };
 
-typedef struct _mISDNinstance {
-	struct _mISDNinstance	*prev;
-	struct _mISDNinstance	*next;
+/* a instance of a mISDNobject */
+struct _mISDNinstance {
+	mISDNinstance_t		*prev;
+	mISDNinstance_t		*next;
 	char			name[mISDN_MAX_IDLEN];
 	int			extentions;
 	u_int			id;
 	mISDN_pid_t		pid;
-	struct _mISDNstack	*st;
+	mISDNstack_t		*st;
 	mISDNobject_t		*obj;
 	void			*data;
 	mISDNif_t		up;
 	mISDNif_t		down;
 	lock_func_t		*lock;
 	unlock_func_t		*unlock;
-} mISDNinstance_t;
+};
 
-typedef struct _mISDNlayer {
-	struct _mISDNlayer	*prev;
-	struct _mISDNlayer	*next;
+/* a list of parallel (horizontal) mISDNinstances in the same layer
+ * normally here is only one instance per layer only if the information
+ * will be splitted here are more instances */
+struct _mISDNlayer {
+	mISDNlayer_t		*prev;
+	mISDNlayer_t		*next;
 	mISDNinstance_t		*inst;
-} mISDNlayer_t;
+};
 
-typedef struct _mISDNstack {
-	struct _mISDNstack	*prev;
-	struct _mISDNstack	*next;
+/* the STACK; a (vertical) chain of layers */
+ 
+struct _mISDNstack {
+	mISDNstack_t		*prev;
+	mISDNstack_t		*next;
 	u_int			id;
-	int			extentions;
+	u_int			extentions;
 	mISDN_pid_t		pid;
+	mISDN_stPara_t		para;
 	mISDNlayer_t		*lstack;
 	mISDNinstance_t		*mgr;
-	struct _mISDNstack	*child;
-} mISDNstack_t;
+	mISDNstack_t		*child;
+};
 
-typedef struct _mISDNport {
+/* lowlevel read/write struct for the mISDNdevice */
+struct _mISDNport {
 	wait_queue_head_t	procq;
 	spinlock_t		lock;
 	mISDNif_t		pif;
@@ -541,11 +565,12 @@ typedef struct _mISDNport {
 	u_char			*buf;
 	u_char			*ip;
 	u_char			*op;
-} mISDNport_t;
+};
 
-typedef struct _mISDNdevice {
-	struct _mISDNdevice	*prev;
-	struct _mISDNdevice	*next;
+/* the user interface to handle /dev/mISDN */
+struct _mISDNdevice {
+	mISDNdevice_t		*prev;
+	mISDNdevice_t		*next;
 	int			minor;
 	struct semaphore	io_sema;
 	int			open_mode;
@@ -554,7 +579,7 @@ typedef struct _mISDNdevice {
 	struct _devicelayer	*layer;
 	struct _devicestack	*stack;
 	struct _mISDNtimer	*timer;
-} mISDNdevice_t;
+};
 
 /* common helper functions */
 extern int	put_mISDN_header(struct sk_buff *, iframe_t *);

@@ -1,4 +1,4 @@
-/* $Id: capi.c,v 1.7 2003/07/28 12:05:47 kkeil Exp $
+/* $Id: capi.c,v 1.8 2003/08/01 22:15:52 kkeil Exp $
  *
  */
 
@@ -7,7 +7,7 @@
 #include "helper.h"
 #include "debug.h"
 
-static char *capi_revision = "$Revision: 1.7 $";
+static char *capi_revision = "$Revision: 1.8 $";
 
 static int debug = 0;
 static mISDNobject_t capi_obj;
@@ -81,59 +81,40 @@ capi20_manager(void *data, u_int prim, void *arg) {
 		}
 		if (found)
 			break;
+		binst = NULL;
 		ctrl = ctrl->next;
 	}
-	switch(prim) {
-	    case MGR_NEWLAYER | REQUEST:
-	    	if (!(ctrl = newContr(&capi_obj, data, arg)))
-	    		return(-EINVAL);
-	    	else
-	    		ctrl->debug = debug;
-	        break;
-	    case MGR_CONNECT | REQUEST:
-		if (!ctrl) {
-			if (CAPI_DBG_WARN & debug)
-				printk(KERN_WARNING "capi20_manager connect no instance\n");
+	if (prim == (MGR_NEWLAYER | REQUEST)) {
+		ctrl = newContr(&capi_obj, data, arg);
+		if (!ctrl)
 			return(-EINVAL);
-		}
+		ctrl->debug = debug;
+		return(0);
+	}
+	if (!ctrl) {
+		if (CAPI_DBG_WARN & debug)
+			printk(KERN_WARNING "capi20_manager setif no instance\n");
+		return(-EINVAL);
+	}
+	switch(prim) {
+	    case MGR_CONNECT | REQUEST:
 		return(ConnectIF(inst, arg));
-		break;
 	    case MGR_SETIF | INDICATION:
 	    case MGR_SETIF | REQUEST:
-		if (!ctrl) {
-			if (CAPI_DBG_WARN & debug)
-				printk(KERN_WARNING "capi20_manager setif no instance\n");
-			return(-EINVAL);
-		}
 		if (&ctrl->inst == inst)
 			return(SetIF(inst, arg, prim, NULL, contrL3L4, ctrl));
 		else
 			return(SetIF(inst, arg, prim, NULL, ncci_l3l4, inst->data));
-		break;
 	    case MGR_DISCONNECT | REQUEST:
 	    case MGR_DISCONNECT | INDICATION:
-		if (!ctrl) {
-			if (CAPI_DBG_WARN & debug)
-				printk(KERN_WARNING "capi20_manager disconnect no instance\n");
-			return(-EINVAL);
-		}
 		return(DisConnectIF(inst, arg));
-		break;
 	    case MGR_RELEASE | INDICATION:
-	    	if (ctrl) {
-	    		if (CAPI_DBG_INFO & debug)
-				printk(KERN_DEBUG "release_capi20 id %x\n", ctrl->inst.st->id);
-			contrDestr(ctrl);
-			kfree(ctrl);
-	    	} else if (CAPI_DBG_WARN & debug)
-	    		printk(KERN_WARNING "capi20_manager release no instance\n");
+		if (CAPI_DBG_INFO & debug)
+			printk(KERN_DEBUG "release_capi20 id %x\n", ctrl->inst.st->id);
+		contrDestr(ctrl);
+		kfree(ctrl);
 	    	break;
 	    case MGR_UNREGLAYER | REQUEST:
-		if (!ctrl) {
-			if (CAPI_DBG_WARN & debug)
-				printk(KERN_WARNING "capi20_manager unreglayer no instance\n");
-			return(-EINVAL);
-		}
 		if (binst) {
 			capi_obj.ctrl(binst->inst.down.peer, MGR_DISCONNECT | REQUEST,
 				&binst->inst.down);
@@ -141,18 +122,12 @@ capi20_manager(void *data, u_int prim, void *arg) {
 		}
 		break;
 	    case MGR_CTRLREADY | INDICATION:
-		if (ctrl) {
-			if (CAPI_DBG_INFO & debug)
-				printk(KERN_DEBUG "ctrl %x ready\n", ctrl->inst.st->id);
-			contrRun(ctrl);
-		} else {
-			if (CAPI_DBG_WARN & debug)
-				printk(KERN_WARNING "ctrl ready no instance\n");
-			return(-EINVAL);
-		}
+		if (CAPI_DBG_INFO & debug)
+			printk(KERN_DEBUG "ctrl %x ready\n", ctrl->inst.st->id);
+		contrRun(ctrl);
 		break;
 	    default:
-	    	if (CAPI_DBG_WARN & debug)
+		if (CAPI_DBG_WARN & debug)
 			printk(KERN_WARNING "capi20_manager prim %x not handled\n", prim);
 		return(-EINVAL);
 	}

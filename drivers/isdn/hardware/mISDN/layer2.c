@@ -1,4 +1,4 @@
-/* $Id: layer2.c,v 1.10 2003/07/27 11:14:19 kkeil Exp $
+/* $Id: layer2.c,v 1.11 2003/08/01 22:15:53 kkeil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -12,7 +12,7 @@
 #include "helper.h"
 #include "debug.h"
 
-static char *l2_revision = "$Revision: 1.10 $";
+static char *l2_revision = "$Revision: 1.11 $";
 
 static void l2m_debug(struct FsmInst *fi, char *fmt, ...);
 
@@ -2067,7 +2067,7 @@ new_l2(mISDNstack_t *st, mISDN_pid_t *pid, layer2_t **newl2) {
 	}
 	memset(nl2, 0, sizeof(layer2_t));
 	nl2->debug = debug;
-	nl2->inst.obj = &isdnl2;
+	init_mISDNinstance(&nl2->inst, &isdnl2, nl2);
 	nl2->inst.extentions = EXT_INST_CLONE;
 	memcpy(&nl2->inst.pid, pid, sizeof(mISDN_pid_t));
 	if (!SetHandledPID(&isdnl2, &nl2->inst.pid)) {
@@ -2163,9 +2163,6 @@ new_l2(mISDNstack_t *st, mISDN_pid_t *pid, layer2_t **newl2) {
 
 	FsmInitTimer(&nl2->l2m, &nl2->t200);
 	FsmInitTimer(&nl2->l2m, &nl2->t203);
-	nl2->inst.data = nl2;
-	nl2->inst.up.owner = &nl2->inst;
-	nl2->inst.down.owner = &nl2->inst;
 	APPEND_TO_LIST(nl2, ((layer2_t *)isdnl2.ilist));
 	err = isdnl2.ctrl(st, MGR_REGLAYER | INDICATION, &nl2->inst);
 	if (err) {
@@ -2174,6 +2171,15 @@ new_l2(mISDNstack_t *st, mISDN_pid_t *pid, layer2_t **newl2) {
 		REMOVE_FROM_LISTBASE(nl2, ((layer2_t *)isdnl2.ilist));
 		kfree(nl2);
 		nl2 = NULL;
+	} else {
+		mISDN_stPara_t	stp;
+
+	    	if (st->para.maxdatalen)
+		    	nl2->maxlen = st->para.maxdatalen;
+		stp.maxdatalen = 0;
+		stp.up_headerlen = 0;
+		stp.down_headerlen = l2headersize(nl2, 0);
+		isdnl2.ctrl(st, MGR_ADDSTPARA | REQUEST, &stp);
 	}
 	if (newl2)
 		*newl2 = nl2;
@@ -2270,7 +2276,6 @@ MODULE_AUTHOR("Karsten Keil");
 MODULE_LICENSE("GPL");
 #endif
 MODULE_PARM(debug, "1i");
-#define Isdnl2Init init_module
 #endif
 
 static int
@@ -2278,8 +2283,9 @@ l2_manager(void *data, u_int prim, void *arg) {
 	mISDNinstance_t *inst = data;
 	layer2_t *l2l = isdnl2.ilist;;
 
-	printk(KERN_DEBUG "%s: data:%p prim:%x arg:%p\n", __FUNCTION__,
-		data, prim, arg);
+	if (debug & 0x1000)
+		printk(KERN_DEBUG "%s: data:%p prim:%x arg:%p\n", __FUNCTION__,
+			data, prim, arg);
 	if (!data)
 		return(-EINVAL);
 	while(l2l) {
@@ -2287,31 +2293,27 @@ l2_manager(void *data, u_int prim, void *arg) {
 			break;
 		l2l = l2l->next;
 	}
-	switch(prim) {
-	    case MGR_NEWLAYER | REQUEST:
+	if (prim == (MGR_NEWLAYER | REQUEST))
 		return(new_l2(data, arg, NULL));
+	if (!l2l) {
+		if (debug & 0x1)
+			printk(KERN_WARNING "l2_manager prim(%x) l2 no instance\n", prim);
+		return(-EINVAL);
+	}
+	switch(prim) {
+	    case MGR_ADDSTPARA | INDICATION:
+	    	if (((mISDN_stPara_t *)arg)->maxdatalen)
+		    	l2l->maxlen = ((mISDN_stPara_t *)arg)->maxdatalen;
+	    case MGR_CLRSTPARA | INDICATION:
+		break;
 	    case MGR_CLONELAYER | REQUEST:
 		return(clone_l2(l2l, arg));
 	    case MGR_CONNECT | REQUEST:
-		if (!l2l) {
-			printk(KERN_WARNING "l2_manager connect l2 no instance\n");
-			return(-EINVAL);
-		}
 		return(ConnectIF(inst, arg));
-		break;
 	    case MGR_SETIF | REQUEST:
 	    case MGR_SETIF | INDICATION:
-		if (!l2l) {
-			printk(KERN_WARNING "l2_manager setif l2 no instance\n");
-			return(-EINVAL);
-		}
 		return(SetIF(inst, arg, prim, l2from_up, l2from_down, l2l));
-		break;
 	    case MGR_ADDIF | REQUEST:
-		if (!l2l) {
-			printk(KERN_WARNING "l2_manager addif l2 no instance\n");
-			return(-EINVAL);
-		}
 		if (arg) {
 			mISDNif_t *hif = arg;
 			if (hif->stat & IF_UP) {
@@ -2322,34 +2324,22 @@ l2_manager(void *data, u_int prim, void *arg) {
 		break;
 	    case MGR_DISCONNECT | REQUEST:
 	    case MGR_DISCONNECT | INDICATION:
-		if (!l2l) {
-			printk(KERN_WARNING "l2_manager disconnect l2 no instance\n");
-			return(-EINVAL);
-		}
 		return(DisConnectIF(inst, arg));
-		break;
 	    case MGR_RELEASE | INDICATION:
 	    case MGR_UNREGLAYER | REQUEST:
-		if (l2l) {
-			printk(KERN_DEBUG "release_l2 id %x\n", inst->st->id);
-			release_l2(l2l);
-		} else 
-			printk(KERN_WARNING "l2_manager release no instance\n");
+		release_l2(l2l);
 		break;
 	    case MGR_STATUS | REQUEST:
-		if (!l2l) {
-			printk(KERN_WARNING "l2_manager status l2 no instance\n");
-			return(-EINVAL);
-		}
 		return(l2_status(l2l, arg));
 	    default:
-		printk(KERN_WARNING "l2_manager prim %x not handled\n", prim);
+		if (debug & 0x1)
+			printk(KERN_WARNING "l2_manager prim %x not handled\n", prim);
 		return(-EINVAL);
 	}
 	return(0);
 }
 
-int Isdnl2Init(void)
+int Isdnl2_Init(void)
 {
 	int err;
 
@@ -2376,8 +2366,7 @@ int Isdnl2Init(void)
 	return(err);
 }
 
-#ifdef MODULE
-void cleanup_module(void)
+void Isdnl2_cleanup(void)
 {
 	int err;
 
@@ -2392,4 +2381,6 @@ void cleanup_module(void)
 	TEIFree();
 	FsmFree(&l2fsm);
 }
-#endif
+
+module_init(Isdnl2_Init);
+module_exit(Isdnl2_cleanup);

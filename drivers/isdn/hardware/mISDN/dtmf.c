@@ -1,4 +1,4 @@
-/* $Id: dtmf.c,v 1.5 2003/07/27 11:14:19 kkeil Exp $
+/* $Id: dtmf.c,v 1.6 2003/08/01 22:15:52 kkeil Exp $
  *
  * Linux ISDN subsystem, DTMF tone module
  *
@@ -47,7 +47,7 @@ static int debug = 0;
 
 static mISDNobject_t dtmf_obj;
 
-static char *mISDN_dtmf_revision = "$Revision: 1.5 $";
+static char *mISDN_dtmf_revision = "$Revision: 1.6 $";
 
 /*
  * Misc. lookup-tables.
@@ -508,15 +508,12 @@ new_dtmf(mISDNstack_t *st, mISDN_pid_t *pid) {
 	}
 	memset(n_dtmf, 0, sizeof(dtmf_t));
 	memcpy(&n_dtmf->inst.pid, pid, sizeof(mISDN_pid_t));
-	n_dtmf->inst.obj = &dtmf_obj;
-	n_dtmf->inst.data = n_dtmf;
+	init_mISDNinstance(&n_dtmf->inst, &dtmf_obj, n_dtmf);
 	if (!SetHandledPID(&dtmf_obj, &n_dtmf->inst.pid)) {
 		int_error();
 		return(-ENOPROTOOPT);
 	}
 	n_dtmf->debug = debug;
-	n_dtmf->inst.up.owner = &n_dtmf->inst;
-	n_dtmf->inst.down.owner = &n_dtmf->inst;
 	APPEND_TO_LIST(n_dtmf, ((dtmf_t *)dtmf_obj.ilist));
 	err = dtmf_obj.ctrl(st, MGR_REGLAYER | INDICATION, &n_dtmf->inst);
 	if (err) {
@@ -573,43 +570,31 @@ dtmf_manager(void *data, u_int prim, void *arg) {
 			break;
 		dtmf_l = dtmf_l->next;
 	}
-	switch(prim) {
-	    case MGR_NEWLAYER | REQUEST:
+	if (prim == (MGR_NEWLAYER | REQUEST))
 		return(new_dtmf(data, arg));
+	if (!dtmf_l) {
+		printk(KERN_WARNING "dtmf_manager prim(%x) no instance\n", prim);
+		return(-EINVAL);
+	}
+	switch(prim) {
+	    case MGR_CLRSTPARA | INDICATION:
+	    case MGR_CLONELAYER | REQUEST:
+		break;
 	    case MGR_CONNECT | REQUEST:
-		if (!dtmf_l) {
-			printk(KERN_WARNING "dtmf_manager connect no instance\n");
-			return(-EINVAL);
-		}
 		return(ConnectIF(inst, arg));
 	    case MGR_SETIF | REQUEST:
 	    case MGR_SETIF | INDICATION:
-		if (!dtmf_l) {
-			printk(KERN_WARNING "dtmf_manager setif no instance\n");
-			return(-EINVAL);
-		}
 		return(SetIF(inst, arg, prim, dtmf_from_up, dtmf_from_down, dtmf_l));
 	    case MGR_DISCONNECT | REQUEST:
 	    case MGR_DISCONNECT | INDICATION:
-		if (!dtmf_l) {
-			printk(KERN_WARNING "dtmf_manager disconnect no instance\n");
-			return(-EINVAL);
-		}
 		return(DisConnectIF(inst, arg));
 	    case MGR_UNREGLAYER | REQUEST:
 	    case MGR_RELEASE | INDICATION:
-		if (dtmf_l) {
-			if (debug & DEBUG_DTMF_MGR)
-				printk(KERN_DEBUG "release_dtmf id %x\n", dtmf_l->inst.st->id);
-			release_dtmf(dtmf_l);
-		} else 
-			printk(KERN_WARNING "dtmf_manager release no instance\n");
+		if (debug & DEBUG_DTMF_MGR)
+			printk(KERN_DEBUG "release_dtmf id %x\n", dtmf_l->inst.st->id);
+		release_dtmf(dtmf_l);
 		break;
 //	    case MGR_STATUS | REQUEST:
-//		if (!dtmf_l) {
-//			printk(KERN_WARNING "dtmf_manager status dtmf no instance\n");
-//			return(-EINVAL);
-//		}
 //		return(dtmf_status(dtmf_l, arg));
 	    default:
 		if (debug & DEBUG_DTMF_MGR)

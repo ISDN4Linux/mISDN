@@ -1,4 +1,4 @@
-/* $Id: contr.c,v 1.10 2003/07/28 12:05:47 kkeil Exp $
+/* $Id: contr.c,v 1.11 2003/08/01 22:15:52 kkeil Exp $
  *
  */
 
@@ -9,7 +9,7 @@
 #include "debug.h"
 
 #define contrDebug(contr, lev, fmt, args...) \
-	capidebug(lev, fmt, ## args)
+	if (contr->debug & lev) capidebug(lev, fmt, ## args)
 
 void
 contrDestr(Contr_t *contr)
@@ -77,7 +77,7 @@ contrRun(Contr_t *contr)
 	}
 	strncpy(contr->ctrl->manu, "mISDN CAPI (C) Kai Germaschewski, Karsten Keil", CAPI_MANUFACTURER_LEN);
 	strncpy(contr->ctrl->serial, "0002", CAPI_SERIAL_LEN);
-	contr->ctrl->version.majorversion = 2;
+	contr->ctrl->version.majorversion = 2; 
 	contr->ctrl->version.minorversion = 0;
 	contr->ctrl->version.majormanuversion = 1;
 	contr->ctrl->version.minormanuversion = 1;
@@ -85,10 +85,13 @@ contrRun(Contr_t *contr)
 	contr->ctrl->profile.ncontroller = 1;
 	contr->ctrl->profile.nbchannel = nb;
 	// FIXME
+	contrDebug(contr, CAPI_DBG_INFO, "%s: %s version(%s)",
+		__FUNCTION__, contr->ctrl->manu, contr->ctrl->serial);
 	contr->ctrl->profile.goptions = 0x11; // internal controller, supplementary services
 	contr->ctrl->profile.support1 = 3; // HDLC, TRANS
 	contr->ctrl->profile.support2 = 3; // X75SLP, TRANS
 	contr->ctrl->profile.support3 = 1; // TRANS
+	
 #ifdef OLDCAPI_DRIVER_INTERFACE
 	contr->ctrl->ready(contr->ctrl);
 #else
@@ -159,8 +162,6 @@ ReleaseAppl(struct capi_ctr *ctrl, __u16 ApplId)
 	contr->appls[ApplId - 1] = NULL;
 #ifdef OLDCAPI_DRIVER_INTERFACE
 	contr->ctrl->appl_released(contr->ctrl, ApplId);
-#else
-	capilib_release_appl(&contr->ncci_head, ApplId);
 #endif
 }
 
@@ -213,7 +214,6 @@ LoadFirmware(struct capi_ctr *ctrl, capiloaddata *data)
 	contr->inst.obj->ctrl(contr->inst.st, MGR_LOADFIRM | REQUEST, &firm);
 	if (data->firmware.user)
 		vfree(firm.data);
-	contrRun(contr);
 	return(0);
 }
 
@@ -263,7 +263,6 @@ ResetContr(struct capi_ctr *ctrl)
 #ifdef OLDCAPI_DRIVER_INTERFACE
 	contr->ctrl->reseted(contr->ctrl);
 #else
-	capilib_release(&contr->ncci_head);
 	capi_ctr_reseted(contr->ctrl);
 #endif
 }
@@ -316,6 +315,9 @@ contrRecvCmsg(Contr_t *contr, _cmsg *cmsg)
 	
 	capi_cmsg2message(cmsg, contr->msgbuf);
 	len = CAPIMSG_LEN(contr->msgbuf);
+	contrDebug(contr, CAPI_DBG_CONTR_MSG, "%s: len(%d) applid(%x) %s msgnr(%d) addr(%08x",
+		__FUNCTION__, len, cmsg->ApplId, capi_cmd2str(cmsg->Command, cmsg->Subcommand),
+		cmsg->Messagenumber, cmsg->adr.adrController);
 	if (!(skb = alloc_skb(len, GFP_ATOMIC))) {
 		printk(KERN_ERR "%s: no mem for %d bytes\n", __FUNCTION__, len);
 		int_error();
@@ -469,8 +471,7 @@ contrConstr(Contr_t *contr, mISDNstack_t *st, mISDN_pid_t *pid, mISDNobject_t *o
 #endif
 	contr->adrController = st->id;
 	sprintf(contr->inst.name, "CAPI %d", st->id);
-	contr->inst.obj = ocapi;
-	contr->inst.data = contr;
+	init_mISDNinstance(&contr->inst, ocapi, contr);
 	if (!SetHandledPID(ocapi, &contr->inst.pid)) {
 		int_error();
 		return(-ENOPROTOOPT);
@@ -479,17 +480,12 @@ contrConstr(Contr_t *contr, mISDNstack_t *st, mISDN_pid_t *pid, mISDNobject_t *o
 		if (!(binst = kmalloc(sizeof(BInst_t), GFP_ATOMIC))) {
 			printk(KERN_ERR "no mem for Binst\n");
 			int_error();
-#ifndef OLDCAPI_DRIVER_INTERFACE
-			kfree(contr->ctrl);
-			contr->ctrl = NULL;
-#endif
 			return -ENOMEM;
 		}
 		memset(binst, 0, sizeof(BInst_t));
 		binst->bst = cst;
 		binst->inst.st = cst;
-		binst->inst.data = binst;
-		binst->inst.obj = ocapi;
+		init_mISDNinstance(&binst->inst, ocapi, binst);
 		binst->inst.pid.layermask |= ISDN_LAYER(4);
 		binst->inst.down.stat = IF_NOACTIV;
 		APPEND_TO_LIST(binst, contr->binst);
@@ -507,7 +503,6 @@ contrConstr(Contr_t *contr, mISDNstack_t *st, mISDN_pid_t *pid, mISDNobject_t *o
 			retval = -ENODEV;
 	}
 #else
-	INIT_LIST_HEAD(&contr->ncci_head);
 	contr->ctrl->owner = THIS_MODULE;
 	sprintf(contr->ctrl->name, "mISDN%d", st->id);
 	contr->ctrl->driver_name = "mISDN";
@@ -520,10 +515,6 @@ contrConstr(Contr_t *contr, mISDNstack_t *st, mISDN_pid_t *pid, mISDNobject_t *o
 	contr->ctrl->procinfo = procinfo;
 	contr->ctrl->ctr_read_proc = read_proc;
 	retval = attach_capi_ctr(contr->ctrl);
-	if (retval) {
-		kfree(contr->ctrl);
-		contr->ctrl = NULL;
-	}
 #endif
 	if (!retval) {
 		contr->adrController = contr->ctrl->cnr;

@@ -1,4 +1,4 @@
-/* $Id: dchannel.h,v 1.6 2003/07/28 12:05:47 kkeil Exp $
+/* $Id: dchannel.h,v 1.7 2003/08/01 22:15:52 kkeil Exp $
  *
  *   Basic declarations for dchannel HW
  *
@@ -54,6 +54,7 @@ typedef struct _dchannel_t {
 	u_char			*tx_buf;
 	int			tx_idx;
 	int             	tx_len;
+	int			up_headerlen;
 	int			err_crc;
 	int			err_tx;
 	int			err_rx;
@@ -72,6 +73,15 @@ typedef struct _dchannel_t {
 
 extern int init_dchannel(dchannel_t *);
 extern int free_dchannel(dchannel_t *);
+
+static inline void
+dch_set_para(dchannel_t *dch, mISDN_stPara_t *stp)
+{
+	if (stp)
+		dch->up_headerlen = stp->up_headerlen;
+	else
+		dch->up_headerlen = 0;
+}
 
 static inline void
 dchannel_sched_event(dchannel_t *dch, int event)

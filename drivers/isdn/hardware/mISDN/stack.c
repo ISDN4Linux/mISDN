@@ -1,4 +1,4 @@
-/* $Id: stack.c,v 1.5 2003/07/27 11:14:19 kkeil Exp $
+/* $Id: stack.c,v 1.6 2003/08/01 22:15:53 kkeil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -42,6 +42,7 @@ get_stack_info(iframe_t *frm) {
 		else
 			si->mgr = 0;
 		memcpy(&si->pid, &st->pid, sizeof(mISDN_pid_t));
+		memcpy(&si->para, &st->para, sizeof(mISDN_stPara_t));
 		si->instcnt = 0;
 		lay = st->lstack;
 		while(lay) {
@@ -287,10 +288,11 @@ new_stack(mISDNstack_t *master, mISDNinstance_t *inst)
 
 
 static int
-release_layers(mISDNstack_t *st, u_int prim) {
+release_layers(mISDNstack_t *st, u_int prim)
+{
 	mISDNinstance_t *inst;
 	mISDNlayer_t    *layer;
-	int cnt = 0;
+	int		cnt = 0;
 
 	while((layer = st->lstack)) {
 		inst = layer->inst;
@@ -309,6 +311,72 @@ release_layers(mISDNstack_t *st, u_int prim) {
 		}
 	}
 	return(0);
+}
+
+int
+do_for_all_layers(mISDNstack_t *st, u_int prim, void *arg)
+{
+	mISDNinstance_t *inst;
+	mISDNlayer_t    *layer;
+	int		cnt = 0;
+
+	if (!st) {
+		int_error();
+		return(-EINVAL);
+	}
+	layer = st->lstack;
+	while(layer) {
+		inst = layer->inst;
+		layer = layer->next;
+		if (inst) {
+			if (core_debug & DEBUG_CORE_FUNC)
+				printk(KERN_DEBUG  "%s: st(%p) inst(%p):%x %s prim(%x) arg(%p)\n",
+					__FUNCTION__, st, inst, inst->id, inst->name, prim, arg);
+			inst->obj->own_ctrl(inst, prim, arg);
+		}
+		if (cnt++ > 1000) {
+			int_errtxt("release_layers st(%p)", st);
+			return(-EINVAL);
+		}
+	}
+	return(0);
+}
+
+int
+change_stack_para(mISDNstack_t *st, u_int prim, mISDN_stPara_t *stpara)
+{
+	int	changed = 0;
+	if (!st) {
+		int_error();
+		return(-EINVAL);
+	}
+	if (prim == (MGR_ADDSTPARA | REQUEST)) {
+		if (!stpara) {
+			int_error();
+			return(-EINVAL);
+		}
+		prim = MGR_ADDSTPARA | INDICATION;
+		if (stpara->maxdatalen > 0 && stpara->maxdatalen < st->para.maxdatalen) {
+			changed++;
+			st->para.maxdatalen = stpara->maxdatalen;
+		}
+		if (stpara->up_headerlen > st->para.up_headerlen) {
+			changed++;
+			st->para.up_headerlen = stpara->up_headerlen;
+		}
+		if (stpara->down_headerlen > st->para.down_headerlen) {
+			changed++;
+			st->para.down_headerlen = stpara->down_headerlen;
+		}
+		if (!changed)
+			return(0);
+		stpara = &st->para;
+	} else if (prim == (MGR_CLRSTPARA | REQUEST)) {
+		prim = MGR_CLRSTPARA | INDICATION;
+		memset(&st->para, 0, sizeof(mISDN_stPara_t));
+		stpara = NULL;
+	}
+	return(do_for_all_layers(st, prim, stpara));
 }
 
 int
@@ -335,6 +403,8 @@ release_stack(mISDNstack_t *st) {
 	}
 	REMOVE_FROM_LISTBASE(st, mISDN_stacklist);
 	kfree(st);
+	if (core_debug & DEBUG_CORE_FUNC)
+		printk(KERN_DEBUG "%s: mISDN_stacklist(%p)\n", __FUNCTION__, mISDN_stacklist);
 	return(0);
 }
 
@@ -484,25 +554,56 @@ unregister_instance(mISDNinstance_t *inst) {
 	inst->prev = inst->next = NULL;
 	inst->id = 0;
 	inst->obj->refcnt--;
+	if (core_debug & DEBUG_CORE_FUNC)
+		printk(KERN_DEBUG "%s: mISDN_instlist(%p)\n", __FUNCTION__, mISDN_instlist);
 	return(0);
 }
 
 int
-set_stack(mISDNstack_t *st, mISDN_pid_t *pid) {
-	int err;
-	mISDNinstance_t *inst;
-	mISDNlayer_t *hl;
+copy_pid(mISDN_pid_t *dpid, mISDN_pid_t *spid, u_char *pbuf)
+{
+	u_int	i, off;
+
+	memcpy(dpid, spid, sizeof(mISDN_pid_t));
+	if (spid->pbuf) {
+		if (!pbuf) {
+			int_error();
+			return(-ENOMEM);
+		}
+		dpid->pbuf = pbuf;
+		memcpy(dpid->pbuf, spid->pbuf, spid->maxplen);
+		for (i = 0; i <= MAX_LAYER_NR; i++) {
+			if (spid->param[i]) {
+				off = (u_int)(spid->param[i] - spid->pbuf);
+				dpid->param[i] = dpid->pbuf + off;
+			}
+		}
+	}
+	return(0);
+}
+
+int
+set_stack(mISDNstack_t *st, mISDN_pid_t *pid)
+{
+	int 		err;
+	u_char		*pbuf = NULL;
+	mISDNinstance_t	*inst;
+	mISDNlayer_t	*hl;
 
 	if (!st || !pid) {
 		int_error();
 		return(-EINVAL);
 	}
-	memcpy(&st->pid, pid, sizeof(mISDN_pid_t));
 	if (!st->mgr || !st->mgr->obj || !st->mgr->obj->ctrl) {
 		int_error();
 		return(-EINVAL);
 	}
-	memcpy(&st->mgr->pid, pid, sizeof(mISDN_pid_t));
+	if (pid->pbuf)
+		pbuf = kmalloc(pid->maxplen, GFP_ATOMIC);
+	err = copy_pid(&st->pid, pid, pbuf);
+	if (err)
+		return(err);
+	memcpy(&st->mgr->pid, &st->pid, sizeof(mISDN_pid_t));
 	if (!SetHandledPID(st->mgr->obj, &st->mgr->pid)) {
 		int_error();
 		return(-ENOPROTOOPT);
@@ -552,6 +653,10 @@ clear_stack(mISDNstack_t *st) {
 		return(-EINVAL);
 	if (core_debug & DEBUG_CORE_FUNC)
 		printk(KERN_DEBUG "%s: st(%p)\n", __FUNCTION__, st);
+	if (st->pid.pbuf)
+		kfree(st->pid.pbuf);
 	memset(&st->pid, 0, sizeof(mISDN_pid_t));
+	memset(&st->para, 0, sizeof(mISDN_stPara_t));
 	return(release_layers(st, MGR_UNREGLAYER | REQUEST));
 }
+

@@ -1,4 +1,4 @@
-/* $Id: avm_fritz.c,v 1.14 2003/07/28 12:05:47 kkeil Exp $
+/* $Id: avm_fritz.c,v 1.15 2003/08/01 22:15:52 kkeil Exp $
  *
  * fritz_pci.c    low level stuff for AVM Fritz!PCI and ISA PnP isdn cards
  *              Thanks to AVM, Berlin for informations
@@ -28,7 +28,7 @@
 #define LOCK_STATISTIC
 #include "hw_lock.h"
 
-static const char *avm_fritz_rev = "$Revision: 1.14 $";
+static const char *avm_fritz_rev = "$Revision: 1.15 $";
 
 enum {
 	AVM_FRITZ_PCI,
@@ -538,7 +538,33 @@ hdlc_fill_fifo(bchannel_t *bch)
 }
 
 static void
-HDLC_irq(bchannel_t *bch, u_int stat) {
+HDLC_irq_xpr(bchannel_t *bch)
+{
+	if (bch->tx_idx < bch->tx_len)
+		hdlc_fill_fifo(bch);
+	else {
+		bch->tx_idx = 0;
+		if (test_and_clear_bit(BC_FLG_TX_NEXT, &bch->Flag)) {
+			if (bch->next_skb) {
+				bch->tx_len = bch->next_skb->len;
+				memcpy(bch->tx_buf, bch->next_skb->data, bch->tx_len);
+				hdlc_fill_fifo(bch);
+			} else {
+				bch->tx_len = 0;
+				printk(KERN_WARNING "hdlc tx irq TX_NEXT without skb\n");
+				test_and_clear_bit(BC_FLG_TX_BUSY, &bch->Flag);
+			}
+		} else {
+			bch->tx_len = 0;
+			test_and_clear_bit(BC_FLG_TX_BUSY, &bch->Flag);
+		}
+		bch_sched_event(bch, B_XMTBUFREADY);
+	}
+}
+
+static void
+HDLC_irq(bchannel_t *bch, u_int stat)
+{
 	int		len;
 	struct sk_buff	*skb;
 	hdlc_hw_t	*hdlc = bch->hw;
@@ -564,7 +590,7 @@ HDLC_irq(bchannel_t *bch, u_int stat) {
 			if ((stat & HDLC_STAT_RME) || (bch->protocol == ISDN_PID_L1_B_64TRANS)) {
 				if (((stat & HDLC_STAT_CRCVFRRAB)==HDLC_STAT_CRCVFR) ||
 					(bch->protocol == ISDN_PID_L1_B_64TRANS)) {
-					if (!(skb = dev_alloc_skb(bch->rx_idx)))
+					if (!(skb = alloc_stack_skb(bch->rx_idx, bch->up_headerlen)))
 						printk(KERN_WARNING "HDLC: receive out of memory\n");
 					else {
 						memcpy(skb_put(skb, bch->rx_idx),
@@ -585,44 +611,24 @@ HDLC_irq(bchannel_t *bch, u_int stat) {
 	}
 	if (stat & HDLC_INT_XDU) {
 		/* Here we lost an TX interrupt, so
-		 * restart transmitting the whole frame.
+		 * restart transmitting the whole frame on HDLC
+		 * in transparent mode we send the next data
 		 */
+		if (bch->debug & L1_DEB_WARN)
+			debugprint(&bch->inst, "ch%d XDU tx_len(%d) tx_idx(%d) Flag(%lx)",
+				bch->channel, bch->tx_len, bch->tx_idx, bch->Flag);
 		if (bch->tx_len) {
-			bch->tx_idx = 0;
-			if (bch->debug & L1_DEB_WARN)
-				debugprint(&bch->inst, "ch%d XDU", bch->channel);
-		} else if (bch->debug & L1_DEB_WARN)
-			debugprint(&bch->inst, "ch%d XDU without data", bch->channel);
+			if (bch->protocol != ISDN_PID_L1_B_64TRANS)
+				bch->tx_idx = 0;
+		}
 		hdlc->ctrl.sr.xml = 0;
 		hdlc->ctrl.sr.cmd |= HDLC_CMD_XRS;
 		write_ctrl(bch, 1);
 		hdlc->ctrl.sr.cmd &= ~HDLC_CMD_XRS;
 		write_ctrl(bch, 1);
-		hdlc_fill_fifo(bch);
-	} else if (stat & HDLC_INT_XPR) {
-		if (bch->tx_idx < bch->tx_len) {
-			hdlc_fill_fifo(bch);
-		} else {
-			bch->tx_idx = 0;
-			if (test_and_clear_bit(BC_FLG_TX_NEXT, &bch->Flag)) {
-				if (bch->next_skb) {
-					bch->tx_len = bch->next_skb->len;
-					memcpy(bch->tx_buf,
-						bch->next_skb->data, bch->tx_len);
-					hdlc_fill_fifo(bch);
-					bch_sched_event(bch, B_XMTBUFREADY);
-				} else {
-					bch->tx_len = 0;
-					printk(KERN_WARNING "hdlc tx irq TX_NEXT without skb\n");
-					test_and_clear_bit(BC_FLG_TX_BUSY, &bch->Flag);
-				}
-			} else {
-				bch->tx_len = 0;
-				test_and_clear_bit(BC_FLG_TX_BUSY, &bch->Flag);
-				bch_sched_event(bch, B_XMTBUFREADY);
-			}
-		}
-	}
+		HDLC_irq_xpr(bch);
+	} else if (stat & HDLC_INT_XPR)
+		HDLC_irq_xpr(bch);
 }
 
 static inline void
@@ -998,6 +1004,7 @@ release_card(fritzpnppci *card)
 	free_bchannel(&card->bch[1]);
 	free_bchannel(&card->bch[0]);
 	free_dchannel(&card->dch);
+	fritz.ctrl(&card->dch.inst, MGR_UNREGLAYER | REQUEST, NULL);
 	REMOVE_FROM_LISTBASE(card, ((fritzpnppci *)fritz.ilist));
 	unlock_dev(card);
 	if (card->type == AVM_FRITZ_PNP) {
@@ -1008,7 +1015,6 @@ release_card(fritzpnppci *card)
 		pci_set_drvdata(card->pdev, NULL);
 	}
 	kfree(card);
-	fritz.refcnt--;
 }
 
 static int
@@ -1018,6 +1024,9 @@ fritz_manager(void *data, u_int prim, void *arg) {
 	struct sk_buff	*skb;
 	int		channel = -1;
 
+	if (debug & 0x10000)
+		printk(KERN_DEBUG "%s: data(%p) prim(%x) arg(%p)\n",
+			__FUNCTION__, data, prim, arg);
 	if (!data) {
 		printk(KERN_ERR "%s: no data prim %x arg %p\n",
 			__FUNCTION__, prim, arg);
@@ -1033,78 +1042,62 @@ fritz_manager(void *data, u_int prim, void *arg) {
 			break;
 		}
 		if (&card->bch[1].inst == inst) {
-			inst = &card->bch[1].inst;
 			channel = 1;
 			break;
 		}
 		card = card->next;
 	}
 	if (channel<0) {
-		printk(KERN_ERR "%s: no channel data %p prim %x arg %p\n",
+		printk(KERN_WARNING "%s: no channel data %p prim %x arg %p\n",
 			__FUNCTION__, data, prim, arg);
 		return(-EINVAL);
 	}
 
 	switch(prim) {
 	    case MGR_REGLAYER | CONFIRM:
-		if (!card) {
-			printk(KERN_WARNING "%s: no card found\n", __FUNCTION__);
-			return(-ENODEV);
-		}
+		if (channel == 2)
+			dch_set_para(&card->dch, &inst->st->para);
+		else
+			bch_set_para(&card->bch[channel], &inst->st->para);
 		break;
 	    case MGR_UNREGLAYER | REQUEST:
-		if (!card) {
-			printk(KERN_WARNING "%s: no card found\n",
-				__FUNCTION__);
-			return(-ENODEV);
-		} else {
-			if (channel == 2) {
-				inst->down.fdata = &card->dch;
-				if ((skb = create_link_skb(PH_CONTROL | REQUEST,
-					HW_DEACTIVATE, 0, NULL, 0))) {
-					if (ISAC_l1hw(&inst->down, skb))
-						dev_kfree_skb(skb);
-				}
-			} else {
-				inst->down.fdata = &card->bch[channel];
-				if ((skb = create_link_skb(MGR_DISCONNECT | REQUEST,
-					0, 0, NULL, 0))) {
-					if (hdlc_down(&inst->down, skb))
-						dev_kfree_skb(skb);
-				}
+		if (channel == 2) {
+			inst->down.fdata = &card->dch;
+			if ((skb = create_link_skb(PH_CONTROL | REQUEST,
+				HW_DEACTIVATE, 0, NULL, 0))) {
+				if (ISAC_l1hw(&inst->down, skb))
+					dev_kfree_skb(skb);
 			}
-			fritz.ctrl(inst->up.peer, MGR_DISCONNECT | REQUEST,
-				&inst->up);
-			fritz.ctrl(inst, MGR_UNREGLAYER | REQUEST, NULL);
+		} else {
+			inst->down.fdata = &card->bch[channel];
+			if ((skb = create_link_skb(MGR_DISCONNECT | REQUEST,
+				0, 0, NULL, 0))) {
+				if (hdlc_down(&inst->down, skb))
+					dev_kfree_skb(skb);
+			}
 		}
+		fritz.ctrl(inst->up.peer, MGR_DISCONNECT | REQUEST, &inst->up);
+		fritz.ctrl(inst, MGR_UNREGLAYER | REQUEST, NULL);
+		break;
+	    case MGR_CLRSTPARA | INDICATION:
+		arg = NULL;
+	    case MGR_ADDSTPARA | INDICATION:
+		if (channel == 2)
+			dch_set_para(&card->dch, arg);
+		else
+			bch_set_para(&card->bch[channel], arg);
 		break;
 	    case MGR_RELEASE | INDICATION:
-		if (!card) {
-			printk(KERN_WARNING "%s: no card found\n",
-				__FUNCTION__);
-			return(-ENODEV);
+		if (channel == 2) {
+			release_card(card);
 		} else {
-			if (channel == 2) {
-				release_card(card);
-			} else {
-				fritz.refcnt--;
-			}
+			fritz.refcnt--;
 		}
 		break;
 	    case MGR_CONNECT | REQUEST:
-		if (!card) {
-			printk(KERN_WARNING "%s: connect request failed\n",
-				__FUNCTION__);
-			return(-ENODEV);
-		}
 		return(ConnectIF(inst, arg));
-		break;
 	    case MGR_SETIF | REQUEST:
 	    case MGR_SETIF | INDICATION:
-		if (!card) {
-			printk(KERN_WARNING "%s: setif failed\n", __FUNCTION__);
-			return(-ENODEV);
-		}
 		if (channel==2)
 			return(SetIF(inst, arg, prim, ISAC_l1hw, NULL,
 				&card->dch));
@@ -1114,18 +1107,8 @@ fritz_manager(void *data, u_int prim, void *arg) {
 		break;
 	    case MGR_DISCONNECT | REQUEST:
 	    case MGR_DISCONNECT | INDICATION:
-		if (!card) {
-			printk(KERN_WARNING "%s: del interface request failed\n",
-				__FUNCTION__);
-			return(-ENODEV);
-		}
 		return(DisConnectIF(inst, arg));
-		break;
 	    case MGR_SETSTACK | CONFIRM:
-		if (!card) {
-			printk(KERN_WARNING "%s: setstack failed\n", __FUNCTION__);
-			return(-ENODEV);
-		}
 		if ((channel!=2) && (inst->pid.global == 2)) {
 			inst->down.fdata = &card->bch[channel];
 			if ((skb = create_link_skb(PH_ACTIVATE | REQUEST,
@@ -1156,27 +1139,19 @@ static int __devinit setup_instance(fritzpnppci *card)
 	
 	APPEND_TO_LIST(card, ((fritzpnppci *)fritz.ilist));
 	card->dch.debug = debug;
-	card->dch.inst.obj = &fritz;
 	lock_HW_init(&card->lock);
 	card->dch.inst.lock = lock_dev;
 	card->dch.inst.unlock = unlock_dev;
-	card->dch.inst.data = card;
 	card->dch.inst.pid.layermask = ISDN_LAYER(0);
 	card->dch.inst.pid.protocol[0] = ISDN_PID_L0_TE_S0;
-	card->dch.inst.up.owner = &card->dch.inst;
-	card->dch.inst.down.owner = &card->dch.inst;
-	fritz.ctrl(NULL, MGR_DISCONNECT | REQUEST, &card->dch.inst.down);
+	init_mISDNinstance(&card->dch.inst, &fritz, card);
 	sprintf(card->dch.inst.name, "Fritz%d", fritz_cnt+1);
 	set_dchannel_pid(&pid, protocol[fritz_cnt], layermask[fritz_cnt]);
 	init_dchannel(&card->dch);
 	for (i=0; i<2; i++) {
 		card->bch[i].channel = i;
-		card->bch[i].inst.obj = &fritz;
-		card->bch[i].inst.data = card;
+		init_mISDNinstance(&card->bch[i].inst, &fritz, card);
 		card->bch[i].inst.pid.layermask = ISDN_LAYER(0);
-		card->bch[i].inst.up.owner = &card->bch[i].inst;
-		card->bch[i].inst.down.owner = &card->bch[i].inst;
-		fritz.ctrl(NULL, MGR_DISCONNECT | REQUEST, &card->bch[i].inst.down);
 		card->bch[i].inst.lock = lock_dev;
 		card->bch[i].inst.unlock = unlock_dev;
 		card->bch[i].debug = debug;
@@ -1220,6 +1195,7 @@ static int __devinit setup_instance(fritzpnppci *card)
 		fritz.ctrl(card->dch.inst.st, MGR_DELSTACK | REQUEST, NULL);
 		return(err);
 	}
+	fritz.ctrl(card->dch.inst.st, MGR_CTRLREADY | INDICATION, NULL);
 	printk(KERN_INFO "fritz %d cards installed\n", fritz_cnt);
 	return(0);
 }

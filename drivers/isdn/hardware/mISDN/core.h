@@ -1,4 +1,4 @@
-/* $Id: core.h,v 1.3 2003/07/27 11:14:19 kkeil Exp $
+/* $Id: core.h,v 1.4 2003/08/01 22:15:52 kkeil Exp $
  * 
  * This file is (c) under GNU PUBLIC LICENSE
  *
@@ -45,7 +45,10 @@ extern int		get_stack_cnt(void);
 extern mISDNstack_t	*get_stack4id(u_int);
 extern mISDNstack_t	*new_stack(mISDNstack_t *, mISDNinstance_t *);
 extern int		release_stack(mISDNstack_t *);
+extern int		do_for_all_layers(mISDNstack_t *, u_int, void *);
+extern int		change_stack_para(mISDNstack_t *, u_int, mISDN_stPara_t *);
 extern void		release_stacks(mISDNobject_t *);
+extern int		copy_pid(mISDN_pid_t *, mISDN_pid_t *, u_char *);
 extern int		set_stack(mISDNstack_t *, mISDN_pid_t *);
 extern int		clear_stack(mISDNstack_t *);
 extern mISDNlayer_t	*getlayer4lay(mISDNstack_t *, int);

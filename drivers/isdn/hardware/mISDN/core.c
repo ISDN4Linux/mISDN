@@ -1,4 +1,4 @@
-/* $Id: core.c,v 1.13 2003/07/28 12:05:47 kkeil Exp $
+/* $Id: core.c,v 1.14 2003/08/01 22:15:52 kkeil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -18,7 +18,7 @@
 #include <linux/smp_lock.h>
 #endif
 
-static char *mISDN_core_revision = "$Revision: 1.13 $";
+static char *mISDN_core_revision = "$Revision: 1.14 $";
 
 mISDNobject_t	*mISDN_objects = NULL;
 int core_debug;
@@ -34,7 +34,6 @@ MODULE_LICENSE("GPL");
 MODULE_PARM(debug, "1i");
 EXPORT_SYMBOL(mISDN_register);
 EXPORT_SYMBOL(mISDN_unregister);
-#define mISDNInit init_module
 #endif
 
 typedef struct _mISDN_thread {
@@ -400,6 +399,32 @@ mgr_queue(void *data, u_int prim, struct sk_buff *skb)
 	return(0);
 }
 
+static int central_manager(void *, u_int, void *);
+
+static int
+set_stack_req(mISDNstack_t *st, mISDN_pid_t *pid)
+{
+	struct sk_buff	*skb;
+	mISDN_headext_t	*hhe;
+	mISDN_pid_t	*npid;
+	u_char		*pbuf = NULL;
+
+	skb = alloc_skb(sizeof(mISDN_pid_t) + pid->maxplen, GFP_ATOMIC);
+	hhe = mISDN_HEADEXT_P(skb);
+	hhe->prim = MGR_SETSTACK_NW | REQUEST;
+	hhe->what = MGR_FUNCTION;
+	hhe->data[0] = st;
+	npid = (mISDN_pid_t *)skb_put(skb, sizeof(mISDN_pid_t));
+	if (pid->pbuf)
+		pbuf = skb_put(skb, pid->maxplen);
+	copy_pid(npid, pid, pbuf);
+	hhe->func.ctrl = central_manager;
+	skb_queue_tail(&mISDN_thread.workq, skb);
+	wake_up_interruptible(&mISDN_thread.waitq);
+	return(0);
+}
+
+
 static int central_manager(void *data, u_int prim, void *arg) {
 	mISDNstack_t *st = data;
 
@@ -433,22 +458,7 @@ static int central_manager(void *data, u_int prim, void *arg) {
 	switch(prim) {
 	    case MGR_SETSTACK | REQUEST:
 		/* can sleep in case of module reload */
-		{
-			struct sk_buff	*skb;
-			mISDN_headext_t	*hhe;
-
-			skb = alloc_skb(sizeof(mISDN_pid_t), GFP_ATOMIC);
-			hhe = mISDN_HEADEXT_P(skb);
-			hhe->prim = MGR_SETSTACK_NW | REQUEST;
-			hhe->what = MGR_FUNCTION;
-			hhe->data[0] = st;
-			/* FIXME: handling of optional pid parameters */
-			memcpy(skb_put(skb, sizeof(mISDN_pid_t)), arg, sizeof(mISDN_pid_t));
-			hhe->func.ctrl = central_manager;
-			skb_queue_tail(&mISDN_thread.workq, skb);
-			wake_up_interruptible(&mISDN_thread.waitq);
-			return(0);
-		}
+		return(set_stack_req(st, arg));
 	    case MGR_SETSTACK_NW | REQUEST:
 		return(set_stack(st, arg));
 	    case MGR_CLEARSTACK | REQUEST:
@@ -459,6 +469,11 @@ static int central_manager(void *data, u_int prim, void *arg) {
 		return(sel_channel(st, arg));
 	    case MGR_ADDIF | REQUEST:
 		return(add_if(data, prim, arg));
+	    case MGR_CTRLREADY | INDICATION:
+		return(do_for_all_layers(st, prim, arg));
+	    case MGR_ADDSTPARA | REQUEST:
+	    case MGR_CLRSTPARA | REQUEST:
+		return(change_stack_para(st, prim, arg));
 	    case MGR_CONNECT | REQUEST:
 		return(ConnectIF(data, arg));
 	    case MGR_LOADFIRM | REQUEST:
@@ -498,8 +513,10 @@ int mISDN_register(mISDNobject_t *obj) {
 	obj->ctrl = central_manager;
 	// register_prop
 	if (debug)
-	        printk(KERN_DEBUG "mISDN_register %s id %x\n", obj->name,
-	        	obj->id);
+		printk(KERN_DEBUG "mISDN_register %s id %x\n", obj->name,
+			obj->id);
+	if (core_debug & DEBUG_CORE_FUNC)
+		printk(KERN_DEBUG "mISDN_register: obj(%p)\n", obj);
 	return(0);
 }
 
@@ -515,6 +532,8 @@ int mISDN_unregister(mISDNobject_t *obj) {
 	else
 		remove_object(obj);
 	REMOVE_FROM_LISTBASE(obj, mISDN_objects);
+	if (core_debug & DEBUG_CORE_FUNC)
+		printk(KERN_DEBUG "mISDN_unregister: mISDN_objects(%p)\n", mISDN_objects);
 	return(0);
 }
 
@@ -540,19 +559,10 @@ mISDNInit(void)
 	return(err);
 }
 
-#ifdef MODULE
-void cleanup_module(void) {
+void mISDN_cleanup(void) {
 	DECLARE_MUTEX_LOCKED(sem);
 	mISDNstack_t *st;
 
-	if (mISDN_thread.thread) {
-		/* abort mISDNd kernel thread */
-		mISDN_thread.notify = &sem;
-		test_and_set_bit(mISDN_TFLAGS_RMMOD, &mISDN_thread.Flags);
-		wake_up_interruptible(&mISDN_thread.waitq);
-		down(&sem);
-		mISDN_thread.notify = NULL;
-	}
 	free_mISDNdev();
 	if (mISDN_objects) {
 		printk(KERN_WARNING "mISDNcore mISDN_objects not empty\n");
@@ -570,6 +580,16 @@ void cleanup_module(void) {
 			st = st->next;
 		}
 	}
+	if (mISDN_thread.thread) {
+		/* abort mISDNd kernel thread */
+		mISDN_thread.notify = &sem;
+		test_and_set_bit(mISDN_TFLAGS_RMMOD, &mISDN_thread.Flags);
+		wake_up_interruptible(&mISDN_thread.waitq);
+		down(&sem);
+		mISDN_thread.notify = NULL;
+	}
 	printk(KERN_DEBUG "mISDNcore unloaded\n");
 }
-#endif
+
+module_init(mISDNInit);
+module_exit(mISDN_cleanup);

@@ -1,4 +1,4 @@
-/* $Id: bchannel.h,v 1.6 2003/07/28 12:05:47 kkeil Exp $
+/* $Id: bchannel.h,v 1.7 2003/08/01 22:15:52 kkeil Exp $
  *
  *   Basic declarations, defines for Bchannel hardware
  *
@@ -67,6 +67,8 @@ typedef struct _bchannel_t {
 	struct work_struct	work;
 	void			(*hw_bh) (struct _bchannel_t *);
 	u_long			event;
+	int			maxdatasize;
+	int			up_headerlen;
 	int			err_crc;
 	int			err_tx;
 	int			err_rdo;
@@ -75,6 +77,18 @@ typedef struct _bchannel_t {
 
 extern int init_bchannel(bchannel_t *);
 extern int free_bchannel(bchannel_t *);
+
+static inline void
+bch_set_para(bchannel_t *bch, mISDN_stPara_t *stp)
+{
+	if (stp) {
+		bch->maxdatasize = stp->maxdatalen;
+		bch->up_headerlen = stp->up_headerlen;
+	} else {
+		bch->maxdatasize = 0;
+		bch->up_headerlen = 0;
+	}
+}
 
 static inline void
 bch_sched_event(bchannel_t *bch, int event)

@@ -1,4 +1,4 @@
-/* $Id: cplci.c,v 1.11 2003/07/27 11:14:19 kkeil Exp $
+/* $Id: cplci.c,v 1.12 2003/08/01 22:15:52 kkeil Exp $
  *
  */
 
@@ -66,7 +66,7 @@ u_int plci_parse_channel_id(u_char *p)
 
 	if (p) {
 		p++;
-		capidebug(CAPI_DBG_PLCI_INFO, "%s: l(%d) %x\n", __FUNCTION__, p[0], p[1]);
+		capidebug(CAPI_DBG_PLCI_INFO, "%s: l(%d) %x", __FUNCTION__, p[0], p[1]);
 		l = *p++;
 		if (l == 1) {
 			cid = *p;
@@ -871,7 +871,7 @@ static void plci_cc_ph_control_ind(struct FsmInst *fi, int event, void *arg)
 	if (!arg)
 		return;
 
-	cplciDebug(cplci, CAPI_DBG_PLCI_INFO, "%s: tt(%x)\n", __FUNCTION__, *tt);
+	cplciDebug(cplci, CAPI_DBG_PLCI_INFO, "%s: tt(%x)", __FUNCTION__, *tt);
 	if ((*tt & ~DTMF_TONE_MASK) != DTMF_TONE_VAL)
 		return;
 
@@ -991,7 +991,7 @@ void cplciConstr(Cplci_t *cplci, Appl_t *appl, Plci_t *plci)
 void cplciDestr(Cplci_t *cplci)
 {
 	if (cplci->plci) {
-		cplciDebug(cplci, CAPI_DBG_PLCI, "%s plci state %s\n", __FUNCTION__,
+		cplciDebug(cplci, CAPI_DBG_PLCI, "%s plci state %s", __FUNCTION__,
 			str_st_plci[cplci->plci_m.state]);
 		if (cplci->plci_m.state != ST_PLCI_P_0) {
 			struct sk_buff	*skb = alloc_l3msg(10, MT_RELEASE_COMPLETE);
@@ -1016,7 +1016,7 @@ void cplci_l3l4(Cplci_t *cplci, int pr, void *arg)
 	Q931_info_t	*qi = arg;
 	u_char		*ie;
 
-	cplciDebug(cplci, CAPI_DBG_PLCI_L3, "%s: cplci(%x) plci(%x) pr(%x) arg(%p)\n",
+	cplciDebug(cplci, CAPI_DBG_PLCI_L3, "%s: cplci(%x) plci(%x) pr(%x) arg(%p)",
 		__FUNCTION__, cplci->adrPLCI, cplci->plci->adrPLCI, pr, arg);
 	switch (pr) {
 		case CC_SETUP | INDICATION:

@@ -1,4 +1,4 @@
-/* $Id: plci.c,v 1.5 2003/07/21 12:44:46 kkeil Exp $
+/* $Id: plci.c,v 1.6 2003/08/01 22:15:53 kkeil Exp $
  *
  */
 
@@ -154,4 +154,3 @@ int plciL4L3(Plci_t *plci, __u32 prim, struct sk_buff *skb)
 		dev_kfree_skb(skb);
 	return(err);
 }
-

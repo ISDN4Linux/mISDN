@@ -1,4 +1,4 @@
-/* $Id: sedl_fax.c,v 1.12 2003/07/27 11:14:19 kkeil Exp $
+/* $Id: sedl_fax.c,v 1.13 2003/08/01 22:15:53 kkeil Exp $
  *
  * sedl_fax.c  low level stuff for Sedlbauer Speedfax + cards
  *
@@ -45,7 +45,7 @@
 
 extern const char *CardType[];
 
-const char *Sedlfax_revision = "$Revision: 1.12 $";
+const char *Sedlfax_revision = "$Revision: 1.13 $";
 
 const char *Sedlbauer_Types[] =
 	{"None", "speed fax+", "speed fax+ pyramid", "speed fax+ pci"};
@@ -654,11 +654,11 @@ release_card(sedl_fax *card) {
 	free_bchannel(&card->bch[1]);
 	free_bchannel(&card->bch[0]);
 	free_dchannel(&card->dch);
+	speedfax.ctrl(&card->dch.inst, MGR_UNREGLAYER | REQUEST, NULL);
 	REMOVE_FROM_LISTBASE(card, ((sedl_fax *)speedfax.ilist));
 	unlock_dev(card);
 	kfree(card);
 	sedl_cnt--;
-	speedfax.refcnt--;
 }
 
 static int
@@ -697,82 +697,58 @@ speedfax_manager(void *data, u_int prim, void *arg) {
 	}
 	switch(prim) {
 	    case MGR_REGLAYER | CONFIRM:
-		if (!card) {
-			printk(KERN_WARNING "speedfax_manager no card found\n");
-			return(-ENODEV);
-		}
+		if (channel == 2)
+			dch_set_para(&card->dch, &inst->st->para);
+		else
+			bch_set_para(&card->bch[channel], &inst->st->para);
 		break;
 	    case MGR_UNREGLAYER | REQUEST:
-		if (!card) {
-			printk(KERN_WARNING "speedfax_manager no card found\n");
-			return(-ENODEV);
-		} else {
-			if (channel == 2) {
-				inst->down.fdata = &card->dch;
-				if ((skb = create_link_skb(PH_CONTROL | REQUEST,
-					HW_DEACTIVATE, 0, NULL, 0))) {
-					if (ISAC_l1hw(&inst->down, skb))
-						dev_kfree_skb(skb);
-				}
-			} else {
-				inst->down.fdata = &card->bch[channel];
-				if ((skb = create_link_skb(MGR_DISCONNECT | REQUEST,
-					0, 0, NULL, 0))) {
-					if (isar_down(&inst->down, skb))
-						dev_kfree_skb(skb);
-				}
-				
+		if (channel == 2) {
+			inst->down.fdata = &card->dch;
+			if ((skb = create_link_skb(PH_CONTROL | REQUEST,
+				HW_DEACTIVATE, 0, NULL, 0))) {
+				if (ISAC_l1hw(&inst->down, skb))
+					dev_kfree_skb(skb);
 			}
-			speedfax.ctrl(inst->up.peer, MGR_DISCONNECT | REQUEST,
-				&inst->up);
-			speedfax.ctrl(inst, MGR_UNREGLAYER | REQUEST, NULL);
+		} else {
+			inst->down.fdata = &card->bch[channel];
+			if ((skb = create_link_skb(MGR_DISCONNECT | REQUEST,
+				0, 0, NULL, 0))) {
+				if (isar_down(&inst->down, skb))
+					dev_kfree_skb(skb);
+			}
 		}
+		speedfax.ctrl(inst->up.peer, MGR_DISCONNECT | REQUEST, &inst->up);
+		speedfax.ctrl(inst, MGR_UNREGLAYER | REQUEST, NULL);
+		break;
+	    case MGR_CLRSTPARA | INDICATION:
+		arg = NULL;
+	    case MGR_ADDSTPARA | INDICATION:
+		if (channel == 2)
+			dch_set_para(&card->dch, arg);
+		else
+			bch_set_para(&card->bch[channel], arg);
 		break;
 	    case MGR_RELEASE | INDICATION:
-		if (!card) {
-			printk(KERN_WARNING "speedfax_manager no card found\n");
-			return(-ENODEV);
+		if (channel == 2) {
+			release_card(card);
 		} else {
-			if (channel == 2) {
-				release_card(card);
-			} else {
-				speedfax.refcnt--;
-			}
+			speedfax.refcnt--;
 		}
 		break;
 	    case MGR_CONNECT | REQUEST:
-		if (!card) {
-			printk(KERN_WARNING "%s: connect request failed\n",
-				__FUNCTION__);
-			return(-ENODEV);
-		}
 		return(ConnectIF(inst, arg));
-		break;
 	    case MGR_SETIF | REQUEST:
 	    case MGR_SETIF | INDICATION:
-		if (!card) {
-			printk(KERN_WARNING "%s: setif failed\n", __FUNCTION__);
-			return(-ENODEV);
-		}
 		if (channel==2)
-			return(SetIF(inst, arg, prim, ISAC_l1hw, NULL,
-				&card->dch));
+			return(SetIF(inst, arg, prim, ISAC_l1hw, NULL, &card->dch));
 		else
-			return(SetIF(inst, arg, prim, isar_down, NULL,
-				&card->bch[channel]));
+			return(SetIF(inst, arg, prim, isar_down, NULL, &card->bch[channel]));
 	    case MGR_DISCONNECT | REQUEST:
 	    case MGR_DISCONNECT | INDICATION:
-		if (!card) {
-			printk(KERN_WARNING "speedfax_manager del interface request failed\n");
-			return(-ENODEV);
-		}
 		return(DisConnectIF(inst, arg));
-		break;
 	    case MGR_LOADFIRM | REQUEST:
-		if (!card) {
-			printk(KERN_WARNING "speedfax_manager MGR_LOADFIRM no card\n");
-			return(-ENODEV);
-		} else {
+	    	{
 			struct firm {
 				int	len;
 				void	*data;
@@ -782,11 +758,10 @@ speedfax_manager(void *data, u_int prim, void *arg) {
 				return(-EINVAL);
 			return(isar_load_firmware(&card->bch[0], firm->data, firm->len));
 		}
+	    case MGR_LOADFIRM | CONFIRM:
+		speedfax.ctrl(card->dch.inst.st, MGR_CTRLREADY | INDICATION, NULL);
+		break;
 	    case MGR_SETSTACK | CONFIRM:
-		if (!card) {
-			printk(KERN_WARNING "%s: setstack failed\n", __FUNCTION__);
-			return(-ENODEV);
-		}
 		if ((channel!=2) && (inst->pid.global == 2)) {
 			inst->down.fdata = &card->bch[channel];
 			if ((skb = create_link_skb(PH_ACTIVATE | REQUEST,
@@ -843,28 +818,18 @@ static int __init Speedfax_init(void)
 		memset(card, 0, sizeof(sedl_fax));
 		APPEND_TO_LIST(card, ((sedl_fax *)speedfax.ilist));
 		card->dch.debug = debug;
-		card->dch.inst.obj = &speedfax;
 		lock_HW_init(&card->lock);
 		card->dch.inst.lock = lock_dev;
 		card->dch.inst.unlock = unlock_dev;
-		card->dch.inst.data = card;
-		card->dch.inst.up.owner = &card->dch.inst;
-		card->dch.inst.down.owner = &card->dch.inst;
-		speedfax.ctrl(NULL, MGR_DISCONNECT | REQUEST,
-			&card->dch.inst.down);
+		init_mISDNinstance(&card->dch.inst, &speedfax, card);
 		set_dchannel_pid(&pid, protocol[sedl_cnt], layermask[sedl_cnt]);
 		sprintf(card->dch.inst.name, "SFax%d", sedl_cnt+1);
 		init_dchannel(&card->dch);
 		for (i=0; i<2; i++) {
 			card->bch[i].channel = i;
-			card->bch[i].inst.obj = &speedfax;
-			card->bch[i].inst.data = card;
-			card->bch[i].inst.pid.layermask = 0;
-			card->bch[i].inst.up.owner = &card->bch[i].inst;
-			card->bch[i].inst.down.owner = &card->bch[i].inst;
 			card->bch[i].inst.down.fdata = &card->bch[i];
-			speedfax.ctrl(NULL, MGR_DISCONNECT | REQUEST,
-				&card->bch[i].inst.down);
+			card->bch[i].inst.pid.layermask = 0;
+			init_mISDNinstance(&card->bch[i].inst, &speedfax, card);
 			card->bch[i].inst.lock = lock_dev;
 			card->bch[i].inst.unlock = unlock_dev;
 			card->bch[i].debug = debug;

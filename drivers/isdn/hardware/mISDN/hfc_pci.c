@@ -1,4 +1,4 @@
-/* $Id: hfc_pci.c,v 1.27 2003/07/27 11:14:19 kkeil Exp $
+/* $Id: hfc_pci.c,v 1.28 2003/08/01 22:15:52 kkeil Exp $
 
  * hfc_pci.c     low level driver for CCD's hfc-pci based cards
  *
@@ -46,7 +46,7 @@
 
 extern const char *CardType[];
 
-static const char *hfcpci_revision = "$Revision: 1.27 $";
+static const char *hfcpci_revision = "$Revision: 1.28 $";
 
 /* table entry in the PCI devices list */
 typedef struct {
@@ -431,7 +431,7 @@ hfcpci_empty_fifo(bchannel_t *bch, bzfifo_type * bz, u_char * bdata, int count)
 		bz->za[new_f2].z2 = new_z2;
 		bz->f2 = new_f2;	/* next buffer */
 		skb = NULL;
-	} else if (!(skb = dev_alloc_skb(count - 3)))
+	} else if (!(skb = alloc_stack_skb(count - 3, bch->up_headerlen)))
 		printk(KERN_WARNING "HFCPCI: receive out of memory\n");
 	else {
 		total = count;
@@ -495,7 +495,7 @@ receive_dmsg(hfc_pci_t *hc)
 #endif
 			df->f2 = ((df->f2 + 1) & MAX_D_FRAMES) | (MAX_D_FRAMES + 1);	/* next buffer */
 			df->za[df->f2 & D_FREG_MASK].z2 = (zp->z2 + rcnt) & (D_FIFO_SIZE - 1);
-		} else if ((skb = alloc_uplinkD_skb(rcnt - 3))) {
+		} else if ((skb = alloc_stack_skb(rcnt - 3, dch->up_headerlen))) {
 			total = rcnt;
 			rcnt -= 3;
 			ptr = skb_put(skb, rcnt);
@@ -560,7 +560,7 @@ hfcpci_empty_fifo_trans(bchannel_t *bch, bzfifo_type * bz, u_char * bdata)
 	if (new_z2 >= (B_FIFO_SIZE + B_SUB_VAL))
 		new_z2 -= B_FIFO_SIZE;	/* buffer wrap */
 
-	if (!(skb = dev_alloc_skb(fcnt)))
+	if (!(skb = alloc_stack_skb(fcnt, bch->up_headerlen)))
 		printk(KERN_WARNING "HFCPCI: receive out of memory\n");
 	else {
 		ptr = skb_put(skb, fcnt);
@@ -2130,10 +2130,10 @@ release_card(hfc_pci_t *hc) {
 	free_bchannel(&hc->bch[1]);
 	free_bchannel(&hc->bch[0]);
 	free_dchannel(&hc->dch);
+	HFC_obj.ctrl(&hc->dch.inst, MGR_UNREGLAYER | REQUEST, NULL);
 	REMOVE_FROM_LISTBASE(hc, ((hfc_pci_t *)HFC_obj.ilist));
 	unlock_dev(hc);
 	kfree(hc);
-	HFC_obj.refcnt--;
 }
 
 static int
@@ -2172,78 +2172,58 @@ HFC_manager(void *data, u_int prim, void *arg) {
 
 	switch(prim) {
 	    case MGR_REGLAYER | CONFIRM:
-		if (!card) {
-			printk(KERN_WARNING "%s: no card found\n", __FUNCTION__);
-			return(-ENODEV);
-		}
+		if (channel == 2)
+			dch_set_para(&card->dch, &inst->st->para);
+		else
+			bch_set_para(&card->bch[channel], &inst->st->para);
 		break;
 	    case MGR_UNREGLAYER | REQUEST:
-		if (!card) {
-			printk(KERN_WARNING "%s: no card found\n", __FUNCTION__);
-			return(-ENODEV);
-		} else {
-			if (channel == 2) {
-				inst->down.fdata = &card->dch;
-				if ((skb = create_link_skb(PH_CONTROL | REQUEST,
-					HW_DEACTIVATE, 0, NULL, 0))) {
-					if (HFCD_l1hw(&inst->down, skb))
-						dev_kfree_skb(skb);
-				}
-			} else {
-				inst->down.fdata = &card->bch[channel];
-				if ((skb = create_link_skb(MGR_DISCONNECT | REQUEST,
-					0, 0, NULL, 0))) {
-					if (hfcpci_l2l1(&inst->down, skb))
-						dev_kfree_skb(skb);
-				}
+		if (channel == 2) {
+			inst->down.fdata = &card->dch;
+			if ((skb = create_link_skb(PH_CONTROL | REQUEST,
+				HW_DEACTIVATE, 0, NULL, 0))) {
+				if (HFCD_l1hw(&inst->down, skb))
+					dev_kfree_skb(skb);
 			}
-			HFC_obj.ctrl(inst->up.peer, MGR_DISCONNECT | REQUEST,
-				&inst->up);
-			HFC_obj.ctrl(inst, MGR_UNREGLAYER | REQUEST, NULL);
+		} else {
+			inst->down.fdata = &card->bch[channel];
+			if ((skb = create_link_skb(MGR_DISCONNECT | REQUEST,
+				0, 0, NULL, 0))) {
+				if (hfcpci_l2l1(&inst->down, skb))
+					dev_kfree_skb(skb);
+			}
 		}
+		HFC_obj.ctrl(inst->up.peer, MGR_DISCONNECT | REQUEST, &inst->up);
+		HFC_obj.ctrl(inst, MGR_UNREGLAYER | REQUEST, NULL);
+		break;
+	    case MGR_CLRSTPARA | INDICATION:
+		arg = NULL;
+	    case MGR_ADDSTPARA | INDICATION:
+		if (channel == 2)
+			dch_set_para(&card->dch, arg);
+		else
+			bch_set_para(&card->bch[channel], arg);
 		break;
 	    case MGR_RELEASE | INDICATION:
-		if (!card) {
-			printk(KERN_WARNING "%s: no card found\n", __FUNCTION__);
-			return(-ENODEV);
+		if (channel == 2) {
+			release_card(card);
 		} else {
-			if (channel == 2) {
-				release_card(card);
-			} else {
-				HFC_obj.refcnt--;
-			}
+			HFC_obj.refcnt--;
 		}
 		break;
 	    case MGR_CONNECT | REQUEST:
-		if (!card) {
-			printk(KERN_WARNING "%s: connect request failed\n",
-				__FUNCTION__);
-			return(-ENODEV);
-		}
 		return(ConnectIF(inst, arg));
-		break;
 	    case MGR_SETIF | REQUEST:
 	    case MGR_SETIF | INDICATION:
-		if (!card) {
-			printk(KERN_WARNING "%s: setif failed\n", __FUNCTION__);
-			return(-ENODEV);
-		}
 		if (channel==2)
 			return(SetIF(inst, arg, prim, HFCD_l1hw, NULL,
 				&card->dch));
 		else
 			return(SetIF(inst, arg, prim, hfcpci_l2l1, NULL,
 				&card->bch[channel]));
-		break;
 	    case MGR_DISCONNECT | REQUEST:
 	    case MGR_DISCONNECT | INDICATION:
-		if (!card) {
-			printk(KERN_WARNING "%s: del interface request failed\n",
-				__FUNCTION__);
-			return(-ENODEV);
-		}
 		return(DisConnectIF(inst, arg));
-		break;
 	    case MGR_SELCHANNEL | REQUEST:
 		if (channel != 2) {
 			printk(KERN_WARNING "%s: selchannel not dinst\n",
@@ -2251,13 +2231,7 @@ HFC_manager(void *data, u_int prim, void *arg) {
 			return(-EINVAL);
 		}
 		return(SelFreeBChannel(card, arg));
-		break;
 	    case MGR_SETSTACK | CONFIRM:
-		if (!card) {
-			printk(KERN_WARNING "%s: setstack failed\n", __FUNCTION__);
-			return(-ENODEV);
-		}
-		
 		if ((channel!=2) && (inst->pid.global == 2)) {
 			inst->down.fdata = &card->bch[channel];
 			if ((skb = create_link_skb(PH_ACTIVATE | REQUEST,
@@ -2313,29 +2287,17 @@ static int __init HFC_init(void)
 		memset(card, 0, sizeof(hfc_pci_t));
 		APPEND_TO_LIST(card, ((hfc_pci_t *)HFC_obj.ilist));
 		card->dch.debug = debug;
-		card->dch.inst.obj = &HFC_obj;
 		lock_HW_init(&card->lock);
 		card->dch.inst.lock = lock_dev;
 		card->dch.inst.unlock = unlock_dev;
-		card->dch.inst.data = card;
+		init_mISDNinstance(&card->dch.inst, &HFC_obj, card);
 		card->dch.inst.pid.layermask = ISDN_LAYER(0);
-		card->dch.inst.up.owner = &card->dch.inst;
-		card->dch.inst.down.owner = &card->dch.inst;
-		HFC_obj.ctrl(NULL, MGR_DISCONNECT | REQUEST,
-			&card->dch.inst.up);
-		HFC_obj.ctrl(NULL, MGR_DISCONNECT | REQUEST,
-			&card->dch.inst.down);
 		sprintf(card->dch.inst.name, "HFC%d", HFC_cnt+1);
 		init_dchannel(&card->dch);
 		for (i=0; i<2; i++) {
 			card->bch[i].channel = i + 1;
-			card->bch[i].inst.obj = &HFC_obj;
-			card->bch[i].inst.data = card;
+			init_mISDNinstance(&card->bch[i].inst, &HFC_obj, card);
 			card->bch[i].inst.pid.layermask = ISDN_LAYER(0);
-			card->bch[i].inst.up.owner = &card->bch[i].inst;
-			card->bch[i].inst.down.owner = &card->bch[i].inst;
-			HFC_obj.ctrl(NULL, MGR_DISCONNECT | REQUEST,
-				&card->bch[i].inst.down);
 			card->bch[i].inst.lock = lock_dev;
 			card->bch[i].inst.unlock = unlock_dev;
 			card->bch[i].debug = debug;
@@ -2473,6 +2435,7 @@ static int __init HFC_init(void)
 				err = 0;
 			return(err);
 		}
+		HFC_obj.ctrl(dst, MGR_CTRLREADY | INDICATION, NULL);
 	}
 	printk(KERN_INFO "HFC %d cards installed\n", HFC_cnt);
 	return(0);

@@ -1,4 +1,4 @@
-/* $Id: ncci.c,v 1.10 2003/07/28 12:05:47 kkeil Exp $
+/* $Id: ncci.c,v 1.11 2003/08/01 22:15:53 kkeil Exp $
  *
  */
 
@@ -202,8 +202,8 @@ static void ncci_facility_req(struct FsmInst *fi, int event, void *arg)
 		cmsg->Info = CapiIllMessageParmCoding;
 	} else if (p && p[0]) {
 		func = CAPIMSG_U16(p, 1);
-		ncci_debug(fi, "ncci_facility_req: p %02x %02x %02x func(%x)\n",
-			p[0], p[1], p[2], func);
+		ncci_debug(fi, "%s: p %02x %02x %02x func(%x)",
+			__FUNCTION__, p[0], p[1], p[2], func);
 		switch (func) {
 			case 1:
 				op = DTMF_TONE_START;
@@ -368,9 +368,10 @@ void ncciConstr(Ncci_t *ncci, Cplci_t *cplci)
 
 void ncciInitSt(Ncci_t *ncci)
 {
-	mISDN_pid_t pid;
-	int retval;
-	Cplci_t *cplci = ncci->cplci;
+	mISDN_pid_t	pid;
+	mISDN_stPara_t	stpara;
+	int		retval;
+	Cplci_t		*cplci = ncci->cplci;
 
 	memset(&pid, 0, sizeof(mISDN_pid_t));
 	pid.layermask = ISDN_LAYER(1) | ISDN_LAYER(2) | ISDN_LAYER(3) |
@@ -405,10 +406,10 @@ void ncciInitSt(Ncci_t *ncci)
 	}
 	pid.protocol[3] = (1 << cplci->Bprotocol.B3protocol) |
 		ISDN_PID_LAYER(3) | ISDN_PID_BCHANNEL_BIT;
-	capidebug(CAPI_DBG_NCCI, "ncciInitSt B1(%x) B2(%x) B3(%x) global(%d) ch(%x)\n",
+	capidebug(CAPI_DBG_NCCI, "ncciInitSt B1(%x) B2(%x) B3(%x) global(%d) ch(%x)",
    		pid.protocol[1], pid.protocol[2], pid.protocol[3], pid.global, 
 		cplci->bchannel);
-	capidebug(CAPI_DBG_NCCI, "ncciInitSt ch(%d) cplci->contr->binst(%p)\n",
+	capidebug(CAPI_DBG_NCCI, "ncciInitSt ch(%d) cplci->contr->binst(%p)",
 		cplci->bchannel & 3, cplci->contr->binst);
 	pid.protocol[4] = ISDN_PID_L4_B_CAPI20;
 	ncci->binst = contrSelChannel(cplci->contr, cplci->bchannel);
@@ -416,7 +417,7 @@ void ncciInitSt(Ncci_t *ncci)
 		int_error();
 		return;
 	}
-	capidebug(CAPI_DBG_NCCI, "ncciInitSt ncci->binst(%p)\n", ncci->binst);
+	capidebug(CAPI_DBG_NCCI, "ncciInitSt ncci->binst(%p)", ncci->binst);
 	memset(&ncci->binst->inst.pid, 0, sizeof(mISDN_pid_t));
 	ncci->binst->inst.data = ncci;
 	ncci->binst->inst.pid.layermask = ISDN_LAYER(4);
@@ -428,13 +429,25 @@ void ncciInitSt(Ncci_t *ncci)
 	retval = ncci->binst->inst.obj->ctrl(ncci->binst->bst,
 		MGR_REGLAYER | INDICATION, &ncci->binst->inst); 
 	if (retval) {
-		int_error();
+		printk(KERN_WARNING "%s MGR_REGLAYER | INDICATION ret(%d)\n",
+			__FUNCTION__, retval);
 		return;
+	}
+	stpara.maxdatalen = ncci->appl->rp.datablklen;
+	stpara.up_headerlen = CAPI_B3_DATA_IND_HEADER_SIZE;
+	stpara.down_headerlen = 0;
+                        
+	retval = ncci->binst->inst.obj->ctrl(ncci->binst->bst,
+		MGR_ADDSTPARA | REQUEST, &stpara);
+	if (retval) {
+		printk(KERN_WARNING "%s MGR_SETSTACK | REQUEST ret(%d)\n",
+			__FUNCTION__, retval);
 	}
 	retval = ncci->binst->inst.obj->ctrl(ncci->binst->bst,
 		MGR_SETSTACK | REQUEST, &pid);
 	if (retval) {
-		int_error();
+		printk(KERN_WARNING "%s MGR_SETSTACK | REQUEST ret(%d)\n",
+			__FUNCTION__, retval);
 		return;
 	}
 }
@@ -458,8 +471,6 @@ void ncciLinkUp(Ncci_t *ncci)
 {
 #ifdef OLDCAPI_DRIVER_INTERFACE
 	ncci->contr->ctrl->new_ncci(ncci->contr->ctrl, ncci->appl->ApplId, ncci->adrNCCI, ncci->window);
-#else
-	capilib_new_ncci(&ncci->contr->ncci_head, ncci->appl->ApplId, ncci->adrNCCI, ncci->window);
 #endif
 	ncciInitSt(ncci);
 }
@@ -484,14 +495,12 @@ void ncciDestr(Ncci_t *ncci)
 {
 	int i;
 
-	capidebug(CAPI_DBG_NCCI, "ncciDestr NCCI %x\n", ncci->adrNCCI);
+	capidebug(CAPI_DBG_NCCI, "ncciDestr NCCI %x", ncci->adrNCCI);
 	if (ncci->binst)
 		ncciReleaseSt(ncci);
 	if (ncci->appl)
 #ifdef OLDCAPI_DRIVER_INTERFACE
 		ncci->contr->ctrl->free_ncci(ncci->contr->ctrl, ncci->appl->ApplId, ncci->adrNCCI);
-#else
-		capilib_free_ncci(&ncci->contr->ncci_head, ncci->appl->ApplId, ncci->adrNCCI);
 #endif
 	/* cleanup data queues */
 	discard_queue(&ncci->squeue);
@@ -518,10 +527,10 @@ void ncciDataInd(Ncci_t *ncci, int pr, struct sk_buff *skb)
 		return;
 	}
 
-	if (skb_headroom(skb) < 22) {
-		capidebug(CAPI_DBG_NCCI_L3, "%s: only %d bytes headroom, need %d\n",
-			__FUNCTION__, skb_headroom(skb), 22);
-		nskb = skb_realloc_headroom(skb, 22);
+	if (skb_headroom(skb) < CAPI_B3_DATA_IND_HEADER_SIZE) {
+		capidebug(CAPI_DBG_NCCI_L3, "%s: only %d bytes headroom, need %d",
+			__FUNCTION__, skb_headroom(skb), CAPI_B3_DATA_IND_HEADER_SIZE);
+		nskb = skb_realloc_headroom(skb, CAPI_B3_DATA_IND_HEADER_SIZE);
 		dev_kfree_skb(skb);
 		if (!nskb) {
 			int_error();
@@ -530,19 +539,19 @@ void ncciDataInd(Ncci_t *ncci, int pr, struct sk_buff *skb)
       	} else { 
 		nskb = skb;
 	}
-
 	ncci->recv_skb_handles[i] = nskb;
-	
-	skb_push(nskb, 22);
-	*((__u16*) nskb->data) = 22;
+
+	skb_push(nskb, CAPI_B3_DATA_IND_HEADER_SIZE);
+	*((__u16*) nskb->data) = CAPI_B3_DATA_IND_HEADER_SIZE;
 	*((__u16*)(nskb->data+2)) = ncci->appl->ApplId;
 	*((__u8*) (nskb->data+4)) = CAPI_DATA_B3;
 	*((__u8*) (nskb->data+5)) = CAPI_IND;
 	*((__u16*)(nskb->data+6)) = ncci->appl->MsgId++;
 	*((__u32*)(nskb->data+8)) = ncci->adrNCCI;
-	*((__u32*)(nskb->data+12)) = (__u32)(nskb->data + 22);
-	*((__u16*)(nskb->data+16)) = nskb->len - 22;
+	*((__u32*)(nskb->data+12)) = (__u32)(nskb->data + CAPI_B3_DATA_IND_HEADER_SIZE);
+	*((__u16*)(nskb->data+16)) = nskb->len - CAPI_B3_DATA_IND_HEADER_SIZE;
 	*((__u16*)(nskb->data+18)) = i;
+	// FIXME FLAGS
 	*((__u16*)(nskb->data+20)) = 0;
 #ifdef OLDCAPI_DRIVER_INTERFACE
 	ncci->contr->ctrl->handle_capimsg(ncci->contr->ctrl, ncci->appl->ApplId, nskb);
@@ -742,7 +751,7 @@ int ncci_l3l4(mISDNif_t *hif, struct sk_buff *skb)
 			cplci_l3l4(ncci->cplci, hh->prim, skb->data);
 			break;
 		default:
-			capidebug(CAPI_DBG_WARN, "%s: unknown prim(%x) dinfo(%x) len(%d) skb(%p)\n",
+			capidebug(CAPI_DBG_WARN, "%s: unknown prim(%x) dinfo(%x) len(%d) skb(%p)",
 				__FUNCTION__, hh->prim, hh->dinfo, skb->len, skb);
 			int_error();
 			return(-EINVAL);
@@ -754,7 +763,7 @@ int ncci_l3l4(mISDNif_t *hif, struct sk_buff *skb)
 static int ncciL4L3(Ncci_t *ncci, u_int prim, int dtyp, int len, void *arg,
 			struct sk_buff *skb)
 {
-	capidebug(CAPI_DBG_NCCI_L3, "%s: NCCI %x prim(%x)\n",
+	capidebug(CAPI_DBG_NCCI_L3, "%s: NCCI %x prim(%x)",
 		__FUNCTION__, ncci->adrNCCI, prim);
 	if (skb)
 		return(if_newhead(&ncci->binst->inst.down, prim, dtyp, skb));
