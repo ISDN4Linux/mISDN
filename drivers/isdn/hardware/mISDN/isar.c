@@ -1,4 +1,4 @@
-/* $Id: isar.c,v 0.11 2001/03/06 10:31:30 kkeil Exp $
+/* $Id: isar.c,v 0.12 2001/03/13 02:04:04 kkeil Exp $
  *
  * isar.c   ISAR (Siemens PSB 7110) specific routines
  *
@@ -204,6 +204,7 @@ isar_load_firmware(bchannel_t *bch, u_char *buf, int size)
 #define	BLK_HEAD_SIZE 6
 	if (1 != (ret = ISARVersion(bch, "Testing"))) {
 		printk(KERN_ERR"isar_load_firmware wrong isar version %d\n", ret);
+		bch->inst.unlock(bch->inst.data);
 		return(1);
 	}
 	debug = bch->debug;
@@ -217,6 +218,7 @@ isar_load_firmware(bchannel_t *bch, u_char *buf, int size)
 	bch->BC_Write_Reg(bch->inst.data, 0, ISAR_IRQBIT, 0);
 	if (!(msg = kmalloc(256, GFP_KERNEL))) {
 		printk(KERN_ERR"isar_load_firmware no buffer\n");
+		bch->inst.unlock(bch->inst.data);
 		return (1);
 	}
 	while (cnt < size) {
