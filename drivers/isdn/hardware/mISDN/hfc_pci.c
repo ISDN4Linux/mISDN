@@ -1,4 +1,4 @@
-/* $Id: hfc_pci.c,v 1.36 2004/01/26 22:21:30 keil Exp $
+/* $Id: hfc_pci.c,v 1.37 2004/01/29 00:53:13 keil Exp $
 
  * hfc_pci.c     low level driver for CCD's hfc-pci based cards
  *
@@ -46,7 +46,7 @@
 
 extern const char *CardType[];
 
-static const char *hfcpci_revision = "$Revision: 1.36 $";
+static const char *hfcpci_revision = "$Revision: 1.37 $";
 
 /* table entry in the PCI devices list */
 typedef struct {
@@ -2247,6 +2247,7 @@ HFC_manager(void *data, u_int prim, void *arg) {
 	int		channel = -1;
 
 	if (!data) {
+		MGR_HASPROTOCOL_HANDLER(prim,arg,&HFC_obj)
 		printk(KERN_ERR "%s: no data prim %x arg %p\n",
 			__FUNCTION__, prim, arg);
 		return(-EINVAL);
@@ -2350,6 +2351,8 @@ HFC_manager(void *data, u_int prim, void *arg) {
 					0, 0, NULL, 0);
 		}
 		break;
+	    PRIM_NOT_HANDLED(MGR_CTRLREADY | INDICATION);
+	    PRIM_NOT_HANDLED(MGR_GLOBALOPT | REQUEST);
 	    default:
 		printk(KERN_WARNING "%s: prim %x not handled\n",
 			__FUNCTION__, prim);

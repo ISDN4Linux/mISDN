@@ -1,4 +1,4 @@
-/* $Id: avm_fritz.c,v 1.25 2004/01/26 22:21:30 keil Exp $
+/* $Id: avm_fritz.c,v 1.26 2004/01/29 00:53:13 keil Exp $
  *
  * fritz_pci.c    low level stuff for AVM Fritz!PCI and ISA PnP isdn cards
  *              Thanks to AVM, Berlin for informations
@@ -28,7 +28,7 @@
 #define LOCK_STATISTIC
 #include "hw_lock.h"
 
-static const char *avm_fritz_rev = "$Revision: 1.25 $";
+static const char *avm_fritz_rev = "$Revision: 1.26 $";
 
 enum {
 	AVM_FRITZ_PCI,
@@ -1231,6 +1231,7 @@ fritz_manager(void *data, u_int prim, void *arg) {
 		}
 		break;
 	    PRIM_NOT_HANDLED(MGR_CTRLREADY | INDICATION);
+	    PRIM_NOT_HANDLED(MGR_GLOBALOPT | REQUEST);
 	    default:
 		printk(KERN_WARNING "%s: prim %x not handled\n",
 			__FUNCTION__, prim);
@@ -1335,6 +1336,8 @@ static int __devinit fritzpci_probe(struct pci_dev *pdev, const struct pci_devic
 	card->irq = pdev->irq;
 	pci_set_drvdata(pdev, card);
 	err = setup_instance(card);
+	if (err)
+		pci_set_drvdata(pdev, NULL);
 	return(err);
 }
 
@@ -1373,6 +1376,8 @@ static int __devinit fritzpnp_probe(struct pci_dev *pdev, const struct isapnp_de
 
 	pnp_set_drvdata(pdev, card);
 	err = setup_instance(card);
+	if (err)
+		pnp_set_drvdata(pdev, NULL);
 	return(err);
 }
 
