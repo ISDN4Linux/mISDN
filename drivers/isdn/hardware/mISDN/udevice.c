@@ -1,4 +1,4 @@
-/* $Id: udevice.c,v 0.17 2001/05/18 00:48:51 kkeil Exp $
+/* $Id: udevice.c,v 0.18 2001/07/10 16:01:03 kkeil Exp $
  *
  * Copyright 2000  by Karsten Keil <kkeil@isdn4linux.de>
  */
@@ -150,9 +150,13 @@ new_devstack(hisaxdevice_t *dev, stack_info_t *si)
 
 	memset(&inst, 0, sizeof(hisaxinstance_t));
 	st = get_stack4id(si->id);
-	if ((si->extentions & EXT_STACK_CLONE) && !st) {
-		int_errtxt("ext(%x) st(%x)", si->extentions, si->id);
-		return(-EINVAL);
+	if (si->extentions & EXT_STACK_CLONE) {
+		if (st) {
+			inst.st = st;
+		} else {
+			int_errtxt("ext(%x) st(%x)", si->extentions, si->id);
+			return(-EINVAL);
+		}
 	}
 	err = udev_obj.ctrl(NULL, MGR_NEWSTACK | REQUEST, &inst);
 	if (err) {

@@ -1,4 +1,4 @@
-/* $Id: stack.c,v 0.11 2001/05/18 00:48:52 kkeil Exp $
+/* $Id: stack.c,v 0.12 2001/07/10 16:01:03 kkeil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -65,7 +65,7 @@ get_stack_info(iframe_t *frm) {
 }
 
 static int
-get_free_stackid(hisaxstack_t *mst) {
+get_free_stackid(hisaxstack_t *mst, int flag) {
 	int id=1;
 	hisaxstack_t *st;
 
@@ -82,11 +82,23 @@ get_free_stackid(hisaxstack_t *mst) {
 			else
 				return(id);
 		}
-		return(0); /* 127 used controllers ??? */
-	} else { /* new child_id */
-		id = mst->id;
-		while(id<0x7fffffff) {
-			id += 0x00010000;
+	} else if (flag & FLG_CLONE_STACK) {
+		id = mst->id | FLG_CLONE_STACK;
+		while(id < CLONE_ID_MAX) {
+			id += CLONE_ID_INC;
+			st = hisax_stacklist;
+			while (st) {
+				if (st->id == id)
+					break;
+				st = st->next;
+			}
+			if (!st)
+				return(id);
+		}
+	} else if (flag & FLG_CHILD_STACK) {
+		id = mst->id | FLG_CHILD_STACK;
+		while(id < CHILD_ID_MAX) {
+			id += CHILD_ID_INC;
 			st = mst->child;
 			while (st) {
 				if (st->id == id)
@@ -252,7 +264,15 @@ new_stack(hisaxstack_t *master, hisaxinstance_t *inst)
 		return(NULL);
 	}
 	memset(newst, 0, sizeof(hisaxstack_t));
-	newst->id = get_free_stackid(master);
+	if (!master) {
+		if (inst && inst->st) {
+			newst->id = get_free_stackid(inst->st, FLG_CLONE_STACK);
+		} else {
+			newst->id = get_free_stackid(NULL, 0);
+		}
+	} else {
+		newst->id = get_free_stackid(master, FLG_CHILD_STACK);
+	}
 	newst->mgr = inst;
 	if (master) {
 		APPEND_TO_LIST(newst, master->child);
@@ -358,19 +378,22 @@ release_stacks(hisaxobject_t *obj) {
 			obj->name, obj->refcnt);
 }
 
-#define INST_ID_INC	0x100
 
 static void
 get_free_instid(hisaxstack_t *st, hisaxinstance_t *inst) {
 	hisaxinstance_t *il = hisax_instlist;
 
 	inst->id = get_lowlayer(inst->pid.layermask)<<20;
+	inst->id |= FLG_INSTANCE;
 	if (st) {
 		inst->id |= st->id;
 	} else {
-		inst->id += INST_ID_INC;
 		while(il) {
 			if (il->id == inst->id) {
+				if ((inst->id & IF_INSTMASK) >= INST_ID_MAX) {
+					inst->id = 0;
+					return;
+				}
 				inst->id += INST_ID_INC;
 				il = hisax_instlist;
 				continue;
@@ -382,7 +405,8 @@ get_free_instid(hisaxstack_t *st, hisaxinstance_t *inst) {
 
 int
 register_layer(hisaxstack_t *st, hisaxinstance_t *inst) {
-	hisaxlayer_t *layer;
+	hisaxlayer_t	*layer;
+	int		refinc = 0;
 
 	if (!inst)
 		return(-EINVAL);
@@ -404,17 +428,27 @@ register_layer(hisaxstack_t *st, hisaxinstance_t *inst) {
 				return(-EBUSY);
 			}
 		} else if (!(layer = kmalloc(sizeof(hisaxlayer_t), GFP_ATOMIC))) {
-			int_errtxt("no mem for layer %d", inst->pid.layermask);
+			int_errtxt("no mem for layer %x", inst->pid.layermask);
 			return(-ENOMEM);
 		}
 		memset(layer, 0, sizeof(hisaxlayer_t));
 		insertlayer(st, layer, inst->pid.layermask);
-		layer->inst =inst;
+		layer->inst = inst;
 	}
 	if (!inst->id)
-		inst->obj->refcnt++;
+		refinc++;
 	get_free_instid(st, inst);
+	if (!inst->id) {
+		int_errtxt("no free inst->id for layer %x", inst->pid.layermask);
+		if (st && layer) {
+			REMOVE_FROM_LISTBASE(layer, st->lstack);
+			kfree(layer);
+		}
+		return(-EINVAL);
+	}
 	inst->st = st;
+	if (refinc)
+		inst->obj->refcnt++;
 	APPEND_TO_LIST(inst, hisax_instlist);
 	return(0);
 }
