@@ -1,4 +1,4 @@
-/* $Id: l3_udss1.c,v 0.4 2001/02/19 11:51:42 kkeil Exp $
+/* $Id: l3_udss1.c,v 0.5 2001/02/19 22:25:31 kkeil Exp $
  *
  * EURO/DSS1 D-channel protocol
  *
@@ -26,15 +26,19 @@ static hisaxobject_t u_dss1;
 
 
 extern char *HiSax_getrev(const char *revision);
-const char *dss1_revision = "$Revision: 0.4 $";
+const char *dss1_revision = "$Revision: 0.5 $";
 
 static int dss1man(l3_process_t *, u_int, void *);
 
 static void MsgStart(l3_process_t *pc, u_char mt) {
 	pc->op = &pc->obuf[0];
 	*pc->op++ = 8;
-	*pc->op++ = 1;
-	*pc->op++ = pc->callref ^ 0x80;
+	if (pc->callref == -1) { /* dummy cr */
+		*pc->op++ = 0;
+	} else {
+		*pc->op++ = 1;
+		*pc->op++ = pc->callref ^ 0x80;
+	}
 	*pc->op++ = mt;
 }
 
@@ -1748,12 +1752,6 @@ static struct stateentry downstatelist[] =
 	 CC_CONNECT | REQUEST, l3dss1_connect_req},
 	{SBIT(10),
 	 CC_SUSPEND | REQUEST, l3dss1_suspend_req},
-#if 0
-        {SBIT(7) | SBIT(9) | SBIT(25),
-         CC_REDIR | REQUEST, l3dss1_redir_req},
-        {SBIT(6),
-         CC_REDIR | REQUEST, l3dss1_redir_req_early},
-#endif
 };
 
 #define DOWNSLLEN \
@@ -1957,17 +1955,9 @@ dss1_fromdown(hisaxif_t *hif, u_int prim, u_int nr, int dtyp, void *arg) {
 		dev_kfree_skb(skb);
 		return(0);
 	} else if (cr == -1) {	/* Dummy Callref */
-#if 0
-	u_char *p;
 		if (mt == MT_FACILITY)
-			if ((p = findie(skb->data, skb->len, IE_FACILITY, 0))) {
-				l3dss1_parse_facility(st, NULL, 
-					(pr == (DL_DATA | INDICATION)) ? -1 : -2, p); 
-				dev_kfree_skb(skb);
-				return(0);  
-			}
-#endif
-		if (l3->debug & L3_DEB_WARN)
+			l3dss1_facility(l3->dummy, prim, skb);
+		else if (l3->debug & L3_DEB_WARN)
 			l3_debug(l3, "dss1up dummy Callref (no facility msg or ie)");
 		dev_kfree_skb(skb);
 		return(0);
@@ -2098,12 +2088,6 @@ dss1_fromup(hisaxif_t *hif, u_int prim, u_int nr, int dtyp, void *arg) {
 		printk(KERN_ERR "HiSax dss1 fromup without proc pr=%04x\n", prim);
 		return(-EINVAL);
 	}
-#if 0
-	if ( pr == (CC_TDSS1_IO | REQUEST)) {
-		l3dss1_io_timer(proc); /* timer expires */ 
-		return;
-	}  
-#endif
 	for (i = 0; i < DOWNSLLEN; i++)
 		if ((prim == downstatelist[i].primitive) &&
 		    ((1 << proc->state) & downstatelist[i].state))
@@ -2212,6 +2196,19 @@ create_udss1(hisaxstack_t *st, hisaxif_t *hif) {
 		nl3->global->n303 = N303;
 		nl3->global->l3 = nl3;
 		L3InitTimer(nl3->global, &nl3->global->timer);
+	}
+	if (!(nl3->dummy = kmalloc(sizeof(l3_process_t), GFP_ATOMIC))) {
+		printk(KERN_ERR "HiSax can't get memory for dss1 dummy CR\n");
+		kfree(nl3->global);
+		kfree(nl3);
+		return(NULL);
+	} else {
+		nl3->dummy->state = 0;
+		nl3->dummy->callref = -1;
+		nl3->dummy->next = NULL;
+		nl3->dummy->n303 = N303;
+		nl3->dummy->l3 = nl3;
+		L3InitTimer(nl3->dummy, &nl3->dummy->timer);
 	}
 	nl3->inst.protocol = hif->protocol;
 	nl3->inst.obj = &u_dss1;

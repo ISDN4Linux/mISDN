@@ -1,4 +1,4 @@
-/* $Id: layer3.h,v 0.4 2001/02/19 11:51:42 kkeil Exp $
+/* $Id: layer3.h,v 0.5 2001/02/19 22:25:31 kkeil Exp $
  *
  * This file is (c) under GNU PUBLIC LICENSE
  *
@@ -20,7 +20,8 @@
 #define L3_DEB_CHECK	0x10
 #define L3_DEB_SI	0x20
 
-#define FLG_L2BLOCK     1
+#define FLG_L2BLOCK	1
+#define FLG_PTP		2
 
 typedef struct _cause {
 	u_char	len __attribute__ ((packed));
@@ -268,6 +269,7 @@ typedef struct _layer3 {
 	struct FsmTimer	l3m_timer;
 	l3_process_t	*proc;
 	l3_process_t	*global;
+	l3_process_t	*dummy;
 	int		(*p_mgr)(l3_process_t *, u_int, void *);
 	u_int		id;
 	int		debug;

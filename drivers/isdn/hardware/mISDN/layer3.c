@@ -1,4 +1,4 @@
-/* $Id: layer3.c,v 0.4 2001/02/19 11:51:42 kkeil Exp $
+/* $Id: layer3.c,v 0.5 2001/02/19 22:25:31 kkeil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -14,7 +14,7 @@
 #include "hisaxl3.h"
 #include "helper.h"
 
-const char *l3_revision = "$Revision: 0.4 $";
+const char *l3_revision = "$Revision: 0.5 $";
 
 static
 struct Fsm l3fsm = {NULL, 0, 0, NULL, NULL};
@@ -285,8 +285,18 @@ release_l3_process(l3_process_t *p)
 	REMOVE_FROM_LISTBASE(p, l3->proc);
 	StopAllL3Timer(p);
 	kfree(p);
-	if (!l3->proc)
-		RELEASE();
+	if (!l3->proc && !test_bit(FLG_PTP, &l3->Flag)) {
+		if (l3->debug)
+			l3_debug(l3, "release_l3_process: last process");
+		if (!skb_queue_len(&l3->squeue)) {
+			if (l3->debug)
+				l3_debug(l3, "release_l3_process: release link");
+			FsmEvent(&l3->l3m, EV_RELEASE_REQ, NULL);
+		} else {
+			if (l3->debug)
+				l3_debug(l3, "release_l3_process: not release link");
+		}
+	}
 };
 
 static void
@@ -307,14 +317,17 @@ int
 hisax_l3up(l3_process_t *l3p, u_int prim, void *arg) {
 	layer3_t *l3;
 	hisaxif_t *up;
+	l3msg_t l3msg;
 	int err = -EINVAL;
 
 	if (!l3p)
 		return(-EINVAL);
 	l3 = l3p->l3;
 	up = &l3->inst.up;
+	l3msg.id = l3p->id;
+	l3msg.arg = arg;
 	if (up->func)
-		err = up->func(up, prim, l3->msgnr++, 0, arg);
+		err = up->func(up, prim, l3->msgnr++, DTYPE_L3MSGP, &l3msg);
 	return(err);
 }
 
@@ -491,6 +504,7 @@ init_l3(layer3_t *l3)
 {
 	l3->proc   = NULL;
 	l3->global = NULL;
+	l3->dummy = NULL;
 	skb_queue_head_init(&l3->squeue);
 	l3->l3m.fsm = &l3fsm;
 	l3->l3m.state = ST_L3_LC_REL;
@@ -512,6 +526,11 @@ release_l3(layer3_t *l3)
 		StopAllL3Timer(l3->global);
 		kfree(l3->global);
 		l3->global = NULL;
+	}
+	if (l3->dummy) {
+		StopAllL3Timer(l3->dummy);
+		kfree(l3->dummy);
+		l3->dummy = NULL;
 	}
 	FsmDelTimer(&l3->l3m_timer, 54);
 	discard_queue(&l3->squeue);

@@ -1,4 +1,4 @@
-/* $Id: mISDNif.h,v 0.4 2001/02/19 11:51:42 kkeil Exp $
+/* $Id: mISDNif.h,v 0.5 2001/02/19 22:25:31 kkeil Exp $
  *
  */
 
@@ -206,6 +206,7 @@
 #define IF_TYPE(i)	((i)->stat & IF_TYPEMASK)
 
 #define DTYPE_SKB	-1
+#define DTYPE_L3MSGP	-2
 
 /* special packet type */
 #define PACKET_NOACK	250
@@ -249,6 +250,11 @@ typedef struct _bsetup {
 	int	flags;
 	u_int	protocol[MAX_LAYER+1];
 } bsetup_t;
+
+typedef struct _l3msg_t {
+	int	id;
+	void	*arg;
+} l3msg_t;
 
 #ifdef __KERNEL__
 
