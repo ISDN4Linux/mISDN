@@ -1,4 +1,4 @@
-/* $Id: dchannel.h,v 1.9 2004/01/26 22:21:30 keil Exp $
+/* $Id: dchannel.h,v 1.10 2004/01/28 10:06:39 keil Exp $
  *
  *   Basic declarations for dchannel HW
  *
@@ -39,6 +39,7 @@
 #define FLG_HW_INIT		13
 
 typedef struct _dchannel_t {
+	int			channel;
 	mISDNinstance_t		inst;
 	u_long			DFlags;
 	u_int			type;

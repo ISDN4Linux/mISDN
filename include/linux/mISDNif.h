@@ -1,4 +1,4 @@
-/* $Id: mISDNif.h,v 1.23 2004/01/26 22:21:32 keil Exp $
+/* $Id: mISDNif.h,v 1.24 2004/01/28 10:06:40 keil Exp $
  *
  */
 
@@ -106,6 +106,20 @@
 #define HW_MOD_NOCARR	0x0412
 #define HW_MOD_FCERROR	0x0413
 #define HW_HFC_COEFF	0x0500
+#define HW_LOS		0x0501
+#define HW_LOS_OFF	0x0502
+#define HW_AIS		0x0503
+#define HW_AIS_OFF	0x0504
+#define HW_SLIP_TX	0x0505
+#define HW_SLIP_RX	0x0506
+#define HW_PCM_CONN	0x0580
+#define HW_PCM_DISC	0x0581
+#define HW_CONF_JOIN	0x0582
+#define HW_CONF_SPLIT	0x0583
+#define HW_ECHO_ON	0x0584
+#define HW_ECHO_OFF	0x0585
+#define HW_RECEIVE_OFF	0x0586
+#define HW_RECEIVE_ON	0x0587
 #define HW_TESTLOOP	0xFF00
 #define HW_FIRM_START	0xFF10
 #define HW_FIRM_DATA	0xFF11
@@ -132,6 +146,10 @@
 #define TONE_PATT_OFF	0x2311
 #define VOL_CHANGE_TX	0x2312
 #define VOL_CHANGE_RX	0x2313
+#define BF_ENABLE_KEY	0x2314
+#define BF_DISABLE	0x2315
+#define BF_ACCEPT	0x2316
+#define BF_REJECT	0x2317
 #define HW_POTS_ON		0x1001
 #define HW_POTS_OFF		0x1002
 #define HW_POTS_SETMICVOL	0x1100
@@ -485,7 +503,7 @@ typedef struct _stack_info {
 	int		instcnt;
 	int		inst[MAX_LAYER_NR +1];
 	int		childcnt;
-	u_int		child[2];
+	u_int		child[30];
 } stack_info_t;
 
 typedef struct _layer_info {
