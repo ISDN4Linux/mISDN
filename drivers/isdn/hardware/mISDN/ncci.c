@@ -1,4 +1,4 @@
-/* $Id: ncci.c,v 0.5 2001/03/03 18:17:16 kkeil Exp $
+/* $Id: ncci.c,v 0.6 2001/03/04 00:48:49 kkeil Exp $
  *
  */
 
@@ -338,6 +338,10 @@ void ncciInitSt(Ncci_t *ncci)
 	Cplci_t *cplci = ncci->cplci;
 
 	memset(&pid, 0, sizeof(hisax_pid_t));
+	if (test_bit(PLCI_FLAG_OUTGOING, &cplci->plci->flags))
+		pid.global = 1; // DTE, orginate
+	else
+		pid.global = 2; // DCE, answer
 	if (cplci->Bprotocol.B1protocol > 23) {
 		int_errtxt("wrong B1 prot %x", cplci->Bprotocol.B1protocol);
 		return;
@@ -356,8 +360,8 @@ void ncciInitSt(Ncci_t *ncci)
 	}
 	pid.protocol[3] = (1 << cplci->Bprotocol.B3protocol) |
 		ISDN_PID_LAYER(3) | ISDN_PID_BCHANNEL_BIT;
-	printk(KERN_DEBUG "ncciInitSt B1(%x) B2(%x) B3(%x) ch(%x)\n",
-		pid.protocol[1], pid.protocol[2], pid.protocol[3],
+	printk(KERN_DEBUG "ncciInitSt B1(%x) B2(%x) B3(%x) global(%d) ch(%x)\n",
+   		pid.protocol[1], pid.protocol[2], pid.protocol[3], pid.global, 
 		cplci->bchannel);
 	printk(KERN_DEBUG "ncciInitSt ch(%d) cplci->contr->binst(%p)\n",
 		cplci->bchannel & 3, cplci->contr->binst);
@@ -395,10 +399,6 @@ void ncciInitSt(Ncci_t *ncci)
 		int_error();
 		return;
 	}
-//	if (sp.b2_mode != B2_MODE_TRANS || !test_bit(PLCI_FLAG_OUTGOING, &cplci->plci->flags)) {
-		// listen for e.g. SABME
-//		ncciL4L3(ncci, PH_ACTIVATE | REQUEST, 0, 0, NULL);
-//	}
 }
 
 void ncciReleaseSt(Ncci_t *ncci)
@@ -545,7 +545,6 @@ void ncciDataConf(Ncci_t *ncci, int pr, void *arg)
 	cmsg.DataHandle = ncci->xmit_skb_handles[i].DataHandle;
 	cmsg.Info = 0;
 	ncciRecvCmsg(ncci, &cmsg);
-	ncci->xmit_skb_handles[i].skb = 0;
 }	
 	
 void ncciDataResp(Ncci_t *ncci, struct sk_buff *skb)
@@ -640,7 +639,6 @@ static int ncci_l3l4(hisaxif_t *hif, u_int prim, int dinfo, int len, void *arg)
 
 	switch (prim) {
 		// we're not using the Fsm for DL_DATA for performance reasons
-		case PH_DATA | INDICATION:
 		case DL_DATA | INDICATION: 
 			if (ncci->ncci_m.state == ST_NCCI_N_ACT) {
 				ncciDataInd(ncci, prim, arg);
@@ -648,25 +646,20 @@ static int ncci_l3l4(hisaxif_t *hif, u_int prim, int dinfo, int len, void *arg)
 				dev_kfree_skb(skb);
 			}
 			break;
-		case PH_DATA | CONFIRM:
 		case DL_DATA | CONFIRM:
 			if (ncci->ncci_m.state == ST_NCCI_N_ACT) {
 				ncciDataConf(ncci, prim, arg);
 			}
 			break;
-		case PH_ACTIVATE | INDICATION:
 		case DL_ESTABLISH | INDICATION:
 			FsmEvent(&ncci->ncci_m, EV_NCCI_DL_ESTABLISH_IND, arg);
 			break;
-		case PH_ACTIVATE | CONFIRM:
 		case DL_ESTABLISH | CONFIRM:
 			FsmEvent(&ncci->ncci_m, EV_NCCI_DL_ESTABLISH_CONF, arg);
 			break;
-		case PH_DEACTIVATE | INDICATION:
 		case DL_RELEASE | INDICATION:
 			FsmEvent(&ncci->ncci_m, EV_NCCI_DL_RELEASE_IND, arg);
 			break;
-		case PH_DEACTIVATE | CONFIRM:
 		case DL_RELEASE | CONFIRM:
 			FsmEvent(&ncci->ncci_m, EV_NCCI_DL_RELEASE_CONF, arg);
 			break;

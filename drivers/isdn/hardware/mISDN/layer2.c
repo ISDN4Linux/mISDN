@@ -1,4 +1,4 @@
-/* $Id: layer2.c,v 0.7 2001/03/03 18:17:15 kkeil Exp $
+/* $Id: layer2.c,v 0.8 2001/03/04 00:48:49 kkeil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -12,7 +12,7 @@
 #include "helper.h"
 #include "debug.h"
 
-const char *l2_revision = "$Revision: 0.7 $";
+const char *l2_revision = "$Revision: 0.8 $";
 
 static void l2m_debug(struct FsmInst *fi, char *fmt, ...);
 
@@ -108,7 +108,7 @@ l2up(layer2_t *l2, u_int prim, int dinfo, int len, void *arg) {
 	hisaxif_t *up = &l2->inst.up;
 	int err = -EINVAL;
 
-	if(up)
+	if (up->func)
 		err = up->func(up, prim, dinfo, len, arg);
 	return(err);
 }
@@ -118,7 +118,7 @@ l2down(layer2_t *l2, u_int prim, int dinfo, int len, void *arg) {
 	hisaxif_t *down = &l2->inst.down;
 	int err = -EINVAL;
 
-	if (down) {
+	if (down->func) {
 		if (prim == PH_DATA_REQ) {
 			if (test_and_set_bit(FLG_L1_BUSY, &l2->flag)) {
 				skb_queue_tail(&l2->down_queue, arg);
@@ -132,6 +132,19 @@ l2down(layer2_t *l2, u_int prim, int dinfo, int len, void *arg) {
 	return(err);
 }
 
+
+static int
+l2down_phd(layer2_t *l2, struct sk_buff *skb) {
+	hisaxif_t *down = &l2->inst.down;
+	int ret = -EINVAL;
+
+	if (down->func)
+		ret = down->func(down, PH_DATA_REQ, DINFO_SKB, 0, skb);
+	if (ret)
+		printk(KERN_WARNING "l2down_phd: error %d\n", ret);
+	return(ret);
+}
+
 static int
 ph_data_confirm(hisaxif_t *up, int dinfo, int len, void *arg) {
 	layer2_t *l2 = up->fdata;
@@ -143,7 +156,10 @@ ph_data_confirm(hisaxif_t *up, int dinfo, int len, void *arg) {
 		if (skb == l2->down_skb) {
 			if ((skb = skb_dequeue(&l2->down_queue))) {
 				l2->down_skb = skb;
-				l2down(l2, PH_DATA_REQ, dinfo, len, skb);
+				if (l2down_phd(l2, skb)) {
+					dev_kfree_skb(skb);
+					l2->down_skb = NULL;
+				}
 			} else
 				l2->down_skb = NULL;
 			if (next)
@@ -163,7 +179,11 @@ ph_data_confirm(hisaxif_t *up, int dinfo, int len, void *arg) {
 	if (!test_and_set_bit(FLG_L1_BUSY, &l2->flag)) {
 		if ((skb = skb_dequeue(&l2->down_queue))) {
 			l2->down_skb = skb;
-			l2down(l2, PH_DATA_REQ, 0, 0, skb);
+			if (l2down_phd(l2, skb)) {
+				dev_kfree_skb(skb);
+				l2->down_skb = NULL;
+				test_and_clear_bit(FLG_L1_BUSY, &l2->flag);
+			}
 		} else
 			test_and_clear_bit(FLG_L1_BUSY, &l2->flag);
 	}
@@ -270,9 +290,9 @@ sethdraddr(layer2_t *l2, u_char * header, int rsp)
 		if (test_bit(FLG_ORIG, &l2->flag))
 			crbit = !crbit;
 		if (crbit)
-			*ptr++ = 1;
+			*ptr++ = l2->addr.B;
 		else
-			*ptr++ = 3;
+			*ptr++ = l2->addr.A;
 		return (1);
 	}
 }
@@ -446,22 +466,16 @@ legalnr(layer2_t *l2, unsigned int nr)
 static void
 setva(layer2_t *l2, unsigned int nr)
 {
-	int len;
-
 	while (l2->va != nr) {
 		(l2->va)++;
 		if(test_bit(FLG_MOD128, &l2->flag))
 			l2->va %= 128;
 		else
 			l2->va %= 8;
-		len = l2->windowar[l2->sow]->len;
-		if (PACKET_NOACK == l2->windowar[l2->sow]->pkt_type)
-			len = -1;
+		l2up(l2, DL_DATA | CONFIRM, DINFO_SKB, 0, l2->windowar[l2->sow]);
 		dev_kfree_skb(l2->windowar[l2->sow]);
 		l2->windowar[l2->sow] = NULL;
 		l2->sow = (l2->sow + 1) % l2->window;
-//		if (st->lli.l2writewakeup && (len >=0))
-//			st->lli.l2writewakeup(st, len);
 	}
 }
 
@@ -667,7 +681,7 @@ l2_got_ui(struct FsmInst *fi, int event, void *arg)
 
 	skb_pull(skb, l2headersize(l2, 1));
 	l2up(l2, DL_UNITDATA | INDICATION, DINFO_SKB, 0, skb);
-/*	^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/*	^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
  *		in states 1-3 for broadcast
  */
 }
@@ -1294,7 +1308,8 @@ l2_pull_iqueue(struct FsmInst *fi, int event, void *arg)
 		       p1);
 		dev_kfree_skb(l2->windowar[p1]);
 	}
-	l2->windowar[p1] = skb_clone(skb, GFP_ATOMIC);
+	l2->windowar[p1] = skb;
+	skb = skb_clone(skb, GFP_ATOMIC);
 
 	i = sethdraddr(l2, header, CMD);
 
@@ -1794,9 +1809,9 @@ l2from_down(hisaxif_t *hif, u_int prim, int dinfo, int len, void *arg) {
 			FsmEvent(&l2->l2m, EV_L1_DEACTIVATE, arg);
 			ret = 0;
 			break;
-		case (MDL_STATUS | REQUEST):
+		case (MDL_FINDTEI | REQUEST):
 			if (test_bit(FLG_LAPD, &l2->flag)) {
-				if (l2->tei == len) {
+				if (l2->tei == dinfo) {
 					teimgr_t **p = arg;
 					if (p) {
 						*p = l2->tm;
@@ -1889,16 +1904,9 @@ tei_l2(layer2_t *l2, u_int prim, int dinfo, int len, void *arg)
 	    case (MDL_ERROR | RESPONSE):
 		FsmEvent(&l2->l2m, EV_L2_MDL_ERROR, arg);
 		break;
-#if 0
-	    case (MDL_STATUS | REQUEST):
-		if (l2->inst.st && l2->inst.st->inst[1]) {
-			hisaxif_t *up = &l2->inst.st->inst[1]->up;
-			if (up)
-				return(up->func(up, MDL_STATUS | REQUEST,
-					dinfo, len, arg));
-		}
+	    case (MDL_FINDTEI | REQUEST):
+	    	return(l2down(l2, prim, dinfo, len, arg));
 		break;
-#endif
 	}
 	return(0);
 }
@@ -1952,6 +1960,7 @@ static layer2_t *
 create_l2(hisaxstack_t *st, hisaxif_t *hif) {
 	layer2_t *nl2;
 	int err,lay;
+	u_char *p;
 
 	if (!hif)
 		return(NULL);
@@ -1999,7 +2008,23 @@ create_l2(hisaxstack_t *st, hisaxif_t *hif) {
 		nl2->T200 = 1000;
 		nl2->N200 = 4;
 		nl2->T203 = 5000;
-		test_and_set_bit(FLG_ORIG, &nl2->flag);
+		nl2->addr.A = 3;
+		nl2->addr.B = 1;
+		nl2->inst.pid.global = st->pid.global;
+		if (nl2->inst.pid.global == 1)
+			test_and_set_bit(FLG_ORIG, &nl2->flag);
+		if ((p=st->pid.param[2])) {
+			if (*p>=4) {
+				p++;
+				nl2->addr.A = *p++;
+				nl2->addr.B = *p++;
+				if (*p++ == 128)
+					test_and_set_bit(FLG_MOD128, &nl2->flag);
+				nl2->window = *p++;
+				if (nl2->window > 7)
+					nl2->window = 7;
+			}
+		}
 		break;
 	    default:
 		printk(KERN_ERR "layer1 create failed prt %x\n",hif->protocol);

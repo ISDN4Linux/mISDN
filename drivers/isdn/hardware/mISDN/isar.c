@@ -1,4 +1,4 @@
-/* $Id: isar.c,v 0.7 2001/03/03 18:17:15 kkeil Exp $
+/* $Id: isar.c,v 0.8 2001/03/04 00:48:49 kkeil Exp $
  *
  * isar.c   ISAR (Siemens PSB 7110) specific routines
  *
@@ -417,6 +417,10 @@ reterror:
 static void
 isar_bh(bchannel_t *bch)
 {
+	struct sk_buff	*skb;
+	u_int 		pr;
+	int		ret;
+
 	if (!bch)
 		return;
 	if (!bch->inst.up.func) {
@@ -424,29 +428,27 @@ isar_bh(bchannel_t *bch)
 		return;
 	}
 	if (test_and_clear_bit(B_XMTBUFREADY, &bch->event)) {
-		struct sk_buff *skb = bch->next_skb;
-
+		skb = bch->next_skb;
 		if (skb) {
 			bch->next_skb = NULL;
-			bch->inst.up.func(&bch->inst.up, PH_DATA_CNF,
-				DINFO_SKB, 0, skb);
-		} else
-			printk(KERN_WARNING "B_XMTBUFREADY without skb\n");
+			if (bch->inst.pid.protocol[2] == ISDN_PID_L2_B_TRANS)
+				pr = DL_DATA | CONFIRM;
+			else
+				pr = PH_DATA | CONFIRM;
+			bch->inst.up.func(&bch->inst.up, pr, DINFO_SKB, 0, skb);
+		}
 	}
 	if (test_and_clear_bit(B_RCVBUFREADY, &bch->event)) {
-		struct sk_buff	*skb;
-		int		err;
-		hisaxif_t	*upif;
-
 		while ((skb = skb_dequeue(&bch->rqueue))) {
-			if (!(upif = &bch->inst.up)) {
-				dev_kfree_skb(skb);
-				continue;
-			}
-			err = upif->func(upif, PH_DATA_IND, DINFO_SKB, 0, skb);
-			if (err < 0) {
+			if (bch->inst.pid.protocol[2] == ISDN_PID_L2_B_TRANS)
+				pr = DL_DATA | INDICATION;
+			else
+				pr = PH_DATA | INDICATION;
+			ret = bch->inst.up.func(&bch->inst.up, pr, DINFO_SKB,
+				0, skb);
+			if (ret < 0) {
 				printk(KERN_WARNING "HiSax: isar deliver err %d\n",
-					err);
+					ret);
 				dev_kfree_skb(skb);
 			}
 		}
@@ -462,11 +464,10 @@ isar_bh(bchannel_t *bch)
 	if (test_and_clear_bit(B_LL_FCERROR, &bch->event))
 		deliver_status(bch, HW_MOD_FCERROR);
 	if (test_and_clear_bit(B_TOUCH_TONE, &bch->event)) {
-		int tt = bch->conmsg[0];
-
-		tt |= TOUCH_TONE_VAL;
+		ret = bch->conmsg[0];
+		ret |= TOUCH_TONE_VAL;
 		bch->inst.up.func(&bch->inst.up, PH_CONTROL | INDICATION,
-			0, sizeof(int), &tt);
+			0, sizeof(int), &ret);
 	}
 
 }
@@ -1621,22 +1622,21 @@ isar_down(hisaxif_t *hif, u_int prim, int dinfo, int len, void *arg)
 			bch->tx_idx = 0;
 			isar_fill_fifo(bch);
 			bch->inst.unlock(bch->inst.data);
-			bch->inst.up.func(&bch->inst.up, PH_DATA_CNF,
+			bch->inst.up.func(&bch->inst.up, prim | CONFIRM,
 				DINFO_SKB, 0, skb);
 		}
 	} else if ((prim == (PH_ACTIVATE | REQUEST)) ||
 		(prim == (DL_ESTABLISH  | REQUEST))) {
-		test_and_set_bit(BC_FLG_ACTIV, &bch->Flag);
-		bch->inst.lock(bch->inst.data);
-		ret = modeisar(bch, bch->channel,
-			bch->inst.pid.protocol[1], NULL);
-		bch->inst.unlock(bch->inst.data);
-		if (ret)
-			bch->inst.up.func(&bch->inst.up, prim | CONFIRM, 0,
-				ret, NULL);
-		else
-			bch->inst.up.func(&bch->inst.up, prim | CONFIRM, 0,
-				0, NULL);
+		if (test_and_set_bit(BC_FLG_ACTIV, &bch->Flag))
+			ret = 0;
+		else {
+			bch->inst.lock(bch->inst.data);
+			ret = modeisar(bch, bch->channel,
+				bch->inst.pid.protocol[1], NULL);
+			bch->inst.unlock(bch->inst.data);
+		}
+		bch->inst.up.func(&bch->inst.up, prim | CONFIRM, 0,
+			ret, NULL);
 	} else if ((prim == (PH_DEACTIVATE | REQUEST)) ||
 		(prim == (DL_RELEASE | REQUEST)) ||
 		(prim == (MGR_DELIF | REQUEST))) {

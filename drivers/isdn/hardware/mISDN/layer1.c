@@ -1,4 +1,4 @@
-/* $Id: layer1.c,v 0.7 2001/03/03 18:17:15 kkeil Exp $
+/* $Id: layer1.c,v 0.8 2001/03/04 00:48:49 kkeil Exp $
  *
  * hisax_l1.c     common low level stuff for I.430 layer1
  *
@@ -10,7 +10,7 @@
  *
  */
 
-const char *l1_revision = "$Revision: 0.7 $";
+const char *l1_revision = "$Revision: 0.8 $";
 
 #include <linux/config.h>
 #include <linux/module.h>
@@ -157,7 +157,7 @@ l1up(layer1_t *l1, u_int prim, int dinfo, int len, void *arg) {
 	int		err = -EINVAL;
 	hisaxif_t	*upif = &l1->inst.up;
 
-	if (upif) {
+	if (upif->func) {
 		err = upif->func(upif, prim, dinfo, len, arg);
 		if (err < 0) {
 			printk(KERN_WARNING "HiSax: l1up err %d\n", err);
@@ -511,6 +511,8 @@ l1from_up(hisaxif_t *hif, u_int prim, int dinfo, int len, void *arg) {
 				FsmEvent(&l1->l1m, EV_PH_ACTIVATE, arg);
 			}
 			break;
+		case (MDL_FINDTEI | REQUEST):
+			return(l1up(l1, prim, dinfo, len, arg));
 		default:
 			if (l1->debug)
 				hisaxdebug(l1->inst.st->id, NULL,

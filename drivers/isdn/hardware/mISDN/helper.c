@@ -1,4 +1,4 @@
-/* $Id: helper.c,v 0.5 2001/03/03 08:07:29 kkeil Exp $
+/* $Id: helper.c,v 0.6 2001/03/04 00:48:49 kkeil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -150,10 +150,12 @@ int bprotocol2pid(void *bp, hisax_pid_t *pid) {
 		p += *p;
 		p++;
 	}
-	if (*p)
-		pid->global = p;
-	else
-		pid->global = NULL;
+	pid->global = 0;
+	if (*p == 2) { // len of 1 word
+		p++;
+		w = (__u16 *)p;
+		pid->global = *w;
+	}
 	return(0);
 }
 

@@ -1,4 +1,4 @@
-/* $Id: stack.c,v 0.4 2001/03/03 08:27:06 kkeil Exp $
+/* $Id: stack.c,v 0.5 2001/03/04 00:48:49 kkeil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -211,20 +211,11 @@ insertlayer(hisaxstack_t *st, hisaxlayer_t *layer, int layermask)
 		return(-EINVAL);
 	}
 	item = st->lstack;
-	if (core_debug & DEBUG_CORE_FUNC)
-		printk(KERN_DEBUG "lstack(%p)",
-			st->lstack);
 	if (!item) {
 		st->lstack = layer;
-		if (core_debug & DEBUG_CORE_FUNC)
-			printk("\n");
 	} else {
 		while(item) {
 			if (layermask < get_layermask(item)) {
-				if (core_debug & DEBUG_CORE_FUNC)
-					printk(" item(%p) lm(%x) prev(%p)\n",
-						item, get_layermask(item),
-						item->prev);
 				INSERT_INTO_LIST(layer, item, st->lstack);
 				return(0);
 			} else {
@@ -233,9 +224,6 @@ insertlayer(hisaxstack_t *st, hisaxlayer_t *layer, int layermask)
 			}
 			item = item->next;
 		}
-		if (core_debug & DEBUG_CORE_FUNC)
-			printk(" item(%p) lm(%x)\n",
-				item, get_layermask(item));
 		item->next = layer;
 		layer->prev = item;
 	}

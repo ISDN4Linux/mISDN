@@ -1,4 +1,4 @@
-/* $Id: tei.c,v 0.4 2001/03/03 18:17:16 kkeil Exp $
+/* $Id: tei.c,v 0.5 2001/03/04 00:48:49 kkeil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -12,7 +12,7 @@
 #include "debug.h"
 #include <linux/random.h>
 
-const char *tei_revision = "$Revision: 0.4 $";
+const char *tei_revision = "$Revision: 0.5 $";
 
 #define ID_REQUEST	1
 #define ID_ASSIGNED	2
@@ -82,7 +82,7 @@ findtei(teimgr_t *tm, int tei)
 
 	if (tei == 127)
 		return (NULL);
-	if (!tei_l2(tm->l2, MDL_STATUS | REQUEST, tei, sizeof(void), &ptr))
+	if (!tei_l2(tm->l2, MDL_FINDTEI | REQUEST, tei, sizeof(void), &ptr))
 		return(ptr);
 	return (NULL);
 }

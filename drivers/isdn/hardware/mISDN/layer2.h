@@ -1,4 +1,4 @@
-/* $Id: layer2.h,v 0.6 2001/03/03 18:17:15 kkeil Exp $
+/* $Id: layer2.h,v 0.7 2001/03/04 00:48:49 kkeil Exp $
  *
  * Layer 2 defines
  *
@@ -24,11 +24,17 @@ typedef struct _teimgr {
 	struct _layer2	*l2;
 } teimgr_t;
 
+typedef struct _laddr {
+	u_char	A;
+	u_char	B;
+} laddr_t;
+
 typedef struct _layer2 {
 	struct _layer2	*prev;
 	struct _layer2	*next;
 	int		sapi;
 	int		tei;
+	laddr_t		addr;
 	int		maxlen;
 	teimgr_t	*tm;
 	u_int		flag;
