@@ -1,4 +1,4 @@
-/* $Id: layer2.c,v 1.5 2003/06/24 21:58:53 kkeil Exp $
+/* $Id: layer2.c,v 1.6 2003/07/18 16:36:03 kkeil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -12,7 +12,7 @@
 #include "helper.h"
 #include "debug.h"
 
-const char *l2_revision = "$Revision: 1.5 $";
+const char *l2_revision = "$Revision: 1.6 $";
 
 static void l2m_debug(struct FsmInst *fi, char *fmt, ...);
 
@@ -2030,8 +2030,6 @@ release_l2(layer2_t *l2)
 	discard_queue(&l2->i_queue);
 	discard_queue(&l2->ui_queue);
 	discard_queue(&l2->down_queue);
-	if (l2->down_skb)
-		dev_kfree_skb(l2->down_skb);
 	ReleaseWin(l2);
 	if (test_bit(FLG_LAPD, &l2->flag))
 		release_tei(l2->tm);

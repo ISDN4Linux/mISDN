@@ -1,4 +1,4 @@
-/* $Id: mISDNif.h,v 1.9 2003/07/07 14:29:39 kkeil Exp $
+/* $Id: mISDNif.h,v 1.10 2003/07/18 16:36:03 kkeil Exp $
  *
  */
 
@@ -49,6 +49,7 @@
 #define MGR_DISCONNECT	0x0f3300
 #define MGR_SETIF	0x0f3400
 #define MGR_ADDIF	0x0f3500
+#define MGR_QUEUEIF	0x0f3600
 #define MGR_RELEASE	0x0f4500
 #define MGR_GETDEVICE	0x0f5100
 #define MGR_DELDEVICE	0x0f5200

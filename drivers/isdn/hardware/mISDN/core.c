@@ -1,4 +1,4 @@
-/* $Id: core.c,v 1.6 2003/06/30 11:23:33 kkeil Exp $
+/* $Id: core.c,v 1.7 2003/07/18 16:36:03 kkeil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -112,10 +112,18 @@ hisaxd(void *data)
 						err--; /* to free skb */
 					}
 					break;
+				case MGR_QUEUEIF:
+					err = hhe->func.iff(hhe->data[0], skb);
+					if (err) {
+						printk(KERN_WARNING "hisaxd: what(%x) prim(%x) failed err(%x)\n",
+							hhe->what, hhe->prim, err);
+					}
+					break;
 				default:
 					int_error();
 					printk(KERN_WARNING "hisaxd: what(%x) prim(%x) unknown\n",
 						hhe->what, hhe->prim);
+					err = -EINVAL;
 					break;
 			}
 			if (err)
@@ -231,9 +239,12 @@ dummy_if(hisaxif_t *hif, struct sk_buff *skb)
 			__FUNCTION__, hif);
 		return(-EINVAL);
 	}
-	if (debug & DEBUG_DUMMY_FUNC)
+	if (debug & DEBUG_DUMMY_FUNC) {
+		hisax_head_t	*hh = HISAX_HEAD_P(skb);
+
 		printk(KERN_DEBUG "%s: hif(%p) skb(%p) len(%d) prim(%x)\n",
-			__FUNCTION__, hif, skb, skb->len, *((u_int *)skb->data));
+			__FUNCTION__, hif, skb, skb->len, hh->prim);
+	}
 	dev_kfree_skb_any(skb);
 	return(0);
 }
@@ -375,6 +386,17 @@ get_hdevice(hisaxdevice_t **dev, int *typ)
 	return(-EINVAL);
 }
 
+static int
+mgr_queue(void *data, u_int prim, struct sk_buff *skb)
+{
+	hisax_headext_t *hhe = HISAX_HEADEXT_P(skb);
+
+	hhe->what = prim;
+	skb_queue_tail(&hisax_thread.workq, skb);
+	wake_up_interruptible(&hisax_thread.waitq);
+	return(0);
+}
+
 static int central_manager(void *data, u_int prim, void *arg) {
 	hisaxstack_t *st = data;
 
@@ -400,6 +422,8 @@ static int central_manager(void *data, u_int prim, void *arg) {
 	    	return(get_hdevice(data, arg));
 	    case MGR_DELDEVICE | REQUEST:
 	    	return(free_device(data));
+	    case MGR_QUEUEIF | REQUEST:
+	    	return(mgr_queue(data, MGR_QUEUEIF, arg));
 	}
 	if (!data)
 		return(-EINVAL);

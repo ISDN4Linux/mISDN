@@ -1,4 +1,4 @@
-/* $Id: dchannel.c,v 1.2 2003/06/22 10:39:43 kkeil Exp $
+/* $Id: dchannel.c,v 1.3 2003/07/18 16:36:03 kkeil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -107,25 +107,3 @@ free_dchannel(dchannel_t *dch) {
 	return(0);
 }
 
-void
-set_dchannel_pid(hisax_pid_t *pid, int protocol, int layermask) {
-
-	if (!layermask)
-		layermask = ISDN_LAYER(0)| ISDN_LAYER(1) | ISDN_LAYER(2) |
-			ISDN_LAYER(3) | ISDN_LAYER(4);
-	
-	memset(pid, 0, sizeof(hisax_pid_t));
-	pid->layermask = layermask;
-	if (layermask & ISDN_LAYER(0))
-		pid->protocol[0] = ISDN_PID_L0_TE_S0;
-	if (layermask & ISDN_LAYER(1))
-		pid->protocol[1] = ISDN_PID_L1_TE_S0;
-	if (layermask & ISDN_LAYER(2))
-		pid->protocol[2] = ISDN_PID_L2_LAPD;
-	if (layermask & ISDN_LAYER(3)) {
-		if (protocol == 2)
-			pid->protocol[3] = ISDN_PID_L3_DSS1USER;
-	}
-	if (layermask & ISDN_LAYER(4))
-		pid->protocol[4] = ISDN_PID_L4_CAPI20;
-}

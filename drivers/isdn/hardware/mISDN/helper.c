@@ -1,4 +1,4 @@
-/* $Id: helper.c,v 1.4 2003/06/22 10:39:43 kkeil Exp $
+/* $Id: helper.c,v 1.5 2003/07/18 16:36:03 kkeil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -10,7 +10,32 @@
 #include <linux/hisaxif.h>
 #include "helper.h"
 
-int bprotocol2pid(void *bp, hisax_pid_t *pid) {
+void
+set_dchannel_pid(hisax_pid_t *pid, int protocol, int layermask)
+{
+	if (!layermask)
+		layermask = ISDN_LAYER(0)| ISDN_LAYER(1) | ISDN_LAYER(2) |
+			ISDN_LAYER(3) | ISDN_LAYER(4);
+	
+	memset(pid, 0, sizeof(hisax_pid_t));
+	pid->layermask = layermask;
+	if (layermask & ISDN_LAYER(0))
+		pid->protocol[0] = ISDN_PID_L0_TE_S0;
+	if (layermask & ISDN_LAYER(1))
+		pid->protocol[1] = ISDN_PID_L1_TE_S0;
+	if (layermask & ISDN_LAYER(2))
+		pid->protocol[2] = ISDN_PID_L2_LAPD;
+	if (layermask & ISDN_LAYER(3)) {
+		if (protocol == 2)
+			pid->protocol[3] = ISDN_PID_L3_DSS1USER;
+	}
+	if (layermask & ISDN_LAYER(4))
+		pid->protocol[4] = ISDN_PID_L4_CAPI20;
+}
+
+int
+bprotocol2pid(void *bp, hisax_pid_t *pid)
+{
 	__u8	*p = bp;
 	__u16	*w = bp;
 	int	i;

@@ -1,4 +1,4 @@
-/* $Id: cplci.c,v 1.6 2003/07/07 14:29:38 kkeil Exp $
+/* $Id: cplci.c,v 1.7 2003/07/18 16:36:03 kkeil Exp $
  *
  */
 
@@ -18,117 +18,6 @@ static u_char BEARER_31AUDIO_64K_ALAW[] = {4, 3, 0x90, 0x90, 0xA3};
 static u_char BEARER_31AUDIO_64K_ULAW[] = {4, 3, 0x90, 0x90, 0xA2};
 static u_char HLC_TELEPHONY[] = {0x7d, 2, 0x91, 0x81};
 static u_char HLC_FACSIMILE[] = {0x7d, 2, 0x91, 0x84};
-static signed char l3_ie2pos[128] = {
-			-1,-1,-1,-1, 0,-1,-1,-1, 1,-1,-1,-1,-1,-1,-1,-1,
-			 2,-1,-1,-1, 3,-1,-1,-1, 4,-1,-1,-1, 5,-1, 6,-1,
-			 7,-1,-1,-1,-1,-1,-1, 8, 9,10,-1,-1,11,-1,-1,-1,
-			-1,-1,-1,-1,12,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-			13,-1,14,15,16,17,18,19,-1,-1,-1,-1,20,21,-1,-1,
-			-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-			-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,22,23,-1,-1,
-			24,25,-1,-1,26,-1,-1,-1,27,28,-1,-1,29,30,31,-1
-};
-			
-static unsigned char l3_pos2ie[32] = {
-			0x04, 0x08, 0x10, 0x14, 0x18, 0x1c, 0x1e, 0x20,
-			0x27, 0x28, 0x29, 0x2c, 0x34, 0x40, 0x42, 0x43,
-			0x44, 0x45, 0x46, 0x47, 0x4c, 0x4d, 0x6c, 0x6d,
-			0x70, 0x71, 0x74, 0x78, 0x79, 0x7c, 0x7d, 0x7e
-};
-
-static void
-initQ931_info(Q931_info_t *qi) {
-	memset(qi, 0, sizeof(Q931_info_t));
-};
-
-struct sk_buff *
-alloc_l3msg(int len, u_char type)
-{
-	struct sk_buff	*skb;
-	Q931_info_t	*qi;
-
-	if (!(skb = alloc_skb(len + MAX_HEADER_LEN + L3_EXTRA_SIZE, GFP_ATOMIC))) {
-		printk(KERN_WARNING "HiSax: No skb for L3\n");
-		return (NULL);
-	}
-	skb_reserve(skb, MAX_HEADER_LEN);
-	qi = (Q931_info_t *)skb_put(skb, L3_EXTRA_SIZE);
-	initQ931_info(qi);
-	qi->type = type;
-	return (skb);
-}
-
-void AddvarIE(struct sk_buff *skb, u_char *ie)
-{
-	u_char	*p, *ps;
-	u16	*ies;
-	int	l;
-	Q931_info_t *qi = (Q931_info_t *)skb->data;
-
-	ies = &qi->bearer_capability;
-	ps = (u_char *) qi;
-	ps += L3_EXTRA_SIZE;
-	if (*ie & 0x80) { /* one octett IE */
-		if (*ie == IE_MORE_DATA)
-			ies = &qi->more_data;
-		else if (*ie == IE_COMPLETE)
-			ies = &qi->sending_complete;
-		else if ((*ie & 0xf0) == IE_CONGESTION)
-			ies = &qi->congestion_level;
-		else {
-			int_error();
-			return;
-		}
-		l = 1;
-	} else {
-		if (l3_ie2pos[*ie]<0) {
-			int_error();
-			return;
-		}
-		ies += l3_ie2pos[*ie];
-		l = ie[1] + 2;
-	}
-	p = skb_put(skb, l);
-	*ies = (u16)(p - ps);
-	memcpy(p, ie, l);
-}
-
-void AddIE(struct sk_buff *skb, u_char ie, u_char *iep)
-{
-	u_char	*p, *ps;
-	u16	*ies;
-	int	l;
-	Q931_info_t *qi = (Q931_info_t *)skb->data;
-
-	ies = &qi->bearer_capability;
-	ps = (u_char *) qi;
-	ps += L3_EXTRA_SIZE;
-	if (ie & 0x80) { /* one octett IE */
-		if (ie == IE_MORE_DATA)
-			ies = &qi->more_data;
-		else if (ie == IE_COMPLETE)
-			ies = &qi->sending_complete;
-		else if ((ie & 0xf0) == IE_CONGESTION)
-			ies = &qi->congestion_level;
-		else {
-			int_error();
-			return;
-		}
-		l = 0;
-	} else {
-		if (l3_ie2pos[ie]<0) {
-			int_error();
-			return;
-		}
-		ies += l3_ie2pos[ie];
-		l = iep[0] + 1;
-	}
-	p = skb_put(skb, l+1);
-	*ies = (u16)(p - ps);
-	*p++ = ie;
-	if (l)
-		memcpy(p, iep, l);
-}
 
 __u16 q931CIPValue(Q931_info_t *qi)
 {
@@ -1454,9 +1343,9 @@ void cplciInfoIndIE(Cplci_t *cplci, unsigned char ie, __u32 mask, Q931_info_t *q
 		int_error();
 		return;
 	} else {
-		if (l3_ie2pos[ie]<0)
+		if (l3_ie2pos(ie) < 0)
 			return;
-		ies += l3_ie2pos[ie];
+		ies += l3_ie2pos(ie);
 		if (!*ies)
 			return;
 		iep = (u_char *)qi;

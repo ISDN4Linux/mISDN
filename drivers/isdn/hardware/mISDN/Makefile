@@ -22,12 +22,16 @@ hisaxisac-objs := isac.o arcofi.o debug.o
 OBJ_core := hisax_core.o hisax_stack.o hisax_dev.o helper.o
 OBJ_l1 := hisax_l1.o helper.o debug.o fsm.o
 OBJ_l2 := hisax_l2.o tei.o helper.o debug.o fsm.o
-OBJ_l3udss1 := hisax_l3.o helper.o debug.o fsm.o l3_udss1.o
+OBJ_l3udss1 := hisax_l3.o helper.o l3helper.o debug.o fsm.o l3_udss1.o
 OBJ_capi := capi.o contr.o listen.o appl.o plci.o cplci.o ncci.o asn1.o \
             asn1_aoc.o asn1_comp.o asn1_generic.o asn1_diversion.o \
             asn1_basic_service.o asn1_address.o asn1_enc.o capi_enc.o \
-            supp_serv.o helper.o debug.o fsm.o
+            supp_serv.o helper.o l3helper.o debug.o fsm.o
 OBJ_dtmf := hisax_dtmf.o helper.o debug.o
+
+ifdef CONFIG_I4L_CAPI_LAYER
+i4lcapi-objs := i4l_capi.o helper.o l3helper.o debug.o fsm.o
+endif
 
 LX_OBJS += hisax_core.o
 
@@ -61,6 +65,7 @@ obj-$(CONFIG_ISDN_DRV_NEWHISAX) += hisaxl2.o
 obj-$(CONFIG_ISDN_DRV_NEWHISAX) += l3udss1.o
 obj-$(CONFIG_ISDN_DRV_NEWHISAX) += hisaxcapi.o
 obj-$(CONFIG_ISDN_DRV_NEWHISAX) += hisaxdtmf.o
+obj-$(CONFIG_ISDN_DRV_NEWHISAX) += i4lcapi.o
 
 M_OBJS := $(obj-m)
 
@@ -107,3 +112,9 @@ hisaxdtmf.o: $(OBJ_dtmf)
 	$(RM) $@
 	$(LD) -r -o $@ $(filter-out $(MODVERFILE) dummy ,$^)
 
+ifdef CONFIG_I4L_CAPI_LAYER
+i4lcapi.o: $(i4lcapi-objs)
+	$(RM) $@
+	$(LD) -r -o $@ $(filter-out $(MODVERFILE) dummy ,$^)
+
+endif

@@ -1,4 +1,4 @@
-/* $Id: dchannel.h,v 1.2 2003/06/24 21:58:53 kkeil Exp $
+/* $Id: dchannel.h,v 1.3 2003/07/18 16:36:03 kkeil Exp $
  *
  *   Basic declarations for dchannel HW
  *
@@ -68,8 +68,6 @@ typedef struct _dchannel_t {
 
 extern int init_dchannel(dchannel_t *);
 extern int free_dchannel(dchannel_t *);
-
-void set_dchannel_pid(hisax_pid_t *, int, int);
 
 static inline void
 dchannel_sched_event(dchannel_t *dch, int event)

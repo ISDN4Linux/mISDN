@@ -1,4 +1,4 @@
-/* $Id: helper.h,v 1.4 2003/07/07 14:29:38 kkeil Exp $
+/* $Id: helper.h,v 1.5 2003/07/18 16:36:03 kkeil Exp $
  *
  *   Basic declarations, defines and prototypes
  *
@@ -82,6 +82,7 @@ alloc_uplinkD_skb(size_t size)
 	return(skb);
 }
 
+extern void set_dchannel_pid(hisax_pid_t *, int, int);
 extern int get_lowlayer(int);
 extern int get_up_layer(int);
 extern int get_down_layer(int);
@@ -138,5 +139,15 @@ extern __inline__ int if_link(hisaxif_t *i, u_int prim, int dinfo, int len,
 		kfree_skb(skb);
 	return(err);
 }
+
+/* L3 data struct helper functions */
+
+extern	signed int	l3_ie2pos(u_char);
+extern	unsigned char	l3_pos2ie(int);
+extern	void		initQ931_info(Q931_info_t *);
+extern	struct sk_buff 	*alloc_l3msg(int, u_char);
+extern	void		AddvarIE(struct sk_buff *, u_char *);
+extern	void		AddIE(struct sk_buff *, u_char, u_char *);
+extern	void		LogL3Msg(struct sk_buff *);
 
 #endif /* _HISAX_HELPER_H */

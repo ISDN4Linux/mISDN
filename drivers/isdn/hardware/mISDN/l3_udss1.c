@@ -1,4 +1,4 @@
-/* $Id: l3_udss1.c,v 1.8 2003/07/07 14:29:38 kkeil Exp $
+/* $Id: l3_udss1.c,v 1.9 2003/07/18 16:36:03 kkeil Exp $
  *
  * EURO/DSS1 D-channel protocol
  *
@@ -24,32 +24,9 @@ static int debug = 0;
 static hisaxobject_t u_dss1;
 
 
-const char *dss1_revision = "$Revision: 1.8 $";
+const char *dss1_revision = "$Revision: 1.9 $";
 
 static int dss1man(l3_process_t *, u_int, void *);
-
-static signed char l3_ie2pos[128] = {
-			-1,-1,-1,-1, 0,-1,-1,-1, 1,-1,-1,-1,-1,-1,-1,-1,
-			 2,-1,-1,-1, 3,-1,-1,-1, 4,-1,-1,-1, 5,-1, 6,-1,
-			 7,-1,-1,-1,-1,-1,-1, 8, 9,10,-1,-1,11,-1,-1,-1,
-			-1,-1,-1,-1,12,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-			13,-1,14,15,16,17,18,19,-1,-1,-1,-1,20,21,-1,-1,
-			-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
-			-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,22,23,-1,-1,
-			24,25,-1,-1,26,-1,-1,-1,27,28,-1,-1,29,30,31,-1
-};
-			
-static unsigned char l3_pos2ie[32] = {
-			0x04, 0x08, 0x10, 0x14, 0x18, 0x1c, 0x1e, 0x20,
-			0x27, 0x28, 0x29, 0x2c, 0x34, 0x40, 0x42, 0x43,
-			0x44, 0x45, 0x46, 0x47, 0x4c, 0x4d, 0x6c, 0x6d,
-			0x70, 0x71, 0x74, 0x78, 0x79, 0x7c, 0x7d, 0x7e
-};
-
-static void
-initQ931_info(Q931_info_t *qi) {
-	memset(qi, 0, sizeof(Q931_info_t));
-};
 
 static int
 parseQ931(struct sk_buff *skb) {
@@ -116,7 +93,7 @@ parseQ931(struct sk_buff *skb) {
 				cnt++;
 				pos++;
 			} else {
-				iep = l3_ie2pos[p[pos]];
+				iep = l3_ie2pos(p[pos]);
 				if ((pos+1) >= len)
 					return(-4);
 				l = p[pos+1];
@@ -182,7 +159,7 @@ compose_msg(struct sk_buff *skb, Q931_info_t *qi)
 		if (v_ie[i]) {
 			l = buf[v_ie[i] + 1] +1;
 			p = skb_put(skb, l + 1);
-			*p++ = l3_pos2ie[i];
+			*p++ = l3_pos2ie(i);
 			memcpy(p, &buf[v_ie[i] + 1], l);
 		}
 	}
@@ -453,7 +430,7 @@ check_infoelements(l3_process_t *pc, struct sk_buff *skb, int *checklist)
 	oldpos = -1;
 	for (i=0; i<32; i++) {
 		if (iep[i]) {
-			ie = l3_pos2ie[i];
+			ie = l3_pos2ie(i);
 			if ((newpos = ie_in_set(pc, ie, cl))) {
 				if (newpos > 0) {
 					if (newpos < oldpos)
@@ -783,7 +760,8 @@ l3dss1_release_cmpl(l3_process_t *pc, u_char pr, void *arg)
 
 	StopAllL3Timer(pc);
 	newl3state(pc, 0);
-	hisax_l3up(pc, CC_RELEASE_COMPLETE | INDICATION, skb);
+	if (hisax_l3up(pc, CC_RELEASE_COMPLETE | INDICATION, skb))
+		dev_kfree_skb(skb);
 	release_l3_process(pc);
 }
 
@@ -807,7 +785,8 @@ l3dss1_alerting(l3_process_t *pc, u_char pr, void *arg)
 	newl3state(pc, 4);
 	if (ret)
 		l3dss1_std_ie_err(pc, ret);
-	hisax_l3up(pc, CC_ALERTING | INDICATION, skb);
+	if (hisax_l3up(pc, CC_ALERTING | INDICATION, skb))
+		dev_kfree_skb(skb);
 }
 
 static void
@@ -850,7 +829,8 @@ l3dss1_call_proc(l3_process_t *pc, u_char pr, void *arg)
 	L3AddTimer(&pc->timer, T310, CC_T310);
 	if (ret) /* STATUS for none mandatory IE errors after actions are taken */
 		l3dss1_std_ie_err(pc, ret);
-	hisax_l3up(pc, CC_PROCEEDING | INDICATION, skb);
+	if (hisax_l3up(pc, CC_PROCEEDING | INDICATION, skb))
+		dev_kfree_skb(skb);
 }
 
 static void
@@ -874,7 +854,8 @@ l3dss1_connect(l3_process_t *pc, u_char pr, void *arg)
 	newl3state(pc, 10);
 	if (ret)
 		l3dss1_std_ie_err(pc, ret);
-	hisax_l3up(pc, CC_CONNECT | INDICATION, skb);
+	if (hisax_l3up(pc, CC_CONNECT | INDICATION, skb))
+		dev_kfree_skb(skb);
 }
 
 static void
@@ -897,7 +878,8 @@ l3dss1_connect_ack(l3_process_t *pc, u_char pr, void *arg)
 	}
 	if (ret)
 		l3dss1_std_ie_err(pc, ret);
-	hisax_l3up(pc, CC_CONNECT_ACKNOWLEDGE | INDICATION, skb);
+	if (hisax_l3up(pc, CC_CONNECT_ACKNOWLEDGE | INDICATION, skb))
+		dev_kfree_skb(skb);
 }
 
 static void
@@ -926,9 +908,10 @@ l3dss1_disconnect(l3_process_t *pc, u_char pr, void *arg)
 		newl3state(pc, 19);
 	else
 		newl3state(pc, 12);
-       	if (11 != ret)
-		hisax_l3up(pc, CC_DISCONNECT | INDICATION, skb);
-	else if (!cause) {
+       	if (11 != ret) {
+		if (hisax_l3up(pc, CC_DISCONNECT | INDICATION, skb))
+			dev_kfree_skb(skb);
+	} else if (!cause) {
 		l3dss1_release_req(pc, pr, NULL);
 		dev_kfree_skb(skb);
 	} else
@@ -981,7 +964,8 @@ l3dss1_setup_ack(l3_process_t *pc, u_char pr, void *arg)
 	L3AddTimer(&pc->timer, T304, CC_T304);
 	if (ret) /* STATUS for none mandatory IE errors after actions are taken */
 		l3dss1_std_ie_err(pc, ret);
-	hisax_l3up(pc, CC_SETUP_ACKNOWLEDGE | INDICATION, skb);
+	if (hisax_l3up(pc, CC_SETUP_ACKNOWLEDGE | INDICATION, skb))
+		dev_kfree_skb(skb);
 }
 
 static void
@@ -1108,7 +1092,8 @@ l3dss1_setup(l3_process_t *pc, u_char pr, void *arg)
 		dev_kfree_skb(skb);
 		return;
 	}
-	hisax_l3up(pc, CC_SETUP | INDICATION, skb);
+	if (hisax_l3up(pc, CC_SETUP | INDICATION, skb))
+		dev_kfree_skb(skb);
 }
 
 static void
@@ -1141,7 +1126,8 @@ l3dss1_release(l3_process_t *pc, u_char pr, void *arg)
 		l3dss1_message_cause(pc, MT_RELEASE_COMPLETE, cause);
 	else
 		l3dss1_message(pc, MT_RELEASE_COMPLETE);
-	hisax_l3up(pc, CC_RELEASE | INDICATION, skb);
+	if (hisax_l3up(pc, CC_RELEASE | INDICATION, skb))
+		dev_kfree_skb(skb);
 	newl3state(pc, 0);
 	release_l3_process(pc);
 }
@@ -1200,9 +1186,10 @@ l3dss1_progress(l3_process_t *pc, u_char pr, void *arg) {
 	err = check_infoelements(pc, skb, ie_PROGRESS);
 	if (err)
 		l3dss1_std_ie_err(pc, err);
-	if (ERR_IE_COMPREHENSION != err)
-		hisax_l3up(pc, CC_PROGRESS | INDICATION, skb);
-	else
+	if (ERR_IE_COMPREHENSION != err) {
+		if (hisax_l3up(pc, CC_PROGRESS | INDICATION, skb))
+			dev_kfree_skb(skb);
+	} else
 		dev_kfree_skb(skb);
 }
 
@@ -1245,9 +1232,10 @@ l3dss1_notify(l3_process_t *pc, u_char pr, void *arg) {
 	err = check_infoelements(pc, skb, ie_NOTIFY);
 	if (err)
 		l3dss1_std_ie_err(pc, err);
-	if (ERR_IE_COMPREHENSION != err)
-		hisax_l3up(pc, CC_NOTIFY | INDICATION, skb);
-	else
+	if (ERR_IE_COMPREHENSION != err) {
+		if (hisax_l3up(pc, CC_NOTIFY | INDICATION, skb))
+			dev_kfree_skb(skb);
+	} else
 		dev_kfree_skb(skb);
 }
 
@@ -1259,7 +1247,8 @@ l3dss1_status_enq(l3_process_t *pc, u_char pr, void *arg) {
 	ret = check_infoelements(pc, skb, ie_STATUS_ENQUIRY);
 	l3dss1_std_ie_err(pc, ret);
 	l3dss1_status_send(pc, CAUSE_STATUS_RESPONSE);
-	hisax_l3up(pc, CC_STATUS_ENQUIRY | INDICATION, skb);
+	if (hisax_l3up(pc, CC_STATUS_ENQUIRY | INDICATION, skb))
+		dev_kfree_skb(skb);
 }
 
 static void
@@ -1274,7 +1263,8 @@ l3dss1_information(l3_process_t *pc, u_char pr, void *arg) {
 		L3DelTimer(&pc->timer);
 		L3AddTimer(&pc->timer, T302, CC_T302);
 	}
-	hisax_l3up(pc, CC_INFORMATION | INDICATION, skb);
+	if (hisax_l3up(pc, CC_INFORMATION | INDICATION, skb))
+		dev_kfree_skb(skb);
 }
 
 static void
@@ -1282,7 +1272,7 @@ l3dss1_release_ind(l3_process_t *pc, u_char pr, void *arg)
 {
 	u_char		*p;
 	struct sk_buff	*skb = arg;
-	int		callState = -1;
+	int		err, callState = -1;
 	Q931_info_t	*qi = (Q931_info_t *)skb->data;
 
 	if (qi->call_state) {
@@ -1297,11 +1287,13 @@ l3dss1_release_ind(l3_process_t *pc, u_char pr, void *arg)
 		 * set down layer 3 without sending any message
 		 */
 		newl3state(pc, 0);
-		hisax_l3up(pc, CC_RELEASE | INDICATION, skb);
+		err = hisax_l3up(pc, CC_RELEASE | INDICATION, skb);
 		release_l3_process(pc);
 	} else {
-		hisax_l3up(pc, CC_RELEASE | INDICATION, skb);
+		err = hisax_l3up(pc, CC_RELEASE | INDICATION, skb);
 	}
+	if (err)
+		dev_kfree_skb(skb);
 }
 
 static void
@@ -1365,10 +1357,12 @@ l3dss1_status(l3_process_t *pc, u_char pr, void *arg) {
 		 * state == 0, then we must set down layer 3
 		 */
 		newl3state(pc, 0);
-		hisax_l3up(pc, CC_STATUS| INDICATION, skb);
+		ret = hisax_l3up(pc, CC_STATUS| INDICATION, skb);
 		release_l3_process(pc);
 	} else
-		hisax_l3up(pc, CC_STATUS | INDICATION, skb);
+		ret = hisax_l3up(pc, CC_STATUS | INDICATION, skb);
+	if (ret)
+		dev_kfree_skb(skb);
 }
 
 static void
@@ -1386,7 +1380,8 @@ l3dss1_facility(l3_process_t *pc, u_char pr, void *arg)
 		dev_kfree_skb(skb);
 		return;
 	}		
-	hisax_l3up(pc, CC_FACILITY | INDICATION, skb);
+	if (hisax_l3up(pc, CC_FACILITY | INDICATION, skb))
+		dev_kfree_skb(skb);
 }
 
 static void
@@ -1400,7 +1395,8 @@ l3dss1_suspend_ack(l3_process_t *pc, u_char pr, void *arg) {
 	if ((ret = check_infoelements(pc, skb, ie_SUSPEND_ACKNOWLEDGE)))
 		if (pc->l3->debug & L3_DEB_WARN)
 			l3_debug(pc->l3, "SUSPACK check ie(%d)",ret);
-	hisax_l3up(pc, CC_SUSPEND_ACKNOWLEDGE | INDICATION, skb);
+	if (hisax_l3up(pc, CC_SUSPEND_ACKNOWLEDGE | INDICATION, skb))
+		dev_kfree_skb(skb);
 	release_l3_process(pc);
 }
 
@@ -1429,7 +1425,8 @@ l3dss1_suspend_rej(l3_process_t *pc, u_char pr, void *arg)
 		return;
 	}
 	L3DelTimer(&pc->timer);
-	hisax_l3up(pc, CC_SUSPEND_REJECT | INDICATION, skb);
+	if (hisax_l3up(pc, CC_SUSPEND_REJECT | INDICATION, skb))
+		dev_kfree_skb(skb);
 	newl3state(pc, 10);
 	if (ret) /* STATUS for none mandatory IE errors after actions are taken */
 		l3dss1_std_ie_err(pc, ret);
@@ -1465,7 +1462,8 @@ l3dss1_resume_ack(l3_process_t *pc, u_char pr, void *arg)
 		return;
 	}
 	L3DelTimer(&pc->timer);
-	hisax_l3up(pc, CC_RESUME_ACKNOWLEDGE | INDICATION, skb);
+	if (hisax_l3up(pc, CC_RESUME_ACKNOWLEDGE | INDICATION, skb))
+		dev_kfree_skb(skb);
 	newl3state(pc, 10);
 	if (ret) /* STATUS for none mandatory IE errors after actions are taken */
 		l3dss1_std_ie_err(pc, ret);
@@ -1496,7 +1494,8 @@ l3dss1_resume_rej(l3_process_t *pc, u_char pr, void *arg)
 		return;
 	}
 	L3DelTimer(&pc->timer);
-	hisax_l3up(pc, CC_RESUME_REJECT | INDICATION, skb);
+	if (hisax_l3up(pc, CC_RESUME_REJECT | INDICATION, skb))
+		dev_kfree_skb(skb);
 	newl3state(pc, 0);
 	if (ret) /* STATUS for none mandatory IE errors after actions are taken */
 		l3dss1_std_ie_err(pc, ret);
@@ -1702,8 +1701,10 @@ l3dss1_dl_reset(l3_process_t *pc, u_char pr, void *arg)
 	*p++ = 0x80 | CAUSE_TEMPORARY_FAILURE;
 	nskb = skb_clone(skb, GFP_ATOMIC);
 	l3dss1_disconnect_req(pc, pr, skb);
-	if (nskb)
-		hisax_l3up(pc, CC_DISCONNECT | REQUEST, nskb);
+	if (nskb) {
+		if (hisax_l3up(pc, CC_DISCONNECT | REQUEST, nskb))
+			dev_kfree_skb(nskb);
+	}
 }
 
 static void

@@ -1,4 +1,4 @@
-/* $Id: capi.h,v 1.2 2003/07/07 14:29:38 kkeil Exp $
+/* $Id: capi.h,v 1.3 2003/07/18 16:36:03 kkeil Exp $
  *
  */
 
@@ -315,9 +315,6 @@ int  cplciFacSuspendReq(Cplci_t *cplci, struct FacReqParm *facReqParm,
 		       struct FacConfParm *facConfParm);
 int  cplciFacResumeReq(Cplci_t *cplci, struct FacReqParm *facReqParm,
 		      struct FacConfParm *facConfParm);
-struct sk_buff *alloc_l3msg(int, u_char);
-void AddvarIE(struct sk_buff *, u_char *);
-void AddIE(struct sk_buff *, u_char, u_char *);
 
 // ---------------------------------------------------------------------------
 // Ncci_t

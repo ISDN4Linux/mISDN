@@ -1,4 +1,4 @@
-/* $Id: contr.c,v 1.5 2002/09/17 10:43:35 kkeil Exp $
+/* $Id: contr.c,v 1.6 2003/07/18 16:36:03 kkeil Exp $
  *
  */
 
@@ -245,6 +245,7 @@ void contrRecvCmsg(Contr_t *contr, _cmsg *cmsg)
 	capi_cmsg2message(cmsg, contr->msgbuf);
 	len = CAPIMSG_LEN(contr->msgbuf);
 	if (!(skb = alloc_skb(len, GFP_ATOMIC))) {
+		printk(KERN_ERR "%s: no mem for %d bytes\n", __FUNCTION__, len);
 		int_error();
 		return;
 	}
@@ -348,7 +349,7 @@ contrL3L4(hisaxif_t *hif, struct sk_buff *skb)
 		ret = contrDummyInd(contr, hh->prim, skb);
 	} else {
 		if (!(plci = contrGetPLCI4addr(contr, hh->dinfo))) {
-			contrDebug(contr, LL_DEB_WARN, ": unknown plci prim(%x) id(%x)",
+			contrDebug(contr, LL_DEB_WARN, "%s: unknown plci prim(%x) id(%x)",
 				__FUNCTION__, hh->prim, hh->dinfo);
 			return(-ENODEV);
 		}
