@@ -1,4 +1,4 @@
-/* $Id: mISDNif.h,v 1.20 2003/11/11 20:31:35 keil Exp $
+/* $Id: mISDNif.h,v 1.21 2003/11/13 13:01:55 keil Exp $
  *
  */
 
@@ -106,12 +106,15 @@
 #define HW_MOD_NOCARR	0x0412
 #define HW_MOD_FCERROR	0x0413
 #define HW_HFC_COEFF	0x0500
-#define HW_D_BLOCKED	0xFF20 
-#define HW_D_NOBLOCKED	0xFF21 
 #define HW_TESTLOOP	0xFF00
 #define HW_FIRM_START	0xFF10
 #define HW_FIRM_DATA	0xFF11
 #define HW_FIRM_END	0xFF12
+#define HW_D_BLOCKED	0xFF20 
+#define HW_D_NOBLOCKED	0xFF21 
+#define HW_TESTRX_RAW	0xFF40
+#define HW_TESTRX_HDLC	0xFF41
+#define HW_TESTRX_OFF	0xFF4f
 /* TOUCH TONE IS 0x20XX  XX "0"..."9", "A","B","C","D","*","#" */
 #define DTMF_TONE_VAL	0x2000
 #define DTMF_TONE_MASK	0x007F

@@ -1,4 +1,4 @@
-/* $Id: hfc_pci.c,v 1.31 2003/11/11 21:06:34 keil Exp $
+/* $Id: hfc_pci.c,v 1.32 2003/11/13 13:01:55 keil Exp $
 
  * hfc_pci.c     low level driver for CCD's hfc-pci based cards
  *
@@ -46,7 +46,7 @@
 
 extern const char *CardType[];
 
-static const char *hfcpci_revision = "$Revision: 1.31 $";
+static const char *hfcpci_revision = "$Revision: 1.32 $";
 
 /* table entry in the PCI devices list */
 typedef struct {
@@ -1635,6 +1635,82 @@ mode_hfcpci(bchannel_t *bch, int bc, int protocol)
 	return(0);
 }
 
+static int
+set_hfcpci_rxtest(bchannel_t *bch, int protocol, struct sk_buff *skb)
+{
+	hfc_pci_t	*hc = bch->inst.data;
+	int		*chan = (int *)skb->data;
+
+	if (skb->len <4) {
+		debugprint(&bch->inst, "HFCPCI rxtest no channel parameter");
+		return(-EINVAL);
+	}
+	if (bch->debug & L1_DEB_HSCX)
+		debugprint(&bch->inst, "HFCPCI bchannel test rx protocol %x-->%x ch %x-->%x",
+			bch->protocol, protocol, bch->channel, *chan);
+	if (bch->channel != *chan) {
+		debugprint(&bch->inst, "HFCPCI rxtest wrong channel parameter %x/%x",
+			bch->channel, *chan);
+		return(-EINVAL);
+	}
+	switch (protocol) {
+		case (ISDN_PID_L1_B_64TRANS):
+			bch->protocol = protocol;
+		        hfcpci_clear_fifo_rx(hc, (*chan & 2)?1:0);
+			if (*chan & 2) {
+				hc->hw.sctrl_r |= SCTRL_B2_ENA;
+				hc->hw.fifo_en |= HFCPCI_FIFOEN_B2RX;
+				hc->hw.int_m1 |= HFCPCI_INTS_B2REC;
+				hc->hw.ctmt |= 2;
+				hc->hw.conn &= ~0x18;
+#ifdef REVERSE_BITORDER
+				hc->hw.cirm |= 0x80;
+#endif
+			} else {
+				hc->hw.sctrl_r |= SCTRL_B1_ENA;
+				hc->hw.fifo_en |= HFCPCI_FIFOEN_B1RX;
+				hc->hw.int_m1 |= HFCPCI_INTS_B1REC;
+				hc->hw.ctmt |= 1;
+				hc->hw.conn &= ~0x03;
+#ifdef REVERSE_BITORDER
+				hc->hw.cirm |= 0x40;
+#endif
+			}
+			break;
+		case (ISDN_PID_L1_B_64HDLC):
+			bch->protocol = protocol;
+		        hfcpci_clear_fifo_rx(hc, (*chan & 2)?1:0);
+			if (*chan & 2) {
+				hc->hw.sctrl_r |= SCTRL_B2_ENA;
+				hc->hw.last_bfifo_cnt[1] = 0;
+				hc->hw.fifo_en |= HFCPCI_FIFOEN_B2RX;
+				hc->hw.int_m1 |= HFCPCI_INTS_B2REC;
+				hc->hw.ctmt &= ~2;
+				hc->hw.conn &= ~0x18;
+			} else {
+				hc->hw.sctrl_r |= SCTRL_B1_ENA;
+			        hc->hw.last_bfifo_cnt[0] = 0;  
+				hc->hw.fifo_en |= HFCPCI_FIFOEN_B1RX;
+				hc->hw.int_m1 |= HFCPCI_INTS_B1REC;
+				hc->hw.ctmt &= ~1;
+				hc->hw.conn &= ~0x03;
+			}
+			break;
+		default:
+			debugprint(&bch->inst, "prot not known %x", protocol);
+			return(-ENOPROTOOPT);
+	}
+	Write_hfc(hc, HFCPCI_INT_M1, hc->hw.int_m1);
+	Write_hfc(hc, HFCPCI_FIFO_EN, hc->hw.fifo_en);
+	Write_hfc(hc, HFCPCI_SCTRL_R, hc->hw.sctrl_r);
+	Write_hfc(hc, HFCPCI_CTMT, hc->hw.ctmt);
+	Write_hfc(hc, HFCPCI_CONNECT, hc->hw.conn);
+#ifdef REVERSE_BITORDER
+	Write_hfc(hc, HFCPCI_CIRM, hc->hw.cirm);
+#endif
+	return(0);
+}
+
 /******************************/
 /* Layer2 -> Layer 1 Transfer */
 /******************************/
@@ -1716,6 +1792,23 @@ hfcpci_l2l1(mISDNif_t *hif, struct sk_buff *skb)
 				return(0);
 		}
 		ret = 0;
+	} else if (hh->prim == (PH_CONTROL | REQUEST)) {
+		bch->inst.lock(bch->inst.data, 0);
+		if (hh->dinfo == HW_TESTRX_RAW) {
+			ret = set_hfcpci_rxtest(bch, ISDN_PID_L1_B_64TRANS, skb);
+		} else if (hh->dinfo == HW_TESTRX_HDLC) {
+			ret = set_hfcpci_rxtest(bch, ISDN_PID_L1_B_64HDLC, skb);
+		} else if (hh->dinfo == HW_TESTRX_OFF) {
+			mode_hfcpci(bch, bch->channel, ISDN_PID_NONE);
+			ret = 0;
+		} else
+			ret = -EINVAL;
+		bch->inst.unlock(bch->inst.data);
+		if (!ret) {
+			skb_trim(skb, 0);
+			if (!if_newhead(&bch->inst.up, hh->prim | CONFIRM, hh->dinfo, skb))
+				return(0);
+		}
 	} else {
 		printk(KERN_WARNING "%s: unknown prim(%x)\n",
 			__FUNCTION__, hh->prim);
