@@ -1,4 +1,4 @@
-/* $Id: layer1.c,v 0.12 2001/03/27 15:34:20 kkeil Exp $
+/* $Id: layer1.c,v 0.13 2001/04/11 16:38:57 kkeil Exp $
  *
  * hisax_l1.c     common low level stuff for I.430 layer1
  *
@@ -10,7 +10,7 @@
  *
  */
 
-const char *l1_revision = "$Revision: 0.12 $";
+const char *l1_revision = "$Revision: 0.13 $";
 
 #include <linux/config.h>
 #include <linux/module.h>
@@ -28,6 +28,19 @@ typedef struct _layer1 {
 	int delay;
 	hisaxinstance_t	inst;
 } layer1_t;
+
+/* l1 status_info */
+typedef struct _status_info_l1 {
+	int	len;
+	int	typ;
+	int	protocol;
+	int	status;
+	int	state;
+	int	Flags;
+	int	T3;
+	int	delay;
+	int	debug;
+} status_info_l1_t;
 
 static int debug = 0;
 static hisaxobject_t isdnl1;
@@ -657,6 +670,26 @@ new_l1(hisaxstack_t *st, hisax_pid_t *pid) {
 	return(err);
 }
 
+static int
+l1_status(layer1_t *l1, status_info_l1_t *si)
+{
+
+	if (!si)
+		return(-EINVAL);
+	memset(si, 0, sizeof(status_info_l1_t));
+	si->len = sizeof(status_info_l1_t) - 2*sizeof(int);
+	si->typ = STATUS_INFO_L1;
+	si->protocol = l1->inst.pid.protocol[1];
+	if (test_bit(FLG_L1_ACTIVATED, &l1->Flags))
+		si->status = 1;
+	si->state = l1->l1m.state;
+	si->Flags = l1->Flags;
+	si->T3 = TIMER3_VALUE;
+	si->debug = l1->delay;
+	si->debug = l1->debug;
+	return(0);
+}
+
 static char MName[] = "ISDNL1";
 
 #ifdef MODULE
@@ -712,6 +745,12 @@ l1_manager(void *data, u_int prim, void *arg) {
 	    	} else 
 	    		printk(KERN_WARNING "l1_manager release no instance\n");
 	    	break;
+	    case MGR_STATUS | REQUEST:
+		if (!l1l) {
+			printk(KERN_WARNING "l1_manager status l1 no instance\n");
+			return(-EINVAL);
+		}
+		return(l1_status(l1l, arg));
 	    default:
 		printk(KERN_WARNING "l1_manager prim %x not handled\n", prim);
 		return(-EINVAL);

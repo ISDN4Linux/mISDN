@@ -1,4 +1,4 @@
-/* $Id: layer2.c,v 0.13 2001/04/11 10:21:10 kkeil Exp $
+/* $Id: layer2.c,v 0.14 2001/04/11 16:38:57 kkeil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -12,7 +12,7 @@
 #include "helper.h"
 #include "debug.h"
 
-const char *l2_revision = "$Revision: 0.13 $";
+const char *l2_revision = "$Revision: 0.14 $";
 
 static void l2m_debug(struct FsmInst *fi, char *fmt, ...);
 
@@ -2057,6 +2057,45 @@ new_l2(hisaxstack_t *st, hisax_pid_t *pid) {
 	return(err);
 }
 
+static int
+l2_status(layer2_t *l2, status_info_l2_t *si)
+{
+
+	if (!si)
+		return(-EINVAL);
+	memset(si, 0, sizeof(status_info_l2_t));
+	si->len = sizeof(status_info_l2_t) - 2*sizeof(int);
+	si->typ = STATUS_INFO_L2;
+	si->protocol = l2->inst.pid.protocol[2];
+	si->state = l2->l2m.state;
+	si->sapi = l2->sapi;
+	si->tei = l2->tei;
+	si->addr = l2->addr;
+	si->maxlen = l2->maxlen;
+	si->flag = l2->flag;
+	si->vs = l2->vs;
+	si->va = l2->va;
+	si->vr = l2->vr;
+	si->rc = l2->rc;
+	si->window = l2->window;
+	si->sow = l2->sow;
+	si->T200 = l2->T200;
+	si->N200 = l2->N200;
+	si->T203 = l2->T203;
+	si->len_i_queue = skb_queue_len(&l2->i_queue);
+	si->len_ui_queue = skb_queue_len(&l2->ui_queue);
+	si->len_d_queue = skb_queue_len(&l2->down_queue);
+	si->debug = l2->debug;
+	if (l2->tm) {
+		si->tei_state = l2->tm->tei_m.state;
+		si->tei_ri = l2->tm->ri;
+		si->T202 = l2->tm->T202;
+		si->N202 = l2->tm->N202;
+		si->tei_debug = l2->tm->debug;
+	}
+	return(0);
+}
+
 static char MName[] = "ISDNL2";
  
 #ifdef MODULE
@@ -2119,13 +2158,18 @@ l2_manager(void *data, u_int prim, void *arg) {
 		break;
 	    case MGR_RELEASE | INDICATION:
 	    case MGR_UNREGLAYER | REQUEST:
-	    	if (l2l) {
+		if (l2l) {
 			printk(KERN_DEBUG "release_l2 id %x\n", inst->st->id);
-	    		release_l2(l2l);
-	    	} else 
-	    		printk(KERN_WARNING "l2_manager release no instance\n");
-	    	break;
-	    		
+			release_l2(l2l);
+		} else 
+			printk(KERN_WARNING "l2_manager release no instance\n");
+		break;
+	    case MGR_STATUS | REQUEST:
+		if (!l2l) {
+			printk(KERN_WARNING "l2_manager status l2 no instance\n");
+			return(-EINVAL);
+		}
+		return(l2_status(l2l, arg));
 	    default:
 		printk(KERN_WARNING "l2_manager prim %x not handled\n", prim);
 		return(-EINVAL);

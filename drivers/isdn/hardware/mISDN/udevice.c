@@ -1,4 +1,4 @@
-/* $Id: udevice.c,v 0.15 2001/04/11 10:21:10 kkeil Exp $
+/* $Id: udevice.c,v 0.16 2001/04/11 16:38:57 kkeil Exp $
  *
  * Copyright 2000  by Karsten Keil <kkeil@isdn4linux.de>
  */
@@ -421,6 +421,26 @@ del_if_req(hisaxdevice_t *dev, iframe_t *iff) {
 }
 
 static int
+get_status(iframe_t *off)
+{
+	status_info_t	*si = (status_info_t *)off->data.p;
+	hisaxinstance_t	*inst;
+	int err;
+
+	if (!(inst = get_instance4id(off->addr & IF_ADDRMASK))) {
+		printk(KERN_WARNING __FUNCTION__": no instance\n");
+		err = -ENODEV;
+	} else {
+		err = inst->obj->own_ctrl(inst, MGR_STATUS | REQUEST, si);
+	}
+	if (err)
+		off->len = err;
+	else
+		off->len = si->len + 2*sizeof(int);
+	return(err);	
+}
+
+static int
 wdata_frame(hisaxdevice_t *dev, iframe_t *iff) {
 	hisaxif_t *hif = NULL;
 	devicelayer_t *dl;
@@ -732,6 +752,17 @@ hisax_wdata(hisaxdevice_t *dev, void *dp, int len) {
 		off.dinfo = 0;
 		off.len = del_if_req(dev, iff);
 		hisax_rdata(dev, &off, 1);
+		break;
+	    case (MGR_STATUS | REQUEST):
+		used = head;
+		off.addr = iff->addr;
+		off.prim = MGR_STATUS | CONFIRM;
+		off.dinfo = 0;
+		off.data.p = stbuf;
+		if (get_status(&off))
+			hisax_rdata(dev, &off, 1);
+		else
+			hisax_rdata(dev, &off, 0);
 		break;
 	    default:
 		used = head + iff->len;

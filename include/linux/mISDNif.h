@@ -1,4 +1,4 @@
-/* $Id: mISDNif.h,v 0.23 2001/04/11 10:21:10 kkeil Exp $
+/* $Id: mISDNif.h,v 0.24 2001/04/11 16:38:57 kkeil Exp $
  *
  */
 
@@ -261,6 +261,16 @@ typedef struct _iframe {
 		int	i;
 	} data;
 } iframe_t;
+
+
+#define STATUS_INFO_L1	1
+#define STATUS_INFO_L2	2
+
+typedef struct _status_info {
+	int	len;
+	int	typ;
+	u_char	info[120];
+} status_info_t;
 
 typedef struct _logdata {
 	char    *head;
