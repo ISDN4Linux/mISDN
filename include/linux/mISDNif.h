@@ -1,4 +1,4 @@
-/* $Id: mISDNif.h,v 1.25 2004/01/30 23:46:39 keil Exp $
+/* $Id: mISDNif.h,v 1.26 2004/02/05 21:21:18 keil Exp $
  *
  */
 
@@ -101,11 +101,14 @@
 #define HW_MOD_FRH	0x0401
 #define HW_MOD_FTM	0x0402
 #define HW_MOD_FTH	0x0403
+#define HW_MOD_FTS	0x0404
 #define HW_MOD_CONNECT	0x0410
 #define HW_MOD_OK	0x0411
 #define HW_MOD_NOCARR	0x0412
 #define HW_MOD_FCERROR	0x0413
 #define HW_MOD_READY	0x0414
+#define HW_MOD_LASTDATA	0x0415
+#define HW_MOD_SILENCE	0x0416
 #define HW_HFC_COEFF	0x0500
 #define HW_LOS		0x0501
 #define HW_LOS_OFF	0x0502
