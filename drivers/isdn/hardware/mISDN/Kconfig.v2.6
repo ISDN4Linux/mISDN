@@ -35,6 +35,17 @@ config MISDN_HFCPCI
 	  Enable support for card with Cologne Chips Design HFC PCI based
 	  cards.
 
+config MISDN_HFCMULTI
+	bool "Support for HFC multiport cards (HFC-4S/8S/E1)"
+	depends on PCI
+	help
+	  Enable support for card with Cologne Chips Design HFC multiport
+	  chip. There are three types of chips that are quite similar,
+	  but the interface is different:
+	   * HFC-4S (4 S/T interfaces on one chip)
+	   * HFC-8S (8 S/T interfaces on one chip)
+	   * HFC-E1 (E1 interface for 2Mbit ISDN)
+
 config MISDN_SPEEDFAX
 	bool "Support for Sedlbauer Speedfax+"
 	depends on PCI || ISA

@@ -32,6 +32,10 @@ ifdef CONFIG_MISDN_W6692
 obj-$(CONFIG_MISDN_DRV) += w6692pci.o
 endif
 
+ifdef CONFIG_MISDN_HFCMULTI
+obj-$(CONFIG_MISDN_DRV) += hfcmulti.o
+endif
+
 ifdef CONFIG_MISDN_DSP
 obj-$(CONFIG_MISDN_DRV) += mISDN_dsp.o
 endif
@@ -46,6 +50,7 @@ sedlfax-objs := sedl_fax.o isar.o
 avmfritz-objs := avm_fritz.o
 hfcpci-objs := hfc_pci.o
 w6692pci-objs := w6692.o
+hfcmulti-objs := hfc_multi.o
 mISDN_isac-objs := isac.o arcofi.o
 mISDN_core-objs := core.o stack.o udevice.o helper.o debug.o fsm.o \
 			dchannel.o bchannel.o l3helper.o
