@@ -100,7 +100,7 @@
 
 extern const char *CardType[];
 
-static const char *hfcmulti_revision = "$Revision: 1.2 $";
+static const char *hfcmulti_revision = "$Revision: 1.3 $";
 
 static int HFC_cnt;
 
@@ -2409,7 +2409,7 @@ release_port(hfc_multi_t *hc, int port)
 			if (hc->chan[i].dch) {
 				if (debug & DEBUG_HFCMULTI_INIT)
 					printk(KERN_DEBUG "%s: free port %d D-channel %d (1..32)\n", __FUNCTION__, hc->chan[i].port, i);
-				free_dchannel(hc->chan[i].dch);
+				mISDN_free_dch(hc->chan[i].dch);
 				kfree(hc->chan[i].dch);
 				hc->chan[i].dch = NULL;
 			}
@@ -2420,7 +2420,7 @@ release_port(hfc_multi_t *hc, int port)
 			if (hc->chan[i].bch) {
 				if (debug & DEBUG_HFCMULTI_INIT)
 					printk(KERN_DEBUG "%s: free port %d B-channel %d (1..32)\n", __FUNCTION__, hc->chan[i].port, i);
-				free_bchannel(hc->chan[i].bch);
+				mISDN_free_bch(hc->chan[i].bch);
 				kfree(hc->chan[i].bch);
 				hc->chan[i].bch = NULL;
 			}
@@ -2557,7 +2557,7 @@ HFC_manager(void *data, u_int prim, void *arg)
 		case MGR_CONNECT | REQUEST:
 		if (debug & DEBUG_HFCMULTI_MGR)
 			printk(KERN_DEBUG "%s: MGR_CONNECT\n", __FUNCTION__);
-		return(ConnectIF(inst, arg));
+		return(mISDN_ConnectIF(inst, arg));
 		//break;
 
 		case MGR_SETIF | REQUEST:
@@ -2565,16 +2565,16 @@ HFC_manager(void *data, u_int prim, void *arg)
 		if (debug & DEBUG_HFCMULTI_MGR)
 			printk(KERN_DEBUG "%s: MGR_SETIF\n", __FUNCTION__);
 		if (dch)
-			return(SetIF(inst, arg, prim, hfcmulti_l1hw, NULL, dch));
+			return(mISDN_SetIF(inst, arg, prim, hfcmulti_l1hw, NULL, dch));
 		if (bch)
-			return(SetIF(inst, arg, prim, hfcmulti_l2l1, NULL, bch));
+			return(mISDN_SetIF(inst, arg, prim, hfcmulti_l2l1, NULL, bch));
 		//break;
 
 		case MGR_DISCONNECT | REQUEST:
 		case MGR_DISCONNECT | INDICATION:
 		if (debug & DEBUG_HFCMULTI_MGR)
 			printk(KERN_DEBUG "%s: MGR_DISCONNECT\n", __FUNCTION__);
-		return(DisConnectIF(inst, arg));
+		return(mISDN_DisConnectIF(inst, arg));
 		//break;
 
 		case MGR_SELCHANNEL | REQUEST:
@@ -2775,14 +2775,14 @@ HFCmulti_init(void)
 			dch->inst.obj = &HFCM_obj;
 			dch->inst.lock = lock_dev;
 			dch->inst.unlock = unlock_dev;
-			init_mISDNinstance(&dch->inst, &HFCM_obj, hc);
+			mISDN_init_instance(&dch->inst, &HFCM_obj, hc);
 			dch->inst.pid.layermask = ISDN_LAYER(0);
 			sprintf(dch->inst.name, "HFCm%d/%d", HFC_cnt+1, pt+1);
 			if (!(hc->chan[ch].rx_buf = kmalloc(MAX_DFRAME_LEN_L1, GFP_ATOMIC))) {
 				err = -ENOMEM;
 				goto free_channels;
 			}
-			if (init_dchannel(dch)) {
+			if (mISDN_init_dch(dch)) {
 				err = -ENOMEM;
 				goto free_channels;
 			}
@@ -2804,14 +2804,14 @@ HFCmulti_init(void)
 				}
 				memset(bch, 0, sizeof(bchannel_t));
 				bch->channel = ch2;
-				init_mISDNinstance(&bch->inst, &HFCM_obj, hc);
+				mISDN_init_instance(&bch->inst, &HFCM_obj, hc);
 				bch->inst.pid.layermask = ISDN_LAYER(0);
 				bch->inst.lock = lock_dev;
 				bch->inst.unlock = unlock_dev;
 				//bch->debug = debug;
 				sprintf(bch->inst.name, "%s B%d",
 					dch->inst.name, i+1);
-				if (init_bchannel(bch)) {
+				if (mISDN_init_bch(bch)) {
 					kfree(bch);
 					err = -ENOMEM;
 					goto free_channels;
@@ -2827,7 +2827,7 @@ HFCmulti_init(void)
 			}
 
 			/* set D-channel */
-			set_dchannel_pid(&pid, protocol[port_cnt], layermask[port_cnt]);
+			mISDN_set_dchannel_pid(&pid, protocol[port_cnt], layermask[port_cnt]);
 
 			/* set protocol type */
 			if (protocol[port_cnt] & 0x10) {
@@ -3033,7 +3033,7 @@ HFCmulti_init(void)
 		if (hc->chan[i].dch) {
 			if (debug & DEBUG_HFCMULTI_INIT)
 				printk(KERN_DEBUG "%s: free D-channel %d (1..32)\n", __FUNCTION__, i);
-			free_dchannel(hc->chan[i].dch);
+			mISDN_free_dch(hc->chan[i].dch);
 			kfree(hc->chan[i].dch);
 			hc->chan[i].dch = NULL;
 		}
@@ -3044,7 +3044,7 @@ HFCmulti_init(void)
 		if (hc->chan[i].bch) {
 			if (debug & DEBUG_HFCMULTI_INIT)
 				printk(KERN_DEBUG "%s: free B-channel %d (1..32)\n", __FUNCTION__, i);
-			free_bchannel(hc->chan[i].bch);
+			mISDN_free_bch(hc->chan[i].bch);
 			kfree(hc->chan[i].bch);
 			hc->chan[i].bch = NULL;
 		}
