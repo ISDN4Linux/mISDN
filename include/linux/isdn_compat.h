@@ -30,7 +30,7 @@
 #define dev_kfree_skb_any(a)		dev_kfree_skb(a)
 #define dev_kfree_skb_irq(a)		dev_kfree_skb(a)
 #else /* 2.4.0 and later */
-
+#include <linux/netdevice.h>
 #define pci_resource_start_io(pdev, nr) pci_resource_start(pdev, nr)
 #define pci_resource_start_mem(pdev, nr) pci_resource_start(pdev, nr)
 #define get_pcibase(ps, nr) ps->resource[nr].start
