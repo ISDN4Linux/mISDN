@@ -1,4 +1,4 @@
-/* $Id: layer2.h,v 0.5 2001/03/03 08:07:30 kkeil Exp $
+/* $Id: layer2.h,v 0.6 2001/03/03 18:17:15 kkeil Exp $
  *
  * Layer 2 defines
  *
@@ -21,7 +21,6 @@ typedef struct _teimgr {
 	struct FsmTimer	t202;
 	int		T202, N202;
 	int		debug;
-	u_int		last_nr;
 	struct _layer2	*l2;
 } teimgr_t;
 
@@ -41,22 +40,19 @@ typedef struct _layer2 {
 	struct FsmTimer	t200, t203;
 	int		T200, N200, T203;
 	int		debug;
-	u_int		msgnr;
-	u_int		last_nr;
-	u_int		ph_nr;
 	hisaxinstance_t	inst;
 	struct sk_buff	*windowar[MAX_WINDOW];
-	struct sk_buff	*ph_skb;
+	struct sk_buff	*down_skb;
 	struct sk_buff_head i_queue;
 	struct sk_buff_head ui_queue;
-	struct sk_buff_head ph_queue;
+	struct sk_buff_head down_queue;
 } layer2_t;
 
 /* from hisax_l2.c */
-extern int tei_l2(layer2_t *l2, u_int prim, u_int nr, int dtyp, void *arg);
+extern int tei_l2(layer2_t *l2, u_int prim, int dinfo, int len, void *arg);
 
 /* from tei.c */
-extern int l2_tei(teimgr_t *tm, u_int prim, u_int nr, int dtyp, void *arg);
+extern int l2_tei(teimgr_t *tm, u_int prim, int dinfo, int len, void *arg);
 extern int create_teimgr(layer2_t *l2);
 extern void release_tei(teimgr_t *tm);
 extern int TEIInit(void);

@@ -1,4 +1,4 @@
-/* $Id: core.c,v 0.8 2001/03/03 08:07:30 kkeil Exp $
+/* $Id: core.c,v 0.9 2001/03/03 18:17:15 kkeil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -110,10 +110,10 @@ remove_object(hisaxobject_t *obj) {
 }
 
 static int
-dummy_if(hisaxif_t *hif, u_int prim, uint nr, int dtyp, void *arg) {
+dummy_if(hisaxif_t *hif, u_int prim, int dinfo, int len, void *arg) {
 	if (debug & DEBUG_DUMMY_FUNC)
-		printk(KERN_DEBUG "hisax dummy_if prim:%x hif:%p nr: %d dtyp %x arg:%p\n",
-			prim, hif, nr, dtyp, arg);
+		printk(KERN_DEBUG __FUNCTION__": prim:%x hif:%p dinfo:%x len:%d arg:%p\n",
+			prim, hif, dinfo, len, arg);
 	return(-EINVAL);
 }
 

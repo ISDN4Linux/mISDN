@@ -1,4 +1,4 @@
-/* $Id: layer1.c,v 0.6 2001/03/03 08:07:30 kkeil Exp $
+/* $Id: layer1.c,v 0.7 2001/03/03 18:17:15 kkeil Exp $
  *
  * hisax_l1.c     common low level stuff for I.430 layer1
  *
@@ -10,7 +10,7 @@
  *
  */
 
-const char *l1_revision = "$Revision: 0.6 $";
+const char *l1_revision = "$Revision: 0.7 $";
 
 #include <linux/config.h>
 #include <linux/module.h>
@@ -26,14 +26,12 @@ typedef struct _layer1 {
 	struct FsmTimer timer;
 	int debug;
 	int delay;
-	u_int	last_nr;
 	hisaxinstance_t	inst;
 } layer1_t;
 
 static layer1_t *l1list = NULL;
 static int debug = 0;
 static hisaxobject_t isdnl1;
-static u_int msgnr = 1;
 
 #define TIMER3_VALUE 7000
 
@@ -155,12 +153,12 @@ l1m_debug(struct FsmInst *fi, char *fmt, ...)
 }
 
 static int
-l1up(layer1_t *l1, u_int prim, u_int nr, int dtyp, void *arg) {
+l1up(layer1_t *l1, u_int prim, int dinfo, int len, void *arg) {
 	int		err = -EINVAL;
 	hisaxif_t	*upif = &l1->inst.up;
 
 	if (upif) {
-		err = upif->func(upif, prim, nr, dtyp, arg);
+		err = upif->func(upif, prim, dinfo, len, arg);
 		if (err < 0) {
 			printk(KERN_WARNING "HiSax: l1up err %d\n", err);
 			return(err);
@@ -183,7 +181,7 @@ l1_deact_cnf(struct FsmInst *fi, int event, void *arg)
 	FsmChangeState(fi, ST_L1_F3);
 	if (test_bit(FLG_L1_ACTIVATING, &l1->Flags))
 		l1->inst.down.func(&l1->inst.down, PH_CONTROL | REQUEST,
-			msgnr++, 4, (void *)HW_POWERUP);
+			0, 4, (void *)HW_POWERUP);
 }
 
 static void
@@ -204,7 +202,7 @@ l1_power_up_s(struct FsmInst *fi, int event, void *arg)
 	if (test_bit(FLG_L1_ACTIVATING, &l1->Flags)) {
 		FsmChangeState(fi, ST_L1_F4);
 		l1->inst.down.func(&l1->inst.down, PH_SIGNAL | REQUEST,
-			msgnr++, 4, (void *)INFO3_P8);
+			0, 4, (void *)INFO3_P8);
 		FsmRestartTimer(&l1->timer, TIMER3_VALUE, EV_TIMER3, NULL, 2);
 		test_and_set_bit(FLG_L1_T3RUN, &l1->Flags);
 	} else
@@ -234,7 +232,7 @@ l1_info2_ind(struct FsmInst *fi, int event, void *arg)
 	else
 #endif
 		FsmChangeState(fi, ST_L1_F6);
-	l1->inst.down.func(&l1->inst.down, PH_SIGNAL | REQUEST, msgnr++,
+	l1->inst.down.func(&l1->inst.down, PH_SIGNAL | REQUEST, 0,
 		4, (void *)INFO3_P8);
 }
 
@@ -249,7 +247,7 @@ l1_info4_ind(struct FsmInst *fi, int event, void *arg)
 	else
 #endif
 		FsmChangeState(fi, ST_L1_F7);
-	l1->inst.down.func(&l1->inst.down, PH_SIGNAL | REQUEST, msgnr++,
+	l1->inst.down.func(&l1->inst.down, PH_SIGNAL | REQUEST, 0,
 		4, (void *)INFO3_P8);
 	if (test_and_clear_bit(FLG_L1_DEACTTIMER, &l1->Flags))
 		FsmDelTimer(&l1->timer, 4);
@@ -270,8 +268,8 @@ l1_timer3(struct FsmInst *fi, int event, void *arg)
 	test_and_clear_bit(FLG_L1_T3RUN, &l1->Flags);	
 	if (test_and_clear_bit(FLG_L1_ACTIVATING, &l1->Flags)) {
 		if (test_and_clear_bit(FLG_L1_DBLOCKED, &l1->Flags))
-			l1up(l1, PH_CONTROL | INDICATION, msgnr++, 4, &db);
-		l1up(l1, PH_DEACTIVATE | INDICATION, msgnr++, 0, NULL);
+			l1up(l1, PH_CONTROL | INDICATION, 0, 4, &db);
+		l1up(l1, PH_DEACTIVATE | INDICATION, 0, 0, NULL);
 	}
 #ifdef HISAX_UINTERFACE
 	if (!test_bit(FLG_L1_UINT, &l1->Flags))
@@ -279,7 +277,7 @@ l1_timer3(struct FsmInst *fi, int event, void *arg)
 	if (l1->l1m.state != ST_L1_F6) {
 		FsmChangeState(fi, ST_L1_F3);
 		l1->inst.down.func(&l1->inst.down, PH_CONTROL | REQUEST,
-			msgnr++, 4, (void *)HW_POWERUP);
+			0, 4, (void *)HW_POWERUP);
 	}
 }
 
@@ -291,9 +289,9 @@ l1_timer_act(struct FsmInst *fi, int event, void *arg)
 	test_and_clear_bit(FLG_L1_ACTTIMER, &l1->Flags);
 	test_and_set_bit(FLG_L1_ACTIVATED, &l1->Flags);
 	if (test_and_clear_bit(FLG_L1_ACTIVATING, &l1->Flags))
-		l1up(l1, PH_ACTIVATE | CONFIRM, l1->last_nr, 0, NULL);
+		l1up(l1, PH_ACTIVATE | CONFIRM, 0, 0, NULL);
 	else
-		l1up(l1, PH_ACTIVATE | INDICATION, msgnr++, 0, NULL);
+		l1up(l1, PH_ACTIVATE | INDICATION, 0, 0, NULL);
 }
 
 static void
@@ -305,9 +303,9 @@ l1_timer_deact(struct FsmInst *fi, int event, void *arg)
 	test_and_clear_bit(FLG_L1_DEACTTIMER, &l1->Flags);
 	test_and_clear_bit(FLG_L1_ACTIVATED, &l1->Flags);
 	if (test_and_clear_bit(FLG_L1_DBLOCKED, &l1->Flags))
-		l1up(l1, PH_CONTROL | INDICATION, msgnr++, 4, &db);
-	l1up(l1, PH_DEACTIVATE | INDICATION, msgnr++, 0, NULL);
-	l1->inst.down.func(&l1->inst.down, PH_CONTROL | REQUEST, msgnr++, 4,
+		l1up(l1, PH_CONTROL | INDICATION, 0, 4, &db);
+	l1up(l1, PH_DEACTIVATE | INDICATION, 0, 0, NULL);
+	l1->inst.down.func(&l1->inst.down, PH_CONTROL | REQUEST, 0, 4,
 		(void *)HW_DEACTIVATE);
 }
 
@@ -316,7 +314,7 @@ l1_activate_s(struct FsmInst *fi, int event, void *arg)
 {
 	layer1_t *l1 = fi->userdata;
 
-	l1->inst.down.func(&l1->inst.down, PH_CONTROL | REQUEST, msgnr++, 4,
+	l1->inst.down.func(&l1->inst.down, PH_CONTROL | REQUEST, 0, 4,
 		(void *)HW_RESET);
 }
 
@@ -329,8 +327,8 @@ l1_activate_no(struct FsmInst *fi, int event, void *arg)
 	if ((!test_bit(FLG_L1_DEACTTIMER, &l1->Flags)) && (!test_bit(FLG_L1_T3RUN, &l1->Flags))) {
 		test_and_clear_bit(FLG_L1_ACTIVATING, &l1->Flags);
 		if (test_and_clear_bit(FLG_L1_DBLOCKED, &l1->Flags))
-			l1up(l1, PH_CONTROL | INDICATION, msgnr++, 4, &db);
-		l1up(l1, PH_DEACTIVATE | INDICATION, msgnr++, 0, NULL);
+			l1up(l1, PH_CONTROL | INDICATION, 0, 4, &db);
+		l1up(l1, PH_DEACTIVATE | INDICATION, 0, 0, NULL);
 	}
 }
 
@@ -393,7 +391,7 @@ l1_deact_req_u(struct FsmInst *fi, int event, void *arg)
 	FsmChangeState(fi, ST_L1_RESET);
 	FsmRestartTimer(&l1->timer, 550, EV_TIMER_DEACT, NULL, 2);
 	test_and_set_bit(FLG_L1_DEACTTIMER, &l1->Flags);
-	l1->inst.down.func(&l1->inst.down, PH_CONTROL | REQUEST, msgnr++, 4,
+	l1->inst.down.func(&l1->inst.down, PH_CONTROL | REQUEST, 0, 4,
 		(void *)HW_POWERUP);
 }
 
@@ -417,7 +415,7 @@ l1_activate_u(struct FsmInst *fi, int event, void *arg)
 {
 	layer1_t *l1 = fi->userdata;
 
-	l1->inst.down.func(&l1->inst.down, PH_SIGNAL | REQUEST, msgnr++, 4,
+	l1->inst.down.func(&l1->inst.down, PH_SIGNAL | REQUEST, 0, 4,
 		(void *)INFO1);
 }
 
@@ -471,7 +469,7 @@ l1b_timer_act(struct FsmInst *fi, int event, void *arg)
 	layer1_t *l1 = fi->userdata;
 
 	FsmChangeState(fi, ST_L1_ACTIV);
-	l1up(l1, PH_ACTIVATE | CONFIRM, l1->last_nr, 0, NULL);
+	l1up(l1, PH_ACTIVATE | CONFIRM, 0, 0, NULL);
 }
 
 static void
@@ -480,7 +478,7 @@ l1b_timer_deact(struct FsmInst *fi, int event, void *arg)
 	layer1_t *l1 = fi->userdata;
 
 	FsmChangeState(fi, ST_L1_NULL);
-	l1up(l1, PH_DEACTIVATE | CONFIRM, l1->last_nr, 0, NULL);
+	l1up(l1, PH_DEACTIVATE | CONFIRM, 0, 0, NULL);
 }
 
 static struct FsmNode L1BFnList[] =
@@ -494,7 +492,7 @@ static struct FsmNode L1BFnList[] =
 #define L1B_FN_COUNT (sizeof(L1BFnList)/sizeof(struct FsmNode))
 
 static int
-l1from_up(hisaxif_t *hif, u_int prim, u_int nr, int dtyp, void *arg) {
+l1from_up(hisaxif_t *hif, u_int prim, int dinfo, int len, void *arg) {
 	layer1_t *l1;
 
 	if (!hif || !hif->fdata)
@@ -503,14 +501,13 @@ l1from_up(hisaxif_t *hif, u_int prim, u_int nr, int dtyp, void *arg) {
 	switch(prim) {
 		case (PH_DATA | REQUEST):
 		case (PH_CONTROL | REQUEST):
-			return(l1->inst.down.func(&l1->inst.down, prim, nr, dtyp, arg));
+			return(l1->inst.down.func(&l1->inst.down, prim, dinfo, len, arg));
 			break;
 		case (PH_ACTIVATE | REQUEST):
 			if (test_bit(FLG_L1_ACTIVATED, &l1->Flags))
-				l1up(l1, PH_ACTIVATE | CONFIRM, nr, 0, NULL);
+				l1up(l1, PH_ACTIVATE | CONFIRM, 0, 0, NULL);
 			else {
 				test_and_set_bit(FLG_L1_ACTIVATING, &l1->Flags);
-				l1->last_nr = nr;
 				FsmEvent(&l1->l1m, EV_PH_ACTIVATE, arg);
 			}
 			break;
@@ -525,7 +522,7 @@ l1from_up(hisaxif_t *hif, u_int prim, u_int nr, int dtyp, void *arg) {
 }
 
 static int
-l1from_down(hisaxif_t *hif, u_int prim, u_int nr, int dtyp, void *arg) {
+l1from_down(hisaxif_t *hif, u_int prim, int dinfo, int len, void *arg) {
 	layer1_t *l1;
 	u_int val = (u_int)arg;
 
@@ -535,9 +532,9 @@ l1from_down(hisaxif_t *hif, u_int prim, u_int nr, int dtyp, void *arg) {
 	if (prim == PH_DATA_IND) {
 		if (test_bit(FLG_L1_ACTTIMER, &l1->Flags))
 			FsmEvent(&l1->l1m, EV_TIMER_ACT, NULL);	
-		return(l1up(l1, prim, nr, dtyp, arg));
+		return(l1up(l1, prim, dinfo, len, arg));
 	} else if (prim == PH_DATA_CNF) {
-		return(l1up(l1, prim, nr, dtyp, arg));
+		return(l1up(l1, prim, dinfo, len, arg));
 	} else if (prim == (PH_CONTROL | INDICATION)) {
 		if (val == HW_RESET)
 			FsmEvent(&l1->l1m, EV_RESET_IND, arg);

@@ -1,4 +1,4 @@
-/* $Id: udevice.c,v 0.4 2001/03/03 08:07:30 kkeil Exp $
+/* $Id: udevice.c,v 0.5 2001/03/03 18:17:15 kkeil Exp $
  *
  * Copyright 2000  by Karsten Keil <kkeil@isdn4linux.de>
  */
@@ -46,7 +46,7 @@ static int device_debug = 0;
 static int UD_Protocols[] = {	ISDN_PID_ANY };
 #define PROTOCOLCNT	(sizeof(UD_Protocols)/sizeof(int))
 
-static int from_up_down(hisaxif_t *, u_int, u_int, int, void *);
+static int from_up_down(hisaxif_t *, u_int, int, int, void *);
 
 static int
 hisax_rdata(hisaxdevice_t *dev, iframe_t *iff, int use_value) {
@@ -217,7 +217,7 @@ wdata_frame(hisaxdevice_t *dev, iframe_t *iff) {
 					skb_reserve(skb, MAX_HEADER_LEN);
 				dp = &iff->data.b[0];
 				memcpy(skb_put(skb, len), dp, len);
-				err = hif->func(hif, iff->prim, iff->nr, DTYPE_SKB, skb);
+				err = hif->func(hif, iff->prim, DINFO_SKB, 0, skb);
 				if (err)
 					dev_kfree_skb(skb);
 				return(err);
@@ -226,7 +226,7 @@ wdata_frame(hisaxdevice_t *dev, iframe_t *iff) {
 		if (device_debug & DEBUG_WDATA)
 			printk(KERN_DEBUG "wdata_frame: hif %p f:%p d:%p s:%p i:%p\n",
 				hif, hif->func, hif->fdata, hif->st, hif->inst);
-		err = hif->func(hif, iff->prim, iff->nr, iff->len, &iff->data.b[0]);
+		err = hif->func(hif, iff->prim, iff->dinfo, iff->len, &iff->data.b[0]);
 	} else {
 		if (device_debug & DEBUG_WDATA)
 			printk(KERN_DEBUG "hisax: no matching interface\n");
@@ -252,14 +252,14 @@ hisax_wdata(hisaxdevice_t *dev, void *dp, int len) {
 		return(len);
 	}
 	if (device_debug & DEBUG_WDATA)
-		printk(KERN_DEBUG "hisax_wdata: %x:%x %d %d\n",
-			iff->addr, iff->prim, iff->nr, iff->len);
+		printk(KERN_DEBUG "hisax_wdata: %x:%x %x %d\n",
+			iff->addr, iff->prim, iff->dinfo, iff->len);
 	switch(iff->prim) {
 	    case (MGR_GETSTACK | REQUEST):
 		used = head;
 		off.addr = iff->addr;
 		off.prim = MGR_GETSTACK | CONFIRM;
-		off.nr = iff->nr;
+		off.dinfo = 0;
 		if (iff->addr <= 0) {
 			off.data.i = get_stack_cnt();
 			off.len = sizeof(int);
@@ -277,7 +277,7 @@ hisax_wdata(hisaxdevice_t *dev, void *dp, int len) {
 			return(len);
 		off.addr = iff->addr;
 		off.prim = MGR_GETLAYER | CONFIRM;
-		off.nr = iff->nr;
+		off.dinfo = 0;
 		lay = iff->data.i;
 		off.len = 0;
 		if ((st = get_stack4id(iff->addr))) {
@@ -306,7 +306,7 @@ hisax_wdata(hisaxdevice_t *dev, void *dp, int len) {
 			return(len);
 		ip = &iff->data.i;
 		off.addr = iff->addr;
-		off.nr = iff->nr;
+		off.dinfo = 0;
 		off.prim = MGR_ADDLAYER | CONFIRM;
 		off.len = 4;
 		if ((st = get_stack4id(iff->addr))) {
@@ -323,7 +323,7 @@ hisax_wdata(hisaxdevice_t *dev, void *dp, int len) {
 		used = head;
 		off.addr = iff->addr;
 		off.prim = MGR_DELLAYER | CONFIRM;
-		off.nr = iff->nr;
+		off.dinfo = 0;
 		if ((dl=get_devlayer(dev, iff->addr)))
 			off.len = del_layer(dl);
 		else
@@ -558,7 +558,7 @@ static struct file_operations hisax_fops =
 };
 
 static int
-from_up_down(hisaxif_t *hif, u_int prim, u_int nr, int len, void *arg) {
+from_up_down(hisaxif_t *hif, u_int prim, int dinfo, int len, void *arg) {
 	
 	devicelayer_t *dl;
 	iframe_t off;
@@ -573,12 +573,12 @@ from_up_down(hisaxif_t *hif, u_int prim, u_int nr, int len, void *arg) {
 	off.addr = dl->iaddr | IF_TYPE(hif);
 	off.prim = prim;
 	off.len = 0;
-	off.nr = nr;
+	off.dinfo = dinfo;
 	if (device_debug & DEBUG_RDATA)
-		printk(KERN_DEBUG "from_up_down: %x(%x) nr:%d len:%d\n",
-			off.prim, off.addr, nr, len);
+		printk(KERN_DEBUG "from_up_down: %x(%x) dinfo:%x len:%d\n",
+			off.prim, off.addr, dinfo, len);
 	if (CMD_IS_DATA(prim)) {
-		if (len == DTYPE_SKB) {
+		if (dinfo == DINFO_SKB) {
 			if ((sub == REQUEST) || (sub == INDICATION)) {
 				if (!(skb = arg))
 					return(-EINVAL);
@@ -595,11 +595,11 @@ from_up_down(hisaxif_t *hif, u_int prim, u_int nr, int len, void *arg) {
 					if (IF_TYPE(hif) == IF_UP)
 						retval = dl->inst.up.func(
 							&dl->inst.up, prim,
-							nr, len, arg);
+							dinfo, len, arg);
 					else if (IF_TYPE(hif) == IF_DOWN)
 						retval = dl->inst.down.func(
 							&dl->inst.down, prim,
-							nr, len, arg);
+							dinfo, len, arg);
 					if (retval) {
 						dev_kfree_skb(skb);
 						retval = 0;

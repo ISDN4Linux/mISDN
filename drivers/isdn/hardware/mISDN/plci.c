@@ -1,4 +1,4 @@
-/* $Id: plci.c,v 0.3 2001/02/27 17:45:44 kkeil Exp $
+/* $Id: plci.c,v 0.4 2001/03/03 18:17:16 kkeil Exp $
  *
  */
 
@@ -54,7 +54,8 @@ void plciHandleSetupInd(Plci_t *plci, int pr, SETUP_t *setup)
 
 		memset(&relcmpl, 0, sizeof(RELEASE_COMPLETE_t));
 		relcmpl.CAUSE = cause;
-		plciL4L3(plci, CC_RELEASE_COMPLETE | REQUEST, &relcmpl);
+		plciL4L3(plci, CC_RELEASE_COMPLETE | REQUEST,
+			sizeof(RELEASE_COMPLETE_t), &relcmpl);
 	}
 }
 
@@ -119,18 +120,11 @@ void plciNewCrInd(Plci_t *plci, struct l3_process *l3_pc)
 
 void plciNewCrReq(Plci_t *plci)
 {
-	l3msg_t l3msg;
-	l3msg.id = plci->adrPLCI;
-	l3msg.arg = NULL;
-	plciL4L3(plci, CC_NEW_CR | REQUEST, &l3msg);
+	plciL4L3(plci, CC_NEW_CR | REQUEST, 0, NULL);
 }
 
-int plciL4L3(Plci_t *plci, __u32 prim, void *arg)
+int plciL4L3(Plci_t *plci, __u32 prim, int len, void *arg)
 {
-	l3msg_t l3msg;
-
-	l3msg.id = plci->adrPLCI;
-	l3msg.arg = arg;
-	return(contrL4L3(plci->contr, prim, &l3msg));
+ 	return(contrL4L3(plci->contr, prim, plci->adrPLCI, len, arg));
 }
 

@@ -1,4 +1,4 @@
-/* $Id: capi.h,v 0.4 2001/03/03 08:07:29 kkeil Exp $
+/* $Id: capi.h,v 0.5 2001/03/03 18:17:15 kkeil Exp $
  *
  */
 
@@ -183,8 +183,8 @@ void		contrDelPlci(Contr_t *contr, struct _Plci *plci);
 void		contrDummyInd(Contr_t *, __u32, void *);
 DummyProcess_t	*contrNewDummyPc(Contr_t *contr);
 DummyProcess_t	*contrId2DummyPc(Contr_t *contr, __u16 invokeId);
-int		contrL4L3(Contr_t *, __u32, l3msg_t *);
-int		contrL3L4(hisaxif_t *, u_int, u_int, int, void *);
+int		contrL4L3(Contr_t *, __u32, int, int, void *);
+int		contrL3L4(hisaxif_t *, u_int, int, int, void *);
 BInst_t		*contrSelChannel(Contr_t *, int);
 // ---------------------------------------------------------------------------
 // struct Listen
@@ -279,7 +279,7 @@ void plciAttachCplci(Plci_t *plci, struct _Cplci *cplci);
 void plciDetachCplci(Plci_t *plci, struct _Cplci *cplci);
 void plciNewCrInd(Plci_t *plci, void *);
 void plciNewCrReq(Plci_t *plci);
-int  plciL4L3(Plci_t *plci, __u32 prim, void *arg);
+int  plciL4L3(Plci_t *, __u32, int, void *);
 
 // ---------------------------------------------------------------------------
 // struct Cplci

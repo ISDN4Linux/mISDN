@@ -1,4 +1,4 @@
-/* $Id: isac.c,v 0.3 2001/02/13 10:42:55 kkeil Exp $
+/* $Id: isac.c,v 0.4 2001/03/03 18:17:15 kkeil Exp $
  *
  * isac.c   ISAC specific routines
  *
@@ -24,8 +24,6 @@ static char *ISACVer[] =
 {"2086/2186 V1.1", "2085 B1", "2085 B2",
  "2085 V2.3"};
 
-static u_int msgnr = 1;
-
 void
 ISACVersion(dchannel_t *dch, char *s)
 {
@@ -48,7 +46,6 @@ isac_new_ph(dchannel_t *dch)
 {
 	u_int		prim = PH_SIGNAL | INDICATION;
 	u_int		para = 0;
-	u_int		nr = msgnr++;
 	hisaxif_t	*upif = &dch->inst.up;
 
 	switch (dch->hw.isac.ph_state) {
@@ -63,7 +60,6 @@ isac_new_ph(dchannel_t *dch)
 		case (ISAC_IND_DID):
 			prim = PH_CONTROL | CONFIRM;
 			para = HW_DEACTIVATE;
-			nr = dch->reqnr;
 			break;
 		case (ISAC_IND_DR):
 			prim = PH_CONTROL | INDICATION;
@@ -89,7 +85,7 @@ isac_new_ph(dchannel_t *dch)
 			return;
 	}
 	while(upif) {
-		upif->func(upif, prim, nr, 4, (void *)para);
+		upif->func(upif, prim, 0, 4, (void *)para);
 		upif = upif->next;
 	}
 }
@@ -106,7 +102,7 @@ isac_rcv(dchannel_t *dch)
 			dev_kfree_skb(skb);
 			continue;
 		}
-		err = upif->func(upif, PH_DATA_IND, msgnr++, DTYPE_SKB, skb);
+		err = upif->func(upif, PH_DATA_IND, DINFO_SKB, 0, skb);
 		if (err < 0) {
 			printk(KERN_WARNING "HiSax: isac deliver err %d\n", err);
 			dev_kfree_skb(skb);
@@ -138,9 +134,8 @@ isac_bh(dchannel_t *dch)
 		if (skb) {
 			dch->next_skb = NULL;
 			dch->inst.up.func(&dch->inst.up, PH_DATA_CNF,
-				dch->next_nr, DTYPE_SKB, skb);
-		} else
-			printk(KERN_WARNING "D_XMTBUFREADY without skb\n");
+				DINFO_SKB, 0, skb);
+		}
 	}
 	if (test_and_clear_bit(D_RCVBUFREADY, &dch->event))
 		isac_rcv(dch);
@@ -306,7 +301,6 @@ isac_interrupt(dchannel_t *dch, u_char val)
 				test_and_clear_bit(FLG_TX_BUSY, &dch->DFlags);
 		}
 	}
-      afterXPR:
 	if (val & 0x04) {	/* CISQ */
 		exval = dch->readisac(dch->inst.data, ISAC_CIR0);
 		if (dch->debug & L1_DEB_ISAC)
@@ -497,7 +491,7 @@ isac_interrupt(dchannel_t *dch, u_char val)
 }
 
 int
-ISAC_l1hw(hisaxif_t *hif, u_int prim, u_int nr, int len, void *arg)
+ISAC_l1hw(hisaxif_t *hif, u_int prim, int dinfo, int len, void *arg)
 {
 	dchannel_t *dch = hif->fdata;
 	struct sk_buff *skb = arg;
@@ -515,7 +509,6 @@ ISAC_l1hw(hisaxif_t *hif, u_int prim, u_int nr, int len, void *arg)
 		if (test_and_set_bit(FLG_TX_BUSY, &dch->DFlags)) {
 			test_and_set_bit(FLG_TX_NEXT, &dch->DFlags);
 			dch->next_skb = skb;
-			dch->next_nr = nr;
 			dch->inst.unlock(dch->inst.data);
 		} else {
 			dch->tx_len = skb->len;
@@ -523,12 +516,11 @@ ISAC_l1hw(hisaxif_t *hif, u_int prim, u_int nr, int len, void *arg)
 			dch->tx_idx = 0;
 			isac_fill_fifo(dch);
 			dch->inst.unlock(dch->inst.data);
-			dch->inst.up.func(&dch->inst.up, PH_DATA_CNF, nr,
-				DTYPE_SKB, skb);
+			dch->inst.up.func(&dch->inst.up, PH_DATA_CNF,
+				DINFO_SKB, 0, skb);
 		}
 	} else if (prim == (PH_SIGNAL | REQUEST)) {
 		dch->inst.lock(dch->inst.data);
-		dch->reqnr = nr;
 		if (val == INFO3_P8)
 			ph_command(dch, ISAC_CMD_AR8);
 		else if (val == INFO3_P10)
@@ -538,7 +530,6 @@ ISAC_l1hw(hisaxif_t *hif, u_int prim, u_int nr, int len, void *arg)
 		dch->inst.unlock(dch->inst.data);
 	} else if (prim == (PH_CONTROL | REQUEST)) {
 		dch->inst.lock(dch->inst.data);
-		dch->reqnr = nr;
 		if (val == HW_RESET) {
 			if ((dch->hw.isac.ph_state == ISAC_IND_EI) ||
 				(dch->hw.isac.ph_state == ISAC_IND_DR) ||

@@ -1,4 +1,4 @@
-/* $Id: contr.c,v 0.4 2001/03/03 08:07:29 kkeil Exp $
+/* $Id: contr.c,v 0.5 2001/03/03 18:17:15 kkeil Exp $
  *
  */
 
@@ -190,11 +190,14 @@ void contrSendMessage(Contr_t *contr, struct sk_buff *skb)
 
 void contrLoadFirmware(Contr_t *contr, int len, void *data)
 {
-	l3msg_t fmsg;
+	struct firm {
+		int	len;
+		void	*data;
+	} firm;
 	
-	fmsg.id = len;
-	fmsg.arg = data;
-	contr->inst.obj->ctrl(contr->inst.st, MGR_LOADFIRM | REQUEST, &fmsg);	
+	firm.len  = len;
+	firm.data = data;
+	contr->inst.obj->ctrl(contr->inst.st, MGR_LOADFIRM | REQUEST, &firm);
 	contrRun(contr);
 }
 
@@ -312,40 +315,40 @@ static Plci_t
 }
 
 int
-contrL3L4(hisaxif_t *hif, u_int prim, u_int nr, int dtyp, void *arg)
+contrL3L4(hisaxif_t *hif, u_int prim, int dinfo, int len, void *arg)
 {
 	Contr_t	*contr;
 	Plci_t	*plci;
-	l3msg_t	*l3msg = arg;
+	__u32	*id = arg;
 
 	if (!hif || !hif->fdata)
 		return(-EINVAL);
 	contr = hif->fdata;
-	if (!l3msg)
-		return(-EINVAL);
 	if (prim == (CC_NEW_CR | INDICATION)) {
+		if (!arg)
+			return(-EINVAL);
 		plci = contrNewPlci(contr);
 		if (!plci)
 			return(-EBUSY);
-		l3msg->id = plci->adrPLCI;
-	} else if ((l3msg->id & ~CONTROLER_MASK) == DUMMY_CR_FLAG) {
-		contrDummyInd(contr, prim, l3msg->arg);
+		*id = plci->adrPLCI;
+	} else if ((dinfo & ~CONTROLER_MASK) == DUMMY_CR_FLAG) {
+		contrDummyInd(contr, prim, arg);
 	} else {
-		if (!(plci = contrGetPLCI4addr(contr, l3msg->id))) {
-			contrDebug(contr, LL_DEB_WARN, __FUNCTION__ ": unknown plci prim(%x) id(%x)", prim, l3msg->id);
+		if (!(plci = contrGetPLCI4addr(contr, dinfo))) {
+			contrDebug(contr, LL_DEB_WARN, __FUNCTION__ ": unknown plci prim(%x) id(%x)", prim, dinfo);
 			return(-ENODEV);
 		}
-		plci_l3l4(plci, prim, l3msg->arg);
+		plci_l3l4(plci, prim, arg);
 	}
 	return(0);
 }
 
-int contrL4L3(Contr_t *contr, __u32 prim, l3msg_t *l3msg) {
+int contrL4L3(Contr_t *contr, __u32 prim, int dinfo, int len, void *arg) {
 	int err = -EINVAL;
 
 	if (contr->inst.down.func) {
-		err = contr->inst.down.func(&contr->inst.down, prim, 0,
-			DTYPE_L3MSGP, l3msg);
+		err = contr->inst.down.func(&contr->inst.down, prim, dinfo,
+			len, arg);
 	}
 	return(err);
 }
@@ -376,12 +379,6 @@ Contr_t *newContr(hisaxobject_t *ocapi, hisaxstack_t *st, hisaxif_t *hif)
 		return(NULL);
 	}
 	return contr;
-}
-
-void delContr(Contr_t *contr)
-{
-	contrDestr(contr);
-	kfree(contr);
 }
 
 BInst_t *contrSelChannel(Contr_t *contr, int channr)

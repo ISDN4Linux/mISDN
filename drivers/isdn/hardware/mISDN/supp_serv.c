@@ -1,4 +1,4 @@
-/* $Id: supp_serv.c,v 0.2 2001/02/22 05:54:40 kkeil Exp $
+/* $Id: supp_serv.c,v 0.3 2001/03/03 18:17:16 kkeil Exp $
  *
  */
 
@@ -273,13 +273,11 @@ void encodeInvokeComponentLength(__u8 *msg, __u8 *p)
 }
 
 
-static int dummy_L4L3(DummyProcess_t *dpc, __u32 prim, void *arg) {
+static int dummy_L4L3(DummyProcess_t *dpc, __u32 prim, int len, void *arg) {
 	Contr_t *contr = dpc->contr;
-	l3msg_t l3msg;
 
-	l3msg.id = contr->adrController | DUMMY_CR_FLAG;
-	l3msg.arg = arg;
-	return(contrL4L3(contr, prim, &l3msg));
+	return(contrL4L3(contr, prim, contr->adrController | DUMMY_CR_FLAG,
+		len, arg));
 }
 
 DummyProcess_t *applNewDummyPc(Appl_t *appl, __u16 Function, __u32 Handle)
@@ -335,7 +333,7 @@ int applFacCFActivate(Appl_t *appl, struct FacReqParm *facReqParm,
 	encodeInvokeComponentLength(dummy_pc->buf, p);
 	fac.FACILITY = dummy_pc->buf;
 
-	dummy_L4L3(dummy_pc, CC_FACILITY | REQUEST, &fac);
+	dummy_L4L3(dummy_pc, CC_FACILITY | REQUEST, sizeof(FACILITY_t), &fac);
 	dummyPcAddTimer(dummy_pc, T_ACTIVATE);
 
 	facConfParm->u.Info.SupplementaryServiceInfo = CapiSuccess;
@@ -361,7 +359,7 @@ int applFacCFDeactivate(Appl_t *appl, struct FacReqParm *facReqParm,
 	encodeInvokeComponentLength(dummy_pc->buf, p);
 	fac.FACILITY = dummy_pc->buf;
 
-	dummy_L4L3(dummy_pc, CC_FACILITY | REQUEST, &fac);
+	dummy_L4L3(dummy_pc, CC_FACILITY | REQUEST, sizeof(FACILITY_t), &fac);
 	dummyPcAddTimer(dummy_pc, T_DEACTIVATE);
 
 	facConfParm->u.Info.SupplementaryServiceInfo = CapiSuccess;
@@ -388,7 +386,7 @@ int applFacCFInterrogateParameters(Appl_t *appl, struct FacReqParm *facReqParm,
 	encodeInvokeComponentLength(dummy_pc->buf, p);
 	fac.FACILITY = dummy_pc->buf;
 
-	dummy_L4L3(dummy_pc, CC_FACILITY | REQUEST, &fac);
+	dummy_L4L3(dummy_pc, CC_FACILITY | REQUEST, sizeof(FACILITY_t), &fac);
 	dummyPcAddTimer(dummy_pc, T_INTERROGATE);
 
 	facConfParm->u.Info.SupplementaryServiceInfo = CapiSuccess;
@@ -413,7 +411,7 @@ int applFacCFInterrogateNumbers(Appl_t *appl, struct FacReqParm *facReqParm,
 	p += encodeInt(p, 0x11); // InterrogateServedUserNumbers
 	encodeInvokeComponentLength(dummy_pc->buf, p);
 	fac.FACILITY = dummy_pc->buf;
-	dummy_L4L3(dummy_pc, CC_FACILITY | REQUEST, &fac);
+	dummy_L4L3(dummy_pc, CC_FACILITY | REQUEST, sizeof(FACILITY_t), &fac);
 	dummyPcAddTimer(dummy_pc, T_INTERROGATE);
 
 	facConfParm->u.Info.SupplementaryServiceInfo = CapiSuccess;

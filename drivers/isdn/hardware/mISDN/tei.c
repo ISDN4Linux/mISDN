@@ -1,4 +1,4 @@
-/* $Id: tei.c,v 0.3 2001/02/13 10:42:55 kkeil Exp $
+/* $Id: tei.c,v 0.4 2001/03/03 18:17:16 kkeil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -12,7 +12,7 @@
 #include "debug.h"
 #include <linux/random.h>
 
-const char *tei_revision = "$Revision: 0.3 $";
+const char *tei_revision = "$Revision: 0.4 $";
 
 #define ID_REQUEST	1
 #define ID_ASSIGNED	2
@@ -82,7 +82,7 @@ findtei(teimgr_t *tm, int tei)
 
 	if (tei == 127)
 		return (NULL);
-	if (!tei_l2(tm->l2, MDL_STATUS | REQUEST, tm->l2->msgnr++, tei, &ptr))
+	if (!tei_l2(tm->l2, MDL_STATUS | REQUEST, tei, sizeof(void), &ptr))
 		return(ptr);
 	return (NULL);
 }
@@ -107,7 +107,7 @@ put_tei_msg(teimgr_t *tm, u_char m_id, unsigned int ri, u_char tei)
 	bp[2] = ri & 0xff;
 	bp[3] = m_id;
 	bp[4] = (tei << 1) | 1;
-	tei_l2(tm->l2, MDL_UNITDATA | REQUEST, tm->l2->msgnr++, DTYPE_SKB, skb);
+	tei_l2(tm->l2, MDL_UNITDATA | REQUEST, DINFO_SKB, 0, skb);
 }
 
 static void
@@ -149,12 +149,12 @@ tei_id_assign(struct FsmInst *fi, int event, void *arg)
 		if (ri != otm->ri) {
 			tm->tei_m.printdebug(fi,
 				"possible duplicate assignment tei %d", tei);
-			tei_l2(otm->l2, MDL_ERROR | RESPONSE, tm->last_nr, 0, NULL);
+			tei_l2(otm->l2, MDL_ERROR | RESPONSE, 0, 0, NULL);
 		}
 	} else if (ri == tm->ri) {
 		FsmDelTimer(&tm->t202, 1);
 		FsmChangeState(fi, ST_TEI_NOP);
-		tei_l2(tm->l2, MDL_ASSIGN | REQUEST, tm->l2->msgnr++, 4, &tei);
+		tei_l2(tm->l2, MDL_ASSIGN | REQUEST, 0, 4, &tei);
 //		cs->cardmsg(cs, MDL_ASSIGN | REQUEST, NULL);
 	}
 }
@@ -228,7 +228,7 @@ tei_id_remove(struct FsmInst *fi, int event, void *arg)
 	if ((tm->l2->tei != -1) && ((tei == GROUP_TEI) || (tei == tm->l2->tei))) {
 		FsmDelTimer(&tm->t202, 5);
 		FsmChangeState(&tm->tei_m, ST_TEI_NOP);
-		tei_l2(tm->l2, MDL_REMOVE | REQUEST, tm->l2->msgnr++, 0, NULL);
+		tei_l2(tm->l2, MDL_REMOVE | REQUEST, 0, 0, NULL);
 //		cs->cardmsg(cs, MDL_REMOVE | REQUEST, NULL);
 	}
 }
@@ -261,7 +261,7 @@ tei_id_req_tout(struct FsmInst *fi, int event, void *arg)
 		FsmAddTimer(&tm->t202, tm->T202, EV_T202, NULL, 3);
 	} else {
 		tm->tei_m.printdebug(fi, "assign req failed");
-		tei_l2(tm->l2, MDL_ERROR | RESPONSE, tm->last_nr, 0, NULL);
+		tei_l2(tm->l2, MDL_ERROR | RESPONSE, 0, 0, NULL);
 //		cs->cardmsg(cs, MDL_REMOVE | REQUEST, NULL);
 		FsmChangeState(fi, ST_TEI_NOP);
 	}
@@ -282,7 +282,7 @@ tei_id_ver_tout(struct FsmInst *fi, int event, void *arg)
 	} else {
 		tm->tei_m.printdebug(fi, "verify req for tei %d failed",
 			tm->l2->tei);
-		tei_l2(tm->l2, MDL_REMOVE | REQUEST, tm->l2->msgnr++, 0, NULL);
+		tei_l2(tm->l2, MDL_REMOVE | REQUEST, 0, 0, NULL);
 //		cs->cardmsg(cs, MDL_REMOVE | REQUEST, NULL);
 		FsmChangeState(fi, ST_TEI_NOP);
 	}
@@ -339,20 +339,19 @@ tei_ph_data_ind(teimgr_t *tm, int dtyp, void *arg)
 }
 
 int
-l2_tei(teimgr_t *tm, u_int prim, u_int nr, int dtyp, void *arg)
+l2_tei(teimgr_t *tm, u_int prim, int dinfo, int len, void *arg)
 {
 	if (!tm)
 		return(-EINVAL);
 	switch (prim) {
 	    case (MDL_UNITDATA | INDICATION):
-	    	return(tei_ph_data_ind(tm, dtyp, arg));
+	    	return(tei_ph_data_ind(tm, dinfo, arg));
 	    case (MDL_ASSIGN | INDICATION):
-	    	tm->last_nr = nr;
 		if (test_bit(FLG_FIXED_TEI, &tm->l2->flag)) {
 			if (tm->debug)
 				tm->tei_m.printdebug(&tm->tei_m,
 					"fixed assign tei %d", tm->l2->tei);
-			tei_l2(tm->l2, MDL_ASSIGN | REQUEST, tm->l2->msgnr++,
+			tei_l2(tm->l2, MDL_ASSIGN | REQUEST, 0,
 				tm->l2->tei, NULL);
 //			cs->cardmsg(cs, MDL_ASSIGN | REQUEST, NULL);
 		} else

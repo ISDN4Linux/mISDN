@@ -1,4 +1,4 @@
-/* $Id: mISDNif.h,v 0.10 2001/03/03 08:07:30 kkeil Exp $
+/* $Id: mISDNif.h,v 0.11 2001/03/03 18:17:16 kkeil Exp $
  *
  */
 
@@ -220,8 +220,7 @@
 #define IF_LAYERMASK	0x00FF0000
 #define IF_TYPE(i)	((i)->stat & IF_TYPEMASK)
 
-#define DTYPE_SKB	-1
-#define DTYPE_L3MSGP	-2
+#define DINFO_SKB	-1
 
 #define DUMMY_CR_FLAG	0x7FFFFF00
 #define CONTROLER_MASK	0x000000FF
@@ -242,7 +241,7 @@
 typedef struct _iframe {
 	u_int	addr;
 	u_int	prim;
-	u_int	nr;
+	u_int	dinfo;
 	int	len;
 	union {
 		u_char	b[4];
@@ -268,12 +267,6 @@ typedef struct _hisax_pid {
 	void	*param[MAX_LAYER_NR +1];
 	void	*global;
 } hisax_pid_t;
-
-
-typedef struct _l3msg_t {
-	int	id;
-	void	*arg;
-} l3msg_t;
 
 
 /* l3 pointer arrays */
@@ -484,7 +477,7 @@ typedef struct _hisaxif {
 	int			stat;
 	struct _hisaxstack	*st;
 	struct _hisaxinstance	*inst;
-	int			(*func)(struct _hisaxif *, u_int, u_int, int, void *);
+	int			(*func)(struct _hisaxif *, u_int, int, int, void *);
 	void			*fdata;
 } hisaxif_t;
 

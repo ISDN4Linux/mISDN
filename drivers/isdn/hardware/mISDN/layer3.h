@@ -1,4 +1,4 @@
-/* $Id: layer3.h,v 0.8 2001/03/03 08:07:30 kkeil Exp $
+/* $Id: layer3.h,v 0.9 2001/03/03 18:17:15 kkeil Exp $
  *
  * This file is (c) under GNU PUBLIC LICENSE
  *
@@ -83,7 +83,6 @@ typedef struct _layer3 {
 	u_int		id;
 	int		debug;
 	u_int		Flag;
-	u_int		msgnr;
 	hisaxinstance_t	inst;
 	struct sk_buff_head squeue;
 } layer3_t;
@@ -94,7 +93,7 @@ struct stateentry {
 	void (*rout) (l3_process_t *, u_char, void *);
 };
 
-extern int l3_msg(layer3_t *, u_int, u_int, int, void *);
+extern int l3_msg(layer3_t *, u_int, int, int, void *);
 extern struct sk_buff *l3_alloc_skb(int);
 extern void newl3state(l3_process_t *, int);
 extern void L3InitTimer(l3_process_t *, L3Timer_t *);
@@ -106,7 +105,7 @@ extern l3_process_t *getl3proc(layer3_t *, int);
 extern l3_process_t *getl3proc4id(layer3_t *, int);
 extern l3_process_t *new_l3_process(layer3_t *, int, int);
 extern u_char *findie(u_char *, int, u_char, int);
-extern int hisax_l3up(l3_process_t *, u_int, void *);
+extern int hisax_l3up(l3_process_t *, u_int, int, void *);
 extern int getcallref(u_char * p);
 extern int newcallref(void);
 extern void init_l3(layer3_t *);

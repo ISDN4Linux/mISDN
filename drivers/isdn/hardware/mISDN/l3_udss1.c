@@ -1,4 +1,4 @@
-/* $Id: l3_udss1.c,v 0.10 2001/03/03 08:07:30 kkeil Exp $
+/* $Id: l3_udss1.c,v 0.11 2001/03/03 18:17:16 kkeil Exp $
  *
  * EURO/DSS1 D-channel protocol
  *
@@ -25,7 +25,7 @@ static int debug = 0;
 static hisaxobject_t u_dss1;
 
 
-const char *dss1_revision = "$Revision: 0.10 $";
+const char *dss1_revision = "$Revision: 0.11 $";
 
 static int dss1man(l3_process_t *, u_int, void *);
 
@@ -61,8 +61,7 @@ static int SendMsg(l3_process_t *pc, int state) {
 	memcpy(skb_put(skb, l), &pc->obuf[0], l);
 	if (state != -1)
 		newl3state(pc, state);
-	if ((ret=l3_msg(pc->l3, DL_DATA | REQUEST, pc->l3->msgnr++,
-		DTYPE_SKB, skb)))
+	if ((ret=l3_msg(pc->l3, DL_DATA | REQUEST, DINFO_SKB, 0, skb)))
 		dev_kfree_skb(skb);
 	return(ret);
 }
@@ -81,8 +80,7 @@ l3dss1_message(l3_process_t *pc, u_char mt)
 	*p++ = 1;
 	*p++ = pc->callref ^ 0x80;
 	*p++ = mt;
-	if ((ret=l3_msg(pc->l3, DL_DATA | REQUEST, pc->l3->msgnr++,
-		DTYPE_SKB, skb)))
+	if ((ret=l3_msg(pc->l3, DL_DATA | REQUEST, DINFO_SKB, 0, skb)))
 		dev_kfree_skb(skb);
 	return(ret);
 }
@@ -615,7 +613,7 @@ l3dss1_release_cmpl_req(l3_process_t *pc, u_char pr, void *arg)
 		newl3state(pc, 0);
 		l3dss1_message(pc, MT_RELEASE_COMPLETE);
 	}
-	hisax_l3up(pc, CC_RELEASE | INDICATION, pc);
+	hisax_l3up(pc, CC_RELEASE_COMPLETE | CONFIRM, 0, NULL);
 	release_l3_process(pc);
 }
 
@@ -753,7 +751,8 @@ l3dss1_release_cmpl(l3_process_t *pc, u_char pr, void *arg)
 		findie(skb->data, skb->len, IE_SIGNAL, 0);
 	pc->para.RELEASE_COMPLETE.USER_USER =
 		findie(skb->data, skb->len, IE_USER_USER, 0);
-	hisax_l3up(pc, CC_RELEASE_COMPLETE | INDICATION, &pc->para.RELEASE_COMPLETE);
+	hisax_l3up(pc, CC_RELEASE_COMPLETE | INDICATION,
+		sizeof(RELEASE_COMPLETE_t), &pc->para.RELEASE_COMPLETE);
 	release_l3_process(pc);
 }
 
@@ -786,7 +785,7 @@ l3dss1_alerting(l3_process_t *pc, u_char pr, void *arg)
 		findie(skb->data, skb->len, IE_USER_USER, 0);
 	if (ret)
 		l3dss1_std_ie_err(pc, ret);
-	hisax_l3up(pc, CC_ALERTING | INDICATION, &pc->para.ALERTING);
+	hisax_l3up(pc, CC_ALERTING | INDICATION, sizeof(ALERTING_t), &pc->para.ALERTING);
 }
 
 static void
@@ -835,7 +834,8 @@ l3dss1_call_proc(l3_process_t *pc, u_char pr, void *arg)
 	L3AddTimer(&pc->timer, T310, CC_T310);
 	if (ret) /* STATUS for none mandatory IE errors after actions are taken */
 		l3dss1_std_ie_err(pc, ret);
-	hisax_l3up(pc, CC_PROCEEDING | INDICATION, &pc->para.CALL_PROCEEDING);
+	hisax_l3up(pc, CC_PROCEEDING | INDICATION, sizeof(CALL_PROCEEDING_t),
+		&pc->para.CALL_PROCEEDING);
 }
 
 static void
@@ -875,7 +875,7 @@ l3dss1_connect(l3_process_t *pc, u_char pr, void *arg)
 		findie(skb->data, skb->len, IE_USER_USER, 0);
 	if (ret)
 		l3dss1_std_ie_err(pc, ret);
-	hisax_l3up(pc, CC_CONNECT | INDICATION, &pc->para.CONNECT);
+	hisax_l3up(pc, CC_CONNECT | INDICATION, sizeof(CONNECT_t), &pc->para.CONNECT);
 }
 
 static void
@@ -899,7 +899,8 @@ l3dss1_connect_ack(l3_process_t *pc, u_char pr, void *arg)
 		findie(skb->data, skb->len, IE_SIGNAL, 0);
 	if (ret)
 		l3dss1_std_ie_err(pc, ret);
-	hisax_l3up(pc, CC_CONNECT_ACKNOWLEDGE | INDICATION, &pc->para.CONNECT_ACKNOWLEDGE);
+	hisax_l3up(pc, CC_CONNECT_ACKNOWLEDGE | INDICATION,
+		sizeof(CONNECT_ACKNOWLEDGE_t), &pc->para.CONNECT_ACKNOWLEDGE);
 }
 
 static void
@@ -939,7 +940,8 @@ l3dss1_disconnect(l3_process_t *pc, u_char pr, void *arg)
 	else
 		newl3state(pc, 12);
        	if (11 != ret)
-		hisax_l3up(pc, CC_DISCONNECT | INDICATION, &pc->para.DISCONNECT);
+		hisax_l3up(pc, CC_DISCONNECT | INDICATION, sizeof(DISCONNECT_t),
+			&pc->para.DISCONNECT);
 	else if (!cause)
 		l3dss1_release_req(pc, pr, NULL);
 	if (cause) {
@@ -992,7 +994,8 @@ l3dss1_setup_ack(l3_process_t *pc, u_char pr, void *arg)
 	L3AddTimer(&pc->timer, T304, CC_T304);
 	if (ret) /* STATUS for none mandatory IE errors after actions are taken */
 		l3dss1_std_ie_err(pc, ret);
-	hisax_l3up(pc, CC_SETUP_ACKNOWLEDGE | INDICATION, &pc->para.SETUP_ACKNOWLEDGE);
+	hisax_l3up(pc, CC_SETUP_ACKNOWLEDGE | INDICATION,
+		sizeof(SETUP_ACKNOWLEDGE_t), &pc->para.SETUP_ACKNOWLEDGE);
 }
 
 static void
@@ -1121,12 +1124,13 @@ l3dss1_setup(l3_process_t *pc, u_char pr, void *arg)
 	L3AddTimer(&pc->timer, T_CTRL, CC_TCTRL);
 	if (err) /* STATUS for none mandatory IE errors after actions are taken */
 		l3dss1_std_ie_err(pc, err);
-	if (hisax_l3up(pc, CC_NEW_CR | INDICATION, &pc->id)) {
+	if (hisax_l3up(pc, CC_NEW_CR | INDICATION, 4, &pc->id)) {
 		if (pc->l3->debug & L3_DEB_WARN)
 			l3_debug(pc->l3, "cannot register SETUP CR");
 		release_l3_process(pc);
 	} else
-		hisax_l3up(pc, CC_SETUP | INDICATION, &pc->para.SETUP);
+		hisax_l3up(pc, CC_SETUP | INDICATION, sizeof(SETUP_t),
+			&pc->para.SETUP);
 }
 
 static void
@@ -1167,7 +1171,7 @@ l3dss1_release(l3_process_t *pc, u_char pr, void *arg)
 		l3dss1_message_cause(pc, MT_RELEASE_COMPLETE, cause);
 	else
 		l3dss1_message(pc, MT_RELEASE_COMPLETE);
-	hisax_l3up(pc, CC_RELEASE | INDICATION, &pc->para.RELEASE);
+	hisax_l3up(pc, CC_RELEASE | INDICATION, sizeof(RELEASE_t), &pc->para.RELEASE);
 	newl3state(pc, 0);
 	release_l3_process(pc);
 }
@@ -1233,7 +1237,7 @@ l3dss1_progress(l3_process_t *pc, u_char pr, void *arg) {
 	if (err)
 		l3dss1_std_ie_err(pc, err);
 	if (ERR_IE_COMPREHENSION != err)
-		hisax_l3up(pc, CC_PROGRESS | INDICATION, &pc->para.PROGRESS);
+		hisax_l3up(pc, CC_PROGRESS | INDICATION, sizeof(PROGRESS_t), &pc->para.PROGRESS);
 }
 
 static void
@@ -1275,7 +1279,8 @@ l3dss1_notify(l3_process_t *pc, u_char pr, void *arg) {
 	if (err)
 		l3dss1_std_ie_err(pc, err);
 	if (ERR_IE_COMPREHENSION != err)
-		hisax_l3up(pc, CC_NOTIFY | INDICATION, &pc->para.NOTIFY);
+		hisax_l3up(pc, CC_NOTIFY | INDICATION, sizeof(NOTIFY_t),
+			&pc->para.NOTIFY);
 }
 
 static void
@@ -1288,7 +1293,8 @@ l3dss1_status_enq(l3_process_t *pc, u_char pr, void *arg) {
 		findie(skb->data, skb->len, IE_DISPLAY, 0);
 	l3dss1_std_ie_err(pc, ret);
 	l3dss1_status_send(pc, CAUSE_STATUS_RESPONSE);
-	hisax_l3up(pc, CC_STATUS_ENQUIRY | INDICATION, &pc->para.STATUS_ENQUIRY);
+	hisax_l3up(pc, CC_STATUS_ENQUIRY | INDICATION,
+		sizeof(STATUS_ENQUIRY_t), &pc->para.STATUS_ENQUIRY);
 }
 
 static void
@@ -1313,7 +1319,8 @@ l3dss1_information(l3_process_t *pc, u_char pr, void *arg) {
 		L3DelTimer(&pc->timer);
 		L3AddTimer(&pc->timer, T302, CC_T302);
 	}
-	hisax_l3up(pc, CC_INFORMATION | INDICATION, &pc->para.INFORMATION);
+	hisax_l3up(pc, CC_INFORMATION | INDICATION, sizeof(INFORMATION_t),
+		&pc->para.INFORMATION);
 }
 
 static void
@@ -1331,18 +1338,18 @@ l3dss1_release_ind(l3_process_t *pc, u_char pr, void *arg)
 		/* ETS 300-104 7.6.1, 8.6.1, 10.6.1... and 16.1
 		 * set down layer 3 without sending any message
 		 */
-		hisax_l3up(pc, CC_RELEASE | INDICATION, NULL);
+		hisax_l3up(pc, CC_RELEASE | INDICATION, 0, NULL);
 		newl3state(pc, 0);
 		release_l3_process(pc);
 	} else {
-		hisax_l3up(pc, CC_RELEASE | INDICATION, NULL);
+		hisax_l3up(pc, CC_RELEASE | INDICATION, 0, NULL);
 	}
 }
 
 static void
 l3dss1_restart(l3_process_t *pc, u_char pr, void *arg) {
 	L3DelTimer(&pc->timer);
-	hisax_l3up(pc, CC_RELEASE | INDICATION, NULL);
+	hisax_l3up(pc, CC_RELEASE | INDICATION, 0, NULL);
 	release_l3_process(pc);
 }
 
@@ -1394,11 +1401,13 @@ l3dss1_status(l3_process_t *pc, u_char pr, void *arg) {
 		 * if received MT_STATUS with cause == 111 and call
 		 * state == 0, then we must set down layer 3
 		 */
-		hisax_l3up(pc, CC_RELEASE | INDICATION, &pc->para.STATUS);
+		hisax_l3up(pc, CC_STATUS| INDICATION, sizeof(STATUS_t),
+			&pc->para.STATUS);
 		newl3state(pc, 0);
 		release_l3_process(pc);
 	} else
-		hisax_l3up(pc, CC_STATUS | INDICATION, &pc->para.STATUS);
+		hisax_l3up(pc, CC_STATUS | INDICATION, sizeof(STATUS_t),
+			&pc->para.STATUS);
 }
 
 static void
@@ -1417,7 +1426,8 @@ l3dss1_facility(l3_process_t *pc, u_char pr, void *arg)
 	}		
 	pc->para.FACILITY.DISPLAY =
 		findie(skb->data, skb->len, IE_DISPLAY, 0);
-	hisax_l3up(pc, CC_FACILITY | INDICATION, &pc->para.FACILITY);
+	hisax_l3up(pc, CC_FACILITY | INDICATION, sizeof(FACILITY_t),
+		&pc->para.FACILITY);
 }
 
 static void
@@ -1435,7 +1445,8 @@ l3dss1_suspend_ack(l3_process_t *pc, u_char pr, void *arg) {
 	if ((ret = check_infoelements(pc, skb, ie_SUSPEND_ACKNOWLEDGE)))
 		if (pc->l3->debug & L3_DEB_WARN)
 			l3_debug(pc->l3, "SUSPACK check ie(%d)",ret);
-	hisax_l3up(pc, CC_SUSPEND_ACKNOWLEDGE | INDICATION, &pc->para.SUSPEND_ACKNOWLEDGE);
+	hisax_l3up(pc, CC_SUSPEND_ACKNOWLEDGE | INDICATION,
+		sizeof(SUSPEND_ACKNOWLEDGE_t), &pc->para.SUSPEND_ACKNOWLEDGE);
 	release_l3_process(pc);
 }
 
@@ -1464,7 +1475,8 @@ l3dss1_suspend_rej(l3_process_t *pc, u_char pr, void *arg)
 		return;
 	}
 	L3DelTimer(&pc->timer);
-	hisax_l3up(pc, CC_SUSPEND_REJECT | INDICATION, &pc->para.SUSPEND_REJECT);
+	hisax_l3up(pc, CC_SUSPEND_REJECT | INDICATION,
+		sizeof(SUSPEND_REJECT_t), &pc->para.SUSPEND_REJECT);
 	newl3state(pc, 10);
 	if (ret) /* STATUS for none mandatory IE errors after actions are taken */
 		l3dss1_std_ie_err(pc, ret);
@@ -1501,7 +1513,8 @@ l3dss1_resume_ack(l3_process_t *pc, u_char pr, void *arg)
 	pc->para.RESUME_ACKNOWLEDGE.DISPLAY =
 		findie(skb->data, skb->len, IE_DISPLAY, 0);
 	L3DelTimer(&pc->timer);
-	hisax_l3up(pc, CC_RESUME_ACKNOWLEDGE | INDICATION, &pc->para.RESUME_ACKNOWLEDGE);
+	hisax_l3up(pc, CC_RESUME_ACKNOWLEDGE | INDICATION,
+		sizeof(RESUME_ACKNOWLEDGE_t), &pc->para.RESUME_ACKNOWLEDGE);
 	newl3state(pc, 10);
 	if (ret) /* STATUS for none mandatory IE errors after actions are taken */
 		l3dss1_std_ie_err(pc, ret);
@@ -1532,7 +1545,8 @@ l3dss1_resume_rej(l3_process_t *pc, u_char pr, void *arg)
 		return;
 	}
 	L3DelTimer(&pc->timer);
-	hisax_l3up(pc, CC_RESUME_REJECT | INDICATION, &pc->para.RESUME_REJECT);
+	hisax_l3up(pc, CC_RESUME_REJECT | INDICATION, sizeof(RESUME_REJECT_t),
+		&pc->para.RESUME_REJECT);
 	newl3state(pc, 0);
 	if (ret) /* STATUS for none mandatory IE errors after actions are taken */
 		l3dss1_std_ie_err(pc, ret);
@@ -1567,7 +1581,7 @@ l3dss1_global_restart(l3_process_t *pc, u_char pr, void *arg)
 		if ((ri & 7) == 7)
 			dss1man(up, CC_RESTART | REQUEST, NULL);
 		else if (up->bc == chan)
-			hisax_l3up(up, CC_RESTART | REQUEST, up);
+			hisax_l3up(up, CC_RESTART | REQUEST, 0, NULL);
 		up = up->next;
 	}
 	MsgStart(pc, MT_RESTART_ACKNOWLEDGE);
@@ -1593,7 +1607,7 @@ l3dss1_t302(l3_process_t *pc, u_char pr, void *arg)
 	L3DelTimer(&pc->timer);
 	newl3state(pc, 11);
 	l3dss1_message_cause(pc, MT_DISCONNECT, CAUSE_INVALID_NUMBER);
-	hisax_l3up(pc, CC_TIMEOUT | INDICATION, NULL);
+	hisax_l3up(pc, CC_TIMEOUT | INDICATION, 0, NULL);
 }
 
 static void
@@ -1610,7 +1624,7 @@ l3dss1_t303(l3_process_t *pc, u_char pr, void *arg)
 		}
 	}
 	l3dss1_message_cause(pc, MT_RELEASE_COMPLETE, CAUSE_TIMER_EXPIRED);
-	hisax_l3up(pc, CC_TIMEOUT | INDICATION, NULL);
+	hisax_l3up(pc, CC_TIMEOUT | INDICATION, 0, NULL);
 	release_l3_process(pc);
 }
 
@@ -1620,7 +1634,7 @@ l3dss1_t304(l3_process_t *pc, u_char pr, void *arg)
 	L3DelTimer(&pc->timer);
 	newl3state(pc, 11);
 	l3dss1_message_cause(pc, MT_DISCONNECT, CAUSE_TIMER_EXPIRED);
-	hisax_l3up(pc, CC_TIMEOUT | INDICATION, NULL);
+	hisax_l3up(pc, CC_TIMEOUT | INDICATION, 0, NULL);
 }
 
 static void
@@ -1642,7 +1656,7 @@ l3dss1_t310(l3_process_t *pc, u_char pr, void *arg)
 	L3DelTimer(&pc->timer);
 	newl3state(pc, 11);
 	l3dss1_message_cause(pc, MT_DISCONNECT, CAUSE_TIMER_EXPIRED);
-	hisax_l3up(pc, CC_TIMEOUT | INDICATION, NULL);
+	hisax_l3up(pc, CC_TIMEOUT | INDICATION, 0, NULL);
 }
 
 static void
@@ -1651,7 +1665,7 @@ l3dss1_t313(l3_process_t *pc, u_char pr, void *arg)
 	L3DelTimer(&pc->timer);
 	newl3state(pc, 11);
 	l3dss1_message_cause(pc, MT_DISCONNECT, CAUSE_TIMER_EXPIRED);
-	hisax_l3up(pc, CC_TIMEOUT | INDICATION, NULL);
+	hisax_l3up(pc, CC_TIMEOUT | INDICATION, 0, NULL);
 }
 
 static void
@@ -1667,7 +1681,7 @@ static void
 l3dss1_t308_2(l3_process_t *pc, u_char pr, void *arg)
 {
 	L3DelTimer(&pc->timer);
-	hisax_l3up(pc, CC_TIMEOUT | INDICATION, NULL);
+	hisax_l3up(pc, CC_TIMEOUT | INDICATION, 0, NULL);
 	release_l3_process(pc);
 }
 
@@ -1679,7 +1693,7 @@ l3dss1_t318(l3_process_t *pc, u_char pr, void *arg)
 	pc->cause = 102;	/* Timer expiry */
 	pc->para.loc = 0;	/* local */
 #endif
-	hisax_l3up(pc, CC_RESUME_REJECT | INDICATION, NULL);
+	hisax_l3up(pc, CC_RESUME_REJECT | INDICATION, 0, NULL);
 	newl3state(pc, 19);
 	l3dss1_message(pc, MT_RELEASE);
 	L3AddTimer(&pc->timer, T308, CC_T308_1);
@@ -1693,7 +1707,7 @@ l3dss1_t319(l3_process_t *pc, u_char pr, void *arg)
 	pc->cause = 102;	/* Timer expiry */
 	pc->para.loc = 0;	/* local */
 #endif
-	hisax_l3up(pc, CC_SUSPEND_REJECT | INDICATION, NULL);
+	hisax_l3up(pc, CC_SUSPEND_REJECT | INDICATION, 0, NULL);
 	newl3state(pc, 10);
 }
 
@@ -1709,7 +1723,7 @@ l3dss1_dl_reset(l3_process_t *pc, u_char pr, void *arg)
 	cause[1] = 0x80 | CAUSE_LOC_USER;
 	cause[2] = 0x80 | CAUSE_TEMPORARY_FAILURE;
 	l3dss1_disconnect_req(pc, pr, &disc);
-	hisax_l3up(pc, CC_DISCONNECT | REQUEST, &disc);
+	hisax_l3up(pc, CC_DISCONNECT | REQUEST, sizeof(DISCONNECT_t), &disc);
 }
 
 static void
@@ -1720,7 +1734,7 @@ l3dss1_dl_release(l3_process_t *pc, u_char pr, void *arg)
         pc->cause = 0x1b;          /* Destination out of order */
         pc->para.loc = 0;
 #endif
-	hisax_l3up(pc, DL_RELEASE | INDICATION, NULL);
+	hisax_l3up(pc, DL_RELEASE | INDICATION, 0, NULL);
 	release_l3_process(pc);
 }
 
@@ -1729,7 +1743,7 @@ l3dss1_dl_reestablish(l3_process_t *pc, u_char pr, void *arg)
 {
 	L3DelTimer(&pc->timer);
 	L3AddTimer(&pc->timer, T309, CC_T309);
-	l3_msg(pc->l3, DL_ESTABLISH | REQUEST, pc->l3->msgnr++, 0, NULL);
+	l3_msg(pc->l3, DL_ESTABLISH | REQUEST, 0, 0, NULL);
 }
  
 static void
@@ -1911,7 +1925,7 @@ global_handler(layer3_t *l3, int mt, struct sk_buff *skb)
 }
 
 static int
-dss1_fromdown(hisaxif_t *hif, u_int prim, u_int nr, int dtyp, void *arg) {
+dss1_fromdown(hisaxif_t *hif, u_int prim, int dinfo, int len, void *arg) {
 	layer3_t *l3;
 	int i, mt, cr, cause, callState;
 	char *ptr;
@@ -1929,7 +1943,7 @@ dss1_fromdown(hisaxif_t *hif, u_int prim, u_int nr, int dtyp, void *arg) {
 		case (DL_ESTABLISH | INDICATION):
 		case (DL_RELEASE | INDICATION):
 		case (DL_RELEASE | CONFIRM):
-			l3_msg(l3, prim, nr, dtyp, arg);
+			l3_msg(l3, prim, dinfo, len, arg);
 			return(0);
 			break;
                 default:
@@ -1937,10 +1951,10 @@ dss1_fromdown(hisaxif_t *hif, u_int prim, u_int nr, int dtyp, void *arg) {
                         	"HiSax dss1up unknown pr=%04x\n", prim);
                         return(-EINVAL);
 	}
-	if ((dtyp != DTYPE_SKB) || !arg) {
+	if ((dinfo != DINFO_SKB) || !arg) {
 		printk(KERN_WARNING
-			"HiSax dss1_fromdown prim %x dtyp %x skb %p\n",
-			prim, dtyp, arg);
+			"HiSax dss1_fromdown prim %x dinfo %x skb %p\n",
+			prim, dinfo, arg);
 		return(-EINVAL);
 	}
 	if (skb->len < 3) {
@@ -2084,9 +2098,8 @@ dss1_fromdown(hisaxif_t *hif, u_int prim, u_int nr, int dtyp, void *arg) {
 }
 
 static int
-dss1_fromup(hisaxif_t *hif, u_int prim, u_int nr, int dtyp, void *arg) {
+dss1_fromup(hisaxif_t *hif, u_int prim, int dinfo, int len, void *arg) {
 	layer3_t *l3;
-	l3msg_t *msg = arg;
 	int i, cr;
 	l3_process_t *proc;
 
@@ -2094,23 +2107,19 @@ dss1_fromup(hisaxif_t *hif, u_int prim, u_int nr, int dtyp, void *arg) {
 		return(-EINVAL);
 	l3 = hif->fdata;
 	if ((DL_ESTABLISH | REQUEST) == prim) {
-		l3_msg(l3, prim, l3->msgnr++, 0, NULL);
+		l3_msg(l3, prim, 0, 0, NULL);
 		return(0);
-	}
-	if (!msg) {
-		printk(KERN_WARNING "dss1_fromup no arg prim(%x)\n", prim);
-		return(-EINVAL);
 	}
 	if ((CC_NEW_CR | REQUEST) == prim) {
 		cr = newcallref();
 		cr |= 0x80;
 		if ((proc = new_l3_process(l3, cr, N303))) {
-			proc->id = msg->id;
+			proc->id = dinfo;
 			return(0);
 		}
 		return(-ENOMEM);
 	} else {
-		proc = getl3proc4id(l3, msg->id);
+		proc = getl3proc4id(l3, dinfo);
 	}
 	if (!proc) {
 		printk(KERN_ERR "HiSax dss1 fromup without proc pr=%04x\n", prim);
@@ -2130,7 +2139,7 @@ dss1_fromup(hisaxif_t *hif, u_int prim, u_int nr, int dtyp, void *arg) {
 			l3_debug(l3, "dss1down state %d prim %#x",
 				proc->state, prim);
 		}
-		downstatelist[i].rout(proc, prim, msg->arg);
+		downstatelist[i].rout(proc, prim, arg);
 	}
 	return(0);
 }

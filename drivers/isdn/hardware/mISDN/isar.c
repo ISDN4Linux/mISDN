@@ -1,4 +1,4 @@
-/* $Id: isar.c,v 0.6 2001/03/03 08:07:30 kkeil Exp $
+/* $Id: isar.c,v 0.7 2001/03/03 18:17:15 kkeil Exp $
  *
  * isar.c   ISAR (Siemens PSB 7110) specific routines
  *
@@ -32,7 +32,6 @@ void isar_setup(bchannel_t *);
 static void isar_pump_cmd(bchannel_t *, int, u_char);
 static inline void deliver_status(bchannel_t *, int);
 
-static u_int msgnr = 1;
 static int firmwaresize = 0;
 static u_char *firmware;
 static u_char *fw_p;
@@ -430,7 +429,7 @@ isar_bh(bchannel_t *bch)
 		if (skb) {
 			bch->next_skb = NULL;
 			bch->inst.up.func(&bch->inst.up, PH_DATA_CNF,
-				bch->next_nr, DTYPE_SKB, skb);
+				DINFO_SKB, 0, skb);
 		} else
 			printk(KERN_WARNING "B_XMTBUFREADY without skb\n");
 	}
@@ -444,8 +443,7 @@ isar_bh(bchannel_t *bch)
 				dev_kfree_skb(skb);
 				continue;
 			}
-			err = upif->func(upif, PH_DATA_IND, msgnr++,
-				DTYPE_SKB, skb);
+			err = upif->func(upif, PH_DATA_IND, DINFO_SKB, 0, skb);
 			if (err < 0) {
 				printk(KERN_WARNING "HiSax: isar deliver err %d\n",
 					err);
@@ -468,7 +466,7 @@ isar_bh(bchannel_t *bch)
 
 		tt |= TOUCH_TONE_VAL;
 		bch->inst.up.func(&bch->inst.up, PH_CONTROL | INDICATION,
-			msgnr++, sizeof(int), &tt);
+			0, sizeof(int), &tt);
 	}
 
 }
@@ -987,7 +985,7 @@ deliver_status(bchannel_t *bch, int status)
 {
 	if (bch->debug & L1_DEB_HSCX)
 		debugprint(&bch->inst, "HL->LL FAXIND %x", status);
-	bch->inst.up.func(&bch->inst.up, PH_STATUS | INDICATION, msgnr++,
+	bch->inst.up.func(&bch->inst.up, PH_STATUS | INDICATION, 0,
 		sizeof(int), &status);
 }
 
@@ -1599,7 +1597,7 @@ isar_setup(bchannel_t *bch)
 }
 
 int
-isar_down(hisaxif_t *hif, u_int prim, u_int nr, int len, void *arg)
+isar_down(hisaxif_t *hif, u_int prim, int dinfo, int len, void *arg)
 {
 	bchannel_t *bch = hif->fdata;
 	int ret = 0;
@@ -1616,7 +1614,6 @@ isar_down(hisaxif_t *hif, u_int prim, u_int nr, int len, void *arg)
 		if (test_and_set_bit(FLG_TX_BUSY, &bch->Flag)) {
 			test_and_set_bit(FLG_TX_NEXT, &bch->Flag);
 			bch->next_skb = skb;
-			bch->next_nr = nr;
 			bch->inst.unlock(bch->inst.data);
 		} else {
 			bch->tx_len = skb->len;
@@ -1624,8 +1621,8 @@ isar_down(hisaxif_t *hif, u_int prim, u_int nr, int len, void *arg)
 			bch->tx_idx = 0;
 			isar_fill_fifo(bch);
 			bch->inst.unlock(bch->inst.data);
-			bch->inst.up.func(&bch->inst.up, PH_DATA_CNF, nr,
-				DTYPE_SKB, skb);
+			bch->inst.up.func(&bch->inst.up, PH_DATA_CNF,
+				DINFO_SKB, 0, skb);
 		}
 	} else if ((prim == (PH_ACTIVATE | REQUEST)) ||
 		(prim == (DL_ESTABLISH  | REQUEST))) {
@@ -1635,10 +1632,10 @@ isar_down(hisaxif_t *hif, u_int prim, u_int nr, int len, void *arg)
 			bch->inst.pid.protocol[1], NULL);
 		bch->inst.unlock(bch->inst.data);
 		if (ret)
-			bch->inst.up.func(&bch->inst.up, prim | CONFIRM, nr,
+			bch->inst.up.func(&bch->inst.up, prim | CONFIRM, 0,
 				ret, NULL);
 		else
-			bch->inst.up.func(&bch->inst.up, prim | CONFIRM, nr,
+			bch->inst.up.func(&bch->inst.up, prim | CONFIRM, 0,
 				0, NULL);
 	} else if ((prim == (PH_DEACTIVATE | REQUEST)) ||
 		(prim == (DL_RELEASE | REQUEST)) ||
@@ -1653,7 +1650,7 @@ isar_down(hisaxif_t *hif, u_int prim, u_int nr, int len, void *arg)
 		test_and_clear_bit(BC_FLG_ACTIV, &bch->Flag);
 		bch->inst.unlock(bch->inst.data);
 		if (prim != (MGR_DELIF | REQUEST))
-			bch->inst.up.func(&bch->inst.up, prim | CONFIRM, nr++,
+			bch->inst.up.func(&bch->inst.up, prim | CONFIRM, 0,
 				0, NULL);
 	} else if (prim == (PH_CONTROL | REQUEST)) {
 		int  *val = arg;
@@ -1667,7 +1664,7 @@ isar_down(hisaxif_t *hif, u_int prim, u_int nr, int len, void *arg)
 				isar_pump_cmd(bch, PCTRL_CMD_TDTMF, (*val & 0xff));
 				bch->inst.unlock(bch->inst.data);
 				bch->inst.up.func(&bch->inst.up, PH_CONTROL | CONFIRM,
-					nr++, 0, 0);
+					0, 0, 0);
 			} else {
 				printk(KERN_WARNING "isar_down TOUCH_TONE_SEND wrong protocol %x\n",
 					bch->protocol);
@@ -1682,14 +1679,14 @@ isar_down(hisaxif_t *hif, u_int prim, u_int nr, int len, void *arg)
 			}
 			fw_p = firmware;
 			bch->inst.up.func(&bch->inst.up, PH_CONTROL | RESPONSE,
-				nr++, 0, 0);
+				0, 0, NULL);
 		} else if (*val == HW_FIRM_DATA) {
 			val++;
 			len = *val++;
 			memcpy(fw_p, val, len);
 			fw_p += len;
 			bch->inst.up.func(&bch->inst.up, PH_CONTROL | RESPONSE,
-				nr++, 0, 0);
+				0, 0, NULL);
 		} else if (*val == HW_FIRM_END) {
 			if ((fw_p - firmware) == firmwaresize)
 				ret = isar_load_firmware(bch, firmware, firmwaresize);
@@ -1702,7 +1699,7 @@ isar_down(hisaxif_t *hif, u_int prim, u_int nr, int len, void *arg)
 			fw_p = firmware = NULL;
 			firmwaresize = 0;
 			bch->inst.up.func(&bch->inst.up, PH_CONTROL | RESPONSE,
-				nr++, 0, 0);
+				0, 0, NULL);
 		}
 	} else {
 		printk(KERN_WARNING "isar_down unknown prim(%x)\n", prim);

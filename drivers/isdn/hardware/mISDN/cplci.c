@@ -1,4 +1,4 @@
-/* $Id: cplci.c,v 0.3 2001/02/27 17:45:44 kkeil Exp $
+/* $Id: cplci.c,v 0.4 2001/03/03 18:17:15 kkeil Exp $
  *
  */
 
@@ -294,7 +294,7 @@ static void plci_connect_req(struct FsmInst *fi, int event, void *arg)
 	}
 
 	plciNewCrReq(plci);
-	plciL4L3(plci, CC_SETUP | REQUEST, &setup_req);
+	plciL4L3(plci, CC_SETUP | REQUEST, sizeof(SETUP_t), &setup_req);
 answer:
 	capi_cmsg_answer(cmsg);
 	cmsg->Info = Info;
@@ -326,21 +326,30 @@ static void plci_suspend_req(struct FsmInst *fi, int event, void *arg)
 {
 	Cplci_t *cplci = fi->userdata;
 	Plci_t *plci = cplci->plci;
+	int len;
 
-	plciL4L3(plci, CC_SUSPEND | REQUEST, arg); 
+	if (arg)
+		len = sizeof(SUSPEND_t);
+	else
+		len = 0;
+	plciL4L3(plci, CC_SUSPEND | REQUEST, len, arg); 
 }
 
 static void plci_resume_req(struct FsmInst *fi, int event, void *arg)
 {
 	Cplci_t *cplci = fi->userdata;
 	Plci_t *plci = cplci->plci;
-	
+	int len;
+
+	if (arg)
+		len = sizeof(RESUME_t);
+	else
+		len = 0;
+
 	// we already sent CONF with Info = SuppInfo = 0
-
 	FsmChangeState(fi, ST_PLCI_P_RES);
-
 	plciNewCrReq(plci);
-	plciL4L3(plci, CC_RESUME | REQUEST, arg);
+	plciL4L3(plci, CC_RESUME | REQUEST, len, arg);
 }
 
 static void plci_alert_req(struct FsmInst *fi, int event, void *arg)
@@ -356,7 +365,8 @@ static void plci_alert_req(struct FsmInst *fi, int event, void *arg)
 	} else {
 		Info = cmsg2alerting_req(cmsg, &alerting_req);
 		if (Info == 0) {
-			plciL4L3(plci, CC_ALERTING | REQUEST, &alerting_req); 
+			plciL4L3(plci, CC_ALERTING | REQUEST,
+				sizeof(ALERTING_t), &alerting_req); 
 		}
 	}
 	
@@ -379,7 +389,7 @@ static void plci_connect_resp(struct FsmInst *fi, int event, void *arg)
 				int_error();
 			}
 			cplciClearOtherApps(cplci);
-			plciL4L3(plci, CC_CONNECT | REQUEST, 0);
+			plciL4L3(plci, CC_CONNECT | REQUEST, 0, NULL);
 			FsmChangeState(fi, ST_PLCI_P_4);
 			break;
 		default : // ignore, reject 
@@ -409,9 +419,10 @@ static void plci_connect_resp(struct FsmInst *fi, int event, void *arg)
 				// if we already answered, we can't just ignore but must clear actively
 					memset(&disconnect_req, 0, sizeof(DISCONNECT_t));
 					disconnect_req.CAUSE = cause;
-					plciL4L3(plci, CC_DISCONNECT | REQUEST, &disconnect_req);
+					plciL4L3(plci, CC_DISCONNECT | REQUEST,
+						sizeof(DISCONNECT_t), &disconnect_req);
 				} else {
-					plciL4L3(plci, CC_RESET | REQUEST, 0);
+					plciL4L3(plci, CC_RESET | REQUEST, 0, NULL);
 				}
 			}
 		
@@ -457,12 +468,13 @@ static void plci_disconnect_req(struct FsmInst *fi, int event, void *arg)
 	cplciLinkDown(cplci);
 
 	if (cplci->cause[0]) { // FIXME
-		plciL4L3(plci, CC_RELEASE | REQUEST, 0);
+		plciL4L3(plci, CC_RELEASE | REQUEST, 0, NULL);
 	} else {
 		memset(&disconnect_req, 0, sizeof(DISCONNECT_t));
 		memcpy(cause, "\x02\x80\x90", 3); // normal call clearing
 		disconnect_req.CAUSE = cause;
-		plciL4L3(plci, CC_DISCONNECT | REQUEST, &disconnect_req);
+		plciL4L3(plci, CC_DISCONNECT | REQUEST, sizeof(DISCONNECT_t),
+			&disconnect_req);
 	}
 }
 
@@ -565,7 +577,7 @@ static void plci_cc_disconnect_ind(struct FsmInst *fi, int event, void *arg)
 		memcpy(cplci->cause, disc->CAUSE, 3);
 	if (!(cplci->appl->listen.InfoMask & CAPI_INFOMASK_EARLYB3)) {
 		cplciLinkDown(cplci);
-		plciL4L3(cplci->plci, CC_RELEASE | REQUEST, 0);
+		plciL4L3(cplci->plci, CC_RELEASE | REQUEST, 0, NULL);
 	}
 }
 
@@ -751,7 +763,8 @@ static void plci_info_req_overlap(struct FsmInst *fi, int event, void *arg)
 
 	Info = cmsg2info_req(cmsg, &info_req);
 	if (Info == CapiSuccess) {
-		plciL4L3(plci, CC_INFO | REQUEST, &info_req);
+		plciL4L3(plci, CC_INFO | REQUEST, sizeof(INFORMATION_t),
+			&info_req);
 	}
 	
 	capi_cmsg_answer(cmsg);

@@ -1,4 +1,4 @@
-/* $Id: layer3.c,v 0.7 2001/03/03 08:07:30 kkeil Exp $
+/* $Id: layer3.c,v 0.8 2001/03/03 18:17:15 kkeil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -14,7 +14,7 @@
 #include "helper.h"
 #include "hisaxl3.h"
 
-const char *l3_revision = "$Revision: 0.7 $";
+const char *l3_revision = "$Revision: 0.8 $";
 
 static
 struct Fsm l3fsm = {NULL, 0, 0, NULL, NULL};
@@ -294,7 +294,7 @@ release_l3_process(l3_process_t *p)
 	if (!p)
 		return;
 	l3 = p->l3;
-	hisax_l3up(p, CC_RELEASE_CR | INDICATION, NULL);
+	hisax_l3up(p, CC_RELEASE_CR | INDICATION, 0, NULL);
 	REMOVE_FROM_LISTBASE(p, l3->proc);
 	StopAllL3Timer(p);
 	kfree(p);
@@ -327,30 +327,27 @@ l3ml3p(layer3_t *l3, int pr)
 }
 
 int
-hisax_l3up(l3_process_t *l3p, u_int prim, void *arg) {
+hisax_l3up(l3_process_t *l3p, u_int prim, int len, void *arg) {
 	layer3_t *l3;
 	hisaxif_t *up;
-	l3msg_t l3msg;
 	int err = -EINVAL;
 
 	if (!l3p)
 		return(-EINVAL);
 	l3 = l3p->l3;
 	up = &l3->inst.up;
-	l3msg.id = l3p->id;
-	l3msg.arg = arg;
 	if (up->func)
-		err = up->func(up, prim, l3->msgnr++, DTYPE_L3MSGP, &l3msg);
+		err = up->func(up, prim, l3p->id, len, arg);
 	return(err);
 }
 
 static int
-l3down(layer3_t *l3, u_int prim, u_int nr, int dtyp, void *arg) {
+l3down(layer3_t *l3, u_int prim, int dinfo, int len, void *arg) {
 	hisaxif_t *down = &l3->inst.down;
 	int err = -EINVAL;
 
 	if (down->func) 
-		err = down->func(down, prim, nr, dtyp, arg);
+		err = down->func(down, prim, dinfo, len, arg);
 	else
 		printk(KERN_WARNING "l3down: no down func prim %x\n", prim);
 	return(err);
@@ -364,7 +361,7 @@ lc_activate(struct FsmInst *fi, int event, void *arg)
 	layer3_t *l3 = fi->userdata;
 
 	FsmChangeState(fi, ST_L3_LC_ESTAB_WAIT);
-	l3down(l3, DL_ESTABLISH | REQUEST, l3->msgnr++, 0, NULL);
+	l3down(l3, DL_ESTABLISH | REQUEST, 0, 0, NULL);
 }
 
 static void
@@ -376,7 +373,7 @@ lc_connect(struct FsmInst *fi, int event, void *arg)
 
 	FsmChangeState(fi, ST_L3_LC_ESTAB);
 	while ((skb = skb_dequeue(&l3->squeue))) {
-		l3down(l3, DL_DATA | REQUEST, l3->msgnr++, DTYPE_SKB, skb);
+		l3down(l3, DL_DATA | REQUEST, DINFO_SKB, 0, skb);
 		dequeued++;
 	}
 	if ((!l3->proc) &&  dequeued) {
@@ -397,7 +394,7 @@ lc_connected(struct FsmInst *fi, int event, void *arg)
 	FsmDelTimer(&l3->l3m_timer, 51);
 	FsmChangeState(fi, ST_L3_LC_ESTAB);
 	while ((skb = skb_dequeue(&l3->squeue))) {
-		l3down(l3, DL_DATA | REQUEST, l3->msgnr++, DTYPE_SKB, skb);
+		l3down(l3, DL_DATA | REQUEST, DINFO_SKB, 0, skb);
 		dequeued++;
 	}
 	if ((!l3->proc) &&  dequeued) {
@@ -429,7 +426,7 @@ lc_release_req(struct FsmInst *fi, int event, void *arg)
 		FsmAddTimer(&l3->l3m_timer, DREL_TIMER_VALUE, EV_TIMEOUT, NULL, 51);
 	} else {
 		FsmChangeState(fi, ST_L3_LC_REL_WAIT);
-		l3down(l3, DL_RELEASE | REQUEST, l3->msgnr++, 0, NULL);
+		l3down(l3, DL_RELEASE | REQUEST, 0, 0, NULL);
 	}
 }
 
@@ -477,12 +474,12 @@ static struct FsmNode L3FnList[] =
 #define L3_FN_COUNT (sizeof(L3FnList)/sizeof(struct FsmNode))
 
 int
-l3_msg(layer3_t *l3, u_int pr, u_int nr, int dtyp, void *arg)
+l3_msg(layer3_t *l3, u_int pr, int dinfo, int len, void *arg)
 {
 	switch (pr) {
 		case (DL_DATA | REQUEST):
 			if (l3->l3m.state == ST_L3_LC_ESTAB) {
-				l3down(l3, pr, l3->msgnr++, DTYPE_SKB, arg);
+				l3down(l3, pr, dinfo, len, arg);
 			} else {
 				struct sk_buff *skb = arg;
 
@@ -526,7 +523,6 @@ init_l3(layer3_t *l3)
 	l3->l3m.userint = 0;
 	l3->l3m.printdebug = l3m_debug;
         FsmInitTimer(&l3->l3m, &l3->l3m_timer);
-        l3->msgnr = 1;
 }
 
 

@@ -1,4 +1,4 @@
-/* $Id: sedl_fax.c,v 0.7 2001/03/03 08:07:30 kkeil Exp $
+/* $Id: sedl_fax.c,v 0.8 2001/03/03 18:17:16 kkeil Exp $
  *
  * sedl_fax.c  low level stuff for Sedlbauer Speedfax + cards
  *
@@ -40,7 +40,7 @@
 
 extern const char *CardType[];
 
-const char *Sedlfax_revision = "$Revision: 0.7 $";
+const char *Sedlfax_revision = "$Revision: 0.8 $";
 
 const char *Sedlbauer_Types[] =
 	{"None", "speed fax+", "speed fax+ pyramid", "speed fax+ pci"};
@@ -564,7 +564,7 @@ setup_speedfax(sedl_fax *sf, u_int io_cfg, u_int irq_cfg)
 }
 
 static int
-dummy_down(hisaxif_t *hif,  u_int prim, u_int nr, int dtyp, void *arg) {
+dummy_down(hisaxif_t *hif,  u_int prim, int dinfo, int len, void *arg) {
 	sedl_fax *card;
 
 	if (!hif || !hif->fdata)
@@ -812,11 +812,14 @@ speedfax_manager(void *data, u_int prim, void *arg) {
 			printk(KERN_WARNING "speedfax_manager MGR_LOADFIRM no card\n");
 			return(-ENODEV);
 		} else {
-			l3msg_t *firm = arg;
+			struct firm {
+				int	len;
+				void	*data;
+			} *firm = arg;
 			
-			if (!firm)
+			if (!arg)
 				return(-EINVAL);
-			return(isar_load_firmware(&card->bch[0], firm->arg, firm->id));
+			return(isar_load_firmware(&card->bch[0], firm->data, firm->len));
 		}
 	    default:
 		printk(KERN_WARNING "speedfax_manager prim %x not handled\n", prim);

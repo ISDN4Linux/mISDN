@@ -1,4 +1,4 @@
-/* $Id: ncci.c,v 0.4 2001/03/03 08:07:30 kkeil Exp $
+/* $Id: ncci.c,v 0.5 2001/03/03 18:17:16 kkeil Exp $
  *
  */
 
@@ -7,7 +7,7 @@
 #include "debug.h"
 #include "dss1.h"
 
-static int ncciL4L3(Ncci_t *ncci, u_int prim, int dtyp, void *arg);
+static int ncciL4L3(Ncci_t *, u_int, int, int, void *);
 
 // --------------------------------------------------------------------
 // NCCI state machine
@@ -126,7 +126,7 @@ static void ncci_connect_b3_req(struct FsmInst *fi, int event, void *arg)
 	printk(KERN_DEBUG "ncci_connect_b3_req NCCI %x cmsg->Info(%x)\n",
 		ncci->adrNCCI, cmsg->Info);
 	if (cmsg->Info < 0x1000) 
-		ncciL4L3(ncci, DL_ESTABLISH | REQUEST, 0, 0);
+		ncciL4L3(ncci, DL_ESTABLISH | REQUEST, 0, 0, NULL);
 }
 
 static void ncci_connect_b3_ind(struct FsmInst *fi, int event, void *arg)
@@ -180,7 +180,7 @@ static void ncci_disconnect_b3_req(struct FsmInst *fi, int event, void *arg)
 		ncciRecvCmsg(ncci, cmsg);
 	} else {
 		ncciRecvCmsg(ncci, cmsg);
-		ncciL4L3(ncci, DL_RELEASE | REQUEST, 0, 0);
+		ncciL4L3(ncci, DL_RELEASE | REQUEST, 0, 0, NULL);
 	}
 }
 
@@ -309,7 +309,7 @@ static struct FsmNode fn_ncci_list[] =
 
 const int FN_NCCI_COUNT = sizeof(fn_ncci_list)/sizeof(struct FsmNode);
 
-static int ncci_l3l4(hisaxif_t *hif, u_int prim, u_int nr, int dtyp, void *arg);
+static int ncci_l3l4(hisaxif_t *hif, u_int prim, int dinfo, int len, void *arg);
 
 void ncciConstr(Ncci_t *ncci, Cplci_t *cplci)
 {
@@ -397,7 +397,7 @@ void ncciInitSt(Ncci_t *ncci)
 	}
 //	if (sp.b2_mode != B2_MODE_TRANS || !test_bit(PLCI_FLAG_OUTGOING, &cplci->plci->flags)) {
 		// listen for e.g. SABME
-//		ncciL4L3(ncci, PH_ACTIVATE | REQUEST, 0, 0);
+//		ncciL4L3(ncci, PH_ACTIVATE | REQUEST, 0, 0, NULL);
 //	}
 }
 
@@ -405,7 +405,7 @@ void ncciReleaseSt(Ncci_t *ncci)
 {
 	int retval;
 
-	ncciL4L3(ncci, PH_DEACTIVATE | REQUEST, 0, 0);
+	ncciL4L3(ncci, PH_DEACTIVATE | REQUEST, 0, 0, NULL);
 	retval = ncci->binst->inst.obj->ctrl(ncci->binst->inst.st,
 		MGR_CLEARSTACK | REQUEST, NULL);
 
@@ -518,7 +518,7 @@ void ncciDataReq(Ncci_t *ncci, struct sk_buff *skb)
 	ncci->xmit_skb_handles[i].MsgId = CAPIMSG_MSGID(skb->data);
 
 	skb_pull(skb, CAPIMSG_LEN(skb->data));
-	ncciL4L3(ncci, DL_DATA | REQUEST, DTYPE_SKB, skb);
+	ncciL4L3(ncci, DL_DATA | REQUEST, DINFO_SKB, 0, skb);
 	return;
 
  fail:
@@ -629,7 +629,7 @@ void ncci_l3l4st(struct PStack *st, int pr, void *arg)
 }
 #endif
 
-static int ncci_l3l4(hisaxif_t *hif, u_int prim, u_int nr, int dtyp, void *arg)
+static int ncci_l3l4(hisaxif_t *hif, u_int prim, int dinfo, int len, void *arg)
 {
 	Ncci_t *ncci;
 	struct sk_buff *skb = arg;
@@ -671,8 +671,8 @@ static int ncci_l3l4(hisaxif_t *hif, u_int prim, u_int nr, int dtyp, void *arg)
 			FsmEvent(&ncci->ncci_m, EV_NCCI_DL_RELEASE_CONF, arg);
 			break;
 		default:
-			printk(KERN_DEBUG __FUNCTION__ ": unknown prim(%x) dtyp(%x) arg(%p)\n",
-				prim, dtyp, arg);
+			printk(KERN_DEBUG __FUNCTION__ ": unknown prim(%x) dinfo(%x) len(%d) arg(%p)\n",
+				prim, dinfo, len, arg);
 			int_error();
 	}
 	return(0);
@@ -682,8 +682,7 @@ void ncciSetInterface(hisaxif_t *hif) {
 	hif->func = ncci_l3l4;
 }
 
-
-static int ncciL4L3(Ncci_t *ncci, u_int prim, int dtyp, void *arg)
+static int ncciL4L3(Ncci_t *ncci, u_int prim, int dtyp, int len, void *arg)
 {
 	printk(KERN_DEBUG __FUNCTION__ ": NCCI %x prim(%x)\n",
 		ncci->adrNCCI, prim);
@@ -691,7 +690,7 @@ static int ncciL4L3(Ncci_t *ncci, u_int prim, int dtyp, void *arg)
 		int_error();
 		return -EINVAL;
 	}
-	return(ncci->binst->inst.down.func(&ncci->binst->inst.down, prim, 0, dtyp, arg));
+	return(ncci->binst->inst.down.func(&ncci->binst->inst.down, prim, dtyp, len, arg));
 }
 
 void init_ncci(void)

@@ -1,4 +1,4 @@
-/* $Id: avm_fritz.c,v 0.6 2001/03/03 08:07:29 kkeil Exp $
+/* $Id: avm_fritz.c,v 0.7 2001/03/03 18:17:15 kkeil Exp $
  *
  * fritz_pci.c    low level stuff for AVM Fritz!PCI and ISA PnP isdn cards
  *              Thanks to AVM, Berlin for informations
@@ -18,7 +18,7 @@
 #include "helper.h"
 #include "debug.h"
 
-static const char *avm_pci_rev = "$Revision: 0.6 $";
+static const char *avm_pci_rev = "$Revision: 0.7 $";
 
 #define ISDN_CTYPE_FRITZPCI 1
 
@@ -576,7 +576,7 @@ HDLC_irq_main(fritzpnppci *fc)
 }
 
 static int
-hdlc_down(hisaxif_t *hif, u_int prim, u_int nr, int len, void *arg)
+hdlc_down(hisaxif_t *hif, u_int prim, int dinfo, int len, void *arg)
 {
 	bchannel_t	*bch;
 	fritzpnppci	*fc;
@@ -623,7 +623,7 @@ hdlc_down(hisaxif_t *hif, u_int prim, u_int nr, int len, void *arg)
 			test_and_clear_bit(BC_FLG_BUSY, &bch->Flag);
 			modehdlc(bch, 0, bch->channel);
 			bch->inst.up.func(&bch->inst.up,
-				PH_DEACTIVATE | CONFIRM, nr, 0, NULL);
+				PH_DEACTIVATE | CONFIRM, 0, 0, NULL);
 			break;
 	}
 	return(0);
@@ -984,7 +984,7 @@ setup_fritz(fritzpnppci *fc, u_int io_cfg, u_int irq_cfg)
 }
 
 static int
-dummy_down(hisaxif_t *hif,  u_int prim, u_int nr, int dtyp, void *arg) {
+dummy_down(hisaxif_t *hif,  u_int prim, int dinfo, int len, void *arg) {
 	fritzpnppci *card;
 
 	if (!hif || !hif->fdata)

@@ -1,4 +1,4 @@
-/* $Id: capi.c,v 0.4 2001/03/03 08:07:29 kkeil Exp $
+/* $Id: capi.c,v 0.5 2001/03/03 18:17:15 kkeil Exp $
  *
  */
 
@@ -9,7 +9,7 @@
 #include "helper.h"
 #include "debug.h"
 
-const char *capi_revision = "$Revision: 0.4 $";
+const char *capi_revision = "$Revision: 0.5 $";
 
 static int debug = 0;
 static hisaxobject_t capi_obj;
@@ -287,7 +287,8 @@ capi20_manager(void *data, u_int prim, void *arg) {
 	    case MGR_RELEASE | INDICATION:
 	    	if (ctrl) {
 			printk(KERN_DEBUG "release_capi20 id %x\n", ctrl->inst.st->id);
-	    		delContr(ctrl);
+			contrDestr(ctrl);
+			kfree(ctrl);
 	    	} else 
 	    		printk(KERN_WARNING "capi20_manager release no instance\n");
 	    	break;
@@ -326,16 +327,17 @@ int Capi20Init(void)
 void cleanup_module(void)
 {
 	int err;
-	Contr_t *contrlist = (Contr_t *)capi_obj.ilist;
+	Contr_t *contr;
 
 	if ((err = HiSax_unregister(&capi_obj))) {
 		printk(KERN_ERR "Can't unregister User DSS1 error(%d)\n", err);
 	}
-	if (contrlist) {
+	if (capi_obj.ilist) {
 		printk(KERN_WARNING "hisaxl3 contrlist not empty\n");
-		while(contrlist)
-			delContr(contrlist);
-		capi_obj.ilist = NULL;
+		while((contr = capi_obj.ilist)) {
+			contrDestr(contr);
+			kfree(contr);
+		}
 	}
 	detach_capi_driver(&hisax_driver);
 	free_listen();
