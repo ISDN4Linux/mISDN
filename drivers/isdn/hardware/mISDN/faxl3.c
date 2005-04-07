@@ -1,4 +1,4 @@
-/* $Id: faxl3.c,v 1.2 2004/06/17 12:31:12 keil Exp $
+/* $Id: faxl3.c,v 1.3 2005/04/07 08:59:41 keil Exp $
  *
  * Linux ISDN subsystem, Fax Layer 3
  *
@@ -116,7 +116,7 @@ static int debug = 0;
 
 static mISDNobject_t faxl3_obj;
 
-static char *mISDN_faxl3_revision = "$Revision: 1.2 $";
+static char *mISDN_faxl3_revision = "$Revision: 1.3 $";
 
 static u_char FaxModulation[] = {24,48,72,74,96,98,122,146};
 static u_char FaxModulationTrain[] = {24,48,72,73,96,97,121,145};
@@ -2051,7 +2051,7 @@ new_faxl3(mISDNstack_t *st, mISDN_pid_t *pid) {
 	n_faxl3->entity = MISDN_ENTITY_NONE;
 	err = faxl3_obj.ctrl(&n_faxl3->inst, MGR_NEWENTITY | REQUEST, NULL);
 	if (err) {
-		printk(KERN_WARNING "mISDN %s: MGR_NEWENTITY REQUEST failed err(%x)\n",
+		printk(KERN_WARNING "mISDN %s: MGR_NEWENTITY REQUEST failed err(%d)\n",
 			__FUNCTION__, err);
 	}
 	err = faxl3_obj.ctrl(st, MGR_REGLAYER | INDICATION, &n_faxl3->inst);

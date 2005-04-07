@@ -1,4 +1,4 @@
-/* $Id: core.c,v 1.24 2005/02/24 12:48:08 keil Exp $
+/* $Id: core.c,v 1.25 2005/04/07 08:59:41 keil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -19,7 +19,7 @@
 #include <linux/smp_lock.h>
 #endif
 
-static char		*mISDN_core_revision = "$Revision: 1.24 $";
+static char		*mISDN_core_revision = "$Revision: 1.25 $";
 
 LIST_HEAD(mISDN_objectlist);
 rwlock_t		mISDN_objects_lock = RW_LOCK_UNLOCKED;
@@ -109,7 +109,7 @@ mISDNd(void *data)
 					err = hhe->func.ctrl(hhe->data[0], hhe->prim,
 						skb->len ? skb->data : NULL);
 					if (err) {
-						printk(KERN_WARNING "mISDNd: addr(%x) prim(%x) failed err(%x)\n",
+						printk(KERN_WARNING "mISDNd: addr(%x) prim(%x) failed err(%d)\n",
 							hhe->addr, hhe->prim, err);
 					} else {
 						if (debug)
@@ -121,7 +121,7 @@ mISDNd(void *data)
 				case MGR_QUEUEIF:
 					err = hhe->func.iff(hhe->data[0], skb);
 					if (err) {
-						printk(KERN_WARNING "mISDNd: addr(%x) prim(%x) failed err(%x)\n",
+						printk(KERN_WARNING "mISDNd: addr(%x) prim(%x) failed err(%d)\n",
 							hhe->addr, hhe->prim, err);
 					}
 					break;

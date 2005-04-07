@@ -1,4 +1,4 @@
-/* $Id: l3_udss1.c,v 1.27 2005/03/03 19:03:03 jolly Exp $
+/* $Id: l3_udss1.c,v 1.28 2005/04/07 08:59:41 keil Exp $
  *
  * EURO/DSS1 D-channel protocol
  *
@@ -24,7 +24,7 @@ static int debug = 0;
 static mISDNobject_t u_dss1;
 
 
-const char *dss1_revision = "$Revision: 1.27 $";
+const char *dss1_revision = "$Revision: 1.28 $";
 
 static int dss1man(l3_process_t *, u_int, void *);
 
@@ -2302,7 +2302,7 @@ new_udss1(mISDNstack_t *st, mISDN_pid_t *pid)
 	list_add_tail(&nl3->list, &u_dss1.ilist);
 	err = u_dss1.ctrl(&nl3->inst, MGR_NEWENTITY | REQUEST, NULL);
 	if (err) {
-		printk(KERN_WARNING "mISDN %s: MGR_NEWENTITY REQUEST failed err(%x)\n",
+		printk(KERN_WARNING "mISDN %s: MGR_NEWENTITY REQUEST failed err(%d)\n",
 			__FUNCTION__, err);
 	}
 	err = u_dss1.ctrl(st, MGR_REGLAYER | INDICATION, &nl3->inst);

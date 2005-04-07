@@ -1,4 +1,4 @@
-/* $Id: layer2.c,v 1.19 2004/06/17 12:31:12 keil Exp $
+/* $Id: layer2.c,v 1.20 2005/04/07 08:59:41 keil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -12,7 +12,7 @@
 #include "helper.h"
 #include "debug.h"
 
-static char *l2_revision = "$Revision: 1.19 $";
+static char *l2_revision = "$Revision: 1.20 $";
 
 static void l2m_debug(struct FsmInst *fi, char *fmt, ...);
 
@@ -2233,7 +2233,7 @@ new_l2(mISDNstack_t *st, mISDN_pid_t *pid, layer2_t **newl2) {
 	list_add_tail(&nl2->list, &isdnl2.ilist);
 	err = isdnl2.ctrl(&nl2->inst, MGR_NEWENTITY | REQUEST, NULL);
 	if (err) {
-		printk(KERN_WARNING "mISDN %s: MGR_NEWENTITY REQUEST failed err(%x)\n",
+		printk(KERN_WARNING "mISDN %s: MGR_NEWENTITY REQUEST failed err(%d)\n",
 			__FUNCTION__, err);
 	}
 	err = isdnl2.ctrl(st, MGR_REGLAYER | INDICATION, &nl2->inst);

@@ -1,4 +1,4 @@
-/* $Id: contr.c,v 1.22 2004/06/17 12:31:11 keil Exp $
+/* $Id: contr.c,v 1.23 2005/04/07 08:59:41 keil Exp $
  *
  */
 
@@ -605,7 +605,7 @@ ControllerConstr(Controller_t **contr_p, mISDNstack_t *st, mISDN_pid_t *pid, mIS
 	contr->entity = MISDN_ENTITY_NONE;
 	retval = ocapi->ctrl(&contr->inst, MGR_NEWENTITY | REQUEST, NULL);
 	if (retval) {
-		printk(KERN_WARNING "mISDN %s: MGR_NEWENTITY REQUEST failed err(%x)\n",
+		printk(KERN_WARNING "mISDN %s: MGR_NEWENTITY REQUEST failed err(%d)\n",
 			__FUNCTION__, retval);
 	}
 	retval = 0;
