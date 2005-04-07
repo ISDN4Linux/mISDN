@@ -1,4 +1,4 @@
-/* $Id: ncci.c,v 1.23 2004/01/26 22:21:30 keil Exp $
+/* $Id: ncci.c,v 1.24 2005/04/07 08:57:50 keil Exp $
  *
  */
 
@@ -1043,6 +1043,9 @@ ncciDataConf(Ncci_t *ncci, int pr, struct sk_buff *skb)
 	}
 	if (i == ncci->window) {
 		int_error();
+		printk(KERN_DEBUG "%s: dinfo(%x)\n", __FUNCTION__, mISDN_HEAD_DINFO(skb));
+		for (i = 0; i < ncci->window; i++)
+			printk(KERN_DEBUG "%s: PktId[%d] %x\n", __FUNCTION__, i, ncci->xmit_skb_handles[i].PktId);
 		return(-EINVAL);
 	}
 	ncci->xmit_skb_handles[i].PktId = 0;
