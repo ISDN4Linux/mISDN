@@ -1,4 +1,4 @@
-/* $Id: l3_udss1.c,v 1.28 2005/04/07 08:59:41 keil Exp $
+/* $Id: l3_udss1.c,v 1.29 2005/04/30 15:27:05 jolly Exp $
  *
  * EURO/DSS1 D-channel protocol
  *
@@ -24,7 +24,7 @@ static int debug = 0;
 static mISDNobject_t u_dss1;
 
 
-const char *dss1_revision = "$Revision: 1.28 $";
+const char *dss1_revision = "$Revision: 1.29 $";
 
 static int dss1man(l3_process_t *, u_int, void *);
 
@@ -361,7 +361,7 @@ struct ie_len max_ie_len[] = {
 	{IE_FACILITY, 255},
 	{IE_PROGRESS, 4},
 	{IE_NET_FAC, 255},
-	{IE_NOTIFY, 3},
+	{IE_NOTIFY, 255}, /* 3-* Q.932 Section 9 */
 	{IE_DISPLAY, 82},
 	{IE_DATE, 8},
 	{IE_KEYPAD, 34},
@@ -1222,6 +1222,7 @@ l3dss1_notify(l3_process_t *pc, u_char pr, void *arg) {
 		p++;
 		if (p[0] != 1) {
 			err = 1;
+#if 0
 		} else {
 			switch (p[1]) {
 				case 0x80:
@@ -1232,6 +1233,7 @@ l3dss1_notify(l3_process_t *pc, u_char pr, void *arg) {
 					err = 2;
 					break;
 			}
+#endif
 		}
 	} else {
 		cause = CAUSE_MANDATORY_IE_MISS;
@@ -1755,7 +1757,7 @@ static struct stateentry downstatelist[] =
 	{SBIT(2) | SBIT(3) | SBIT(4) | SBIT(7) | SBIT(8) | SBIT(9) |
 		SBIT(10) | SBIT(11) | SBIT(12) | SBIT(15) | SBIT(25),
 	 CC_INFORMATION | REQUEST, l3dss1_information_req},
-	{SBIT(10),
+	{ALL_STATES,
 	 CC_NOTIFY | REQUEST, l3dss1_notify_req},
 	{SBIT(10),
 	 CC_PROGRESS | REQUEST, l3dss1_progress_req},
@@ -1817,7 +1819,7 @@ static struct stateentry datastatelist[] =
 	{SBIT(2) | SBIT(3) | SBIT(4) | SBIT(7) | SBIT(8) | SBIT(9) | SBIT(10) |
 	 SBIT(11) | SBIT(12) | SBIT(15) | SBIT(17) | SBIT(19) | SBIT(25),
 	 MT_INFORMATION, l3dss1_information},
-	{SBIT(10) | SBIT(11) | SBIT(15),
+	{ALL_STATES,
 	 MT_NOTIFY, l3dss1_notify},
 	{SBIT(0) | SBIT(1) | SBIT(2) | SBIT(3) | SBIT(4) | SBIT(7) | SBIT(8) | SBIT(10) |
 	 SBIT(11) | SBIT(12) | SBIT(15) | SBIT(17) | SBIT(19) | SBIT(25),
