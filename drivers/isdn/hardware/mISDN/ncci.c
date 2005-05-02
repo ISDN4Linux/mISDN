@@ -1,4 +1,4 @@
-/* $Id: ncci.c,v 1.24 2005/04/07 08:57:50 keil Exp $
+/* $Id: ncci.c,v 1.25 2005/05/02 12:29:22 keil Exp $
  *
  */
 
@@ -436,14 +436,17 @@ ncci_manufacturer_req(struct FsmInst *fi, int event, void *arg)
 static void
 ncci_connect_b3_active_ind(struct FsmInst *fi, int event, void *arg)
 {
-	Ncci_t *ncci = fi->userdata;
-	int i;
+	Ncci_t	*ncci = fi->userdata;
+	int	i;
+	u_long	flags;
 
 	mISDN_FsmChangeState(fi, ST_NCCI_N_ACT);
+	spin_lock_irqsave(&ncci->conf_lock, flags);
 	for (i = 0; i < CAPI_MAXDATAWINDOW; i++) {
 		ncci->xmit_skb_handles[i].PktId = 0;
 		ncci->recv_skb_handles[i] = 0;
 	}
+	spin_unlock_irqrestore(&ncci->conf_lock, flags);
 	Send2Application(ncci, arg);
 }
 
@@ -824,6 +827,7 @@ ncciConstr(AppPlci_t *aplci)
 	ncci->ncci_m.debug      = aplci->plci->contr->debug & CAPI_DBG_NCCI_STATE;
 	ncci->ncci_m.userdata   = ncci;
 	ncci->ncci_m.printdebug = ncci_debug;
+	spin_lock_init(&ncci->conf_lock);
 	/* unused NCCI */
 	ncci->addr = aplci->addr;
 	ncci->AppPlci = aplci;
@@ -853,7 +857,8 @@ ncciConstr(AppPlci_t *aplci)
 void
 ncciDestr(Ncci_t *ncci)
 {
-	int i;
+	int	i;
+	u_long	flags;
 
 	capidebug(CAPI_DBG_NCCI, "ncciDestr NCCI %x", ncci->addr);
 
@@ -862,11 +867,13 @@ ncciDestr(Ncci_t *ncci)
 		ncci->contr->ctrl->free_ncci(ncci->contr->ctrl, ncci->appl->ApplId, ncci->addr);
 #endif
 	/* cleanup data queues */
+	spin_lock_irqsave(&ncci->conf_lock, flags);
 	discard_queue(&ncci->squeue);
 	for (i = 0; i < ncci->window; i++) {
 		if (ncci->xmit_skb_handles[i].PktId)
 			ncci->xmit_skb_handles[i].PktId = 0;
 	}
+	spin_unlock_irqrestore(&ncci->conf_lock, flags);
 	AppPlciDelNCCI(ncci);
 	ncci_free(ncci);
 }
@@ -957,18 +964,21 @@ ncciDataReq(Ncci_t *ncci, struct sk_buff *skb)
 	int	i, err;
 	__u16	len, capierr = 0;
 	_cmsg	*cmsg;
-	
+	u_long	flags;
+
 	len = CAPIMSG_LEN(skb->data);
 	if (len != 22 && len != 30) {
 		capierr = CapiIllMessageParmCoding;
 		int_error();
 		goto fail;
 	}
+	spin_lock_irqsave(&ncci->conf_lock, flags);
 	for (i = 0; i < ncci->window; i++) {
 		if (ncci->xmit_skb_handles[i].PktId == 0)
 			break;
 	}
 	if (i == ncci->window) {
+		spin_unlock_irqrestore(&ncci->conf_lock, flags);
 		return(CAPI_SENDQUEUEFULL);
 	}
 	mISDN_HEAD_DINFO(skb) = ControllerNextId(ncci->contr);
@@ -982,6 +992,7 @@ ncciDataReq(Ncci_t *ncci, struct sk_buff *skb)
 	if (test_bit(NCCI_STATE_FCTRL, &ncci->state)) {
 		if (test_and_set_bit(NCCI_STATE_BUSY, &ncci->state)) {
 			skb_queue_tail(&ncci->squeue, skb);
+			spin_unlock_irqrestore(&ncci->conf_lock, flags);
 			return(CAPI_NOERROR);
 		}
 		if (skb_queue_len(&ncci->squeue)) {
@@ -990,7 +1001,7 @@ ncciDataReq(Ncci_t *ncci, struct sk_buff *skb)
 			i = -1;
 		}
 	}
-	
+	spin_unlock_irqrestore(&ncci->conf_lock, flags);
 	err = ncciL4L3(ncci, DL_DATA | REQUEST, mISDN_HEAD_DINFO(skb), 0, NULL, skb);
 	if (!err)
 		return(CAPI_NOERROR);
@@ -998,6 +1009,7 @@ ncciDataReq(Ncci_t *ncci, struct sk_buff *skb)
 	int_error();
 	skb_push(skb, len);
 	capierr = CAPI_MSGBUSY;
+	spin_lock_irqsave(&ncci->conf_lock, flags);
 	if (i == -1) {
 		for (i = 0; i < ncci->window; i++) {
 			if (ncci->xmit_skb_handles[i].PktId == mISDN_HEAD_DINFO(skb))
@@ -1007,8 +1019,10 @@ ncciDataReq(Ncci_t *ncci, struct sk_buff *skb)
 			int_error();
 		else
 			ncci->xmit_skb_handles[i].PktId = 0;
+		spin_unlock_irqrestore(&ncci->conf_lock, flags);
 	} else {
 		ncci->xmit_skb_handles[i].PktId = 0;
+		spin_unlock_irqrestore(&ncci->conf_lock, flags);
 		return(capierr);
 	}
 fail:
@@ -1036,12 +1050,15 @@ ncciDataConf(Ncci_t *ncci, int pr, struct sk_buff *skb)
 {
 	int	i;
 	_cmsg	*cmsg;
+	u_long	flags;
 
+	spin_lock_irqsave(&ncci->conf_lock, flags);
 	for (i = 0; i < ncci->window; i++) {
 		if (ncci->xmit_skb_handles[i].PktId == mISDN_HEAD_DINFO(skb))
 			break;
 	}
 	if (i == ncci->window) {
+		spin_unlock_irqrestore(&ncci->conf_lock, flags);
 		int_error();
 		printk(KERN_DEBUG "%s: dinfo(%x)\n", __FUNCTION__, mISDN_HEAD_DINFO(skb));
 		for (i = 0; i < ncci->window; i++)
@@ -1054,6 +1071,7 @@ ncciDataConf(Ncci_t *ncci, int pr, struct sk_buff *skb)
 
 	cmsg = cmsg_alloc();
 	if (!cmsg) {
+		spin_unlock_irqrestore(&ncci->conf_lock, flags);
 		int_error();
 		return(-ENOMEM);
 	}
@@ -1061,18 +1079,23 @@ ncciDataConf(Ncci_t *ncci, int pr, struct sk_buff *skb)
 	capi_cmsg_header(cmsg, ncci->AppPlci->appl->ApplId, CAPI_DATA_B3, CAPI_CONF, 
 			 ncci->xmit_skb_handles[i].MsgId, ncci->addr);
 	cmsg->DataHandle = ncci->xmit_skb_handles[i].DataHandle;
+	spin_unlock_irqrestore(&ncci->conf_lock, flags);
 	cmsg->Info = 0;
 	Send2Application(ncci, cmsg);
 	if (test_bit(NCCI_STATE_FCTRL, &ncci->state)) {
+		spin_lock_irqsave(&ncci->conf_lock, flags);
 		if (skb_queue_len(&ncci->squeue)) {
 			skb = skb_dequeue(&ncci->squeue);
+			spin_unlock_irqrestore(&ncci->conf_lock, flags);
 			if (ncciL4L3(ncci, DL_DATA | REQUEST, mISDN_HEAD_DINFO(skb),
 				0, NULL, skb)) {
 				int_error();
 				dev_kfree_skb(skb);
 			}
-		} else
+		} else {
 			test_and_clear_bit(NCCI_STATE_BUSY, &ncci->state);
+			spin_unlock_irqrestore(&ncci->conf_lock, flags);
+		}
 	}
 	return(0);
 }	

@@ -1,4 +1,4 @@
-/* $Id: m_capi.h,v 1.11 2004/06/17 12:31:12 keil Exp $
+/* $Id: m_capi.h,v 1.12 2005/05/02 12:29:22 keil Exp $
  *
  * Rewritten CAPI Layer (Layer4 in mISDN)
  * 
@@ -273,6 +273,7 @@ struct _Ncci {
 	int			savedstate;
 	int			window;
 	u_long			state;
+	spinlock_t		conf_lock;
 	ConfQueue_t		xmit_skb_handles[CAPI_MAXDATAWINDOW];
 	struct sk_buff		*recv_skb_handles[CAPI_MAXDATAWINDOW];
 	struct sk_buff_head	squeue;
