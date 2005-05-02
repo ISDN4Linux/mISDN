@@ -1,4 +1,4 @@
-/* $Id: ncci.c,v 1.25 2005/05/02 12:29:22 keil Exp $
+/* $Id: ncci.c,v 1.26 2005/05/02 12:30:30 keil Exp $
  *
  */
 
@@ -690,7 +690,8 @@ ncciD_reset_b3_conf(struct FsmInst *fi, int event, void *arg)
 static void
 ncciD_reset_b3_req(struct FsmInst *fi, int event, void *arg)
 {
-	SKB2Application(fi->userdata, arg);
+	if (SKB_l4l3(fi->userdata, arg))
+		dev_kfree_skb(arg);
 }
 
 static void
@@ -711,6 +712,8 @@ ncciD_disconnect_b3_conf(struct FsmInst *fi, int event, void *arg)
 	struct sk_buff	*skb = arg;
 	__u16		info = CAPIMSG_U16(skb->data, 12);
 
+	if (ncci->ncci_m.debug)
+		log_skbdata(skb);
 	if (test_bit(NCCI_STATE_APPLRELEASED, &ncci->state))
 		return;
 	if (info != 0)
@@ -727,7 +730,8 @@ ncciD_disconnect_b3_ind(struct FsmInst *fi, int event, void *arg)
 	mISDN_FsmChangeState(fi, ST_NCCI_N_5);
 	if (test_bit(NCCI_STATE_APPLRELEASED, &ncci->state)) {
 		skb_pull(skb, CAPIMSG_BASELEN);
-		skb_trim(skb, 4);
+		skb_trim(skb, 0);
+		skb_put(skb, 4);
 		if_newhead(&ncci->link->inst.down, CAPI_DISCONNECT_B3_RESP, 0, skb);
 		ncciDestr(ncci);
 	} else
@@ -1156,6 +1160,12 @@ ncci_l4l3_direct(Ncci_t *ncci, struct sk_buff *skb) {
 			break;
 		case CAPI_DISCONNECT_B3_RESP:
 			ret = mISDN_FsmEvent(&ncci->ncci_m, EV_AP_DISCONNECT_B3_RESP, skb);
+			break;
+		case CAPI_RESET_B3_REQ:
+			ret = mISDN_FsmEvent(&ncci->ncci_m, EV_AP_RESET_B3_REQ, skb);
+			break;
+		case CAPI_RESET_B3_RESP:
+			ret = mISDN_FsmEvent(&ncci->ncci_m, EV_AP_RESET_B3_RESP, skb);
 			break;
 		default:
 			int_error();

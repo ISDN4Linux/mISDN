@@ -1,4 +1,4 @@
-/* $Id: x25_dte.c,v 1.7 2005/01/18 16:01:33 keil Exp $
+/* $Id: x25_dte.c,v 1.8 2005/05/02 12:30:30 keil Exp $
  *
  * Linux modular ISDN subsystem, mISDN
  * X.25/X.31 Layer3 for DTE mode   
@@ -22,7 +22,7 @@ static int debug = 0;
 
 static mISDNobject_t x25dte_obj;
 
-static char *mISDN_dte_revision = "$Revision: 1.7 $";
+static char *mISDN_dte_revision = "$Revision: 1.8 $";
 
 /* local prototypes */
 static x25_channel_t *	dte_create_channel(x25_l3_t *, int, u_char, __u16, int, u_char *);
@@ -1085,8 +1085,8 @@ dte_from_up(mISDNif_t *hif, struct sk_buff *skb)
 					err = -EXFULL;
 					break;
 				}
-				skb_trim(skb, 2);
-				memcpy(skb->data, &info, 2);
+				skb_trim(skb, 0);
+				memcpy(skb_put(skb, 2), &info, 2);
 				err = X25sendL4skb(l3c, l3, addr, CAPI_RESET_B3_CONF, hh->dinfo, skb);
 			} else
 				err = 0;
@@ -1120,8 +1120,8 @@ dte_from_up(mISDNif_t *hif, struct sk_buff *skb)
 					info = 0;
 			} else
 				info = 0x2004; /* no NCCI available */
-			skb_trim(skb, 2);
-			memcpy(skb->data, &info, 2);
+			skb_trim(skb, 0);
+			memcpy(skb_put(skb, 2), &info, 2);
 			err = X25sendL4skb(l3c, l3, addr, CAPI_CONNECT_B3_CONF, hh->dinfo, skb);
 			break;
 		case CAPI_RESET_B3_REQ:
@@ -1143,8 +1143,8 @@ dte_from_up(mISDNif_t *hif, struct sk_buff *skb)
 					info = 0;
 			} else
 				info = 0x2002;
-			skb_trim(skb, 2);
-			memcpy(skb->data, &info, 2);
+			skb_trim(skb, 0);
+			memcpy(skb_put(skb, 2), &info, 2);
 			err = X25sendL4skb(l3c, l3, addr, CAPI_RESET_B3_CONF, hh->dinfo, skb);
 			break;
 		case CAPI_DISCONNECT_B3_REQ:
@@ -1166,8 +1166,9 @@ dte_from_up(mISDNif_t *hif, struct sk_buff *skb)
 					info = 0;
 			} else
 				info = 0x2002;
-			skb_trim(skb, 2);
-			memcpy(skb->data, &info, 2);
+			
+			skb_trim(skb, 0);
+			memcpy(skb_put(skb, 2), &info, 2);
 			err = X25sendL4skb(l3c, l3, addr, CAPI_DISCONNECT_B3_CONF, hh->dinfo, skb);
 			break;
 		case CAPI_CONNECT_B3_RESP:
