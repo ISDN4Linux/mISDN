@@ -1,4 +1,4 @@
-/* $Id: hfcs_usb.c,v 1.2 2005/04/06 12:10:46 mbachem Exp $
+/* $Id: hfcs_usb.c,v 1.3 2005/05/04 15:38:31 mbachem Exp $
  *
  * mISDN driver for Colognechip HFC-S USB chip
  *
@@ -40,18 +40,8 @@
 #include "hw_lock.h"
 #include "hfcs_usb.h"
 
-
-/* hfcsusb Layer1 commands */
-#define	S0_L1CMD_ECK	0x00
-#define HFC_L1_ACTIVATE_TE	0x01
-#define HFC_L1_ACTIVATE_NT	0x02
-#define HFC_L1_DEACTIVATE_NT	0x03
-#define S0_L1CMD_AR8	0x08
-#define S0_L1CMD_AR10	0x09
-
-
 #define DRIVER_NAME "mISDN_hfcsusb"
-const char *hfcsusb_rev = "$Revision: 1.2 $";
+const char *hfcsusb_rev = "$Revision: 1.3 $";
 
 #define MAX_CARDS	8
 #define MODULE_PARM_T	"1-8i"
@@ -788,25 +778,6 @@ hfcsusb_ph_command(hfcsusb_t * card, u_char command)
 					      HFCUSB_STATES,
 					      HFCUSB_DO_ACTION);
 			break;
-			
-			
-		case S0_L1CMD_AR8:
-			mISDN_debugprint(&card->dch.inst,
-					 "S0_L1CMD_AR8 at ph_sate = %i",
-					 &card->dch.ph_state);
-			break;
-
-		case S0_L1CMD_AR10:
-			mISDN_debugprint(&card->dch.inst,
-					 "S0_L1CMD_AR10 at ph_sate = %i",
-					 &card->dch.ph_state);
-			break;
-
-		case S0_L1CMD_ECK:
-			mISDN_debugprint(&card->dch.inst,
-					 "S0_L1CMD_ECK at ph_sate = %i",
-					 &card->dch.ph_state);
-			break;
 	}
 }
 
@@ -852,23 +823,14 @@ hfcsusb_l1hwD(mISDNif_t * hif, struct sk_buff *skb)
 					   hh->dinfo, skb));
 		}
 	} else if (hh->prim == (PH_SIGNAL | REQUEST)) {
-		dch->inst.lock(dch->inst.data, 0);
-		if (hh->dinfo == INFO3_P8)
-			hfcsusb_ph_command(dch->hw, S0_L1CMD_AR8);
-		else if (hh->dinfo == INFO3_P10)
-			hfcsusb_ph_command(dch->hw, S0_L1CMD_AR10);
-		else
-			ret = -EINVAL;
-		dch->inst.unlock(dch->inst.data);
+		/* do not handle INFO3_P8 and INFO3_P10 */
+		ret = -EINVAL;
 	} else if (hh->prim == (PH_CONTROL | REQUEST)) {
 		dch->inst.lock(dch->inst.data, 0);
 		if (hh->dinfo == HW_RESET) {
 			if (dch->ph_state != 0)
 				hfcsusb_ph_command(dch->hw,
 						   HFC_L1_ACTIVATE_TE);
-			hfcsusb_ph_command(dch->hw, S0_L1CMD_ECK);
-		} else if (hh->dinfo == HW_POWERUP) {
-			hfcsusb_ph_command(dch->hw, S0_L1CMD_ECK);
 		} else if (hh->dinfo == HW_DEACTIVATE) {
 			discard_queue(&dch->rqueue);
 			if (dch->next_skb) {

@@ -1,6 +1,6 @@
 /*
 * hfcs_usb.h, HFC-S USB mISDN driver
-* $Id: hfcs_usb.h,v 1.1 2005/04/04 14:01:00 mbachem Exp $ 
+* $Id: hfcs_usb.h,v 1.2 2005/05/04 15:38:31 mbachem Exp $ 
 *
 */
 
@@ -20,6 +20,10 @@
 #define CLKDEL_TE	0x0f	/* CLKDEL in TE mode */
 #define CLKDEL_NT	0x6c	/* CLKDEL in NT mode */
 
+/* hfcsusb Layer1 commands */
+#define HFC_L1_ACTIVATE_TE      0x01
+#define HFC_L1_ACTIVATE_NT      0x02
+#define HFC_L1_DEACTIVATE_NT    0x03
 
 /* bits in STATES */
 #define HFCUSB_LOAD_STATE	0x10
