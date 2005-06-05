@@ -32,7 +32,7 @@ struct hfc_chan {
 	int		port; /* the interface port this channel is associated with */
 	int		nt_mode;
 	int		nt_timer; /* -1 if off, 0 if elapsed, >0 if running */
-	int		los, ais, slip_tx, slip_rx; /* current alarms */
+	int		los, ais; /* current alarms */
 	int		jitter;
 	u_long		cfg; /* port configuration */
 	int		sync; /* sync state (used by E1) */

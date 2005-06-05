@@ -110,7 +110,7 @@
 
 extern const char *CardType[];
 
-static const char *hfcmulti_revision = "$Revision: 1.23 $";
+static const char *hfcmulti_revision = "$Revision: 1.24 $";
 
 static int HFC_cnt;
 
@@ -1254,39 +1254,55 @@ hfcmulti_interrupt(int intno, void *dev_id, struct pt_regs *regs)
 			if (hc->type == 1)
 			if (hc->created[0]) {
 				if (test_bit(HFC_CFG_REPORT_LOS, &hc->chan[16].cfg)) {
-					if (debug & DEBUG_HFCMULTI_SYNC)
-						printk(KERN_DEBUG "%s: (id=%d) E1 got LOS\n", __FUNCTION__, hc->id);
 					/* LOS */
 					temp = HFC_inb_(hc, R_RX_STA0) & V_SIG_LOS;
-					if (!temp && hc->chan[16].los)
-						dchannel_sched_event(dch, D_LOS);
-					if (temp && !hc->chan[16].los)
-						dchannel_sched_event(dch, D_LOS_OFF);
+					if (!temp && hc->chan[16].los) {
+						if (debug & DEBUG_HFCMULTI_SYNC)
+							printk(KERN_DEBUG "%s: (id=%d) E1 got LOS\n", __FUNCTION__, hc->id);
+						if ((dch = hc->chan[16].dch))
+							dchannel_sched_event(dch, D_LOS);
+					}
+					if (temp && !hc->chan[16].los) {
+						if (debug & DEBUG_HFCMULTI_SYNC)
+							printk(KERN_DEBUG "%s: (id=%d) E1 LOS cleared\n", __FUNCTION__, hc->id);
+						if ((dch = hc->chan[16].dch))
+							dchannel_sched_event(dch, D_LOS_OFF);
+					}
 					hc->chan[16].los = temp;
 				}
 				if (test_bit(HFC_CFG_REPORT_AIS, &hc->chan[16].cfg)) {
-					if (debug & DEBUG_HFCMULTI_SYNC)
-						printk(KERN_DEBUG "%s: (id=%d) E1 got AIS\n", __FUNCTION__, hc->id);
 					/* AIS */
 					temp = HFC_inb_(hc, R_RX_STA0) & V_AIS;
-					if (!temp && hc->chan[16].ais)
-						dchannel_sched_event(dch, D_AIS);
-					if (!temp && hc->chan[16].ais)
-						dchannel_sched_event(dch, D_AIS_OFF);
+					if (!temp && hc->chan[16].ais) {
+						if (debug & DEBUG_HFCMULTI_SYNC)
+							printk(KERN_DEBUG "%s: (id=%d) E1 got AIS\n", __FUNCTION__, hc->id);
+						if ((dch = hc->chan[16].dch))
+							dchannel_sched_event(dch, D_AIS);
+					}
+					if (temp && !hc->chan[16].ais) {
+						if (debug & DEBUG_HFCMULTI_SYNC)
+							printk(KERN_DEBUG "%s: (id=%d) E1 AIS cleared\n", __FUNCTION__, hc->id);
+						if ((dch = hc->chan[16].dch))
+							dchannel_sched_event(dch, D_AIS_OFF);
+					}
 					hc->chan[16].ais = temp;
 				}
 				if (test_bit(HFC_CFG_REPORT_SLIP, &hc->chan[16].cfg)) {
-					if (debug & DEBUG_HFCMULTI_SYNC)
-						printk(KERN_DEBUG "%s: (id=%d) E1 got SLIP (RX)\n", __FUNCTION__, hc->id);
 					/* SLIP */
 					temp = HFC_inb_(hc, R_SLIP) & V_FOSLIP_RX;
-					if (!temp && hc->chan[16].slip_rx)
-						dchannel_sched_event(dch, D_SLIP_RX);
-					hc->chan[16].slip_rx = temp;
+					if (temp) {
+						if (debug & DEBUG_HFCMULTI_SYNC)
+							printk(KERN_DEBUG "%s: (id=%d) E1 got SLIP (RX)\n", __FUNCTION__, hc->id);
+						if ((dch = hc->chan[16].dch))
+							dchannel_sched_event(dch, D_SLIP_RX);
+					}
 					temp = HFC_inb_(hc, R_SLIP) & V_FOSLIP_TX;
-					if (!temp && hc->chan[16].slip_tx)
-						dchannel_sched_event(dch, D_SLIP_TX);
-					hc->chan[16].slip_tx = temp;
+					if (temp) {
+						if (debug & DEBUG_HFCMULTI_SYNC)
+							printk(KERN_DEBUG "%s: (id=%d) E1 got SLIP (TX)\n", __FUNCTION__, hc->id);
+						if ((dch = hc->chan[16].dch))
+							dchannel_sched_event(dch, D_SLIP_TX);
+					}
 				}
 				temp = HFC_inb_(hc, R_JATT_DIR);
 				switch(hc->chan[16].sync) {
