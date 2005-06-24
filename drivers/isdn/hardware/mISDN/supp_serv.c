@@ -1,4 +1,4 @@
-/* $Id: supp_serv.c,v 1.8 2004/01/26 22:21:30 keil Exp $
+/* $Id: supp_serv.c,v 1.9 2005/06/24 15:33:13 keil Exp $
  *
  */
 
@@ -36,7 +36,6 @@ static int
 SSProcess_L4L3(SSProcess_t *spc, __u32 prim, struct sk_buff *skb) {
 	int	err;
 
-// FIXME	err = ControllerL4L3(contr, prim, contr->addr | DUMMY_CR_FLAG, skb);
 	err = ControllerL4L3(spc->contr, prim, MISDN_ID_DUMMY, skb);
 	if (err)
 		dev_kfree_skb(skb);
