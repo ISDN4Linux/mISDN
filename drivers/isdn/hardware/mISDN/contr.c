@@ -1,4 +1,4 @@
-/* $Id: contr.c,v 1.23 2005/04/07 08:59:41 keil Exp $
+/* $Id: contr.c,v 1.24 2005/06/26 11:35:40 keil Exp $
  *
  */
 
@@ -487,6 +487,8 @@ ControllerL3L4(mISDNif_t *hif, struct sk_buff *skb)
 		if(!ret)
 			dev_kfree_skb(skb);
 	} else if (hh->dinfo == MISDN_ID_DUMMY) {
+		contrDebug(contr, CAPI_DBG_CONTR_INFO, "%s: call Supplementary_l3l4 len %d",
+			__FUNCTION__, skb->len);
 		ret = Supplementary_l3l4(contr, hh->prim, skb);
 	} else {
 		if (!(plci = getPlci4L3id(contr, hh->dinfo))) {
