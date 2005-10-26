@@ -1,4 +1,4 @@
-/* $Id: hw_lock.h,v 1.6 2005/03/09 03:09:06 keil Exp $
+/* $Id: hw_lock.h,v 1.7 2005/10/26 14:13:19 keil Exp $
  *
  * hw_lock.h  Hardware locking inline routines
  *
@@ -92,7 +92,7 @@ typedef struct _mISDN_HWlock {
  */
 static inline int lock_HW(mISDN_HWlock_t *lock, int nowait)
 {
-	register u_long	flags;
+	u_long	flags;
 #ifdef LOCK_STATISTIC
 	int	wait = 0;
 #endif
