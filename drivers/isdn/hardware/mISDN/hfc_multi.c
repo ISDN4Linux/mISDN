@@ -110,7 +110,7 @@
 
 extern const char *CardType[];
 
-static const char *hfcmulti_revision = "$Revision: 1.24 $";
+static const char *hfcmulti_revision = "$Revision: 1.25 $";
 
 static int HFC_cnt;
 
@@ -2815,7 +2815,7 @@ setup_pci(hfc_multi_t *hc)
 		if (debug & DEBUG_HFCMULTI_INIT)
 			printk(KERN_DEBUG "setup_pci(): investigating card entry %d (looking for type %d)\n", i, hc->type);
 		inuse:
-		tmp_dev = pci_find_subsys(id_list[i].vendor_id, id_list[i].device_id, id_list[i].vendor_sub, id_list[i].device_sub, tmp_dev);
+		tmp_dev = pci_get_subsys(id_list[i].vendor_id, id_list[i].device_id, id_list[i].vendor_sub, id_list[i].device_sub, tmp_dev);
 		if (tmp_dev) {
 			/* skip if already in use */
 			list_for_each_entry_safe(hc_tmp, next, &HFCM_obj.ilist, list) {
