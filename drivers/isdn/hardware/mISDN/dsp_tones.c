@@ -1,4 +1,4 @@
-/* $Id: dsp_tones.c,v 1.5 2004/07/04 10:31:09 jolly Exp $ 
+/* $Id: dsp_tones.c,v 1.6 2005/10/26 14:12:13 keil Exp $ 
  *
  * Audio support data for ISDN4Linux.
  *
@@ -373,7 +373,7 @@ void dsp_tone_copy(dsp_t *dsp, u8 *data, int len)
  
 	/* if we have no tone, we copy silence */
 	if (!tone->tone) {
-		memset(data, silence, len);
+		memset(data, dsp_silence, len);
 		return;
 	}
 

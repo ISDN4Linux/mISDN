@@ -1,4 +1,4 @@
-/* $Id: dsp.h,v 1.6 2004/08/28 12:35:26 jolly Exp $
+/* $Id: dsp.h,v 1.7 2005/10/26 14:12:13 keil Exp $
  *
  * Audio support data for ISDN4Linux.
  *
@@ -60,7 +60,7 @@ extern void dsp_audio_generate_seven(void);
 extern void dsp_audio_generate_mix_table(void);
 extern void dsp_audio_generate_ulaw_samples(void);
 extern void dsp_audio_generate_volume_changes(void);
-extern u8 silence;
+extern u8 dsp_silence;
 
 
 /*************

@@ -1,4 +1,4 @@
-/* $Id: dsp_cmx.c,v 1.9 2005/01/29 16:23:24 jolly Exp $
+/* $Id: dsp_cmx.c,v 1.10 2005/10/26 14:12:13 keil Exp $
  *
  * Audio crossconnecting/conferrencing (hardware level).
  *
@@ -239,7 +239,7 @@ dsp_cmx_add_conf_member(dsp_t *dsp, conference_t *conf)
 	}
 	lock_HW(&dsp_lock, 0);
 	memset(member, 0, sizeof(conf_member_t));
-	memset(dsp->rx_buff, silence, sizeof(dsp->rx_buff));
+	memset(dsp->rx_buff, dsp_silence, sizeof(dsp->rx_buff));
 	member->dsp = dsp;
 	/* set initial values */
 	dsp->W_rx = conf->W_max;
@@ -1130,7 +1130,7 @@ struct sk_buff
 				}
 			}
 			if (len)
-				memset(d, silence, len);
+				memset(d, dsp_silence, len);
 			dsp->R_tx = t;
 			return(nskb);
 		}
@@ -1197,7 +1197,7 @@ struct sk_buff
 				r = (r+1) & CMX_BUFF_MASK;
 			}
 			if(r != rr)
-				memset(d, silence, (rr-r)&CMX_BUFF_MASK);
+				memset(d, dsp_silence, (rr-r)&CMX_BUFF_MASK);
 		/* -> if echo is enabled */
 		} else {
 			/* -> mix tx-data with echo if available, or use echo only */

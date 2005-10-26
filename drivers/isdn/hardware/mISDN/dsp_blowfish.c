@@ -1,4 +1,4 @@
-/* $Id: dsp_blowfish.c,v 1.2 2004/03/28 17:13:06 jolly Exp $
+/* $Id: dsp_blowfish.c,v 1.3 2005/10/26 14:12:13 keil Exp $
  *
  * Blowfish encryption/decryption for mISDN_dsp.
  *
@@ -594,7 +594,7 @@ dsp_bf_init(dsp_t *dsp, const u8 *key, uint keylen)
 	while(i < 9)
 	{
 		dsp->bf_crypt_out[i] = 0xff;
-		dsp->bf_data_out[i] = silence;
+		dsp->bf_data_out[i] = dsp_silence;
 		i++;
 	}
 	dsp->bf_crypt_pos = 0;

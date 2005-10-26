@@ -1,4 +1,4 @@
-/* $Id: dsp_core.c,v 1.10 2004/08/28 12:35:26 jolly Exp $
+/* $Id: dsp_core.c,v 1.11 2005/10/26 14:12:13 keil Exp $
  *
  * Author       Andreas Eversberg (jolly@jolly.de)
  * Based on source code structure by
@@ -161,7 +161,7 @@ or if cmx is currently using software.
  
  */
 
-const char *dsp_revision = "$Revision: 1.10 $";
+const char *dsp_revision = "$Revision: 1.11 $";
 
 #include <linux/delay.h>
 #include <linux/config.h>
@@ -910,7 +910,7 @@ static int dsp_init(void)
 	INIT_LIST_HEAD(&dsp_obj.ilist);
 
 	/* initialize audio tables */
-	silence = (dsp_options&DSP_OPT_ULAW)?0xff:0x2a;
+	dsp_silence = (dsp_options&DSP_OPT_ULAW)?0xff:0x2a;
 	dsp_audio_law_to_s32 = (dsp_options&DSP_OPT_ULAW)?dsp_audio_ulaw_to_s32:dsp_audio_alaw_to_s32;
 	dsp_audio_generate_s2law_table();
 	dsp_audio_generate_seven();

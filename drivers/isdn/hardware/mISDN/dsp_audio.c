@@ -1,4 +1,4 @@
-/* $Id: dsp_audio.c,v 1.4 2004/03/28 17:13:06 jolly Exp $
+/* $Id: dsp_audio.c,v 1.5 2005/10/26 14:12:13 keil Exp $
  *
  * Audio support data for mISDN_dsp.
  *
@@ -301,7 +301,7 @@ u8 dsp_audio_ulaw_to_alaw[256] =
 	0x8a, 0x8a, 0x6a, 0x6a, 0xea, 0xea, 0x2a, 0x2a
 };
 
-u8 silence;
+u8 dsp_silence;
 
 
 /*****************************************************
