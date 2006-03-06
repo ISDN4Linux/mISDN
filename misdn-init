@@ -1,0 +1,544 @@
+#!/bin/bash
+
+################################################################################
+#
+# misdn-init init script
+#
+# Copyright (C) 2005, Nadi Sarrar
+#
+# Nadi Sarrar <nadi@beronet.com>
+#
+# This program is free software, distributed under the terms of
+# the GNU General Public License
+#
+
+#
+# USAGE:
+#
+#   /etc/init.d/misdn-init start|stop|restart|config|scan|help
+#
+
+#
+# CONFIGURATION:
+#
+# Path to your misdn-init.conf:
+#
+misdn_init_conf="/etc/misdn-init.conf"
+#
+################################################################################
+
+
+MODPROBE=modprobe
+RMMOD=rmmod
+INSMOD=insmod
+LSPCI=lspci
+MKNOD=mknod
+
+# HFC 8/4 (S0) Options
+master_clock=16
+
+# HFC-E1 Options
+optical=16
+los=18
+ais=19
+slip=20
+nocrc4=24
+
+# Card Settings
+ulaw=8
+dtmf=9
+pcm_slave=11
+
+
+function remove_preloaded_modules {
+	tmp=$(lsmod)
+	cards="hfcmulti hfcpci avmfritz w6692 hfcusb"
+
+	for i in $cards ; do 
+		echo $tmp | grep $i >/dev/null && (echo "$i already loaded, removing it"; modprobe -r $i)
+	done
+}
+
+function load_card_modules {
+
+	IFS=$'\n'
+
+	for line in $(sed -n -e '/^[^#]/p' ${misdn_init_conf});
+	do
+		var=`echo "${line}" | sed -e "s/^\(.*\)=.*/\1/"`
+		val=`echo "${line}" | sed -e "s/^.*=\(.*\)/\1/"`
+		
+		case "${var}" in
+			card)
+				nr=`echo "${val}" | sed -e "s/^\([0-9]*\),.*/\1/"`
+				mod=`echo "${val}" | sed -e "s/^[^,]*,\([^,]*\).*/\1/"`
+				if [ ${#val} -gt $(echo "obase=10;${#nr}+${#mod}+1" | bc) ]; then
+					opns=`echo "${val}" | sed -e "s/^[^,]*,[^,]*,\(.*\)/\1/"`
+				else
+					opns=""
+				fi
+				case "${mod}" in
+					0x*)
+						hfcmulti[${nr}]=$(echo ${mod} | sed -e "s/^0x\([0-9]*\)/\1/")
+						let "hfcports = ${hfcports} + ${hfcmulti[${nr}]}"
+						IFS=$','
+						for li in ${opns}; do
+							hfcmulti[${nr}]=$(echo "obase=10;2^(${!li}-1)+${hfcmulti[${nr}]}" | bc)
+						done
+						IFS=$'\n'
+						;;
+					*)
+						other_card[${nr}]=${mod}
+						;;
+				esac
+				;;
+			te_ptp)
+				IFS=$','
+				for li in ${val}; do
+					layermask[${li}]="0xf"
+					protocol[${li}]=34 # 0x22 == 34
+				done
+				IFS=$'\n'
+				;;
+			te_ptmp)
+				IFS=$','
+				for li in ${val}; do
+					layermask[${li}]="0xf"
+					protocol[${li}]=2 # 0x2 == 2
+				done
+				IFS=$'\n'
+				;;
+			nt_*)
+				IFS=$','
+				for li in ${val}; do
+					layermask[${li}]="0x3"
+					protocol[${li}]=18 # 0x12 == 18
+				done
+				IFS=$'\n'
+				;;
+			te_capi_ptp)
+				IFS=$','
+				for li in ${val}; do
+					layermask[${li}]="0x0"
+					protocol[${li}]=34 # 0x22 == 34
+				done
+				IFS=$'\n'
+
+				addcapi=1
+				;;
+			te_capi_ptmp)
+				IFS=$','
+				for li in ${val}; do
+					layermask[${li}]="0x0"
+					protocol[${li}]=2 # 0x2 == 2
+				done
+				IFS=$'\n'
+				addcapi=1
+				;;
+
+			option)
+				port=`echo "${val}" | sed -e "s/^\([0-9]*\),.*/\1/"`
+				opt=`echo "${val}" | sed -e "s/^[0-9]*,\(.*\)/\1/"`
+
+				if [ -z ${protocol[${port}]} ]; then
+					protocol[${port}]="0"
+				fi
+				
+				IFS=$','
+				for li in ${opt}; do
+					protocol[${port}]=$(echo "obase=10;2^(${!li}-1)+${protocol[${port}]}" | bc)
+				done
+				IFS=$'\n'
+				;;
+			poll)
+				poll=${val}
+				;;
+			pcm)
+				pcm=${val}
+				;;
+			debug)
+				debug=${val}
+				;;
+			*)
+				echo "unknown variable: ${var}"
+				;;
+		esac
+		
+	done
+
+	echo "-----------------------------------------"
+	echo " Loading module(s) for your misdn-cards:"
+	echo "-----------------------------------------"
+
+	card_index=1
+	port_index=1
+	while [ ! -z ${hfcmulti[${card_index}]} ] || [ ! -z ${other_card[${card_index}]} ];
+	do
+		if [ ! -z ${hfcmulti[${card_index}]} ]; then
+	# MODPROBE COMMAND FOR hfcmulti CARD
+			hfcmulti_type="type="
+			hfcmulti_prot="protocol="
+			hfcmulti_layer="layermask="
+			while [ ! -z ${hfcmulti[${card_index}]} ];
+			do
+				hfcmulti_type="${hfcmulti_type}$(echo "obase=16;\"0x\";${hfcmulti[${card_index}]}" | bc ),"
+				let "card_index = ${card_index} + 1"
+			done
+			while [ ${hfcports} -gt 0 ];
+			do
+				if [ ! -z ${protocol[${port_index}]} ]; then
+					hfcmulti_prot="${hfcmulti_prot}$(echo "obase=16;\"0x\";${protocol[${port_index}]}" | bc),"
+				else
+					hfcmulti_prot="${hfcmulti_prot}0x2,"
+				fi
+				if [ ! -z ${layermask[${port_index}]} ]; then
+					hfcmulti_layer="${hfcmulti_layer}${layermask[${port_index}]},"
+				else
+					hfcmulti_layer="${hfcmulti_layer}0xf,"
+				fi
+				let "port_index = ${port_index} + 1"
+				let "hfcports = ${hfcports} - 1"
+			done
+			hfcmulti_type="$(echo ${hfcmulti_type} | sed -e 's/^\(.*\),$/\1/')"
+			hfcmulti_prot="$(echo ${hfcmulti_prot} | sed -e 's/^\(.*\),$/\1/')"
+			hfcmulti_layer="$(echo ${hfcmulti_layer} | sed -e 's/^\(.*\),$/\1/')"
+			hfcmulti_cmd="modprobe hfcmulti ${hfcmulti_type} ${hfcmulti_prot} ${hfcmulti_layer}"
+			if [ ! -z ${poll} ]; then
+				hfcmulti_cmd="${hfcmulti_cmd} poll=${poll}"
+			fi
+			if [ ! -z ${pcm} ]; then
+				hfcmulti_cmd="${hfcmulti_cmd} pcm=${pcm}"
+			fi
+			if [ ! -z ${debug} ]; then
+				hfcmulti_cmd="${hfcmulti_cmd} debug=${debug}"
+			fi
+
+			echo ${hfcmulti_cmd}
+			eval ${hfcmulti_cmd}
+		else
+	# MODPROBE COMMAND FOR _NON_ hfcmulti CARD
+			other_cmd="modprobe ${other_card[${card_index}]}"
+			if [ ! -z ${protocol[${port_index}]} ]; then
+				other_prot="protocol=$(echo "obase=16;\"0x\";${protocol[${port_index}]}" | bc),"
+			else
+				other_prot="protocol=0x2,"
+			fi
+			if [ ! -z ${layermask[${port_index}]} ]; then
+				other_layer="layermask=${layermask[${port_index}]},"
+			else
+				other_layer="layermask=0xf,"
+			fi
+
+			let "prev = ${card_index}"
+			let "card_index = ${card_index} + 1"
+			let "port_index = ${port_index} + 1"
+			while [ "${other_card[${card_index}]}" == "${other_card[${prev}]}" ];
+			do
+				if [ ! -z ${protocol[${port_index}]} ]; then
+					other_prot="${other_prot}$(echo "obase=16;\"0x\";${protocol[${port_index}]}" | bc),"
+				else
+					other_prot="${other_prot}0x2,"
+				fi
+				if [ ! -z ${layermask[${port_index}]} ]; then
+					other_layer="${other_layer}${layermask[${port_index}]},"
+				else
+					other_layer="${other_layer}0xf,"
+				fi
+				let "prev = ${card_index}"
+				let "card_index = ${card_index} + 1"
+				let "port_index = ${port_index} + 1"
+			done
+			
+			other_prot="$(echo ${other_prot} | sed -e 's/^\(.*\),$/\1/')"
+			other_layer="$(echo ${other_layer} | sed -e 's/^\(.*\),$/\1/')"
+			other_cmd="${other_cmd} ${other_prot} ${other_layer}"
+			echo "${other_cmd}"
+			eval ${other_cmd}
+		fi
+	done
+}
+
+function unload_card_modules {
+
+	IFS=$'\n'
+
+	for line in $(sed -ne '/^[^#]/p' ${misdn_init_conf});
+	do
+		var=`echo "${line}" | sed -e "s/^\(.*\)=.*/\1/"`
+		val=`echo "${line}" | sed -e "s/^.*=\(.*\)/\1/"`
+		
+		case "${var}" in
+			card)
+				nr=`echo "${val}" | sed -e "s/^\([0-9]*\),.*/\1/"`
+				mod=`echo "${val}" | sed -e "s/^[^,]*,\([^,]*\).*/\1/"`
+				case "${mod}" in
+					0x*)
+						modulelist[${nr}]=hfcmulti
+						;;
+					*)
+						modulelist[${nr}]=${mod}
+						;;
+				esac
+				;;
+		esac
+		
+	done
+
+	echo "-------------------------------------------"
+	echo " Unloading module(s) for your misdn-cards:"
+	echo "-------------------------------------------"
+
+	rmmod_cmd="${RMMOD} ${modulelist[1]}"
+	echo "${rmmod_cmd}"
+	eval ${rmmod_cmd}
+	
+	index=2
+	prev=1
+	while [ ! -z ${modulelist[${index}]} ];
+	do
+		if [ ${modulelist[${index}]} != ${modulelist[${prev}]} ]; then
+			rmmod_cmd="${RMMOD} ${modulelist[${index}]}"
+			echo "${rmmod_cmd}"
+			eval ${rmmod_cmd}
+		fi
+		let "prev = ${index}"
+		let "index = ${index} + 1"
+	done
+}
+
+function create_misdn_init_conf {
+	
+	cardcount=1
+	cardconf=""
+	IFS=$'\n'
+	NL="
+"
+
+	function die {
+		echo "[!!] ${1}"
+		exit 1
+	}
+	
+	function addcard {
+		cardline="${cardline}card=${cardcount},${1}${NL}"
+		let "cardcount = ${cardcount} + 1"
+	}
+
+	function addport {
+		let "portcount = ${portcount} + ${1}"
+	}
+
+	portcount=0
+
+	for line in $(${LSPCI} -n -d 1397:30b1); do
+		addcard "0x1"
+		addport 1
+	done
+	for line in $(${LSPCI} -n -d 1397:08b4); do
+		addcard "0x4"
+		addport 4
+	done
+	for line in $(${LSPCI} -n -d 1397:16b8); do
+		addcard "0x8"
+		addport 8
+	done
+	for line in $(${LSPCI} -n | grep "1397:\(2bd\(0\|6\|7\|8\|9\|a\|b\|c\)\|b100\)\|1043:0675\|0871:ffa\(1\|2\)\|1051:0100\|15b0:2bd0\|114f:007\(0\|1\|2\|3\)\|13d1:2bd1\|182d:3069"); do
+		addcard "hfcpci"
+		addport 1
+	done
+	for line in $(${LSPCI} -n -d 1244:0xa00); do
+		addcard "avmfritz"
+		addport 1
+	done
+	for line in $(${LSPCI} -n -d 1050:6692); do
+		addcard "w6692pci"
+		addport 1
+	done
+	if [ "${1}" == "scan" ]; then
+		echo "[OK] found the following devices:"
+		echo "${cardline}[ii] run \"/etc/init.d/misdn-init config\" to store this information to ${misdn_init_conf}"
+	else
+		
+		index=1
+		portline="te_ptmp="
+		while [ ${index} -le ${portcount} ]; do
+			portline="${portline}${index},"
+			let "index = ${index} + 1"
+		done
+		portline="$(echo ${portline} | sed -e 's/^\(.*\),$/\1/')"
+
+		misdn_cfg_pt1="#
+# Configuration file for your misdn hardware
+#
+# Usage: /etc/init.d/misdn-init start|stop|restart|config|scan|help
+#
+
+#
+# Card Settings
+#
+# Syntax: card=<number>,<type>[,<option>...]
+#
+#    <number>   count your cards beginning with 1
+#    <type>     either 0x1,0x4 or 0x8 for your hfcmulti hardware,
+#               or the name of your card driver module.
+#    <option>	ulaw       - uLaw (instead of aLaw)
+#               dtmf       - enable DTMF detection on all B-channels
+#               pcm_slave  - set PCM bus into slave mode
+#"
+		misdn_cfg_pt2="#
+# Port settings
+#
+# Syntax: <port_type>=<port_number>[,<port_number>...]
+#
+#    <port_type>    te_ptp   		- TE-Mode, PTP
+#                   te_ptmp  		- TE-Mode, PTMP
+#                   te_capi_ptp  	- TE-Mode (capi), PTP
+#                   te_capi_ptmp 	- TE-Mode (capi), PTMP
+#                   nt_ptp   		- NT-Mode, PTP
+#                   nt_ptmp  		- NT-Mode, PTMP
+#    <port_number>  port that should be considered
+#"
+		misdn_cfg_pt3="#
+# Port Options
+#
+# Syntax: option=<port_number>,<option>[,<option>...]
+#
+#    <option>  master_clock  - use master clock for this S/T interface
+#                              (only once per chip, only for HFC 8/4)
+#              optical       - optical (only HFC-E1)
+#              los           - report LOS (only HFC-E1)
+#              ais           - report AIS (only HFC-E1)
+#              slip          - report SLIP (only HFC-E1)
+#              nocrc4	     - turn off crc4 mode use double frame instead 
+#				(only HFC-E1)
+#
+#option=1,master_clock
+#option=2,ais,nocrc4
+#option=3,optical,los,ais,slip
+
+
+#
+# General Options for your hfcmulti hardware
+#
+# poll=<number>
+#
+#        Only one poll value must be given for all cards.
+#        Give the number of samples for each fifo process.
+#        By default 128 is used. Decrease to reduce delay, increase to
+#        reduce cpu load. If unsure, don't mess with it!!!
+#        Valid is 32, 64, 128, 256.
+#
+# pcm=<number>
+#        
+#        Give the id of the PCM bus. All PCM busses with the same ID
+#        are expected to be connected and have equal slots.
+#        Only one chip of the PCM bus must be master, the others slave.
+#        -1 means no support of PCM bus.
+#
+# debug=<number>
+#
+#        Enable debugging (see hfc_multi.h for debug options).
+#
+poll=128
+#pcm=1
+debug=0"
+
+		if [ -f ${misdn_init_conf} ]; then
+			cp "${misdn_init_conf}" "${misdn_init_conf}.save" || die "could not backup your existing ${misdn_init_conf}!"
+			echo "[OK] ${misdn_init_conf} already present. backing it up to ${misdn_init_conf}.save"
+		fi
+		echo "${misdn_cfg_pt1}${NL}${cardline}${NL}${misdn_cfg_pt2}${NL}${portline}${NL}${NL}${misdn_cfg_pt3}" > ${misdn_init_conf} || die "could not write to /etc/misdn-init.conf!"
+#echo "${misdn_cfg_pt1}${NL}${cardline}${NL}${misdn_cfg_pt2}${NL}${portline}${NL}${NL}${misdn_cfg_pt3}" > testconf || die "could not write to /etc/misdn-init.conf!"
+
+		echo "[OK] ${misdn_init_conf} created. It's now safe to run \"/etc/init.d/misdn-init start\""
+		if [ ${portcount} -gt 1 ]; then
+			echo "[ii] make your ports (1-${portcount}) available in asterisk by editing \"/etc/asterisk/misdn.conf\""
+		elif [ ${portcount} -eq 1 ]; then
+			echo "[ii] make your port (1) available in asterisk by editing \"/etc/asterisk/misdn.conf\""
+		fi
+	fi
+}
+
+function check_cfg_file {
+	if [ ! -f ${misdn_init_conf} ]; then
+		echo "[!!] failed to load: ${misdn_init_conf}"
+		echo "run \"/etc/init.d/misdn-init config\" to scan your devices and generate a basic config file."
+		exit 1
+	fi
+}
+
+# MAIN #############
+
+case "$1" in
+	start|--start)
+
+		remove_preloaded_modules
+
+		check_cfg_file
+	
+		$MODPROBE mISDN_core debug=0
+		$MODPROBE mISDN_l1 debug=0
+		$MODPROBE mISDN_l2 debug=0
+		$MODPROBE l3udss1 debug=0
+		$MODPROBE mISDN_dsp debug=0x0 options=0x0
+		$MODPROBE mISDN_capi
+		
+		load_card_modules
+	
+		sleep 1
+		
+		if [ ! -e /dev/mISDN ]; then
+			$MKNOD /dev/mISDN c 46 0
+			echo "[i] creating device node: /dev/mISDN"
+		fi
+		;;
+
+	stop|--stop)
+		
+		check_cfg_file
+
+		unload_card_modules
+		
+		for mod in $(lsmod | sed -ne '/Module/!{s/\([^ ]*\).*/\1/;p}');
+		do
+			case "${mod}" in
+				mISDN_capi | mISDN_dsp | l3udss1 | mISDN_l2 | mISDN_l1 | mISDN_isac | mISDN_core)
+					eval "${RMMOD} ${mod}"
+					;;
+			esac
+		done
+		;;
+
+	restart|--restart)
+		
+		check_cfg_file
+
+		sh $0 stop
+		sleep 2 # some phones will release tei when layer 1 is down
+		sh $0 start
+		;;
+
+	config|--config)
+
+		create_misdn_init_conf
+
+		;;
+
+	scan|--scan)
+
+		create_misdn_init_conf scan
+
+		;;
+
+	help|--help)
+		echo "Usage: $0 {start|stop|restart|config|scan|help}"
+		exit 0
+		;;
+
+	*)
+		echo "Usage: $0 {start|stop|restart|config|scan|help}"
+		exit 2
+		;;
+
+esac
+
