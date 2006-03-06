@@ -1,4 +1,4 @@
-/* $Id: isar.h,v 1.3 2003/07/27 11:14:19 kkeil Exp $
+/* $Id: isar.h,v 1.4 2006/03/06 12:52:07 keil Exp $
  *
  * isar.h   ISAR (Siemens PSB 7110) specific defines
  *
@@ -230,9 +230,9 @@ typedef struct _isar_hw {
 #define STFAX_ESCAPE	5
 #define STFAX_SILDET	6
 
-extern int ISARVersion(bchannel_t *bch, char *s);
-extern void isar_int_main(bchannel_t *bch);
-extern int init_isar(bchannel_t *bch);
-extern void free_isar(bchannel_t *bch);
-extern int isar_down(mISDNif_t *, struct sk_buff *);
-extern int isar_load_firmware(bchannel_t *bch, u_char *buf, int size);
+extern int ISARVersion(channel_t *bch, char *s);
+extern void isar_int_main(channel_t *bch);
+extern int init_isar(channel_t *bch);
+extern void free_isar(channel_t *bch);
+extern int isar_down(mISDNinstance_t *, struct sk_buff *);
+extern int isar_load_firmware(channel_t *bch, u_char *buf, int size);

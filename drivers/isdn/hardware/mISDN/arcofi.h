@@ -1,4 +1,4 @@
-/* $Id: arcofi.h,v 1.1 2003/06/21 21:39:54 kkeil Exp $
+/* $Id: arcofi.h,v 1.2 2006/03/06 12:52:07 keil Exp $
  *
  * arcofi.h   Ansteuerung ARCOFI 2165
  *
@@ -27,6 +27,6 @@ struct arcofi_msg {
 	u_char			msg[10];
 };
 
-extern int arcofi_fsm(dchannel_t *, int, void *);
-extern void init_arcofi(dchannel_t *);
-extern void clear_arcofi(dchannel_t *);
+extern int arcofi_fsm(channel_t *, int, void *);
+extern void init_arcofi(channel_t *);
+extern void clear_arcofi(channel_t *);

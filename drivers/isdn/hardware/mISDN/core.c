@@ -1,4 +1,4 @@
-/* $Id: core.c,v 1.25 2005/04/07 08:59:41 keil Exp $
+/* $Id: core.c,v 1.26 2006/03/06 12:52:07 keil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -19,17 +19,17 @@
 #include <linux/smp_lock.h>
 #endif
 
-static char		*mISDN_core_revision = "$Revision: 1.25 $";
+static char		*mISDN_core_revision = "$Revision: 1.26 $";
 
 LIST_HEAD(mISDN_objectlist);
-rwlock_t		mISDN_objects_lock = RW_LOCK_UNLOCKED;
+static rwlock_t		mISDN_objects_lock = RW_LOCK_UNLOCKED;
 
 int core_debug;
 
 static u_char		entityarray[MISDN_MAX_ENTITY/8];
 static spinlock_t	entity_lock = SPIN_LOCK_UNLOCKED;
 
-static int debug;
+static uint debug;
 static int obj_id;
 
 #ifdef MODULE
@@ -37,7 +37,8 @@ MODULE_AUTHOR("Karsten Keil");
 #ifdef MODULE_LICENSE
 MODULE_LICENSE("GPL");
 #endif
-MODULE_PARM(debug, "1i");
+module_param (debug, uint, S_IRUGO | S_IWUSR);
+MODULE_PARM_DESC (debug, "mISDN core debug mask");
 #endif
 
 typedef struct _mISDN_thread {
@@ -49,10 +50,10 @@ typedef struct _mISDN_thread {
 	struct sk_buff_head	workq;
 } mISDN_thread_t;
 
-#define	mISDN_TFLAGS_STARTED	1
-#define mISDN_TFLAGS_RMMOD	2
-#define mISDN_TFLAGS_ACTIV	3
-#define mISDN_TFLAGS_TEST	4
+#define	mISDN_TFLAGS_STARTED	0
+#define mISDN_TFLAGS_RMMOD	1
+#define mISDN_TFLAGS_ACTIV	2
+#define mISDN_TFLAGS_TEST	3
 
 static mISDN_thread_t	mISDN_thread;
 
@@ -97,7 +98,7 @@ mISDNd(void *data)
 			break;
 		if (hkt->notify != NULL)
 			up(hkt->notify);
-		interruptible_sleep_on(&hkt->waitq);
+		wait_event_interruptible(hkt->waitq, ((!skb_queue_empty(&hkt->workq)) || (hkt->Flags & 0xfffffffe)));
 		if (test_and_clear_bit(mISDN_TFLAGS_RMMOD, &hkt->Flags))
 			break;
 		while ((skb = skb_dequeue(&hkt->workq))) {
@@ -118,6 +119,7 @@ mISDNd(void *data)
 						err--; /* to free skb */
 					}
 					break;
+#ifdef FIXME
 				case MGR_QUEUEIF:
 					err = hhe->func.iff(hhe->data[0], skb);
 					if (err) {
@@ -125,6 +127,7 @@ mISDNd(void *data)
 							hhe->addr, hhe->prim, err);
 					}
 					break;
+#endif
 				default:
 					int_error();
 					printk(KERN_WARNING "mISDNd: addr(%x) prim(%x) unknown\n",
@@ -219,21 +222,7 @@ find_object_module(int protocol) {
 	return(NULL);
 }
 
-static void
-remove_object(mISDNobject_t *obj) {
-	mISDNstack_t *st, *nst;
-	mISDNlayer_t *layer, *nl;
-	mISDNinstance_t *inst;
-
-	list_for_each_entry_safe(st, nst, &mISDN_stacklist, list) {
-		list_for_each_entry_safe(layer, nl, &st->layerlist, list) {
-			inst = layer->inst;
-			if (inst && inst->obj == obj)
-				inst->obj->own_ctrl(st, MGR_RELEASE | INDICATION, inst);
-		}
-	}
-}
-
+#ifdef FIXME
 static int
 dummy_if(mISDNif_t *hif, struct sk_buff *skb)
 {
@@ -251,6 +240,7 @@ dummy_if(mISDNif_t *hif, struct sk_buff *skb)
 	dev_kfree_skb_any(skb);
 	return(0);
 }
+#endif
 
 mISDNinstance_t *
 get_next_instance(mISDNstack_t *st, mISDN_pid_t *pid)
@@ -335,6 +325,7 @@ sel_channel(mISDNstack_t *st, channel_info_t *ci)
 	return(err);
 }
 
+#ifdef FIXME
 static int
 disconnect_if(mISDNinstance_t *inst, u_int prim, mISDNif_t *hif) {
 	int	err = 0;
@@ -371,6 +362,7 @@ add_if(mISDNinstance_t *inst, u_int prim, mISDNif_t *hif) {
 	inst->obj->own_ctrl(inst, prim, hif);
 	return(0);
 }
+#endif
 
 static char tmpbuf[4096];
 static int
@@ -394,15 +386,18 @@ get_hdevice(mISDNdevice_t **dev, int *typ)
 		return(-EINVAL);
 	if (!typ)
 		return(-EINVAL);
+#ifdef FIXME
 	if (*typ == mISDN_RAW_DEVICE) {
 		*dev = get_free_rawdevice();
 		if (!(*dev))
 			return(-ENODEV);
 		return(0);
 	}
+#endif
 	return(-EINVAL);
 }
 
+#ifdef FIXME
 static int
 mgr_queue(void *data, u_int prim, struct sk_buff *skb)
 {
@@ -414,6 +409,8 @@ mgr_queue(void *data, u_int prim, struct sk_buff *skb)
 	return(0);
 }
 
+#endif
+
 static int central_manager(void *, u_int, void *);
 
 static int
@@ -423,6 +420,7 @@ set_stack_req(mISDNstack_t *st, mISDN_pid_t *pid)
 	mISDN_headext_t	*hhe;
 	mISDN_pid_t	*npid;
 	u_char		*pbuf = NULL;
+	int		err;
 
 	if (!(skb = alloc_skb(sizeof(mISDN_pid_t) + pid->maxplen, GFP_ATOMIC)))
 		return(-ENOMEM);
@@ -431,9 +429,11 @@ set_stack_req(mISDNstack_t *st, mISDN_pid_t *pid)
 	hhe->addr = MGR_FUNCTION;
 	hhe->data[0] = st;
 	npid = (mISDN_pid_t *)skb_put(skb, sizeof(mISDN_pid_t));
-	if (pid->pbuf)
+	if (pid->maxplen)
 		pbuf = skb_put(skb, pid->maxplen);
-	copy_pid(npid, pid, pbuf);
+	err = copy_pid(npid, pid, pbuf);
+	if (err) // FIXME error handling
+		int_errtxt("copy_pid error %d", err);
 	hhe->func.ctrl = central_manager;
 	skb_queue_tail(&mISDN_thread.workq, skb);
 	wake_up_interruptible(&mISDN_thread.waitq);
@@ -506,7 +506,7 @@ new_entity(mISDNinstance_t *inst)
 		printk(KERN_WARNING "mISDN: no more entity available(max %d)\n", MISDN_MAX_ENTITY);
 		return(ret);
 	}
-	ret = inst->obj->own_ctrl(inst, MGR_NEWENTITY | CONFIRM, (void *)entity);
+	ret = inst->obj->own_ctrl(inst, MGR_NEWENTITY | CONFIRM, (void *)((u_long)entity));
 	if (ret)
 		mISDN_delete_entity(entity);
 	return(ret);
@@ -524,7 +524,7 @@ static int central_manager(void *data, u_int prim, void *arg) {
 		return(new_entity(data));
 	    case MGR_DELENTITY | REQUEST:
 	    case MGR_DELENTITY | INDICATION:
-	    	return(mISDN_delete_entity((int)arg));
+	    	return(mISDN_delete_entity((u_long)arg & 0xffffffff));
 	    case MGR_REGLAYER | INDICATION:
 		return(register_layer(st, arg));
 	    case MGR_REGLAYER | REQUEST:
@@ -535,48 +535,62 @@ static int central_manager(void *data, u_int prim, void *arg) {
 		return(-EINVAL);
 	    case MGR_UNREGLAYER | REQUEST:
 		return(unregister_instance(data));
+#ifdef FIXME
 	    case MGR_DISCONNECT | REQUEST:
 	    case MGR_DISCONNECT | INDICATION:
 		return(disconnect_if(data, prim, arg));
+#endif
 	    case MGR_GETDEVICE | REQUEST:
 	    	return(get_hdevice(data, arg));
 	    case MGR_DELDEVICE | REQUEST:
 	    	return(free_device(data));
+#ifdef FIXME
 	    case MGR_QUEUEIF | REQUEST:
 	    	return(mgr_queue(data, MGR_QUEUEIF, arg));
+#endif
 	}
 	if (!data)
 		return(-EINVAL);
 	switch(prim) {
+	    case MGR_ADDLAYER | REQUEST:
+		return(preregister_layer(st, arg));
 	    case MGR_SETSTACK | REQUEST:
 		/* can sleep in case of module reload */
 		return(set_stack_req(st, arg));
 	    case MGR_SETSTACK_NW | REQUEST:
 		return(set_stack(st, arg));
 	    case MGR_CLEARSTACK | REQUEST:
-		return(clear_stack(st));
+		return(clear_stack(st, arg ? 1 : 0));
 	    case MGR_DELSTACK | REQUEST:
 		return(release_stack(st));
 	    case MGR_SELCHANNEL | REQUEST:
 		return(sel_channel(st, arg));
+	    case MGR_STOPSTACK | REQUEST:
+		return(mISDN_start_stop(st, 0));
+	    case MGR_STARTSTACK | REQUEST:
+		return(mISDN_start_stop(st, 1));
+#ifdef FIXME
 	    case MGR_ADDIF | REQUEST:
 		return(add_if(data, prim, arg));
+#endif
 	    case MGR_CTRLREADY | INDICATION:
 	    	return(queue_ctrl_ready(st, arg));
 	    case MGR_ADDSTPARA | REQUEST:
 	    case MGR_CLRSTPARA | REQUEST:
 		return(change_stack_para(st, prim, arg));
+#ifdef FIXME
 	    case MGR_CONNECT | REQUEST:
 		return(mISDN_ConnectIF(data, arg));
+#endif
 	    case MGR_EVALSTACK  | REQUEST:
 	    	return(evaluate_stack_pids(data, arg));
 	    case MGR_GLOBALOPT | REQUEST:
 	    case MGR_LOADFIRM | REQUEST:
 	    	if (st->mgr && st->mgr->obj && st->mgr->obj->own_ctrl)
 	    		return(st->mgr->obj->own_ctrl(st->mgr, prim, arg));
-	    	break;
+		break;
 	    case MGR_DEBUGDATA | REQUEST:
-	    	return(debugout(data, arg));
+		return(debugout(data, arg));
 	    default:
 	    	if (debug)
 			printk(KERN_WARNING "manager prim %x not handled\n", prim);
@@ -587,6 +601,7 @@ static int central_manager(void *data, u_int prim, void *arg) {
 
 int mISDN_register(mISDNobject_t *obj) {
 	u_long	flags;
+	int	retval;
 
 	if (!obj)
 		return(-EINVAL);
@@ -601,7 +616,14 @@ int mISDN_register(mISDNobject_t *obj) {
 			obj->id);
 	if (core_debug & DEBUG_CORE_FUNC)
 		printk(KERN_DEBUG "mISDN_register: obj(%p)\n", obj);
-	return(0);
+	retval = mISDN_register_sysfs_obj(obj);
+	if (retval) {
+		printk(KERN_ERR "mISDN_register class_device_register return(%d)\n", retval);
+		write_lock_irqsave(&mISDN_objects_lock, flags);
+		list_del(&obj->list);
+		write_unlock_irqrestore(&mISDN_objects_lock, flags);
+	}
+	return(retval);
 }
 
 int mISDN_unregister(mISDNobject_t *obj) {
@@ -615,13 +637,14 @@ int mISDN_unregister(mISDNobject_t *obj) {
 	if (obj->DPROTO.protocol[0])
 		release_stacks(obj);
 	else
-		remove_object(obj);
+		cleanup_object(obj);
 	write_lock_irqsave(&mISDN_objects_lock, flags);
 	list_del(&obj->list);
 	write_unlock_irqrestore(&mISDN_objects_lock, flags);
 	if (core_debug & DEBUG_CORE_FUNC)
 		printk(KERN_DEBUG "mISDN_unregister: mISDN_objectlist(%p<-%p->%p)\n",
 			mISDN_objectlist.prev, &mISDN_objectlist, mISDN_objectlist.next);
+	class_device_unregister(&obj->class_dev);
 	return(0);
 }
 
@@ -638,9 +661,14 @@ mISDNInit(void)
 	if (err)
 		return(err);
 #endif
+	err = mISDN_sysfs_init();
+	if (err)
+		goto sysfs_fail;
+
 	err = init_mISDNdev(debug);
 	if (err)
-		return(err);
+		goto dev_fail;
+
 	init_waitqueue_head(&mISDN_thread.waitq);
 	skb_queue_head_init(&mISDN_thread.workq);
 	mISDN_thread.notify = &sem;
@@ -650,27 +678,24 @@ mISDNInit(void)
 	test_and_set_bit(mISDN_TFLAGS_TEST, &mISDN_thread.Flags);
 	wake_up_interruptible(&mISDN_thread.waitq);
 	return(err);
+
+dev_fail:
+	mISDN_sysfs_cleanup();
+sysfs_fail:
+#ifdef MISDN_MEMDEBUG
+	__mid_cleanup();
+#endif
+	return(err);
 }
 
 void mISDN_cleanup(void) {
 	DECLARE_MUTEX_LOCKED(sem);
-	mISDNstack_t *st, *nst;
 
 	free_mISDNdev();
 	if (!list_empty(&mISDN_objectlist)) {
 		printk(KERN_WARNING "mISDNcore mISDN_objects not empty\n");
 	}
-	if (!list_empty(&mISDN_stacklist)) {
-		printk(KERN_WARNING "mISDNcore mISDN_stacklist not empty\n");
-		list_for_each_entry_safe(st, nst, &mISDN_stacklist, list) {
-			printk(KERN_WARNING "mISDNcore st %x still in list\n",
-				st->id);
-			if (list_empty(&st->list)) {
-				printk(KERN_WARNING "mISDNcore st == next\n");
-				break;
-			}
-		}
-	}
+	check_stacklist();
 	if (mISDN_thread.thread) {
 		/* abort mISDNd kernel thread */
 		mISDN_thread.notify = &sem;
@@ -682,6 +707,7 @@ void mISDN_cleanup(void) {
 #ifdef MISDN_MEMDEBUG
 	__mid_cleanup();
 #endif
+	mISDN_sysfs_cleanup();
 	printk(KERN_DEBUG "mISDNcore unloaded\n");
 }
 

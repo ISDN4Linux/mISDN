@@ -1,4 +1,4 @@
-/* $Id: isac.h,v 1.4 2004/01/26 22:21:30 keil Exp $
+/* $Id: isac.h,v 1.5 2006/03/06 12:52:07 keil Exp $
  *
  * isac.h   ISAC specific defines
  *
@@ -128,9 +128,9 @@ typedef struct isac_chip {
 
 /* interface for the isac module */
 
-extern int mISDN_isac_init(dchannel_t *);
-extern void mISDN_isac_free(dchannel_t *);
+extern int mISDN_isac_init(channel_t *);
+extern void mISDN_isac_free(channel_t *);
 
-extern void mISDN_isac_interrupt(dchannel_t *, u_char);
-extern void mISDN_clear_isac(dchannel_t *);
-extern int mISDN_ISAC_l1hw(mISDNif_t *, struct sk_buff *);
+extern void mISDN_isac_interrupt(channel_t *, u_char);
+extern void mISDN_clear_isac(channel_t *);
+extern int mISDN_ISAC_l1hw(mISDNinstance_t *, struct sk_buff *);

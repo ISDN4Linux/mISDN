@@ -1,4 +1,4 @@
-/* $Id: isar.c,v 1.20 2004/02/05 21:21:16 keil Exp $
+/* $Id: isar.c,v 1.21 2006/03/06 12:52:07 keil Exp $
  *
  * isar.c   ISAR (Siemens PSB 7110) specific routines
  *
@@ -9,9 +9,9 @@
  */
 
 #include <linux/delay.h>
+#include <linux/vmalloc.h>
 #include "layer1.h"
-#include "helper.h"
-#include "bchannel.h"
+#include "channel.h"
 #include "isar.h"
 #include "debug.h"
 
@@ -20,24 +20,24 @@
 
 #define MIN(a,b) ((a<b)?a:b)
 
-static char *ISAR_revision = "$Revision: 1.20 $";
+static char *ISAR_revision = "$Revision: 1.21 $";
 
 const u_char faxmodulation_s[] = "3,24,48,72,73,74,96,97,98,121,122,145,146";
 const u_char faxmodulation[] = {3,24,48,72,73,74,96,97,98,121,122,145,146};
 #define FAXMODCNT 13
 
-void isar_setup(bchannel_t *);
-static void isar_pump_cmd(bchannel_t *, int, u_char);
+void isar_setup(channel_t *);
+static void isar_pump_cmd(channel_t *, int, u_char);
 
 static int firmwaresize = 0;
 static u_char *firmware;
 static u_char *fw_p;
 
 static inline int
-waitforHIA(bchannel_t *bch, int timeout)
+waitforHIA(channel_t *bch, int timeout)
 {
 
-	while ((bch->Read_Reg(bch->inst.data, 0, ISAR_HIA) & 1) && timeout) {
+	while ((bch->read_reg(bch->inst.privat, ISAR_HIA) & 1) && timeout) {
 		udelay(1);
 		timeout--;
 	}
@@ -48,7 +48,7 @@ waitforHIA(bchannel_t *bch, int timeout)
 
 
 int
-sendmsg(bchannel_t *bch, u_char his, u_char creg, u_char len,
+sendmsg(channel_t *bch, u_char his, u_char creg, u_char len,
 	u_char *msg)
 {
 	int i;
@@ -59,69 +59,65 @@ sendmsg(bchannel_t *bch, u_char his, u_char creg, u_char len,
 	if (bch->debug & L1_DEB_HSCX)
 		mISDN_debugprint(&bch->inst, "sendmsg(%02x,%02x,%d)", his, creg, len);
 #endif
-	bch->Write_Reg(bch->inst.data, 0, ISAR_CTRL_H, creg);
-	bch->Write_Reg(bch->inst.data, 0, ISAR_CTRL_L, len);
-	bch->Write_Reg(bch->inst.data, 0, ISAR_WADR, 0);
+	bch->write_reg(bch->inst.privat, ISAR_CTRL_H, creg);
+	bch->write_reg(bch->inst.privat, ISAR_CTRL_L, len);
+	bch->write_reg(bch->inst.privat, ISAR_WADR, 0);
 	if (msg && len) {
-		bch->Write_Reg(bch->inst.data, 1, ISAR_MBOX, msg[0]);
-		for (i=1; i<len; i++)
-			bch->Write_Reg(bch->inst.data, 2, ISAR_MBOX, msg[i]);
+		bch->write_fifo(bch->inst.privat, msg, len);
 #if DUMP_MBOXFRAME>1
 		if (bch->debug & L1_DEB_HSCX_FIFO) {
 			char *t;
 			
 			i = len;
 			while (i>0) {
-				t = bch->blog;
+				t = bch->log;
 				t += sprintf(t, "sendmbox cnt %d", len);
 				mISDN_QuickHex(t, &msg[len-i], (i>64) ? 64:i);
-				mISDN_debugprint(&bch->inst, bch->blog);
+				mISDN_debugprint(&bch->inst, bch->log);
 				i -= 64;
 			}
 		}
 #endif
 	}
-	bch->Write_Reg(bch->inst.data, 1, ISAR_HIS, his);
+	bch->write_reg(bch->inst.privat, ISAR_HIS, his);
 	waitforHIA(bch, 10000);
 	return(1);
 }
 
 /* Call only with IRQ disabled !!! */
 inline void
-rcv_mbox(bchannel_t *bch, isar_reg_t *ireg, u_char *msg)
+rcv_mbox(channel_t *bch, isar_reg_t *ireg, u_char *msg)
 {
 	int i;
 
-	bch->Write_Reg(bch->inst.data, 1, ISAR_RADR, 0);
+	bch->write_reg(bch->inst.privat, ISAR_RADR, 0);
 	if (msg && ireg->clsb) {
-		msg[0] = bch->Read_Reg(bch->inst.data, 1, ISAR_MBOX);
-		for (i=1; i < ireg->clsb; i++)
-			 msg[i] = bch->Read_Reg(bch->inst.data, 2, ISAR_MBOX);
+		bch->read_fifo(bch->inst.privat, msg, ireg->clsb);
 #if DUMP_MBOXFRAME>1
 		if (bch->debug & L1_DEB_HSCX_FIFO) {
 			char *t;
 			
 			i = ireg->clsb;
 			while (i>0) {
-				t = bch->blog;
+				t = bch->log;
 				t += sprintf(t, "rcv_mbox cnt %d", ireg->clsb);
 				mISDN_QuickHex(t, &msg[ireg->clsb-i], (i>64) ? 64:i);
-				mISDN_debugprint(&bch->inst, bch->blog);
+				mISDN_debugprint(&bch->inst, bch->log);
 				i -= 64;
 			}
 		}
 #endif
 	}
-	bch->Write_Reg(bch->inst.data, 1, ISAR_IIA, 0);
+	bch->write_reg(bch->inst.privat, ISAR_IIA, 0);
 }
 
 /* Call only with IRQ disabled !!! */
 inline void
-get_irq_infos(bchannel_t *bch, isar_reg_t *ireg)
+get_irq_infos(channel_t *bch, isar_reg_t *ireg)
 {
-	ireg->iis = bch->Read_Reg(bch->inst.data, 1, ISAR_IIS);
-	ireg->cmsb = bch->Read_Reg(bch->inst.data, 1, ISAR_CTRL_H);
-	ireg->clsb = bch->Read_Reg(bch->inst.data, 1, ISAR_CTRL_L);
+	ireg->iis = bch->read_reg(bch->inst.privat, ISAR_IIS);
+	ireg->cmsb = bch->read_reg(bch->inst.privat, ISAR_CTRL_H);
+	ireg->clsb = bch->read_reg(bch->inst.privat, ISAR_CTRL_L);
 #if DUMP_MBOXFRAME
 	if (bch->debug & L1_DEB_HSCX)
 		mISDN_debugprint(&bch->inst, "rcv_mbox(%02x,%02x,%d)", ireg->iis, ireg->cmsb,
@@ -130,14 +126,14 @@ get_irq_infos(bchannel_t *bch, isar_reg_t *ireg)
 }
 
 int
-waitrecmsg(bchannel_t *bch, u_char *len,
+waitrecmsg(channel_t *bch, u_char *len,
 	u_char *msg, int maxdelay)
 {
 	int timeout = 0;
 	isar_hw_t *ih = bch->hw;
 	
 	
-	while((!(bch->Read_Reg(bch->inst.data, 0, ISAR_IRQBIT) & ISAR_IRQSTA)) &&
+	while((!(bch->read_reg(bch->inst.privat, ISAR_IRQBIT) & ISAR_IRQSTA)) &&
 		(timeout++ < maxdelay))
 		udelay(1);
 	if (timeout >= maxdelay) {
@@ -151,7 +147,7 @@ waitrecmsg(bchannel_t *bch, u_char *len,
 }
 
 int
-ISARVersion(bchannel_t *bch, char *s)
+ISARVersion(channel_t *bch, char *s)
 {
 	int ver;
 	u_char msg[] = ISAR_MSG_HWVER;
@@ -160,9 +156,9 @@ ISARVersion(bchannel_t *bch, char *s)
 	isar_hw_t *ih = bch->hw;
 	int debug;
 
-//	bch->cardmsg(bch->inst.data, CARD_RESET,  NULL);
+//	bch->cardmsg(bch->inst.privat, CARD_RESET,  NULL);
 	/* disable ISAR IRQ */
-	bch->Write_Reg(bch->inst.data, 0, ISAR_IRQBIT, 0);
+	bch->write_reg(bch->inst.privat, ISAR_IRQBIT, 0);
 	debug = bch->debug;
 	bch->debug &= ~(L1_DEB_HSCX | L1_DEB_HSCX_FIFO);
 	if (!sendmsg(bch, ISAR_HIS_VNR, 0, 3, msg))
@@ -182,25 +178,26 @@ ISARVersion(bchannel_t *bch, char *s)
 }
 
 int
-isar_load_firmware(bchannel_t *bch, u_char *buf, int size)
+isar_load_firmware(channel_t *bch, u_char *buf, int size)
 {
-	int ret, cnt, debug;
-	u_char len, nom, noc;
-	u_short sadr, left, *sp;
-	u_char *p = buf;
-	u_char *msg, *tmpmsg, *mp, tmp[64];
-	isar_hw_t *ih = bch->hw;
+	int		ret, cnt, debug;
+	u_char		len, nom, noc;
+	u_short		sadr, left, *sp;
+	u_char		*p = buf;
+	u_char		*msg, *tmpmsg, *mp, tmp[64];
+	isar_hw_t	*ih = bch->hw;
+	u_long		flags;
 	
 	struct {u_short sadr;
 		u_short len;
 		u_short d_key;
 	} *blk_head;
 		
-	bch->inst.lock(bch->inst.data, 0);
+	spin_lock_irqsave(bch->inst.hwlock, flags);
 #define	BLK_HEAD_SIZE 6
 	if (1 != (ret = ISARVersion(bch, "Testing"))) {
 		printk(KERN_ERR"isar_load_firmware wrong isar version %d\n", ret);
-		bch->inst.unlock(bch->inst.data);
+		spin_unlock_irqrestore(bch->inst.hwlock, flags);
 		return(1);
 	}
 	debug = bch->debug;
@@ -211,10 +208,10 @@ isar_load_firmware(bchannel_t *bch, u_char *buf, int size)
 	printk(KERN_DEBUG"isar_load_firmware size: %d\n", size);
 	cnt = 0;
 	/* disable ISAR IRQ */
-	bch->Write_Reg(bch->inst.data, 0, ISAR_IRQBIT, 0);
+	bch->write_reg(bch->inst.privat, ISAR_IRQBIT, 0);
 	if (!(msg = kmalloc(256, GFP_ATOMIC))) {
 		printk(KERN_ERR"isar_load_firmware no buffer\n");
-		bch->inst.unlock(bch->inst.data);
+		spin_unlock_irqrestore(bch->inst.hwlock, flags);
 		return (1);
 	}
 	while (cnt < size) {
@@ -320,8 +317,8 @@ isar_load_firmware(bchannel_t *bch, u_char *buf, int size)
 		printk(KERN_DEBUG"isar start dsp success\n");
 	/* NORMAL mode entered */
 	/* Enable IRQs of ISAR */
-	bch->Write_Reg(bch->inst.data, 0, ISAR_IRQBIT, ISAR_IRQSTA);
-	bch->inst.unlock(bch->inst.data);
+	bch->write_reg(bch->inst.privat, ISAR_IRQBIT, ISAR_IRQSTA);
+	spin_unlock_irqrestore(bch->inst.hwlock, flags);
 	cnt = 1000; /* max 1s */
 	while ((!ih->reg->bstat) && cnt) {
 		mdelay(1);
@@ -340,12 +337,12 @@ isar_load_firmware(bchannel_t *bch, u_char *buf, int size)
 	while (cnt--)
 		mdelay(1);
 	ih->reg->iis = 0;
-	bch->inst.lock(bch->inst.data, 0);
+	spin_lock_irqsave(bch->inst.hwlock, flags);
 	if (!sendmsg(bch, ISAR_HIS_DIAG, ISAR_CTRL_STST, 0, NULL)) {
 		printk(KERN_ERR"isar sendmsg self tst failed\n");
 		ret = 1;goto reterror;
 	}
-	bch->inst.unlock(bch->inst.data);
+	spin_unlock_irqrestore(bch->inst.hwlock, flags);
 	cnt = 10000; /* max 100 ms */
 	while ((ih->reg->iis != ISAR_IIS_DIAG) && cnt) {
 		udelay(10);
@@ -364,13 +361,13 @@ isar_load_firmware(bchannel_t *bch, u_char *buf, int size)
 			ih->reg->cmsb, ih->reg->clsb, ih->reg->par[0]);
 		ret = 1;goto reterrflg;
 	}
-	bch->inst.lock(bch->inst.data, 0);
+	spin_lock_irqsave(bch->inst.hwlock, flags);
 	ih->reg->iis = 0;
 	if (!sendmsg(bch, ISAR_HIS_DIAG, ISAR_CTRL_SWVER, 0, NULL)) {
 		printk(KERN_ERR"isar RQST SVN failed\n");
 		ret = 1;goto reterror;
 	}
-	bch->inst.unlock(bch->inst.data);
+	spin_unlock_irqrestore(bch->inst.hwlock, flags);
 	cnt = 30000; /* max 300 ms */
 	while ((ih->reg->iis != ISAR_IIS_DIAG) && cnt) {
 		udelay(10);
@@ -392,40 +389,43 @@ isar_load_firmware(bchannel_t *bch, u_char *buf, int size)
 		}
 	}
 	bch->debug = debug;
-	bch->inst.lock(bch->inst.data, 0);
+	spin_lock_irqsave(bch->inst.hwlock, flags);
 	isar_setup(bch);
-	bch->inst.unlock(bch->inst.data);
+	spin_unlock_irqrestore(bch->inst.hwlock, flags);
 	bch->inst.obj->own_ctrl(&bch->inst, MGR_LOADFIRM | CONFIRM, NULL);
 	ret = 0;
 reterrflg:
-	bch->inst.lock(bch->inst.data, 0);
+	spin_lock_irqsave(bch->inst.hwlock, flags);
 reterror:
 	bch->debug = debug;
 	if (ret)
 		/* disable ISAR IRQ */
-		bch->Write_Reg(bch->inst.data, 0, ISAR_IRQBIT, 0);
-	bch->inst.unlock(bch->inst.data);
+		bch->write_reg(bch->inst.privat, ISAR_IRQBIT, 0);
+	spin_unlock_irqrestore(bch->inst.hwlock, flags);
 	kfree(msg);
 	return(ret);
 }
 
+#ifdef OBSOLETE
 #define B_LL_READY	8
 #define B_LL_NOCARRIER	9
 #define B_LL_CONNECT	10
 #define B_LL_OK		11
 #define B_LL_FCERROR	12
 #define B_TOUCH_TONE	13
+#endif
 
 static inline void
-deliver_status(bchannel_t *bch, int status)
+deliver_status(channel_t *bch, int status)
 {
 	if (bch->debug & L1_DEB_HSCX)
 		mISDN_debugprint(&bch->inst, "HL->LL FAXIND %x", status);
-	if_link(&bch->inst.up, PH_STATUS | INDICATION, status, 0, NULL, 0);
+	mISDN_queue_data(&bch->inst, FLG_MSG_UP, PH_STATUS | INDICATION, status, 0, NULL, 0);
 }
 
+#ifdef OBSOLETE
 static void
-isar_bh(bchannel_t *bch)
+isar_bh(channel_t *bch)
 {
 	int	tt;
 
@@ -448,13 +448,14 @@ isar_bh(bchannel_t *bch)
 		else if (tt > '9')
 			tt += 7;
 		tt |= DTMF_TONE_VAL;
-		if_link(&bch->inst.up, PH_CONTROL | INDICATION,
+		mISDN_queue_data(&bch->inst, FLG_MSG_UP, PH_CONTROL | INDICATION,
 			0, sizeof(int), &tt, 0);
 	}
 }
+#endif
 
 static inline void
-isar_rcv_frame(bchannel_t *bch)
+isar_rcv_frame(channel_t *bch)
 {
 	u_char		*ptr;
 	struct sk_buff	*skb;
@@ -462,36 +463,49 @@ isar_rcv_frame(bchannel_t *bch)
 	
 	if (!ih->reg->clsb) {
 		mISDN_debugprint(&bch->inst, "isar zero len frame");
-		bch->Write_Reg(bch->inst.data, 1, ISAR_IIA, 0);
+		bch->write_reg(bch->inst.privat, ISAR_IIA, 0);
 		return;
 	}
-	switch (bch->protocol) {
+	switch (bch->state) {
 	    case ISDN_PID_NONE:
 		mISDN_debugprint(&bch->inst, "isar protocol 0 spurious IIS_RDATA %x/%x/%x",
 			ih->reg->iis, ih->reg->cmsb, ih->reg->clsb);
 		printk(KERN_WARNING"isar protocol 0 spurious IIS_RDATA %x/%x/%x\n",
 			ih->reg->iis, ih->reg->cmsb, ih->reg->clsb);
-		bch->Write_Reg(bch->inst.data, 1, ISAR_IIA, 0);
+		bch->write_reg(bch->inst.privat, ISAR_IIA, 0);
 		break;
 	    case ISDN_PID_L1_B_64TRANS:
 	    case ISDN_PID_L2_B_TRANSDTMF:
 	    case ISDN_PID_L1_B_MODEM_ASYNC:
-		if ((skb = alloc_stack_skb(ih->reg->clsb, bch->up_headerlen))) {
-			rcv_mbox(bch, ih->reg, (u_char *)skb_put(skb, ih->reg->clsb));
-			skb_queue_tail(&bch->rqueue, skb);
-			bch_sched_event(bch, B_RCVBUFREADY);
-		} else {
-			printk(KERN_WARNING "mISDN: skb out of memory\n");
-			bch->Write_Reg(bch->inst.data, 1, ISAR_IIA, 0);
+	    	if (!bch->rx_skb) {
+	    		bch->rx_skb = alloc_stack_skb(ih->reg->clsb, bch->up_headerlen);
+	    		if (unlikely(!bch->rx_skb)) {
+	    			printk(KERN_WARNING "mISDN: skb out of memory\n");
+	    			bch->write_reg(bch->inst.privat, ISAR_IIA, 0);
+	    			break;
+			}
 		}
+		rcv_mbox(bch, ih->reg, (u_char *)skb_put(bch->rx_skb, ih->reg->clsb));
+		queue_ch_frame(bch, INDICATION, MISDN_ID_ANY, bch->rx_skb);
+		bch->rx_skb = NULL;
 		break;
 	    case ISDN_PID_L1_B_64HDLC:
-		if ((bch->rx_idx + ih->reg->clsb) > MAX_DATA_MEM) {
+	    	if (!bch->rx_skb) {
+	    		bch->rx_skb = alloc_stack_skb(bch->maxlen + 2, bch->up_headerlen);
+	    		if (unlikely(!bch->rx_skb)) {
+	    			printk(KERN_WARNING "mISDN: skb out of memory\n");
+	    			bch->write_reg(bch->inst.privat, ISAR_IIA, 0);
+	    			break;
+			}
+		}
+		if ((bch->rx_skb->len + ih->reg->clsb) > (bch->maxlen + 2)) {
 			if (bch->debug & L1_DEB_WARN)
 				mISDN_debugprint(&bch->inst, "isar_rcv_frame: incoming packet too large");
-			bch->Write_Reg(bch->inst.data, 1, ISAR_IIA, 0);
-			bch->rx_idx = 0;
-		} else if (ih->reg->cmsb & HDLC_ERROR) {
+			bch->write_reg(bch->inst.privat, ISAR_IIA, 0);
+			skb_trim(bch->rx_skb, 0);
+			break;
+		}
+		if (ih->reg->cmsb & HDLC_ERROR) {
 			if (bch->debug & L1_DEB_WARN)
 				mISDN_debugprint(&bch->inst, "isar frame error %x len %d",
 					ih->reg->cmsb, ih->reg->clsb);
@@ -501,131 +515,160 @@ isar_rcv_frame(bchannel_t *bch)
 			if (ih->reg->cmsb & HDLC_ERR_CER)
 				bch->err_crc++;
 #endif
-			bch->rx_idx = 0;
-			bch->Write_Reg(bch->inst.data, 1, ISAR_IIA, 0);
-		} else {
-			if (ih->reg->cmsb & HDLC_FSD)
-				bch->rx_idx = 0;
-			ptr = bch->rx_buf + bch->rx_idx;
-			bch->rx_idx += ih->reg->clsb;
-			rcv_mbox(bch, ih->reg, ptr);
-			if (ih->reg->cmsb & HDLC_FED) {
-				if (bch->rx_idx < 3) { /* last 2 bytes are the FCS */
-					if (bch->debug & L1_DEB_WARN)
-						mISDN_debugprint(&bch->inst, "isar frame to short %d",
-							bch->rx_idx);
-				} else if (!(skb = alloc_stack_skb(bch->rx_idx-2, bch->up_headerlen))) {
-					printk(KERN_WARNING "ISAR: receive out of memory\n");
-				} else {
-					memcpy(skb_put(skb, bch->rx_idx-2),
-						bch->rx_buf, bch->rx_idx-2);
-					skb_queue_tail(&bch->rqueue, skb);
-					bch_sched_event(bch, B_RCVBUFREADY);
-				}
-				bch->rx_idx = 0;
+			skb_trim(bch->rx_skb, 0);
+			bch->write_reg(bch->inst.privat, ISAR_IIA, 0);
+			break;
+		}
+		if (ih->reg->cmsb & HDLC_FSD)
+			skb_trim(bch->rx_skb, 0);
+		ptr = skb_put(bch->rx_skb, ih->reg->clsb);
+		rcv_mbox(bch, ih->reg, ptr);
+		if (ih->reg->cmsb & HDLC_FED) {
+			if (bch->rx_skb->len < 3) { /* last 2 bytes are the FCS */
+				if (bch->debug & L1_DEB_WARN)
+					mISDN_debugprint(&bch->inst, "isar frame to short %d",
+						bch->rx_skb->len);
+				skb_trim(bch->rx_skb, 0);
+				break;
 			}
+			skb_trim(bch->rx_skb, bch->rx_skb->len - 2);
+			if (bch->rx_skb->len < MISDN_COPY_SIZE) {
+				skb = alloc_stack_skb(bch->rx_skb->len, bch->up_headerlen);
+				if (skb) {
+					memcpy(skb_put(skb, bch->rx_skb->len),
+						bch->rx_skb->data, bch->rx_skb->len);
+					skb_trim(bch->rx_skb, 0);
+				} else {
+					skb = bch->rx_skb;
+					bch->rx_skb = NULL;
+				}
+			} else {
+				skb = bch->rx_skb;
+				bch->rx_skb = NULL;
+			}
+			queue_ch_frame(bch, INDICATION, MISDN_ID_ANY, skb);
 		}
 		break;
 	case ISDN_PID_L1_B_T30FAX:
 		if (ih->state != STFAX_ACTIV) {
 			if (bch->debug & L1_DEB_WARN)
 				mISDN_debugprint(&bch->inst, "isar_rcv_frame: not ACTIV");
-			bch->Write_Reg(bch->inst.data, 1, ISAR_IIA, 0);
-			bch->rx_idx = 0;
+			bch->write_reg(bch->inst.privat, ISAR_IIA, 0);
+			if (bch->rx_skb)
+				skb_trim(bch->rx_skb, 0);
 			break;
 		}
 		if (ih->cmd == PCTRL_CMD_FRM) {
-			rcv_mbox(bch, ih->reg, bch->rx_buf);
-			bch->rx_idx = ih->reg->clsb;
-			if (bch->debug & L1_DEB_HSCX)
-				mISDN_debugprint(&bch->inst, "isar_rcv_frame: %d", bch->rx_idx);
-			if ((skb = alloc_stack_skb(bch->rx_idx, bch->up_headerlen))) {
-				memcpy(skb_put(skb, bch->rx_idx), bch->rx_buf, bch->rx_idx);
-				if (ih->reg->cmsb & SART_NMD) { /* ABORT */
-					if (bch->debug & L1_DEB_WARN)
-						mISDN_debugprint(&bch->inst, "isar_rcv_frame: no more data");
-					bch->Write_Reg(bch->inst.data, 1, ISAR_IIA, 0);
-					bch->rx_idx = 0;
-					sendmsg(bch, SET_DPS(ih->dpath) |
-						ISAR_HIS_PUMPCTRL, PCTRL_CMD_ESC,
-						0, NULL);
-					ih->state = STFAX_ESCAPE;
-//					set_skb_flag(skb, DF_NOMOREDATA);
+		    	if (!bch->rx_skb) {
+		    		bch->rx_skb = alloc_stack_skb(ih->reg->clsb, bch->up_headerlen);
+	    			if (unlikely(!bch->rx_skb)) {
+	    				printk(KERN_WARNING "mISDN: skb out of memory\n");
+		    			bch->write_reg(bch->inst.privat, ISAR_IIA, 0);
+	    				break;
 				}
-				skb_queue_tail(&bch->rqueue, skb);
-				bch_sched_event(bch, B_RCVBUFREADY);
-				if (ih->reg->cmsb & SART_NMD)
-					bch_sched_event(bch, B_LL_NOCARRIER);
-			} else {
-				printk(KERN_WARNING "mISDN: skb out of memory\n");
-				bch->Write_Reg(bch->inst.data, 1, ISAR_IIA, 0);
 			}
+			rcv_mbox(bch, ih->reg, skb_put(bch->rx_skb, ih->reg->clsb));
+			if (bch->debug & L1_DEB_HSCX)
+				mISDN_debugprint(&bch->inst, "isar_rcv_frame: %d",
+					bch->rx_skb->len);
+			if (ih->reg->cmsb & SART_NMD) { /* ABORT */
+				if (bch->debug & L1_DEB_WARN)
+					mISDN_debugprint(&bch->inst, "isar_rcv_frame: no more data");
+				bch->write_reg(bch->inst.privat, ISAR_IIA, 0);
+				sendmsg(bch, SET_DPS(ih->dpath) |
+					ISAR_HIS_PUMPCTRL, PCTRL_CMD_ESC,
+					0, NULL);
+				ih->state = STFAX_ESCAPE;
+//				set_skb_flag(skb, DF_NOMOREDATA);
+			}
+			queue_ch_frame(bch, INDICATION, MISDN_ID_ANY, bch->rx_skb);
+			bch->rx_skb = NULL;
+			if (ih->reg->cmsb & SART_NMD)
+				deliver_status(bch, HW_MOD_NOCARR);
 			break;
 		}
 		if (ih->cmd != PCTRL_CMD_FRH) {
 			if (bch->debug & L1_DEB_WARN)
 				mISDN_debugprint(&bch->inst, "isar_rcv_frame: unknown fax mode %x",
 					ih->cmd);
-			bch->Write_Reg(bch->inst.data, 1, ISAR_IIA, 0);
-			bch->rx_idx = 0;
+			bch->write_reg(bch->inst.privat, ISAR_IIA, 0);
+			if (bch->rx_skb)
+				skb_trim(bch->rx_skb, 0);
 			break;
 		}
 		/* PCTRL_CMD_FRH */
-		if ((bch->rx_idx + ih->reg->clsb) > MAX_DATA_MEM) {
+	    	if (!bch->rx_skb) {
+	    		bch->rx_skb = alloc_stack_skb(bch->maxlen + 2, bch->up_headerlen);
+	    		if (unlikely(!bch->rx_skb)) {
+	    			printk(KERN_WARNING "mISDN: skb out of memory\n");
+	    			bch->write_reg(bch->inst.privat, ISAR_IIA, 0);
+	    			break;
+			}
+		}
+		if ((bch->rx_skb->len + ih->reg->clsb) > (bch->maxlen + 2)) {
 			if (bch->debug & L1_DEB_WARN)
 				mISDN_debugprint(&bch->inst, "isar_rcv_frame: incoming packet too large");
-			bch->Write_Reg(bch->inst.data, 1, ISAR_IIA, 0);
-			bch->rx_idx = 0;
-		} else if (ih->reg->cmsb & HDLC_ERROR) {
+			bch->write_reg(bch->inst.privat, ISAR_IIA, 0);
+			skb_trim(bch->rx_skb, 0);
+			break;
+		}  else if (ih->reg->cmsb & HDLC_ERROR) {
 			if (bch->debug & L1_DEB_WARN)
 				mISDN_debugprint(&bch->inst, "isar frame error %x len %d",
 					ih->reg->cmsb, ih->reg->clsb);
-			bch->rx_idx = 0;
-			bch->Write_Reg(bch->inst.data, 1, ISAR_IIA, 0);
-		} else {
-			if (ih->reg->cmsb & HDLC_FSD)
-				bch->rx_idx = 0;
-			ptr = bch->rx_buf + bch->rx_idx;
-			bch->rx_idx += ih->reg->clsb;
-			rcv_mbox(bch, ih->reg, ptr);
-			if (ih->reg->cmsb & HDLC_FED) {
-				if (bch->rx_idx < 3) { /* last 2 bytes are the FCS */
-					if (bch->debug & L1_DEB_WARN)
-						mISDN_debugprint(&bch->inst, "isar frame to short %d",
-							bch->rx_idx);
-				} else if (!(skb = alloc_stack_skb(bch->rx_idx, bch->up_headerlen))) {
-					printk(KERN_WARNING "ISAR: receive out of memory\n");
-				} else {
-					memcpy(skb_put(skb, bch->rx_idx-2), bch->rx_buf, bch->rx_idx-2);
-//					if (ih->reg->cmsb & SART_NMD)
-						 /* ABORT */
-//						set_skb_flag(skb, DF_NOMOREDATA);
-					skb_queue_tail(&bch->rqueue, skb);
-					bch_sched_event(bch, B_RCVBUFREADY);
-				}
-				bch->rx_idx = 0;
+			skb_trim(bch->rx_skb, 0);
+			bch->write_reg(bch->inst.privat, ISAR_IIA, 0);
+			break;
+		}
+		if (ih->reg->cmsb & HDLC_FSD)
+			skb_trim(bch->rx_skb, 0);
+		ptr = skb_put(bch->rx_skb, ih->reg->clsb);
+		rcv_mbox(bch, ih->reg, ptr);
+		if (ih->reg->cmsb & HDLC_FED) {
+			if (bch->rx_skb->len < 3) { /* last 2 bytes are the FCS */
+				if (bch->debug & L1_DEB_WARN)
+					mISDN_debugprint(&bch->inst, "isar frame to short %d",
+						bch->rx_skb->len);
+				skb_trim(bch->rx_skb, 0);
+				break;
 			}
+			skb_trim(bch->rx_skb, bch->rx_skb->len - 2);
+			if (bch->rx_skb->len < MISDN_COPY_SIZE) {
+				skb = alloc_stack_skb(bch->rx_skb->len, bch->up_headerlen);
+				if (skb) {
+					memcpy(skb_put(skb, bch->rx_skb->len),
+						bch->rx_skb->data, bch->rx_skb->len);
+					skb_trim(bch->rx_skb, 0);
+				} else {
+					skb = bch->rx_skb;
+					bch->rx_skb = NULL;
+				}
+			} else {
+				skb = bch->rx_skb;
+				bch->rx_skb = NULL;
+			}
+			queue_ch_frame(bch, INDICATION, MISDN_ID_ANY, skb);
 		}
 		if (ih->reg->cmsb & SART_NMD) { /* ABORT */
 			if (bch->debug & L1_DEB_WARN)
 				mISDN_debugprint(&bch->inst, "isar_rcv_frame: no more data");
-			bch->Write_Reg(bch->inst.data, 1, ISAR_IIA, 0);
-			bch->rx_idx = 0;
-			sendmsg(bch, SET_DPS(ih->dpath) |
-				ISAR_HIS_PUMPCTRL, PCTRL_CMD_ESC, 0, NULL);
+			bch->write_reg(bch->inst.privat, ISAR_IIA, 0);
+			if (bch->rx_skb)
+				skb_trim(bch->rx_skb, 0);
+			sendmsg(bch, SET_DPS(ih->dpath) | ISAR_HIS_PUMPCTRL,
+				PCTRL_CMD_ESC, 0, NULL);
 			ih->state = STFAX_ESCAPE;
-			bch_sched_event(bch, B_LL_NOCARRIER);
+			deliver_status(bch, HW_MOD_NOCARR);
 		}
 		break;
 	default:
-		printk(KERN_ERR"isar_rcv_frame protocol (%x)error\n", bch->protocol);
-		bch->Write_Reg(bch->inst.data, 1, ISAR_IIA, 0);
+		printk(KERN_ERR"isar_rcv_frame protocol (%x)error\n", bch->state);
+		bch->write_reg(bch->inst.privat, ISAR_IIA, 0);
 		break;
 	}
 }
 
 void
-isar_fill_fifo(bchannel_t *bch)
+isar_fill_fifo(channel_t *bch)
 {
 	isar_hw_t	*ih = bch->hw;
 	int count;
@@ -634,7 +677,9 @@ isar_fill_fifo(bchannel_t *bch)
 
 	if ((bch->debug & L1_DEB_HSCX) && !(bch->debug & L1_DEB_HSCX_FIFO))
 		mISDN_debugprint(&bch->inst, "%s", __FUNCTION__);
-	count = bch->tx_len - bch->tx_idx;
+	if (!bch->tx_skb)
+		return;
+	count = bch->tx_skb->len - bch->tx_idx;
 	if (count <= 0)
 		return;
 	if (!(ih->reg->bstat &
@@ -646,27 +691,27 @@ isar_fill_fifo(bchannel_t *bch)
 	} else {
 		msb = HDLC_FED;
 	}
-	ptr = bch->tx_buf + bch->tx_idx;
+	ptr = bch->tx_skb->data + bch->tx_idx;
 	if (!bch->tx_idx) {
 		if (bch->debug & L1_DEB_HSCX)
 			mISDN_debugprint(&bch->inst, "frame start");
-		if ((bch->protocol == ISDN_PID_L1_B_T30FAX) &&
+		if ((bch->state == ISDN_PID_L1_B_T30FAX) &&
 			(ih->cmd == PCTRL_CMD_FTH)) {
 			if (count > 1) {
 				if ((ptr[0]== 0xff) && (ptr[1] == 0x13)) {
 					/* last frame */
-					test_and_set_bit(BC_FLG_LASTDATA, &bch->Flag);
+					test_and_set_bit(FLG_LASTDATA, &bch->Flags);
 					if (bch->debug & L1_DEB_HSCX)
 						mISDN_debugprint(&bch->inst, "set LASTDATA");
 					if (msb == HDLC_FED)
-						test_and_set_bit(BC_FLG_DLEETX, &bch->Flag);
+						test_and_set_bit(FLG_DLEETX, &bch->Flags);
 				}
 			}
 		}
 		msb |= HDLC_FST;
 	}
 	bch->tx_idx += count;
-	switch (bch->protocol) {
+	switch (bch->state) {
 		case ISDN_PID_NONE:
 			printk(KERN_ERR "%s: wrong protocol 0\n", __FUNCTION__);
 			break;
@@ -700,15 +745,15 @@ isar_fill_fifo(bchannel_t *bch)
 		default:
 			if (bch->debug)
 				mISDN_debugprint(&bch->inst, "%s: protocol(%x) error",
-					__FUNCTION__, bch->protocol);
+					__FUNCTION__, bch->state);
 			printk(KERN_ERR "%s: protocol(%x) error\n",
-				__FUNCTION__, bch->protocol);
+				__FUNCTION__, bch->state);
 			break;
 	}
 }
 
 inline
-bchannel_t *sel_bch_isar(bchannel_t *bch, u_char dpath)
+channel_t *sel_bch_isar(channel_t *bch, u_char dpath)
 {
 
 	if ((!dpath) || (dpath == 3))
@@ -722,74 +767,78 @@ bchannel_t *sel_bch_isar(bchannel_t *bch, u_char dpath)
 }
 
 inline void
-send_frames(bchannel_t *bch)
+send_frames(channel_t *bch)
 {
 	isar_hw_t	*ih = bch->hw;
 
-	if (bch->tx_len - bch->tx_idx) {
+	if (bch->tx_skb && (bch->tx_skb->len > bch->tx_idx)) {
 		isar_fill_fifo(bch);
 	} else {
-		bch->tx_idx = 0;
-		if (bch->protocol == ISDN_PID_L1_B_T30FAX) {
+		if (bch->state == ISDN_PID_L1_B_T30FAX) {
 			if (ih->cmd == PCTRL_CMD_FTH) {
-				if (test_bit(BC_FLG_LASTDATA, &bch->Flag)) {
+				if (test_bit(FLG_LASTDATA, &bch->Flags)) {
 					printk(KERN_WARNING "set NMD_DATA\n");
-					test_and_set_bit(BC_FLG_NMD_DATA, &bch->Flag);
+					test_and_set_bit(FLG_NMD_DATA, &bch->Flags);
 				}
 			} else if (ih->cmd == PCTRL_CMD_FTM) {
-				if (test_bit(BC_FLG_DLEETX, &bch->Flag)) {
-					test_and_set_bit(BC_FLG_LASTDATA, &bch->Flag);
-					test_and_set_bit(BC_FLG_NMD_DATA, &bch->Flag);
+				if (test_bit(FLG_DLEETX, &bch->Flags)) {
+					test_and_set_bit(FLG_LASTDATA, &bch->Flags);
+					test_and_set_bit(FLG_NMD_DATA, &bch->Flags);
 				}
 			}
 		}
-		if (test_and_clear_bit(BC_FLG_TX_NEXT, &bch->Flag)) {
-			if (bch->next_skb) {
-				bch->tx_len = bch->next_skb->len;
-				memcpy(bch->tx_buf,
-					bch->next_skb->data, bch->tx_len);
+		if (bch->tx_skb)
+			dev_kfree_skb(bch->tx_skb);
+		bch->tx_idx = 0;
+		if (test_bit(FLG_TX_NEXT, &bch->Flags)) {
+			bch->tx_skb = bch->next_skb;
+			if (bch->tx_skb) {
+				mISDN_head_t	*hh = mISDN_HEAD_P(bch->tx_skb);
+
+				bch->next_skb = NULL;
+				test_and_clear_bit(FLG_TX_NEXT, &bch->Flags);
+				queue_ch_frame(bch, CONFIRM, hh->dinfo, NULL);
 				isar_fill_fifo(bch);
-				bch_sched_event(bch, B_XMTBUFREADY);
 			} else {
-				bch->tx_len = 0;
-				printk(KERN_WARNING "isar tx irq TX_NEXT without skb\n");
-				test_and_clear_bit(BC_FLG_TX_BUSY, &bch->Flag);
+				printk(KERN_WARNING "hdlc tx irq TX_NEXT without skb\n");
+				test_and_clear_bit(FLG_TX_NEXT, &bch->Flags);
+				test_and_clear_bit(FLG_TX_BUSY, &bch->Flags);
 			}
 		} else {
-			bch->tx_len = 0;
-			if (test_and_clear_bit(BC_FLG_DLEETX, &bch->Flag)) {
-				if (test_and_clear_bit(BC_FLG_LASTDATA, &bch->Flag)) {
-					if (test_and_clear_bit(BC_FLG_NMD_DATA, &bch->Flag)) {
+			bch->tx_skb = NULL;
+			if (test_and_clear_bit(FLG_DLEETX, &bch->Flags)) {
+				if (test_and_clear_bit(FLG_LASTDATA, &bch->Flags)) {
+					if (test_and_clear_bit(FLG_NMD_DATA, &bch->Flags)) {
 						u_char dummy = 0;
 						sendmsg(bch, SET_DPS(ih->dpath) |
 							ISAR_HIS_SDATA, 0x01, 1, &dummy);
 					}
-					test_and_set_bit(BC_FLG_LL_OK, &bch->Flag);
+					test_and_set_bit(FLG_LL_OK, &bch->Flags);
 				} else {
-					bch_sched_event(bch, B_LL_CONNECT);
+					deliver_status(bch, HW_MOD_CONNECT);
 				}
 			}
-			test_and_clear_bit(BC_FLG_TX_BUSY, &bch->Flag);
-			bch_sched_event(bch, B_XMTBUFREADY);
+			test_and_clear_bit(FLG_TX_BUSY, &bch->Flags);
+//			bch_sched_event(bch, B_XMTBUFREADY);
 		}
 	}
 }
 
 inline void
-check_send(bchannel_t *bch, u_char rdm)
+check_send(channel_t *bch, u_char rdm)
 {
-	bchannel_t *bc;
+	channel_t *bc;
 	
 	if (rdm & BSTAT_RDM1) {
 		if ((bc = sel_bch_isar(bch, 1))) {
-			if (bc->protocol) {
+			if (test_bit(FLG_ACTIVE, &bc->Flags)) {
 				send_frames(bc);
 			}
 		}
 	}
 	if (rdm & BSTAT_RDM2) {
 		if ((bc = sel_bch_isar(bch, 2))) {
-			if (bc->protocol) {
+			if (test_bit(FLG_ACTIVE, &bc->Flags)) {
 				send_frames(bc);
 			}
 		}
@@ -804,7 +853,7 @@ const char *dmrim[] = {"NO MOD", "NO DEF", "V32/V32b", "V22", "V21",
 			"Bell103", "V23", "Bell202", "V17", "V29", "V27ter"};
 
 static void
-isar_pump_status_rsp(bchannel_t *bch, isar_reg_t *ireg) {
+isar_pump_status_rsp(channel_t *bch, isar_reg_t *ireg) {
 	isar_hw_t	*ih = bch->hw;
 	u_char ril = ireg->par[0];
 	u_char rim;
@@ -852,13 +901,12 @@ isar_pump_status_rsp(bchannel_t *bch, isar_reg_t *ireg) {
 			break;
 	}
 	sprintf(ih->conmsg,"%s %s", dmril[ril], dmrim[rim]);
-	bch->conmsg = ih->conmsg;
 	if (bch->debug & L1_DEB_HSCX)
-		mISDN_debugprint(&bch->inst, "pump strsp %s", bch->conmsg);
+		mISDN_debugprint(&bch->inst, "pump strsp %s %s", ih->conmsg);
 }
 
 static void
-isar_pump_statev_modem(bchannel_t *bch, u_char devt) {
+isar_pump_statev_modem(channel_t *bch, u_char devt) {
 	isar_hw_t	*ih = bch->hw;
 	u_char dps = SET_DPS(ih->dpath);
 
@@ -870,13 +918,13 @@ isar_pump_statev_modem(bchannel_t *bch, u_char devt) {
 		case PSEV_CON_ON:
 			if (bch->debug & L1_DEB_HSCX)
 				mISDN_debugprint(&bch->inst, "pump stev CONNECT");
-			bch_sched_event(bch, B_LL_CONNECT);
+			deliver_status(bch, HW_MOD_CONNECT);
 			break;
 		case PSEV_CON_OFF:
 			if (bch->debug & L1_DEB_HSCX)
 				mISDN_debugprint(&bch->inst, "pump stev NO CONNECT");
 			sendmsg(bch, dps | ISAR_HIS_PSTREQ, 0, 0, NULL);
-			bch_sched_event(bch, B_LL_NOCARRIER);
+			deliver_status(bch, HW_MOD_NOCARR);
 			break;
 		case PSEV_V24_OFF:
 			if (bch->debug & L1_DEB_HSCX)
@@ -928,7 +976,7 @@ isar_pump_statev_modem(bchannel_t *bch, u_char devt) {
 }
 
 static void
-isar_pump_statev_fax(bchannel_t *bch, u_char devt) {
+isar_pump_statev_fax(channel_t *bch, u_char devt) {
 	isar_hw_t	*ih = bch->hw;
 	u_char dps = SET_DPS(ih->dpath);
 	u_char p1;
@@ -942,8 +990,8 @@ isar_pump_statev_fax(bchannel_t *bch, u_char devt) {
 			if (bch->debug & L1_DEB_HSCX)
 				mISDN_debugprint(&bch->inst, "pump stev RSP_READY");
 			ih->state = STFAX_READY;
-			bch_sched_event(bch, B_LL_READY);
-//			if (test_bit(BC_FLG_ORIG, &bch->Flag)) {
+			deliver_status(bch, HW_MOD_READY);
+//			if (test_bit(BC_FLG_ORIG, &bch->Flags)) {
 //				isar_pump_cmd(bch, HW_MOD_FRH, 3);
 //			} else {
 //				isar_pump_cmd(bch, HW_MOD_FTH, 3);
@@ -1007,15 +1055,15 @@ isar_pump_statev_fax(bchannel_t *bch, u_char devt) {
 				if (ih->cmd == PCTRL_CMD_FTH) {
 					int delay = (ih->mod == 3) ? 1000 : 200;
 					/* 1s (200 ms) Flags before data */
-					if (test_and_set_bit(BC_FLG_FTI_RUN, &bch->Flag))
+					if (test_and_set_bit(FLG_FTI_RUN, &bch->Flags))
 						del_timer(&ih->ftimer);
 					ih->ftimer.expires =
 						jiffies + ((delay * HZ)/1000);
-					test_and_set_bit(BC_FLG_LL_CONN,
-						&bch->Flag);
+					test_and_set_bit(FLG_LL_CONN,
+						&bch->Flags);
 					add_timer(&ih->ftimer);
 				} else {
-					bch_sched_event(bch, B_LL_CONNECT);
+					deliver_status(bch, HW_MOD_CONNECT);
 				}
 			} else {
 				if (bch->debug & L1_DEB_WARN)
@@ -1060,17 +1108,17 @@ isar_pump_statev_fax(bchannel_t *bch, u_char devt) {
 						break;
 				}
 			} else if (ih->state == STFAX_ACTIV) {
-				if (test_and_clear_bit(BC_FLG_LL_OK, &bch->Flag)) {
-					bch_sched_event(bch, B_LL_OK);
+				if (test_and_clear_bit(FLG_LL_OK, &bch->Flags)) {
+					deliver_status(bch, HW_MOD_OK);
 				} else if (ih->cmd == PCTRL_CMD_FRM) {
-					bch_sched_event(bch, B_LL_NOCARRIER);
+					deliver_status(bch, HW_MOD_NOCARR);
 				} else {
-					bch_sched_event(bch, B_LL_FCERROR);
+					deliver_status(bch, HW_MOD_FCERROR);
 				}
 				ih->state = STFAX_READY;
 			} else if (ih->state != STFAX_SILDET) { // ignore in STFAX_SILDET
 				ih->state = STFAX_READY;
-				bch_sched_event(bch, B_LL_FCERROR);
+				deliver_status(bch, HW_MOD_FCERROR);
 			}
 			break;
 		case PSEV_RSP_SILDET:
@@ -1107,7 +1155,7 @@ isar_pump_statev_fax(bchannel_t *bch, u_char devt) {
 				mISDN_debugprint(&bch->inst, "pump stev RSP_FCERR");
 			ih->state = STFAX_ESCAPE;
 			sendmsg(bch, dps | ISAR_HIS_PUMPCTRL, PCTRL_CMD_ESC, 0, NULL);
-			bch_sched_event(bch, B_LL_FCERROR);
+			deliver_status(bch, HW_MOD_FCERROR);
 			break;
 		default:
 			break;
@@ -1117,10 +1165,10 @@ isar_pump_statev_fax(bchannel_t *bch, u_char devt) {
 static char debbuf[128];
 
 void
-isar_int_main(bchannel_t *bch)
+isar_int_main(channel_t *bch)
 {
 	isar_hw_t	*ih = bch->hw;
-	bchannel_t *bc;
+	channel_t *bc;
 
 	get_irq_infos(bch, ih->reg);
 	switch (ih->reg->iis & ISAR_IIS_MSCMSD) {
@@ -1130,11 +1178,11 @@ isar_int_main(bchannel_t *bch)
 			} else {
 				mISDN_debugprint(&bch->inst, "isar spurious IIS_RDATA %x/%x/%x",
 					ih->reg->iis, ih->reg->cmsb, ih->reg->clsb);
-				bch->Write_Reg(bch->inst.data, 1, ISAR_IIA, 0);
+				bch->write_reg(bch->inst.privat, ISAR_IIA, 0);
 			}
 			break;
 		case ISAR_IIS_GSTEV:
-			bch->Write_Reg(bch->inst.data, 1, ISAR_IIA, 0);
+			bch->write_reg(bch->inst.privat, ISAR_IIA, 0);
 			ih->reg->bstat |= ih->reg->cmsb;
 			check_send(bch, ih->reg->cmsb);
 			break;
@@ -1150,28 +1198,36 @@ isar_int_main(bchannel_t *bch)
 			if (bch->debug & L1_DEB_WARN)
 				mISDN_debugprint(&bch->inst, "Buffer STEV dpath%d msb(%x)",
 					ih->reg->iis>>6, ih->reg->cmsb);
-			bch->Write_Reg(bch->inst.data, 1, ISAR_IIA, 0);
+			bch->write_reg(bch->inst.privat, ISAR_IIA, 0);
 			break;
 		case ISAR_IIS_PSTEV:
 			if ((bc = sel_bch_isar(bch, ih->reg->iis >> 6))) {
 				rcv_mbox(bc, ih->reg, (u_char *)ih->reg->par);
-				if (bc->protocol == ISDN_PID_L1_B_MODEM_ASYNC) {
+				if (bc->state == ISDN_PID_L1_B_MODEM_ASYNC) {
 					isar_pump_statev_modem(bc, ih->reg->cmsb);
-				} else if (bc->protocol == ISDN_PID_L1_B_T30FAX) {
+				} else if (bc->state == ISDN_PID_L1_B_T30FAX) {
 					isar_pump_statev_fax(bc, ih->reg->cmsb);
-				} else if (bc->protocol == ISDN_PID_L2_B_TRANSDTMF) {
-					ih->conmsg[0] = ih->reg->cmsb;
-					bch->conmsg = ih->conmsg;
-					bch_sched_event(bc, B_TOUCH_TONE);
+				} else if (bc->state == ISDN_PID_L2_B_TRANSDTMF) {
+					int	tt;
+					tt = ih->reg->cmsb | 0x30;
+					if (tt == 0x3e)
+						tt = '*';
+					else if (tt == 0x3f)
+						tt = '#';
+					else if (tt > '9')
+						tt += 7;
+					tt |= DTMF_TONE_VAL;
+					mISDN_queue_data(&bch->inst, FLG_MSG_UP, PH_CONTROL | INDICATION,
+						0, sizeof(int), &tt, 0);
 				} else {
 					if (bch->debug & L1_DEB_WARN)
 						mISDN_debugprint(&bch->inst, "isar IIS_PSTEV pmode %d stat %x",
-							bc->protocol, ih->reg->cmsb);
+							bc->state, ih->reg->cmsb);
 				}
 			} else {
 				mISDN_debugprint(&bch->inst, "isar spurious IIS_PSTEV %x/%x/%x",
 					ih->reg->iis, ih->reg->cmsb, ih->reg->clsb);
-				bch->Write_Reg(bch->inst.data, 1, ISAR_IIA, 0);
+				bch->write_reg(bch->inst.privat, ISAR_IIA, 0);
 			}
 			break;
 		case ISAR_IIS_PSTRSP:
@@ -1181,7 +1237,7 @@ isar_int_main(bchannel_t *bch)
 			} else {
 				mISDN_debugprint(&bch->inst, "isar spurious IIS_PSTRSP %x/%x/%x",
 					ih->reg->iis, ih->reg->cmsb, ih->reg->clsb);
-				bch->Write_Reg(bch->inst.data, 1, ISAR_IIA, 0);
+				bch->write_reg(bch->inst.privat, ISAR_IIA, 0);
 			}
 			break;
 		case ISAR_IIS_DIAG:
@@ -1214,30 +1270,30 @@ isar_int_main(bchannel_t *bch)
 }
 
 static void
-ftimer_handler(bchannel_t *bch) {
+ftimer_handler(channel_t *bch) {
 	if (bch->debug)
 		mISDN_debugprint(&bch->inst, "ftimer flags %04x",
-			bch->Flag);
-	test_and_clear_bit(BC_FLG_FTI_RUN, &bch->Flag);
-	if (test_and_clear_bit(BC_FLG_LL_CONN, &bch->Flag)) {
-		bch_sched_event(bch, B_LL_CONNECT);
+			bch->Flags);
+	test_and_clear_bit(FLG_FTI_RUN, &bch->Flags);
+	if (test_and_clear_bit(FLG_LL_CONN, &bch->Flags)) {
+		deliver_status(bch, HW_MOD_CONNECT);
 	}
 }
 
 static void
-setup_pump(bchannel_t *bch) {
+setup_pump(channel_t *bch) {
 	isar_hw_t	*ih = bch->hw;
 	u_char dps = SET_DPS(ih->dpath);
 	u_char ctrl, param[6];
 
-	switch (bch->protocol) {
+	switch (bch->state) {
 		case ISDN_PID_NONE:
 		case ISDN_PID_L1_B_64TRANS:
 		case ISDN_PID_L1_B_64HDLC:
 			sendmsg(bch, dps | ISAR_HIS_PUMPCFG, PMOD_BYPASS, 0, NULL);
 			break;
 		case ISDN_PID_L2_B_TRANSDTMF:
-			if (test_bit(BC_FLG_DTMFSEND, &bch->Flag)) {
+			if (test_bit(FLG_DTMFSEND, &bch->Flags)) {
 				param[0] = 5; /* TOA 5 db */
 				sendmsg(bch, dps | ISAR_HIS_PUMPCFG, PMOD_DTMF_TRANS, 1, param);
 			} else {
@@ -1246,7 +1302,7 @@ setup_pump(bchannel_t *bch) {
 			}
 		case ISDN_PID_L1_B_MODEM_ASYNC:
 			ctrl = PMOD_DATAMODEM;
-			if (test_bit(BC_FLG_ORIG, &bch->Flag)) {
+			if (test_bit(FLG_ORIGIN, &bch->Flags)) {
 				ctrl |= PCTRL_ORIG;
 				param[5] = PV32P6_CTN;
 			} else {
@@ -1262,7 +1318,7 @@ setup_pump(bchannel_t *bch) {
 			break;
 		case ISDN_PID_L1_B_T30FAX:
 			ctrl = PMOD_FAX;
-			if (test_bit(BC_FLG_ORIG, &bch->Flag)) {
+			if (test_bit(FLG_ORIGIN, &bch->Flags)) {
 				ctrl |= PCTRL_ORIG;
 				param[1] = PFAXP2_CTN;
 			} else {
@@ -1273,7 +1329,7 @@ setup_pump(bchannel_t *bch) {
 			ih->state = STFAX_NULL;
 			ih->newcmd = 0;
 			ih->newmod = 0;
-			test_and_set_bit(BC_FLG_FTI_RUN, &bch->Flag);
+			test_and_set_bit(FLG_FTI_RUN, &bch->Flags);
 			break;
 	}
 	udelay(1000);
@@ -1282,12 +1338,12 @@ setup_pump(bchannel_t *bch) {
 }
 
 static void
-setup_sart(bchannel_t *bch) {
+setup_sart(channel_t *bch) {
 	isar_hw_t	*ih = bch->hw;
 	u_char dps = SET_DPS(ih->dpath);
 	u_char ctrl, param[2];
 	
-	switch (bch->protocol) {
+	switch (bch->state) {
 		case ISDN_PID_NONE:
 			sendmsg(bch, dps | ISAR_HIS_SARTCFG, SMODE_DISABLE, 0,
 				NULL);
@@ -1317,14 +1373,14 @@ setup_sart(bchannel_t *bch) {
 }
 
 static void
-setup_iom2(bchannel_t *bch) {
+setup_iom2(channel_t *bch) {
 	isar_hw_t	*ih = bch->hw;
 	u_char dps = SET_DPS(ih->dpath);
 	u_char cmsb = IOM_CTRL_ENA, msg[5] = {IOM_P1_TXD,0,0,0,0};
 	
 	if (bch->channel)
 		msg[1] = msg[3] = 1;
-	switch (bch->protocol) {
+	switch (bch->state) {
 		case ISDN_PID_NONE:
 			cmsb = 0;
 			/* dummy slot */
@@ -1337,7 +1393,7 @@ setup_iom2(bchannel_t *bch) {
 		case ISDN_PID_L1_B_T30FAX:
 			cmsb |= IOM_CTRL_RCV;
 		case ISDN_PID_L2_B_TRANSDTMF:
-			if (test_bit(BC_FLG_DTMFSEND, &bch->Flag))
+			if (test_bit(FLG_DTMFSEND, &bch->Flags))
 				cmsb |= IOM_CTRL_RCV;
 			cmsb |= IOM_CTRL_ALAW;
 			break;
@@ -1349,12 +1405,12 @@ setup_iom2(bchannel_t *bch) {
 }
 
 static int
-modeisar(bchannel_t *bch, int channel, u_int bprotocol, u_char *param)
+modeisar(channel_t *bch, int channel, u_int bprotocol, u_char *param)
 {
 	isar_hw_t	*ih = bch->hw;
 
 	/* Here we are selecting the best datapath for requested protocol */
-	if(bch->protocol == ISDN_PID_NONE) { /* New Setup */
+	if(bch->state == ISDN_PID_NONE) { /* New Setup */
 		bch->channel = channel;
 		switch (bprotocol) {
 			case ISDN_PID_NONE: /* init */
@@ -1392,12 +1448,12 @@ modeisar(bchannel_t *bch, int channel, u_int bprotocol, u_char *param)
 	}
 	if (bch->debug & L1_DEB_HSCX)
 		mISDN_debugprint(&bch->inst, "isar dp%d protocol %x->%x ichan %d",
-			ih->dpath, bch->protocol, bprotocol, channel);
-	bch->protocol = bprotocol;
+			ih->dpath, bch->state, bprotocol, channel);
+	bch->state = bprotocol;
 	setup_pump(bch);
 	setup_iom2(bch);
 	setup_sart(bch);
-	if (bch->protocol == ISDN_PID_NONE) {
+	if (bch->state == ISDN_PID_NONE) {
 		/* Clear resources */
 		if (ih->dpath == 1)
 			test_and_clear_bit(ISAR_DP1_USE, &ih->reg->Flags);
@@ -1409,7 +1465,7 @@ modeisar(bchannel_t *bch, int channel, u_int bprotocol, u_char *param)
 }
 
 static void
-isar_pump_cmd(bchannel_t *bch, int cmd, u_char para)
+isar_pump_cmd(channel_t *bch, int cmd, u_char para)
 {
 	isar_hw_t	*ih = bch->hw;
 	u_char		dps = SET_DPS(ih->dpath);
@@ -1433,7 +1489,7 @@ isar_pump_cmd(bchannel_t *bch, int cmd, u_char para)
 			} else if ((ih->state == STFAX_ACTIV) &&
 				(ih->cmd == PCTRL_CMD_FTM) &&
 				(ih->mod == para)) {
-				bch_sched_event(bch, B_LL_CONNECT);
+				deliver_status(bch, HW_MOD_CONNECT);
 			} else {
 				ih->newmod = para;
 				ih->newcmd = PCTRL_CMD_FTM;
@@ -1456,7 +1512,7 @@ isar_pump_cmd(bchannel_t *bch, int cmd, u_char para)
 			} else if ((ih->state == STFAX_ACTIV) &&
 				(ih->cmd == PCTRL_CMD_FTH) &&
 				(ih->mod == para)) {
-				bch_sched_event(bch, B_LL_CONNECT);
+				deliver_status(bch, HW_MOD_CONNECT);
 			} else {
 				ih->newmod = para;
 				ih->newcmd = PCTRL_CMD_FTH;
@@ -1479,7 +1535,7 @@ isar_pump_cmd(bchannel_t *bch, int cmd, u_char para)
 			} else if ((ih->state == STFAX_ACTIV) &&
 				(ih->cmd == PCTRL_CMD_FRM) &&
 				(ih->mod == para)) {
-				bch_sched_event(bch, B_LL_CONNECT);
+				deliver_status(bch, HW_MOD_CONNECT);
 			} else {
 				ih->newmod = para;
 				ih->newcmd = PCTRL_CMD_FRM;
@@ -1502,7 +1558,7 @@ isar_pump_cmd(bchannel_t *bch, int cmd, u_char para)
 			} else if ((ih->state == STFAX_ACTIV) &&
 				(ih->cmd == PCTRL_CMD_FRH) &&
 				(ih->mod == para)) {
-				bch_sched_event(bch, B_LL_CONNECT);
+				deliver_status(bch, HW_MOD_CONNECT);
 			} else {
 				ih->newmod = para;
 				ih->newcmd = PCTRL_CMD_FRH;
@@ -1522,7 +1578,7 @@ isar_pump_cmd(bchannel_t *bch, int cmd, u_char para)
 }
 
 void
-isar_setup(bchannel_t *bch)
+isar_setup(channel_t *bch)
 {
 	u_char msg;
 	int i;
@@ -1535,80 +1591,72 @@ isar_setup(bchannel_t *bch)
 		sendmsg(bch, (i ? ISAR_HIS_DPS2 : ISAR_HIS_DPS1) |
 			ISAR_HIS_P12CFG, 4, 1, &msg);
 		ih->mml = msg;
-		bch[i].protocol = 0;
+		bch[i].state = 0;
 		ih->dpath = i + 1;
 		modeisar(&bch[i], i, 0, NULL);
 	}
 }
 
 int
-isar_down(mISDNif_t *hif, struct sk_buff *skb)
+isar_down(mISDNinstance_t *inst, struct sk_buff *skb)
 {
-	bchannel_t	*bch;
-	int		ret = -EINVAL;
-	mISDN_head_t	*hh;
+	channel_t	*bch = container_of(inst, channel_t, inst);
+	int		ret = 0;
+	mISDN_head_t	*hh = mISDN_HEAD_P(skb);
+	u_long		flags;
 
-	if (!hif || !skb)
-		return(ret);
-	hh = mISDN_HEAD_P(skb);
-	bch = hif->fdata;
-	ret = 0;
 	if ((hh->prim == PH_DATA_REQ) ||
 		(hh->prim == (DL_DATA | REQUEST))) {
-		if (bch->next_skb) {
-			mISDN_debugprint(&bch->inst, " l2l1 next_skb exist this shouldn't happen");
-			return(-EBUSY);
-		}
-		bch->inst.lock(bch->inst.data, 0);
-		if (test_and_set_bit(BC_FLG_TX_BUSY, &bch->Flag)) {
-			test_and_set_bit(BC_FLG_TX_NEXT, &bch->Flag);
-			bch->next_skb = skb;
-			bch->inst.unlock(bch->inst.data);
-			return(0);
-		} else {
-			bch->tx_len = skb->len;
-			memcpy(bch->tx_buf, skb->data, bch->tx_len);
-			bch->tx_idx = 0;
+		spin_lock_irqsave(inst->hwlock, flags);
+		ret = channel_senddata(bch, hh->dinfo, skb);
+		if (ret > 0) { /* direct TX */
 			isar_fill_fifo(bch);
-			bch->inst.unlock(bch->inst.data);
-			skb_trim(skb, 0);
-			return(if_newhead(&bch->inst.up, hh->prim | CONFIRM,
-				hh->dinfo, skb));
-		}
-	} else if ((hh->prim == (PH_ACTIVATE | REQUEST)) ||
-		(hh->prim == (DL_ESTABLISH  | REQUEST))) {
-		if (test_and_set_bit(BC_FLG_ACTIV, &bch->Flag))
 			ret = 0;
-		else {
+		}
+		spin_unlock_irqrestore(inst->hwlock, flags);
+		return(ret);
+	}
+	if ((hh->prim == (PH_ACTIVATE | REQUEST)) ||
+		(hh->prim == (DL_ESTABLISH  | REQUEST))) {
+		if (!test_and_set_bit(FLG_ACTIVE, &bch->Flags)) {
 			u_int	bp = bch->inst.pid.protocol[1];
 
 			if (bch->inst.pid.global == 1)
-				test_and_set_bit(BC_FLG_ORIG, &bch->Flag);
+				test_and_set_bit(FLG_ORIGIN, &bch->Flags);
 			if ((bp == ISDN_PID_L1_B_64TRANS) &&
 				(bch->inst.pid.protocol[2] == ISDN_PID_L2_B_TRANSDTMF))
 				bp = ISDN_PID_L2_B_TRANSDTMF;
-			bch->inst.lock(bch->inst.data, 0);
+			spin_lock_irqsave(inst->hwlock, flags);
 			ret = modeisar(bch, bch->channel, bp, NULL);
-			bch->inst.unlock(bch->inst.data);
+			spin_unlock_irqrestore(inst->hwlock, flags);
 		}
 		skb_trim(skb, 0);
-		return(if_newhead(&bch->inst.up, hh->prim | CONFIRM, ret, skb));
+		return(mISDN_queueup_newhead(inst, 0, hh->prim | CONFIRM, ret, skb));
 	} else if ((hh->prim == (PH_DEACTIVATE | REQUEST)) ||
 		(hh->prim == (DL_RELEASE | REQUEST)) ||
-		(hh->prim == (MGR_DISCONNECT | REQUEST))) {
-		bch->inst.lock(bch->inst.data, 0);
-		if (test_and_clear_bit(BC_FLG_TX_NEXT, &bch->Flag)) {
+		((hh->prim == (PH_CONTROL | REQUEST) && (hh->dinfo == HW_DEACTIVATE)))) {
+		spin_lock_irqsave(inst->hwlock, flags);
+		if (test_and_clear_bit(FLG_TX_NEXT, &bch->Flags)) {
 			dev_kfree_skb(bch->next_skb);
 			bch->next_skb = NULL;
 		}
-		test_and_clear_bit(BC_FLG_TX_BUSY, &bch->Flag);
+		if (bch->tx_skb) {
+			dev_kfree_skb(bch->tx_skb);
+			bch->tx_skb = NULL;
+		}
+		bch->tx_idx = 0;
+		if (bch->rx_skb) {
+			dev_kfree_skb(bch->rx_skb);
+			bch->rx_skb = NULL;
+		}
+		test_and_clear_bit(FLG_TX_BUSY, &bch->Flags);
+		test_and_clear_bit(FLG_L2DATA, &bch->Flags);
 		modeisar(bch, bch->channel, 0, NULL);
-		test_and_clear_bit(BC_FLG_ACTIV, &bch->Flag);
-		bch->inst.unlock(bch->inst.data);
+		test_and_clear_bit(FLG_ACTIVE, &bch->Flags);
+		spin_unlock_irqrestore(inst->hwlock, flags);
 		skb_trim(skb, 0);
-		if (hh->prim != (MGR_DISCONNECT | REQUEST))
-			if (!if_newhead(&bch->inst.up, hh->prim | CONFIRM, 0, skb))
-				return(0);
+		if (hh->prim != (PH_CONTROL | REQUEST))
+			ret = mISDN_queueup_newhead(inst, 0, hh->prim | CONFIRM, 0, skb);
 	} else if (hh->prim == (PH_CONTROL | REQUEST)) {
 		int  *val;
 		int  len;
@@ -1618,7 +1666,7 @@ isar_down(mISDNif_t *hif, struct sk_buff *skb)
 			mISDN_debugprint(&bch->inst, "PH_CONTROL | REQUEST %x/%x",
 					hh->dinfo, *val);
 		if ((hh->dinfo == 0) && ((*val & ~DTMF_TONE_MASK) == DTMF_TONE_VAL)) {
-			if (bch->protocol == ISDN_PID_L2_B_TRANSDTMF) {
+			if (bch->state == ISDN_PID_L2_B_TRANSDTMF) {
 				char tt = *val & DTMF_TONE_MASK;
 				
 				if (tt == '*')
@@ -1628,16 +1676,15 @@ isar_down(mISDNif_t *hif, struct sk_buff *skb)
 				else if (tt > '9')
 					tt -= 7;
 				tt &= 0x1f;
-				bch->inst.lock(bch->inst.data, 0);
+				spin_lock_irqsave(inst->hwlock, flags);
 				isar_pump_cmd(bch, PCTRL_CMD_TDTMF, tt);
-				bch->inst.unlock(bch->inst.data);
+				spin_unlock_irqrestore(inst->hwlock, flags);
 				skb_trim(skb, 0);
-				if (!if_newhead(&bch->inst.up, PH_CONTROL |
-					CONFIRM, 0, skb))
+				if (!mISDN_queueup_newhead(inst, 0, PH_CONTROL | CONFIRM, 0, skb))
 					return(0);
 			} else {
 				printk(KERN_WARNING "isar_down TOUCH_TONE_SEND wrong protocol %x\n",
-					bch->protocol);
+					bch->state);
 				return(-EINVAL);
 			}
 		} else if ((hh->dinfo == HW_MOD_FRM) || (hh->dinfo == HW_MOD_FRH) ||
@@ -1647,7 +1694,7 @@ isar_down(mISDNif_t *hif, struct sk_buff *skb)
 			for (i=0; i<FAXMODCNT; i++)
 				if (faxmodulation[i] == *val)
 					break;
-			if ((FAXMODCNT > i) && test_bit(BC_FLG_INIT, &bch->Flag)) {
+			if ((FAXMODCNT > i) && test_bit(FLG_INITIALIZED, &bch->Flags)) {
 				printk(KERN_WARNING "isar: new mod\n");
 				isar_pump_cmd(bch, hh->dinfo, *val);
 				ret = 0;
@@ -1655,9 +1702,10 @@ isar_down(mISDNif_t *hif, struct sk_buff *skb)
 				int_errtxt("wrong modulation");
 				/* wrong modulation or not activ */
 				// TODO
+				ret = -EINVAL;
 			}
 		} else if (hh->dinfo == HW_MOD_LASTDATA) {
-			test_and_set_bit(BC_FLG_DLEETX, &bch->Flag);
+			test_and_set_bit(FLG_DLEETX, &bch->Flags);
 		} else if (hh->dinfo == HW_FIRM_START) {
 			firmwaresize = *val;
 			if (!(firmware = vmalloc(firmwaresize))) {
@@ -1666,32 +1714,38 @@ isar_down(mISDNif_t *hif, struct sk_buff *skb)
 			}
 			fw_p = firmware;
 			skb_trim(skb, 0);
-			if(!if_newhead(&bch->inst.up, PH_CONTROL | CONFIRM,
-				0, skb))
+			if(!mISDN_queueup_newhead(inst, 0, PH_CONTROL | CONFIRM, 0, skb))
 				return(0);
 		} else if (hh->dinfo == HW_FIRM_DATA) {
 			len = *val++;
+			if (!fw_p)
+				return(-EINVAL);
 			memcpy(fw_p, val, len);
 			fw_p += len;
 			skb_trim(skb, 0);
-			if(!if_newhead(&bch->inst.up, PH_CONTROL | CONFIRM,
-				0, skb))
+			if(!mISDN_queueup_newhead(inst, 0, PH_CONTROL | CONFIRM, 0, skb))
 				return(0);
 		} else if (hh->dinfo == HW_FIRM_END) {
-			if ((fw_p - firmware) == firmwaresize)
+			if (!fw_p)
+				return(-EINVAL);
+			len = (fw_p - firmware) & 0xffffffff;
+			if (len == firmwaresize)
 				ret = isar_load_firmware(bch, firmware, firmwaresize);
 			else {
 				printk(KERN_WARNING "wrong firmware size %d/%d\n",
-					fw_p - firmware, firmwaresize);
+					len, firmwaresize);
 				ret = -EINVAL;
 			}
 			vfree(firmware);
 			fw_p = firmware = NULL;
 			firmwaresize = 0;
 			skb_trim(skb, 0);
-			if(!if_newhead(&bch->inst.up, PH_CONTROL | CONFIRM,
-				0, skb))
+			if(!mISDN_queueup_newhead(inst, 0, PH_CONTROL | CONFIRM, 0, skb))
 				return(0);
+		} else {
+			printk(KERN_WARNING "isar_down unknown (PH_CONTROL | REQUEST) %x\n",
+				hh->dinfo);
+			ret = -EINVAL;
 		}
 	} else {
 		printk(KERN_WARNING "isar_down unknown prim(%x)\n", hh->prim);
@@ -1703,25 +1757,24 @@ isar_down(mISDNif_t *hif, struct sk_buff *skb)
 }
 
 void
-free_isar(bchannel_t *bch)
+free_isar(channel_t *bch)
 {
 	isar_hw_t *ih = bch->hw;
 
 	modeisar(bch, bch->channel, 0, NULL);
 	del_timer(&ih->ftimer);
-	test_and_clear_bit(BC_FLG_INIT, &bch->Flag);
+	test_and_clear_bit(FLG_INITIALIZED, &bch->Flags);
 }
 
 
-int init_isar(bchannel_t *bch)
+int init_isar(channel_t *bch)
 {
 	isar_hw_t *ih = bch->hw;
 
 	printk(KERN_INFO "mISDN: ISAR driver Rev. %s\n", mISDN_getrev(ISAR_revision));
-	bch->hw_bh = isar_bh;
 	ih->ftimer.function = (void *) ftimer_handler;
 	ih->ftimer.data = (long) bch;
 	init_timer(&ih->ftimer);
-	test_and_set_bit(BC_FLG_INIT, &bch->Flag);
+	test_and_set_bit(FLG_INITIALIZED, &bch->Flags);
 	return (0);
 }

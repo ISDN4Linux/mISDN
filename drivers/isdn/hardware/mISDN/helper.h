@@ -1,8 +1,8 @@
-/* $Id: helper.h,v 1.14 2005/03/09 03:09:06 keil Exp $
+/* $Id: helper.h,v 1.15 2006/03/06 12:52:07 keil Exp $
  *
  *   Basic declarations, defines and prototypes
  *
- * This file is (c) under GNU PUBLIC LICENSE
+ * This file is released under the GPLv2
  *
  */
 #ifndef _mISDN_HELPER_H
@@ -43,14 +43,14 @@ discard_queue(struct sk_buff_head *q)
 #ifdef MISDN_MEMDEBUG
 #define alloc_stack_skb(s, r)	__mid_alloc_stack_skb(s, r, __FILE__, __LINE__)
 static inline struct sk_buff *
-__mid_alloc_stack_skb(size_t size, size_t reserve, char *fn, int line)
+__mid_alloc_stack_skb(u_int size, u_int reserve, char *fn, int line)
 {
 	struct sk_buff *skb;
 
 	if (!(skb = __mid_alloc_skb(size + reserve, GFP_ATOMIC, fn, line)))
 #else
 static inline struct sk_buff *
-alloc_stack_skb(size_t size, size_t reserve)
+alloc_stack_skb(u_int size, u_int reserve)
 {
 	struct sk_buff *skb;
 
@@ -141,7 +141,7 @@ extern void	mISDN_RemoveUsedPID(mISDN_pid_t *, mISDN_pid_t *);
  *
  * initialisize the mISDNinstance_t struct <inst>
  */ 
-extern void	mISDN_init_instance(mISDNinstance_t *, mISDNobject_t *, void *);
+extern void	mISDN_init_instance(mISDNinstance_t *, mISDNobject_t *, void *, if_func_t *);
 
 /* returns the member count of a list */
 static inline int
@@ -176,32 +176,48 @@ mISDN_sethead(u_int prim, int dinfo, struct sk_buff *skb)
 	hh->dinfo = dinfo;
 }
 
-/* send the skb through this interface with new header values */
+#define mISDN_queue_up(i, a, s)		mISDN_queue_message(i, a | FLG_MSG_UP, s)
+#define mISDN_queue_down(i, a, s)	mISDN_queue_message(i, a | FLG_MSG_DOWN, s)
+
 static inline int
-if_newhead(mISDNif_t *i, u_int prim, int dinfo, struct sk_buff *skb)
+mISDN_queueup_newhead(mISDNinstance_t *inst, u_int aflag, u_int prim, int dinfo, struct sk_buff *skb)
 {
-	if (!i->func || !skb)
-		return(-ENXIO);
-	mISDN_sethead(prim, dinfo, skb);
-	return(i->func(i, skb));
+	mISDN_head_t *hh = mISDN_HEAD_P(skb);
+
+	hh->prim = prim;
+	hh->dinfo = dinfo;
+	return(mISDN_queue_up(inst, aflag, skb));
 }
+
+static inline int
+mISDN_queuedown_newhead(mISDNinstance_t *inst, u_int aflag, u_int prim, int dinfo, struct sk_buff *skb)
+{
+	mISDN_head_t *hh = mISDN_HEAD_P(skb);
+
+	hh->prim = prim;
+	hh->dinfo = dinfo;
+	return(mISDN_queue_down(inst, aflag, skb));
+}
+
 
 /* allocate a mISDN message SKB with enough headroom and set the header fields
  * the MEMDEBUG version is for debugging memory leaks in the mISDN stack
  */
 #ifdef MISDN_MEMDEBUG
-#define create_link_skb(p, d, l, a, r)	__mid_create_link_skb(p, d, l, a, r, __FILE__, __LINE__)
+#define create_link_skb(p, d, l, dp, r)	__mid_create_link_skb(p, d, l, dp, r, __FILE__, __LINE__)
 static inline struct sk_buff *
-__mid_create_link_skb(u_int prim, int dinfo, int len, void *arg, int reserve, char *fn, int line)
+__mid_create_link_skb(u_int prim, int dinfo, u_int len, void *dp, u_int reserve, char *fn, int line)
 {
 	struct sk_buff	*skb;
+	mISDN_head_t	*hh;
 
 	if (!(skb = __mid_alloc_skb(len + reserve, GFP_ATOMIC, fn, line))) {
 #else
 static inline struct sk_buff *
-create_link_skb(u_int prim, int dinfo, int len, void *arg, int reserve)
+create_link_skb(u_int prim, int dinfo, u_int len, void *dp, u_int reserve)
 {
 	struct sk_buff	*skb;
+	mISDN_head_t	*hh;
 
 	if (!(skb = alloc_skb(len + reserve, GFP_ATOMIC))) {
 #endif
@@ -211,8 +227,11 @@ create_link_skb(u_int prim, int dinfo, int len, void *arg, int reserve)
 	} else
 		skb_reserve(skb, reserve);
 	if (len)
-		memcpy(skb_put(skb, len), arg, len);
-	mISDN_sethead(prim, dinfo, skb);
+		memcpy(skb_put(skb, len), dp, len);
+	hh = mISDN_HEAD_P(skb);
+	hh->prim = prim;
+	hh->dinfo = dinfo;
+	hh->len = len;
 	return(skb);
 }
 
@@ -221,28 +240,25 @@ create_link_skb(u_int prim, int dinfo, int len, void *arg, int reserve)
  * the MEMDEBUG version is for debugging memory leaks in the mISDN stack
  */
 #ifdef MISDN_MEMDEBUG
-#define if_link(i, p, d, l, a, r)	__mid_if_link(i, p, d, l, a, r, __FILE__, __LINE__)
+#define mISDN_queue_data(i, a, p, d, l, dp, r)	__mid_queue_data(i, a, p, d, l, dp, r, __FILE__, __LINE__)
 static inline int
-__mid_if_link(mISDNif_t *i, u_int prim, int dinfo, int len, void *arg, int reserve, char *fn, int line)
+__mid_queue_data(mISDNinstance_t *inst, u_int aflag, u_int prim, int dinfo, u_int len, void *dp, u_int reserve, char *fn, int line)
 {
 	struct sk_buff	*skb;
 	int		err;
 
-	if (!(skb = __mid_create_link_skb(prim, dinfo, len, arg, reserve, fn, line)))
+	if (!(skb = __mid_create_link_skb(prim, dinfo, len, dp, reserve, fn, line)))
 #else
 static inline int
-if_link(mISDNif_t *i, u_int prim, int dinfo, int len, void *arg, int reserve)
+mISDN_queue_data(mISDNinstance_t *inst, u_int aflag, u_int prim, int dinfo, u_int len, void *dp, u_int reserve)
 {
 	struct sk_buff	*skb;
 	int		err;
 
-	if (!(skb = create_link_skb(prim, dinfo, len, arg, reserve)))
+	if (!(skb = create_link_skb(prim, dinfo, len, dp, reserve)))
 #endif
 		return(-ENOMEM);
-	if (!i)
-		err = -ENXIO;
-	else
-		err = i->func(i, skb);
+	err = mISDN_queue_message(inst, aflag, skb);
 	if (err)
 		kfree_skb(skb);
 	return(err);
@@ -261,6 +277,8 @@ extern	struct sk_buff 	*mISDN_alloc_l3msg(int, u_char);
 #endif
 extern	void		mISDN_AddvarIE(struct sk_buff *, u_char *);
 extern	void		mISDN_AddIE(struct sk_buff *, u_char, u_char *);
+extern	ie_info_t	*mISDN_get_last_repeated_ie(Q931_info_t *, ie_info_t *);
+extern	int		mISDN_get_free_ext_ie(Q931_info_t *);
 extern	void		mISDN_LogL3Msg(struct sk_buff *);
 
 /* manager default handler helper macros */

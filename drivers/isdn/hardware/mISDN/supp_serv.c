@@ -1,4 +1,4 @@
-/* $Id: supp_serv.c,v 1.10 2005/06/26 11:35:40 keil Exp $
+/* $Id: supp_serv.c,v 1.11 2006/03/06 12:52:07 keil Exp $
  *
  */
 
@@ -175,6 +175,22 @@ static __inline__ int capiGetFacReqCFInterrogateNumbers(__u8 *p, __u8 *_end, str
 	return(len + 1);
 }
 
+static __inline__ int capiGetFacReqCD(__u8 *p, __u8 *_end, struct FacReqCDeflection *CD)
+{
+	int len = *p++;
+	int ret;
+	__u8 *end = p + len;
+
+	if (end > _end) return -1;
+
+	CAPI_GET(capiGetWord, &CD->PresentationAllowed);
+	CAPI_GET(capiGetStruct, &CD->DeflectedToNumber);
+	CAPI_GET(capiGetStruct, &CD->DeflectedToSubaddress);
+
+	if (p != end) return -1;
+	return len + 1;
+}
+
 
 static __inline__ int capiGetFacReqParm(__u8 *p, struct FacReqParm *facReqParm)
 {
@@ -208,6 +224,9 @@ static __inline__ int capiGetFacReqParm(__u8 *p, struct FacReqParm *facReqParm)
 			break;
 		case 0x000c: // CF Interrogate Numbers
 			CAPI_GET(capiGetFacReqCFInterrogateNumbers, &facReqParm->u.CFInterrogateNumbers);
+			break;
+		case 0x000d: // CD
+			CAPI_GET(capiGetFacReqCD, &facReqParm->u.CDeflection);
 			break;
 		default:
 			return(len + 1);
@@ -255,7 +274,7 @@ FacCFInterrogateParameters(Application_t *appl, FacReqParm_t *facReqParm, FacCon
 
 	p = encodeInvokeComponentHead(sspc->buf);
 	p += encodeInt(p, sspc->invokeId);
-	p += encodeInt(p, 0x0b); // interrogationDiversion
+	p += encodeInt(p, 11); // interrogationDiversion
 	p += encodeInterrogationDiversion(p,  &facReqParm->u.CFInterrogateParameters);
 	encodeInvokeComponentLength(sspc->buf, p);
 	mISDN_AddIE(skb, IE_FACILITY, sspc->buf);
@@ -285,7 +304,7 @@ FacCFInterrogateNumbers(Application_t *appl, FacReqParm_t *facReqParm, FacConfPa
 
 	p = encodeInvokeComponentHead(sspc->buf);
 	p += encodeInt(p, sspc->invokeId);
-	p += encodeInt(p, 0x11); // InterrogateServedUserNumbers
+	p += encodeInt(p, 17); // InterrogateServedUserNumbers
 	encodeInvokeComponentLength(sspc->buf, p);
 	mISDN_AddIE(skb, IE_FACILITY, sspc->buf);
 	SSProcess_L4L3(sspc, CC_FACILITY | REQUEST, skb);
@@ -311,7 +330,7 @@ FacCFActivate(Application_t *appl, FacReqParm_t *facReqParm, FacConfParm_t *facC
 	}
 	p = encodeInvokeComponentHead(sspc->buf);
 	p += encodeInt(p, sspc->invokeId);
-	p += encodeInt(p, 0x07); // activationDiversion
+	p += encodeInt(p, 7); // activationDiversion
 	p += encodeActivationDiversion(p, &facReqParm->u.CFActivate);
 	encodeInvokeComponentLength(sspc->buf, p);
 	mISDN_AddIE(skb, IE_FACILITY, sspc->buf);
@@ -338,7 +357,7 @@ FacCFDeactivate(Application_t *appl, FacReqParm_t *facReqParm, FacConfParm_t *fa
 	}
 	p = encodeInvokeComponentHead(sspc->buf);
 	p += encodeInt(p, sspc->invokeId);
-	p += encodeInt(p, 0x08); // dectivationDiversion
+	p += encodeInt(p, 8); // dectivationDiversion
 	p += encodeDeactivationDiversion(p, &facReqParm->u.CFDeactivate);
 	encodeInvokeComponentLength(sspc->buf, p);
 	mISDN_AddIE(skb, IE_FACILITY, sspc->buf);
@@ -350,6 +369,33 @@ FacCFDeactivate(Application_t *appl, FacReqParm_t *facReqParm, FacConfParm_t *fa
 	return CapiSuccess;
 }
  
+static int
+FacCDeflection(AppPlci_t *aplci, FacReqParm_t *facReqParm, FacConfParm_t *facConfParm)
+{
+	SSProcess_t	*sspc;
+	struct sk_buff	*skb = mISDN_alloc_l3msg(260, MT_FACILITY);
+	__u8		*p;
+
+	if (!skb)
+		return CAPI_MSGOSRESOURCEERR;
+	sspc = SSProcessConstr(aplci->appl, facReqParm->Function, facReqParm->u.CFActivate.Handle);
+	if (!sspc) {
+		kfree_skb(skb);
+		return CAPI_MSGOSRESOURCEERR;
+	}
+	p = encodeInvokeComponentHead(sspc->buf);
+	p += encodeInt(p, sspc->invokeId);
+	p += encodeInt(p, 13); // Calldefection
+	p += encodeInvokeDeflection(p, &facReqParm->u.CDeflection);
+	encodeInvokeComponentLength(sspc->buf, p);
+	mISDN_AddIE(skb, IE_FACILITY, sspc->buf);
+	if (aplci->plci)
+		plciL4L3(aplci->plci, CC_FACILITY | REQUEST, skb);
+	SSProcessAddTimer(sspc, T_ACTIVATE);
+	facConfParm->u.Info.SupplementaryServiceInfo = CapiSuccess;
+	return CapiSuccess;
+}
+
 void
 SupplementaryFacilityReq(Application_t *appl, _cmsg *cmsg)
 {
@@ -372,6 +418,22 @@ SupplementaryFacilityReq(Application_t *appl, _cmsg *cmsg)
 			break;
 		case 0x0001: // Listen
 			Info = FacListen(appl, &facReqParm, &facConfParm);
+			break;
+		case 0x0002: // Hold
+			aplci = getAppPlci4addr(appl, cmsg->adr.adrPLCI);
+			if (!aplci) {
+				Info = CapiIllContrPlciNcci;
+				break;
+			}
+			Info = AppPlciFacHoldReq(aplci, &facReqParm, &facConfParm);
+			break;
+		case 0x0003: // Retrieve
+			aplci = getAppPlci4addr(appl, cmsg->adr.adrPLCI);
+			if (!aplci) {
+				Info = CapiIllContrPlciNcci;
+				break;
+			}
+			Info = AppPlciFacRetrieveReq(aplci, &facReqParm, &facConfParm);
 			break;
 		case 0x0004: // Suspend
 			aplci = getAppPlci4addr(appl, cmsg->adr.adrPLCI);
@@ -408,6 +470,14 @@ SupplementaryFacilityReq(Application_t *appl, _cmsg *cmsg)
 			break;
 		case 0x000c: // CF Interrogate Numbers
 			Info = FacCFInterrogateNumbers(appl, &facReqParm, &facConfParm);
+			break;
+		case 0x000d: // CD
+			aplci = getAppPlci4addr(appl, cmsg->adr.adrPLCI);
+			if (!aplci) {
+				Info = CapiIllContrPlciNcci;
+				break;
+			}
+			Info = FacCDeflection(aplci, &facReqParm, &facConfParm);
 			break;
 		default:
 			Info = CapiSuccess;
@@ -457,6 +527,40 @@ SendSSFacilityInd(Application_t *appl, __u32 addr, __u8 *para)
 	SendCmsg2Application(appl, cmsg);
 }
 
+void
+SendSSNotificationEvent(AppPlci_t *aplci, u16 event)
+{
+	__u8		tmp[4], *p;
+
+	if (!aplci->appl)
+		return;
+	switch (event) {
+		case 0x8000: // user hold
+		case 0x8001: // user retrieve
+			if (!(aplci->appl->NotificationMask & SuppServiceHR))
+				return;
+			break;
+		case 0x8002: // user suspended
+		case 0x8003: // user resumed
+			if (!(aplci->appl->NotificationMask & SuppServiceTP))
+				return;
+			break;
+		case 0x8004: // call is diverting
+		case 0x8005: // diversion activated
+			if (!(aplci->appl->NotificationMask & SuppServiceCF))
+				return;
+			break;
+		default:
+			int_errtxt("Event %x not known\n", event);
+			return;
+	}
+	p = &tmp[1];
+	p += capiEncodeWord(p, event); // Suspend/Resume Notification
+	*p++ = 0; // empty struct
+	tmp[0] = p - &tmp[1];
+	SendSSFacilityInd(aplci->appl, aplci->addr, tmp);
+}
+
 static void
 SendSSFacilityInd2All(Controller_t *contr, __u32 nMask, __u8 *para)
 {
@@ -503,10 +607,10 @@ void SSProcessAddTimer(SSProcess_t *sspc, int msec)
 }
 
 
-#if 0
+#ifdef ASN1_DEBUG
 void printPublicPartyNumber(struct PublicPartyNumber *publicPartyNumber)
 {
-	printk("(%d) %s\n", publicPartyNumber->publicTypeOfNumber, 
+	printk(KERN_DEBUG "(%d) %s\n", publicPartyNumber->publicTypeOfNumber, 
 	       publicPartyNumber->numberDigits);
 }
 
@@ -514,7 +618,7 @@ void printPartyNumber(struct PartyNumber *partyNumber)
 {
 	switch (partyNumber->type) {
 	case 0: 
-		printk("unknown %s\n", partyNumber->p.unknown);
+		printk(KERN_DEBUG "unknown %s\n", partyNumber->p.unknown);
 		break;
 	case 1:
 		printPublicPartyNumber(&partyNumber->p.publicPartyNumber);
@@ -541,63 +645,41 @@ void printAddress(struct Address *address)
 #endif
 
 static void 
-SSProcessFacility(Controller_t *contr, Q931_info_t *qi)
+SSProcessSingleFacility(Controller_t *contr, struct asn1_parm *parm)
 {
 	Application_t		*appl;
-        int			ie_len;
-	struct asn1_parm	parm;
 	SSProcess_t		*sspc;
-	__u8			tmp[256];
-        __u8			*p, *end;
+	__u8			*p, tmp[256];
 
-        if (!qi || !qi->facility) {
-		int_error();
-                return;
-	}
-	p = (__u8 *)qi;
-	p += L3_EXTRA_SIZE + qi->facility;
-	p++;
-        ie_len = *p++;
-        end = p + ie_len;
-//        if (end > skb->data + skb->len) {
-//                int_error();
-//                return;
-//        }
-
-        if (*p++ != 0x91) { // Supplementary Service Applications
-		int_error();
-                return;
-        }
-	ParseComponent(&parm, p, end);
-	switch (parm.comp) {
+	switch (parm->comp) {
 		case invoke:
-#if 0
-			printk("invokeId %d\n", parm.u.inv.invokeId);
-			printk("operationValue %d\n", parm.u.inv.operationValue);
+#ifdef ASN1_DEBUG
+			printk("invokeId %d\n", parm->u.inv.invokeId);
+			printk("operationValue %d\n", parm->u.inv.operationValue);
 #endif
-			switch (parm.u.inv.operationValue) {
+			switch (parm->u.inv.operationValue) {
 				case 0x0009: 
-#if 0
-					printk("procedure %d basicService %d\n", parm.c.inv.o.actNot.procedure,
-						parm.c.inv.o.actNot.basicService);
-					printServedUserNr(&parm.c.inv.o.actNot.servedUserNr);
-					printAddress(&parm.c.inv.o.actNot.address);
+#ifdef ASN1_DEBUG
+					printk("procedure %d basicService %d\n", parm->u.inv.o.actNot.procedure,
+						parm->u.inv.o.actNot.basicService);
+					printServedUserNr(&parm->u.inv.o.actNot.servedUserNr);
+					printAddress(&parm->u.inv.o.actNot.address);
 #endif
 					p = &tmp[1];
 					p += capiEncodeWord(p, 0x8006);
-					p += capiEncodeFacIndCFNotAct(p, &parm.u.inv.o.actNot);
+					p += capiEncodeFacIndCFNotAct(p, &parm->u.inv.o.actNot);
 					tmp[0] = p - &tmp[1];
 					SendSSFacilityInd2All(contr, SuppServiceCF, tmp);
 					break;
 				case 0x000a: 
-#if 0
-					printk("procedure %d basicService %d\n", parm.c.inv.o.deactNot.procedure,
-						parm.c.inv.o.deactNot.basicService);
-					printServedUserNr(&parm.c.inv.o.deactNot.servedUserNr);
+#ifdef ASN1_DEBUG
+					printk("procedure %d basicService %d\n", parm->u.inv.o.deactNot.procedure,
+						parm->u.inv.o.deactNot.basicService);
+					printServedUserNr(&parm->u.inv.o.deactNot.servedUserNr);
 #endif
 					p = &tmp[1];
 					p += capiEncodeWord(p, 0x8007);
-					p += capiEncodeFacIndCFNotDeact(p, &parm.u.inv.o.deactNot);
+					p += capiEncodeFacIndCFNotDeact(p, &parm->u.inv.o.deactNot);
 					tmp[0] = p - &tmp[1];
 					SendSSFacilityInd2All(contr, SuppServiceCF, tmp);
 					break;
@@ -606,7 +688,7 @@ SSProcessFacility(Controller_t *contr, Q931_info_t *qi)
 			}
 			break;
 		case returnResult:
-			sspc = getSSProcess4Id(contr, parm.u.retResult.invokeId);
+			sspc = getSSProcess4Id(contr, parm->u.retResult.invokeId);
 			if (!sspc)
 				return;
 			appl = getApplication4Id(contr, sspc->ApplId);
@@ -623,14 +705,14 @@ SSProcessFacility(Controller_t *contr, Q931_info_t *qi)
 					break;
 				case 0x000b:
 					p += capiEncodeFacIndCFinterParameters(p, 0, sspc->Handle, 
-						&parm.u.retResult.o.resultList);
+						&parm->u.retResult.o.resultList);
 					break;
 				case 0x000c:
 					p += capiEncodeFacIndCFinterNumbers(p, 0, sspc->Handle, 
-						&parm.u.retResult.o.list);
+						&parm->u.retResult.o.list);
 					break;
 				default:
-					int_error();
+					int_errtxt("returnResult for Function %04x", sspc->Function);
 					break;
 			}
 			tmp[0] = p - &tmp[1];
@@ -638,7 +720,7 @@ SSProcessFacility(Controller_t *contr, Q931_info_t *qi)
 			SSProcessDestr(sspc);
 			break;
 		case returnError:
-			sspc = getSSProcess4Id(contr, parm.u.retResult.invokeId);
+			sspc = getSSProcess4Id(contr, parm->u.retResult.invokeId);
 			if (!sspc)
 				return;
 			appl = getApplication4Id(contr, sspc->ApplId);
@@ -646,19 +728,77 @@ SSProcessFacility(Controller_t *contr, Q931_info_t *qi)
 				return;
 			p = &tmp[1];
 			p += capiEncodeWord(p, sspc->Function);
-			p += capiEncodeFacIndCFact(p, 0x3600 | (parm.u.retError.errorValue & 0xff), 
+			p += capiEncodeFacIndCFact(p, 0x3600 | (parm->u.retError.errorValue & 0xff), 
 				sspc->Handle);
 			tmp[0] = p - &tmp[1];
 			SendSSFacilityInd(appl, sspc->addr, tmp);
 			SSProcessDestr(sspc);
 			break;
-		default: {
-				static char logbuf[512];
-
-				int_errtxt("component %x not handled", parm.comp);
-				mISDN_QuickHex(logbuf, p, ie_len);
-				printk(KERN_DEBUG "facIE: %s\n", logbuf);
+		case reject:
+			if (parm->u.reject.invokeId == -1) /* ID := NULL */
+				return;
+			if (parm->u.reject.problem != InvokeP) {
+				int_errtxt("reject problem class %d problem %d do not match CAPI errors",
+					parm->u.reject.problem, parm->u.reject.problemValue);
+				/* this is not compatible, but better as ignore */
+				switch (parm->u.reject.problem) {
+					case GeneralP:
+						parm->u.reject.problemValue |= 0x80;
+						break;
+					default:
+						parm->u.reject.problemValue |= (parm->u.reject.problem << 4);
+				}
 			}
+			sspc = getSSProcess4Id(contr, parm->u.reject.invokeId);
+			if (!sspc)
+				return;
+			appl = getApplication4Id(contr, sspc->ApplId);
+			if (!appl)
+				return;
+			p = &tmp[1];
+			p += capiEncodeWord(p, sspc->Function);
+			p += capiEncodeFacIndCFact(p, 0x3700 | (parm->u.reject.problemValue & 0xff), 
+				sspc->Handle);
+			tmp[0] = p - &tmp[1];
+			SendSSFacilityInd(appl, sspc->addr, tmp);
+			SSProcessDestr(sspc);
+			break;
+		default:
+			int_errtxt("component %x not handled", parm->comp);
+			break;
+	}
+}
+
+static void 
+SSProcessFacility(Controller_t *contr, __u8 *p)
+{
+        int			ie_len, l;
+	struct asn1_parm	parm;
+        __u8			*end;
+
+        ie_len = *p++;
+        end = p + ie_len;
+
+        p++; // Supplementary Service Applications checked before
+
+        while (p < end) {
+	        parm.comp = -1;
+	        l = ParseComponent(&parm, p, end);
+	        // printk(KERN_DEBUG "ie_len (%d) l(%d) parm.comp %d\n", ie_len, l, parm.comp);
+	        if (parm.comp != -1) {
+	        	SSProcessSingleFacility(contr, &parm);
+	        } else {
+			static char logbuf[3*260];
+
+			int_errtxt("component %x not handled", parm.comp);
+			if (ie_len > 260)
+				ie_len = 260;
+			mISDN_QuickHex(logbuf, p, ie_len);
+			printk(KERN_DEBUG "facIE: %s\n", logbuf);
+		}
+	        if (l>0)
+	        	p += l;
+		else
 			break;
 	}
 }
@@ -666,14 +806,42 @@ SSProcessFacility(Controller_t *contr, Q931_info_t *qi)
 int
 Supplementary_l3l4(Controller_t *contr, __u32 prim, struct sk_buff *skb)
 {
-	int ret = -EINVAL;
+	int		ret = -EINVAL;
+	Q931_info_t	*qi;
+	ie_info_t	*fac;
+	__u8		*p, *end;
 
 	if (!skb)
 		return(ret);
 	switch (prim) {
 		case CC_FACILITY | INDICATION:
-			if (skb->len)
-				SSProcessFacility(contr, (Q931_info_t *)skb->data);
+			qi = (Q931_info_t *)skb->data;
+			if (skb->len <= L3_EXTRA_SIZE) {
+				int_error();
+				break;
+			}
+		        if (!qi->facility.off) {
+		        	int_error();
+		        	break;
+			}
+			fac = &qi->facility;
+			while(fac && fac->off) {
+				p = (__u8 *)qi;
+				p += L3_EXTRA_SIZE + fac->off + 1;
+			        end = p + *p;
+			        if (end > skb->data + skb->len) {
+			                int_error();
+			                fac = NULL;
+				} else if (p[1] == 0x91) { // Supplementary Service Applications
+					SSProcessFacility(contr, p);
+				} else {
+					int_errtxt("FACILITY but not a Supplementary Service ID %x", p[1]);
+				}
+				if (fac->repeated)
+					fac = &qi->ext[fac->ridx].ie;
+				else
+					fac = NULL;
+			}
 			dev_kfree_skb(skb);
 			ret = 0;
 			break;

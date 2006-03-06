@@ -1,6 +1,6 @@
 #!/bin/sh
 
-KERNELDIR=/usr/src/linux
+KERNELDIR=/lib/modules/$(uname -r)/build
 KERNFIRST=false
 PREPARSER="./preparser"
 DODIFF=dodiff

@@ -1,4 +1,4 @@
-/* $Id: dtmf.c,v 1.11 2004/06/17 12:31:12 keil Exp $
+/* $Id: dtmf.c,v 1.12 2006/03/06 12:52:07 keil Exp $
  *
  * Linux ISDN subsystem, DTMF tone module
  *
@@ -36,7 +36,7 @@ typedef struct _dtmf {
 #define	FLG_DTMF_ULAW	1
 #define FLG_DTMF_ACTIV	2
 
-static int debug = 0;
+static u_int debug = 0;
 
 #define DEBUG_DTMF_MGR		0x001
 #define DEBUG_DTMF_TONE		0x010
@@ -46,7 +46,7 @@ static int debug = 0;
 
 static mISDNobject_t dtmf_obj;
 
-static char *mISDN_dtmf_revision = "$Revision: 1.11 $";
+static char *mISDN_dtmf_revision = "$Revision: 1.12 $";
 
 /*
  * Misc. lookup-tables.
@@ -350,7 +350,7 @@ isdn_audio_goertzel(dtmf_t *dtmf)
 		if (dtmf->debug & DEBUG_DTMF_TONE)
 			printk(KERN_DEBUG "DTMF: tone='%c'\n", what);
 		k = what | DTMF_TONE_VAL;
-		if_link(&dtmf->inst.up, PH_CONTROL | INDICATION,
+		mISDN_queue_data(&dtmf->inst, FLG_MSG_UP, PH_CONTROL | INDICATION,
 			0, sizeof(int), &k, 0);
 	}
 	dtmf->last = what;
@@ -397,20 +397,16 @@ dtmf_reset(dtmf_t *dtmf)
 	dtmf->idx = 0;
 }
 
+#ifdef OBSOLETE
 static int
-dtmf_from_up(mISDNif_t *hif, struct sk_buff *skb)
+dtmf_from_up(mISDNinstance_t *inst, struct sk_buff *skb)
 {
 	dtmf_t		*dtmf;
 	mISDN_head_t	*hh;
 	int		*data;
 	int		err = 0;
 
-	if (!hif || !hif->fdata || !skb)
-		return(-EINVAL);
-	dtmf = hif->fdata;
-	if (!dtmf->inst.down.func) {
-		return(-ENXIO);
-	}
+	dtmf = inst->privat;
 	hh = mISDN_HEAD_P(skb);
 	switch(hh->prim) {
 		case (PH_CONTROL | REQUEST):
@@ -431,25 +427,21 @@ dtmf_from_up(mISDNif_t *hif, struct sk_buff *skb)
 			}
 			/* Fall trough in case of not handled function */
 		default:
-			return(dtmf->inst.down.func(&dtmf->inst.down, skb));
+			return(mISDN_queue_down(inst, 0, skb));
 	}
 	if (!err)
 		dev_kfree_skb(skb);
 	return(err);
 }
+#endif
 
 static int
-dtmf_from_down(mISDNif_t *hif,  struct sk_buff *skb)
+dtmf_function(mISDNinstance_t *inst,  struct sk_buff *skb)
 {
 	dtmf_t		*dtmf;
 	mISDN_head_t	*hh;
 
-	if (!hif || !hif->fdata || !skb)
-		return(-EINVAL);
-	dtmf = hif->fdata;
-	if (!dtmf->inst.up.func) {
-		return(-ENXIO);
-	}
+	dtmf = inst->privat;
 	hh = mISDN_HEAD_P(skb);
 	switch(hh->prim) {
 		case (PH_DATA | CONFIRM):
@@ -460,6 +452,25 @@ dtmf_from_down(mISDNif_t *hif,  struct sk_buff *skb)
 			if (test_bit(FLG_DTMF_ACTIV, &dtmf->Flags))
 				isdn_audio_calc_dtmf(dtmf, skb);
 			hh->prim = DL_DATA_IND;
+			break;
+		case (PH_CONTROL | REQUEST):
+			if ((hh->dinfo == 0) && (skb->len >= sizeof(int))) {
+				int *data = (int *)skb->data;
+				if (dtmf->debug & DEBUG_DTMF_CTRL)
+					printk(KERN_DEBUG "DTMF: PH_CONTROL REQ data %04x\n",
+						*data);
+				if (*data == DTMF_TONE_START) {
+					test_and_set_bit(FLG_DTMF_ACTIV, &dtmf->Flags);
+					dtmf_reset(dtmf);
+					dev_kfree_skb(skb);
+					return(0);
+				} else if (*data == DTMF_TONE_STOP) {
+					test_and_clear_bit(FLG_DTMF_ACTIV, &dtmf->Flags);
+					dtmf_reset(dtmf);
+					dev_kfree_skb(skb);
+					return(0);
+				}
+			}
 			break;
 		case (PH_ACTIVATE | CONFIRM):
 			hh->prim = DL_ESTABLISH | CONFIRM;
@@ -474,30 +485,26 @@ dtmf_from_down(mISDNif_t *hif,  struct sk_buff *skb)
 			hh->prim = DL_RELEASE | INDICATION;
 			break;
 	}
-	return(dtmf->inst.up.func(&dtmf->inst.up, skb));
+	return(mISDN_queue_message(inst, hh->addr & MSG_DIR_MASK, skb));
 }
 
 static void
 release_dtmf(dtmf_t *dtmf) {
 	mISDNinstance_t	*inst = &dtmf->inst;
+	u_long		flags;
 
-	if (inst->up.peer) {
-		inst->up.peer->obj->ctrl(inst->up.peer,
-			MGR_DISCONNECT | REQUEST, &inst->up);
-	}
-	if (inst->down.peer) {
-		inst->down.peer->obj->ctrl(inst->down.peer,
-			MGR_DISCONNECT | REQUEST, &inst->down);
-	}
+	spin_lock_irqsave(&dtmf_obj.lock, flags);
 	list_del(&dtmf->list);
+	spin_unlock_irqrestore(&dtmf_obj.lock, flags);
 	dtmf_obj.ctrl(inst, MGR_UNREGLAYER | REQUEST, NULL);
 	kfree(dtmf);
 }
 
 static int
 new_dtmf(mISDNstack_t *st, mISDN_pid_t *pid) {
-	dtmf_t *n_dtmf;
-	int err;
+	dtmf_t	*n_dtmf;
+	int	err;
+	u_long	flags;
 
 	if (!st || !pid)
 		return(-EINVAL);
@@ -507,14 +514,16 @@ new_dtmf(mISDNstack_t *st, mISDN_pid_t *pid) {
 	}
 	memset(n_dtmf, 0, sizeof(dtmf_t));
 	memcpy(&n_dtmf->inst.pid, pid, sizeof(mISDN_pid_t));
-	mISDN_init_instance(&n_dtmf->inst, &dtmf_obj, n_dtmf);
+	mISDN_init_instance(&n_dtmf->inst, &dtmf_obj, n_dtmf, dtmf_function);
 	if (!mISDN_SetHandledPID(&dtmf_obj, &n_dtmf->inst.pid)) {
 		int_error();
 		kfree(n_dtmf);
 		return(-ENOPROTOOPT);
 	}
 	n_dtmf->debug = debug;
+	spin_lock_irqsave(&dtmf_obj.lock, flags);
 	list_add_tail(&n_dtmf->list, &dtmf_obj.ilist);
+	spin_unlock_irqrestore(&dtmf_obj.lock, flags);
 	err = dtmf_obj.ctrl(st, MGR_REGLAYER | INDICATION, &n_dtmf->inst);
 	if (err) {
 		list_del(&n_dtmf->list);
@@ -550,7 +559,8 @@ static char MName[] = "DTMF";
 
 #ifdef MODULE
 MODULE_AUTHOR("Karsten Keil");
-MODULE_PARM(debug, "1i");
+module_param (debug, uint, S_IRUGO | S_IWUSR);
+MODULE_PARM_DESC (debug, "dtmf debug mask");
 #ifdef MODULE_LICENSE
 MODULE_LICENSE("GPL");
 #endif
@@ -561,17 +571,20 @@ dtmf_manager(void *data, u_int prim, void *arg) {
 	mISDNinstance_t	*inst = data;
 	dtmf_t		*dtmf_l;
 	int		ret = -EINVAL;
+	u_long		flags;
 
 	if (debug & DEBUG_DTMF_MGR)
 		printk(KERN_DEBUG "dtmf_manager data:%p prim:%x arg:%p\n", data, prim, arg);
 	if (!data)
 		return(ret);
+	spin_lock_irqsave(&dtmf_obj.lock, flags);
 	list_for_each_entry(dtmf_l, &dtmf_obj.ilist, list) {
 		if (&dtmf_l->inst == inst) {
 			ret = 0;
 			break;
 		}
 	}
+	spin_unlock_irqrestore(&dtmf_obj.lock, flags);
 	if (prim == (MGR_NEWLAYER | REQUEST))
 		return(new_dtmf(data, arg));
 	if (ret) {
@@ -580,6 +593,8 @@ dtmf_manager(void *data, u_int prim, void *arg) {
 	}
 	switch(prim) {
 	    case MGR_CLRSTPARA | INDICATION:
+		break;
+#ifdef OBSOLETE
 	    case MGR_CLONELAYER | REQUEST:
 		break;
 	    case MGR_CONNECT | REQUEST:
@@ -590,6 +605,7 @@ dtmf_manager(void *data, u_int prim, void *arg) {
 	    case MGR_DISCONNECT | REQUEST:
 	    case MGR_DISCONNECT | INDICATION:
 		return(mISDN_DisConnectIF(inst, arg));
+#endif
 	    case MGR_UNREGLAYER | REQUEST:
 	    case MGR_RELEASE | INDICATION:
 		if (debug & DEBUG_DTMF_MGR)
@@ -617,6 +633,7 @@ static int dtmf_init(void)
 	dtmf_obj.name = MName;
 	dtmf_obj.BPROTO.protocol[2] = ISDN_PID_L2_B_TRANSDTMF;
 	dtmf_obj.own_ctrl = dtmf_manager;
+	spin_lock_init(&dtmf_obj.lock);
 	INIT_LIST_HEAD(&dtmf_obj.ilist);
 	if ((err = mISDN_register(&dtmf_obj))) {
 		printk(KERN_ERR "Can't register %s error(%d)\n", MName, err);

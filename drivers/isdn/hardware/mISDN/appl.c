@@ -1,4 +1,4 @@
-/* $Id: appl.c,v 1.13 2005/05/02 12:30:30 keil Exp $
+/* $Id: appl.c,v 1.14 2006/03/06 12:52:07 keil Exp $
  *
  *  Applications are owned by the controller and only
  *  handle this controller, multiplexing multiple
@@ -161,37 +161,14 @@ FacilityReq(Application_t *appl, struct sk_buff *skb)
 	dev_kfree_skb(skb);
 }
 
-__u16
+void
 ApplicationSendMessage(Application_t *appl, struct sk_buff *skb)
 {
 	Plci_t		*plci;
 	AppPlci_t	*aplci;
-	Ncci_t		*ncci;
-	__u16		ret = CAPI_NOERROR;
+	__u16		ret;
 
 	switch (CAPICMD(CAPIMSG_COMMAND(skb->data), CAPIMSG_SUBCOMMAND(skb->data))) {
-		// for NCCI state machine
-		case CAPI_DATA_B3_REQ:
-		case CAPI_DATA_B3_RESP:
-		case CAPI_CONNECT_B3_RESP:
-		case CAPI_CONNECT_B3_ACTIVE_RESP:
-		case CAPI_DISCONNECT_B3_REQ:
-		case CAPI_DISCONNECT_B3_RESP:
-		case CAPI_RESET_B3_REQ:
-		case CAPI_RESET_B3_RESP:
-			aplci = getAppPlci4addr(appl, CAPIMSG_CONTROL(skb->data));
-			if (!aplci) {
-				AnswerMessage2Application(appl, skb, CapiIllContrPlciNcci);
-				goto free;
-			}
-			ncci = getNCCI4addr(aplci, CAPIMSG_NCCI(skb->data), GET_NCCI_EXACT);
-			if (!ncci) {
-				int_error();
-				AnswerMessage2Application(appl, skb, CapiIllContrPlciNcci);
-				goto free;
-			}
-			ret = ncciSendMessage(ncci, skb);
-			break;
 		// new NCCI
 		case CAPI_CONNECT_B3_REQ:
 			aplci = getAppPlci4addr(appl, CAPIMSG_CONTROL(skb->data));
@@ -200,6 +177,15 @@ ApplicationSendMessage(Application_t *appl, struct sk_buff *skb)
 				goto free;
 			}
 			ConnectB3Request(aplci, skb);
+			break;
+		// maybe already down NCCI
+		case CAPI_DISCONNECT_B3_RESP:
+			aplci = getAppPlci4addr(appl, CAPIMSG_CONTROL(skb->data));
+			if (!aplci) {
+				AnswerMessage2Application(appl, skb, CapiIllContrPlciNcci);
+				goto free;
+			}
+			DisconnectB3Request(aplci, skb);
 			break;
 		// for PLCI state machine
 		case CAPI_INFO_REQ:
@@ -215,6 +201,9 @@ ApplicationSendMessage(Application_t *appl, struct sk_buff *skb)
 				goto free;
 			}
 			ret = AppPlciSendMessage(aplci, skb);
+			if (ret) {
+				int_error();
+			}
 			break;
 		case CAPI_CONNECT_REQ:
 			if (ControllerNewPlci(appl->contr, &plci, MISDN_ID_ANY)) {
@@ -227,11 +216,17 @@ ApplicationSendMessage(Application_t *appl, struct sk_buff *skb)
 				goto free;
 			}
 			ret = AppPlciSendMessage(aplci, skb);
+			if (ret) {
+				int_error();
+			}
 			break;
 
 		// for LISTEN state machine
 		case CAPI_LISTEN_REQ:
 			ret = listenSendMessage(appl, skb);
+			if (ret) {
+				int_error();
+			}
 			break;
 
 		// other
@@ -248,13 +243,12 @@ ApplicationSendMessage(Application_t *appl, struct sk_buff *skb)
 		default:
 			applDebug(appl, CAPI_DBG_WARN, "applSendMessage: %#x %#x not handled!", 
 				CAPIMSG_COMMAND(skb->data), CAPIMSG_SUBCOMMAND(skb->data));
-			ret = CAPI_ILLCMDORSUBCMDORMSGTOSMALL;
 			break;
 	}
-	return(ret);
+	return;
  free:
 	dev_kfree_skb(skb);
-	return(ret);
+	return;
 }
 
 AppPlci_t *

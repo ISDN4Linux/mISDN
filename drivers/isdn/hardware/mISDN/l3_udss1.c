@@ -1,10 +1,10 @@
-/* $Id: l3_udss1.c,v 1.30 2005/06/24 15:33:13 keil Exp $
+/* $Id: l3_udss1.c,v 1.31 2006/03/06 12:52:07 keil Exp $
  *
  * EURO/DSS1 D-channel protocol
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
- *		This file is (c) under GNU PUBLIC LICENSE
+ *		This file is (c) under GNU  PUBLIC LICENSE
  *		For changes and modifications please read
  *		../../../Documentation/isdn/mISDN.cert
  *
@@ -24,7 +24,7 @@ static int debug = 0;
 static mISDNobject_t u_dss1;
 
 
-const char *dss1_revision = "$Revision: 1.30 $";
+const char *dss1_revision = "$Revision: 1.31 $";
 
 static int dss1man(l3_process_t *, u_int, void *);
 
@@ -32,8 +32,9 @@ static int
 parseQ931(struct sk_buff *skb) {
 	Q931_info_t	*qi;
 	int		l, codeset, maincodeset;
-	int		len, iep, pos = 0, cnt = 0;
-	u16		*ie, cr;
+	int		len, iep, pos = 0, cnt = 0, eidx = -1;
+	u16		cr;
+	ie_info_t	*ie, *old;
 	u_char		t, *p = skb->data;
 
 	if (skb->len < 3)
@@ -79,57 +80,125 @@ parseQ931(struct sk_buff *skb) {
 			codeset = p[pos] & 0x07;
 			if (!(p[pos] & 0x08))
 				maincodeset = codeset;
+			if (eidx >= 0) {
+				qi->ext[eidx].cs.len = pos - qi->ext[eidx].ie.off;
+				eidx = -1;
+			}
 			pos++;
 			continue;
 		}
 		if (codeset == 0) {
 			if (p[pos] & 0x80) { /* single octett IE */
 				if (p[pos] == IE_MORE_DATA)
-					qi->more_data = pos;
+					qi->more_data.off = pos;
 				else if (p[pos] == IE_COMPLETE)
-					qi->sending_complete = pos;
+					qi->sending_complete.off = pos;
 				else if ((p[pos] & 0xf0) == IE_CONGESTION)
-					qi->congestion_level = pos;
+					qi->congestion_level.off = pos;
 				cnt++;
 				pos++;
 			} else {
-				iep = mISDN_l3_ie2pos(p[pos]);
+				t = p[pos];
+				iep = mISDN_l3_ie2pos(t);
 				if ((pos+1) >= len)
 					return(-4);
 				l = p[pos+1];
 				if ((pos+l+1) >= len)
 					return(-5);
 				if (iep>=0) {
-					if (!ie[iep])
-						ie[iep] = pos;
+					if (!ie[iep].off) { /* IE not detected before */
+						ie[iep].off = pos;
+					} else { /* IE is repeated */
+						old = &ie[iep];
+						if (old->repeated)
+							old = mISDN_get_last_repeated_ie(qi, old);
+						if (!old) {
+							int_error();
+							return(-6);
+						}
+						eidx = mISDN_get_free_ext_ie(qi);
+						if (eidx < 0) {
+							int_error();
+							return(-7);
+						}
+						old->ridx = eidx;
+						old->repeated = 1;
+						qi->ext[eidx].ie.off = pos;
+						qi->ext[eidx].v.codeset = 0;
+						qi->ext[eidx].v.val = t;
+						eidx = -1;
+					}
 				}
 				pos += l + 2;
 				cnt++;
 			}
+		} else { /* codeset != 0 */
+			if (eidx < 0) {
+				eidx = mISDN_get_free_ext_ie(qi);
+				if (eidx < 0) {
+					int_error();
+					return(-8);
+				}
+				qi->ext[eidx].cs.codeset = codeset;
+				qi->ext[eidx].ie.off = pos;
+				qi->ext[eidx].ie.cs_flg = 1;
+				if (codeset == maincodeset) { /* locked shift */
+					qi->ext[eidx].cs.locked = 1;
+				}
+			}
+			if (p[pos] & 0x80) { /* single octett IE */
+				cnt++;
+				pos++;
+			} else {
+				if ((pos+1) >= len)
+					return(-4);
+				l = p[pos+1];
+				if ((pos+l+1) >= len)
+					return(-5);
+				pos += l + 2;
+				cnt++;
+			}
+			if (qi->ext[eidx].cs.locked == 0) {/* single IE codeset shift */
+				qi->ext[eidx].cs.len = pos - qi->ext[eidx].ie.off;
+				eidx = -1;
+			}
 		}
 		codeset = maincodeset;
 	}
+	if (eidx >= 0)
+		qi->ext[eidx].cs.len = pos - qi->ext[eidx].ie.off;
 	return(cnt);
 }
 
 static int
 calc_msg_len(Q931_info_t *qi)
 {
-	int	i, cnt = 0;
-	u_char	*buf = (u_char *)qi;
-	u16	*v_ie;
+	int		i, cnt = 0;
+	u_char		*buf = (u_char *)qi;
+	ie_info_t	*ie;
 
 	buf += L3_EXTRA_SIZE;
-	if (qi->more_data)
+	if (qi->more_data.off)
 		cnt++;
-	if (qi->sending_complete)
+	if (qi->sending_complete.off)
 		cnt++;
-	if (qi->congestion_level)
+	if (qi->congestion_level.off)
 		cnt++;
-	v_ie = &qi->bearer_capability;
-	for (i=0; i<32; i++) {
-		if (v_ie[i])
-			cnt += buf[v_ie[i] + 1] + 2;
+	ie = &qi->bearer_capability;
+	while (ie <= &qi->fill1) {
+		if (ie->off)
+			cnt += buf[ie->off + 1] + 2;
+		ie++;
+	}
+	for (i = 0; i < 8; i++) {
+		if (qi->ext[i].ie.off) {
+			if (qi->ext[i].ie.cs_flg == 1) { /* other codset info chunk */
+				cnt++; /* codeset shift IE */
+				cnt += qi->ext[i].cs.len;
+			} else { /* repeated IE */
+				cnt += buf[qi->ext[i].ie.off + 1] + 2;
+			}
+		}
 	}
 	return(cnt);
 }
@@ -137,31 +206,58 @@ calc_msg_len(Q931_info_t *qi)
 static int
 compose_msg(struct sk_buff *skb, Q931_info_t *qi)
 {
-	int	i, l;
-	u_char	*p, *buf = (u_char *)qi;
-	u16	*v_ie;
+	int		i, l, ri;
+	u_char		*p, *buf = (u_char *)qi;
+	ie_info_t	*ie;
 
 	buf += L3_EXTRA_SIZE;
-	
-	if (qi->more_data) {
+
+	if (qi->more_data.off) {
 		p = skb_put(skb, 1);
-		*p = buf[qi->more_data];
+		*p = buf[qi->more_data.off];
 	}
-	if (qi->sending_complete) {
+	if (qi->sending_complete.off) {
 		p = skb_put(skb, 1);
-		*p = buf[qi->sending_complete];
+		*p = buf[qi->sending_complete.off];
 	}
-	if (qi->congestion_level) {
+	if (qi->congestion_level.off) {
 		p = skb_put(skb, 1);
-		*p = buf[qi->congestion_level];
+		*p = buf[qi->congestion_level.off];
 	}
-	v_ie = &qi->bearer_capability;
+	ie = &qi->bearer_capability;
 	for (i=0; i<32; i++) {
-		if (v_ie[i]) {
-			l = buf[v_ie[i] + 1] +1;
+		if (ie[i].off) {
+			l = buf[ie[i].off + 1] +1;
 			p = skb_put(skb, l + 1);
 			*p++ = mISDN_l3_pos2ie(i);
-			memcpy(p, &buf[v_ie[i] + 1], l);
+			memcpy(p, &buf[ie[i].off + 1], l);
+			if (ie[i].repeated) {
+				ri = ie[i].ridx;
+				while(ri >= 0) {
+					l = buf[qi->ext[ri].ie.off + 1] +1;
+					p = skb_put(skb, l + 1);
+					if (mISDN_l3_pos2ie(i) != qi->ext[ri].v.val)
+						int_error();
+					*p++ = qi->ext[ri].v.val;
+					memcpy(p, &buf[qi->ext[ri].ie.off + 1], l);
+					if (qi->ext[ri].ie.repeated)
+						ri = qi->ext[ri].ie.ridx;
+					else
+						ri = -1;
+				}
+			}
+		}
+	}
+	for (i=0; i<8; i++) {
+		/* handle other codeset elements */
+		if (qi->ext[i].ie.cs_flg == 1) {
+			p = skb_put(skb, 1); /* shift codeset IE */
+			if (qi->ext[i].cs.locked == 1)
+				*p = 0x90 | qi->ext[i].cs.codeset;
+			else /* non-locking shift */
+				*p = 0x98 | qi->ext[i].cs.codeset;
+			p = skb_put(skb, qi->ext[i].cs.len);
+			memcpy(p, &buf[qi->ext[i].ie.off], qi->ext[i].cs.len);
 		}
 	}
 	return(0);
@@ -302,7 +398,7 @@ static int ie_ALERTING[] = {IE_BEARER, IE_CHANNEL_ID | IE_MANDATORY_1,
 		IE_USER_USER, -1};
 static int ie_CALL_PROCEEDING[] = {IE_BEARER, IE_CHANNEL_ID | IE_MANDATORY_1,
 		IE_FACILITY, IE_PROGRESS, IE_DISPLAY, IE_HLC, -1};
-static int ie_CONNECT[] = {IE_BEARER, IE_CHANNEL_ID | IE_MANDATORY_1, 
+static int ie_CONNECT[] = {IE_BEARER, IE_CHANNEL_ID | IE_MANDATORY_1,
 		IE_FACILITY, IE_PROGRESS, IE_DISPLAY, IE_DATE, IE_SIGNAL,
 		IE_CONNECT_PN, IE_CONNECT_SUB, IE_LLC, IE_HLC, IE_USER_USER, -1};
 static int ie_CONNECT_ACKNOWLEDGE[] = {IE_CHANNEL_ID, IE_DISPLAY, IE_SIGNAL, -1};
@@ -315,7 +411,7 @@ static int ie_PROGRESS[] = {IE_BEARER, IE_CAUSE, IE_FACILITY, IE_PROGRESS |
 		IE_MANDATORY, IE_DISPLAY, IE_HLC, IE_USER_USER, -1};
 static int ie_RELEASE[] = {IE_CAUSE | IE_MANDATORY_1, IE_FACILITY, IE_DISPLAY,
 		IE_SIGNAL, IE_USER_USER, -1};
-/* a RELEASE_COMPLETE with errors don't require special actions 
+/* a RELEASE_COMPLETE with errors don't require special actions
 static int ie_RELEASE_COMPLETE[] = {IE_CAUSE | IE_MANDATORY_1, IE_FACILITY,
 		IE_DISPLAY, IE_SIGNAL, IE_USER_USER, -1};
 */
@@ -334,7 +430,13 @@ static int ie_STATUS[] = {IE_CAUSE | IE_MANDATORY, IE_CALL_STATE |
 static int ie_STATUS_ENQUIRY[] = {IE_DISPLAY, -1};
 static int ie_SUSPEND_ACKNOWLEDGE[] = {IE_FACILITY, IE_DISPLAY, -1};
 static int ie_SUSPEND_REJECT[] = {IE_CAUSE | IE_MANDATORY, IE_DISPLAY, -1};
-/* not used 
+static int ie_HOLD[] = {IE_DISPLAY, -1};
+static int ie_HOLD_ACKNOWLEDGE[] = {IE_DISPLAY, -1};
+static int ie_HOLD_REJECT[] = {IE_CAUSE | IE_MANDATORY, IE_DISPLAY, -1};
+static int ie_RETRIEVE[] = {IE_CHANNEL_ID| IE_MANDATORY, IE_DISPLAY, -1};
+static int ie_RETRIEVE_ACKNOWLEDGE[] = {IE_CHANNEL_ID| IE_MANDATORY, IE_DISPLAY, -1};
+static int ie_RETRIEVE_REJECT[] = {IE_CAUSE | IE_MANDATORY, IE_DISPLAY, -1};
+/* not used
  * static int ie_CONGESTION_CONTROL[] = {IE_CONGESTION | IE_MANDATORY,
  *		IE_CAUSE | IE_MANDATORY, IE_DISPLAY, -1};
  * static int ie_USER_INFORMATION[] = {IE_MORE_DATA, IE_USER_USER | IE_MANDATORY, -1};
@@ -421,16 +523,16 @@ check_infoelements(l3_process_t *pc, struct sk_buff *skb, int *checklist)
 	Q931_info_t	*qi = (Q931_info_t *)skb->data;
 	int		*cl = checklist;
 	u_char		*p, ie;
-	u16		*iep;
+	ie_info_t	*iep;
 	int		i, l, newpos, oldpos;
 	int		err_seq = 0, err_len = 0, err_compr = 0, err_ureg = 0;
-	
+
 	p = skb->data;
 	p += L3_EXTRA_SIZE;
 	iep = &qi->bearer_capability;
 	oldpos = -1;
 	for (i=0; i<32; i++) {
-		if (iep[i]) {
+		if (iep[i].off) {
 			ie = mISDN_l3_pos2ie(i);
 			if ((newpos = ie_in_set(pc, ie, cl))) {
 				if (newpos > 0) {
@@ -445,7 +547,7 @@ check_infoelements(l3_process_t *pc, struct sk_buff *skb, int *checklist)
 				else
 					err_ureg++;
 			}
-			l = p[iep[i] +1];
+			l = p[iep[i].off +1];
 			if (l > getmax_ie_len(ie))
 				err_len++;
 		}
@@ -462,7 +564,7 @@ check_infoelements(l3_process_t *pc, struct sk_buff *skb, int *checklist)
 			return(ERR_IE_LENGTH);
 		if (err_seq)
 			return(ERR_IE_SEQUENCE);
-	} 
+	}
 	return(0);
 }
 
@@ -494,6 +596,12 @@ l3dss1_check_messagetype_validity(l3_process_t *pc, int mt, void *arg)
 		case MT_CONGESTION_CONTROL:
 		case MT_STATUS:
 		case MT_STATUS_ENQUIRY:
+		case MT_HOLD:
+		case MT_HOLD_ACKNOWLEDGE:
+		case MT_HOLD_REJECT:
+		case MT_RETRIEVE:
+		case MT_RETRIEVE_ACKNOWLEDGE:
+		case MT_RETRIEVE_REJECT:
 			if (pc->l3->debug & L3_DEB_CHECK)
 				l3_debug(pc->l3, "l3dss1_check_messagetype_validity mt(%x) OK", mt);
 			break;
@@ -514,7 +622,7 @@ l3dss1_std_ie_err(l3_process_t *pc, int ret) {
 	if (pc->l3->debug & L3_DEB_CHECK)
 		l3_debug(pc->l3, "check_infoelements ret %d", ret);
 	switch(ret) {
-		case 0: 
+		case 0:
 			break;
 		case ERR_IE_COMPREHENSION:
 			l3dss1_status_send(pc, CAUSE_MANDATORY_IE_MISS);
@@ -536,9 +644,9 @@ l3dss1_get_channel_id(l3_process_t *pc, struct sk_buff *skb) {
 	Q931_info_t	*qi = (Q931_info_t *)skb->data;
 	u_char		*p;
 
-	if (qi->channel_id) {
+	if (qi->channel_id.off) {
 		p = skb->data;
-		p += L3_EXTRA_SIZE + qi->channel_id;
+		p += L3_EXTRA_SIZE + qi->channel_id.off;
 		p++;
 		if (test_bit(FLG_EXTCID, &pc->l3->Flag)) {
 			if (*p != 1) {
@@ -569,9 +677,9 @@ l3dss1_get_cause(l3_process_t *pc, struct sk_buff *skb) {
 	u_char		l;
 	u_char		*p;
 
-	if (qi->cause) {
+	if (qi->cause.off) {
 		p = skb->data;
-		p += L3_EXTRA_SIZE + qi->cause;
+		p += L3_EXTRA_SIZE + qi->cause.off;
 		p++;
 		l = *p++;
 		if (l>30) {
@@ -636,8 +744,8 @@ l3dss1_disconnect_req(l3_process_t *pc, u_char pr, void *arg)
 	StopAllL3Timer(pc);
 	if (arg) {
 		qi = (Q931_info_t *)skb->data;
-		if (!qi->cause) {
-			qi->cause = skb->len - L3_EXTRA_SIZE;
+		if (!qi->cause.off) {
+			qi->cause.off = skb->len - L3_EXTRA_SIZE;
 			p = skb_put(skb, 4);
 			*p++ = IE_CAUSE;
 			*p++ = 2;
@@ -935,7 +1043,7 @@ l3dss1_disconnect(l3_process_t *pc, u_char pr, void *arg)
 			cause = CAUSE_MANDATORY_IE_MISS;
 		else
 			cause = CAUSE_INVALID_CONTENTS;
-	} 
+	}
 	ret = check_infoelements(pc, skb, ie_DISCONNECT);
 	if (ERR_IE_COMPREHENSION == ret)
 		cause = CAUSE_MANDATORY_IE_MISS;
@@ -1020,8 +1128,8 @@ l3dss1_setup(l3_process_t *pc, u_char pr, void *arg)
 	 */
 	/* only the first occurence 'll be detected ! */
 	p = skb->data;
-	if (qi->bearer_capability) {
-		p += L3_EXTRA_SIZE + qi->bearer_capability;
+	if (qi->bearer_capability.off) {
+		p += L3_EXTRA_SIZE + qi->bearer_capability.off;
 		p++;
 		if ((p[0] < 2) || (p[0] > 11))
 			err = 1;
@@ -1033,7 +1141,7 @@ l3dss1_setup(l3_process_t *pc, u_char pr, void *arg)
 				case 0x08: /* Unrestricted digital information */
 				case 0x09: /* Restricted digital information */
 				case 0x11:
-					/* Unrestr. digital information  with 
+					/* Unrestr. digital information  with
 					 * tones/announcements ( or 7 kHz audio
 					 */
 				case 0x18: /* Video */
@@ -1062,7 +1170,7 @@ l3dss1_setup(l3_process_t *pc, u_char pr, void *arg)
 			l3dss1_msg_without_setup(pc, CAUSE_INVALID_CONTENTS);
 			dev_kfree_skb(skb);
 			return;
-		} 
+		}
 	} else {
 		if (pc->l3->debug & L3_DEB_WARN)
 			l3_debug(pc->l3, "setup without bearer capabilities");
@@ -1090,7 +1198,7 @@ l3dss1_setup(l3_process_t *pc, u_char pr, void *arg)
 			if (pc->l3->debug & L3_DEB_WARN)
 				l3_debug(pc->l3, "setup without bchannel, call waiting");
 			bcfound++;
-		} 
+		}
 	} else {
 		if (pc->l3->debug & L3_DEB_WARN)
 			l3_debug(pc->l3, "setup with wrong chid ret %d", err);
@@ -1163,9 +1271,9 @@ l3dss1_progress(l3_process_t *pc, u_char pr, void *arg) {
 	int		err = 0;
 	u_char		*p, cause = CAUSE_INVALID_CONTENTS;
 
-	if (qi->progress) {
+	if (qi->progress.off) {
 		p = skb->data;
-		p += L3_EXTRA_SIZE + qi->progress;
+		p += L3_EXTRA_SIZE + qi->progress.off;
 		p++;
 		if (p[0] != 2) {
 			err = 1;
@@ -1199,7 +1307,7 @@ l3dss1_progress(l3_process_t *pc, u_char pr, void *arg) {
 		cause = CAUSE_MANDATORY_IE_MISS;
 		err = 4;
 	}
-	if (err) {	
+	if (err) {
 		if (pc->l3->debug & L3_DEB_WARN)
 			l3_debug(pc->l3, "progress error %d", err);
 		l3dss1_status_send(pc, cause);
@@ -1210,6 +1318,16 @@ l3dss1_progress(l3_process_t *pc, u_char pr, void *arg) {
 	err = check_infoelements(pc, skb, ie_PROGRESS);
 	if (err)
 		l3dss1_std_ie_err(pc, err);
+	/* 
+	 * clear T310 if running (should be cleared by a Progress 
+	 * Message, according to ETSI). 
+	 * 
+	 */
+	L3DelTimer(&pc->timer);
+	if (pc->t303skb) {
+		dev_kfree_skb(pc->t303skb);
+		pc->t303skb = NULL;
+	}
 	if (ERR_IE_COMPREHENSION != err) {
 		if (mISDN_l3up(pc, CC_PROGRESS | INDICATION, skb))
 			dev_kfree_skb(skb);
@@ -1223,10 +1341,10 @@ l3dss1_notify(l3_process_t *pc, u_char pr, void *arg) {
 	Q931_info_t	*qi = (Q931_info_t *)skb->data;
 	int		err = 0;
 	u_char		*p, cause = CAUSE_INVALID_CONTENTS;
-                        
-	if (qi->notify) {
+
+	if (qi->notify.off) {
 		p = skb->data;
-		p += L3_EXTRA_SIZE + qi->notify;
+		p += L3_EXTRA_SIZE + qi->notify.off;
 		p++;
 		if (p[0] != 1) {
 			err = 1;
@@ -1247,7 +1365,7 @@ l3dss1_notify(l3_process_t *pc, u_char pr, void *arg) {
 		cause = CAUSE_MANDATORY_IE_MISS;
 		err = 3;
 	}
-	if (err) {	
+	if (err) {
 		if (pc->l3->debug & L3_DEB_WARN)
 			l3_debug(pc->l3, "notify error %d", err);
 		l3dss1_status_send(pc, cause);
@@ -1301,9 +1419,9 @@ l3dss1_release_ind(l3_process_t *pc, u_char pr, void *arg)
 	int		err, callState = -1;
 	Q931_info_t	*qi = (Q931_info_t *)skb->data;
 
-	if (qi->call_state) {
+	if (qi->call_state.off) {
 		p = skb->data;
-		p += L3_EXTRA_SIZE + qi->call_state;
+		p += L3_EXTRA_SIZE + qi->call_state.off;
 		p++;
 		if (1 == *p++)
 			callState = *p;
@@ -1325,6 +1443,7 @@ l3dss1_release_ind(l3_process_t *pc, u_char pr, void *arg)
 static void
 l3dss1_restart(l3_process_t *pc, u_char pr, void *arg) {
 	struct sk_buff	*skb = arg;
+
 	L3DelTimer(&pc->timer);
 	mISDN_l3up(pc, CC_RELEASE | INDICATION, NULL);
 	release_l3_process(pc);
@@ -1336,9 +1455,9 @@ static void
 l3dss1_status(l3_process_t *pc, u_char pr, void *arg) {
 	struct sk_buff	*skb = arg;
 	Q931_info_t	*qi = (Q931_info_t *)skb->data;
-	int		ret = 0; 
+	int		ret = 0;
 	u_char		*p, cause = 0, callState = 0xff;
-	
+
 	if ((ret = l3dss1_get_cause(pc, skb))) {
 		if (pc->l3->debug & L3_DEB_WARN)
 			l3_debug(pc->l3, "STATUS get_cause ret(%d)", ret);
@@ -1347,9 +1466,9 @@ l3dss1_status(l3_process_t *pc, u_char pr, void *arg) {
 		else
 			cause = CAUSE_INVALID_CONTENTS;
 	}
-	if (qi->call_state) {
+	if (qi->call_state.off) {
 		p = skb->data;
-		p += L3_EXTRA_SIZE + qi->call_state;
+		p += L3_EXTRA_SIZE + qi->call_state.off;
 		p++;
 		if (1 == *p++) {
 			callState = *p;
@@ -1375,7 +1494,7 @@ l3dss1_status(l3_process_t *pc, u_char pr, void *arg) {
 			return;
 		}
 	}
-	if (qi->cause)
+	if (qi->cause.off)
 		cause = pc->err & 0x7f;
 	if ((cause == CAUSE_PROTOCOL_ERROR) && (callState == 0)) {
 		/* ETS 300-104 7.6.1, 8.6.1, 10.6.1...
@@ -1397,15 +1516,15 @@ l3dss1_facility(l3_process_t *pc, u_char pr, void *arg)
 	struct sk_buff	*skb = arg;
 	Q931_info_t	*qi = (Q931_info_t *)skb->data;
 	int		ret;
-	
+
 	ret = check_infoelements(pc, skb, ie_FACILITY);
 	l3dss1_std_ie_err(pc, ret);
-	if (!qi->facility) {
+	if (!qi->facility.off) {
 		if (pc->l3->debug & L3_DEB_WARN)
 			l3_debug(pc->l3, "FACILITY without IE_FACILITY");
 		dev_kfree_skb(skb);
 		return;
-	}		
+	}
 	if (mISDN_l3up(pc, CC_FACILITY | INDICATION, skb))
 		dev_kfree_skb(skb);
 }
@@ -1436,7 +1555,7 @@ l3dss1_suspend_rej(l3_process_t *pc, u_char pr, void *arg)
 	if ((ret = l3dss1_get_cause(pc, skb))) {
 		if (pc->l3->debug & L3_DEB_WARN)
 			l3_debug(pc->l3, "SUSP_REJ get_cause err(%d)", ret);
-		if (ret == -1) 
+		if (ret == -1)
 			cause = CAUSE_MANDATORY_IE_MISS;
 		else
 			cause = CAUSE_INVALID_CONTENTS;
@@ -1505,7 +1624,7 @@ l3dss1_resume_rej(l3_process_t *pc, u_char pr, void *arg)
 	if ((ret = l3dss1_get_cause(pc, skb))) {
 		if (pc->l3->debug & L3_DEB_WARN)
 			l3_debug(pc->l3, "RES_REJ get_cause err(%d)", ret);
-		if (ret == -1) 
+		if (ret == -1)
 			cause = CAUSE_MANDATORY_IE_MISS;
 		else
 			cause = CAUSE_INVALID_CONTENTS;
@@ -1538,9 +1657,9 @@ l3dss1_global_restart(l3_process_t *pc, u_char pr, void *arg)
 
 //	newl3state(pc, 2);
 	L3DelTimer(&pc->timer);
-	if (qi->restart_ind) {
+	if (qi->restart_ind.off) {
 		p = skb->data;
-		p += L3_EXTRA_SIZE + qi->restart_ind;
+		p += L3_EXTRA_SIZE + qi->restart_ind.off;
 		p++;
 		ri = p[1];
 		l3_debug(pc->l3, "Restart %x", ri);
@@ -1548,9 +1667,9 @@ l3dss1_global_restart(l3_process_t *pc, u_char pr, void *arg)
 		l3_debug(pc->l3, "Restart without restart IE");
 		ri = 0x86;
 	}
-	if (qi->channel_id) {
+	if (qi->channel_id.off) {
 		p = skb->data;
-		p += L3_EXTRA_SIZE + qi->channel_id;
+		p += L3_EXTRA_SIZE + qi->channel_id.off;
 		p++;
 		chan = p[1] & 3;
 		ch = p[1];
@@ -1581,6 +1700,394 @@ l3dss1_global_restart(l3_process_t *pc, u_char pr, void *arg)
 static void
 l3dss1_dummy(l3_process_t *pc, u_char pr, void *arg)
 {
+}
+
+static void
+l3dss1_hold_req(l3_process_t *pc, u_char pr, void *arg)
+{
+	if (!test_bit(FLG_PTP, &pc->l3->Flag)) {
+		if ((pc->state & VALID_HOLD_STATES_PTMP) == 0) { /* not a valid HOLD state for PtMP */
+			return;
+		}
+	}
+	switch(pc->aux_state) {
+		case AUX_IDLE:
+			break;
+		default:
+			int_errtxt("RETRIEVE_REQ in wrong aux state %d\n", pc->aux_state);
+		case AUX_HOLD_IND: /* maybe collition, ignored */
+			return;
+	}
+	if (arg)
+		SendMsg(pc, arg, -1);
+	else
+		l3dss1_message(pc, MT_HOLD);
+	pc->aux_state = AUX_HOLD_REQ;
+	L3AddTimer(&pc->aux_timer, THOLD, CC_THOLD);
+}
+
+static void
+l3dss1_hold_ack_req(l3_process_t *pc, u_char pr, void *arg)
+{
+	switch(pc->aux_state) {
+		case AUX_HOLD_IND:
+			break;
+		default:
+			int_errtxt("HOLD_ACK in wrong aux state %d\n", pc->aux_state);
+			return;
+	}
+	if (arg)
+		SendMsg(pc, arg, -1);
+	else
+		l3dss1_message(pc, MT_HOLD_ACKNOWLEDGE);
+	pc->aux_state = AUX_CALL_HELD;
+}
+
+static void
+l3dss1_hold_rej_req(l3_process_t *pc, u_char pr, void *arg)
+{
+	switch(pc->aux_state) {
+		case AUX_HOLD_IND:
+			break;
+		default:
+			int_errtxt("HOLD_REJ in wrong aux state %d\n", pc->aux_state);
+			return;
+	}
+	if (arg)
+		SendMsg(pc, arg, -1);
+	else
+		l3dss1_message_cause(pc, MT_HOLD_REJECT, CAUSE_RESOURCES_UNAVAIL); // FIXME
+	pc->aux_state = AUX_IDLE;
+}
+
+static void
+l3dss1_hold_ind(l3_process_t *pc, u_char pr, void *arg)
+{
+	struct sk_buff	*skb = arg;
+	int		ret;
+
+	ret = check_infoelements(pc, skb, ie_HOLD);
+	if (ERR_IE_COMPREHENSION == ret) {
+		l3dss1_std_ie_err(pc, ret);
+		dev_kfree_skb(skb);
+		return;
+	}
+	if (test_bit(FLG_PTP, &pc->l3->Flag)) {
+		if ((pc->state & VALID_HOLD_STATES_PTP) == 0) { /* not a valid HOLD state for PtP */
+			l3dss1_message_cause(pc, MT_HOLD_REJECT, CAUSE_NOTCOMPAT_STATE);
+			dev_kfree_skb(skb);
+			return;
+		}
+	} else {
+		if ((pc->state & VALID_HOLD_STATES_PTMP) == 0) { /* not a valid HOLD state for PtMP */
+			l3dss1_message_cause(pc, MT_HOLD_REJECT, CAUSE_NOTCOMPAT_STATE);
+			dev_kfree_skb(skb);
+			return;
+		}
+	}
+	switch(pc->aux_state) {
+		case AUX_HOLD_REQ:
+			L3DelTimer(&pc->aux_timer);
+		case AUX_IDLE:
+			if (mISDN_l3up(pc, CC_HOLD | INDICATION, skb))
+				dev_kfree_skb(skb);
+			else {
+				pc->aux_state = AUX_HOLD_IND;
+			}
+			break;
+		default:
+			l3dss1_message_cause(pc, MT_HOLD_REJECT, CAUSE_NOTCOMPAT_STATE);
+			dev_kfree_skb(skb);
+			return;
+	}
+	if (ret) /* STATUS for none mandatory IE errors after actions are taken */
+		l3dss1_std_ie_err(pc, ret);
+}
+
+static void
+l3dss1_hold_rej(l3_process_t *pc, u_char pr, void *arg)
+{
+	struct sk_buff	*skb = arg;
+	int		ret;
+	u_char		cause;
+
+	if ((ret = l3dss1_get_cause(pc, skb))) {
+		if (pc->l3->debug & L3_DEB_WARN)
+			l3_debug(pc->l3, "HOLD_REJ get_cause err(%d)", ret);
+		if (ret == -1)
+			cause = CAUSE_MANDATORY_IE_MISS;
+		else
+			cause = CAUSE_INVALID_CONTENTS;
+		l3dss1_status_send(pc, cause);
+		dev_kfree_skb(skb);
+		return;
+	}
+	ret = check_infoelements(pc, skb, ie_HOLD_REJECT);
+	if (ERR_IE_COMPREHENSION == ret) {
+		l3dss1_std_ie_err(pc, ret);
+		dev_kfree_skb(skb);
+		return;
+	}
+	switch(pc->aux_state) {
+		case AUX_HOLD_REQ:
+			L3DelTimer(&pc->aux_timer);
+			break;
+		default:
+			int_errtxt("HOLD_REJ in wrong aux state %d\n", pc->aux_state);
+	}
+	pc->aux_state = AUX_IDLE;
+	if (mISDN_l3up(pc, CC_HOLD_REJECT | INDICATION, skb))
+		dev_kfree_skb(skb);
+}
+
+static void
+l3dss1_hold_ignore(l3_process_t *pc, u_char pr, void *arg)
+{
+	dev_kfree_skb(arg);
+}
+
+static void
+l3dss1_hold_req_ignore(l3_process_t *pc, u_char pr, void *arg)
+{
+}
+
+static void
+l3dss1_hold_ack(l3_process_t *pc, u_char pr, void *arg)
+{
+	struct sk_buff	*skb = arg;
+	int		ret;
+
+	ret = check_infoelements(pc, skb, ie_HOLD_ACKNOWLEDGE);
+	if (ERR_IE_COMPREHENSION == ret) {
+		l3dss1_std_ie_err(pc, ret);
+		dev_kfree_skb(skb);
+		return;
+	}
+	switch(pc->aux_state) {
+		case AUX_HOLD_REQ:
+			L3DelTimer(&pc->aux_timer);
+			if (mISDN_l3up(pc, CC_HOLD_ACKNOWLEDGE | INDICATION, skb))
+				dev_kfree_skb(skb);
+			pc->aux_state = AUX_CALL_HELD;
+			break;
+		default:
+			int_errtxt("HOLD_ACK in wrong aux state %d\n", pc->aux_state);
+			dev_kfree_skb(skb);
+	}
+	if (ret) /* STATUS for none mandatory IE errors after actions are taken */
+		l3dss1_std_ie_err(pc, ret);
+}
+
+static void
+l3dss1_retrieve_req(l3_process_t *pc, u_char pr, void *arg)
+{
+	if (!test_bit(FLG_PTP, &pc->l3->Flag)) {
+		if ((pc->state & (VALID_HOLD_STATES_PTMP | SBIT(12))) == 0) { /* not a valid RETRIEVE state for PtMP */
+			return;
+		}
+	}
+	switch(pc->aux_state) {
+		case AUX_CALL_HELD:
+			break;
+		default:
+			int_errtxt("RETRIEVE_REQ in wrong aux state %d\n", pc->aux_state);
+		case AUX_RETRIEVE_IND: /* maybe collition, ignored */
+			return;
+	}
+	if (arg) {
+		SendMsg(pc, arg, -1);
+	} else {
+		newl3state(pc, -1);
+		l3dss1_message(pc, MT_RETRIEVE);
+	}
+	pc->aux_state = AUX_RETRIEVE_REQ;
+	L3AddTimer(&pc->aux_timer, TRETRIEVE, CC_TRETRIEVE);
+}
+
+static void
+l3dss1_retrieve_ack_req(l3_process_t *pc, u_char pr, void *arg)
+{
+	switch(pc->aux_state) {
+		case AUX_RETRIEVE_IND:
+			break;
+		default:
+			int_errtxt("HOLD_REJ in wrong aux state %d\n", pc->aux_state);
+			return;
+	}
+	if (arg)
+		SendMsg(pc, arg, -1);
+	else
+		l3dss1_message(pc, MT_RETRIEVE_ACKNOWLEDGE);
+	pc->aux_state = AUX_IDLE;
+}
+
+static void
+l3dss1_retrieve_rej_req(l3_process_t *pc, u_char pr, void *arg)
+{
+	switch(pc->aux_state) {
+		case AUX_RETRIEVE_IND:
+			break;
+		default:
+			int_errtxt("HOLD_REJ in wrong aux state %d\n", pc->aux_state);
+			return;
+	}
+	if (arg)
+		SendMsg(pc, arg, -1);
+	else
+		l3dss1_message_cause(pc, MT_RETRIEVE_REJECT, CAUSE_RESOURCES_UNAVAIL); // FIXME
+	pc->aux_state = AUX_CALL_HELD;
+}
+
+
+static void
+l3dss1_retrieve_ind(l3_process_t *pc, u_char pr, void *arg)
+{
+	struct sk_buff	*skb = arg;
+	int		ret;
+
+	if (test_bit(FLG_PTP, &pc->l3->Flag)) {
+		if ((pc->state & (VALID_HOLD_STATES_PTP | SBIT(12))) == 0) { /* not a valid RETRIEVE state for PtP */
+			l3dss1_message_cause(pc, MT_RETRIEVE_REJECT, CAUSE_NOTCOMPAT_STATE);
+			dev_kfree_skb(skb);
+			return;
+		}
+	} else {
+		if ((pc->state & (VALID_HOLD_STATES_PTMP | SBIT(12))) == 0) { /* not a valid RETRIEVE state for PtMP */
+			l3dss1_message_cause(pc, MT_RETRIEVE_REJECT, CAUSE_NOTCOMPAT_STATE);
+			dev_kfree_skb(skb);
+			return;
+		}
+	}
+	ret = check_infoelements(pc, skb, ie_RETRIEVE);
+	if (ERR_IE_COMPREHENSION == ret) {
+		l3dss1_std_ie_err(pc, ret);
+		dev_kfree_skb(skb);
+		return;
+	}
+	switch(pc->aux_state) {
+		case AUX_RETRIEVE_REQ:
+			L3DelTimer(&pc->aux_timer);
+		case AUX_CALL_HELD:
+			if (!(ret = l3dss1_get_channel_id(pc, skb))) {
+				if ((0 == pc->bc) || (3 == pc->bc)) {
+					if (pc->l3->debug & L3_DEB_WARN)
+						l3_debug(pc->l3, "RETRIEVE with wrong chid %x",
+							pc->bc);
+					l3dss1_message_cause(pc, MT_RETRIEVE_REJECT, CAUSE_INVALID_CONTENTS);
+					dev_kfree_skb(skb);
+					return;
+				}
+			}
+			if (mISDN_l3up(pc, CC_RETRIEVE | INDICATION, skb))
+				dev_kfree_skb(skb);
+			else {
+				pc->aux_state = AUX_RETRIEVE_IND;
+			}
+			break;
+		default:
+			l3dss1_message_cause(pc, MT_RETRIEVE_REJECT, CAUSE_NOTCOMPAT_STATE);
+			dev_kfree_skb(skb);
+			return;
+	}
+	if (ret) /* STATUS for none mandatory IE errors after actions are taken */
+		l3dss1_std_ie_err(pc, ret);
+}
+
+static void
+l3dss1_retrieve_ack(l3_process_t *pc, u_char pr, void *arg)
+{
+	struct sk_buff	*skb = arg;
+	int		ret;
+
+	ret = check_infoelements(pc, skb, ie_RETRIEVE_ACKNOWLEDGE);
+	if (ERR_IE_COMPREHENSION == ret) {
+		l3dss1_std_ie_err(pc, ret);
+		dev_kfree_skb(skb);
+		return;
+	}
+	switch(pc->aux_state) {
+		case AUX_RETRIEVE_REQ:
+			L3DelTimer(&pc->aux_timer);
+			if (!(ret = l3dss1_get_channel_id(pc, skb))) {
+				if ((0 == pc->bc) || (3 == pc->bc)) {
+					if (pc->l3->debug & L3_DEB_WARN)
+						l3_debug(pc->l3, "RETRIEVE ACK with wrong chid %x",
+							pc->bc);
+					l3dss1_status_send(pc, CAUSE_INVALID_CONTENTS);
+					dev_kfree_skb(skb);
+					return;
+				}
+			}
+			if (mISDN_l3up(pc, CC_RETRIEVE_ACKNOWLEDGE | INDICATION, skb))
+				dev_kfree_skb(skb);
+			pc->aux_state = AUX_IDLE;
+			break;
+		default:
+			int_errtxt("RETRIEVE_ACK in wrong aux state %d\n", pc->aux_state);
+	}
+	if (ret) /* STATUS for none mandatory IE errors after actions are taken */
+		l3dss1_std_ie_err(pc, ret);
+}
+
+static void
+l3dss1_retrieve_rej(l3_process_t *pc, u_char pr, void *arg)
+{
+	struct sk_buff	*skb = arg;
+	int		ret;
+	u_char		cause;
+
+	if ((ret = l3dss1_get_cause(pc, skb))) {
+		if (pc->l3->debug & L3_DEB_WARN)
+			l3_debug(pc->l3, "RETRIEVE_REJ get_cause err(%d)", ret);
+		if (ret == -1)
+			cause = CAUSE_MANDATORY_IE_MISS;
+		else
+			cause = CAUSE_INVALID_CONTENTS;
+		l3dss1_status_send(pc, cause);
+		dev_kfree_skb(skb);
+		return;
+	}
+	ret = check_infoelements(pc, skb, ie_RETRIEVE_REJECT);
+	if (ERR_IE_COMPREHENSION == ret) {
+		l3dss1_std_ie_err(pc, ret);
+		dev_kfree_skb(skb);
+		return;
+	}
+	switch(pc->aux_state) {
+		case AUX_RETRIEVE_REQ:
+			L3DelTimer(&pc->aux_timer);
+			pc->aux_state = AUX_CALL_HELD;
+			break;
+		default:
+			int_errtxt("RETRIEVE_REJ in wrong aux state %d\n", pc->aux_state);
+	}
+	pc->aux_state = AUX_IDLE;
+	if (mISDN_l3up(pc, CC_RETRIEVE_REJECT | INDICATION, skb))
+		dev_kfree_skb(skb);
+}
+
+static void
+l3dss1_thold(l3_process_t *pc, u_char pr, void *arg)
+{
+	L3DelTimer(&pc->aux_timer);
+#if 0
+	pc->cause = 102;	/* Timer expiry */
+	pc->para.loc = 0;	/* local */
+#endif
+	mISDN_l3up(pc, CC_HOLD_REJECT | INDICATION, NULL);
+	pc->aux_state = AUX_IDLE;
+}
+
+static void
+l3dss1_tretrieve(l3_process_t *pc, u_char pr, void *arg)
+{
+	L3DelTimer(&pc->aux_timer);
+#if 0
+	pc->cause = 102;	/* Timer expiry */
+	pc->para.loc = 0;	/* local */
+#endif
+	mISDN_l3up(pc, CC_RETRIEVE_REJECT | INDICATION, NULL);
+	pc->aux_state = AUX_CALL_HELD;
 }
 
 static void
@@ -1715,7 +2222,7 @@ l3dss1_dl_reset(l3_process_t *pc, u_char pr, void *arg)
 	qi = (Q931_info_t *)skb_put(skb, L3_EXTRA_SIZE);
 	mISDN_initQ931_info(qi);
 	qi->type = MT_DISCONNECT;
-	qi->cause = 1;
+	qi->cause.off = 1;
 	p = skb_put(skb, 5);
 	p++;
 	*p++ = IE_CAUSE;
@@ -1748,7 +2255,7 @@ l3dss1_dl_reestablish(l3_process_t *pc, u_char pr, void *arg)
 	L3AddTimer(&pc->timer, T309, CC_T309);
 	l3_msg(pc->l3, DL_ESTABLISH | REQUEST, 0, 0, NULL);
 }
- 
+
 static void
 l3dss1_dl_reest_status(l3_process_t *pc, u_char pr, void *arg)
 {
@@ -1794,6 +2301,26 @@ static struct stateentry downstatelist[] =
 	 CC_CONNECT | REQUEST, l3dss1_connect_req},
 	{SBIT(10),
 	 CC_SUSPEND | REQUEST, l3dss1_suspend_req},
+	{SBIT(3) | SBIT(4) | SBIT(7) | SBIT(8) | SBIT(9) | SBIT(10),
+	 CC_HOLD | REQUEST, l3dss1_hold_req},
+	{ALL_STATES,
+	 CC_HOLD | REQUEST, l3dss1_hold_req_ignore},
+	{SBIT(3) | SBIT(4) | SBIT(7) | SBIT(8) | SBIT(9) | SBIT(10),
+	 CC_HOLD_ACKNOWLEDGE | REQUEST, l3dss1_hold_ack_req},
+	{SBIT(3) | SBIT(4) | SBIT(7) | SBIT(8) | SBIT(9) | SBIT(10),
+	 CC_HOLD_REJECT | REQUEST, l3dss1_hold_rej_req},
+	{SBIT(3) | SBIT(4) | SBIT(7) | SBIT(8) | SBIT(9) | SBIT(10) | SBIT(12),
+	 CC_RETRIEVE | REQUEST, l3dss1_retrieve_req},
+	{ALL_STATES,
+	 CC_RETRIEVE| REQUEST, l3dss1_hold_req_ignore},
+	{SBIT(3) | SBIT(4) | SBIT(7) | SBIT(8) | SBIT(9) | SBIT(10) | SBIT(12),
+	 CC_RETRIEVE_ACKNOWLEDGE | REQUEST, l3dss1_retrieve_ack_req},
+	{SBIT(3) | SBIT(4) | SBIT(7) | SBIT(8) | SBIT(9) | SBIT(10) | SBIT(12),
+	 CC_RETRIEVE_REJECT | REQUEST, l3dss1_retrieve_rej_req},
+	{SBIT(3) | SBIT(4) | SBIT(7) | SBIT(8) | SBIT(9) | SBIT(10),
+	 CC_HOLD  | REQUEST, l3dss1_hold_req},
+	{ALL_STATES,
+	 CC_FACILITY | REQUEST, l3dss1_facility_req},
 	{ALL_STATES,
 	 CC_STATUS_ENQUIRY | REQUEST, l3dss1_status_enq_req},
 };
@@ -1851,6 +2378,20 @@ static struct stateentry datastatelist[] =
 	 MT_RESUME_ACKNOWLEDGE, l3dss1_resume_ack},
 	{SBIT(17),
 	 MT_RESUME_REJECT, l3dss1_resume_rej},
+	{SBIT(12) | SBIT(19),
+	 MT_HOLD, l3dss1_hold_ignore},
+	{ALL_STATES,
+	 MT_HOLD, l3dss1_hold_ind},
+	{SBIT(3) | SBIT(4) | SBIT(7) | SBIT(8) | SBIT(9) | SBIT(10),
+	 MT_HOLD_REJECT, l3dss1_hold_rej},
+	{SBIT(3) | SBIT(4) | SBIT(7) | SBIT(8) | SBIT(9) | SBIT(10),
+	 MT_HOLD_ACKNOWLEDGE, l3dss1_hold_ack},
+	{ALL_STATES,
+	 MT_RETRIEVE, l3dss1_retrieve_ind},
+	{SBIT(3) | SBIT(4) | SBIT(7) | SBIT(8) | SBIT(9) | SBIT(10) | SBIT(12),
+	 MT_RETRIEVE_REJECT, l3dss1_retrieve_rej},
+	{SBIT(3) | SBIT(4) | SBIT(7) | SBIT(8) | SBIT(9) | SBIT(10) | SBIT(12),
+	 MT_RETRIEVE_ACKNOWLEDGE, l3dss1_retrieve_ack},
 };
 
 #define DATASLLEN \
@@ -1904,6 +2445,10 @@ static struct stateentry manstatelist[] =
 	{SBIT(6),
 	 CC_TCTRL, l3dss1_reset},
 	{ALL_STATES,
+	 CC_THOLD, l3dss1_thold},
+	{ALL_STATES,
+	 CC_TRETRIEVE, l3dss1_tretrieve},
+	{ALL_STATES,
 	 CC_RESTART | REQUEST, l3dss1_restart},
 };
 
@@ -1940,25 +2485,14 @@ global_handler(layer3_t *l3, u_int mt, struct sk_buff *skb)
 }
 
 static int
-dss1_fromdown(mISDNif_t *hif, struct sk_buff *skb)
+dss1_fromdown(layer3_t *l3, struct sk_buff *skb, mISDN_head_t *hh)
 {
-	layer3_t	*l3;
 	u_int		i;
 	int		cause, callState, ret = -EINVAL;
 	char		*ptr;
 	l3_process_t	*proc;
-	mISDN_head_t	*hh;
 	Q931_info_t	*qi;
-	
 
-	if (!hif || !skb)
-		return(ret);
-	l3 = hif->fdata;
-	hh = mISDN_HEAD_P(skb);
-	if (debug)
-		printk(KERN_DEBUG "%s: prim(%x)\n", __FUNCTION__, hh->prim);
-	if (!l3)
-		return(ret);
 	switch (hh->prim) {
 		case (DL_DATA | INDICATION):
 		case (DL_UNITDATA | INDICATION):
@@ -1977,8 +2511,8 @@ dss1_fromdown(mISDNif_t *hif, struct sk_buff *skb)
 			return(0);
 			break;
                 default:
-                        printk(KERN_WARNING "%s: unknown pr=%04x\n",
-                        	__FUNCTION__, hh->prim);
+                        printk(KERN_WARNING "%s: unknown pr=%04x dinfo=%x\n",
+                        	__FUNCTION__, hh->prim, hh->dinfo);
                         return(-EINVAL);
 	}
 	if (skb->len < 3) {
@@ -2003,6 +2537,8 @@ dss1_fromdown(mISDNif_t *hif, struct sk_buff *skb)
 		dev_kfree_skb(skb);
 		return(0);
 	}
+	if (l3->debug & L3_DEB_MSG)
+		mISDN_LogL3Msg(skb);
 	qi = (Q931_info_t *)skb->data;
 	ptr = skb->data;
 	ptr += L3_EXTRA_SIZE;
@@ -2053,15 +2589,15 @@ dss1_fromdown(mISDNif_t *hif, struct sk_buff *skb)
 			}
 		} else if (qi->type == MT_STATUS) {
 			cause = 0;
-			if (qi->cause) {
-				if (ptr[qi->cause +1] >= 2)
-					cause = ptr[qi->cause + 3] & 0x7f;
+			if (qi->cause.off) {
+				if (ptr[qi->cause.off +1] >= 2)
+					cause = ptr[qi->cause.off + 3] & 0x7f;
 				else
-					cause = ptr[qi->cause + 2] & 0x7f;	
+					cause = ptr[qi->cause.off + 2] & 0x7f;
 			}
 			callState = 0;
-			if (qi->call_state) {
-				callState = ptr[qi->cause + 2];
+			if (qi->call_state.off) {
+				callState = ptr[qi->call_state.off + 2];
 			}
 			/* ETS 300-104 part 2.4.1
 			 * if setup has not been made and a message type
@@ -2127,22 +2663,12 @@ dss1_fromdown(mISDNif_t *hif, struct sk_buff *skb)
 }
 
 static int
-dss1_fromup(mISDNif_t *hif, struct sk_buff *skb)
+dss1_fromup(layer3_t *l3, struct sk_buff *skb, mISDN_head_t *hh)
 {
-	layer3_t	*l3;
 	u_int		i;
 	int		cr, ret = -EINVAL;
 	l3_process_t	*proc;
-	mISDN_head_t	*hh;
 
-	if (!hif || !skb)
-		return(ret);
-	l3 = hif->fdata;
-	hh = mISDN_HEAD_P(skb);
-	if (debug)
-		printk(KERN_DEBUG  "%s: prim(%x)\n", __FUNCTION__, hh->prim);
-	if (!l3)
-		return(ret);
 	if ((DL_ESTABLISH | REQUEST) == hh->prim) {
 		l3_msg(l3, hh->prim, 0, 0, NULL);
 		dev_kfree_skb(skb);
@@ -2164,7 +2690,9 @@ dss1_fromup(mISDNif_t *hif, struct sk_buff *skb)
 			}
 		}
 		return(ret);
-	} 
+	}
+	if ((l3->debug & L3_DEB_MSG) && skb->len)
+		mISDN_LogL3Msg(skb);
 	if (!proc && hh->dinfo == MISDN_ID_DUMMY) {
 		if (hh->prim == (CC_FACILITY | REQUEST)) {
 			l3dss1_facility_req(l3->dummy, hh->prim, skb->len ? skb : NULL);
@@ -2206,7 +2734,7 @@ static int
 dss1man(l3_process_t *proc, u_int pr, void *arg)
 {
 	u_int	i;
- 
+
 	if (!proc) {
 		printk(KERN_ERR "mISDN dss1man without proc pr=%04x\n", pr);
 		return(-EINVAL);
@@ -2230,14 +2758,53 @@ dss1man(l3_process_t *proc, u_int pr, void *arg)
 	return(0);
 }
 
+static int
+dss1_function(mISDNinstance_t *inst, struct sk_buff *skb)
+{
+	layer3_t	*l3;
+	int		ret = -EINVAL;
+	mISDN_head_t	*hh;
+
+	l3 = inst->privat;
+	hh = mISDN_HEAD_P(skb);
+	if (debug)
+		printk(KERN_DEBUG  "%s: addr(%08x) prim(%x)\n", __FUNCTION__,  hh->addr, hh->prim);
+	if (!l3)
+		return(ret);
+
+	switch(hh->addr & MSG_DIR_MASK) {
+		case FLG_MSG_DOWN:
+			ret = dss1_fromup(l3, skb, hh);
+			break;
+		case FLG_MSG_UP:
+			ret = dss1_fromdown(l3, skb, hh);
+			break;
+		case MSG_TO_OWNER:
+			/* FIXME: must be handled depending on type */
+			int_errtxt("not implemented yet");
+			break;
+		default:
+			/* FIXME: broadcast must be handled depending on type */
+			if ((hh->prim & MISDN_CMD_MASK) == MGR_SHORTSTATUS) {
+				ret = -EOPNOTSUPP;
+				break;
+			}
+			int_errtxt("not implemented yet");
+			break;
+	}
+	return(ret);
+}
+
 static void
 release_udss1(layer3_t *l3)
 {
 	mISDNinstance_t  *inst = &l3->inst;
+	u_long		flags;
 
 	printk(KERN_DEBUG "release_udss1 refcnt %d l3(%p) inst(%p)\n",
 		u_dss1.refcnt, l3, inst);
 	release_l3(l3);
+#ifdef FIXME
 	if (inst->up.peer) {
 		inst->up.peer->obj->ctrl(inst->up.peer,
 			MGR_DISCONNECT | REQUEST, &inst->up);
@@ -2246,10 +2813,13 @@ release_udss1(layer3_t *l3)
 		inst->down.peer->obj->ctrl(inst->down.peer,
 			MGR_DISCONNECT | REQUEST, &inst->down);
 	}
+#endif
+	spin_lock_irqsave(&u_dss1.lock, flags);
 	list_del(&l3->list);
+	spin_unlock_irqrestore(&u_dss1.lock, flags);
 	u_dss1.ctrl(inst, MGR_UNREGLAYER | REQUEST, NULL);
 	if (l3->entity != MISDN_ENTITY_NONE)
-		u_dss1.ctrl(inst, MGR_DELENTITY | REQUEST, (void *)l3->entity);
+		u_dss1.ctrl(inst, MGR_DELENTITY | REQUEST, (void *)((u_long)l3->entity));
 	kfree(l3);
 }
 
@@ -2258,6 +2828,7 @@ new_udss1(mISDNstack_t *st, mISDN_pid_t *pid)
 {
 	layer3_t	*nl3;
 	int		err;
+	u_long		flags;
 
 	if (!st || !pid)
 		return(-EINVAL);
@@ -2268,7 +2839,7 @@ new_udss1(mISDNstack_t *st, mISDN_pid_t *pid)
 	memset(nl3, 0, sizeof(layer3_t));
 	memcpy(&nl3->inst.pid, pid, sizeof(mISDN_pid_t));
 	nl3->debug = debug;
-	mISDN_init_instance(&nl3->inst, &u_dss1, nl3);
+	mISDN_init_instance(&nl3->inst, &u_dss1, nl3, dss1_function);
 	if (!mISDN_SetHandledPID(&u_dss1, &nl3->inst.pid)) {
 		int_error();
 		return(-ENOPROTOOPT);
@@ -2300,6 +2871,7 @@ new_udss1(mISDNstack_t *st, mISDN_pid_t *pid)
 	nl3->global->l3 = nl3;
 	nl3->global->t303skb = NULL;
 	L3InitTimer(nl3->global, &nl3->global->timer);
+	L3InitTimer(nl3->global, &nl3->global->aux_timer);
 	if (!(nl3->dummy = kmalloc(sizeof(l3_process_t), GFP_ATOMIC))) {
 		printk(KERN_ERR "mISDN can't get memory for dss1 dummy CR\n");
 		release_l3(nl3);
@@ -2314,9 +2886,12 @@ new_udss1(mISDNstack_t *st, mISDN_pid_t *pid)
 	nl3->dummy->l3 = nl3;
 	nl3->dummy->t303skb = NULL;
 	L3InitTimer(nl3->dummy, &nl3->dummy->timer);
-	sprintf(nl3->inst.name, "DSS1 %d", st->id);
+	L3InitTimer(nl3->dummy, &nl3->dummy->aux_timer);
+	sprintf(nl3->inst.name, "DSS1 %x", st->id >> 8);
 	nl3->p_mgr = dss1man;
+	spin_lock_irqsave(&u_dss1.lock, flags);
 	list_add_tail(&nl3->list, &u_dss1.ilist);
+	spin_unlock_irqrestore(&u_dss1.lock, flags);
 	err = u_dss1.ctrl(&nl3->inst, MGR_NEWENTITY | REQUEST, NULL);
 	if (err) {
 		printk(KERN_WARNING "mISDN %s: MGR_NEWENTITY REQUEST failed err(%d)\n",
@@ -2353,18 +2928,21 @@ MODULE_PARM(debug, "1i");
 static int
 udss1_manager(void *data, u_int prim, void *arg) {
 	mISDNinstance_t *inst = data;
-	layer3_t *l3l;
+	layer3_t	*l3l;
+	u_long		flags;
 
-	if (debug & 0x1000)
+	if (debug & MISDN_DEBUG_MANAGER)
 		printk(KERN_DEBUG "udss1_manager data:%p prim:%x arg:%p\n", data, prim, arg);
 	if (!data)
 		return(-EINVAL);
+	spin_lock_irqsave(&u_dss1.lock, flags);
 	list_for_each_entry(l3l, &u_dss1.ilist, list) {
 		if (&l3l->inst == inst)
 			break;
 	}
 	if (&l3l->list == &u_dss1.ilist)
 		l3l = NULL;
+	spin_unlock_irqrestore(&u_dss1.lock, flags);
 	if (prim == (MGR_NEWLAYER | REQUEST))
 		return(new_udss1(data, arg));
 	if (!l3l) {
@@ -2374,12 +2952,13 @@ udss1_manager(void *data, u_int prim, void *arg) {
 	}
 	switch(prim) {
 	    case MGR_NEWENTITY | CONFIRM:
-		l3l->entity = (int)arg;
+		l3l->entity = (u_long)arg & 0xffffffff;
 		break;
 	    case MGR_ADDSTPARA | INDICATION:
 	    	l3l->down_headerlen = ((mISDN_stPara_t *)arg)->down_headerlen;
 	    case MGR_CLRSTPARA | INDICATION:
 		break;
+#ifdef FIXME
 	    case MGR_CONNECT | REQUEST:
 		return(mISDN_ConnectIF(inst, arg));
 	    case MGR_SETIF | REQUEST:
@@ -2388,9 +2967,10 @@ udss1_manager(void *data, u_int prim, void *arg) {
 	    case MGR_DISCONNECT | REQUEST:
 	    case MGR_DISCONNECT | INDICATION:
 		return(mISDN_DisConnectIF(inst, arg));
+#endif
 	    case MGR_RELEASE | INDICATION:
 	    case MGR_UNREGLAYER | REQUEST:
-	    	if (debug & 0x1000)
+	    	if (debug & MISDN_DEBUG_MANAGER)
 			printk(KERN_DEBUG "release_udss1 id %x\n", l3l->inst.st->id);
 	    	release_udss1(l3l);
 	    	break;
@@ -2413,6 +2993,7 @@ int UDSS1Init(void)
 #ifdef MODULE
 	u_dss1.owner = THIS_MODULE;
 #endif
+	spin_lock_init(&u_dss1.lock);
 	INIT_LIST_HEAD(&u_dss1.ilist);
 	u_dss1.name = MName;
 	u_dss1.DPROTO.protocol[3] = ISDN_PID_L3_DSS1USER |

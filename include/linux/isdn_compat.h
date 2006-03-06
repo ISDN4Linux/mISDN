@@ -86,9 +86,22 @@ typedef struct wait_queue *wait_queue_head_t;
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,10)
 #define	OLD_PCI_REGISTER_DRIVER	1
-#define pci_get_subsys pci_find_subsys
+#define OLD_MODULE_PARAM_ARRAY
 #else
 #undef	OLD_PCI_REGISTER_DRIVER
+#endif
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,11)
+#define MODULE_MKOBJ_POINTER
+#endif
+
+#if LINUX_VERSION_CODE > KERNEL_VERSION(2,6,11)
+#define CLASSDEV_HAS_DEVT
+#endif
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,13)
+/* udev sysfs stuff */
+#define CLASS_WITHOUT_OWNER
 #endif
 
 #endif /* __KERNEL__ */

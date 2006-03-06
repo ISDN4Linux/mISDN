@@ -1,4 +1,4 @@
-/* $Id: asn1_comp.c,v 1.1 2003/11/09 09:12:28 keil Exp $
+/* $Id: asn1_comp.c,v 1.2 2006/03/06 12:52:07 keil Exp $
  *
  */
 
@@ -138,6 +138,68 @@ ParseReturnErrorComponent(struct asn1_parm *pc, u_char *p, u_char *end, int dumm
 }
 
 int
+ParseProblemValue(struct asn1_parm *pc, u_char *p, u_char *end, asn1Problem prob)
+{
+	INIT;
+	
+	pc->u.reject.problem = prob;
+	
+	print_asn1msg(PRT_DEBUG_DECODE, "ParseProblemValue: %d %d\n", prob, *p);
+	pc->u.reject.problemValue = *p++;
+	return p - beg;
+}
+
+int
+ParseRejectProblem(struct asn1_parm *pc, u_char *p, u_char *end)
+{
+        INIT;
+
+	XCHOICE_1(ParseProblemValue, ASN1_TAG_CONTEXT_SPECIFIC, 0, GeneralP);
+	XCHOICE_1(ParseProblemValue, ASN1_TAG_CONTEXT_SPECIFIC, 1, InvokeP);
+	XCHOICE_1(ParseProblemValue, ASN1_TAG_CONTEXT_SPECIFIC, 2, ReturnResultP);
+	XCHOICE_1(ParseProblemValue, ASN1_TAG_CONTEXT_SPECIFIC, 3, ReturnErrorP);
+	XCHOICE_DEFAULT;
+}
+
+int
+ParseRejectComponent(struct asn1_parm *pc, u_char *p, u_char *end, int dummy)
+{
+        int invokeId = -1;
+        int rval;
+        INIT;
+
+	pc->comp = reject;
+
+	XSEQUENCE_OPT_1(ParseInvokeId, ASN1_TAG_INTEGER, ASN1_NOT_TAGGED, &invokeId);
+	XSEQUENCE_OPT(ParseNull, ASN1_TAG_NULL, ASN1_NOT_TAGGED);
+	
+	print_asn1msg(PRT_DEBUG_DECODE, "ParseRejectComponent: invokeId %d\n", invokeId);
+
+	pc->u.reject.invokeId = invokeId;
+	
+	rval = ParseRejectProblem(pc, p, end);
+
+	print_asn1msg(PRT_DEBUG_DECODE, "ParseRejectComponent: rval %d\n", rval);
+
+	if (rval > 0)
+		p += rval;
+	else
+		return(-1);
+
+	return p - beg;
+}
+
+int
+ParseUnknownComponent(struct asn1_parm *pc, u_char *p, u_char *end, int dummy)
+{
+	int invokeId;
+	INIT;
+	
+	pc->comp = tag;
+	return end - beg;
+}
+
+int
 ParseComponent(struct asn1_parm *pc, u_char *p, u_char *end)
 {
         INIT;
@@ -145,7 +207,17 @@ ParseComponent(struct asn1_parm *pc, u_char *p, u_char *end)
 	XCHOICE(ParseInvokeComponent, ASN1_TAG_SEQUENCE, 1);
 	XCHOICE(ParseReturnResultComponent, ASN1_TAG_SEQUENCE, 2);
 	XCHOICE(ParseReturnErrorComponent, ASN1_TAG_SEQUENCE, 3);
-//	XCHOICE(ParseRejectComponent, ASN1_TAG_SEQUENCE, 4);
+	XCHOICE(ParseRejectComponent, ASN1_TAG_SEQUENCE, 4);
+	XCHOICE(ParseUnknownComponent, ASN1_TAG_SEQUENCE, 5);
+	XCHOICE(ParseUnknownComponent, ASN1_TAG_SEQUENCE, 6);
+	XCHOICE(ParseUnknownComponent, ASN1_TAG_SEQUENCE, 7);
+	XCHOICE(ParseUnknownComponent, ASN1_TAG_SEQUENCE, 8);
+	XCHOICE(ParseUnknownComponent, ASN1_TAG_SEQUENCE, 9);
+	XCHOICE(ParseUnknownComponent, ASN1_TAG_SEQUENCE, 10);
+	XCHOICE(ParseUnknownComponent, ASN1_TAG_SEQUENCE, 11);
+	XCHOICE(ParseUnknownComponent, ASN1_TAG_SEQUENCE, 12);
+	XCHOICE(ParseUnknownComponent, ASN1_TAG_SEQUENCE, 13);
+	XCHOICE(ParseUnknownComponent, ASN1_TAG_SEQUENCE, 14);
 	XCHOICE_DEFAULT;
 }
 

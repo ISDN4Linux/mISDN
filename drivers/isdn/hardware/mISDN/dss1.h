@@ -1,4 +1,4 @@
-/* $Id: dss1.h,v 1.1 2002/09/17 10:43:35 kkeil Exp $
+/* $Id: dss1.h,v 1.2 2006/03/06 12:52:07 keil Exp $
  *
  *  DSS1 (Euro) D-channel protocol defines
  *
@@ -23,6 +23,9 @@
 #define N303	1
 #define T_CTRL	180000
 
+#define THOLD		4000
+#define TRETRIEVE	4000
+
 /* private TIMER events */
 #define CC_T302		0x030201
 #define CC_T303		0x030301
@@ -36,6 +39,8 @@
 #define CC_T318		0x031801
 #define CC_T319		0x031901
 #define CC_TCTRL	0x031f01
+#define CC_THOLD	0x03a001
+#define CC_TRETRIEVE	0x03a101
 /*
  * Message-Types
  */
@@ -47,6 +52,12 @@
 #define MT_PROGRESS		0x03
 #define MT_SETUP		0x05
 #define MT_SETUP_ACKNOWLEDGE	0x0d
+#define MT_HOLD			0x24
+#define MT_HOLD_ACKNOWLEDGE	0x28
+#define MT_HOLD_REJECT		0x30
+#define MT_RETRIEVE		0x31
+#define MT_RETRIEVE_ACKNOWLEDGE	0x33
+#define MT_RETRIEVE_REJECT	0x37
 #define MT_RESUME		0x26
 #define MT_RESUME_ACKNOWLEDGE	0x2e
 #define MT_RESUME_REJECT	0x22
@@ -136,6 +147,16 @@
 #define CAUSE_PROTOCOL_ERROR	111
 
 #define NO_CAUSE		254
+
+#define AUX_IDLE		0
+#define AUX_HOLD_REQ		1
+#define AUX_CALL_HELD		2
+#define AUX_RETRIEVE_REQ	3
+#define AUX_HOLD_IND		4
+#define AUX_RETRIEVE_IND	5
+
+#define VALID_HOLD_STATES_PTMP	(SBIT(3) | SBIT(4) | SBIT(10))
+#define VALID_HOLD_STATES_PTP	(SBIT(3) | SBIT(4) | SBIT(7) | SBIT(8) | SBIT(9) | SBIT(10))
 
 #else /* only l3dss1_process */
 

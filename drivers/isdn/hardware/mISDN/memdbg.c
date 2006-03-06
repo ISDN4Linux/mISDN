@@ -65,10 +65,8 @@ __mid_kfree(const void *p)
 	_mid_item_t	*mid;
 	u_long		flags;
 
-	if (!p) {
-		printk(KERN_ERR "zero pointer kfree at %p", __builtin_return_address(0));
+	if (!p)
 		return;
-	}
 	mid = (_mid_item_t *)((u_char *)p - sizeof(_mid_item_t));
 	spin_lock_irqsave(&memdbg_lock, flags);
 	list_del(&mid->head);
@@ -104,10 +102,8 @@ __mid_vfree(const void *p)
 	_mid_item_t	*mid;
 	u_long		flags;
 
-	if (!p) {
-		printk(KERN_ERR "zero pointer vfree at %p", __builtin_return_address(0));
+	if (!p)
 		return;
-	}
 	mid = (_mid_item_t *)((u_char *)p - sizeof(_mid_item_t));
 	spin_lock_irqsave(&memdbg_lock, flags);
 	list_del(&mid->head);

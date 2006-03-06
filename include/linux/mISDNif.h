@@ -1,4 +1,4 @@
-/* $Id: mISDNif.h,v 1.32 2004/07/08 00:58:20 keil Exp $
+/* $Id: mISDNif.h,v 1.33 2006/03/06 12:52:08 keil Exp $
  *
  */
 
@@ -9,16 +9,6 @@
 #include <linux/types.h>
 #include <linux/errno.h>
 
-/* primitives for information exchange
- * generell format
- * <8 bit reserved>
- * <4 bit flags>
- * <4 bit layer>
- * <8 bit command>
- * <8 bit subcommand>
- *
- */
- 
 /*
  * ABI Version 32 bit
  *
@@ -29,12 +19,28 @@
  *              - changed if any interface is extended but backwards compatible
  *
  */
-#define	MISDN_MAJOR_VERSION	1
+#define	MISDN_MAJOR_VERSION	3
 #define	MISDN_MINOR_VERSION	0
 #define	MISDN_VERSION		((MISDN_MAJOR_VERSION<<16) | MISDN_MINOR_VERSION)
 
-#define MISDN_REVISION		"$Revision: 1.32 $"
-#define MISDN_DATE		"$Date: 2004/07/08 00:58:20 $"
+#define MISDN_REVISION		"$Revision: 1.33 $"
+#define MISDN_DATE		"$Date: 2006/03/06 12:52:08 $"
+
+/* collect some statistics about the message queues */
+#define MISDN_MSG_STATS
+
+/* primitives for information exchange
+ * generell format
+ * <8 bit reserved>
+ * <4 bit flags>
+ * <4 bit layer>
+ * <8 bit command>
+ * <8 bit subcommand>
+ *
+ */
+
+#define MISDN_CMD_MASK	0xffffff00
+#define MISDN_SUB_MASK	0x000000ff
 
 /* SUBCOMMANDS */
 #define REQUEST		0x80
@@ -61,18 +67,22 @@
 #define MGR_SETSTACK_NW	0x0f1900
 #define MGR_ADDSTPARA	0x0f1A00
 #define MGR_CLRSTPARA	0x0f1B00
+#define MGR_ADDLAYER	0x0f1C00
 #define MGR_GETLAYER	0x0f2100
 #define MGR_GETLAYERID	0x0f2200
 #define MGR_NEWLAYER	0x0f2300
 #define MGR_DELLAYER	0x0f2400
-#define MGR_CLONELAYER	0x0f2500
-#define MGR_GETIF	0x0f3100
-#define MGR_CONNECT	0x0f3200
-#define MGR_DISCONNECT	0x0f3300
-#define MGR_SETIF	0x0f3400
-#define MGR_ADDIF	0x0f3500
-#define MGR_QUEUEIF	0x0f3600
+//#define MGR_CLONELAYER	0x0f2500
+//#define MGR_GETIF	0x0f3100
+//#define MGR_CONNECT	0x0f3200
+//#define MGR_DISCONNECT	0x0f3300
+//#define MGR_SETIF	0x0f3400
+//#define MGR_ADDIF	0x0f3500
+//#define MGR_QUEUEIF	0x0f3600
 #define MGR_CTRLREADY	0x0f4100
+#define MGR_STACKREADY	0x0f4200
+#define MGR_STOPSTACK	0x0f4300
+#define MGR_STARTSTACK	0x0f4400
 #define MGR_RELEASE	0x0f4500
 #define MGR_GETDEVICE	0x0f5100
 #define MGR_DELDEVICE	0x0f5200
@@ -85,9 +95,10 @@
 #define MGR_TIMER	0x0f8800
 #define MGR_CONTROL	0x0fe100
 #define MGR_STATUS	0x0fe200
-#define MGR_HASPROTOCOL 0x0fe300
+#define MGR_HASPROTOCOL	0x0fe300
 #define MGR_EVALSTACK	0x0fe400
 #define MGR_GLOBALOPT	0x0fe500
+#define MGR_SHORTSTATUS	0x0fe600
 #define MGR_LOADFIRM	0x0ff000
 #define MGR_LOGDATA	0x0ff100
 #define MGR_DEBUGDATA	0x0ff200
@@ -106,12 +117,16 @@
 #define INFO3_P10	0x130a
 #define INFO4_P8	0x1408
 #define INFO4_P10	0x140a
+#define D_RX_MON0	0x1800
+#define D_TX_MON0	0x1801
+#define D_RX_MON1	0x1810
+#define D_TX_MON1	0x1811
 #define LOSTFRAMING	0x1f00
 #define ANYSIGNAL	0x1f01
 
 /* PH_CONTROL parameter */
-#define HW_RESET	0x0001 
-#define HW_POWERDOWN	0x0100 
+#define HW_RESET	0x0001
+#define HW_POWERDOWN	0x0100
 #define HW_POWERUP	0x0101
 #define HW_DEACTIVATE	0x0200
 #define HW_ACTIVATE	0x0201
@@ -147,8 +162,8 @@
 #define HW_FIRM_START	0xFF10
 #define HW_FIRM_DATA	0xFF11
 #define HW_FIRM_END	0xFF12
-#define HW_D_BLOCKED	0xFF20 
-#define HW_D_NOBLOCKED	0xFF21 
+#define HW_D_BLOCKED	0xFF20
+#define HW_D_NOBLOCKED	0xFF21
 #define HW_TESTRX_RAW	0xFF40
 #define HW_TESTRX_HDLC	0xFF41
 #define HW_TESTRX_OFF	0xFF4f
@@ -173,6 +188,8 @@
 #define BF_DISABLE	0x2315
 #define BF_ACCEPT	0x2316
 #define BF_REJECT	0x2317
+#define ECHOCAN_ON	0x2318
+#define ECHOCAN_OFF	0x2319
 #define HW_POTS_ON		0x1001
 #define HW_POTS_OFF		0x1002
 #define HW_POTS_SETMICVOL	0x1100
@@ -221,7 +238,7 @@
 #define MPH_DEACTIVATE	0x011000
 #define MPH_ACTIVATE	0x011100
 #define MPH_INFORMATION	0x012000
- 
+
 /* layer 2 */
 #define DL_ESTABLISH	0x020100
 #define DL_RELEASE	0x020000
@@ -272,6 +289,8 @@
 
 #define CC_B3_DATA		0x138600
 
+#define CAPI_MESSAGE_REQUEST	0x040080
+
 #define LAYER_MASK	0x0F0000
 #define COMMAND_MASK	0x00FF00
 #define SUBCOMMAND_MASK	0x0000FF
@@ -319,6 +338,9 @@
 #define ISDN_PID_L0_NT_UP2		0x00000400
 #define ISDN_PID_L0_TE_E1		0x00000008
 #define ISDN_PID_L0_NT_E1		0x00000800
+#define ISDN_PID_L0_IP_S0		0x00000010
+#define ISDN_PID_L0_IP_E1		0x00000020
+#define ISDN_PID_L0_LOOP		0x00000030
 #define ISDN_PID_L1_TE_S0		0x01000001
 #define ISDN_PID_L1_NT_S0		0x01000100
 #define ISDN_PID_L1_TE_U		0x01000002
@@ -327,7 +349,10 @@
 #define ISDN_PID_L1_NT_UP2		0x01000400
 #define ISDN_PID_L1_TE_E1		0x01000008
 #define ISDN_PID_L1_NT_E1		0x01000800
+#define ISDN_PID_L2_LAPD		0x02000001
+#define ISDN_PID_L2_LAPD_NET		0x02000002
 /* Bit 15-0  reserved for CAPI defined protocols */
+#define ISDN_PID_L0_B_IP		0x40000001
 #define ISDN_PID_L1_B_64HDLC		0x41000001
 #define ISDN_PID_L1_B_64TRANS		0x41000002
 #define ISDN_PID_L1_B_V110_ASYNC	0x41000004
@@ -338,8 +363,6 @@
 #define ISDN_PID_L1_B_MODEM_ALL		0x41000080
 #define ISDN_PID_L1_B_MODEM_ASYNC	0x41000100
 #define ISDN_PID_L1_B_MODEM_HDLC	0x41000200
-#define ISDN_PID_L2_LAPD		0x02000001
-#define ISDN_PID_L2_LAPD_NET		0x02000002
 /* Bit 15-0  reserved for CAPI defined protocols */
 #define ISDN_PID_L2_B_X75SLP		0x42000001
 #define ISDN_PID_L2_B_TRANS		0x42000002
@@ -382,6 +405,18 @@
 #define ISDN_PID_L3_DF_EXTCID		0x00200000
 #define ISDN_PID_L3_DF_CRLEN2		0x00400000
 
+
+// short message status
+#define SSTATUS_ALL		0x0fffffff
+#define SSTATUS_BROADCAST_BIT	0x10000000
+#define SSTATUS_L1		0x01ffffff
+#define SSTATUS_L2		0x02ffffff
+#define SSTATUS_L1_DEACTIVATED	0x01000000
+#define SSTATUS_L1_ACTIVATED	0x01000001
+#define SSTATUS_L2_RELEASED	0x02000000
+#define SSTATUS_L2_ESTABLISHED	0x02000001
+
+
 #define mISDN_CORE_DEVICE	0
 #define mISDN_RAW_DEVICE	128
 
@@ -413,11 +448,14 @@
 #define MISDN_ID_DUMMY		0xffff0001
 #define MISDN_ID_GLOBAL		0xffff0002
 
-#define MAX_LAYER_NR	7
-#define ISDN_LAYER(n)	(1<<n)
+#define MAX_LAYER_NR		7
+#define ISDN_LAYER(n)		(1<<n)
 #define LAYER_OUTRANGE(layer)	((layer<0) || (layer>MAX_LAYER_NR))
-#define mISDN_MAX_IDLEN	16
 
+/* should be in sync with linux/kobject.h:KOBJ_NAME_LEN */
+#define mISDN_MAX_IDLEN		20
+
+#ifdef OBSOLETE
 #define IF_NOACTIV	0x00000000
 #define IF_DOWN		0x01000000
 #define IF_UP		0x02000000
@@ -432,18 +470,53 @@
 #define IF_INSTMASK	0x400F0000
 #define IF_LAYERMASK	0x00F00000
 #define IF_TYPE(i)	((i)->stat & IF_TYPEMASK)
-#define CHILD_ID_INC	0x00000100
-#define CHILD_ID_MAX	0x1000FF00
-#define CLONE_ID_INC	0x00000100
-#define CLONE_ID_MAX	0x2000FF00
-#define INST_ID_INC	0x00010000
-#define INST_ID_MAX	0x400F0000
+#endif
+
+/*
+ * general ID layout for instance and stack id's
+ * 3322 2222 2222 1111 1111 1100 0000 0000
+ * 1098 7654 3210 9876 5432 1098 7654 3210
+ * FFFF FFFF CCCC CCCC SSSS SSSS RRRR LLLL
+ *
+ * L (bit 03-00) Layer ID
+ * R (bit 06-04) reserved (0)
+ * U (bit 07)    user device id
+ * S (bit 15-08) Stack ID/controller number
+ * C (bit 23-16) Child/Clone ID
+ * F (bit 31-24) Flags as defined below
+ *
+ */
+
+#define FLG_MSG_DOWN	0x01000000
+#define FLG_MSG_UP	0x02000000
+#define FLG_MSG_TARGET	0x04000000
+#define FLG_MSG_CLONED	0x08000000
 #define FLG_CHILD_STACK	0x10000000
 #define FLG_CLONE_STACK	0x20000000
 #define FLG_INSTANCE	0x40000000
+#define FLG_MSG_TAGGED	0x80000000
+#define MSG_DIR_MASK	0x03000000
+#define MSG_BROADCAST	0x03000000
+#define MSG_TO_OWNER	0x00000000
+
+#define CHILD_ID_INC	0x00010000
+#define CHILD_ID_MAX	0x10FF0000
+#define CHILD_ID_MASK	0x00FF0000
+#define CLONE_ID_INC	0x00010000
+#define CLONE_ID_MAX	0x20FF0000
+#define CLONE_ID_MASK	0x00FF0000
+#define STACK_ID_INC	0x00000100
+#define STACK_ID_MAX	0x00007F00
+#define STACK_ID_MASK	0x30FFFF00
+#define MASTER_ID_MASK	0x0000FF00
+#define LAYER_ID_INC	0x00000001
+#define LAYER_ID_MAX	MAX_LAYER_NR
+#define LAYER_ID_MASK	0x0000000F
+#define FLG_ID_USER	0x00000080
+#define INST_ID_MASK	0x70FFFFFF
 
 #define DUMMY_CR_FLAG	0x7FFFFF00
-#define CONTROLER_MASK	0x000000FF
+// #define CONTROLER_MASK	0x0000FF
 
 /* stack channel values */
 #define CHANNEL_NUMBER	0x000000FF
@@ -456,16 +529,35 @@
 #define CHANNEL_EXT_PCM	0x01000000
 #define CHANNEL_EXT_REV	0x02000000
 
-/* interface extentions */
+/* instance/stack extentions */
 #define EXT_STACK_CLONE 0x00000001
 #define EXT_INST_CLONE	0x00000100
 #define EXT_INST_MGR	0x00000200
 #define EXT_INST_MIDDLE	0x00000400
-#define EXT_IF_CHAIN	0x00010000
-#define EXT_IF_EXCLUSIV	0x00020000
-#define EXT_IF_CREATE	0x00040000
-#define EXT_IF_SPLIT	0x00080000
+#define EXT_INST_UNUSED 0x00000800
+//#define EXT_IF_CHAIN	0x00010000
+//#define EXT_IF_EXCLUSIV	0x00020000
+//#define EXT_IF_CREATE	0x00040000
+//#define EXT_IF_SPLIT	0x00080000
 
+/* stack status flag */
+#define mISDN_STACK_ACTION_MASK		0x0000ffff
+#define mISDN_STACK_COMMAND_MASK	0x000f0000
+#define mISDN_STACK_STATUS_MASK		0xfff00000
+/* action bits 0-15 */
+#define mISDN_STACK_WORK	0
+#define mISDN_STACK_SETUP	1
+#define mISDN_STACK_CLEARING	2
+#define mISDN_STACK_RESTART	3
+#define mISDN_STACK_WAKEUP	4
+#define mISDN_STACK_ABORT	15
+/* status bits 16-31 */
+#define mISDN_STACK_STOPPED	16
+#define mISDN_STACK_INIT	17
+#define mISDN_STACK_THREADSTART	18
+#define mISDN_STACK_ACTIVE	29
+#define mISDN_STACK_RUNNING	30
+#define mISDN_STACK_KILLED	31
 
 /* special packet type */
 #define PACKET_NOACK	250
@@ -504,7 +596,7 @@ typedef struct _status_info {
 typedef struct _logdata {
 	char    *head;
 	char	*fmt;
-	va_list args;	
+	va_list args;
 } logdata_t;
 
 typedef struct _moditem {
@@ -533,6 +625,8 @@ typedef struct _stack_info {
 	mISDN_stPara_t	para;
 	u_int		extentions;
 	u_int		mgr;
+	u_int		master;
+	u_int		clone;
 	int		instcnt;
 	int		inst[MAX_LAYER_NR +1];
 	int		childcnt;
@@ -545,16 +639,19 @@ typedef struct _layer_info {
 	int		extentions;
 	u_int		id;
 	u_int		st;
+	u_int		clone;
+	u_int		parent;
 	mISDN_pid_t	pid;
 } layer_info_t;
 
-
+#ifdef OBSOLETE
 typedef struct _interface_info {
 	int		extentions;
 	u_int		owner;
 	u_int		peer;
 	int		stat;
 } interface_info_t;
+#endif
 
 typedef struct _channel_info {
 	u_int		channel;
@@ -566,46 +663,76 @@ typedef struct _channel_info {
 
 /* l3 pointer arrays */
 
+typedef struct _ie_info {
+	u16	off	: 10,
+		ridx	: 3,
+		res1	: 1,
+		cs_flg	: 1,
+		repeated: 1;
+} __attribute__((packed)) ie_info_t;
+
+typedef struct _ie_val {
+	u16	codeset	: 3,
+		res1	: 5,
+		val	: 8;
+} __attribute__((packed)) ie_val_t;;
+
+typedef struct _cs_info {
+	u16	codeset	: 3,
+		locked	: 1,
+		res1	: 2,
+		len	: 10;
+} __attribute__((packed)) cs_info_t;
+
+typedef struct _ie_info_ext {
+	ie_info_t	ie;
+	union {
+		ie_val_t	v;
+		cs_info_t	cs;
+	};
+} __attribute__((packed)) ie_info_ext_t;
+
 typedef struct _Q931_info {
-	u_char	type __attribute__((packed));
-	u_char	crlen __attribute__((packed));
-	u16	cr __attribute__((packed));
-	u16	bearer_capability __attribute__((packed));
-	u16	cause __attribute__((packed));
-	u16	call_id __attribute__((packed));
-	u16	call_state __attribute__((packed));
-	u16	channel_id __attribute__((packed));
-	u16	facility __attribute__((packed));
-	u16	progress __attribute__((packed));
-	u16	net_fac __attribute__((packed));
-	u16	notify __attribute__((packed));
-	u16	display __attribute__((packed));
-	u16	date __attribute__((packed));
-	u16	keypad __attribute__((packed));
-	u16	signal __attribute__((packed));
-	u16	info_rate __attribute__((packed));
-	u16	end2end_transit __attribute__((packed));
-	u16	transit_delay_sel __attribute__((packed));
-	u16	pktl_bin_para __attribute__((packed));
-	u16	pktl_window __attribute__((packed));
-	u16	pkt_size __attribute__((packed));
-	u16	closed_userg __attribute__((packed));
-	u16	connected_nr __attribute__((packed));
-	u16	connected_sub __attribute__((packed));
-	u16	calling_nr __attribute__((packed));
-	u16	calling_sub __attribute__((packed));
-	u16	called_nr __attribute__((packed));
-	u16	called_sub __attribute__((packed));
-	u16	redirect_nr __attribute__((packed));
-	u16	transit_net_sel __attribute__((packed));
-	u16	restart_ind __attribute__((packed));
-	u16	llc __attribute__((packed));
-	u16	hlc __attribute__((packed));
-	u16	useruser __attribute__((packed));
-	u16	more_data __attribute__((packed));
-	u16	sending_complete __attribute__((packed));
-	u16	congestion_level __attribute__((packed));
-	u16	fill1 __attribute__((packed));
+	u_char		type __attribute__((packed));
+	u_char		crlen __attribute__((packed));
+	u16		cr __attribute__((packed));
+	ie_info_t	bearer_capability __attribute__((packed));
+	ie_info_t	cause __attribute__((packed));
+	ie_info_t	call_id __attribute__((packed));
+	ie_info_t	call_state __attribute__((packed));
+	ie_info_t	channel_id __attribute__((packed));
+	ie_info_t	facility __attribute__((packed));
+	ie_info_t	progress __attribute__((packed));
+	ie_info_t	net_fac __attribute__((packed));
+	ie_info_t	notify __attribute__((packed));
+	ie_info_t	display __attribute__((packed));
+	ie_info_t	date __attribute__((packed));
+	ie_info_t	keypad __attribute__((packed));
+	ie_info_t	signal __attribute__((packed));
+	ie_info_t	info_rate __attribute__((packed));
+	ie_info_t	end2end_transit __attribute__((packed));
+	ie_info_t	transit_delay_sel __attribute__((packed));
+	ie_info_t	pktl_bin_para __attribute__((packed));
+	ie_info_t	pktl_window __attribute__((packed));
+	ie_info_t	pkt_size __attribute__((packed));
+	ie_info_t	closed_userg __attribute__((packed));
+	ie_info_t	connected_nr __attribute__((packed));
+	ie_info_t	connected_sub __attribute__((packed));
+	ie_info_t	calling_nr __attribute__((packed));
+	ie_info_t	calling_sub __attribute__((packed));
+	ie_info_t	called_nr __attribute__((packed));
+	ie_info_t	called_sub __attribute__((packed));
+	ie_info_t	redirect_nr __attribute__((packed));
+	ie_info_t	transit_net_sel __attribute__((packed));
+	ie_info_t	restart_ind __attribute__((packed));
+	ie_info_t	llc __attribute__((packed));
+	ie_info_t	hlc __attribute__((packed));
+	ie_info_t	useruser __attribute__((packed));
+	ie_info_t	more_data __attribute__((packed));
+	ie_info_t	sending_complete __attribute__((packed));
+	ie_info_t	congestion_level __attribute__((packed));
+	ie_info_t	fill1 __attribute__((packed));
+	ie_info_ext_t	ext[8] __attribute__((packed));
 } Q931_info_t;
 
 #define L3_EXTRA_SIZE	sizeof(Q931_info_t)
@@ -617,15 +744,11 @@ typedef struct _Q931_info {
 
 typedef struct _mISDNobject	mISDNobject_t;
 typedef struct _mISDNinstance	mISDNinstance_t;
-typedef struct _mISDNlayer	mISDNlayer_t;
 typedef struct _mISDNstack	mISDNstack_t;
 typedef struct _mISDNport	mISDNport_t;
 typedef struct _mISDNdevice	mISDNdevice_t;
-typedef struct _mISDNif		mISDNif_t;
 typedef int	(ctrl_func_t)(void *, u_int, void *);
-typedef int	(if_func_t)(struct _mISDNif *, struct sk_buff *);
-typedef int	(lock_func_t)(void *, int);
-typedef void	(unlock_func_t)(void *);
+typedef int	(if_func_t)(mISDNinstance_t *, struct sk_buff *);
 
 #define mISDN_HEAD_P(s)		((mISDN_head_t *)&s->cb[0])
 #define mISDN_HEAD_PRIM(s)	((mISDN_head_t *)&s->cb[0])->prim
@@ -649,16 +772,19 @@ typedef struct _mISDN_headext {
 struct _mISDNobject {
 	struct list_head	list;
 	char			*name;
-	int			id;
+	u_int			id;
 	int			refcnt;
 	mISDN_pid_t		DPROTO;
 	mISDN_pid_t		BPROTO;
 	ctrl_func_t		*own_ctrl;
 	ctrl_func_t		*ctrl;
 	struct list_head	ilist;
+	spinlock_t		lock;
 	struct module		*owner;
+	struct class_device	class_dev;
 };
 
+#ifdef OBSOLETE
 /* the interface between two mISDNinstances */
 struct _mISDNif {
 	if_func_t		*func;
@@ -671,6 +797,7 @@ struct _mISDNif {
 	mISDNinstance_t		*owner;
 	mISDNinstance_t		*peer;
 };
+#endif
 
 /* a instance of a mISDNobject */
 struct _mISDNinstance {
@@ -678,16 +805,19 @@ struct _mISDNinstance {
 	char			name[mISDN_MAX_IDLEN];
 	int			extentions;
 	u_int			id;
+	int			regcnt;
 	mISDN_pid_t		pid;
 	mISDNstack_t		*st;
 	mISDNobject_t		*obj;
-	void			*data;
-	mISDNif_t		up;
-	mISDNif_t		down;
-	lock_func_t		*lock;
-	unlock_func_t		*unlock;
+	void			*privat;
+	mISDNinstance_t		*clone;
+	mISDNinstance_t		*parent;
+	if_func_t		*function;
+	spinlock_t		*hwlock;
+	struct class_device	class_dev;
 };
 
+#ifdef OBSOLETE
 /* a list of parallel (horizontal) mISDNinstances in the same layer
  * normally here is only one instance per layer only if the information
  * will be splitted here are more instances */
@@ -695,7 +825,7 @@ struct _mISDNlayer {
 	struct list_head	list;
 	mISDNinstance_t		*inst;
 };
-
+#endif
 /* the STACK; a (vertical) chain of layers */
  
 struct _mISDNstack {
@@ -704,16 +834,34 @@ struct _mISDNstack {
 	u_int			extentions;
 	mISDN_pid_t		pid;
 	mISDN_stPara_t		para;
-	struct list_head	layerlist;
+	u_long			status;
+	struct task_struct	*thread;
+	struct semaphore	*notify;
+	wait_queue_head_t	workq;
+	struct sk_buff_head	msgq;
+#ifdef MISDN_MSG_STATS
+	u_int			msg_cnt;
+	u_int			sleep_cnt;
+	u_int			clone_cnt;
+	u_int			stopped_cnt;
+#endif
+	mISDNinstance_t		*i_array[MAX_LAYER_NR + 1];
+	struct list_head	prereg;
 	mISDNinstance_t		*mgr;
+	mISDNstack_t		*master;
+	mISDNstack_t		*clone;
+	mISDNstack_t		*parent;
 	struct list_head	childlist;
+	struct class_device	class_dev;
+	/* temporary use */
+	mISDN_pid_t		new_pid;
 };
 
 /* lowlevel read/write struct for the mISDNdevice */
 struct _mISDNport {
 	wait_queue_head_t	procq;
 	spinlock_t		lock;
-	mISDNif_t		pif;
+//	mISDNif_t		pif;
 	u_long			Flag;
 	struct sk_buff_head	queue;
 	u_int			maxqlen;
@@ -735,9 +883,11 @@ struct _mISDNdevice {
 
 /* common helper functions */
 extern int	mISDN_bprotocol2pid(void *, mISDN_pid_t *);
-extern int	mISDN_SetIF(mISDNinstance_t *, mISDNif_t *, u_int, void *, void *, void *);
-extern int	mISDN_ConnectIF(mISDNinstance_t *, mISDNinstance_t *);
-extern int	mISDN_DisConnectIF(mISDNinstance_t *, mISDNif_t *);
+// extern int	mISDN_SetIF(mISDNinstance_t *, mISDNif_t *, u_int, void *, void *, void *);
+// extern int	mISDN_ConnectIF(mISDNinstance_t *, mISDNinstance_t *);
+// extern int	mISDN_DisConnectIF(mISDNinstance_t *, mISDNif_t *);
+extern int	mISDN_queue_message(mISDNinstance_t *, u_int, struct sk_buff *);
+
 
 /* global register/unregister functions */
 

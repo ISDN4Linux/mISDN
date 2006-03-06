@@ -1,8 +1,8 @@
-/* $Id: dsp_tones.c,v 1.6 2005/10/26 14:12:13 keil Exp $ 
+/* $Id: dsp_tones.c,v 1.7 2006/03/06 12:52:07 keil Exp $ 
  *
  * Audio support data for ISDN4Linux.
  *
- * Copyright 2002/2003 by Andreas Eversberg (jolly@jolly.de)
+ * Copyright Andreas Eversberg (jolly@jolly.de)
  *
  * This software may be used and distributed according to the terms
  * of the GNU General Public License, incorporated herein by reference.
@@ -437,7 +437,7 @@ dsp_tone_hw_message(dsp_t *dsp, u8 *sample, int len)
 		return;
 	}
 	/* unlocking is not required, because we don't expect a response */
-	if (dsp->inst.down.func(&dsp->inst.down, nskb))
+	if (mISDN_queue_down(&dsp->inst, 0, nskb))
 		dev_kfree_skb(nskb);
 }
 

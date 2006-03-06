@@ -1,4 +1,4 @@
-/* $Id: layer3.h,v 1.10 2004/06/17 12:31:12 keil Exp $
+/* $Id: layer3.h,v 1.11 2006/03/06 12:52:07 keil Exp $
  *
  * This file is (c) under GNU PUBLIC LICENSE
  *
@@ -22,6 +22,7 @@
 #define L3_DEB_CHARGE	0x08
 #define L3_DEB_CHECK	0x10
 #define L3_DEB_SI	0x20
+#define L3_DEB_MSG	0x80000000
 
 #define FLG_L2BLOCK	1
 #define FLG_PTP		2
@@ -45,6 +46,8 @@ typedef struct _l3_process {
 	u_int			id;
 	int			bc;
 	int			err;
+	int			aux_state;
+	L3Timer_t		aux_timer;
 } l3_process_t;
 
 typedef struct _layer3 {
@@ -64,7 +67,6 @@ typedef struct _layer3 {
 	u_long			Flag;
 	mISDNinstance_t		inst;
 	struct sk_buff_head	squeue;
-	spinlock_t              lock;
 	int			OrigCallRef;
 } layer3_t;
 

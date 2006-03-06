@@ -1,7 +1,7 @@
-/* $Id: x25_dte.c,v 1.8 2005/05/02 12:30:30 keil Exp $
+/* $Id: x25_dte.c,v 1.9 2006/03/06 12:52:07 keil Exp $
  *
  * Linux modular ISDN subsystem, mISDN
- * X.25/X.31 Layer3 for DTE mode   
+ * X.25/X.31 Layer3 for DTE mode
  *
  * Author	Karsten Keil (kkeil@suse.de)
  *
@@ -22,7 +22,7 @@ static int debug = 0;
 
 static mISDNobject_t x25dte_obj;
 
-static char *mISDN_dte_revision = "$Revision: 1.8 $";
+static char *mISDN_dte_revision = "$Revision: 1.9 $";
 
 /* local prototypes */
 static x25_channel_t *	dte_create_channel(x25_l3_t *, int, u_char, __u16, int, u_char *);
@@ -370,7 +370,7 @@ static struct FsmNode PFnList[] =
 	{ST_P0,	EV_L3_OUTGOING_CALL,	p_p0_outgoing},
 	{ST_P0, EV_L3_CLEARING,		p_clearing_req},
 	{ST_P1,	EV_L3_READY,		p_ready},
-	{ST_P1,	EV_L3_OUTGOING_CALL,	p_outgoing},		
+	{ST_P1,	EV_L3_OUTGOING_CALL,	p_outgoing},
 	{ST_P1,	EV_L2_INCOMING_CALL,	p_incoming},
 	{ST_P1,	EV_L2_CLEAR,		p_clear_ind},
 	{ST_P1,	EV_L2_CALL_CNF,		p_invalid_pkt},
@@ -493,7 +493,7 @@ d_reset_timeout(struct FsmInst *fi, int event, void *arg)
 		l3c->cause[1] = 51;
 		mISDN_FsmChangeState(fi, ST_D0);
 		if (test_bit(X25_STATE_PERMANENT, &l3c->state))
-			X25_clear_connection(l3c, NULL, 0x3303); 
+			X25_clear_connection(l3c, NULL, 0x3303);
 		else
 			mISDN_FsmEvent(&l3c->x25p, EV_L3_CLEARING, NULL);
 	}
@@ -660,7 +660,7 @@ dte_data_ind_d(x25_channel_t *chan, struct sk_buff *skb, u_char gfi, u_char ptyp
 				mISDN_FsmEvent(&chan->x25d, EV_L3_RESETING, NULL);
 			} else {
 				int flag = (pr_m & 1) ? CAPI_FLAG_MOREDATA : 0;
-				
+
 				if (gfi & X25_GFI_QBIT)
 					flag |= CAPI_FLAG_QUALIFIER;
 				if (gfi & X25_GFI_DBIT)
@@ -755,7 +755,7 @@ dte_data_ind_r(x25_l3_t *l3, struct sk_buff *skb, u_char gfi, __u16 channel, u_c
 {
 	int	ret = X25_ERRCODE_DISCARD;
 
-	
+
 	if (ptype == X25_PTYPE_NOTYPE) {
 		if (channel) {
 			if (l3->x25r.state == ST_R1)
@@ -851,19 +851,10 @@ dte_dl_data_ind(x25_l3_t *l3, struct sk_buff *skb)
 }
 
 static int
-dte_from_down(mISDNif_t *hif,  struct sk_buff *skb)
+dte_from_down(x25_l3_t *l3, struct sk_buff *skb, mISDN_head_t *hh)
 {
-	x25_l3_t	*l3;
-	mISDN_head_t	*hh;
-	int		ret = -EINVAL;
+	int	ret = -EINVAL;
 
-	if (!hif || !hif->fdata || !skb)
-		return(ret);
-	l3 = hif->fdata;
-	if (!l3->inst.up.func) {
-		return(-ENXIO);
-	}
-	hh = mISDN_HEAD_P(skb);
 	if (l3->debug)
 		printk(KERN_DEBUG "%s: prim(%x) dinfo(%x)\n", __FUNCTION__, hh->prim, hh->dinfo);
 	switch(hh->prim) {
@@ -917,7 +908,7 @@ dte_create_channel(x25_l3_t *l3, int typ, u_char flag, __u16 ch, int len, u_char
 	x25_channel_t	*l3c;
 	__u16		nch = ch;
 	int		ret;
-	
+
 	if (typ == X25_CHANNEL_OUTGOING) {
 		if (ch == 0) {
 			/* first search for allready created channels in P1 state */
@@ -1035,38 +1026,13 @@ dte_create_channel(x25_l3_t *l3, int typ, u_char flag, __u16 ch, int len, u_char
 }
 
 static int
-new_l3(mISDNstack_t *st, mISDN_pid_t *pid) {
-	x25_l3_t	*n_l3;
-	int		err;
-
-	err = new_x25_l3(&n_l3, st, pid, &x25dte_obj, debug);
-	if (err)
-		return(err);
-
-	n_l3->x25r.fsm = &dte_rfsm;
-	n_l3->x25r.state = ST_R0;
-	return(0);
-}
-
-static int
-dte_from_up(mISDNif_t *hif, struct sk_buff *skb)
+dte_from_up(x25_l3_t *l3, struct sk_buff *skb, mISDN_head_t *hh)
 {
-	x25_l3_t	*l3;
 	x25_channel_t   *l3c;
-	mISDN_head_t	*hh;
 	__u32		addr;
 	__u16		info = 0;
 	int		err = 0;
 
-	if (!hif || !hif->fdata || !skb)
-		return(-EINVAL);
-	l3 = hif->fdata;
-	if (!l3->inst.down.func) {
-		return(-ENXIO);
-	}
-	hh = mISDN_HEAD_P(skb);
-	if (l3->debug)
-		printk(KERN_DEBUG "%s: prim(%x) dinfo(%x) len(%d)\n", __FUNCTION__, hh->prim, hh->dinfo, skb->len);
 	if (skb->len < 4) {
 		printk(KERN_WARNING "%s: skb too short (%d)\n", __FUNCTION__, skb->len);
 		return(-EINVAL);
@@ -1103,7 +1069,7 @@ dte_from_up(mISDNif_t *hif, struct sk_buff *skb)
 					ncpi = (x25_ncpi_t *)skb->data;
 					l3c = dte_create_channel(l3, X25_CHANNEL_OUTGOING, ncpi->Flags,
 						(ncpi->Group<<8) | ncpi->Channel,
-						ncpi->len - 3, &ncpi->Contens[0]);  
+						ncpi->len - 3, &ncpi->Contens[0]);
 				}
 				if (l3c)
 					l3c->ncci = addr | (l3c->lchan << 16);
@@ -1166,7 +1132,7 @@ dte_from_up(mISDNif_t *hif, struct sk_buff *skb)
 					info = 0;
 			} else
 				info = 0x2002;
-			
+
 			skb_trim(skb, 0);
 			memcpy(skb_put(skb, 2), &info, 2);
 			err = X25sendL4skb(l3c, l3, addr, CAPI_DISCONNECT_B3_CONF, hh->dinfo, skb);
@@ -1235,6 +1201,56 @@ dte_from_up(mISDNif_t *hif, struct sk_buff *skb)
 	return(err);
 }
 
+static int
+dte_function(mISDNinstance_t *inst, struct sk_buff *skb)
+{
+	x25_l3_t	*l3;
+	mISDN_head_t	*hh;
+	int		ret = -EINVAL;
+
+	l3 = inst->privat;
+	hh = mISDN_HEAD_P(skb);
+	if (l3->debug)
+		printk(KERN_DEBUG "%s: addr(%08x) prim(%x) dinfo(%x) len(%d)\n", __FUNCTION__,
+			hh->addr, hh->prim, hh->dinfo, skb->len);
+	if (debug)
+		printk(KERN_DEBUG  "%s: addr(%08x) prim(%x)\n", __FUNCTION__,  hh->addr, hh->prim);
+	if (!l3)
+		return(ret);
+
+	switch(hh->addr & MSG_DIR_MASK) {
+		case FLG_MSG_DOWN:
+			ret = dte_from_up(l3, skb, hh);
+			break;
+		case FLG_MSG_UP:
+		case MSG_BROADCAST:  // we define broaadcast comes from down below
+			ret = dte_from_down(l3, skb, hh);
+			break;
+		case MSG_TO_OWNER:
+			/* FIXME: must be handled depending on type */
+			int_errtxt("not implemented yet");
+			break;
+		default:
+			/* FIXME: must be handled depending on type */
+			int_errtxt("not implemented yet");
+			break;
+	}
+	return(ret);
+}
+
+static int
+new_l3(mISDNstack_t *st, mISDN_pid_t *pid) {
+	x25_l3_t	*n_l3;
+	int		err;
+
+	err = new_x25_l3(&n_l3, st, pid, &x25dte_obj, debug, dte_function);
+	if (err)
+		return(err);
+	n_l3->x25r.fsm = &dte_rfsm;
+	n_l3->x25r.state = ST_R0;
+	return(0);
+}
+
 
 static char MName[] = "X25_DTE";
 
@@ -1251,17 +1267,20 @@ dte_manager(void *data, u_int prim, void *arg) {
 	mISDNinstance_t	*inst = data;
 	x25_l3_t	*l3_l;
 	int		err = -EINVAL;
+	u_long		flags;
 
 	if (debug & DEBUG_L3X25_MGR)
 		printk(KERN_DEBUG "l3x25_manager data:%p prim:%x arg:%p\n", data, prim, arg);
 	if (!data)
 		return(err);
+	spin_lock_irqsave(&x25dte_obj.lock, flags);
 	list_for_each_entry(l3_l, &x25dte_obj.ilist, list) {
 		if (&l3_l->inst == inst) {
 			err = 0;
 			break;
 		}
 	}
+	spin_unlock_irqrestore(&x25dte_obj.lock, flags);
 	if (prim == (MGR_NEWLAYER | REQUEST))
 		return(new_l3(data, arg));
 	if (err) {
@@ -1270,7 +1289,7 @@ dte_manager(void *data, u_int prim, void *arg) {
 	}
 	switch(prim) {
 	    case MGR_NEWENTITY | CONFIRM:
-		l3_l->entity = (int)arg;
+		l3_l->entity = (u_long)arg & 0xffffffff;
 		break;
 	    case MGR_ADDSTPARA | INDICATION:
 		{
@@ -1285,6 +1304,7 @@ dte_manager(void *data, u_int prim, void *arg) {
 	    	}
 	    	break;
 	    case MGR_CLRSTPARA | INDICATION:
+#ifdef OBSOLETE
 	    case MGR_CLONELAYER | REQUEST:
 		break;
 	    case MGR_CONNECT | REQUEST:
@@ -1295,6 +1315,7 @@ dte_manager(void *data, u_int prim, void *arg) {
 	    case MGR_DISCONNECT | REQUEST:
 	    case MGR_DISCONNECT | INDICATION:
 		return(mISDN_DisConnectIF(inst, arg));
+#endif
 	    case MGR_UNREGLAYER | REQUEST:
 	    case MGR_RELEASE | INDICATION:
 		if (debug & DEBUG_L3X25_MGR)
@@ -1323,6 +1344,7 @@ x25_dte_init(void)
 	x25dte_obj.name = MName;
 	x25dte_obj.BPROTO.protocol[3] = ISDN_PID_L3_B_X25DTE;
 	x25dte_obj.own_ctrl = dte_manager;
+	spin_lock_init(&x25dte_obj.lock);
 	INIT_LIST_HEAD(&x25dte_obj.ilist);
 	if ((err = mISDN_register(&x25dte_obj))) {
 		printk(KERN_ERR "Can't register %s error(%d)\n", MName, err);

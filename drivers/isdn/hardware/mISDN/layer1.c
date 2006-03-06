@@ -1,16 +1,14 @@
-/* $Id: layer1.c,v 1.11 2004/06/17 12:31:12 keil Exp $
+/* $Id: layer1.c,v 1.12 2006/03/06 12:52:07 keil Exp $
  *
- * mISDN_l1.c     common low level stuff for I.430 layer1
+ * mISDN_l1.c     common low level stuff for I.430 layer1 TE mode
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
- *		This file is (c) under GNU PUBLIC LICENSE
- *		For changes and modifications please read
- *		../../../Documentation/isdn/mISDN.cert
+ * This file is released under the GPLv2
  *
  */
 
-static char *l1_revision = "$Revision: 1.11 $";
+static char *l1_revision = "$Revision: 1.12 $";
 
 #include <linux/config.h>
 #include <linux/module.h>
@@ -46,9 +44,11 @@ static mISDNobject_t isdnl1;
 
 #define TIMER3_VALUE 7000
 
+#ifdef OBSOLETE
 static
 struct Fsm l1fsm_b =
 {NULL, 0, 0, NULL, NULL};
+#endif
 
 static
 struct Fsm l1fsm_s =
@@ -100,6 +100,7 @@ static char *strL1UState[] =
 };
 #endif
 
+#ifdef OBSOLETE
 enum {
 	ST_L1_NULL,
 	ST_L1_WAIT_ACT,
@@ -116,7 +117,7 @@ static char *strL1BState[] =
 	"ST_L1_WAIT_DEACT",
 	"ST_L1_ACTIV",
 };
-
+#endif
 enum {
 	EV_PH_ACTIVATE,
 	EV_PH_DEACTIVATE,
@@ -124,7 +125,7 @@ enum {
 	EV_DEACT_CNF,
 	EV_DEACT_IND,
 	EV_POWER_UP,
-	EV_ANYSIG_IND, 
+	EV_ANYSIG_IND,
 	EV_INFO2_IND,
 	EV_INFO4_IND,
 	EV_TIMER_DEACT,
@@ -142,7 +143,7 @@ static char *strL1Event[] =
 	"EV_DEACT_CNF",
 	"EV_DEACT_IND",
 	"EV_POWER_UP",
-	"EV_ANYSIG_IND", 
+	"EV_ANYSIG_IND",
 	"EV_INFO2_IND",
 	"EV_INFO4_IND",
 	"EV_TIMER_DEACT",
@@ -166,13 +167,13 @@ l1m_debug(struct FsmInst *fi, char *fmt, ...)
 static int
 l1up(layer1_t *l1, u_int prim, int dinfo, int len, void *arg)
 {
-	return(if_link(&l1->inst.up, prim, dinfo, len, arg, 0));
+	return(mISDN_queue_data(&l1->inst, FLG_MSG_UP, prim, dinfo, len, arg, 0));
 }
 
 static int
 l1down(layer1_t *l1, u_int prim, int dinfo, int len, void *arg)
 {
-	return(if_link(&l1->inst.down, prim, dinfo, len, arg, 0));
+	return(mISDN_queue_data(&l1->inst, FLG_MSG_DOWN, prim, dinfo, len, arg, 0));
 }
 
 static void
@@ -209,8 +210,6 @@ l1_power_up_s(struct FsmInst *fi, int event, void *arg)
 	if (test_bit(FLG_L1_ACTIVATING, &l1->Flags)) {
 		mISDN_FsmChangeState(fi, ST_L1_F4);
 		l1down(l1, PH_SIGNAL | REQUEST, INFO3_P8, 0, NULL);
-		mISDN_FsmRestartTimer(&l1->timer, TIMER3_VALUE, EV_TIMER3, NULL, 2);
-		test_and_set_bit(FLG_L1_T3RUN, &l1->Flags);
 	} else
 		mISDN_FsmChangeState(fi, ST_L1_F3);
 }
@@ -269,11 +268,14 @@ l1_timer3(struct FsmInst *fi, int event, void *arg)
 	layer1_t *l1 = fi->userdata;
 	u_int db = HW_D_NOBLOCKED;
 
-	test_and_clear_bit(FLG_L1_T3RUN, &l1->Flags);	
+	test_and_clear_bit(FLG_L1_T3RUN, &l1->Flags);
 	if (test_and_clear_bit(FLG_L1_ACTIVATING, &l1->Flags)) {
 		if (test_and_clear_bit(FLG_L1_DBLOCKED, &l1->Flags))
 			l1up(l1, PH_CONTROL | INDICATION, 0, 4, &db);
 		l1up(l1, PH_DEACTIVATE | INDICATION, 0, 0, NULL);
+		mISDN_queue_data(&l1->inst, l1->inst.id | MSG_BROADCAST,
+			MGR_SHORTSTATUS | INDICATION, SSTATUS_L1_DEACTIVATED,
+			0, NULL, 0);
 	}
 #ifdef mISDN_UINTERFACE
 	if (!test_bit(FLG_L1_UINT, &l1->Flags))
@@ -295,6 +297,9 @@ l1_timer_act(struct FsmInst *fi, int event, void *arg)
 		l1up(l1, PH_ACTIVATE | CONFIRM, 0, 0, NULL);
 	else
 		l1up(l1, PH_ACTIVATE | INDICATION, 0, 0, NULL);
+	mISDN_queue_data(&l1->inst, l1->inst.id | MSG_BROADCAST,
+		MGR_SHORTSTATUS | INDICATION, SSTATUS_L1_ACTIVATED,
+		0, NULL, 0);
 }
 
 static void
@@ -309,6 +314,9 @@ l1_timer_deact(struct FsmInst *fi, int event, void *arg)
 		l1up(l1, PH_CONTROL | INDICATION, 0, 4, &db);
 	l1up(l1, PH_DEACTIVATE | INDICATION, 0, 0, NULL);
 	l1down(l1, PH_CONTROL | REQUEST, HW_DEACTIVATE, 0, NULL);
+	mISDN_queue_data(&l1->inst, l1->inst.id | MSG_BROADCAST,
+		MGR_SHORTSTATUS | INDICATION, SSTATUS_L1_DEACTIVATED,
+		0, NULL, 0);
 }
 
 static void
@@ -316,6 +324,8 @@ l1_activate_s(struct FsmInst *fi, int event, void *arg)
 {
 	layer1_t *l1 = fi->userdata;
 
+	mISDN_FsmRestartTimer(&l1->timer, TIMER3_VALUE, EV_TIMER3, NULL, 2);
+	test_and_set_bit(FLG_L1_T3RUN, &l1->Flags);
 	l1down(l1, PH_CONTROL | REQUEST, HW_RESET, 0, NULL);
 }
 
@@ -443,7 +453,7 @@ static struct FsmNode L1UFnList[] =
 #define L1U_FN_COUNT (sizeof(L1UFnList)/sizeof(struct FsmNode))
 
 #endif
-
+#ifdef OBSOLETE
 static void
 l1b_activate(struct FsmInst *fi, int event, void *arg)
 {
@@ -489,26 +499,17 @@ static struct FsmNode L1BFnList[] =
 };
 
 #define L1B_FN_COUNT (sizeof(L1BFnList)/sizeof(struct FsmNode))
+#endif
 
 static int
-l1from_up(mISDNif_t *hif, struct sk_buff *skb)
+l1from_up(layer1_t *l1, struct sk_buff *skb, mISDN_head_t *hh)
 {
-	layer1_t	*l1;
-	mISDN_head_t	*hh;
 	int		err = 0;
 
-	if (!hif || !hif->fdata || !skb)
-		return(-EINVAL);
-	l1 = hif->fdata;
-	hh = mISDN_HEAD_P(skb);
 	switch(hh->prim) {
 		case (PH_DATA | REQUEST):
 		case (PH_CONTROL | REQUEST):
-			if (l1->inst.down.func)
-				return(l1->inst.down.func(&l1->inst.down,
-					skb));
-			else
-				err = -ENXIO;
+			return(mISDN_queue_down(&l1->inst, 0, skb));
 			break;
 		case (PH_ACTIVATE | REQUEST):
 			if (test_bit(FLG_L1_ACTIVATED, &l1->Flags))
@@ -519,10 +520,7 @@ l1from_up(mISDNif_t *hif, struct sk_buff *skb)
 			}
 			break;
 		case (MDL_FINDTEI | REQUEST):
-			if (l1->inst.up.func)
-				return(l1->inst.up.func(&l1->inst.up, skb));
-			else
-				err = -ENXIO;
+			return(mISDN_queue_up(&l1->inst, 0, skb));
 			break;
 		default:
 			if (l1->debug)
@@ -537,28 +535,16 @@ l1from_up(mISDNif_t *hif, struct sk_buff *skb)
 }
 
 static int
-l1from_down(mISDNif_t *hif,  struct sk_buff *skb)
+l1from_down(layer1_t *l1, struct sk_buff *skb, mISDN_head_t *hh)
 {
-	layer1_t	*l1;
-	mISDN_head_t	*hh;
 	int		err = 0;
 
-	if (!hif || !hif->fdata || !skb)
-		return(-EINVAL);
-	l1 = hif->fdata;
-	hh = mISDN_HEAD_P(skb);
 	if (hh->prim == PH_DATA_IND) {
 		if (test_bit(FLG_L1_ACTTIMER, &l1->Flags))
 			mISDN_FsmEvent(&l1->l1m, EV_TIMER_ACT, NULL);
-		if (l1->inst.up.func)
-			return(l1->inst.up.func(&l1->inst.up, skb));
-		else
-			err = -ENXIO;
+		return(mISDN_queue_up(&l1->inst, 0, skb));
 	} else if (hh->prim == PH_DATA_CNF) {
-		if (l1->inst.up.func)
-			return(l1->inst.up.func(&l1->inst.up, skb));
-		else
-			err = -ENXIO;
+		return(mISDN_queue_up(&l1->inst, 0, skb));
 	} else if (hh->prim == (PH_CONTROL | INDICATION)) {
 		if (hh->dinfo == HW_RESET)
 			mISDN_FsmEvent(&l1->l1m, EV_RESET_IND, NULL);
@@ -570,7 +556,7 @@ l1from_down(mISDNif_t *hif,  struct sk_buff *skb)
 			mISDN_debug(l1->inst.st->id, NULL,
 				"l1from_down ctrl ind %x unhandled", hh->dinfo);
 	} else if (hh->prim == (PH_CONTROL | CONFIRM)) {
-		if (hh->dinfo == HW_DEACTIVATE) 
+		if (hh->dinfo == HW_DEACTIVATE)
 			mISDN_FsmEvent(&l1->l1m, EV_DEACT_CNF, NULL);
 		else if (l1->debug)
 			mISDN_debug(l1->inst.st->id, NULL,
@@ -600,11 +586,67 @@ l1from_down(mISDNif_t *hif,  struct sk_buff *skb)
 	return(err);
 }
 
+static int
+l1_shortstatus(layer1_t *l1, struct sk_buff *skb, mISDN_head_t *hh)
+{
+	u_int	temp;
+
+	if (hh->prim == (MGR_SHORTSTATUS | REQUEST)) {
+		temp = hh->dinfo & SSTATUS_ALL;
+		if (temp == SSTATUS_ALL || temp == SSTATUS_L1) {
+			skb_trim(skb, 0);
+			if (hh->dinfo & SSTATUS_BROADCAST_BIT)
+				temp = l1->inst.id | MSG_BROADCAST;
+			else
+				temp = hh->addr | FLG_MSG_TARGET;
+			hh->dinfo = (l1->l1m.state == ST_L1_F7) ?
+				SSTATUS_L1_ACTIVATED : SSTATUS_L1_DEACTIVATED;
+			hh->prim = MGR_SHORTSTATUS | CONFIRM;
+			return(mISDN_queue_message(&l1->inst, temp, skb));
+		}
+	}
+	return(-EOPNOTSUPP);
+}
+
+static int
+l1_function(mISDNinstance_t *inst, struct sk_buff *skb)
+{
+	layer1_t	*l1 = inst->privat;
+	mISDN_head_t	*hh = mISDN_HEAD_P(skb);
+	int		ret = -EINVAL;
+
+	if (debug)
+		printk(KERN_DEBUG  "%s: addr(%08x) prim(%x)\n", __FUNCTION__,  hh->addr, hh->prim);
+
+	if (unlikely((hh->prim & MISDN_CMD_MASK) == MGR_SHORTSTATUS))
+		return(l1_shortstatus(l1, skb, hh));
+
+	switch(hh->addr & MSG_DIR_MASK) {
+		case FLG_MSG_DOWN:
+			ret = l1from_up(l1, skb, hh);
+			break;
+		case FLG_MSG_UP:
+			ret = l1from_down(l1, skb, hh);
+			break;
+		case MSG_TO_OWNER:
+			/* FIXME: must be handled depending on type */
+			int_errtxt("not implemented yet");
+			break;
+		default:
+			/* FIXME: must be handled depending on type */
+			int_errtxt("not implemented yet");
+			break;
+	}
+	return(ret);
+}
+
 static void
 release_l1(layer1_t *l1) {
 	mISDNinstance_t	*inst = &l1->inst;
+	u_long		flags;
 
 	mISDN_FsmDelTimer(&l1->timer, 0);
+#ifdef OBSOLETE
 	if (inst->up.peer) {
 		inst->up.peer->obj->ctrl(inst->up.peer,
 			MGR_DISCONNECT | REQUEST, &inst->up);
@@ -613,15 +655,19 @@ release_l1(layer1_t *l1) {
 		inst->down.peer->obj->ctrl(inst->down.peer,
 			MGR_DISCONNECT | REQUEST, &inst->down);
 	}
+#endif
+	spin_lock_irqsave(&isdnl1.lock, flags);
 	list_del(&l1->list);
+	spin_unlock_irqrestore(&isdnl1.lock, flags);
 	isdnl1.ctrl(inst, MGR_UNREGLAYER | REQUEST, NULL);
 	kfree(l1);
 }
 
 static int
 new_l1(mISDNstack_t *st, mISDN_pid_t *pid) {
-	layer1_t *nl1;
-	int err;
+	layer1_t	*nl1;
+	int		err;
+	u_long		flags;
 
 	if (!st || !pid)
 		return(-EINVAL);
@@ -631,14 +677,14 @@ new_l1(mISDNstack_t *st, mISDN_pid_t *pid) {
 	}
 	memset(nl1, 0, sizeof(layer1_t));
 	memcpy(&nl1->inst.pid, pid, sizeof(mISDN_pid_t));
-	mISDN_init_instance(&nl1->inst, &isdnl1, nl1);
+	mISDN_init_instance(&nl1->inst, &isdnl1, nl1, l1_function);
 	if (!mISDN_SetHandledPID(&isdnl1, &nl1->inst.pid)) {
 		int_error();
 		return(-ENOPROTOOPT);
 	}
 	switch(pid->protocol[1]) {
 	    case ISDN_PID_L1_TE_S0:
-	    	sprintf(nl1->inst.name, "l1TES0 %d", st->id);
+	    	sprintf(nl1->inst.name, "l1TES0 %x", st->id >> 8);
 		nl1->l1m.fsm = &l1fsm_s;
 		nl1->l1m.state = ST_L1_F3;
 		nl1->Flags = 0;
@@ -655,7 +701,9 @@ new_l1(mISDNstack_t *st, mISDN_pid_t *pid) {
 	nl1->l1m.userint = 0;
 	nl1->l1m.printdebug = l1m_debug;
 	mISDN_FsmInitTimer(&nl1->l1m, &nl1->timer);
+	spin_lock_irqsave(&isdnl1.lock, flags);
 	list_add_tail(&nl1->list, &isdnl1.ilist);
+	spin_unlock_irqrestore(&isdnl1.lock, flags);
 	err = isdnl1.ctrl(st, MGR_REGLAYER | INDICATION, &nl1->inst);
 	if (err) {
 		mISDN_FsmDelTimer(&nl1->timer, 0);
@@ -701,27 +749,31 @@ l1_manager(void *data, u_int prim, void *arg) {
 	mISDNinstance_t	*inst = data;
 	layer1_t	*l1l;
 	int		err = -EINVAL;
+	u_long		flags;
 
 	if (debug & 0x10000)
 		printk(KERN_DEBUG "%s: data(%p) prim(%x) arg(%p)\n",
 			__FUNCTION__, data, prim, arg);
 	if (!data)
 		return(err);
+	spin_lock_irqsave(&isdnl1.lock, flags);
 	list_for_each_entry(l1l, &isdnl1.ilist, list) {
 		if (&l1l->inst == inst) {
 			err = 0;
 			break;
 		}
 	}
+	spin_unlock_irqrestore(&isdnl1.lock, flags);
 	if (err && (prim != (MGR_NEWLAYER | REQUEST))) {
 		printk(KERN_WARNING "l1_manager connect no instance\n");
 		return(err);
 	}
-	
+
 	switch(prim) {
 	    case MGR_NEWLAYER | REQUEST:
 		err = new_l1(data, arg);
 		break;
+#ifdef OBSOLETE
 	    case MGR_CONNECT | REQUEST:
 		err = mISDN_ConnectIF(inst, arg);
 		break;
@@ -733,6 +785,7 @@ l1_manager(void *data, u_int prim, void *arg) {
 	    case MGR_DISCONNECT | INDICATION:
 		err = mISDN_DisConnectIF(inst, arg);
 		break;
+#endif
 	    case MGR_UNREGLAYER | REQUEST:
 	    case MGR_RELEASE | INDICATION:
 		printk(KERN_DEBUG "release_l1 id %x\n", l1l->inst.st->id);
@@ -762,6 +815,7 @@ int Isdnl1Init(void)
 	isdnl1.name = MName;
 	isdnl1.DPROTO.protocol[1] = ISDN_PID_L1_TE_S0;
 	isdnl1.own_ctrl = l1_manager;
+	spin_lock_init(&isdnl1.lock);
 	INIT_LIST_HEAD(&isdnl1.ilist);
 #ifdef mISDN_UINTERFACE
 	isdnl1.DPROTO.protocol[1] |= ISDN_PID_L1_TE_U;
@@ -776,18 +830,22 @@ int Isdnl1Init(void)
 	l1fsm_s.strEvent = strL1Event;
 	l1fsm_s.strState = strL1SState;
 	mISDN_FsmNew(&l1fsm_s, L1SFnList, L1S_FN_COUNT);
+#ifdef OBSOLETE
 	l1fsm_b.state_count = L1B_STATE_COUNT;
 	l1fsm_b.event_count = L1_EVENT_COUNT;
 	l1fsm_b.strEvent = strL1Event;
 	l1fsm_b.strState = strL1BState;
 	mISDN_FsmNew(&l1fsm_b, L1BFnList, L1B_FN_COUNT);
+#endif
 	if ((err = mISDN_register(&isdnl1))) {
 		printk(KERN_ERR "Can't register %s error(%d)\n", MName, err);
 #ifdef mISDN_UINTERFACE
 		mISDN_FsmFree(&l1fsm_u);
 #endif
 		mISDN_FsmFree(&l1fsm_s);
+#ifdef OBSOLETE
 		mISDN_FsmFree(&l1fsm_b);
+#endif
 	}
 	return(err);
 }
@@ -810,6 +868,8 @@ void cleanup_module(void)
 	mISDN_FsmFree(&l1fsm_u);
 #endif
 	mISDN_FsmFree(&l1fsm_s);
+#ifdef OBSOLETE
 	mISDN_FsmFree(&l1fsm_b);
+#endif
 }
 #endif

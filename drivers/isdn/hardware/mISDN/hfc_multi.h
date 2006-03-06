@@ -3,13 +3,27 @@
  * see notice in hfc_multi.c
  */
 
+typedef unsigned char BYTE;
+typedef unsigned short WORD;
+typedef unsigned long DWORD;
+
+// IMPORTANT!!! use  CONFIG_PLX_PCI_BRIDGE only in conjunction with  CONFIG_HFCMULTI_PCIMEM
+//#define CONFIG_PLX_PCI_BRIDGE   // TODO should be defined in kernel config
+
+#ifdef CONFIG_PLX_PCI_BRIDGE
+#undef FIFO_32BIT_ACCESS
+#ifndef CONFIG_HFCMULTI_PCIMEM
+#define CONFIG_HFCMULTI_PCIMEM
+#endif
+#endif
+
 #define DEBUG_HFCMULTI_FIFO	0x0001
 #define DEBUG_HFCMULTI_CRC	0x0002
-#define DEBUG_HFCMULTI_INIT     0x0004
+#define DEBUG_HFCMULTI_INIT 0x0004
 #define DEBUG_HFCMULTI_MGR	0x0008
 #define DEBUG_HFCMULTI_MODE	0x0010
 #define DEBUG_HFCMULTI_MSG	0x0020
-#define DEBUG_HFCMULTI_STATE	0x0040
+#define DEBUG_HFCMULTI_STATE 0x0040
 #define DEBUG_HFCMULTI_SYNC	0x0100
 #define DEBUG_HFCMULTI_DTMF	0x0200
 #define DEBUG_HFCMULTI_LOCK	0x8000
@@ -21,28 +35,22 @@
          also registers are assigned differen for HFC-4s/8s and HFC-E1
 */
 
-#define MAX_FRAME_SIZE	2048
+// #define MAX_FRAME_SIZE	2048
 
 struct hfc_chan {
-	/* dch or bch is set, otherwhise this channel is not used */
-	dchannel_t	*dch; /* link if channel is a D-channel */
-	bchannel_t	*bch; /* link if channel is a B-channel */
-	int		rx_idx; /* for D-channel */
-	unsigned char	*rx_buf; /* for D-channel */
-	int		port; /* the interface port this channel is associated with */
-	int		nt_mode;
+	channel_t	*ch;	/* link if channel is a D-channel */
+	int		port; 	/* the interface port this channel is associated with */
 	int		nt_timer; /* -1 if off, 0 if elapsed, >0 if running */
-	int		los, ais; /* current alarms */
+	int		los, ais, slip_tx, slip_rx; /* current alarms */
 	int		jitter;
-	u_long		cfg; /* port configuration */
-	int		sync; /* sync state (used by E1) */
-	struct sk_buff_head dtmfque;
-	unsigned long	protocol; /* current protocol */
+	u_long		cfg;	/* port configuration */
+	int		sync;	/* sync state (used by E1) */
+	DWORD		protocol;/* current protocol */
 	int		slot_tx; /* current pcm slot */
 	int		bank_tx; /* current pcm bank */
 	int		slot_rx;
 	int		bank_rx;
-	int		conf; /* conference setting of TX slot */
+	int		conf;	/* conference setting of TX slot */
 	int		txpending; /* if there is currently data in the FIFO 0=no, 1=yes, 2=splloop */
 	int		e1_state; /* keep track of last state */
 };
@@ -50,17 +58,17 @@ struct hfc_chan {
 typedef struct hfc_chan		hfc_chan_t;
 
 struct hfcmulti_hw {
-	unsigned char	r_ctrl;	
-	unsigned char	r_irq_ctrl;	
-	unsigned char	r_cirm;	
-	unsigned char	r_ram_sz;
-	unsigned char	r_pcm_md0;
-	unsigned char	r_irqmsk_misc;
-	unsigned char	r_dtmf;
-	unsigned char	r_st_sync;
-	unsigned char	r_sci_msk;
-	unsigned char	r_tx0, r_tx1;
-	unsigned char	a_st_ctrl0[8];
+	BYTE	r_ctrl;
+	BYTE	r_irq_ctrl;
+	BYTE	r_cirm;
+	BYTE	r_ram_sz;
+	BYTE	r_pcm_md0;
+	BYTE	r_irqmsk_misc;
+	BYTE	r_dtmf;
+	BYTE	r_st_sync;
+	BYTE	r_sci_msk;
+	BYTE	r_tx0, r_tx1;
+	BYTE	a_st_ctrl0[8];
 	timer_t	timer;
 };
 
@@ -76,6 +84,8 @@ typedef struct hfcmulti_hw	hfcmulti_hw_t;
 #define HFC_CFG_REPORT_AIS	6 /* the card should report alarm ind. sign. */
 #define HFC_CFG_REPORT_SLIP	7 /* the card should report bit slips */
 #define HFC_CFG_DTMF		8 /* enable DTMF-detection */
+#define HFC_CFG_CRC4		9 /* disable CRC-4 Multiframe mode,
+				     use double frame instead. */
 
 #define HFC_CHIP_EXRAM_128	0 /* external ram 128k */
 #define HFC_CHIP_EXRAM_512	1 /* external ram 256k */
@@ -86,10 +96,14 @@ typedef struct hfcmulti_hw	hfcmulti_hw_t;
 #define HFC_CHIP_DTMF		6 /* DTMF decoding is enabled */
 #define HFC_CHIP_ULAW		7 /* ULAW mode */
 #define HFC_CHIP_CLOCK2		8 /* double clock mode */
+#define HFC_CHIP_CRYSTAL_CLOCK	9 /* autarc clocking mode */
 
 struct hfc_multi {
 	struct list_head	list;
+#warning
+void *davor, *danach;
 	char		name[32];
+	int		idx;	/* chip index for module parameters */
 	int		id;	/* chip number starting with 1 */
 	int		pcm;	/* id of pcm bus */
 	int		type;
@@ -98,7 +112,10 @@ struct hfc_multi {
 	u_int		irqcnt;
 	struct pci_dev	*pci_dev;
 #ifdef CONFIG_HFCMULTI_PCIMEM
-	unsigned char	*pci_membase;/* PCI memory (MUST BE BYTE POINTER) */
+	u_long	 pci_origmembase, plx_origmembase, dsp_origmembase;
+	u_char	*pci_membase;/* PCI memory (MUST BE BYTE POINTER) */
+	u_char	*plx_membase;/* PCI memory (MUST BE BYTE POINTER) */
+	u_char	*dsp_membase;/* PCI memory (MUST BE BYTE POINTER) */
 #else
 	u_int		pci_iobase;/* PCI IO (MUST BE BYTE POINTER) */
 #endif
@@ -118,10 +135,7 @@ struct hfc_multi {
 	u_int		ledcount; /* used to animate leds */
 	u_int		activity[8]; /* if there is any action on this port (will be cleared after showing led-states) */
 
-	mISDN_HWlock_t  lock;	/* the lock */
-#ifdef SPIN_DEBUG
-	void		*lock_adr;
-#endif
+	spinlock_t	lock;	/* the lock */
 
 	/* the channel index is counted from 0, regardless where the channel
 	 * is located on the hfc-channel.
@@ -188,6 +202,7 @@ typedef struct hfc_multi	hfc_multi_t;
 #define R_TX0			0x28
 #define R_TX1			0x29
 #define R_TX_FR0		0x2C
+
 #define R_TX_FR1		0x2D
 #define R_TX_FR2		0x2E
 #define R_JATT_ATT		0x2F /* undocumented */
@@ -537,9 +552,9 @@ typedef struct hfc_multi	hfc_multi_t;
 #define V_PCM_SYNC		0x04
 #define V_NEG_CLK		0x08
 #define V_HCLK			0x10
-#define V_JATT_AUTO_DEL		0x20
-#define V_JATT_AUTO		0x40
-#define V_JATT_EN		0x80
+//#define V_JATT_AUTO_DEL		0x20
+//#define V_JATT_AUTO		0x40
+#define V_JATT_OFF		0x80
 /* R_STATE */
 #define V_E1_STA		0x01
 #define V_ALT_FR_RX		0x40
@@ -1083,34 +1098,51 @@ struct hfc_register_names {
 
 /* ACCESS TO PCI MEMORY MAPPED REGISTERS */
 
+#define ADDR_MULT 1   // can be defined to other values if there
+					  // is e.g. an offset in a bridge chip addressing
+
 #ifdef CONFIG_HFCMULTI_PCIMEM
 
-#define HFC_outl(a,b,c) (*((volatile u_long *)((a->pci_membase)+b)) = c)
-#define HFC_inl(a,b) (*((volatile u_long *)((a->pci_membase)+b)))
+#define HFC_outl(a,b,c) (*((volatile u_long *)((a->pci_membase)+((b)*ADDR_MULT))) = c)
+#define HFC_inl(a,b) (*((volatile u_long *)((a->pci_membase)+((b)*ADDR_MULT))))
+#define HFC_outw_(a,b,c) (*((volatile u_short *)((a->pci_membase)+((b)*ADDR_MULT))) = c)
+#define HFC_inw_(a,b) (*((volatile u_short *)((a->pci_membase)+((b)*ADDR_MULT))))
+/*
+// version of HFC_inw_(a,b) that makes 8bit access instead of 16bit
+// only for test purposes
+u_short HFC_inw_(hfc_multi_t *a, int b)
+{
+	u_short zl,zh;
 
-/* no debug */
-#define HFC_outl_(a,b,c) (*((volatile u_long *)((a->pci_membase)+b)) = c)
-#define HFC_inl_(a,b) (*((volatile u_long *)((a->pci_membase)+b)))
-#define HFC_inw_(a,b) (*((volatile u_short *)((a->pci_membase)+b)))
-#define HFC_outb_(a,b,c) (*((volatile u_char *)((a->pci_membase)+b)) = c)
-#define HFC_inb_(a,b) (*((volatile u_char *)((a->pci_membase)+b)))
-#define HFC_wait_(a) while((*((volatile u_char *)((a->pci_membase)+R_STATUS))) & V_BUSY)
+	zl=(*((volatile u_char *)((a->pci_membase)+(b*4))));
+	zh=(*((volatile u_char *)((a->pci_membase)+((b+1)*4))));
+	return(zl|(zh<<8));
+
+}
+*/
+
+#define HFC_outb_(a,b,c) (*((volatile u_char *)((a->pci_membase)+((b)*ADDR_MULT))) = c)
+#define HFC_inb_(a,b) (*((volatile u_char *)((a->pci_membase)+((b)*ADDR_MULT))))
+#define HFC_wait_(a) while((*((volatile u_char *)((a->pci_membase)+(R_STATUS*ADDR_MULT)))) & V_BUSY)
+
+
 
 /* macros */
 #ifndef HFC_REGISTER_MAP
 
 /* usage: HFC_outX(card,register,value); */
-#define HFC_outb(a,b,c) (*((volatile u_char *)((a->pci_membase)+b)) = c)
+#define HFC_outb(a,b,c) (*((volatile u_char *)((a->pci_membase)+((b)*ADDR_MULT))) = c)
+#define HFC_outw(a,b,c) (*((volatile u_short *)((a->pci_membase)+((b)*ADDR_MULT))) = c)
 /* usage: register=HFC_inX(card,register); */
-#define HFC_inb(a,b) (*((volatile u_char *)((a->pci_membase)+b)))
-#define HFC_inw(a,b) (*((volatile u_short *)((a->pci_membase)+b)))
+#define HFC_inb(a,b) (*((volatile u_char *)((a->pci_membase)+((b)*ADDR_MULT))))
+#define HFC_inw(a,b) (*((volatile u_short *)((a->pci_membase)+((b)*ADDR_MULT))))
 /* usage: HFC_wait(card); */
-#define HFC_wait(a) while((*((volatile u_char *)((a->pci_membase)+R_STATUS))) & V_BUSY)
+#define HFC_wait(a) while((*((volatile u_char *)((a->pci_membase)+(R_STATUS*ADDR_MULT)))) & V_BUSY)
 
 #else /* HFC_REGISTER_MAP */
 
 #define HFC_outb(a,b,c) _HFC_outb(a, b, c, __FUNCTION__, __LINE__)
-static unsigned char _HFC_outb(hfc_multi_t *a, unsigned char b, unsigned char c, char *function, int line)
+static BYTE _HFC_outb(hfc_multi_t *a, BYTE b, BYTE c, char *function, int line)
 {
 	char regname[256]="", bits[9]="xxxxxxxx";
 	int i;
@@ -1135,10 +1167,10 @@ static unsigned char _HFC_outb(hfc_multi_t *a, unsigned char b, unsigned char c,
 	return(*(((volatile u_char *)a->pci_membase)+b) = c);
 }
 #define HFC_inb(a,b) _HFC_inb(a, b, __FUNCTION__, __LINE__)
-static unsigned char _HFC_inb(hfc_multi_t *a, unsigned char b, char *function, int line)
+static BYTE _HFC_inb(hfc_multi_t *a, BYTE b, char *function, int line)
 {
 	char regname[256]="", bits[9]="xxxxxxxx";
-	u_char c = (*(((volatile u_char *)a->pci_membase)+b));
+	u_char c = (*(((volatile u_char *)a->pci_membase)+((b)*ADDR_MULT));
 	int i;
 
 	i = 0;
@@ -1163,10 +1195,10 @@ static unsigned char _HFC_inb(hfc_multi_t *a, unsigned char b, char *function, i
 	return(c);
 }
 #define HFC_inw(a,b) _HFC_inw(a, b, __FUNCTION__, __LINE__)
-static unsigned short _HFC_inw(hfc_multi_t *a, unsigned char b, char *function, int line)
+static WORD _HFC_inw(hfc_multi_t *a, BYTE b, char *function, int line)
 {
 	char regname[256]="";
-	u_short c = (*(((volatile u_short *)a->pci_membase)+b));
+	u_short c = (*(((volatile u_short *)a->pci_membase)+((b)*ADDR_MULT)));
 	int i;
 
 	i = 0;
@@ -1241,10 +1273,12 @@ static inline void HFC_wait(hfc_multi_t *a)
 /* usage: HFC_putX(card,value); */
 #define HFC_putb(a,b) outb(b,a->pci_iobase)
 #define HFC_putl(a,b) outl(b,a->pci_iobase)
+#define HFC_putw(a,b) outw(b,a->pci_iobase)
 
 /* usage: value=HFC_getX(card); */
 #define HFC_getb(a) inb((volatile u_int)a->pci_iobase)
 #define HFC_getl(a) inl((volatile u_int)a->pci_iobase)
+#define HFC_getw(a) inw((volatile u_int)a->pci_iobase)
 
 /* no debug */
 #define HFC_outl_(a,b,c) HFC_outl(a,b,c)

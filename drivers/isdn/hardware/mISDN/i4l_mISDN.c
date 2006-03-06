@@ -1,4 +1,4 @@
-/* $Id: i4l_mISDN.c,v 1.6 2004/01/26 22:21:30 keil Exp $
+/* $Id: i4l_mISDN.c,v 1.7 2006/03/06 12:52:07 keil Exp $
  *
  * interface for old I4L hardware drivers to the CAPI driver
  *
@@ -21,7 +21,7 @@
 #include "dss1.h"
 #include "debug.h"
 
-static char *i4lcapi_revision = "$Revision: 1.6 $";
+static char *i4lcapi_revision = "$Revision: 1.7 $";
 
 /* data struct */
 typedef struct _i4l_channel	i4l_channel_t;
@@ -1376,7 +1376,7 @@ I4Lcapi_manager(void *data, u_int prim, void *arg) {
 	    case MGR_DISCONNECT | REQUEST:
 	    case MGR_DISCONNECT | INDICATION:
 		return(mISDN_DisConnectIF(inst, arg));
-	    case MGR_SETSTACK | CONFIRM:
+	    case MGR_SETSTACK | INDICATION:
 	    	if (nr_ch >= 0) {
 			if (inst->pid.protocol[2] != ISDN_PID_L2_B_TRANS)
 				test_and_set_bit(I4L_FLG_LAYER1, &channel->Flags);

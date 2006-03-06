@@ -1,4 +1,4 @@
-/* $Id: m_capi.h,v 1.12 2005/05/02 12:29:22 keil Exp $
+/* $Id: m_capi.h,v 1.13 2006/03/06 12:52:07 keil Exp $
  *
  * Rewritten CAPI Layer (Layer4 in mISDN)
  * 
@@ -182,7 +182,6 @@ struct _Controller {
 	__u32			addr;
 	int			entity;
 	int			next_id;
-	spinlock_t		id_lock;
 	u_int			debug;
 	int			maxplci;
 	Plci_t			*plcis;
@@ -273,7 +272,6 @@ struct _Ncci {
 	int			savedstate;
 	int			window;
 	u_long			state;
-	spinlock_t		conf_lock;
 	ConfQueue_t		xmit_skb_handles[CAPI_MAXDATAWINDOW];
 	struct sk_buff		*recv_skb_handles[CAPI_MAXDATAWINDOW];
 	struct sk_buff_head	squeue;
@@ -315,7 +313,7 @@ int		ControllerReleasePlci(Plci_t *);
 Application_t	*getApplication4Id(Controller_t *, __u16);
 Plci_t		*getPlci4Addr(Controller_t *, __u32);
 int		ControllerL4L3(Controller_t *, u_int, int, struct sk_buff *);
-int		ControllerL3L4(mISDNif_t *, struct sk_buff *);
+int		ControllerL3L4(mISDNinstance_t *, struct sk_buff *);
 PLInst_t	*ControllerSelChannel(Controller_t *, u_int);
 void		ControllerAddSSProcess(Controller_t *, SSProcess_t *);
 SSProcess_t	*getSSProcess4Id(Controller_t *, __u16);
@@ -328,7 +326,7 @@ int		ControllerNextId(Controller_t *);
 int		ApplicationConstr(Controller_t *, __u16, capi_register_params *);
 int		ApplicationDestr(Application_t *, int);
 void		ApplicationDebug(Application_t *appl, __u32 level, char *fmt, ...);
-__u16		ApplicationSendMessage(Application_t *appl, struct sk_buff *skb);
+void		ApplicationSendMessage(Application_t *appl, struct sk_buff *skb);
 void		SendCmsg2Application(Application_t *, _cmsg *);
 void		SendCmsgAnswer2Application(Application_t *, _cmsg *, __u16);
 void		AnswerMessage2Application(Application_t *, struct sk_buff *, __u16);
@@ -366,12 +364,15 @@ void 	AppPlciDelNCCI(Ncci_t *);
 void 	AppPlci_l3l4(AppPlci_t *, int, void *);
 __u16 	AppPlciSendMessage(AppPlci_t *, struct sk_buff *);
 void	AppPlciRelease(AppPlci_t *);
+int	AppPlciFacHoldReq(AppPlci_t *, FacReqParm_t *, FacConfParm_t *);
+int	AppPlciFacRetrieveReq(AppPlci_t *, FacReqParm_t *, FacConfParm_t *);
 int	AppPlciFacSuspendReq(AppPlci_t *, FacReqParm_t *, FacConfParm_t *);
 int	AppPlciFacResumeReq(AppPlci_t *, FacReqParm_t *, FacConfParm_t *);
 void	AppPlciGetCmsg(AppPlci_t *, _cmsg *);
 Ncci_t	*getNCCI4addr(AppPlci_t *, __u32, int);
-int	ConnectB3Request(AppPlci_t *, struct sk_buff *);
-int	AppPlcimISDN_SetIF(AppPlci_t *, u_int, void *);
+void	ConnectB3Request(AppPlci_t *, struct sk_buff *);
+void	DisconnectB3Request(AppPlci_t *, struct sk_buff *);
+int	AppPlcimISDN_Active(AppPlci_t *);
 
 #define	GET_NCCI_EXACT		1
 #define GET_NCCI_ONLY_PLCI	2
@@ -385,7 +386,7 @@ Ncci_t	*ncciConstr(AppPlci_t *);
 void	ncciDestr(Ncci_t *);
 void	ncciApplRelease(Ncci_t *);
 void	ncciDelAppPlci(Ncci_t *);
-__u16	ncciSendMessage(Ncci_t *, struct sk_buff *);
+void	ncciSendMessage(Ncci_t *, struct sk_buff *);
 int	ncci_l3l4(Ncci_t *, mISDN_head_t *, struct sk_buff *);
 void	ncciGetCmsg(Ncci_t *, _cmsg *);
 int	ncci_l3l4_direct(Ncci_t *, mISDN_head_t *, struct sk_buff *);
@@ -399,30 +400,44 @@ SSProcess_t	*SSProcessConstr(Application_t *, __u16, __u32);
 void		SSProcessDestr(SSProcess_t *);
 int		Supplementary_l3l4(Controller_t *, __u32, struct sk_buff *);
 void		SupplementaryFacilityReq(Application_t *, _cmsg *);
+void		SendSSNotificationEvent(AppPlci_t *, u16);
 
 // ---------------------------------------------------------------------------
 // INFOMASK defines (LISTEN commands)
 // ---------------------------------------------------------------------------
 
-#define CAPI_INFOMASK_CAUSE     (0x0001)
-#define CAPI_INFOMASK_DATETIME  (0x0002)
-#define CAPI_INFOMASK_DISPLAY   (0x0004)
-#define CAPI_INFOMASK_USERUSER  (0x0008)
-#define CAPI_INFOMASK_PROGRESS  (0x0010)
-#define CAPI_INFOMASK_FACILITY  (0x0020)
-//#define CAPI_INFOMASK_CHARGE    (0x0040)
-//#define CAPI_INFOMASK_CALLEDPN  (0x0080)
-#define CAPI_INFOMASK_CHANNELID (0x0100)
-#define CAPI_INFOMASK_EARLYB3   (0x0200)
-//#define CAPI_INFOMASK_REDIRECT  (0x0400)
+#define CAPI_INFOMASK_CAUSE 	0x0001
+#define CAPI_INFOMASK_DATETIME	0x0002
+#define CAPI_INFOMASK_DISPLAY	0x0004
+#define CAPI_INFOMASK_USERUSER	0x0008
+#define CAPI_INFOMASK_PROGRESS	0x0010
+#define CAPI_INFOMASK_FACILITY	0x0020
+#define CAPI_INFOMASK_CHARGE	0x0040
+#define CAPI_INFOMASK_CALLEDPN	0x0080
+#define CAPI_INFOMASK_CHANNELID	0x0100
+#define CAPI_INFOMASK_EARLYB3	0x0200
+#define CAPI_INFOMASK_REDIRECT	0x0400
+/* bit 11 reserved */
+#define CAPI_INFOMASK_COMPLETE	0x1000
+/* bit 13-31 reserved */
 
 // ---------------------------------------------------------------------------
 // Supplementary Services
 // ---------------------------------------------------------------------------
 
+#define SuppServiceHR			0x00000001
 #define SuppServiceTP			0x00000002
+#define SuppServiceECT			0x00000004
+#define SuppService3PTY			0x00000008
 #define SuppServiceCF			0x00000010
-#define mISDNSupportedServices		(SuppServiceCF | SuppServiceTP)
+#define SuppServiceCD			0x00000020
+#define SuppServiceMCID			0x00000040
+#define SuppServiceCCBS			0x00000080
+
+#define mISDNSupportedServices		(SuppServiceCD | \
+					 SuppServiceCF | \
+					 SuppServiceTP | \
+					 SuppServiceHR)
 
 // ---------------------------------------------------------------------------
 // structs for Facillity requests
@@ -456,6 +471,12 @@ struct FacReqCFDeactivate {
 	__u8  *ServedUserNumber;
 };
 
+struct FacReqCDeflection {
+	__u16 PresentationAllowed;
+	__u8  *DeflectedToNumber;
+	__u8  *DeflectedToSubaddress;
+};
+
 #define FacReqCFInterrogateParameters FacReqCFDeactivate
 
 struct FacReqCFInterrogateNumbers {
@@ -472,6 +493,7 @@ struct FacReqParm {
 		struct FacReqCFDeactivate CFDeactivate;
 		struct FacReqCFInterrogateParameters CFInterrogateParameters;
 		struct FacReqCFInterrogateNumbers CFInterrogateNumbers;
+		struct FacReqCDeflection CDeflection;
 	} u;
 };
 

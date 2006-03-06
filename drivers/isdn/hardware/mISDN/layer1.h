@@ -1,4 +1,4 @@
-/* $Id: layer1.h,v 1.4 2004/01/28 11:34:46 keil Exp $
+/* $Id: layer1.h,v 1.5 2006/03/06 12:52:07 keil Exp $
  *
  * Layer 1 defines
  *
@@ -12,6 +12,7 @@
 #include "memdbg.h"
 #endif
 
+#ifdef OBSOLETE
 #define D_RCVBUFREADY	0
 #define D_XMTBUFREADY	1
 #define D_L1STATECHANGE	2
@@ -32,6 +33,7 @@
 #define B_XMTBUFREADY	1
 #define B_BLOCKEDATOMIC	2
 #define B_DTMFREADY	3
+#endif
 
 #define FLG_L1_ACTIVATING	1
 #define FLG_L1_ACTIVATED	2

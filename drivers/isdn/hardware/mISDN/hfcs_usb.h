@@ -1,6 +1,6 @@
 /*
 * hfcs_usb.h, HFC-S USB mISDN driver
-* $Id: hfcs_usb.h,v 1.3 2005/06/23 16:43:36 mbachem Exp $ 
+* $Id: hfcs_usb.h,v 1.4 2006/03/06 12:52:07 keil Exp $ 
 *
 */
 
@@ -21,28 +21,22 @@
 #define CLKDEL_NT	0x6c	/* CLKDEL in NT mode */
 
 /* hfcsusb Layer1 commands */
-#define HFC_L1_ACTIVATE_TE      0x01
-#define HFC_L1_DEACTIVATE_TE	0x02
-#define HFC_L1_ACTIVATE_NT      0x03
-#define HFC_L1_DEACTIVATE_NT    0x04
+#define HFC_L1_ACTIVATE_TE	0x01
+#define HFC_L1_ACTIVATE_NT	0x02
+#define HFC_L1_DEACTIVATE_NT	0x03
+#define HFC_L1_FORCE_DEACTIVATE_TE 0x04
 
-/* bits in STATES */
+/* cmd FLAGS in HFCUSB_STATES register */
 #define HFCUSB_LOAD_STATE	0x10
 #define HFCUSB_ACTIVATE		0x20
 #define HFCUSB_DO_ACTION	0x40
 #define HFCUSB_NT_G2_G3		0x80
 
 /* bits in hw_mode */
-#define HW_MODE_TE		0x01
-#define HW_MODE_NT		0x02
+#define PORT_MODE_TE		0x01
+#define PORT_MODE_NT		0x02
 #define NT_ACTIVATION_TIMER	0x04 /* enables NT mode activation Timer */
 #define NT_T1_COUNT		10
-
-
-#define HFCUSB_L1_STATECHANGE 0	/* L1 state changed */
-#define HFCUSB_L1_DRX 1		/* D-frame received */
-#define HFCUSB_L1_ERX 2		/* E-frame received */
-#define HFCUSB_L1_DTX 4		/* D-frames completed */
 
 #define MAX_BCH_SIZE 2048	/* allowed B-channel packet size */
 
@@ -84,6 +78,15 @@
 #define HFCUSB_PCM_TX		6
 #define HFCUSB_PCM_RX		7
 
+/*************/
+/* Chan idx  */
+/*************/
+#define B1	0
+#define B2	1
+#define D	2
+#define PCM	3
+#define MAX_CHAN 4
+
 /*
 * used to switch snd_transfer_mode for different TA modes e.g. the Billion USB TA just
 * supports ISO out, while the Cologne Chip EVAL TA just supports BULK out
@@ -95,7 +98,7 @@
 #define ISOC_PACKETS_D	8
 #define ISOC_PACKETS_B	8
 #define ISO_BUFFER_SIZE	128
-
+#define TRANSP_PACKET_SIZE 0
 
 /* defines how much ISO packets are handled in one URB */
 static int iso_packets[8] =
@@ -130,7 +133,6 @@ static int iso_packets[8] =
 /* USB related defines */
 /***********************/
 #define HFC_CTRL_BUFSIZE 32
-
 
 
 /*************************************************/

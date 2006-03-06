@@ -1,4 +1,4 @@
-/* $Id: dsp_cmx.c,v 1.10 2005/10/26 14:12:13 keil Exp $
+/* $Id: dsp_cmx.c,v 1.11 2006/03/06 12:52:07 keil Exp $
  *
  * Audio crossconnecting/conferrencing (hardware level).
  *
@@ -30,7 +30,7 @@
 /* HOW THE CMX WORKS:
  *
  * There are 3 types of interaction: One member is alone, in this case only
- * data flow is done.
+ * data flow from upper to lower layer is done.
  * Two members will also exchange their data so they are crossconnected.
  * Three or more members will be added in a conference and will hear each
  * other but will not receive their own speech (echo) if not enabled.
@@ -40,37 +40,24 @@
  *  - Force mixing of transmit data with other crossconnect/conference members.
  *  - Echo generation to benchmark the delay of audio processing.
  *  - Use hardware to minimize cpu load, disable FIFO load and minimize delay.
+ *  - Dejittering and clock generation.
  *
- * There are 3 buffers:
- *
- * The conference buffer
- *
- *  R-3     R-2   R-1    W-2    W-1 W-3
- *   |       |     |      |      |   |
- * --+-------+-----+------+------+---+---------------
- *                        |          |
- *                      W-min      W-max
- *
- * The conference buffer is a ring buffer used to mix all data from all members.
- * To compensate the echo, data of individual member will later be substracted
- * before it is sent to that member. Each conference has a W-min and a W-max
- * pointer. Each individual member has a write pointer (W-x) and a read pointer
- * (R-x). W-min shows the lowest value of all W-x. The W-max shows the highest
- * value of all W-x. Whenever data is written, it is mixed by adding to the
- * existing sample value in the buffer. If W-max would increase, the additional
- * range is cleared so old data will be erased in the ring buffer.
+ * There are 2 buffers:
  *
  *
  * RX-Buffer
- *                R-1           W-1
+ *                 R             W
  *                 |             |
  * ----------------+-------------+-------------------
  * 
  * The rx-buffer is a ring buffer used to store the received data for each
- * individual member. To compensate echo, this data will later be substracted
- * from the conference's data before it is sent to that member. If only two
- * members are in one conference, this data is used to get the queued data from
- * the other member.
+ * individual member. This is only the case if data needs to be dejittered
+ * or in case of a conference where different clocks require reclocking.
+ * The transmit-clock (R) will read the buffer.
+ * If the clock overruns the write-pointer, we will have a buffer underrun.
+ * If the write pointer always has a certain distance from the transmit-
+ * clock, we will have a delay. The delay will dynamically be increased and
+ * reduced.
  *
  *
  * TX-Buffer
@@ -84,28 +71,25 @@
  * (some) data is dropped so that it will not overrun.
  *
  *
+ * Clock:
+ * 
+ * A Clock is not required, if the data source has exactly one clock. In this
+ * case the data source is forwarded to the destination.
+ *
+ * A Clock is required, because the data source
+ *  - has multiple clocks.
+ *  - has no clock due to jitter (VoIP).
+ * In this case the system's clock is used. The clock resolution depends on
+ * the jiffie resolution.
+ *
  * If a member joins a conference:
  *
- * - If a member joins, its rx_buff is set to silence.
- * - If the conference reaches three members, the conf-buffer is cleared.
- * - When a member is joined, it will set its write and read pointer to W_max.
+ * - If a member joins, its rx_buff is set to silence and change read pointer
+ *   to transmit clock.
  *
  * The procedure of received data from card is explained in cmx_receive.
  * The procedure of received data from user space is explained in cmx_transmit.
- *
- *
- * LIMITS:
- *
- * The max_queue value is 2* the samples of largest packet ever received by any
- * conference member from her card. It also changes during life of conference.
- *
- *
- * AUDIO PROCESS:
- *
- * Writing data to conference's and member's buffer is done by adding the sample
- * value to the existing ring buffer. Writing user space data to the member's
- * buffer is done by substracting the sample value from the existing ring
- * buffer.
+ * The procedure of transmit data to card is cmx_send.
  *
  *
  * Interaction with other features:
@@ -143,12 +127,10 @@
 #include "helper.h"
 #include "debug.h"
 #include "dsp.h"
-#include "hw_lock.h"
 
 //#define CMX_CONF_DEBUG /* debugging of multi party conference, by using conference even with two members */
 //#define CMX_DEBUG /* massive read/write pointer output */
 
-extern mISDN_HWlock_t dsp_lock;
 LIST_HEAD(Conf_list);
 
 /*
@@ -157,13 +139,12 @@ LIST_HEAD(Conf_list);
 void
 dsp_cmx_debug(dsp_t *dsp)
 {
-	conference_t *conf;
-	conf_member_t *member;
-	dsp_t *odsp;
+	conference_t	*conf;
+	conf_member_t	*member;
+	dsp_t		*odsp;
 
 	printk(KERN_DEBUG "-----Current DSP\n");
-	list_for_each_entry(odsp, &dsp_obj.ilist, list)
-	{
+	list_for_each_entry(odsp, &dsp_obj.ilist, list) {
 		printk(KERN_DEBUG "* %s echo=%d txmix=%d", odsp->inst.name, odsp->echo, odsp->tx_mix);
 		if (odsp->conf)
 			printk(" (Conf %d)", odsp->conf->id);
@@ -171,14 +152,15 @@ dsp_cmx_debug(dsp_t *dsp)
 			printk(" *this*");
 		printk("\n");
 	}
-	
 	printk(KERN_DEBUG "-----Current Conf:\n");
-	list_for_each_entry(conf, &Conf_list, list)
-	{
-		printk(KERN_DEBUG "* Conf %d (0x%x)\n", conf->id, (u32)conf);
-		list_for_each_entry(member, &conf->mlist, list)
-		{
-			printk(KERN_DEBUG "  - member = %s (slot_tx %d, bank_tx %d, slot_rx %d, bank_rx %d hfc_conf %d)%s\n", member->dsp->inst.name, member->dsp->pcm_slot_tx, member->dsp->pcm_bank_tx, member->dsp->pcm_slot_rx, member->dsp->pcm_bank_rx, member->dsp->hfc_conf, (member->dsp==dsp)?" *this*":"");
+	list_for_each_entry(conf, &Conf_list, list) {
+		printk(KERN_DEBUG "* Conf %d (%p)\n", conf->id, conf);
+		list_for_each_entry(member, &conf->mlist, list) {
+			printk(KERN_DEBUG
+				"  - member = %s (slot_tx %d, bank_tx %d, slot_rx %d, bank_rx %d hfc_conf %d)%s\n",
+				member->dsp->inst.name, member->dsp->pcm_slot_tx, member->dsp->pcm_bank_tx,
+				member->dsp->pcm_slot_rx, member->dsp->pcm_bank_rx, member->dsp->hfc_conf,
+				(member->dsp==dsp)?" *this*":"");
 		}
 	}
 	printk(KERN_DEBUG "-----end\n");
@@ -231,25 +213,17 @@ dsp_cmx_add_conf_member(dsp_t *dsp, conference_t *conf)
 		return(-EINVAL);
 	}
 
-	unlock_HW(&dsp_lock);
-	if (!(member = vmalloc(sizeof(conf_member_t)))) {
-		lock_HW(&dsp_lock, 0);
-		printk(KERN_ERR "vmalloc conf_member_t failed\n");
+	if (!(member = kmalloc(sizeof(conf_member_t), GFP_ATOMIC))) {
+		printk(KERN_ERR "kmalloc conf_member_t failed\n");
 		return(-ENOMEM);
 	}
-	lock_HW(&dsp_lock, 0);
 	memset(member, 0, sizeof(conf_member_t));
-	memset(dsp->rx_buff, dsp_silence, sizeof(dsp->rx_buff));
 	member->dsp = dsp;
-	/* set initial values */
-	dsp->W_rx = conf->W_max;
-	dsp->R_rx = conf->W_max;
+	/* clear rx buffer */
+	memset(dsp->rx_buff, dsp_silence, sizeof(dsp->rx_buff));
+	dsp->rx_W = dsp->rx_R = -1; /* reset pointers */
 
 	list_add_tail(&member->list, &conf->mlist);
-
-	/* zero conf-buffer if we change from 2 to 3 members */
-	if (3 == count_list_member(&conf->mlist))
-		memset(conf->conf_buff, 0, sizeof(conf->conf_buff));
 
 	dsp->conf = conf;
 	dsp->member = member;
@@ -290,9 +264,7 @@ dsp_cmx_del_conf_member(dsp_t *dsp)
 			list_del(&member->list);
 			dsp->conf = NULL;
 			dsp->member = NULL;
-			unlock_HW(&dsp_lock);
-			vfree(member);
-			lock_HW(&dsp_lock, 0);
+			kfree(member);
 			return(0);
 		}
 	}
@@ -317,13 +289,10 @@ static conference_t
 		return(NULL);
 	}
 
-	unlock_HW(&dsp_lock);
-	if (!(conf = vmalloc(sizeof(conference_t)))) {
-		lock_HW(&dsp_lock, 0);
-		printk(KERN_ERR "vmalloc conference_t failed\n");
+	if (!(conf = kmalloc(sizeof(conference_t), GFP_ATOMIC))) {
+		printk(KERN_ERR "kmalloc conference_t failed\n");
 		return(NULL);
 	}
-	lock_HW(&dsp_lock, 0);
 	memset(conf, 0, sizeof(conference_t));
 	INIT_LIST_HEAD(&conf->mlist);
 	conf->id = id;
@@ -352,9 +321,7 @@ dsp_cmx_del_conf(conference_t *conf)
 		return(-EINVAL);
 	}
 	list_del(&conf->list);
-	unlock_HW(&dsp_lock);
-	vfree(conf);
-	lock_HW(&dsp_lock, 0);
+	kfree(conf);
 
 	return(0);
 }
@@ -379,7 +346,7 @@ dsp_cmx_hw_message(dsp_t *dsp, u32 message, u32 param1, u32 param2, u32 param3, 
 		return;
 	}
 	/* unlocking is not required, because we don't expect a response */
-	if (dsp->inst.down.func(&dsp->inst.down, nskb))
+	if (mISDN_queue_down(&dsp->inst, 0, nskb))
 		dev_kfree_skb(nskb);
 }
 
@@ -395,12 +362,12 @@ dsp_cmx_hw_message(dsp_t *dsp, u32 message, u32 param1, u32 param2, u32 param3, 
 void 
 dsp_cmx_hardware(conference_t *conf, dsp_t *dsp)
 {
-	conf_member_t *member, *nextm;
-	dsp_t *finddsp;
-	int memb = 0, i, ii, i1, i2;
-	int freeunits[8];
-	u_char freeslots[256];
-	int same_hfc = -1, same_pcm = -1, current_conf = -1, all_conf = 1;
+	conf_member_t	*member, *nextm;
+	dsp_t		*finddsp;
+	int		memb = 0, i, ii, i1, i2;
+	int		freeunits[8];
+	u_char		freeslots[256];
+	int		same_hfc = -1, same_pcm = -1, current_conf = -1, all_conf = 1;
 
 	/* dsp gets updated (no conf) */
 //printk("-----1\n");
@@ -556,6 +523,12 @@ dsp_cmx_hardware(conference_t *conf, dsp_t *dsp)
 		if (member->dsp->bf_enable) {
 			if (dsp_debug & DEBUG_DSP_CMX)
 				printk(KERN_DEBUG "%s dsp %s cannot form a conf, because encryption is enabled\n", __FUNCTION__, member->dsp->inst.name);
+			goto conf_software;
+		}
+		/* check if echo cancellation is enabled */
+		if (member->dsp->cancel_enable) {
+			if (dsp_debug & DEBUG_DSP_CMX)
+				printk(KERN_DEBUG "%s dsp %s cannot form a conf, because echo cancellation is enabled\n", __FUNCTION__, member->dsp->inst.name);
 			goto conf_software;
 		}
 		/* check if member is on a card with PCM support */
@@ -960,216 +933,127 @@ dsp_cmx_conf(dsp_t *dsp, u32 conf_id)
 /*
  * audio data is received from card
  */
-
 void 
 dsp_cmx_receive(dsp_t *dsp, struct sk_buff *skb)
 {
-	conference_t *conf = dsp->conf;
-	conf_member_t *member;
-	s32 *c;
+//	s32 *c;
 	u8 *d, *p;
 	int len = skb->len;
-	int w, ww, i, ii;
-	int W_min, W_max;
+	mISDN_head_t *hh = mISDN_HEAD_P(skb);
+	int w, i, ii;
+//	int direct = 0; /* use rx data to clock tx-data */
 
 	/* check if we have sompen */
 	if (len < 1)
 		return;
 
-//#ifndef AUTOJITTER
-	/* -> if length*2 is greater largest */
-	if (dsp->largest < (len<<1))
-		dsp->largest = (len<<1);
-//#endif
+#if 0
+	/* check if we can use our clock and directly forward data */
+	if (!dsp->features.has_jitter) {
+		if (!conf)
+			direct = 1;
+		else {
+			if (count_list_member(&conf->mlist) <= 2)
+				direct = 1;
+		}
+	}
+#endif
 
-	/* half of the buffer should be 4 time larger than maximum packet size */
-	if (len >= (CMX_BUFF_HALF>>2)) {
+	/* half of the buffer should be larger than maximum packet size */
+	if (len >= CMX_BUFF_HALF) {
 		printk(KERN_ERR "%s line %d: packet from card is too large (%d bytes). please make card send smaller packets OR increase CMX_BUFF_SIZE\n", __FILE__, __LINE__, len);
 		return;
 	}
 
-	/* STEP 1: WRITE DOWN WHAT WE GOT (into the buffer(s)) */
-
-	/* -> new W-min & W-max is calculated:
-	 * W_min will be the write pointer of this dsp (after writing 'len'
-	 * of bytes).
-	 * If there are other members in a conference, W_min will be the
-	 * lowest of all member's writer pointers.
-	 * W_max respectively
-	 */
-	W_max = W_min = (dsp->W_rx + len) & CMX_BUFF_MASK;
-	if (conf) {
-		/* -> who is larger? dsp or conf */
-		if (conf->largest < dsp->largest)
-			conf->largest = dsp->largest;
-		else if (conf->largest > dsp->largest)
-			dsp->largest = conf->largest;
-
-		list_for_each_entry(member, &conf->mlist, list) {
-			if (member != dsp->member) {
-				/* if W_rx is lower */
-				if (((member->dsp->W_rx - W_min) & CMX_BUFF_MASK) >= CMX_BUFF_HALF)
-					W_min = member->dsp->W_rx;
-				/* if W_rx is higher */
-				if (((W_max - member->dsp->W_rx) & CMX_BUFF_MASK) >= CMX_BUFF_HALF)
-					W_max = member->dsp->W_rx;
-			}
-		}
-	}
-
-#ifdef CMX_DEBUG
-	printk(KERN_DEBUG "cmx_receive(dsp=%lx): W_rx(dsp)=%05x W_min=%05x W_max=%05x largest=%05x %s\n", dsp, dsp->W_rx, W_min, W_max, dsp->largest, dsp->inst.name);
-#endif
-
-	/* -> if data is not too fast (exceed maximum queue):
-	 * data is written if 'new W_rx' is not too far behind W_min.
-	 */
-	if (((dsp->W_rx + len - W_min) & CMX_BUFF_MASK) <= dsp->largest) {
-		/* -> received data is written to rx-buffer */
-		p = skb->data;
-		d = dsp->rx_buff;
-		w = dsp->W_rx;
-		i = 0;
-		ii = len;
-		while(i < ii) {
-			d[w++ & CMX_BUFF_MASK] = *p++;
-			i++;
-		}
-		/* -> if conference has three or more members */
-		if (conf) {
-#ifdef CMX_CONF_DEBUG
-#warning CMX_CONF_DEBUG is enabled, it causes performance loss with normal 2-party crossconnects
-			if (2 <= count_list_member(&conf->mlist)) {
-#else
-			if (3 <= count_list_member(&conf->mlist)) {
-#endif
-//printk(KERN_DEBUG "cmxing dsp:%s dsp->W_rx=%04x conf->W_max=%04x\n", dsp->inst.name, dsp->W_rx, conf->W_max);
-				/* -> received data is added to conf-buffer
-				 *    new space is overwritten */
-				p = skb->data;
-				c = conf->conf_buff;
-				w = dsp->W_rx;
-				ww = conf->W_max;
-				i = 0;
-				ii = len;
-				/* loop until done or old W_max is reached */
-				while(i<ii && w!=ww) {
-					c[w] += dsp_audio_law_to_s32[*p++]; /* add to existing */
-					w = (w+1) & CMX_BUFF_MASK; /* must be always masked, for loop condition */
-					i++;
-				}
-				/* loop the rest */
-				while(i < ii) {
-					c[w++ & CMX_BUFF_MASK] = dsp_audio_law_to_s32[*p++]; /* write to new */
-					i++;
-				}
-			}
-			/* if W_max is lower new dsp->W_rx */
-			if (((W_max - (dsp->W_rx+len)) & CMX_BUFF_MASK) >= CMX_BUFF_HALF)
-				W_max = (dsp->W_rx + len) & CMX_BUFF_MASK;
-			/* store for dsp_cmx_send */
-			conf->W_min = W_min;
-			/* -> write new W_max */
-			conf->W_max = W_max;
-		}
-		/* -> write new W_rx */
-		dsp->W_rx = (dsp->W_rx + len) & CMX_BUFF_MASK;
+	/* initialize pointers if not already */
+	if (dsp->rx_W < 0) {
+		if (dsp->features.has_jitter)
+			dsp->rx_R = dsp->rx_W = (hh->dinfo & CMX_BUFF_MASK);
+		else
+			dsp->rx_R = dsp->rx_W = 0;
 	} else {
-		if (dsp_debug & DEBUG_DSP_CMX)
-			printk(KERN_DEBUG "CMX: receiving too fast (rx_buff) dsp=%x\n", (u32)dsp);
-#ifdef CMX_DEBUG
-		printk(KERN_DEBUG "W_max=%x-W_min=%x = %d, largest = %d\n", W_max, W_min, (W_max - W_min) & CMX_BUFF_MASK, dsp->largest);
-#endif
+		if (dsp->features.has_jitter) {
+			dsp->rx_W = (hh->dinfo & CMX_BUFF_MASK);
+		}
+		/* if we underrun (or maybe overrun), we set our new read pointer, and write silence to buffer */
+		if (((dsp->rx_W-dsp->rx_R) & CMX_BUFF_MASK) >= CMX_BUFF_HALF) {
+			if (dsp_debug & DEBUG_DSP_CMX)
+				printk(KERN_DEBUG "cmx_receive(dsp=%lx): UNDERRUN (or overrun), adjusting read pointer! (inst %s)\n", (u_long)dsp, dsp->inst.name);
+			dsp->rx_R = dsp->rx_W;
+			memset(dsp->rx_buff, dsp_silence, sizeof(dsp->rx_buff));
+		}
 	}
+
+	/* show where to write */
+#ifdef CMX_DEBUG
+	printk(KERN_DEBUG "cmx_receive(dsp=%lx): rx_R(dsp) rx_W(dsp)=%05x len=%d %s\n", (u_long)dsp, dsp->rx_R, dsp->rx_W, len, dsp->inst.name);
+#endif
+
+	/* write data into rx_buffer */
+	p = skb->data;
+	d = dsp->rx_buff;
+	w = dsp->rx_W;
+	i = 0;
+	ii = len;
+	while(i < ii) {
+		d[w++ & CMX_BUFF_MASK] = *p++;
+		i++;
+	}
+
+	/* increase write-pointer */
+	dsp->rx_W = ((dsp->rx_W+len) & CMX_BUFF_MASK);
 }
 
-/*
- * send mixed audio data to card
- */
 
-struct sk_buff 
-*dsp_cmx_send(dsp_t *dsp, int len, int dinfo)
+/*
+ * send (mixed) audio data to card and control jitter
+ */
+static void
+dsp_cmx_send_member(dsp_t *dsp, int len, s32 *c, int members)
 {
+	int dinfo = 0;
 	conference_t *conf = dsp->conf;
 	dsp_t *member, *other;
 	register s32 sample;
-	s32 *c;
-	u8 *d, *o, *p, *q;
+	u8 *d, *p, *q, *o_q;
 	struct sk_buff *nskb;
-	int r, rr, t, tt;
+	int r, rr, t, tt, o_r, o_rr;
+	
+	/* don't process if: */
+	if (dsp->pcm_slot_tx >= 0 /* connected to pcm slot */
+	 && dsp->tx_R == dsp->tx_W /* AND no tx-data */
+	 && !(dsp->tone.tone && dsp->tone.software)) /* AND not soft tones */
+		return;
+	if (!dsp->b_active) /* if not active */
+		return;
+#ifdef CMX_DEBUG
+printk(KERN_DEBUG "SEND members=%d dsp=%s, conf=%p, rx_R=%05x rx_W=%05x\n", members, dsp->inst.name, conf, dsp->rx_R, dsp->rx_W);
+#endif
 
 	/* PREPARE RESULT */
 	nskb = alloc_skb(len, GFP_ATOMIC);
 	if (!nskb) {
 		printk(KERN_ERR "FATAL ERROR in mISDN_dsp.o: cannot alloc %d bytes\n", len);
-		return(NULL);
+		return;
 	}
 	mISDN_sethead(PH_DATA | REQUEST, dinfo, nskb);
+
 	/* set pointers, indexes and stuff */
 	member = dsp;
 	p = dsp->tx_buff; /* transmit data */
 	q = dsp->rx_buff; /* received data */
 	d = skb_put(nskb, len); /* result */
-	t = dsp->R_tx; /* tx-pointers */
-	tt = dsp->W_tx;
-	r = dsp->R_rx; /* rx-pointers */
-	if (conf) {
-		/* special hardware access */
-		if (conf->hardware) {
-			if (dsp->tone.tone && dsp->tone.software) {
-				/* -> copy tone */
-				dsp_tone_copy(dsp, d, len);
-				dsp->R_tx = dsp->W_tx = 0; /* clear tx buffer */
-				return(nskb);
-			}
-			if (t != tt) {
-				while(len && t!=tt) {
-					*d++ = p[t]; /* write tx_buff */
-					t = (t+1) & CMX_BUFF_MASK;
-					len--;
-				}
-			}
-			if (len)
-				memset(d, dsp_silence, len);
-			dsp->R_tx = t;
-			return(nskb);
-		}
-		/* W_min is also limit for read */
-		rr = conf->W_min;
-	} else
-		rr = dsp->W_rx;
+	t = dsp->tx_R; /* tx-pointers */
+	tt = dsp->tx_W;
+	r = dsp->rx_R; /* rx-pointers */
+	rr = (r + len) & CMX_BUFF_MASK;
 
-	/* increase r, if too far behind rr
-	 * (this happens if interrupts get lost, so transmission is delayed) */
-	if (((rr - r) & CMX_BUFF_MASK) > dsp->largest) {
-		if (dsp_debug & DEBUG_DSP_CMX)
-			printk(KERN_DEBUG "r=%04x is too far behind rr=%04x, correcting. (larger than %04x)\n", r, rr, dsp->largest);
-		r = (rr - dsp->largest) & CMX_BUFF_MASK;
-	}
-	/* calculate actual r (if r+len would overrun rr) */
-	if (((rr - r - len) & CMX_BUFF_MASK) >= CMX_BUFF_HALF) {
-#ifdef CMX_DEBUG
-		printk(KERN_DEBUG "r+len=%04x overruns rr=%04x\n", (r+len) & CMX_BUFF_MASK, rr);
-#endif
-		/* r is set "len" bytes before W_min */
-		r = (rr - len) & CMX_BUFF_MASK;
-		if (dsp_debug & DEBUG_DSP_CMX)
-			printk(KERN_DEBUG "CMX: sending too fast (tx_buff) dsp=%x\n", (u32)dsp);
-	} else
-		/* rr is set "len" bytes after R_rx */
-		rr = (r + len) & CMX_BUFF_MASK;
-	dsp->R_rx = rr;
-	/* now: rr is exactly "len" bytes after r now */
-#ifdef CMX_DEBUG
-	printk(KERN_DEBUG "CMX_SEND(dsp=%lx) %d bytes from tx:0x%05x-0x%05x rx:0x%05x-0x%05x echo=%d %s\n", dsp, len, t, tt, r, rr, dsp->echo, dsp->inst.name);
-#endif
-
-	/* STEP 2.0: PROCESS TONES/TX-DATA ONLY */
+	/* PROCESS TONES/TX-DATA ONLY */
 	if (dsp->tone.tone && dsp->tone.software) {
 		/* -> copy tone */
 		dsp_tone_copy(dsp, d, len);
-		dsp->R_tx = dsp->W_tx = 0; /* clear tx buffer */
-		return(nskb);
+		dsp->tx_R = dsp->tx_W = 0; /* clear tx buffer */
+		goto send_packet;
 	}
 	/* if we have tx-data but do not use mixing */
 	if (!dsp->tx_mix && t!=tt) {
@@ -1180,14 +1064,13 @@ struct sk_buff
 			r = (r+1) & CMX_BUFF_MASK;
 		}
 		if(r == rr) {
-			dsp->R_tx = t;
-			return(nskb);
+			dsp->tx_R = t;
+			goto send_packet;
 		}
 	}
 
-	/* STEP 2.1: PROCESS DATA (one member / no conf) */
-	if (!conf) {
-		single:
+	/* PROCESS DATA (one member / no conf) */
+	if (!conf || members<=1) {
 		/* -> if echo is NOT enabled */
 		if (!dsp->echo) {
 			/* -> send tx-data if available or use 0-volume */
@@ -1211,40 +1094,40 @@ struct sk_buff
 				r = (r+1) & CMX_BUFF_MASK;
 			}
 		}
-		dsp->R_tx = t;
-		return(nskb);
+		dsp->tx_R = t;
+		goto send_packet;
 	}
-	if (1 == count_list_member(&conf->mlist)) {
-		goto single;
-	}
-	/* STEP 2.2: PROCESS DATA (two members) */
+	/* PROCESS DATA (two members) */
 #ifdef CMX_CONF_DEBUG
 	if (0) {
 #else
-	if (2 == count_list_member(&conf->mlist)) {
+	if (members == 2) {
 #endif
 		/* "other" becomes other party */
 		other = (list_entry(conf->mlist.next, conf_member_t, list))->dsp;
 		if (other == member)
 			other = (list_entry(conf->mlist.prev, conf_member_t, list))->dsp;
-		o = other->rx_buff; /* received data */
+		o_q = other->rx_buff; /* received data */
+		o_r = other->rx_R; /* rx-pointers */
+		o_rr = (o_r + len) & CMX_BUFF_MASK;
 		/* -> if echo is NOT enabled */
 		if (!dsp->echo) {
+//if (o_r!=o_rr) printk(KERN_DEBUG "receive data=0x%02x\n", o_q[o_r]); else printk(KERN_DEBUG "NO R!!!\n");
 			/* -> copy other member's rx-data, if tx-data is available, mix */
-			while(r!=rr && t!=tt) {
-				*d++ = dsp_audio_mix_law[(p[t]<<8)|o[r]];
+			while(o_r!=o_rr && t!=tt) {
+				*d++ = dsp_audio_mix_law[(p[t]<<8)|o_q[o_r]];
 				t = (t+1) & CMX_BUFF_MASK;
-				r = (r+1) & CMX_BUFF_MASK;
+				o_r = (o_r+1) & CMX_BUFF_MASK;
 			}
-			while(r != rr) {
-				*d++ = o[r];
-				r = (r+1) & CMX_BUFF_MASK;
+			while(o_r != o_rr) {
+				*d++ = o_q[o_r];
+				o_r = (o_r+1) & CMX_BUFF_MASK;
 			}
 		/* -> if echo is enabled */
 		} else {
 			/* -> mix other member's rx-data with echo, if tx-data is available, mix */
 			while(r!=rr && t!=tt) {
-				sample = dsp_audio_law_to_s32[p[t]] + dsp_audio_law_to_s32[o[r]] + dsp_audio_law_to_s32[q[r]];
+				sample = dsp_audio_law_to_s32[p[t]] + dsp_audio_law_to_s32[q[r]] + dsp_audio_law_to_s32[o_q[o_r]];
 				if (sample < -32768)
 					sample = -32768;
 				else if (sample > 32767)
@@ -1252,22 +1135,23 @@ struct sk_buff
 				*d++ = dsp_audio_s16_to_law[sample & 0xffff]; /* tx-data + rx_data + echo */
 				t = (t+1) & CMX_BUFF_MASK;
 				r = (r+1) & CMX_BUFF_MASK;
+				o_r = (o_r+1) & CMX_BUFF_MASK;
 			}
 			while(r != rr) {
-				*d++ = dsp_audio_mix_law[(o[r]<<8)|q[r]];
+				*d++ = dsp_audio_mix_law[(q[r]<<8)|o_q[o_r]];
 				r = (r+1) & CMX_BUFF_MASK;
+				o_r = (o_r+1) & CMX_BUFF_MASK;
 			}
 		}
-		dsp->R_tx = t;
-		return(nskb);
+		dsp->tx_R = t;
+		goto send_packet;
 	}
-	/* STEP 2.3: PROCESS DATA (three or more members) */
-	c = conf->conf_buff;
+	/* PROCESS DATA (three or more members) */
 	/* -> if echo is NOT enabled */
 	if (!dsp->echo) {
 		/* -> substract rx-data from conf-data, if tx-data is available, mix */
 		while(r!=rr && t!=tt) {
-			sample = dsp_audio_law_to_s32[p[t]] + c[r] - dsp_audio_law_to_s32[q[r]];
+			sample = dsp_audio_law_to_s32[p[t]] + *c++ - dsp_audio_law_to_s32[q[r]];
 			if (sample < -32768)
 				sample = -32768;
 			else if (sample > 32767)
@@ -1277,7 +1161,7 @@ struct sk_buff
 			t = (t+1) & CMX_BUFF_MASK;
 		}
 		while(r != rr) {
-			sample = c[r] - dsp_audio_law_to_s32[q[r]];
+			sample = *c++ - dsp_audio_law_to_s32[q[r]];
 			if (sample < -32768)
 				sample = -32768;
 			else if (sample > 32767)
@@ -1289,7 +1173,7 @@ struct sk_buff
 	} else {
 		/* -> encode conf-data, if tx-data is available, mix */
 		while(r!=rr && t!=tt) {
-			sample = dsp_audio_law_to_s32[p[t]] + c[r];
+			sample = dsp_audio_law_to_s32[p[t]] + *c++;
 			if (sample < -32768)
 				sample = -32768;
 			else if (sample > 32767)
@@ -1299,7 +1183,7 @@ struct sk_buff
 			r = (r+1) & CMX_BUFF_MASK;
 		}
 		while(r != rr) {
-			sample = c[r];
+			sample = *c++;
 			if (sample < -32768)
 				sample = -32768;
 			else if (sample > 32767)
@@ -1308,8 +1192,171 @@ struct sk_buff
 			r = (r+1) & CMX_BUFF_MASK;
 		}
 	}
-	dsp->R_tx = t;
-	return(nskb);
+	dsp->tx_R = t;
+	goto send_packet;
+
+send_packet:
+	/* adjust volume */
+	if (dsp->tx_volume)
+		dsp_change_volume(nskb, dsp->tx_volume);
+	
+	/* cancel echo */
+	if (dsp->cancel_enable)
+		dsp_cancel_tx(dsp, nskb->data, nskb->len);
+	
+	/* crypt */
+	if (dsp->bf_enable)
+		dsp_bf_encrypt(dsp, nskb->data, nskb->len);
+	
+	/* send packet */
+	if (mISDN_queue_down(&dsp->inst, 0, nskb)) {
+		dev_kfree_skb(nskb);
+		printk(KERN_ERR "%s: failed to send tx-packet\n", __FUNCTION__);
+	}
+}
+
+u32	samplecount;
+struct timer_list dsp_spl_tl;
+u64	dsp_spl_jiffies;
+
+void dsp_cmx_send(void *data)
+{
+	conference_t *conf;
+	conf_member_t *member;
+	dsp_t *dsp;
+	int mustmix, members;
+	s32 mixbuffer[MAX_POLL], *c;
+	u8 *q;
+	int r, rr;
+	int jittercheck = 0, delay, i;
+	u_long flags;
+
+	/* lock */
+	spin_lock_irqsave(&dsp_obj.lock, flags);
+
+	/* check if jitter needs to be checked */
+	samplecount += dsp_poll;
+	if (samplecount%8000 < dsp_poll)
+		jittercheck = 1;
+
+	/* loop all members that do not require conference mixing */
+	list_for_each_entry(dsp, &dsp_obj.ilist, list) {
+		conf = dsp->conf;
+		mustmix = 0;
+		members = 0;
+		if (conf) {
+			members = count_list_member(&conf->mlist);
+#ifdef CMX_CONF_DEBUG
+			if (conf->software && members>1)
+#else
+			if (conf->software && members>2)
+#endif
+				mustmix = 1;
+		}
+		
+		/* transmission required */
+		if (!mustmix)
+			dsp_cmx_send_member(dsp, dsp_poll, mixbuffer, members); // unused mixbuffer is given to prevent a potential null-pointer-bug
+	}
+	
+	/* loop all members that require conference mixing */
+	list_for_each_entry(conf, &Conf_list, list) {
+		/* count members and check hardware */
+		members = count_list_member(&conf->mlist);
+#ifdef CMX_CONF_DEBUG
+		if (conf->software && members>1) {
+#else
+		if (conf->software && members>2) {
+#endif
+			/* mix all data */
+			memset(mixbuffer, 0, dsp_poll*sizeof(s32));
+			list_for_each_entry(member, &conf->mlist, list) {
+				dsp = member->dsp;
+				/* get range of data to mix */
+				c = mixbuffer;
+				q = dsp->rx_buff;
+				r = dsp->rx_R;
+				rr = (r + dsp_poll) & CMX_BUFF_MASK;
+				/* add member's data */
+				while(r != rr) {
+					*c++ += dsp_audio_law_to_s32[q[r]];
+					r = (r+1) & CMX_BUFF_MASK;
+				}
+			}
+
+			/* process each member */
+			list_for_each_entry(member, &conf->mlist, list) {
+				/* transmission */
+				dsp_cmx_send_member(member->dsp, dsp_poll, mixbuffer, members);
+			}
+		}
+	}
+
+	/* delete rx-data, increment buffers, change pointers */
+	list_for_each_entry(dsp, &dsp_obj.ilist, list) {
+		q = dsp->rx_buff;
+		r = dsp->rx_R;
+		rr = (r + dsp_poll) & CMX_BUFF_MASK;
+		/* delete rx-data */
+		while(r != rr) {
+			q[r] = dsp_silence;
+			r = (r+1) & CMX_BUFF_MASK;
+		}
+		/* increment rx-buffer pointer */
+		dsp->rx_R = r; /* write incremented read pointer */
+
+		/* check current delay */
+		delay = (dsp->rx_W-r) & CMX_BUFF_MASK;
+		if (delay >= CMX_BUFF_HALF)
+			delay = 0; /* will be the delay before next write */
+		/* check for lower delay */
+			if (delay < dsp->delay[0])
+				dsp->delay[0] = delay;
+		if (jittercheck) {
+			/* find the lowest of all delays */
+			delay = dsp->delay[0];
+			i = 1;
+			while (i < MAX_SECONDS_JITTER_CHECK) {
+				if (delay > dsp->delay[i])
+					delay = dsp->delay[i];
+				i++;
+			}
+			/* remove delay */
+			if (delay) {
+				if (dsp_debug & DEBUG_DSP_CMX)
+					printk(KERN_DEBUG "%s lowest delay of %d bytes for dsp %s are now removed.\n", __FUNCTION__, delay, dsp->inst.name);
+				r = dsp->rx_R;
+				rr = (r + delay) & CMX_BUFF_MASK;
+				/* delete rx-data */
+				while(r != rr) {
+					q[r] = dsp_silence;
+					r = (r+1) & CMX_BUFF_MASK;
+				}
+				/* increment rx-buffer pointer */
+				dsp->rx_R = r; /* write incremented read pointer */
+			}
+			/* scroll up delays */
+			i = MAX_SECONDS_JITTER_CHECK - 1;
+			while (i) {
+				dsp->delay[i] = dsp->delay[i-1];
+				i--;
+			}
+			dsp->delay[0] = CMX_BUFF_HALF; /* (infinite) delay */
+		}
+	}
+
+	/* restart timer */
+//	init_timer(&dsp_spl_tl);
+	if (dsp_spl_jiffies + dsp_tics < jiffies) /* if next event would be in the past ... */
+		dsp_spl_jiffies = jiffies;
+	else
+		dsp_spl_jiffies += dsp_tics;
+
+	dsp_spl_tl.expires = dsp_spl_jiffies;
+	add_timer(&dsp_spl_tl);
+
+	/* unlock */
+	spin_unlock_irqrestore(&dsp_obj.lock, flags);
 }
 
 /*
@@ -1321,36 +1368,15 @@ dsp_cmx_transmit(dsp_t *dsp, struct sk_buff *skb)
 	u_int w, ww;
 	u8 *d, *p;
 	int space, l;
-#ifdef AUTOJITTER
-	int use;
-#endif
 
 	/* check if we have sompen */
 	l = skb->len;
-	w = dsp->W_tx;
-	ww = dsp->R_tx;
 	if (l < 1)
 		return;
 
-#ifdef AUTOJITTER
-	/* check the delay */
-	use = w-ww;
-	if (use < 0)
-		use += CMX_BUFF_SIZE;
-	if (!dsp->tx_delay || dsp->tx_delay>use)
-		dsp->tx_delay = use;
-	dsp->tx_delay_count += l;
-	if (dsp->tx_delay_count >= DELAY_CHECK) {
-		/* now remove the delay */
-		if (dsp_debug & DEBUG_DSP_DELAY)
-			printk(KERN_DEBUG "%s(dsp=0x%x) removing delay of %d bytes\n", __FUNCTION__, (u32)dsp, dsp->tx_delay);
-		dsp->tx_delay_count = 0;
-		dsp->R_tx = ww = (ww + dsp->tx_delay) & CMX_BUFF_MASK;
-		dsp->tx_delay = 0;
-	}
-#endif
-
 	/* check if there is enough space, and then copy */
+	w = dsp->tx_W;
+	ww = dsp->tx_R;
 	p = dsp->tx_buff;
 	d = skb->data;
 	space = ww-w;
@@ -1363,10 +1389,11 @@ dsp_cmx_transmit(dsp_t *dsp, struct sk_buff *skb)
 	else
 		/* write until all byte are copied */
 		ww = (w + skb->len) & CMX_BUFF_MASK;
-	dsp->W_tx = ww;
+	dsp->tx_W = ww;
 
+	/* show current buffer */
 #ifdef CMX_DEBUG
-	printk(KERN_DEBUG "cmx_transmit(dsp=%lx) %d bytes to 0x%x-0x%x. %s\n", dsp, (ww-w)&CMX_BUFF_MASK, w, ww, dsp->inst.name);
+	printk(KERN_DEBUG "cmx_transmit(dsp=%lx) %d bytes to 0x%x-0x%x. %s\n", (u_long)dsp, (ww-w)&CMX_BUFF_MASK, w, ww, dsp->inst.name);
 #endif
 
 	/* copy transmit data to tx-buffer */
@@ -1377,5 +1404,3 @@ dsp_cmx_transmit(dsp_t *dsp, struct sk_buff *skb)
 
 	return;
 }
-
-

@@ -1,8 +1,8 @@
-/* $Id: dsp_blowfish.c,v 1.3 2005/10/26 14:12:13 keil Exp $
+/* $Id: dsp_blowfish.c,v 1.4 2006/03/06 12:52:07 keil Exp $
  *
  * Blowfish encryption/decryption for mISDN_dsp.
  *
- * Copyright 2002/2003 by Andreas Eversberg (jolly@jolly.de)
+ * Copyright Andreas Eversberg (jolly@jolly.de)
  *
  * This software may be used and distributed according to the terms
  * of the GNU General Public License, incorporated herein by reference.

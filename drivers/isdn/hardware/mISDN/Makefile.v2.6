@@ -3,6 +3,9 @@
 # EXTRA_CFLAGS += -S -g
 #
 
+ifdef MINCLUDES
+CFLAGS += -I$(MINCLUDES)
+endif
 ifdef CONFIG_MISDN_MEMDEBUG
 	EXTRA_CFLAGS += -DMISDN_MEMDEBUG
 endif
@@ -28,9 +31,13 @@ ifdef CONFIG_MISDN_HFCUSB
 obj-$(CONFIG_MISDN_DRV) += hfcsusb.o
 endif
 
+ifdef CONFIG_MISDN_HFCMINI
+obj-$(CONFIG_MISDN_DRV) += hfcsmini.o
+endif
+
 ifdef CONFIG_MISDN_SPEEDFAX
 obj-$(CONFIG_MISDN_DRV) += sedlfax.o
-obj-$(CONFIG_MISDN_DRV) += faxl3.o
+# obj-$(CONFIG_MISDN_DRV) += faxl3.o
 endif
 
 ifdef CONFIG_MISDN_W6692
@@ -41,8 +48,16 @@ ifdef CONFIG_MISDN_HFCMULTI
 obj-$(CONFIG_MISDN_DRV) += hfcmulti.o
 endif
 
+ifdef CONFIG_MISDN_XHFC
+obj-$(CONFIG_MISDN_DRV) += xhfc.o
+endif
+
 ifdef CONFIG_MISDN_DSP
 obj-$(CONFIG_MISDN_DRV) += mISDN_dsp.o
+endif
+
+ifdef CONFIG_MISDN_LOOP
+obj-$(CONFIG_MISDN_DRV) += mISDN_loop.o
 endif
 
 ifdef CONFIG_I4L_CAPI_LAYER
@@ -55,11 +70,14 @@ sedlfax-objs := sedl_fax.o isar.o
 avmfritz-objs := avm_fritz.o
 hfcpci-objs := hfc_pci.o
 hfcsusb-objs := hfcs_usb.o
+hfcsmini-objs := hfcs_mini.o
 w6692pci-objs := w6692.o
 hfcmulti-objs := hfc_multi.o
+xhfc-objs := xhfc_su.o xhfc_pci2pi.o
 mISDN_isac-objs := isac.o arcofi.o
 mISDN_core-objs := core.o stack.o udevice.o helper.o debug.o fsm.o \
-			dchannel.o bchannel.o l3helper.o
+			channel.o l3helper.o \
+			sysfs_obj.o sysfs_inst.o sysfs_st.o
 ifdef CONFIG_MISDN_MEMDEBUG
 mISDN_core-objs += memdbg.o
 endif
@@ -71,6 +89,9 @@ mISDN_capi-objs := capi.o contr.o listen.o appl.o plci.o app_plci.o ncci.o asn1.
                    asn1_basic_service.o asn1_address.o asn1_enc.o capi_enc.o \
                    supp_serv.o
 mISDN_dtmf-objs := dtmf.o
-mISDN_dsp-objs := dsp_core.o dsp_cmx.o dsp_tones.o dsp_dtmf.o dsp_audio.o dsp_blowfish.o
+mISDN_dsp-objs := dsp_core.o dsp_cmx.o dsp_tones.o dsp_dtmf.o dsp_audio.o dsp_blowfish.o dsp_cancel.o
+mISDN_loop-objs := loop.o
 mISDN_x25dte-objs := x25_dte.o x25_l3.o
 I4LmISDN-objs := i4l_mISDN.o
+
+

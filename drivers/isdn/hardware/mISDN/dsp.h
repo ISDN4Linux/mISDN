@@ -1,4 +1,4 @@
-/* $Id: dsp.h,v 1.7 2005/10/26 14:12:13 keil Exp $
+/* $Id: dsp.h,v 1.8 2006/03/06 12:52:07 keil Exp $
  *
  * Audio support data for ISDN4Linux.
  *
@@ -8,8 +8,6 @@
  * of the GNU General Public License, incorporated herein by reference.
  *
  */
-
-//#define AUTOJITTER
 
 #define DEBUG_DSP_MGR		0x0001
 #define DEBUG_DSP_CORE		0x0002
@@ -29,19 +27,31 @@
 #define DSP_OPT_ULAW		(1<<0)
 #define DSP_OPT_NOHARDWARE	(1<<1)
 
-#ifdef HAS_WORKQUEUE
-#include <linux/workqueue.h>
-#else
-#include <linux/tqueue.h>
-#endif
+#define FEAT_STATE_INIT	1
+#define FEAT_STATE_WAIT	2
+
 #include <linux/timer.h>
 
 #ifdef MISDN_MEMDEBUG
 #include "memdbg.h"
 #endif
 
+#include "dsp_ecdis.h"
+
+/*
+ * You are now able to choose between the Mark2 and the 
+ * kb1 Echo cancellor. Just comment the one and comment 
+ * out the other.
+ */
+
+//#include "dsp_mec2.h"
+//#include "dsp_kb1ec.h"
+#include "dsp_mg2ec.h"
+
 extern int dsp_options;
 extern int dsp_debug;
+extern int dsp_poll;
+extern int dsp_tics;
 
 /***************
  * audio stuff *
@@ -67,9 +77,18 @@ extern u8 dsp_silence;
  * cmx stuff *
  *************/
 
-#define CMX_BUFF_SIZE	0x4000	/* must be 2**n */
-#define CMX_BUFF_HALF	0x2000	/* CMX_BUFF_SIZE / 2 */
-#define CMX_BUFF_MASK	0x3fff	/* CMX_BUFF_SIZE - 1 */
+#define MAX_POLL	256	/* maximum number of send-chunks */
+
+#define CMX_BUFF_SIZE	0x8000	/* must be 2**n (0x1000 about 1/2 second) */
+#define CMX_BUFF_HALF	0x4000	/* CMX_BUFF_SIZE / 2 */
+#define CMX_BUFF_MASK	0x7fff	/* CMX_BUFF_SIZE - 1 */
+
+/* how many seconds will we check the lowest delay until the jitter buffer
+   is reduced by that delay */
+#define MAX_SECONDS_JITTER_CHECK 5
+
+extern struct timer_list dsp_spl_tl;
+extern u64 dsp_spl_jiffies;
 
 /* the structure of conferences:
  *
@@ -93,11 +112,6 @@ typedef struct _conference {
 	struct list_head	mlist;
 	int			software; /* conf is processed by software */
 	int			hardware; /* conf is processed by hardware */
-//#ifndef AUTOJITTER
-	int			largest; /* largest frame received in conf's life. */
-//#endif
-	int			W_min, W_max; /* min/maximum rx-write pointer of members */
-	s32			conf_buff[CMX_BUFF_SIZE];
 } conference_t;
 
 extern mISDNobject_t dsp_obj;
@@ -109,6 +123,8 @@ extern mISDNobject_t dsp_obj;
 
 #define DSP_DTMF_NPOINTS 102
 
+#define ECHOCAN_BUFLEN 4*128
+
 typedef struct _dtmf_t {
 	int		software; /* dtmf uses software decoding */
 	int 		hardware; /* dtmf uses hardware decoding */
@@ -118,6 +134,12 @@ typedef struct _dtmf_t {
 	int		count;
 	u8		digits[16]; /* just the dtmf result */
 } dtmf_t;
+
+
+/****************
+ * cancel stuff *
+ ****************/
+
 
 
 /***************
@@ -147,6 +169,7 @@ struct dsp_features {
 	int		pcm_id; /* unique id to identify the pcm bus (or -1) */
 	int		pcm_slots; /* number of slots on the pcm bus */
 	int		pcm_banks; /* number of IO banks of pcm bus */
+	int		has_jitter; /* data is jittered and unsorted */
 };		
 
 typedef struct _dsp {
@@ -159,8 +182,6 @@ typedef struct _dsp {
 	tone_t		tone;
 	dtmf_t		dtmf;
 	int		tx_volume, rx_volume;
-	struct work_struct sendwork; /* event for sending data */
-	int		tx_pending;
 
 	/* conference stuff */
 	u32		conf_id;
@@ -168,20 +189,18 @@ typedef struct _dsp {
 	conf_member_t	*member;
 
 	/* buffer stuff */
-	int		largest; /* largest frame received in dsp's life. */
-	int		R_tx, W_tx; /* pointers of transmit buffer */
-	int		R_rx, W_rx; /* pointers of receive buffer and conference buffer */
+	int		rx_W; /* current write pos for data without timestamp */
+	int		rx_R; /* current read pos for transmit clock */
+	int		tx_W; /* current write pos for transmit data */
+	int		tx_R; /* current read pos for transmit clock */
+	int		delay[MAX_SECONDS_JITTER_CHECK];
 	u8		tx_buff[CMX_BUFF_SIZE];
 	u8		rx_buff[CMX_BUFF_SIZE];
-#ifdef AUTOJITTER
-	int		tx_delay; /* used to find the delay of tx buffer */
-	int		tx_delay_count;
-	int		rx_delay; /* used to find the delay of rx buffer */
-	int		rx_delay_count;
-#endif
 
 	/* hardware stuff */
 	struct dsp_features features; /* features */
+	struct timer_list feature_tl;
+	int		feature_state;
 	int		pcm_slot_rx; /* current PCM slot (or -1) */
 	int		pcm_bank_rx;
 	int		pcm_slot_tx;
@@ -200,6 +219,25 @@ typedef struct _dsp {
 	u8		bf_crypt_inring[16];
 	u8		bf_data_out[9];
 	int		bf_sync;
+
+	/* echo cancellation stuff */
+	int		cancel_enable;
+	struct echo_can_state * ec;      /**< == NULL: echo cancellation disabled;
+				      != NULL: echo cancellation enabled */
+
+	echo_can_disable_detector_state_t* ecdis_rd;
+	echo_can_disable_detector_state_t* ecdis_wr;
+	
+	uint16_t echotimer;
+	uint16_t echostate;
+	uint16_t echolastupdate;
+	
+	char txbuf[ECHOCAN_BUFLEN];
+	int txbuflen;
+	
+	char rxbuf[ECHOCAN_BUFLEN];
+	int rxbuflen;
+	
 } dsp_t;
 
 /* functions */
@@ -211,7 +249,11 @@ extern void dsp_cmx_debug(dsp_t *dsp);
 extern void dsp_cmx_hardware(conference_t *conf, dsp_t *dsp);
 extern int dsp_cmx_conf(dsp_t *dsp, u32 conf_id);
 extern void dsp_cmx_receive(dsp_t *dsp, struct sk_buff *skb);
+#ifdef OLDCMX
 extern struct sk_buff *dsp_cmx_send(dsp_t *dsp, int len, int dinfo);
+#else
+extern void dsp_cmx_send(void *data);
+#endif
 extern void dsp_cmx_transmit(dsp_t *dsp, struct sk_buff *skb);
 extern int dsp_cmx_del_conf_member(dsp_t *dsp);
 extern int dsp_cmx_del_conf(conference_t *conf);
@@ -227,5 +269,9 @@ extern void dsp_bf_encrypt(dsp_t *dsp, u8 *data, int len);
 extern void dsp_bf_decrypt(dsp_t *dsp, u8 *data, int len);
 extern int dsp_bf_init(dsp_t *dsp, const u8 *key, unsigned int keylen);
 extern void dsp_bf_cleanup(dsp_t *dsp);
+
+extern void dsp_cancel_tx(dsp_t *dsp, u8 *data, int len);
+extern void dsp_cancel_rx(dsp_t *dsp, u8 *data, int len);
+extern int dsp_cancel_init(dsp_t *dsp, int taps, int training, int delay);
 
 

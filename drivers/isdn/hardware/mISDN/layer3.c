@@ -1,4 +1,4 @@
-/* $Id: layer3.c,v 1.15 2004/06/17 12:31:12 keil Exp $
+/* $Id: layer3.c,v 1.16 2006/03/06 12:52:07 keil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -13,7 +13,7 @@
 #include "layer3.h"
 #include "helper.h"
 
-const char *l3_revision = "$Revision: 1.15 $";
+const char *l3_revision = "$Revision: 1.16 $";
 
 static
 struct Fsm l3fsm = {NULL, 0, 0, NULL, NULL};
@@ -88,14 +88,11 @@ l3_debug(layer3_t *l3, char *fmt, ...)
 static int
 l3_newid(layer3_t *l3)
 {
-	u_long	flags;
 	int	id;
 
-	spin_lock_irqsave(&l3->lock, flags);
 	id = l3->next_id++;
 	if (id == 0x7fff)
 		l3->next_id = 1;
-	spin_unlock_irqrestore(&l3->lock, flags);
 	id |= (l3->entity << 16);
 	return(id);
 }
@@ -277,7 +274,6 @@ l3_process_t
 *new_l3_process(layer3_t *l3, int cr, int n303, u_int id)
 {
 	l3_process_t	*p = NULL;
-	u_long		flags;
 
 	if (id == MISDN_ID_ANY) {
 		if (l3->entity == MISDN_ENTITY_NONE) {
@@ -285,7 +281,6 @@ l3_process_t
 				__FUNCTION__, l3->id);
 			return (NULL);
 		}
-		spin_lock_irqsave(&l3->lock, flags);
 		if (l3->pid_cnt == 0x7FFF)
 			l3->pid_cnt = 0;
 		while(l3->pid_cnt <= 0x7FFF) {
@@ -295,7 +290,6 @@ l3_process_t
 			if (!p)
 				break;
 		}
-		spin_unlock_irqrestore(&l3->lock, flags);
 		if (p) {
 			printk(KERN_WARNING "%s: no free process_id for l3(%x) entity(%x)\n",
 				__FUNCTION__, l3->id, l3->entity);
@@ -320,6 +314,7 @@ l3_process_t
 	p->callref = cr;
 	p->n303 = n303;
 	L3InitTimer(p, &p->timer);
+	L3InitTimer(p, &p->aux_timer);
 	list_add_tail(&p->list, &l3->plist);
 	return (p);
 };
@@ -369,9 +364,9 @@ mISDN_l3up(l3_process_t *l3p, u_int prim, struct sk_buff *skb)
 		return(-EINVAL);
 	l3 = l3p->l3;
 	if (!skb)
-		err = if_link(&l3->inst.up, prim, l3p->id, 0, NULL, 0);
+		err = mISDN_queue_data(&l3->inst, FLG_MSG_UP, prim, l3p->id, 0, NULL, 0);
 	else
-		err = if_newhead(&l3->inst.up, prim, l3p->id, skb);
+		err = mISDN_queueup_newhead(&l3->inst, 0, prim, l3p->id, skb);
 	return(err);
 }
 
@@ -380,9 +375,9 @@ l3down(layer3_t *l3, u_int prim, int dinfo, struct sk_buff *skb) {
 	int err = -EINVAL;
 
 	if (!skb)
-		err = if_link(&l3->inst.down, prim, dinfo, 0, NULL, 0);
+		err = mISDN_queue_data(&l3->inst, FLG_MSG_DOWN, prim, dinfo, 0, NULL, 0);
 	else
-		err = if_newhead(&l3->inst.down, prim, dinfo, skb);
+		err = mISDN_queuedown_newhead(&l3->inst, 0, prim, dinfo, skb);
 	return(err);
 }
 
@@ -554,7 +549,6 @@ init_l3(layer3_t *l3)
 	l3->dummy = NULL;
 	l3->entity = MISDN_ENTITY_NONE;
 	l3->next_id = 1;
-	spin_lock_init(&l3->lock);
 	skb_queue_head_init(&l3->squeue);
 	l3->l3m.fsm = &l3fsm;
 	l3->l3m.state = ST_L3_LC_REL;

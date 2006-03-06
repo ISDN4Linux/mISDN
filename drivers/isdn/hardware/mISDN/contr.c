@@ -1,4 +1,4 @@
-/* $Id: contr.c,v 1.24 2005/06/26 11:35:40 keil Exp $
+/* $Id: contr.c,v 1.25 2006/03/06 12:52:07 keil Exp $
  *
  */
 
@@ -58,6 +58,7 @@ ControllerDestr(Controller_t *contr)
 	}
 #endif
 	contr->ctrl = NULL;
+#ifdef FIXME
 	if (inst->up.peer) {
 		inst->up.peer->obj->ctrl(inst->up.peer,
 			MGR_DISCONNECT | REQUEST, &inst->up);
@@ -66,13 +67,14 @@ ControllerDestr(Controller_t *contr)
 		inst->down.peer->obj->ctrl(inst->down.peer,
 			MGR_DISCONNECT | REQUEST, &inst->down);
 	}
+#endif
 	list_for_each_safe(item, next, &contr->linklist) {
 		PLInst_t	*plink = list_entry(item, PLInst_t, list);
 		list_del(&plink->list);
 		kfree(plink);
 	}
 	if (contr->entity != MISDN_ENTITY_NONE)
-		inst->obj->ctrl(inst, MGR_DELENTITY | REQUEST, (void *)contr->entity);
+		inst->obj->ctrl(inst, MGR_DELENTITY | REQUEST, (void *)((u_long)contr->entity));
 	inst->obj->ctrl(inst, MGR_UNREGLAYER | REQUEST, NULL);
 	list_del(&contr->list);
 	spin_unlock_irqrestore(&contr->list_lock, flags);
@@ -230,15 +232,92 @@ SendMessage(struct capi_ctr *ctrl, struct sk_buff *skb)
 	Controller_t	*contr = ctrl->driverdata;
 	Application_t	*appl;
 	int		ApplId;
-	int		err;
+	int		err = CAPI_NOERROR;
+	u16		cmd;
+	AppPlci_t	*aplci;
+	Ncci_t		*ncci;
+	mISDN_head_t	*hh = mISDN_HEAD_P(skb);
 
 	ApplId = CAPIMSG_APPID(skb->data);
 	appl = getApplication4Id(contr, ApplId);
 	if (!appl) {
 		int_error();
 		err = CAPI_ILLAPPNR;
-	} else
-		err = ApplicationSendMessage(appl, skb);
+		goto end;
+	}
+
+	hh->prim = CAPI_MESSAGE_REQUEST;
+	hh->dinfo = ApplId;
+	cmd = CAPICMD(CAPIMSG_COMMAND(skb->data), CAPIMSG_SUBCOMMAND(skb->data));
+	contrDebug(contr, CAPI_DBG_CONTR_MSG, "SendMessage: %s caddr(%x)", 
+		capi_cmd2str(CAPIMSG_COMMAND(skb->data), CAPIMSG_SUBCOMMAND(skb->data)),
+		CAPIMSG_CONTROL(skb->data));
+	switch (cmd) {
+		// for NCCI state machine
+		case CAPI_DATA_B3_REQ:
+		case CAPI_DATA_B3_RESP:
+		case CAPI_CONNECT_B3_RESP:
+		case CAPI_CONNECT_B3_ACTIVE_RESP:
+		case CAPI_DISCONNECT_B3_REQ:
+		case CAPI_RESET_B3_REQ:
+		case CAPI_RESET_B3_RESP:
+			aplci = getAppPlci4addr(appl, CAPIMSG_CONTROL(skb->data));
+			if (!aplci) {
+				AnswerMessage2Application(appl, skb, CapiIllContrPlciNcci);
+				dev_kfree_skb(skb);
+				break;
+			}
+			ncci = getNCCI4addr(aplci, CAPIMSG_NCCI(skb->data), GET_NCCI_EXACT);
+			if ((!ncci) || (!ncci->link)) {
+				int_error();
+				AnswerMessage2Application(appl, skb, CapiIllContrPlciNcci);
+				dev_kfree_skb(skb);
+				break;
+			}
+			err = mISDN_queue_message(&ncci->link->inst, 0, skb);
+			if (err) {
+				int_errtxt("mISDN_queue_message return(%d)", err);
+				err = CAPI_MSGBUSY;
+			}
+			break;
+		// new NCCI
+		case CAPI_CONNECT_B3_REQ:
+		// maybe already down NCCI
+		case CAPI_DISCONNECT_B3_RESP:
+		// for PLCI state machine
+		case CAPI_INFO_REQ:
+		case CAPI_ALERT_REQ:
+		case CAPI_CONNECT_REQ:
+		case CAPI_CONNECT_RESP:
+		case CAPI_CONNECT_ACTIVE_RESP:
+		case CAPI_DISCONNECT_REQ:
+		case CAPI_DISCONNECT_RESP:
+		case CAPI_SELECT_B_PROTOCOL_REQ:
+		// for LISTEN state machine
+		case CAPI_LISTEN_REQ:
+		// other
+		case CAPI_FACILITY_REQ:
+		case CAPI_MANUFACTURER_REQ:
+		case CAPI_INFO_RESP:
+			err = mISDN_queue_message(&contr->inst, 0, skb);
+			if (err) {
+				int_errtxt("mISDN_queue_message return(%d)", err);
+				err = CAPI_MSGBUSY;
+			}
+			break;
+		/* need not further action currently, so it can be released here too avoid
+		 * overlap with a release application
+		 */
+		case CAPI_FACILITY_RESP:
+			dev_kfree_skb(skb);
+			break;
+		default:
+			contrDebug(contr, CAPI_DBG_WARN, "SendMessage: %#x %#x not handled!", 
+				CAPIMSG_COMMAND(skb->data), CAPIMSG_SUBCOMMAND(skb->data));
+			err = CAPI_ILLCMDORSUBCMDORMSGTOSMALL;
+			break;
+	}
+end:
 #ifndef OLDCAPI_DRIVER_INTERFACE
 	return(err);
 #endif
@@ -468,21 +547,27 @@ SSProcess_t
 	return(sp);
 }
 
-int
-ControllerL3L4(mISDNif_t *hif, struct sk_buff *skb)
+static int
+Controller_function(mISDNinstance_t *inst, struct sk_buff *skb)
 {
 	Controller_t	*contr;
 	Plci_t		*plci;
 	int		ret = -EINVAL;
 	mISDN_head_t	*hh;
 
-	if (!hif || !skb)
-		return(ret);
 	hh = mISDN_HEAD_P(skb);
-	contr = hif->fdata;
+	contr = inst->privat;
 	contrDebug(contr, CAPI_DBG_CONTR_INFO, "%s: prim(%x) id(%x)",
 		__FUNCTION__, hh->prim, hh->dinfo);
-	if (hh->prim == (CC_NEW_CR | INDICATION)) {
+	if (hh->prim == CAPI_MESSAGE_REQUEST) {
+		Application_t	*appl = getApplication4Id(contr, hh->dinfo);
+		if (!appl) {
+			int_error();
+			return(ret);
+		}
+		ApplicationSendMessage(appl, skb);
+		return(0);
+	} else if (hh->prim == (CC_NEW_CR | INDICATION)) {
 		ret = ControllerNewPlci(contr, &plci, hh->dinfo);
 		if(!ret)
 			dev_kfree_skb(skb);
@@ -505,7 +590,7 @@ ControllerL3L4(mISDNif_t *hif, struct sk_buff *skb)
 int
 ControllerL4L3(Controller_t *contr, u_int prim, int dinfo, struct sk_buff *skb)
 {
-	return(if_newhead(&contr->inst.down, prim, dinfo, skb));
+	return(mISDN_queuedown_newhead(&contr->inst, 0, prim, dinfo, skb));
 }
 
 void
@@ -522,6 +607,7 @@ ControllerConstr(Controller_t **contr_p, mISDNstack_t *st, mISDN_pid_t *pid, mIS
 	int			retval;
 	mISDNstack_t		*cst;
 	PLInst_t		*plink;
+	u_long			flags;
 
 	if (!st)
 		return(-EINVAL);
@@ -546,7 +632,6 @@ ControllerConstr(Controller_t **contr_p, mISDNstack_t *st, mISDN_pid_t *pid, mIS
 	INIT_LIST_HEAD(&contr->SSProcesse);
 	INIT_LIST_HEAD(&contr->linklist);
 	spin_lock_init(&contr->list_lock);
-	spin_lock_init(&contr->id_lock);
 	contr->next_id = 1;
 	memcpy(&contr->inst.pid, pid, sizeof(mISDN_pid_t));
 #ifndef OLDCAPI_DRIVER_INTERFACE
@@ -579,10 +664,9 @@ ControllerConstr(Controller_t **contr_p, mISDNstack_t *st, mISDN_pid_t *pid, mIS
 		ControllerDestr(contr);
 		return -ENOMEM;
 	}
-	// FIXME ???
-	contr->addr = st->id;
-	sprintf(contr->inst.name, "CAPI %d", st->id);
-	mISDN_init_instance(&contr->inst, ocapi, contr);
+	contr->addr = (st->id >> 8) & 0xff;
+	sprintf(contr->inst.name, "CAPI %d", contr->addr);
+	mISDN_init_instance(&contr->inst, ocapi, contr, Controller_function);
 	if (!mISDN_SetHandledPID(ocapi, &contr->inst.pid)) {
 		int_error();
 		ControllerDestr(contr);
@@ -598,12 +682,14 @@ ControllerConstr(Controller_t **contr_p, mISDNstack_t *st, mISDN_pid_t *pid, mIS
 		memset(plink, 0, sizeof(PLInst_t));
 		plink->st = cst;
 		plink->inst.st = cst;
-		mISDN_init_instance(&plink->inst, ocapi, plink);
+		mISDN_init_instance(&plink->inst, ocapi, plink, NULL);
 		plink->inst.pid.layermask |= ISDN_LAYER(4);
-		plink->inst.down.stat = IF_NOACTIV;
+//		plink->inst.down.stat = IF_NOACTIV;
 		list_add_tail(&plink->list, &contr->linklist);
 	}
+	spin_lock_irqsave(&ocapi->lock, flags);
 	list_add_tail(&contr->list, &ocapi->ilist);
+	spin_unlock_irqrestore(&ocapi->lock, flags);
 	contr->entity = MISDN_ENTITY_NONE;
 	retval = ocapi->ctrl(&contr->inst, MGR_NEWENTITY | REQUEST, NULL);
 	if (retval) {
@@ -615,14 +701,14 @@ ControllerConstr(Controller_t **contr_p, mISDNstack_t *st, mISDN_pid_t *pid, mIS
 	{
 		char	tmp[10];
 
-		sprintf(tmp, "mISDN%d", st->id);
+		sprintf(tmp, "mISDN%d", (st->id >> 8) & 0xff);
 		contr->ctrl = cdrv_if->attach_ctr(&mISDN_driver, tmp, contr);
 		if (!contr->ctrl)
 			retval = -ENODEV;
 	}
 #else
 	contr->ctrl->owner = THIS_MODULE;
-	sprintf(contr->ctrl->name, "mISDN%d", st->id);
+	sprintf(contr->ctrl->name, "mISDN%d", contr->addr);
 	contr->ctrl->driver_name = "mISDN";
 	contr->ctrl->driverdata = contr;
 	contr->ctrl->register_appl = RegisterApplication;
@@ -635,10 +721,12 @@ ControllerConstr(Controller_t **contr_p, mISDNstack_t *st, mISDN_pid_t *pid, mIS
 	retval = attach_capi_ctr(contr->ctrl);
 #endif
 	if (!retval) {
+		printk(KERN_DEBUG "contr->addr(%02x) cnr(%02x) st(%08x)\n",
+			contr->addr, contr->ctrl->cnr, st->id);
 		contr->addr = contr->ctrl->cnr;
 		plciInit(contr);
 		ocapi->ctrl(st, MGR_REGLAYER | INDICATION, &contr->inst);
-		contr->inst.up.stat = IF_DOWN;
+//		contr->inst.up.stat = IF_DOWN;
 		*contr_p = contr;
 	} else {
 		ControllerDestr(contr);
@@ -676,14 +764,11 @@ ControllerSelChannel(Controller_t *contr, u_int channel)
 int
 ControllerNextId(Controller_t *contr)
 {
-	u_long	flags;
 	int	id;
 
-	spin_lock_irqsave(&contr->id_lock, flags);
 	id = contr->next_id++;
 	if (id == 0x7fff)
 		contr->next_id = 1;
-	spin_unlock_irqrestore(&contr->id_lock, flags);
 	id |= (contr->entity << 16);
 	return(id);
 }

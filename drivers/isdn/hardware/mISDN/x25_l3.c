@@ -1,4 +1,4 @@
-/* $Id: x25_l3.c,v 1.4 2005/04/07 08:59:41 keil Exp $
+/* $Id: x25_l3.c,v 1.5 2006/03/06 12:52:07 keil Exp $
  *
  * Linux modular ISDN subsystem, mISDN
  * X.25/X.31 common Layer3 functions 
@@ -286,14 +286,11 @@ X25_restart(x25_l3_t *l3)
 int
 X25_next_id(x25_l3_t *l3)
 {
-	u_long	flags;
 	int	id;
 
-	spin_lock_irqsave(&l3->lock, flags);
 	id = l3->next_id++;
 	if (id == 0x0fff)
 		l3->next_id = 1;
-	spin_unlock_irqrestore(&l3->lock, flags);
 	id |= (l3->entity << 16);
 	return(id);
 }
@@ -378,7 +375,7 @@ X25_confirmed(x25_channel_t *chan)
 	i = cq->MsgId;
 	/* free entry */
 	cq->PktId = 0;
-	ret = if_newhead(&chan->l3->inst.up, CAPI_DATA_B3_CONF, i, skb);
+	ret = mISDN_queueup_newhead(&chan->l3->inst, 0, CAPI_DATA_B3_CONF, i, skb);
 	if (ret) {
 		printk(KERN_WARNING "%s: up error %d\n", __FUNCTION__, ret);
 		dev_kfree_skb(skb);
@@ -453,7 +450,7 @@ X25_receive_data(x25_channel_t *chan, int ps, int flag, struct sk_buff *skb)
 	capimsg_setu16(nskb->data, 10, i);
 	capimsg_setu16(nskb->data, 12, flag);
 
-	if (if_newhead(&chan->l3->inst.up, CAPI_DATA_B3_IND, 0, nskb)) {
+	if (mISDN_queueup_newhead(&chan->l3->inst, 0, CAPI_DATA_B3_IND, 0, nskb)) {
 		chan->recv_handles[i] = 0;
 		return(X25_ERRCODE_DISCARD);
 	}
@@ -539,8 +536,7 @@ void
 X25_release_channel(x25_channel_t *l3c)
 {
 	list_del(&l3c->list);
-	if (l3c->ncpi_data)
-		kfree(l3c->ncpi_data);
+	kfree(l3c->ncpi_data);
 	l3c->ncpi_data = NULL;
 	l3c->ncpi_len = 0;
 	discard_queue(&l3c->dataq);
@@ -548,10 +544,7 @@ X25_release_channel(x25_channel_t *l3c)
 	mISDN_FsmDelTimer(&l3c->TD, 2);
 	discard_queue(&l3c->dataq);
 	discard_confq(l3c);
-	if (l3c->confq) {
-		kfree(l3c->confq);
-		l3c->confq = NULL;
-	}
+	kfree(l3c->confq);
 	kfree(l3c);
 }
 
@@ -560,6 +553,7 @@ X25_release_l3(x25_l3_t *l3) {
 	mISDNinstance_t	*inst = &l3->inst;
 	x25_channel_t	*ch, *nch;
 
+#ifdef OBSOLETE
 	if (inst->up.peer) {
 		inst->up.peer->obj->ctrl(inst->up.peer,
 			MGR_DISCONNECT | REQUEST, &inst->up);
@@ -568,8 +562,12 @@ X25_release_l3(x25_l3_t *l3) {
 		inst->down.peer->obj->ctrl(inst->down.peer,
 			MGR_DISCONNECT | REQUEST, &inst->down);
 	}
+#endif
 	if (inst->obj) {
+		u_long	flags;
+		spin_lock_irqsave(&inst->obj->lock, flags);
 		list_del_init(&l3->list);
+		spin_unlock_irqrestore(&inst->obj->lock, flags);
 	}
 	discard_queue(&l3->downq);
 	list_for_each_entry_safe(ch, nch, &l3->channellist, list)
@@ -577,7 +575,8 @@ X25_release_l3(x25_l3_t *l3) {
 	mISDN_FsmDelTimer(&l3->TR, 3);
 	if (inst->obj) {
 		if (l3->entity != MISDN_ENTITY_NONE)
-			inst->obj->ctrl(inst, MGR_DELENTITY | REQUEST, (void *)l3->entity);
+			inst->obj->ctrl(inst, MGR_DELENTITY | REQUEST,
+				(void *)((u_long)l3->entity));
 		inst->obj->ctrl(inst, MGR_UNREGLAYER | REQUEST, NULL);
 	}
 	kfree(l3);
@@ -588,8 +587,7 @@ X25_realloc_ncpi_data(x25_channel_t *l3c, int len, u_char *data)
 {
 	if (len) {
 		if (len > l3c->ncpi_len) {
-			if (l3c->ncpi_data)
-				kfree(l3c->ncpi_data);
+			kfree(l3c->ncpi_data);
 			l3c->ncpi_data = kmalloc(len, GFP_ATOMIC);
 			if (!l3c->ncpi_data) {
 				l3c->ncpi_len = 0;
@@ -597,7 +595,7 @@ X25_realloc_ncpi_data(x25_channel_t *l3c, int len, u_char *data)
 			}
 		}
 		memcpy(l3c->ncpi_data, data, len);
-	} else if (l3c->ncpi_data) {
+	} else {
 		kfree(l3c->ncpi_data);
 		l3c->ncpi_data = NULL;
 	}
@@ -629,8 +627,7 @@ new_x25_channel(x25_l3_t *l3, x25_channel_t **ch_p, __u16 ch, int dlen, u_char *
 	l3c->confq = kmalloc(l3c->lwin * sizeof(x25_ConfQueue_t), GFP_ATOMIC);
 	if (!l3c->confq) {
 		printk(KERN_ERR "kmalloc confq %d entries failed\n", l3c->lwin);
-		if (l3c->ncpi_data)
-			kfree(l3c->ncpi_data);
+		kfree(l3c->ncpi_data);
 		kfree(l3c);
 		return(-ENOMEM);
 	}
@@ -658,9 +655,10 @@ new_x25_channel(x25_l3_t *l3, x25_channel_t **ch_p, __u16 ch, int dlen, u_char *
 }
 
 int
-new_x25_l3(x25_l3_t **l3_p, mISDNstack_t *st, mISDN_pid_t *pid, mISDNobject_t *obj, int debug) {
+new_x25_l3(x25_l3_t **l3_p, mISDNstack_t *st, mISDN_pid_t *pid, mISDNobject_t *obj, int debug, if_func_t *function) {
 	x25_l3_t	*n_l3;
 	int		err;
+	u_long		flags;
 
 	if (!st || !pid)
 		return(-EINVAL);
@@ -672,9 +670,8 @@ new_x25_l3(x25_l3_t **l3_p, mISDNstack_t *st, mISDN_pid_t *pid, mISDNobject_t *o
 	INIT_LIST_HEAD(&n_l3->channellist);
 	n_l3->entity = MISDN_ENTITY_NONE;
 	n_l3->next_id = 1;
-	spin_lock_init(&n_l3->lock);
 	memcpy(&n_l3->inst.pid, pid, sizeof(mISDN_pid_t));
-	mISDN_init_instance(&n_l3->inst, obj, n_l3);
+	mISDN_init_instance(&n_l3->inst, obj, n_l3, function);
 	if (!mISDN_SetHandledPID(obj, &n_l3->inst.pid)) {
 		int_error();
 		kfree(n_l3);
@@ -704,8 +701,9 @@ new_x25_l3(x25_l3_t **l3_p, mISDNstack_t *st, mISDN_pid_t *pid, mISDNobject_t *o
 	n_l3->x25r.printdebug = l3m_debug;
 	mISDN_FsmInitTimer(&n_l3->x25r, &n_l3->TR);
 	skb_queue_head_init(&n_l3->downq);
-
+	spin_lock_irqsave(&obj->lock, flags);
 	list_add_tail(&n_l3->list, &obj->ilist);
+	spin_unlock_irqrestore(&obj->lock, flags);
 	err = obj->ctrl(&n_l3->inst, MGR_NEWENTITY | REQUEST, NULL);
 	if (err) {
 		printk(KERN_WARNING "mISDN %s: MGR_NEWENTITY REQUEST failed err(%d)\n",
@@ -853,9 +851,7 @@ X25sendL3frame(x25_channel_t *l3c, x25_l3_t *l3, u_char pt, int len, void *arg)
 	mISDN_sethead(DL_DATA_REQ, X25_next_id(l3), skb);
 
 	if (l3->l2l3m.state == ST_LL_ESTAB) {
-		mISDNif_t	*down = &l3->inst.down;
-
-		ret = down->func(down, skb);
+		ret = mISDN_queue_message(&l3->inst, FLG_MSG_DOWN, skb);
 		if (ret) {
 			dev_kfree_skb(skb);
 		}
@@ -869,15 +865,13 @@ X25sendL3frame(x25_channel_t *l3c, x25_l3_t *l3, u_char pt, int len, void *arg)
 int
 X25_l3down(x25_l3_t *l3, u_int prim, u_int dinfo, struct sk_buff *skb)
 {
-	mISDNif_t	*down = &l3->inst.down;
 	int		ret;
 
 	if (!skb) {
 		if (!(skb = alloc_stack_skb(0, l3->down_headerlen)))
 			return(-ENOMEM);
 	}
-	mISDN_sethead(prim, dinfo, skb);
-	ret = down->func(down, skb);
+	ret = mISDN_queuedown_newhead(&l3->inst, 0, prim, dinfo, skb);
 	if (ret) {
 		dev_kfree_skb(skb);
 	}
@@ -951,7 +945,7 @@ X25sendL4skb(x25_channel_t *l3c, x25_l3_t *l3, __u32 addr, int prim, int dinfo, 
 		capimsg_setu32(skb->data, 0, l3c->ncci);
 	else
 		capimsg_setu32(skb->data, 0, addr);
-	return(if_newhead(&l3->inst.up, prim, dinfo, skb));		 
+	return(mISDN_queueup_newhead(&l3->inst, 0, prim, dinfo, skb));		 
 }
 
 int
@@ -991,7 +985,7 @@ X25sendL4frame(x25_channel_t *l3c, x25_l3_t *l3, int prim, int flags, int len, v
 			dev_kfree_skb(skb);
 			return(-EINVAL);
 	}
-	ret = if_newhead(&l3->inst.up, prim, 0, skb);
+	ret = mISDN_queueup_newhead(&l3->inst, 0, prim, 0, skb);
 	if (ret) {
 		printk(KERN_WARNING "%s: up error %d\n", __FUNCTION__, ret);
 		dev_kfree_skb(skb);

@@ -1,4 +1,4 @@
-/* $Id: asn1_enc.c,v 1.3 2003/11/21 22:29:41 keil Exp $
+/* $Id: asn1_enc.c,v 1.4 2006/03/06 12:52:07 keil Exp $
  *
  */
 
@@ -11,6 +11,14 @@ int encodeNull(__u8 *dest)
 	dest[0] = 0x05;  // null
 	dest[1] = 0;     // length
 	return 2;
+}
+
+int encodeBoolean(__u8 *dest, __u32 i)
+{
+	dest[0] = 0x01;  // BOOLEAN
+	dest[1] = 1;     // length 1
+	dest[3] = i ? 1:0;  // Value
+	return 3;
 }
 
 int encodeInt(__u8 *dest, __u32 i)
@@ -171,6 +179,21 @@ int encodeInterrogationDiversion(__u8 *dest, struct FacReqCFInterrogateParameter
 #endif
 	p += encodeEnum(p, params->BasicService);
 	p += encodeServedUserNumber(p, params->ServedUserNumber);
+
+	dest[1] = p - &dest[2];
+	return p - dest;
+}
+
+int encodeInvokeDeflection(__u8 *dest, struct FacReqCDeflection *CD)
+{
+	__u8 *p;
+
+	dest[0] = 0x30;  // sequence
+	dest[1] = 0;     // length
+	p = &dest[2];
+
+	p += encodeAddress(p, CD->DeflectedToNumber, CD->DeflectedToSubaddress);
+	p += encodeBoolean(p, CD->PresentationAllowed);
 
 	dest[1] = p - &dest[2];
 	return p - dest;

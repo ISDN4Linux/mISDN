@@ -1,4 +1,4 @@
-/* $Id: hfcs_usb.c,v 1.6 2005/11/15 10:10:34 mbachem Exp $
+/* $Id: hfcs_usb.c,v 1.7 2006/03/06 12:52:07 keil Exp $
  *
  * mISDN driver for Colognechip HFC-S USB chip
  *
@@ -20,34 +20,26 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
- * DISCLAIMER
- *   This driver is for ISDN USB TAs with HFC-S USB chips only.
- *   Please verify your TA's Vendor/Product IDs in the usb_device_id
- *   list below to make sure your hardware is supported by this driver.
- *   You might possibly have a device with the same device name
- *   but different IDs which are not supported by this driver due to a
- *   different chipset.
- *
  * TODO
  *   - hotplug disconnect the USB TA does not unregister mISDN Controller
  *     /proc/capi/controller is still "ready"...
  *     --> use rmmod before disconnecting the TA
+ *   - E channel features
+ *
  */
 
 #include <linux/config.h>
 #include <linux/module.h>
 #include <linux/delay.h>
 #include <linux/usb.h>
-#include "dchannel.h"
-#include "bchannel.h"
+#include "channel.h"
 #include "layer1.h"
-#include "helper.h"
 #include "debug.h"
-#include "hw_lock.h"
 #include "hfcs_usb.h"
 
+
 #define DRIVER_NAME "mISDN_hfcsusb"
-const char *hfcsusb_rev = "$Revision: 1.6 $";
+const char *hfcsusb_rev = "$Revision: 1.7 $";
 
 #define MAX_CARDS	8
 #define MODULE_PARM_T	"1-8i"
@@ -76,7 +68,7 @@ struct _hfcsusb_t;		/* forward definition */
 struct usb_fifo;		/* forward definition */
 typedef struct iso_urb_struct {
 	struct urb *purb;
-	__u8 buffer[ISO_BUFFER_SIZE];	/* buffer incoming/outgoing data */
+	__u8 buffer[ISO_BUFFER_SIZE];	/* buffer incoming/outgoing USB URB data */
 	struct usb_fifo *owner_fifo;	/* pointer to owner fifo */
 } iso_urb_struct;
 
@@ -88,56 +80,52 @@ typedef struct usb_fifo {
 	__u8 usb_packet_maxlen;	/* maximum length for usb transfer */
 	unsigned int max_size;	/* maximum size of receive/send packet */
 	__u8 intervall;		/* interrupt interval */
-	struct sk_buff *skbuff;	/* actual used buffer */
 	struct urb *urb;	/* transfer structure for usb routines */
-	__u8 buffer[128];	/* buffer incoming/outgoing data */
+	__u8 buffer[128];	/* buffer USB INT OUT URB data */
 	int bit_line;		/* how much bits are in the fifo? */
 
 	volatile __u8 usb_transfer_mode;	/* switched between ISO and INT */
 	iso_urb_struct iso[2];	/* need two urbs to have one always for pending */
-	__u8 bch_idx;		/* link BChannel Fifos to bch[bch_idx] */
-	int delete_flg;		/* only delete skbuff once */
+	__u8 ch_idx;		/* link BChannel Fifos to chan[ch_idx] */
 	int last_urblen;	/* remember length of last packet */
 } usb_fifo;
 
 typedef struct _hfcsusb_t {
-	struct list_head list;
-	mISDN_HWlock_t lock;
-	dchannel_t dch;
-	bchannel_t bch[2];
+	struct list_head	list;
+	channel_t		chan[4]; // B1,B2,D,(PCM)
 
-	struct usb_device *dev;	/* our device */
-	int if_used;		/* used interface number */
-	int alt_used;		/* used alternate config */
-	int cfg_used;		/* configuration index used */
-	int vend_idx;		/* index in hfcsusb_idtab */
-	int packet_size;
-	int iso_packet_size;
-	int disc_flag;		/* 1 if device was disonnected to avoid some USB actions */
-
-	usb_fifo fifos[HFCUSB_NUM_FIFOS];	/* structure holding all fifo data */
+	struct usb_device	*dev;		/* our device */
+	struct usb_interface	*intf;		/* used interface */
+	int			if_used;	/* used interface number */
+	int			alt_used;	/* used alternate config */
+	int			cfg_used;	/* configuration index used */
+	int			vend_idx;	/* index in hfcsusb_idtab */
+	int			packet_size;
+	int			iso_packet_size;
+	int			disc_flag;	/* 1 if device was disonnected to avoid some USB actions */
+	usb_fifo		fifos[HFCUSB_NUM_FIFOS];	/* structure holding all fifo data */
 
 	/* control pipe background handling */
-	ctrl_buft ctrl_buff[HFC_CTRL_BUFSIZE];	/* buffer holding queued data */
-	volatile int ctrl_in_idx, ctrl_out_idx, ctrl_cnt;	/* input/output pointer + count */
-	struct urb *ctrl_urb;	/* transfer structure for control channel */
-	struct usb_ctrlrequest ctrl_write;	/* buffer for control write request */
-	struct usb_ctrlrequest ctrl_read;	/* same for read request */
-	int ctrl_paksize;	/* control pipe packet size */
-	int ctrl_in_pipe, ctrl_out_pipe;	/* handles for control pipe */
+	ctrl_buft		ctrl_buff[HFC_CTRL_BUFSIZE];	/* buffer holding queued data */
+	volatile int		ctrl_in_idx, ctrl_out_idx, ctrl_cnt;	/* input/output pointer + count */
+	struct urb		*ctrl_urb;	/* transfer structure for control channel */
+	struct usb_ctrlrequest	ctrl_write;	/* buffer for control write request */
+	struct usb_ctrlrequest	ctrl_read;	/* same for read request */
+	int			ctrl_paksize;	/* control pipe packet size */
+	int			ctrl_in_pipe, ctrl_out_pipe;	/* handles for control pipe */
 
-	volatile __u8 threshold_mask;	/* threshold in fifo flow control */
-	__u8 old_led_state, led_state;
+	volatile __u8		threshold_mask;	/* threshold in fifo flow control */
+	__u8			old_led_state, led_state;
 	
-	__u8 hw_mode; /* TE ?, NT ?, NT Timer runnning? */
-	int nt_timer;
+	__u8			portmode; /* TE ?, NT ?, NT Timer runnning? */
+	int			nt_timer;
 } hfcsusb_t;
 
 /* private vendor specific data */
 typedef struct {
-	__u8 led_scheme;	// led display scheme
-	signed short led_bits[8];	// array of 8 possible LED bitmask settings
-	char *vend_name;	// device name
+	__u8		led_scheme;	// led display scheme
+	signed short	led_bits[8];	// array of 8 possible LED bitmask settings
+	char		*vend_name;	// device name
 } hfcsusb_vdata;
 
 /****************************************/
@@ -208,10 +196,10 @@ static struct usb_device_id hfcsusb_idtab[] = {
 };
 
 /* some function prototypes */
-static int hfcsusb_l1hwD(mISDNif_t * hif, struct sk_buff *skb);
-static int hfcsusb_l2l1B(mISDNif_t * hif, struct sk_buff *skb);
-static int mode_bchannel(bchannel_t * bch, int bc, int protocol);
-static void hfcsusb_ph_command(hfcsusb_t * card, u_char command);
+static int	hfcsusb_l2l1(mISDNinstance_t *inst, struct sk_buff *skb);
+static int	setup_bchannel(channel_t * bch, int protocol);
+static void	hfcsusb_ph_command(hfcsusb_t * card, u_char command);
+static void	release_card(hfcsusb_t * card);
 
 
 /******************************************************/
@@ -227,9 +215,9 @@ ctrl_start_transfer(hfcsusb_t * card)
 		card->ctrl_urb->transfer_buffer = NULL;
 		card->ctrl_urb->transfer_buffer_length = 0;
 		card->ctrl_write.wIndex =
-		    card->ctrl_buff[card->ctrl_out_idx].hfcs_reg;
+		    cpu_to_le16(card->ctrl_buff[card->ctrl_out_idx].hfcs_reg);
 		card->ctrl_write.wValue =
-		    card->ctrl_buff[card->ctrl_out_idx].reg_val;
+		    cpu_to_le16(card->ctrl_buff[card->ctrl_out_idx].reg_val);
 
 		usb_submit_urb(card->ctrl_urb, GFP_ATOMIC);	/* start transfer */
 	}
@@ -356,197 +344,24 @@ handle_led(hfcsusb_t * card, int event)
 	write_led(card, card->led_state);
 }
 
-/* HW lock/unlock functions */
-static int
-lock_dev(void *data, int nowait)
-{
-	register mISDN_HWlock_t *lock = &((hfcsusb_t *) data)->lock;
-	return (lock_HW(lock, nowait));
-}
-
-static void
-unlock_dev(void *data)
-{
-	register mISDN_HWlock_t *lock = &((hfcsusb_t *) data)->lock;
-	unlock_HW(lock);
-}
-
-
-static int
-hfcsusb_manager(void *data, u_int prim, void *arg)
-{
-	hfcsusb_t *card;
-	mISDNinstance_t *inst = data;
-	struct sk_buff *skb;
-	int channel = -1;
-
-	if (debug & 0x10000)
-		printk(KERN_DEBUG "%s: data(%p) prim(%x) arg(%p)\n",
-		       __FUNCTION__, data, prim, arg);
-
-	if (!data) {
-		MGR_HASPROTOCOL_HANDLER(prim, arg, &hw_mISDNObj)
-		    printk(KERN_ERR "%s: no data prim %x arg %p\n",
-			   __FUNCTION__, prim, arg);
-		return (-EINVAL);
-	}
-	list_for_each_entry(card, &hw_mISDNObj.ilist, list) {
-		if (&card->dch.inst == inst) {
-			channel = 2;
-			break;
-		}
-		if (&card->bch[0].inst == inst) {
-			channel = 0;
-			break;
-		}
-		if (&card->bch[1].inst == inst) {
-			channel = 1;
-			break;
-		}
-	}
-	if (channel < 0) {
-		printk(KERN_WARNING
-		       "%s: no channel data %p prim %x arg %p\n",
-		       __FUNCTION__, data, prim, arg);
-		return (-EINVAL);
-	}
-
-	switch (prim) {
-		case MGR_REGLAYER | CONFIRM:
-			if (channel == 2)
-				dch_set_para(&card->dch, &inst->st->para);
-			else
-				bch_set_para(&card->bch[channel],
-					     &inst->st->para);
-			break;
-		case MGR_UNREGLAYER | REQUEST:
-			if (channel == 2) {
-				inst->down.fdata = &card->dch;
-				if ((skb =
-				     create_link_skb(PH_CONTROL | REQUEST,
-						     HW_DEACTIVATE, 0,
-						     NULL, 0))) {
-					if (hfcsusb_l1hwD
-					    (&inst->down, skb))
-						dev_kfree_skb(skb);
-				}
-			} else {
-				inst->down.fdata = &card->bch[channel];
-				if ((skb =
-				     create_link_skb(MGR_DISCONNECT |
-						     REQUEST, 0, 0, NULL,
-						     0))) {
-					if (hfcsusb_l2l1B
-					    (&inst->down, skb))
-						dev_kfree_skb(skb);
-				}
-			}
-			hw_mISDNObj.ctrl(inst->up.peer,
-					 MGR_DISCONNECT | REQUEST,
-					 &inst->up);
-			hw_mISDNObj.ctrl(inst, MGR_UNREGLAYER | REQUEST,
-					 NULL);
-			break;
-		case MGR_CLRSTPARA | INDICATION:
-			arg = NULL;
-		case MGR_ADDSTPARA | INDICATION:
-			if (channel == 2)
-				dch_set_para(&card->dch, arg);
-			else
-				bch_set_para(&card->bch[channel], arg);
-			break;
-		case MGR_RELEASE | INDICATION:
-			if (debug & 0x10000)
-				printk(KERN_DEBUG
-				       "%s : ignoring MGR_RELEASE | INDICATION\n",
-				       __FUNCTION__);
-			/* card get released later at usb disconnect or module removal ...
-			   if (channel == 2) {
-			   release_card(card);
-			   } else {
-			   hfcsusb.refcnt--;
-			   }
-			 */
-			break;
-		case MGR_CONNECT | REQUEST:
-			return (mISDN_ConnectIF(inst, arg));
-		case MGR_SETIF | REQUEST:
-		case MGR_SETIF | INDICATION:
-			if (channel == 2)
-				return (mISDN_SetIF
-					(inst, arg, prim, hfcsusb_l1hwD,
-					 NULL, &card->dch));
-			else
-				return (mISDN_SetIF
-					(inst, arg, prim, hfcsusb_l2l1B,
-					 NULL, &card->bch[channel]));
-			break;
-		case MGR_DISCONNECT | REQUEST:
-		case MGR_DISCONNECT | INDICATION:
-			return (mISDN_DisConnectIF(inst, arg));
-		case MGR_SETSTACK | CONFIRM:
-			if ((channel != 2) && (inst->pid.global == 2)) {
-				inst->down.fdata = &card->bch[channel];
-				if ((skb =
-				     create_link_skb(PH_ACTIVATE | REQUEST,
-						     0, 0, NULL, 0))) {
-					if (hfcsusb_l2l1B
-					    (&inst->down, skb))
-						dev_kfree_skb(skb);
-				}
-				if (inst->pid.protocol[2] ==
-				    ISDN_PID_L2_B_TRANS)
-					if_link(&inst->up,
-						DL_ESTABLISH | INDICATION,
-						0, 0, NULL, 0);
-				else
-					if_link(&inst->up,
-						PH_ACTIVATE | INDICATION,
-						0, 0, NULL, 0);
-			}
-			break;
-		case MGR_GLOBALOPT | REQUEST:
-			if (arg) {
-				/* FIXME: detect cards with HEADSET */
-				u_int *gopt = arg;
-				*gopt = GLOBALOPT_INTERNAL_CTRL |
-				    GLOBALOPT_EXTERNAL_EQUIPMENT |
-				    GLOBALOPT_HANDSET;
-			} else
-				return (-EINVAL);
-			break;
-		case MGR_SELCHANNEL | REQUEST:
-			return (-EINVAL);
-			PRIM_NOT_HANDLED(MGR_CTRLREADY | INDICATION);
-		default:
-			printk(KERN_WARNING "%s: prim %x not handled\n",
-			       __FUNCTION__, prim);
-			return (-EINVAL);
-	}
-	return (0);
-}
 
 /*********************************/
 /* S0 state change event handler */
 /*********************************/
 static void
-S0_new_state(dchannel_t * dch)
+S0_new_state(channel_t * dch)
 {
-	u_int prim = PH_SIGNAL | INDICATION;
-	u_int para = 0;
-	mISDNif_t *upif = &dch->inst.up;
-	hfcsusb_t *card = dch->hw;
+	u_int		prim = PH_SIGNAL | INDICATION;
+	u_int		para = 0;
+	hfcsusb_t	*card = dch->inst.privat;
 
-	if (!test_and_clear_bit(D_L1STATECHANGE, &dch->event))
-		return;
-
-	if (card->hw_mode & HW_MODE_TE) {
+	if (card->portmode & PORT_MODE_TE) {
 		if (dch->debug)
-			mISDN_debugprint(&card->dch.inst,
+			mISDN_debugprint(&card->chan[D].inst,
 				 "%s: TE %d",
-				 __FUNCTION__, dch->ph_state);
+				 __FUNCTION__, dch->state);
 		
-		switch (dch->ph_state) {
+		switch (dch->state) {
 			case (0):
 				prim = PH_CONTROL | INDICATION;
 				para = HW_RESET;
@@ -570,17 +385,22 @@ S0_new_state(dchannel_t * dch)
 			default:
 				return;
 		}
+		if (dch->state== 7)
+			test_and_set_bit(FLG_ACTIVE, &dch->Flags);
+		else
+			test_and_clear_bit(FLG_ACTIVE, &dch->Flags);
+		
 	} else {
 		if (dch->debug)
-			mISDN_debugprint(&card->dch.inst,
+			mISDN_debugprint(&card->chan[D].inst,
 				 "%s: NT %d",
-				 __FUNCTION__, dch->ph_state);
+				 __FUNCTION__, dch->state);
 				
-		dch->inst.lock(dch->inst.data, 0);
-		switch (dch->ph_state) {
+		switch (dch->state) {
 			case (1):
+				test_and_clear_bit(FLG_ACTIVE, &dch->Flags);
 				card->nt_timer = 0;
-				card->hw_mode &= ~NT_ACTIVATION_TIMER;
+				card->portmode &= ~NT_ACTIVATION_TIMER;
 				prim = PH_DEACTIVATE | INDICATION;
 				para = 0;
 				handle_led(card, LED_S0_OFF);
@@ -589,38 +409,36 @@ S0_new_state(dchannel_t * dch)
 			case (2):
 				if (card->nt_timer < 0) {
 					card->nt_timer = 0;
-					card->hw_mode &= ~NT_ACTIVATION_TIMER;
+					card->portmode &= ~NT_ACTIVATION_TIMER;
 					hfcsusb_ph_command(dch->hw, HFC_L1_DEACTIVATE_NT);
 				} else {
-					card->hw_mode |= NT_ACTIVATION_TIMER;
+					card->portmode |= NT_ACTIVATION_TIMER;
 					card->nt_timer = NT_T1_COUNT;
 					/* allow G2 -> G3 transition */
 					queued_Write_hfc(card, HFCUSB_STATES, 2 | HFCUSB_NT_G2_G3);
 				}
-				upif = NULL;
-				break;
+				return;
 			case (3):
+				test_and_set_bit(FLG_ACTIVE, &dch->Flags);
 				card->nt_timer = 0;
-				card->hw_mode &= ~NT_ACTIVATION_TIMER;
+				card->portmode &= ~NT_ACTIVATION_TIMER;
 				prim = PH_ACTIVATE | INDICATION;
 				para = 0;
 				handle_led(card, LED_S0_ON);
 				break;
 			case (4):
 				card->nt_timer = 0;
-				card->hw_mode &= ~NT_ACTIVATION_TIMER;
-				upif = NULL;
-				break;
+				card->portmode &= ~NT_ACTIVATION_TIMER;
+				return;
 			default:
 				break;
 		}
-		dch->inst.unlock(dch->inst.data);
+		mISDN_queue_data(&dch->inst, dch->inst.id | MSG_BROADCAST,
+			MGR_SHORTSTATUS | INDICATION, test_bit(FLG_ACTIVE, &dch->Flags) ?
+			SSTATUS_L1_ACTIVATED : SSTATUS_L1_DEACTIVATED,
+			0, NULL, 0);		
 	}		
-	
-	while (upif) {
-		if_link(upif, prim, para, 0, NULL, 0);
-		upif = upif->clone;
-	}
+	mISDN_queue_data(&dch->inst, FLG_MSG_UP, prim, para, 0, NULL, 0);
 }
 
 /******************************/
@@ -629,12 +447,12 @@ S0_new_state(dchannel_t * dch)
 static void
 state_handler(hfcsusb_t * card, __u8 new_l1_state)
 {
-	if (new_l1_state == card->dch.ph_state
+	if (new_l1_state == card->chan[D].state
 	    || new_l1_state < 1 || new_l1_state > 8)
 		return;
 
-	card->dch.ph_state = new_l1_state;
-	dchannel_sched_event(&card->dch, D_L1STATECHANGE);
+	card->chan[D].state = new_l1_state;
+	S0_new_state(&card->chan[D]);
 }
 
 /*
@@ -651,17 +469,17 @@ state_handler(hfcsusb_t * card, __u8 new_l1_state)
  *	if the hardware supports more protocols, they should be handled too
  */
 static int
-mode_bchannel(bchannel_t * bch, int bc, int protocol)
+setup_bchannel(channel_t * bch, int protocol)
 {
 	__u8 conhdlc, sctrl, sctrl_r;	/* conatainer for new register vals */
 
-	hfcsusb_t *card = bch->inst.data;
+	hfcsusb_t *card = bch->inst.privat;
 
 	if (bch->debug & L1_DEB_HSCX)
 		mISDN_debugprint(&bch->inst,
-				 "protocol %x-->%x ch %d-->%d",
-				 bch->protocol, protocol,
-				 bch->channel, bc);
+				 "protocol %x-->%x channel(%d)",
+				 bch->state, protocol,
+				 bch->channel);
 
 	/* setup val for CON_HDLC */
 	conhdlc = 0;
@@ -670,20 +488,23 @@ mode_bchannel(bchannel_t * bch, int bc, int protocol)
 
 	switch (protocol) {
 		case (-1):	/* used for init */
-			bch->protocol = -1;
-			bch->channel = bc;
+			bch->state = -1;
 			/* fall trough */
 		case (ISDN_PID_NONE):
-			if (bch->protocol == ISDN_PID_NONE)
+			if (bch->state == ISDN_PID_NONE)
 				return (0);	/* already in idle state */
-			bch->protocol = ISDN_PID_NONE;
+			bch->state = ISDN_PID_NONE;
+			test_and_clear_bit(FLG_HDLC, &bch->Flags);
+			test_and_clear_bit(FLG_TRANSPARENT, &bch->Flags);
 			break;
 		case (ISDN_PID_L1_B_64TRANS):
 			conhdlc |= 2;
-			bch->protocol = protocol;
+			bch->state = protocol;
+			set_bit(FLG_TRANSPARENT, &bch->Flags);
 			break;
 		case (ISDN_PID_L1_B_64HDLC):
-			bch->protocol = protocol;
+			bch->state = protocol;
+			set_bit(FLG_HDLC, &bch->Flags);
 			break;
 		default:
 			mISDN_debugprint(&bch->inst, "prot not known %x",
@@ -704,37 +525,28 @@ mode_bchannel(bchannel_t * bch, int bc, int protocol)
 		queued_Write_hfc(card, HFCUSB_FIFO,
 				      ((bch->channel)?3:1));
 		queued_Write_hfc(card, HFCUSB_CON_HDLC, conhdlc);
-		
+
 		/* reset fifo */
 		queued_Write_hfc(card, HFCUSB_INC_RES_F, 2);
 
-		sctrl = 0x40 + ((card->hw_mode & HW_MODE_TE)?0x00:0x04);
+		sctrl = 0x40 + ((card->portmode & PORT_MODE_TE)?0x00:0x04);
 		sctrl_r = 0x0;
-		
-		if (card->bch[0].protocol) {
-			sctrl |= ((card->bch[0].channel)?2:1);
-			sctrl_r |= ((card->bch[0].channel)?2:1);
+
+		if (card->chan[B1].state) {
+			sctrl |= ((card->chan[B1].channel)?2:1);
+			sctrl_r |= ((card->chan[B1].channel)?2:1);
 		}
-		
-		if (card->bch[1].protocol) {
-			sctrl |= ((card->bch[1].channel)?2:1);
-			sctrl_r |= ((card->bch[1].channel)?2:1);
+
+		if (card->chan[B2].state) {
+			sctrl |= ((card->chan[B2].channel)?2:1);
+			sctrl_r |= ((card->chan[B2].channel)?2:1);
 		}
-		
-		card->fifos[HFCUSB_B1_RX].bch_idx = 0; /* bch[0] linked to B1 */
-		card->fifos[HFCUSB_B1_TX].bch_idx = 0; 
-		card->fifos[HFCUSB_B2_RX].bch_idx = 1; /* bch[1] linked to B2 */
-		card->fifos[HFCUSB_B2_TX].bch_idx = 1;
 		
 		queued_Write_hfc(card, HFCUSB_SCTRL, sctrl);
 		queued_Write_hfc(card, HFCUSB_SCTRL_R, sctrl_r);
 	
 		if (protocol > ISDN_PID_NONE) {
 			handle_led(card, ((bch->channel)?LED_B2_ON:LED_B1_ON));
-				
-			/* signal the channel has space for transmit data */
-			bch_sched_event(bch, B_XMTBUFREADY);
-			
 		} else {
 			handle_led(card, ((bch->channel)?LED_B2_OFF:LED_B1_OFF));
 		}
@@ -745,43 +557,33 @@ mode_bchannel(bchannel_t * bch, int bc, int protocol)
 static void
 hfcsusb_ph_command(hfcsusb_t * card, u_char command)
 {
-	if (card->dch.debug & L1_DEB_ISAC)
-		mISDN_debugprint(&card->dch.inst, "hfcsusb_ph_command %x",
+	if (card->chan[D].debug & L1_DEB_ISAC)
+		mISDN_debugprint(&card->chan[D].inst, "hfcsusb_ph_command %x",
 				 command);
 
 	switch (command) {
 		case HFC_L1_ACTIVATE_TE:
 			/* force sending sending INFO1 */
-			queued_Write_hfc(card,
-					      HFCUSB_STATES, 0x14);
-
-			schedule_timeout((1 * HZ) / 1000);	/* sleep 1ms */
-
+			queued_Write_hfc(card, HFCUSB_STATES, 0x14);
 			/* start l1 activation */
-			queued_Write_hfc(card,
-					      HFCUSB_STATES, 0x04);
+			queued_Write_hfc(card, HFCUSB_STATES, 0x04);
 			break;
 
-		case HFC_L1_DEACTIVATE_TE:
-			queued_Write_hfc(card,
-					      HFCUSB_STATES, 0x10);
-
-			queued_Write_hfc(card,
-					      HFCUSB_STATES, 0x03);
+		case HFC_L1_FORCE_DEACTIVATE_TE:
+			queued_Write_hfc(card, HFCUSB_STATES, 0x10);
+			queued_Write_hfc(card, HFCUSB_STATES, 0x03);
 			break;
 
 		case HFC_L1_ACTIVATE_NT:
-			queued_Write_hfc(card,
-					      HFCUSB_STATES,
-					      HFCUSB_ACTIVATE 
-					      | HFCUSB_DO_ACTION 
-					      | HFCUSB_NT_G2_G3);
+			queued_Write_hfc(card, HFCUSB_STATES,
+					       HFCUSB_ACTIVATE 
+					       | HFCUSB_DO_ACTION 
+					       | HFCUSB_NT_G2_G3);
 			break;
 
 		case HFC_L1_DEACTIVATE_NT:
-			queued_Write_hfc(card,
-					      HFCUSB_STATES,
-					      HFCUSB_DO_ACTION);
+			queued_Write_hfc(card, HFCUSB_STATES,
+			 		       HFCUSB_DO_ACTION);
 			break;
 	}
 }
@@ -790,114 +592,162 @@ hfcsusb_ph_command(hfcsusb_t * card, u_char command)
 /* Layer 1 D-channel hardware access */
 /*************************************/
 static int
-hfcsusb_l1hwD(mISDNif_t * hif, struct sk_buff *skb)
+handle_dmsg(channel_t *dch, struct sk_buff *skb)
 {
-	dchannel_t *dch;;
-	int ret = -EINVAL;
-	mISDN_head_t *hh;
-	hfcsusb_t *card;
-
-	if (!hif || !skb)
-		return (ret);
-	hh = mISDN_HEAD_P(skb);
-	dch = hif->fdata;
-	mISDNif_t *upif = &dch->inst.up;
-	card = dch->hw;
-	ret = 0;
-	
-	if (hh->prim == PH_DATA_REQ) {
-		if (dch->next_skb) {
-			mISDN_debugprint(&dch->inst,
-					 "hfcsusb l2l1 next_skb exist this shouldn't happen");
-			return (-EBUSY);
-		}
-		dch->inst.lock(dch->inst.data, 0);
-		if (test_and_set_bit(FLG_TX_BUSY, &dch->DFlags)) {
-			test_and_set_bit(FLG_TX_NEXT, &dch->DFlags);
-			dch->next_skb = skb;
-			dch->inst.unlock(dch->inst.data);
-			return (0);
-		} else {
-			/* prepare buffer, which is transmitted by
-			   tx_iso completions later */
-			dch->tx_len = skb->len;
-			memcpy(dch->tx_buf, skb->data, dch->tx_len);
-			dch->tx_idx = 0;
-			dch->inst.unlock(dch->inst.data);
-			skb_trim(skb, 0);
-			return (if_newhead(&dch->inst.up, PH_DATA_CNF,
-					   hh->dinfo, skb));
-		}
-	} else if (hh->prim == (PH_SIGNAL | REQUEST)) {
-		/* do not handle INFO3_P8 and INFO3_P10 */
+	int		ret = 0;
+	mISDN_head_t	*hh = mISDN_HEAD_P(skb);
+	hfcsusb_t	*hw = dch->hw;
+		
+	if (hh->prim == (PH_SIGNAL | REQUEST)) {
 		ret = -EINVAL;
 	} else if (hh->prim == (PH_CONTROL | REQUEST)) {
-		dch->inst.lock(dch->inst.data, 0);
 		if (hh->dinfo == HW_RESET) {
-			if (dch->ph_state != 0)
-				hfcsusb_ph_command(dch->hw,
-						   HFC_L1_ACTIVATE_TE);
-				while (upif) {
-					if_link(upif, PH_CONTROL | INDICATION,
-					        HW_POWERUP, 0, NULL, 0);
-					upif = upif->clone;
-				}
-		} else if (hh->dinfo == HW_POWERUP) {
-			hfcsusb_ph_command(dch->hw, HFC_L1_DEACTIVATE_TE);
+			if (dch->state != 0)
+				hfcsusb_ph_command(hw, HFC_L1_ACTIVATE_TE);
+			skb_trim(skb, 0);
+			return(mISDN_queueup_newhead(&dch->inst, 0, PH_CONTROL | INDICATION,HW_POWERUP, skb));
 		} else if (hh->dinfo == HW_DEACTIVATE) {
-			discard_queue(&dch->rqueue);
 			if (dch->next_skb) {
 				dev_kfree_skb(dch->next_skb);
 				dch->next_skb = NULL;
 			}
-			test_and_clear_bit(FLG_TX_NEXT, &dch->DFlags);
-			test_and_clear_bit(FLG_TX_BUSY, &dch->DFlags);
-			if (test_and_clear_bit(FLG_L1_DBUSY, &dch->DFlags))
+			test_and_clear_bit(FLG_TX_NEXT, &dch->Flags);
+			test_and_clear_bit(FLG_TX_BUSY, &dch->Flags);
+#ifdef FIXME
+			if (test_and_clear_bit(FLG_L1_DBUSY, &dch->Flags))
 				dchannel_sched_event(dch, D_CLEARBUSY);
-		} else if ((hh->dinfo & HW_TESTLOOP) == HW_TESTLOOP) {
-			u_char val = 0;
-
-			if (1 & hh->dinfo)
-				val |= 0x0c;
-			if (2 & hh->dinfo)
-				val |= 0x3;
-			/* !!! not implemented yet */
+#endif
+		} else if (hh->dinfo == HW_POWERUP) {
+			hfcsusb_ph_command(hw, HFC_L1_FORCE_DEACTIVATE_TE);
 		} else {
 			if (dch->debug & L1_DEB_WARN)
 				mISDN_debugprint(&dch->inst,
-						 "hfcsusb_l1hw unknown ctrl %x",
-						 hh->dinfo);
+					"hfcsusb_l1hw unknown ctrl %x",
+					hh->dinfo);
 			ret = -EINVAL;
 		}
-		dch->inst.unlock(dch->inst.data);
 	} else if (hh->prim == (PH_ACTIVATE | REQUEST)) {
-		dch->inst.lock(dch->inst.data, 0);
-		if (card->hw_mode & HW_MODE_NT) {
-			hfcsusb_ph_command(dch->hw, HFC_L1_ACTIVATE_NT);
+		if (hw->portmode & PORT_MODE_NT) {
+			hfcsusb_ph_command(hw, HFC_L1_ACTIVATE_NT);
 		} else {
 			if (dch->debug & L1_DEB_WARN)
-				mISDN_debugprint(&dch->inst, "%s: PH_ACTIVATE none NT mode",
+				mISDN_debugprint(&dch->inst,
+					"%s: PH_ACTIVATE none NT mode",
 					__FUNCTION__);
-			ret = -EINVAL;			
+			ret = -EINVAL;
 		}
-		dch->inst.unlock(dch->inst.data);
 	} else if (hh->prim == (PH_DEACTIVATE | REQUEST)) {
-		dch->inst.lock(dch->inst.data, 0);
-		if (card->hw_mode & HW_MODE_NT) {
-			hfcsusb_ph_command(dch->hw, HFC_L1_DEACTIVATE_NT);
+		if (hw->portmode & PORT_MODE_NT) {
+			hfcsusb_ph_command(hw, HFC_L1_DEACTIVATE_NT);
+			if (test_and_clear_bit(FLG_TX_NEXT, &dch->Flags)) {
+				dev_kfree_skb(dch->next_skb);
+				dch->next_skb = NULL;
+			}
+			if (dch->tx_skb) {
+				dev_kfree_skb(dch->tx_skb);
+				dch->tx_skb = NULL;
+			}
+			dch->tx_idx = 0;
+			if (dch->rx_skb) {
+				dev_kfree_skb(dch->rx_skb);
+				dch->rx_skb = NULL;
+			}
+			test_and_clear_bit(FLG_TX_BUSY, &dch->Flags);
+			test_and_clear_bit(FLG_ACTIVE, &dch->Flags);
 		} else {
 			if (dch->debug & L1_DEB_WARN)
-				mISDN_debugprint(&dch->inst, "%s: PH_DEACTIVATE none NT mode",
+				mISDN_debugprint(&dch->inst,
+					"%s: PH_DEACTIVATE none NT mode",
 					__FUNCTION__);
-			ret = -EINVAL;			
+			ret = -EINVAL;
 		}
-		dch->inst.unlock(dch->inst.data);
+	} else if ((hh->prim & MISDN_CMD_MASK) == MGR_SHORTSTATUS) {
+		u_int temp = hh->dinfo & SSTATUS_ALL; // remove SSTATUS_BROADCAST_BIT
+		if ((hw->portmode & PORT_MODE_NT) &&
+			(temp == SSTATUS_ALL || temp == SSTATUS_L1)) {
+			if (hh->dinfo & SSTATUS_BROADCAST_BIT)
+				temp = dch->inst.id | MSG_BROADCAST;
+			else
+				temp = hh->addr | FLG_MSG_TARGET;
+			skb_trim(skb, 0);
+			hh->dinfo = test_bit(FLG_ACTIVE, &dch->Flags) ?
+				SSTATUS_L1_ACTIVATED : SSTATUS_L1_DEACTIVATED;
+			hh->prim = MGR_SHORTSTATUS | CONFIRM;
+			return(mISDN_queue_message(&dch->inst, temp, skb));
+		}
+		ret = -EOPNOTSUPP;
 	} else {
-		if (dch->debug & L1_DEB_WARN)
-			mISDN_debugprint(&dch->inst,
-					 "hfcsusb_l1hw unknown prim %x",
-					 hh->prim);
-		ret = -EINVAL;
+		printk(KERN_WARNING "%s %s: unknown prim(%x)\n",
+		       dch->inst.name, __FUNCTION__, hh->prim);
+		ret = -EAGAIN;
+	}
+	if (!ret)
+		dev_kfree_skb(skb);
+	return (ret);
+}
+
+/*************************************/
+/* Layer 1 B-channel hardware access */
+/*************************************/
+static int
+handle_bmsg(channel_t *bch, struct sk_buff *skb)
+{
+	int		ret = 0;
+	mISDN_head_t	*hh = mISDN_HEAD_P(skb);
+
+	if ((hh->prim == (PH_ACTIVATE | REQUEST)) ||
+		(hh->prim == (DL_ESTABLISH | REQUEST))) {
+		if (!test_and_set_bit(FLG_ACTIVE, &bch->Flags)) {
+			ret = setup_bchannel(bch, bch->inst.pid.protocol[1]);
+			if (bch->inst.pid.protocol[2] == ISDN_PID_L2_B_TRANS)
+				test_and_set_bit(FLG_L2DATA, &bch->Flags);
+		}
+#ifdef FIXME
+		if (bch->inst.pid.protocol[2] == ISDN_PID_L2_B_RAWDEV)
+			if (bch->dev)
+				if_link(&bch->dev->rport.pif,
+					hh->prim | CONFIRM, 0, 0, NULL, 0);
+#endif
+		skb_trim(skb, 0);
+		return(mISDN_queueup_newhead(&bch->inst, 0, hh->prim | CONFIRM, ret, skb));
+	} else if ((hh->prim == (PH_DEACTIVATE | REQUEST)) ||
+		(hh->prim == (DL_RELEASE | REQUEST)) ||
+		((hh->prim == (PH_CONTROL | REQUEST) && (hh->dinfo == HW_DEACTIVATE)))) {
+
+		if (test_and_clear_bit(FLG_TX_NEXT, &bch->Flags)) {
+			dev_kfree_skb(bch->next_skb);
+			bch->next_skb = NULL;
+		}
+		if (bch->tx_skb) {
+			dev_kfree_skb(bch->tx_skb);
+			bch->tx_skb = NULL;
+		}
+		bch->tx_idx = 0;
+		if (bch->rx_skb) {
+			dev_kfree_skb(bch->rx_skb);
+			bch->rx_skb = NULL;
+		}
+		test_and_clear_bit(FLG_L2DATA, &bch->Flags);
+		test_and_clear_bit(FLG_TX_BUSY, &bch->Flags);
+		setup_bchannel(bch, ISDN_PID_NONE);
+		test_and_clear_bit(FLG_ACTIVE, &bch->Flags);
+		skb_trim(skb, 0);
+		if (hh->prim != (PH_CONTROL | REQUEST)) {
+#ifdef FIXME
+			if (bch->inst.pid.protocol[2] == ISDN_PID_L2_B_RAWDEV)
+				if (bch->dev)
+					if_link(&bch->dev->rport.pif,
+						hh->prim | CONFIRM, 0, 0, NULL, 0);
+#endif
+			if (!mISDN_queueup_newhead(&bch->inst, 0, hh->prim | CONFIRM, 0, skb))
+				return(0);
+		}
+	} else if (hh->prim == (PH_CONTROL | REQUEST)) {
+		// do not handle PH_CONTROL | REQUEST ??
+	} else {
+		printk(KERN_WARNING "%s %s: unknown prim(%x)\n",
+			bch->inst.name, __FUNCTION__, hh->prim);
+		ret = -EAGAIN;
 	}
 	if (!ret)
 		dev_kfree_skb(skb);
@@ -908,274 +758,204 @@ hfcsusb_l1hwD(mISDNif_t * hif, struct sk_buff *skb)
 /* Layer2 -> Layer 1 Transfer */
 /******************************/
 static int
-hfcsusb_l2l1B(mISDNif_t * hif, struct sk_buff *skb)
+hfcsusb_l2l1(mISDNinstance_t *inst, struct sk_buff *skb)
 {
-	bchannel_t *bch;
-	int ret = -EINVAL;
-	mISDN_head_t *hh;
-	
-	hfcsusb_t *card;
+	channel_t	*chan = container_of(inst, channel_t, inst);
+	int		ret = 0;
+	mISDN_head_t	*hh = mISDN_HEAD_P(skb);
 
-	if (!hif || !skb)
-		return (ret);
-	hh = mISDN_HEAD_P(skb);
-	bch = hif->fdata;
-	
-	card = bch->hw;
-	
-	if ((hh->prim == PH_DATA_REQ) || (hh->prim == (DL_DATA | REQUEST))) {
-		if (bch->next_skb) {
-			printk(KERN_WARNING "%s: next_skb exist ERROR\n",
-			       __FUNCTION__);
-			return (-EBUSY);
-		}
-		bch->inst.lock(bch->inst.data, 0);
-		if (test_and_set_bit(BC_FLG_TX_BUSY, &bch->Flag)) {
-			test_and_set_bit(BC_FLG_TX_NEXT, &bch->Flag);
-			bch->next_skb = skb;
-			bch->inst.unlock(bch->inst.data);
-			return (0);
-		} else {
-			/* prepare buffer, wich is transmitted by
-			   tx_iso completions later */
-			bch->tx_len = skb->len;
-			memcpy(bch->tx_buf, skb->data, bch->tx_len);
-			bch->tx_idx = 0;
-			bch->inst.unlock(bch->inst.data);
-			if ((bch->inst.pid.protocol[2] ==
-			     ISDN_PID_L2_B_RAWDEV)
-			    && bch->dev)
-				hif = &bch->dev->rport.pif;
-			else
-				hif = &bch->inst.up;
-			skb_trim(skb, 0);
-			return (if_newhead(hif, hh->prim | CONFIRM,
-					   hh->dinfo, skb));
-		}
-	} else if ((hh->prim == (PH_ACTIVATE | REQUEST)) ||
-		   (hh->prim == (DL_ESTABLISH | REQUEST))) {
-		if (test_and_set_bit(BC_FLG_ACTIV, &bch->Flag))
+	if ((hh->prim == PH_DATA_REQ) || (hh->prim == DL_DATA_REQ)) {
+		ret = channel_senddata(chan, hh->dinfo, skb);
+		if (ret > 0) { 
+			/* data gets transmitted later in USB ISO OUT traffic */
 			ret = 0;
-		else {
-			bch->inst.lock(bch->inst.data, 0);
-			ret =
-			    mode_bchannel(bch, bch->channel,
-					  bch->inst.pid.protocol[1]);
-			bch->inst.unlock(bch->inst.data);
 		}
-		if (bch->inst.pid.protocol[2] == ISDN_PID_L2_B_RAWDEV)
-			if (bch->dev)
-				if_link(&bch->dev->rport.pif,
-					hh->prim | CONFIRM, 0, 0, NULL, 0);
-		skb_trim(skb, 0);
-		return (if_newhead
-			(&bch->inst.up, hh->prim | CONFIRM, ret, skb));
-	} else if ((hh->prim == (PH_DEACTIVATE | REQUEST))
-		   || (hh->prim == (DL_RELEASE | REQUEST))
-		   || (hh->prim == (MGR_DISCONNECT | REQUEST))) {
-		   	
-		bch->inst.lock(bch->inst.data, 0);
-		if (test_and_clear_bit(BC_FLG_TX_NEXT, &bch->Flag)) {
-			dev_kfree_skb(bch->next_skb);
-			bch->next_skb = NULL;
-		}
-		test_and_clear_bit(BC_FLG_TX_BUSY, &bch->Flag);
-		mode_bchannel(bch, bch->channel, ISDN_PID_NONE);
-		test_and_clear_bit(BC_FLG_ACTIV, &bch->Flag);
-		bch->inst.unlock(bch->inst.data);
-		skb_trim(skb, 0);
-		if (hh->prim != (MGR_DISCONNECT | REQUEST)) {
-			if (bch->inst.pid.protocol[2] ==
-			    ISDN_PID_L2_B_RAWDEV)
-				if (bch->dev)
-					if_link(&bch->dev->rport.pif,
-						hh->prim | CONFIRM, 0, 0,
-						NULL, 0);
-			if (!if_newhead
-			    (&bch->inst.up, hh->prim | CONFIRM, 0, skb))
-				return (0);
-		}
-		
-		ret = 0;
-	} else if (hh->prim == (PH_CONTROL | REQUEST)) {
-		// do not handle PH_CONTROL | REQUEST ??
-	} else {
-		printk(KERN_WARNING "%s: unknown prim(%x)\n",
-		       __FUNCTION__, hh->prim);
+		return(ret);
+	} 
+	if (test_bit(FLG_DCHANNEL, &chan->Flags)) {
+		ret = handle_dmsg(chan, skb);
+		if (ret != -EAGAIN)
+			return(ret);
+		ret = -EINVAL;
+	}
+	if (test_bit(FLG_BCHANNEL, &chan->Flags)) {
+		ret = handle_bmsg(chan, skb);
+		if (ret != -EAGAIN)
+			return(ret);
+		ret = -EINVAL;
 	}
 	if (!ret)
 		dev_kfree_skb(skb);
-	return (ret);
+	return(ret);
 }
 
-/*****************************************************/
-/* collect data from interrupt or isochron in        */
-/*****************************************************/
-static void
-collect_rx_frame(usb_fifo * fifo, __u8 * data, int len, int finish)
+
+static int
+hfcsusb_manager(void *data, u_int prim, void *arg)
 {
-	hfcsusb_t *card = fifo->card;
+	hfcsusb_t *hw = NULL;
+	mISDNinstance_t *inst = data;
 	struct sk_buff *skb;
-	u_char *ptr;
-	int fifon;
+	int channel = -1;
 	int i;
+	channel_t *chan = NULL;
+	u_long flags;
 
-	fifon = fifo->fifonum;
-
-	if (!fifo->skbuff) {
-		fifo->skbuff = dev_alloc_skb(fifo->max_size + 3);
-		if (!fifo->skbuff) {
-			printk(KERN_INFO
-			       "HFC-S USB: cannot allocate buffer (dev_alloc_skb) fifo:%d\n",
-			       fifon);
-			return;
-		}
+	if (!data) {
+		MGR_HASPROTOCOL_HANDLER(prim, arg, &hw_mISDNObj)
+		    printk(KERN_ERR "%s %s: no data prim %x arg %p\n",
+			   hw->chan[D].inst.name, __FUNCTION__, prim, arg);
+		return (-EINVAL);
 	}
-	if (len) {
-		if (fifo->skbuff->len + len < fifo->max_size) {
-			memcpy(skb_put(fifo->skbuff, len), data, len);
-		} else {
+	
+	spin_lock_irqsave(&hw_mISDNObj.lock, flags);
 
-			if (debug & 0x10000) {
-				printk(KERN_INFO "HFC-S USB: ");
-				for (i = 0; i < 15; i++)
-					printk("%.2x ",
-					       fifo->skbuff->data[fifo->
-								  skbuff->
-								  len -
-								  15 + i]);
-				printk("\n");
+	/* find channel and card */
+	list_for_each_entry(hw, &hw_mISDNObj.ilist, list) {
+		i = 0;
+		while (i < MAX_CHAN) {
+			if (hw->chan[i].Flags &&
+				&hw->chan[i].inst == inst) {
+				channel = i;
+				chan = &hw->chan[i];
+				break;
 			}
-
-			printk(KERN_INFO
-			       "HCF-USB: got frame exceeded fifo->max_size:%d on fifo:%d\n",
-			       fifo->max_size, fifon);
+			i++;
 		}
+		if (channel >= 0)
+			break;
 	}
-
-	/* Transparent mode data to upper layer */
-	if ((fifon == HFCUSB_B1_RX) || (fifon == HFCUSB_B2_RX)) {
-		if (card->bch[fifo->bch_idx].protocol == ISDN_PID_L1_B_64TRANS) {
-			if (fifo->skbuff->len >= 128) {
-				if (!(skb = alloc_stack_skb(fifo->skbuff->len,
-					card->bch->up_headerlen)))
-					printk(KERN_WARNING "HFC-S USB: receive out of memory\n");
-				else {
-					ptr =
-					    skb_put(skb,
-						    fifo->skbuff->
-						    len);
-					memcpy(ptr, fifo->skbuff->data,
-						fifo->skbuff->len);
-					dev_kfree_skb(fifo->skbuff);
-					fifo->skbuff=NULL;
-
-					skb_queue_tail(&card->bch[fifo->bch_idx].
-						       rqueue,
-						       skb);
-
-					bch_sched_event(&card->bch[fifo->bch_idx], B_RCVBUFREADY);
-				}
-			}
-			return;
-		}
+	spin_unlock_irqrestore(&hw_mISDNObj.lock, flags);
+	
+	if (channel < 0) {
+		printk(KERN_ERR
+		       "%s: no card/channel found  data %p prim %x arg %p\n",
+		       __FUNCTION__, data, prim, arg);
+		return (-EINVAL);
 	}
 
-	/* we have a complete hdlc packet */
-	if (finish) {
-		if ((!fifo->skbuff->data[fifo->skbuff->len - 1])
-		    && (fifo->skbuff->len > 3)) {
-			/* remove CRC & status */
-			skb_trim(fifo->skbuff, fifo->skbuff->len - 3);
-
-			switch (fifon) {
-				case HFCUSB_D_RX:
-					if ((skb =
-					     alloc_stack_skb(fifo->skbuff->
-							     len,
-							     card->dch.
-							     up_headerlen)))
-					{
-						ptr =
-						    skb_put(skb,
-							    fifo->skbuff->
-							    len);
-						memcpy(ptr, fifo->skbuff->data, fifo->skbuff->len);
-						dev_kfree_skb(fifo->skbuff);
-						fifo->skbuff=NULL;
-						
-						skb_queue_tail(&card->dch.
-							       rqueue,
-							       skb);
-
-						dchannel_sched_event
-						    (&card->dch,
-						     D_RCVBUFREADY);
-
-					} else {
-						printk(KERN_WARNING
-						       "HFC-S USB: D receive out of memory\n");
-					}
-					break;
-				case HFCUSB_B1_RX:
-				case HFCUSB_B2_RX:
-					if (card->bch[fifo->bch_idx].protocol > ISDN_PID_NONE) {
-						if ((skb =
-						     alloc_stack_skb(fifo->skbuff->
-								     len,
-								     card->
-								     bch[fifo->bch_idx].
-								     up_headerlen)))
-						{
-							ptr =
-							    skb_put(skb,
-								    fifo->skbuff->
-								    len);
-							memcpy(ptr, fifo->skbuff->data, fifo->skbuff->len);
-							dev_kfree_skb(fifo->skbuff);
-							fifo->skbuff=NULL;
-							
-							skb_queue_tail(&card->
-								       bch
-								       [fifo->bch_idx].
-								       rqueue,
-								       skb);
-							bch_sched_event(&card->
-									bch
-									[fifo->bch_idx],
-									B_RCVBUFREADY);
-						} else {
-							printk(KERN_WARNING
-							       "HFC-S USB: B%i receive out of memory\n",
-							       fifo->bch_idx);
-						}
-					}
-					break;
-				default:
-					printk(KERN_WARNING
-					       "HFC-S USB: FIFO UNKWON!\n");
-			}
-
-		} else {
-			if (fifo->skbuff->len > 3) {
-				printk(KERN_INFO
-				       "HFC-S USB: got frame %d bytes but CRC ERROR on fifo:%d!!!\n",
-				       fifo->skbuff->len, fifon);
-				if (debug & 0x10000) {
-					printk(KERN_INFO "HFC-S USB: ");
-					for (i = 0; i < 15; i++)
-						printk("%.2x ",
-						       fifo->skbuff->
-						       data[fifo->skbuff->
-							    len - 15 + i]);
-					printk("\n");
-				}
+	switch (prim) {
+		case MGR_REGLAYER | CONFIRM:
+			mISDN_setpara(chan, &inst->st->para);
+			break;
+		case MGR_UNREGLAYER | REQUEST:
+			if ((skb = create_link_skb(PH_CONTROL | REQUEST,
+				HW_DEACTIVATE, 0, NULL, 0))) {
+				if (hfcsusb_l2l1(inst, skb))
+					dev_kfree_skb(skb);
+			} else
+				printk(KERN_WARNING "no SKB in %s MGR_UNREGLAYER | REQUEST\n", __FUNCTION__);
+			hw_mISDNObj.ctrl(inst, MGR_UNREGLAYER | REQUEST, NULL);
+			break;
+		case MGR_CLRSTPARA | INDICATION:
+			arg = NULL;
+		case MGR_ADDSTPARA | INDICATION:
+			mISDN_setpara(chan, arg);
+			break;
+		case MGR_RELEASE | INDICATION:
+			if (channel == 2) {
+				release_card(hw);
 			} else {
-				printk(KERN_INFO
-				       "HFC-S USB: frame to small (%d bytes)!!!\n",
-				       fifo->skbuff->len);
+				hw_mISDNObj.refcnt--;
 			}
-			skb_trim(fifo->skbuff, 0);
+			break;
+		case MGR_SETSTACK | INDICATION:
+			if ((channel != 2) && (inst->pid.global == 2)) {
+				if ((skb = create_link_skb(PH_ACTIVATE | REQUEST,
+					0, 0, NULL, 0))) {
+					if (hfcsusb_l2l1(inst, skb))
+						dev_kfree_skb(skb);
+				}
+				if (inst->pid.protocol[2] == ISDN_PID_L2_B_TRANS)
+					mISDN_queue_data(inst, FLG_MSG_UP, DL_ESTABLISH | INDICATION,
+						0, 0, NULL, 0);
+				else
+					mISDN_queue_data(inst, FLG_MSG_UP, PH_ACTIVATE | INDICATION,
+						0, 0, NULL, 0);
+			}
+			break;
+		case MGR_GLOBALOPT | REQUEST:
+			if (arg) {
+				// FIXME: detect cards with HEADSET
+				u_int *gopt = arg;
+				*gopt = GLOBALOPT_INTERNAL_CTRL |
+				    GLOBALOPT_EXTERNAL_EQUIPMENT |
+				    GLOBALOPT_HANDSET;
+			} else
+				return (-EINVAL);
+			break;
+		case MGR_SELCHANNEL | REQUEST:
+			// no special procedure
+			return (-EINVAL);
+			PRIM_NOT_HANDLED(MGR_CTRLREADY | INDICATION);
+		default:
+			printk(KERN_WARNING "%s %s: prim %x not handled\n",
+			       hw->chan[D].inst.name, __FUNCTION__, prim);
+			return (-EINVAL);
+	}
+	return (0);
+}
+
+
+/***********************************************/
+/* collect data from interrupt or isochron in  */
+/***********************************************/
+static void
+collect_rx_frame(usb_fifo * fifo, __u8 * data, unsigned int len, int finish)
+{
+	hfcsusb_t	*card = fifo->card;
+	channel_t	*ch = &card->chan[fifo->ch_idx];
+	struct sk_buff	*skb;	/* data buffer for upper layer */
+	int		fifon;
+
+	if (!len)
+		return;
+		
+	fifon = fifo->fifonum;
+	
+	if (!ch->rx_skb) {
+		ch->rx_skb = alloc_stack_skb(ch->maxlen + 3, ch->up_headerlen);
+		if (!ch->rx_skb) {
+			printk(KERN_DEBUG "%s: No mem for rx_skb\n", __FUNCTION__);
+			return;
+		}
+	}
+	memcpy(skb_put(ch->rx_skb, len), data, len);
+
+	if (test_bit(FLG_HDLC, &ch->Flags)) {
+		/* we have a complete hdlc packet */
+		if (finish) {
+			if ((ch->rx_skb->len > 3) &&
+			   (!(ch->rx_skb->data[ch->rx_skb->len - 1]))) {
+
+				/* remove CRC & status */
+				skb_trim(ch->rx_skb, ch->rx_skb->len - 3);
+
+				if (ch->rx_skb->len < MISDN_COPY_SIZE) {
+					skb = alloc_stack_skb(ch->rx_skb->len, ch->up_headerlen);
+					if (skb) {
+						memcpy(skb_put(skb, ch->rx_skb->len),
+							ch->rx_skb->data, ch->rx_skb->len);
+						skb_trim(ch->rx_skb, 0);
+					} else {
+						skb = ch->rx_skb;
+						ch->rx_skb = NULL;
+					}
+				} else {
+					skb = ch->rx_skb;
+					ch->rx_skb = NULL;
+				}
+				queue_ch_frame(ch, INDICATION, MISDN_ID_ANY, skb);				
+				
+			} else {
+				printk ("HFC-S USB: CRC or minlen ERROR\n");
+			}
+		}
+	} else {
+		if (ch->rx_skb->len >= TRANSP_PACKET_SIZE) {
+			/* deliver transparent data to layer2 */
+			queue_ch_frame(ch, INDICATION, MISDN_ID_ANY, ch->rx_skb);
+			ch->rx_skb = NULL;
 		}
 	}
 }
@@ -1243,7 +1023,7 @@ rx_iso_complete(struct urb *urb, struct pt_regs *regs)
 				/* care for L1 state only for D-Channel
 				   to avoid overlapped iso completions */
 
-				if (fifon == 5) {
+				if (fifon == HFCUSB_D_RX) {
 					/* the S0 state is in the upper half
 					   of the 1st status byte */
 					state_handler(card, buf[0] >> 4);
@@ -1253,9 +1033,7 @@ rx_iso_complete(struct urb *urb, struct pt_regs *regs)
 				if (len > 2)
 					collect_rx_frame(fifo, buf + 2,
 							 len - 2,
-							 (len <
-							  maxlen) ?
-							 eof[fifon] : 0);
+							 (len < maxlen) ? eof[fifon] : 0);
 			} else {
 				collect_rx_frame(fifo, buf, len,
 						 (len <
@@ -1308,16 +1086,12 @@ rx_int_complete(struct urb *urb, struct pt_regs *regs)
 		       urb->status);
 
 		fifo->urb->interval = 0;	/* cancel automatic rescheduling */
-		if (fifo->skbuff) {
-			dev_kfree_skb_any(fifo->skbuff);
-			fifo->skbuff = NULL;
-		}
 		return;
 	}
 	len = urb->actual_length;
 	buf = fifo->buffer;
 	maxlen = fifo->usb_packet_maxlen;
-
+	
 	if (fifo->last_urblen != fifo->usb_packet_maxlen) {
 		/* the threshold mask is in the 2nd status byte */
 		card->threshold_mask = buf[1];
@@ -1336,6 +1110,7 @@ rx_int_complete(struct urb *urb, struct pt_regs *regs)
 				 (len < maxlen) ? eof[fifon] : 0);
 	}
 	fifo->last_urblen = urb->actual_length;
+	
 	status = usb_submit_urb(urb, GFP_ATOMIC);
 	if (status) {
 		printk(KERN_INFO
@@ -1344,44 +1119,38 @@ rx_int_complete(struct urb *urb, struct pt_regs *regs)
 }				/* rx_int_complete */
 
 
-void
-next_d_tx_frame(hfcsusb_t * card)
+/***********************************/
+/* check if new buffer for channel */
+/* is waitinng is transmitt queue  */
+/***********************************/
+int
+next_tx_frame(hfcsusb_t * hw, __u8 channel)
 {
-	if (test_and_clear_bit(FLG_TX_NEXT, &card->dch.DFlags)) {
-		if (card->dch.next_skb) {
-			card->dch.tx_len = card->dch.next_skb->len;
-			memcpy(card->dch.tx_buf,
-			       card->dch.next_skb->data, card->dch.tx_len);
-			card->dch.tx_idx = 0;
-			dchannel_sched_event(&card->dch, D_XMTBUFREADY);
+	channel_t *ch = &hw->chan[channel];
+
+	if (ch->tx_skb)
+		dev_kfree_skb(ch->tx_skb);
+	if (test_and_clear_bit(FLG_TX_NEXT, &ch->Flags)) {
+		ch->tx_skb = ch->next_skb;
+		if (ch->tx_skb) {
+			mISDN_head_t *hh = mISDN_HEAD_P(ch->tx_skb);
+			ch->next_skb = NULL;
+			test_and_clear_bit(FLG_TX_NEXT, &ch->Flags);
+			ch->tx_idx = 0;
+			queue_ch_frame(ch, CONFIRM, hh->dinfo, NULL);
+			return (1);
 		} else {
 			printk(KERN_WARNING
-			       "hfcd tx irq TX_NEXT without skb\n");
-			test_and_clear_bit(FLG_TX_BUSY, &card->dch.DFlags);
+			       "%s channel(%i) TX_NEXT without skb\n",
+			       ch->inst.name, channel);
+			test_and_clear_bit(FLG_TX_NEXT, &ch->Flags);
 		}
 	} else
-		test_and_clear_bit(FLG_TX_BUSY, &card->dch.DFlags);
+		ch->tx_skb = NULL;
+	test_and_clear_bit(FLG_TX_BUSY, &ch->Flags);
+	return (0);
 }
 
-void
-next_b_tx_frame(hfcsusb_t * card, __u8 bch_idx)
-{
-	if (test_and_clear_bit(BC_FLG_TX_NEXT, &card->bch[bch_idx].Flag)) {
-		if (card->bch[bch_idx].next_skb) {
-			card->bch[bch_idx].tx_idx = 0;
-			card->bch[bch_idx].tx_len =
-			    card->bch[bch_idx].next_skb->len;
-			memcpy(card->bch[bch_idx].tx_buf,
-			       card->bch[bch_idx].next_skb->data,
-			       card->bch[bch_idx].tx_len);
-			bch_sched_event(&card->bch[bch_idx],
-					B_XMTBUFREADY);
-		} else
-			printk(KERN_WARNING
-			       "hfc B%i tx irq TX_NEXT without skb\n",
-			       bch_idx);
-	}
-}
 
 /*****************************************************/
 /* transmit completion routine for all ISO tx fifos */
@@ -1392,11 +1161,10 @@ tx_iso_complete(struct urb *urb, struct pt_regs *regs)
 	iso_urb_struct *context_iso_urb = (iso_urb_struct *) urb->context;
 	usb_fifo *fifo = context_iso_urb->owner_fifo;
 	hfcsusb_t *card = fifo->card;
-	int k, tx_offset, num_isoc_packets, sink, len, current_len,
+	channel_t *ch = &card->chan[fifo->ch_idx];
+	int k, tx_offset, num_isoc_packets, sink, remain, current_len,
 	    errcode;
-	int *tx_len, *tx_idx;
-	u_char *tx_buf;
-	int frame_complete, transp_mode=0, fifon, status;
+	int frame_complete, fifon, status;
 	__u8 threshbit;
 	__u8 threshtable[8] = { 1, 2, 4, 8, 0x10, 0x20, 0x40, 0x80 };
 
@@ -1404,7 +1172,7 @@ tx_iso_complete(struct urb *urb, struct pt_regs *regs)
 	status = urb->status;
 
 	tx_offset = 0;
-
+		
 	if (fifo->active && !status) {
 		/* is FifoFull-threshold set for our channel? */
 		threshbit = threshtable[fifon] & card->threshold_mask;
@@ -1424,49 +1192,31 @@ tx_iso_complete(struct urb *urb, struct pt_regs *regs)
 		       sizeof(context_iso_urb->buffer));
 		frame_complete = 0;
 
-		switch (fifon) {
-			case HFCUSB_D_TX:
-				tx_buf = card->dch.tx_buf;
-				tx_len = &card->dch.tx_len;
-				tx_idx = &card->dch.tx_idx;
-				break;
-			case HFCUSB_B1_TX:
-			case HFCUSB_B2_TX:
-				tx_buf = card->bch[fifo->bch_idx].tx_buf;
-				tx_len = &card->bch[fifo->bch_idx].tx_len;
-				tx_idx = &card->bch[fifo->bch_idx].tx_idx;
-				transp_mode = card->bch[fifo->bch_idx].protocol == ISDN_PID_L1_B_64TRANS;
-				break;
-			default:
-				/* should never happen ... */
-				tx_buf = NULL;
-				tx_len = 0;
-				tx_idx = 0;
-		}
-
 		/* Generate next Iso Packets */
 		for (k = 0; k < num_isoc_packets; ++k) {
-			len = (*tx_len - *tx_idx);
-			if (len) {
+			if (ch->tx_skb) {
+				remain = ch->tx_skb->len - ch->tx_idx;
+			} else {
+				remain = 0; 
+			}
+			if (remain>0) {
 				/* we lower data margin every msec */
 				fifo->bit_line -= sink;
 				current_len = (0 - fifo->bit_line) / 8;
+				
 				/* maximum 15 byte for every ISO packet makes our life easier */
 				if (current_len > 14)
 					current_len = 14;
-				current_len =
-				    (len <=
-				     current_len) ? len : current_len;
+				current_len = (remain <= current_len) ? remain : current_len;
 
 				/* how much bit do we put on the line? */
 				fifo->bit_line += current_len * 8;
 
 				context_iso_urb->buffer[tx_offset] = 0;
-				if (current_len == len) {
-					if (!transp_mode) {
+				if (current_len == remain) {
+					if (test_bit(FLG_HDLC, &ch->Flags)) {
 						/* here frame completion */
-						context_iso_urb->
-						    buffer[tx_offset] = 1;
+						context_iso_urb->buffer[tx_offset] = 1;
 						/* add 2 byte flags and 16bit CRC at end of ISDN frame */
 						fifo->bit_line += 32;
 					}
@@ -1474,20 +1224,17 @@ tx_iso_complete(struct urb *urb, struct pt_regs *regs)
 				}
 
 				/* copy tx data to iso-urb buffer */
-				memcpy(context_iso_urb->buffer +
-				       tx_offset + 1,
-				       (tx_buf + *tx_idx), current_len);
-				*tx_idx += current_len;
+				memcpy(context_iso_urb->buffer + tx_offset + 1,
+				       (ch->tx_skb->data + ch->tx_idx), current_len);
+				ch->tx_idx += current_len;
 
 				/* define packet delimeters within the URB buffer */
 				urb->iso_frame_desc[k].offset = tx_offset;
-				urb->iso_frame_desc[k].length =
-				    current_len + 1;
+				urb->iso_frame_desc[k].length = current_len + 1;
 
 				tx_offset += (current_len + 1);
 			} else {
-				urb->iso_frame_desc[k].offset =
-				    tx_offset++;
+				urb->iso_frame_desc[k].offset = tx_offset++;
 
 				urb->iso_frame_desc[k].length = 1;
 				fifo->bit_line -= sink;	/* we lower data margin every msec */
@@ -1497,41 +1244,9 @@ tx_iso_complete(struct urb *urb, struct pt_regs *regs)
 				}
 			}
 
-			if (frame_complete) {
-				fifo->delete_flg = 1;
+			if (frame_complete)
+				next_tx_frame(card, fifo->ch_idx);
 
-				/* check for next tx data in queue */
-				switch (fifon) {
-					case HFCUSB_D_TX:
-						next_d_tx_frame(card);
-						if (fifo->skbuff
-						    && fifo->delete_flg) {
-							dev_kfree_skb_any
-							    (fifo->skbuff);
-							fifo->skbuff =
-							    NULL;
-							fifo->delete_flg =
-							    0;
-						}
-						frame_complete = 0;
-						break;
-
-					case HFCUSB_B1_TX:
-					case HFCUSB_B2_TX:
-						next_b_tx_frame(card, fifo->bch_idx);
-						
-						card->bch[fifo->bch_idx].tx_len =
-						    0;
-						test_and_clear_bit
-						    (BC_FLG_TX_BUSY,
-						     &card->bch[fifo->bch_idx].
-						     Flag);
-						card->bch[fifo->bch_idx].tx_idx =
-						    card->bch[fifo->bch_idx].
-						    tx_len;
-						break;
-				}
-			}
 		}
 		errcode = usb_submit_urb(urb, GFP_ATOMIC);
 		if (errcode < 0) {
@@ -1544,10 +1259,10 @@ tx_iso_complete(struct urb *urb, struct pt_regs *regs)
 		abuse DChannel tx iso completion to trigger NT mode state changes
 		tx_iso_complete is assumed to be called every fifo->intervall ms
 		*/
-		if ((fifon == HFCUSB_D_TX) && (card->hw_mode & HW_MODE_NT)
-		    && (card->hw_mode & NT_ACTIVATION_TIMER)) {
+		if ((fifon == HFCUSB_D_TX) && (card->portmode & PORT_MODE_NT)
+		    && (card->portmode & NT_ACTIVATION_TIMER)) {
 			if ((--card->nt_timer) < 0)
-				dchannel_sched_event(&card->dch, D_L1STATECHANGE);
+				S0_new_state(&card->chan[D]);
 		}
 
 	} else {
@@ -1673,25 +1388,7 @@ start_int_fifo(usb_fifo * fifo)
 		       "HFC-S USB: submit URB error(start_int_info): status:%i\n",
 		       errcode);
 		fifo->active = 0;
-		fifo->skbuff = NULL;
 	}
-}
-
-/*
- * hardware init function, called after the basic
- * struct's and stack's were setuped
- *
- */
-void
-hw_init(hfcsusb_t * card)
-{
-	/* setup basic function pointers */
-	card->dch.hw_bh = S0_new_state;
-
-	/* init bchannel mode */
-	mode_bchannel(&card->bch[0], 0, -1);
-	mode_bchannel(&card->bch[1], 1, -1);
-	card->dch.ph_state = 0;
 }
 
 /* Hardware Initialization */
@@ -1740,7 +1437,6 @@ setup_hfcsusb(hfcsusb_t * card)
 	fifo = card->fifos;
 	for (i = 0; i < HFCUSB_NUM_FIFOS; i++) {
 		write_usb(card, HFCUSB_FIFO, i);	/* select the desired fifo */
-		fifo[i].skbuff = NULL;	/* init buffer pointer */
 		fifo[i].max_size =
 		    (i <= HFCUSB_B2_RX) ? MAX_BCH_SIZE : MAX_DFRAME_LEN;
 		fifo[i].last_urblen = 0;
@@ -1753,7 +1449,7 @@ setup_hfcsusb(hfcsusb_t * card)
 		write_usb(card, HFCUSB_INC_RES_F, 2);	/* reset the fifo */
 	}
 
-	if (card->hw_mode & HW_MODE_NT) {
+	if (card->portmode & PORT_MODE_NT) {
 		write_usb(card, HFCUSB_SCTRL, 0x44);		/* disable B transmitters + capacitive mode, enable NT mode */
 		write_usb(card, HFCUSB_CLKDEL, CLKDEL_NT);	/* clock delay value */
 		write_usb(card, HFCUSB_STATES, 1 | 0x10);	/* set deactivated mode */
@@ -1774,7 +1470,7 @@ setup_hfcsusb(hfcsusb_t * card)
 	/* init the background machinery for control requests */
 	card->ctrl_read.bRequestType = 0xc0;
 	card->ctrl_read.bRequest = 1;
-	card->ctrl_read.wLength = 1;
+	card->ctrl_read.wLength = cpu_to_le16(1);
 	card->ctrl_write.bRequestType = 0x40;
 	card->ctrl_write.bRequest = 0;
 	card->ctrl_write.wLength = 0;
@@ -1791,15 +1487,16 @@ setup_hfcsusb(hfcsusb_t * card)
 		card->fifos[i].active = 0;
 	}
 
-
 	/* 3 (+1) INT IN + 3 ISO OUT */
 	if (card->cfg_used == CNF_3INT3ISO
 	    || card->cfg_used == CNF_4INT3ISO) {
+	    	
 		start_int_fifo(card->fifos + HFCUSB_D_RX);
 		/*
 		   if (card->fifos[HFCUSB_PCM_RX].pipe)
 		   start_int_fifo(card->fifos + HFCUSB_PCM_RX);
 		 */
+
 		start_int_fifo(card->fifos + HFCUSB_B1_RX);
 		start_int_fifo(card->fifos + HFCUSB_B2_RX);
 	}
@@ -1823,6 +1520,7 @@ setup_hfcsusb(hfcsusb_t * card)
 				 ISOC_PACKETS_B, rx_iso_complete, 16);
 	}
 
+
 	start_isoc_chain(card->fifos + HFCUSB_D_TX, ISOC_PACKETS_D,
 			 tx_iso_complete, 1);
 	start_isoc_chain(card->fifos + HFCUSB_B1_TX, ISOC_PACKETS_B,
@@ -1838,31 +1536,22 @@ setup_hfcsusb(hfcsusb_t * card)
 static void
 release_card(hfcsusb_t * card)
 {
-	int i;
+	int	i;
+	u_long	flags;
 
-#ifdef LOCK_STATISTIC
-	printk(KERN_INFO
-	       "try_ok(%d) try_wait(%d) try_mult(%d) try_inirq(%d)\n",
-	       card->lock.try_ok, card->lock.try_wait, card->lock.try_mult,
-	       card->lock.try_inirq);
-	printk(KERN_INFO "irq_ok(%d) irq_fail(%d)\n", card->lock.irq_ok,
-	       card->lock.irq_fail);
-#endif
 	if (debug & 0x10000)
 		printk(KERN_DEBUG "%s\n", __FUNCTION__);
 
-	lock_dev(card, 0);
-	mode_bchannel(&card->bch[0], 0, ISDN_PID_NONE);
-	mode_bchannel(&card->bch[1], 1, ISDN_PID_NONE);
-	mISDN_free_bch(&card->bch[1]);
-	mISDN_free_bch(&card->bch[0]);
-	mISDN_free_dch(&card->dch);
-	hw_mISDNObj.ctrl(card->dch.inst.up.peer, MGR_DISCONNECT | REQUEST,
-			 &card->dch.inst.up);
-	hw_mISDNObj.ctrl(&card->dch.inst, MGR_UNREGLAYER | REQUEST, NULL);
+	setup_bchannel(&card->chan[B1], ISDN_PID_NONE);
+	setup_bchannel(&card->chan[B2], ISDN_PID_NONE);
+	mISDN_freechannel(&card->chan[B1]);
+	mISDN_freechannel(&card->chan[B2]);
+	mISDN_freechannel(&card->chan[D]);
+	hw_mISDNObj.ctrl(&card->chan[D].inst, MGR_UNREGLAYER | REQUEST, NULL);
+	
+	spin_lock_irqsave(&hw_mISDNObj.lock, flags);
 	list_del(&card->list);
-	unlock_dev(card);
-
+	spin_unlock_irqrestore(&hw_mISDNObj.lock, flags);
 	schedule_timeout((80 * HZ) / 1000);	/* Timeout 80ms */
 
 	/* tell all fifos to terminate */
@@ -1884,126 +1573,138 @@ release_card(hfcsusb_t * card)
 		card->fifos[i].active = 0;
 	}
 
-
 	/* wait for all URBS to terminate */
 	if (card->ctrl_urb) {
 		usb_kill_urb(card->ctrl_urb);
 		usb_free_urb(card->ctrl_urb);
 		card->ctrl_urb = NULL;
 	}
-
 	hfcsusb_cnt--;
+	if (card->intf)
+		usb_set_intfdata(card->intf, NULL);
 	kfree(card);
 }
 
 static int
 setup_instance(hfcsusb_t * card)
 {
-	int i, err;
-	mISDN_pid_t pid;
-
-	list_add_tail(&card->list, &hw_mISDNObj.ilist);
-	card->dch.debug = debug;
-	lock_HW_init(&card->lock);
-	card->dch.inst.lock = lock_dev;
-	card->dch.inst.unlock = unlock_dev;
-	card->dch.inst.pid.layermask = ISDN_LAYER(0);
-	card->dch.inst.pid.protocol[0] = ISDN_PID_L0_TE_S0;
-	mISDN_init_instance(&card->dch.inst, &hw_mISDNObj, card);
-	sprintf(card->dch.inst.name, "hfcsusb_%d", hfcsusb_cnt + 1);
-	mISDN_set_dchannel_pid(&pid, protocol[hfcsusb_cnt],
-			       layermask[hfcsusb_cnt]);
-	mISDN_init_dch(&card->dch);
-	card->dch.hw = card;
-	card->hw_mode = 0;
+	int		i, err;
+	mISDN_pid_t	pid;
+	u_long		flags;
 	
-	for (i = 0; i < 2; i++) {
-		card->bch[i].channel = i;
-		mISDN_init_instance(&card->bch[i].inst, &hw_mISDNObj,
-				    card);
-		card->bch[i].inst.pid.layermask = ISDN_LAYER(0);
-		card->bch[i].inst.lock = lock_dev;
-		card->bch[i].inst.unlock = unlock_dev;
-		card->bch[i].debug = debug;
-		sprintf(card->bch[i].inst.name, "%s B%d",
-			card->dch.inst.name, i + 1);
-		mISDN_init_bch(&card->bch[i]);
-		card->bch[i].hw = card;
-		if (card->bch[i].dev) {
-			card->bch[i].dev->wport.pif.func = hfcsusb_l2l1B;
-			card->bch[i].dev->wport.pif.fdata = &card->bch[i];
+	spin_lock_irqsave(&hw_mISDNObj.lock, flags);
+		
+	list_add_tail(&card->list, &hw_mISDNObj.ilist);
+	spin_unlock_irqrestore(&hw_mISDNObj.lock, flags);
+	card->chan[D].debug = debug;
+	
+	/* link card->fifos[] to card->chan[] */
+	card->fifos[HFCUSB_D_RX].ch_idx = D;
+	card->fifos[HFCUSB_D_TX].ch_idx = D;
+	card->fifos[HFCUSB_B1_RX].ch_idx = B1;
+	card->fifos[HFCUSB_B1_TX].ch_idx = B1;
+	card->fifos[HFCUSB_B2_RX].ch_idx = B2;
+	card->fifos[HFCUSB_B2_TX].ch_idx = B2;
+	card->fifos[HFCUSB_PCM_RX].ch_idx = PCM;
+	card->fifos[HFCUSB_PCM_TX].ch_idx = PCM;
+	
+	card->chan[D].channel = D;
+	card->chan[D].state = 0;
+	card->chan[D].inst.hwlock = NULL;
+	card->chan[D].inst.pid.layermask = ISDN_LAYER(0);
+	card->chan[D].inst.pid.protocol[0] = ISDN_PID_L0_TE_S0;
+	card->chan[D].inst.class_dev.dev = &card->dev->dev;
+	mISDN_init_instance(&card->chan[D].inst, &hw_mISDNObj, card, hfcsusb_l2l1);
+	sprintf(card->chan[D].inst.name, "hfcsusb_%d", hfcsusb_cnt + 1);
+	mISDN_set_dchannel_pid(&pid, protocol[hfcsusb_cnt], layermask[hfcsusb_cnt]);
+	mISDN_initchannel(&card->chan[D], MSK_INIT_DCHANNEL, MAX_DFRAME_LEN_L1);
+	card->chan[D].hw = card;
+	card->portmode = 0;
+	
+	for (i = B1; i <= B2; i++) {
+		card->chan[i].channel = i;
+		mISDN_init_instance(&card->chan[i].inst, &hw_mISDNObj, card, hfcsusb_l2l1);
+		card->chan[i].inst.pid.layermask = ISDN_LAYER(0);
+		card->chan[i].inst.hwlock = NULL;
+		card->chan[i].inst.class_dev.dev = &card->dev->dev;
+		card->chan[i].debug = debug;
+		sprintf(card->chan[i].inst.name, "%s B%d",
+			card->chan[D].inst.name, i + 1);
+		mISDN_initchannel(&card->chan[i], MSK_INIT_BCHANNEL, MAX_DATA_MEM);
+		card->chan[i].hw = card;
+#ifdef FIXME
+		if (card->chan[i].dev) {
+			card->chan[i].dev->wport.pif.func = hfcsusb_l2l1;
+			card->chan[i].dev->wport.pif.fdata = &card->chan[i];
 		}
+#endif
 	}
+	
+	card->chan[PCM].channel = PCM;
 
 	if (protocol[hfcsusb_cnt] & 0x10) {
 		// NT Mode
-		printk (KERN_INFO "%s wants NT Mode\n", card->dch.inst.name);
-		card->dch.inst.pid.protocol[0] = ISDN_PID_L0_NT_S0;
-		card->dch.inst.pid.protocol[1] = ISDN_PID_L1_NT_S0;
+		printk (KERN_INFO "%s wants NT Mode\n", card->chan[D].inst.name);
+		card->chan[D].inst.pid.protocol[0] = ISDN_PID_L0_NT_S0;
+		card->chan[D].inst.pid.protocol[1] = ISDN_PID_L1_NT_S0;
 		pid.protocol[0] = ISDN_PID_L0_NT_S0;
 		pid.protocol[1] = ISDN_PID_L1_NT_S0;
-		card->dch.inst.pid.layermask |= ISDN_LAYER(1);
+		card->chan[D].inst.pid.layermask |= ISDN_LAYER(1);
 		pid.layermask |= ISDN_LAYER(1);
 		if (layermask[i] & ISDN_LAYER(2))
 			pid.protocol[2] = ISDN_PID_L2_LAPD_NET;
 		/* select NT mode with activated NT Timer (T1) */
-		card->hw_mode |= (HW_MODE_NT | NT_ACTIVATION_TIMER);
+		card->portmode |= (PORT_MODE_NT | NT_ACTIVATION_TIMER);
 	} else {
-		printk (KERN_INFO "%s wants TE Mode\n", card->dch.inst.name);
+		printk (KERN_INFO "%s wants TE Mode\n", card->chan[D].inst.name);
 		// TE Mode
-		card->dch.inst.pid.protocol[0] = ISDN_PID_L0_TE_S0;
-		card->hw_mode |= HW_MODE_TE;
+		card->chan[D].inst.pid.protocol[0] = ISDN_PID_L0_TE_S0;
+		card->portmode |= PORT_MODE_TE;
 	}
 
 	if (debug)
 		printk(KERN_DEBUG
 		       "hfcsusb card %p dch %p bch1 %p bch2 %p\n", card,
-		       &card->dch, &card->bch[0], &card->bch[1]);
+		       &card->chan[D], &card->chan[B1], &card->chan[B2]);
 
 	err = setup_hfcsusb(card);
 	if (err) {
-		mISDN_free_dch(&card->dch);
-		mISDN_free_bch(&card->bch[1]);
-		mISDN_free_bch(&card->bch[0]);
+		mISDN_freechannel(&card->chan[D]);
+		mISDN_freechannel(&card->chan[B2]);
+		mISDN_freechannel(&card->chan[B1]);
+		spin_lock_irqsave(&hw_mISDNObj.lock, flags);
 		list_del(&card->list);
+		spin_unlock_irqrestore(&hw_mISDNObj.lock, flags);
 		kfree(card);
 		return (err);
 	}
 	hfcsusb_cnt++;
-	err =
-	    hw_mISDNObj.ctrl(NULL, MGR_NEWSTACK | REQUEST,
-			     &card->dch.inst);
+	err = hw_mISDNObj.ctrl(NULL, MGR_NEWSTACK | REQUEST, &card->chan[D].inst);
 	if (err) {
 		release_card(card);
 		return (err);
 	}
-	for (i = 0; i < 2; i++) {
-		err =
-		    hw_mISDNObj.ctrl(card->dch.inst.st,
-				     MGR_NEWSTACK | REQUEST,
-				     &card->bch[i].inst);
+	for (i = B1; i <= B2; i++) {
+		err = hw_mISDNObj.ctrl(card->chan[D].inst.st,
+			MGR_NEWSTACK | REQUEST, &card->chan[i].inst);
 		if (err) {
-			printk(KERN_ERR "MGR_ADDSTACK bchan error %d\n",
-			       err);
-			hw_mISDNObj.ctrl(card->dch.inst.st,
-					 MGR_DELSTACK | REQUEST, NULL);
+			printk(KERN_ERR "MGR_ADDSTACK bchan error %d\n", err);
+			hw_mISDNObj.ctrl(card->chan[D].inst.st, MGR_DELSTACK | REQUEST, NULL);
 			return (err);
 		}
+		setup_bchannel(&card->chan[i], -1);
 	}
-	err =
-	    hw_mISDNObj.ctrl(card->dch.inst.st, MGR_SETSTACK | REQUEST,
-			     &pid);
+	if (debug)
+		printk(KERN_DEBUG "%s lm %x\n", __FUNCTION__, pid.layermask);
+	err = hw_mISDNObj.ctrl(card->chan[D].inst.st, MGR_SETSTACK | REQUEST, &pid);
 	if (err) {
 		printk(KERN_ERR "MGR_SETSTACK REQUEST dch err(%d)\n", err);
-		hw_mISDNObj.ctrl(card->dch.inst.st, MGR_DELSTACK | REQUEST,
-				 NULL);
+		hw_mISDNObj.ctrl(card->chan[D].inst.st, MGR_DELSTACK | REQUEST, NULL);
 		return (err);
 	}
 
-	hw_init(card);
-	hw_mISDNObj.ctrl(card->dch.inst.st, MGR_CTRLREADY | INDICATION,
-			 NULL);
-
+	hw_mISDNObj.ctrl(card->chan[D].inst.st, MGR_CTRLREADY | INDICATION, NULL);
+	usb_set_intfdata(card->intf, card);
 	return (0);
 }
 
@@ -2011,298 +1712,220 @@ setup_instance(hfcsusb_t * card)
 /*************************************************/
 /* function called to probe a new plugged device */
 /*************************************************/
+
 static int
 hfcsusb_probe(struct usb_interface *intf, const struct usb_device_id *id)
 {
-	struct usb_device *dev = interface_to_usbdev(intf);
-	hfcsusb_t *card;
-	struct usb_host_interface *iface = intf->cur_altsetting;
-	struct usb_host_interface *iface_used = NULL;
-	struct usb_host_endpoint *ep;
-	int ifnum = iface->desc.bInterfaceNumber;
-	int i, idx, alt_idx, probe_alt_setting, vend_idx, cfg_used, *vcf,
-	    attr, cfg_found, cidx, ep_addr;
-	int cmptbl[16], small_match, iso_packet_size, packet_size,
-	    alt_used = 0;
-
-	hfcsusb_vdata *driver_info;
+	struct usb_device		*dev = interface_to_usbdev(intf);
+	hfcsusb_t			*card;
+	struct usb_host_interface	*iface = intf->cur_altsetting;
+	struct usb_host_interface	*iface_used = NULL;
+	struct usb_host_endpoint	*ep;
+	int 				ifnum = iface->desc.bInterfaceNumber;
+	int				i, idx, alt_idx, probe_alt_setting, vend_idx, cfg_used, *vcf,
+					attr, cfg_found, ep_addr;
+	int				cmptbl[16], small_match, iso_packet_size, packet_size, alt_used = 0;
+	hfcsusb_vdata			*driver_info;
 
 	vend_idx = 0xffff;
 	for (i = 0; hfcsusb_idtab[i].idVendor; i++) {
-		if (dev->descriptor.idVendor == hfcsusb_idtab[i].idVendor
-		    && dev->descriptor.idProduct ==
-		    hfcsusb_idtab[i].idProduct) {
+		if ((le16_to_cpu(dev->descriptor.idVendor) == hfcsusb_idtab[i].idVendor)
+		    && (le16_to_cpu(dev->descriptor.idProduct) == hfcsusb_idtab[i].idProduct)) {
 			vend_idx = i;
 			continue;
 		}
 	}
 
 	printk(KERN_INFO
-	       "HFC-S USB: probing interface(%d) actalt(%d) minor(%d)\n",
-	       ifnum, iface->desc.bAlternateSetting, intf->minor);
+	       "HFC-S USB: probing interface(%d) actalt(%d) minor(%d) vend_idx(%d)\n",
+	       ifnum, iface->desc.bAlternateSetting, intf->minor, vend_idx);
 
-	if (vend_idx != 0xffff) {
-		/* if vendor and product ID is OK, start probing alternate settings */
-		alt_idx = 0;
-		small_match = 0xffff;
+	if (vend_idx == 0xffff) {
+		printk(KERN_WARNING
+		       "HFC-S USB: no valid vendor found in USB descriptor\n");
+		return (-EIO);
+	}
+	/* if vendor and product ID is OK, start probing alternate settings */
+	alt_idx = 0;
+	small_match = 0xffff;
 
-		/* default settings */
-		iso_packet_size = 16;
-		packet_size = 64;
+	/* default settings */
+	iso_packet_size = 16;
+	packet_size = 64;
 
-		while (alt_idx < intf->num_altsetting) {
-			iface = intf->altsetting + alt_idx;
-			probe_alt_setting = iface->desc.bAlternateSetting;
-			cfg_used = 0;
+	while (alt_idx < intf->num_altsetting) {
+		iface = intf->altsetting + alt_idx;
+		probe_alt_setting = iface->desc.bAlternateSetting;
+		cfg_used = 0;
 
-			/* check for config EOL element */
-			while (validconf[cfg_used][0]) {
-				cfg_found = 1;
-				vcf = validconf[cfg_used];
-				/* first endpoint descriptor */
-				ep = iface->endpoint;
-				memcpy(cmptbl, vcf, 16 * sizeof(int));
-
-				/* check for all endpoints in this alternate setting */
-				for (i = 0; i < iface->desc.bNumEndpoints;
-				     i++) {
-					ep_addr =
-					    ep->desc.bEndpointAddress;
-					/* get endpoint base */
-					idx = ((ep_addr & 0x7f) - 1) * 2;
-					if (ep_addr & 0x80)
-						idx++;
-					attr = ep->desc.bmAttributes;
-					if (cmptbl[idx] == EP_NUL) {
-						cfg_found = 0;
-					}
-					if (attr == USB_ENDPOINT_XFER_INT
-					    && cmptbl[idx] == EP_INT)
-						cmptbl[idx] = EP_NUL;
-					if (attr == USB_ENDPOINT_XFER_BULK
-					    && cmptbl[idx] == EP_BLK)
-						cmptbl[idx] = EP_NUL;
-					if (attr == USB_ENDPOINT_XFER_ISOC
-					    && cmptbl[idx] == EP_ISO)
-						cmptbl[idx] = EP_NUL;
-
-					/* check if all INT endpoints match minimum interval */
-					if (attr == USB_ENDPOINT_XFER_INT
-					    && ep->desc.bInterval <
-					    vcf[17]) {
-						cfg_found = 0;
-					}
-					ep++;
-				}
-				for (i = 0; i < 16; i++) {
-					/* all entries must be EP_NOP or EP_NUL for a valid config */
-					if (cmptbl[i] != EP_NOP
-					    && cmptbl[i] != EP_NUL)
-						cfg_found = 0;
-				}
-				if (cfg_found) {
-					if (cfg_used < small_match) {
-						small_match = cfg_used;
-						alt_used =
-						    probe_alt_setting;
-						iface_used = iface;
-					}
-				}
-				cfg_used++;
-			}
-			alt_idx++;
-		}		/* (alt_idx < intf->num_altsetting) */
-
-		/* found a valid USB Ta Endpint config */
-		if (small_match != 0xffff) {
-			iface = iface_used;
-			if (!
-			    (card =
-			     kmalloc(sizeof(hfcsusb_t), GFP_KERNEL)))
-				return (-ENOMEM);	/* got no mem */
-			memset(card, 0, sizeof(hfcsusb_t));
-
+		/* check for config EOL element */
+		while (validconf[cfg_used][0]) {
+			cfg_found = 1;
+			vcf = validconf[cfg_used];
+			/* first endpoint descriptor */
 			ep = iface->endpoint;
-			vcf = validconf[small_match];
+			memcpy(cmptbl, vcf, 16 * sizeof(int));
 
+			/* check for all endpoints in this alternate setting */
 			for (i = 0; i < iface->desc.bNumEndpoints; i++) {
 				ep_addr = ep->desc.bEndpointAddress;
 				/* get endpoint base */
 				idx = ((ep_addr & 0x7f) - 1) * 2;
 				if (ep_addr & 0x80)
 					idx++;
-				cidx = idx & 7;
 				attr = ep->desc.bmAttributes;
+				if (cmptbl[idx] == EP_NUL) {
+					cfg_found = 0;
+				}
+				if (attr == USB_ENDPOINT_XFER_INT
+					&& cmptbl[idx] == EP_INT)
+					cmptbl[idx] = EP_NUL;
+				if (attr == USB_ENDPOINT_XFER_BULK
+					&& cmptbl[idx] == EP_BLK)
+					cmptbl[idx] = EP_NUL;
+				if (attr == USB_ENDPOINT_XFER_ISOC
+					&& cmptbl[idx] == EP_ISO)
+					cmptbl[idx] = EP_NUL;
 
-				/* init Endpoints */
-				if (vcf[idx] != EP_NOP
-				    && vcf[idx] != EP_NUL) {
-					switch (attr) {
-						case USB_ENDPOINT_XFER_INT:
-							card->
-							    fifos[cidx].
-							    pipe =
-							    usb_rcvintpipe
-							    (dev,
-							     ep->desc.
-							     bEndpointAddress);
-							card->
-							    fifos[cidx].
-							    usb_transfer_mode
-							    = USB_INT;
-							packet_size =
-							    ep->desc.
-							    wMaxPacketSize;
-							break;
-						case USB_ENDPOINT_XFER_BULK:
-							if (ep_addr & 0x80)
-								card->
-								    fifos
-								    [cidx].
-								    pipe =
-								    usb_rcvbulkpipe
-								    (dev,
-								     ep->
-								     desc.
-								     bEndpointAddress);
-							else
-								card->
-								    fifos
-								    [cidx].
-								    pipe =
-								    usb_sndbulkpipe
-								    (dev,
-								     ep->
-								     desc.
-								     bEndpointAddress);
-							card->
-							    fifos[cidx].
-							    usb_transfer_mode
-							    = USB_BULK;
-							packet_size =
-							    ep->desc.
-							    wMaxPacketSize;
-							break;
-						case USB_ENDPOINT_XFER_ISOC:
-							if (ep_addr & 0x80)
-								card->
-								    fifos
-								    [cidx].
-								    pipe =
-								    usb_rcvisocpipe
-								    (dev,
-								     ep->
-								     desc.
-								     bEndpointAddress);
-							else
-								card->
-								    fifos
-								    [cidx].
-								    pipe =
-								    usb_sndisocpipe
-								    (dev,
-								     ep->
-								     desc.
-								     bEndpointAddress);
-							card->
-							    fifos[cidx].
-							    usb_transfer_mode
-							    = USB_ISOC;
-							iso_packet_size =
-							    ep->desc.
-							    wMaxPacketSize;
-							break;
-						default:
-							card->
-							    fifos[cidx].
-							    pipe = 0;
-					}	/* switch attribute */
-
-					if (card->fifos[cidx].pipe) {
-						card->fifos[cidx].
-						    fifonum = cidx;
-						card->fifos[cidx].card =
-						    card;
-						card->fifos[cidx].
-						    usb_packet_maxlen =
-						    ep->desc.
-						    wMaxPacketSize;
-						card->fifos[cidx].
-						    intervall =
-						    ep->desc.bInterval;
-						card->fifos[cidx].
-						    skbuff = NULL;
-					}
+				/* check if all INT endpoints match minimum interval */
+				if (attr == USB_ENDPOINT_XFER_INT &&
+					ep->desc.bInterval < vcf[17]) {
+					cfg_found = 0;
 				}
 				ep++;
 			}
-			card->dev = dev;	/* save device */
-			card->if_used = ifnum;	/* save used interface */
-			card->alt_used = alt_used;	/* and alternate config */
-			card->ctrl_paksize = dev->descriptor.bMaxPacketSize0;	/* control size */
-			card->cfg_used = vcf[16];	/* store used config */
-			card->vend_idx = vend_idx;	/* store found vendor */
-			card->packet_size = packet_size;
-			card->iso_packet_size = iso_packet_size;
-
-			/* create the control pipes needed for register access */
-			card->ctrl_in_pipe = usb_rcvctrlpipe(card->dev, 0);
-			card->ctrl_out_pipe =
-			    usb_sndctrlpipe(card->dev, 0);
-			card->ctrl_urb = usb_alloc_urb(0, GFP_KERNEL);
-
-
-			driver_info =
-			    (hfcsusb_vdata *) hfcsusb_idtab[vend_idx].
-			    driver_info;
-			printk(KERN_INFO "HFC-S USB: detected \"%s\"\n",
-			       driver_info->vend_name);
-			printk(KERN_INFO
-			    "HFC-S USB: Endpoint-Config: %s (if=%d alt=%d)\n",
-			    conf_str[small_match], ifnum, alt_used);			       
-
-			if (setup_instance(card)) {
-				if (card->ctrl_urb) {
-					usb_kill_urb(card->ctrl_urb);
-					usb_free_urb(card->ctrl_urb);
-					card->ctrl_urb = NULL;
-				}
-				kfree(card);
-				return (-EIO);
+			for (i = 0; i < 16; i++) {
+				/* all entries must be EP_NOP or EP_NUL for a valid config */
+				if (cmptbl[i] != EP_NOP && cmptbl[i] != EP_NUL)
+					cfg_found = 0;
 			}
-			usb_set_intfdata(intf, card);
-
-			return (0);
+			if (cfg_found) {
+				if (cfg_used < small_match) {
+					small_match = cfg_used;
+					alt_used = probe_alt_setting;
+					iface_used = iface;
+				}
+			}
+			cfg_used++;
 		}
-	} else {
-		printk(KERN_INFO
-		       "HFC-S USB: no valid vendor found in USB descriptor\n");
+		alt_idx++;
+	}	/* (alt_idx < intf->num_altsetting) */
+
+	/* not found a valid USB Ta Endpoint config */
+	if (small_match == 0xffff) {
+		printk(KERN_WARNING
+		       "HFC-S USB: no valid endpoint found in USB descriptor\n");
+		return (-EIO);
 	}
-	return (-EIO);
+	iface = iface_used;
+	card = kmalloc(sizeof(hfcsusb_t), GFP_KERNEL);
+	if (!card)
+		return (-ENOMEM);	/* got no mem */
+	memset(card, 0, sizeof(hfcsusb_t));
+
+	ep = iface->endpoint;
+	vcf = validconf[small_match];
+
+	for (i = 0; i < iface->desc.bNumEndpoints; i++) {
+		usb_fifo	*f;
+
+		ep_addr = ep->desc.bEndpointAddress;
+		/* get endpoint base */
+		idx = ((ep_addr & 0x7f) - 1) * 2;
+		if (ep_addr & 0x80)
+			idx++;
+		f = &card->fifos[idx & 7];
+
+		/* init Endpoints */
+		if (vcf[idx] == EP_NOP || vcf[idx] == EP_NUL) {
+			ep++;
+			continue;
+		}
+		switch (ep->desc.bmAttributes) {
+			case USB_ENDPOINT_XFER_INT:
+				f->pipe = usb_rcvintpipe(dev,
+					ep->desc.bEndpointAddress);
+				f->usb_transfer_mode = USB_INT;
+				packet_size = le16_to_cpu(ep->desc.wMaxPacketSize);
+				break;
+			case USB_ENDPOINT_XFER_BULK:
+				if (ep_addr & 0x80)
+					f->pipe = usb_rcvbulkpipe(dev,
+						ep->desc.bEndpointAddress);
+				else
+					f->pipe = usb_sndbulkpipe(dev,
+						ep->desc.bEndpointAddress);
+				f->usb_transfer_mode = USB_BULK;
+				packet_size = le16_to_cpu(ep->desc.wMaxPacketSize);
+				break;
+			case USB_ENDPOINT_XFER_ISOC:
+				if (ep_addr & 0x80)
+					f->pipe = usb_rcvisocpipe(dev,
+						ep->desc.bEndpointAddress);
+				else
+					f->pipe = usb_sndisocpipe(dev,
+						ep->desc.bEndpointAddress);
+				f->usb_transfer_mode = USB_ISOC;
+				iso_packet_size = le16_to_cpu(ep->desc.wMaxPacketSize);
+				break;
+			default:
+				f->pipe = 0;
+		}	/* switch attribute */
+
+		if (f->pipe) {
+			f->fifonum = idx & 7;
+			f->card = card;
+			f->usb_packet_maxlen = le16_to_cpu(ep->desc.wMaxPacketSize);
+			f->intervall = ep->desc.bInterval;
+		}
+		ep++;
+	}
+	card->dev = dev;	/* save device */
+	card->if_used = ifnum;	/* save used interface */
+	card->alt_used = alt_used;	/* and alternate config */
+	card->ctrl_paksize = dev->descriptor.bMaxPacketSize0;	/* control size */
+	card->cfg_used = vcf[16];	/* store used config */
+	card->vend_idx = vend_idx;	/* store found vendor */
+	card->packet_size = packet_size;
+	card->iso_packet_size = iso_packet_size;
+
+	/* create the control pipes needed for register access */
+	card->ctrl_in_pipe = usb_rcvctrlpipe(card->dev, 0);
+	card->ctrl_out_pipe = usb_sndctrlpipe(card->dev, 0);
+	card->ctrl_urb = usb_alloc_urb(0, GFP_KERNEL);
+
+	driver_info = (hfcsusb_vdata *) hfcsusb_idtab[vend_idx].driver_info;
+	printk(KERN_INFO "HFC-S USB: detected \"%s\"\n",
+		driver_info->vend_name);
+	printk(KERN_INFO "HFC-S USB: Endpoint-Config: %s (if=%d alt=%d)\n",
+		conf_str[small_match], ifnum, alt_used);			       
+
+	card->intf = intf;
+	if (setup_instance(card)) {
+		return (-EIO);
+	}
+	return (0);
 }
 
 /****************************************************/
 /* function called when an active device is removed */
 /****************************************************/
 static void
-hfcsusb_disconnect(struct usb_interface
-		   *intf)
+hfcsusb_disconnect(struct usb_interface *intf)
 {
 	hfcsusb_t *card = usb_get_intfdata(intf);
+
 	printk(KERN_INFO "HFC-S USB: device disconnect\n");
-	card->disc_flag = 1;
-
-	if (debug & 0x10000)
-		printk(KERN_DEBUG "%s\n", __FUNCTION__);
-
 	if (!card) {
 		if (debug & 0x10000)
-			printk(KERN_DEBUG "%s : NO CONTEXT!\n",
-			       __FUNCTION__);
+			printk(KERN_DEBUG "%s : NO CONTEXT!\n", __FUNCTION__);
 		return;
 	}
-
-	release_card(card);
+	if (debug & 0x10000)
+		printk(KERN_DEBUG "%s\n", __FUNCTION__);
+	card->disc_flag = 1;
+	hw_mISDNObj.ctrl(card->chan[D].inst.st, MGR_DELSTACK | REQUEST, NULL);
+//	release_card(card);
 	usb_set_intfdata(intf, NULL);
 }				/* hfcsusb_disconnect */
 
@@ -2330,6 +1953,7 @@ hfcsusb_init(void)
 #ifdef MODULE
 	hw_mISDNObj.owner = THIS_MODULE;
 #endif
+	spin_lock_init(&hw_mISDNObj.lock);
 	INIT_LIST_HEAD(&hw_mISDNObj.ilist);
 	hw_mISDNObj.name = DRIVER_NAME;
 	hw_mISDNObj.own_ctrl = hfcsusb_manager;
@@ -2367,15 +1991,13 @@ hfcsusb_cleanup(void)
 	if (debug & 0x10000)
 		printk(KERN_DEBUG "%s\n", __FUNCTION__);
 
+	list_for_each_entry_safe(card, next, &hw_mISDNObj.ilist, list) {
+		handle_led(card, LED_POWER_OFF);
+	}
 	if ((err = mISDN_unregister(&hw_mISDNObj))) {
 		printk(KERN_ERR "Can't unregister hfcsusb error(%d)\n",
 		       err);
 	}
-
-	list_for_each_entry_safe(card, next, &hw_mISDNObj.ilist, list) {
-		handle_led(card, LED_POWER_OFF);
-	}
-
 	/* unregister Hardware */
 	usb_deregister(&hfcsusb_drv);	/* release our driver */
 }

@@ -1,4 +1,4 @@
-/* $Id: x25_l3.h,v 1.4 2004/06/17 12:31:12 keil Exp $
+/* $Id: x25_l3.h,v 1.5 2006/03/06 12:52:07 keil Exp $
  *
  * Layer 3 X.25 defines
  *
@@ -64,7 +64,6 @@ struct _x25_l3 {
 	x25_B3_cfg_t		B3cfg;
 	u_long			state;
 	u_int			debug;
-	spinlock_t		lock;
 	u_char			cause[2];
 };
 
@@ -84,7 +83,6 @@ struct _x25_channel {
 	u_int			ncpi_len;
 	u_long			state;
 	u_int			debug;
-	spinlock_t		lock;
 	u_int			pr;
 	u_int			ps;
 	u_int			rps;
@@ -262,7 +260,7 @@ extern void		X25_release_channel(x25_channel_t *);
 extern void		X25_release_l3(x25_l3_t *);
 extern int		X25_realloc_ncpi_data(x25_channel_t *, int, u_char *);
 extern int		new_x25_channel(x25_l3_t *, x25_channel_t **, __u16, int, u_char *);
-extern int		new_x25_l3(x25_l3_t **, mISDNstack_t *, mISDN_pid_t *, mISDNobject_t *, int);
+extern int		new_x25_l3(x25_l3_t **, mISDNstack_t *, mISDN_pid_t *, mISDNobject_t *, int, if_func_t *);
 extern int		X25_next_id(x25_l3_t *);
 extern int		X25_add_header(x25_channel_t *, x25_l3_t *, u_char , u_char *, u_char);
 extern int		X25sendL3frame(x25_channel_t *, x25_l3_t *, u_char, int, void *);

@@ -1,4 +1,4 @@
-/* $Id: l3helper.c,v 1.6 2004/01/27 01:50:20 keil Exp $
+/* $Id: l3helper.c,v 1.7 2006/03/06 12:52:07 keil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -77,10 +77,10 @@ mISDN_alloc_l3msg(int len, u_char type)
 
 void mISDN_AddvarIE(struct sk_buff *skb, u_char *ie)
 {
-	u_char	*p, *ps;
-	u16	*ies;
-	int	l;
-	Q931_info_t *qi = (Q931_info_t *)skb->data;
+	u_char		*p, *ps;
+	ie_info_t	*ies;
+	int		l;
+	Q931_info_t	*qi = (Q931_info_t *)skb->data;
 
 	ies = &qi->bearer_capability;
 	ps = (u_char *) qi;
@@ -96,6 +96,10 @@ void mISDN_AddvarIE(struct sk_buff *skb, u_char *ie)
 			int_error();
 			return;
 		}
+		if (ies->off) { /* already used, no dupes for single octett */
+			int_error();
+			return;
+		}
 		l = 1;
 	} else {
 		if (_mISDN_l3_ie2pos[*ie]<0) {
@@ -103,19 +107,34 @@ void mISDN_AddvarIE(struct sk_buff *skb, u_char *ie)
 			return;
 		}
 		ies += _mISDN_l3_ie2pos[*ie];
+		if (ies->off) {
+			if (ies->repeated)
+				ies = mISDN_get_last_repeated_ie(qi, ies);
+			l = mISDN_get_free_ext_ie(qi);
+			if (l < 0) { // overflow
+				int_error();
+				return;
+			}
+			ies->ridx = l;
+			ies->repeated = 1;
+			ies = &qi->ext[l].ie;
+			ies->cs_flg = 0;
+			qi->ext[l].v.codeset = 0;
+			qi->ext[l].v.val = *ie;
+		}
 		l = ie[1] + 2;
 	}
 	p = skb_put(skb, l);
-	*ies = (u16)(p - ps);
+	ies->off = (u16)(p - ps);
 	memcpy(p, ie, l);
 }
 
 void mISDN_AddIE(struct sk_buff *skb, u_char ie, u_char *iep)
 {
-	u_char	*p, *ps;
-	u16	*ies;
-	int	l;
-	Q931_info_t *qi = (Q931_info_t *)skb->data;
+	u_char		*p, *ps;
+	ie_info_t	*ies;
+	int		l;
+	Q931_info_t	*qi = (Q931_info_t *)skb->data;
 
 	if (ie & 0x80) { /* one octett IE */
 		if (ie == IE_MORE_DATA)
@@ -125,6 +144,10 @@ void mISDN_AddIE(struct sk_buff *skb, u_char ie, u_char *iep)
 		else if ((ie & 0xf0) == IE_CONGESTION)
 			ies = &qi->congestion_level;
 		else {
+			int_error();
+			return;
+		}
+		if (ies->off) { /* already used, no dupes for single octett */
 			int_error();
 			return;
 		}
@@ -138,21 +161,55 @@ void mISDN_AddIE(struct sk_buff *skb, u_char ie, u_char *iep)
 			return;
 		}
 		ies += _mISDN_l3_ie2pos[ie];
+		if (ies->off) {
+			if (ies->repeated)
+				ies = mISDN_get_last_repeated_ie(qi, ies);
+			l = mISDN_get_free_ext_ie(qi);
+			if (l < 0) { // overflow
+				int_error();
+				return;
+			}
+			ies->ridx = l;
+			ies->repeated = 1;
+			ies = &qi->ext[l].ie;
+			ies->cs_flg = 0;
+			qi->ext[l].v.codeset = 0;
+			qi->ext[l].v.val = ie;
+		}
 		l = iep[0] + 1;
 	}
 	ps = (u_char *) qi;
 	ps += L3_EXTRA_SIZE;
 	p = skb_put(skb, l+1);
-	*ies = (u16)(p - ps);
+	ies->off = (u16)(p - ps);
 	*p++ = ie;
 	if (l)
 		memcpy(p, iep, l);
 }
 
+ie_info_t *mISDN_get_last_repeated_ie(Q931_info_t *qi, ie_info_t *ie)
+{
+	while(ie->repeated) {
+		ie = &qi->ext[ie->ridx].ie;
+	}
+	return(ie);
+}
+
+int mISDN_get_free_ext_ie(Q931_info_t *qi)
+{
+	int	i;
+
+	for (i = 0; i < 8; i++) {
+		if (qi->ext[i].ie.off == 0)
+			return(i);
+	}
+	return (-1);
+}
+
 void mISDN_LogL3Msg(struct sk_buff *skb)
 {
-	u_char		*p,*ps, *t, tmp[32];
-	u16		*ies;
+	u_char		*p,*ps, *t, tmp[128];
+	ie_info_t	*ies;
 	int		i,j;
 	Q931_info_t	*qi = (Q931_info_t *)skb->data;
 	mISDN_head_t	*hh;
@@ -168,18 +225,49 @@ void mISDN_LogL3Msg(struct sk_buff *skb)
 	printk(KERN_DEBUG "L3Msg type(%02x) qi(%p) ies(%p) ps(%p)\n",
 		qi->type, qi, ies, ps);
 	for (i=0;i<32;i++) {
-		if (ies[i]) {
-			p = ps + ies[i];
+		if (ies[i].off) {
+			p = ps + ies[i].off;
 			t = tmp;
 			*t = 0;
 			for (j=0; j<p[1]; j++) {
-				if (j>9) {
+				if (j>40) {
 					sprintf(t, " ...");
+					break;
 				}
 				t += sprintf(t, " %02x", p[j+2]);
 			}
-			printk(KERN_DEBUG "L3Msg ies[%d] off(%d) ie(%02x/%02x) len(%d) %s\n",
-				i, ies[i], _mISDN_l3_pos2ie[i], *p, p[1], tmp);
+			printk(KERN_DEBUG "L3Msg ies[%d] off(%d) rep(%d) ridx(%d) ie(%02x/%02x) len(%d)%s\n",
+				i, ies[i].off, ies[i].repeated, ies[i].ridx, _mISDN_l3_pos2ie[i], *p, p[1], tmp);
+		}
+	}
+	for (i=0;i<8;i++) {
+		if (qi->ext[i].ie.off) {
+			p = ps + qi->ext[i].ie.off;
+			t = tmp;
+			*t = 0;
+			if (qi->ext[i].ie.cs_flg) {
+				for (j=0; j<qi->ext[i].cs.len; j++) {
+					if (j>40) {
+						sprintf(t, " ...");
+						break;
+					}
+					t += sprintf(t, " %02x", p[j]);
+				}
+				printk(KERN_DEBUG "L3Msg ext[%d] off(%d) locked(%d) cs(%d) len(%d)%s\n",
+					i, qi->ext[i].ie.off, qi->ext[i].cs.locked, qi->ext[i].cs.codeset,
+					qi->ext[i].cs.len, tmp);
+			} else {
+				for (j=0; j<p[1]; j++) {
+					if (j>40) {
+						sprintf(t, " ...");
+						break;
+					}
+					t += sprintf(t, " %02x", p[j+2]);
+				}
+				printk(KERN_DEBUG "L3Msg ext[%d] off(%d) rep(%d) ridx(%d) cs(%d) ie(%02x/%02x) len(%d) %s\n",
+					i, qi->ext[i].ie.off, qi->ext[i].ie.repeated, qi->ext[i].ie.ridx, 
+					qi->ext[i].v.codeset, qi->ext[i].v.val, *p, p[1], tmp);
+			}
 		}
 	}
 }
@@ -194,4 +282,6 @@ EXPORT_SYMBOL(mISDN_alloc_l3msg);
 #endif
 EXPORT_SYMBOL(mISDN_AddvarIE);
 EXPORT_SYMBOL(mISDN_AddIE);
+EXPORT_SYMBOL(mISDN_get_last_repeated_ie);
+EXPORT_SYMBOL(mISDN_get_free_ext_ie);
 EXPORT_SYMBOL(mISDN_LogL3Msg);

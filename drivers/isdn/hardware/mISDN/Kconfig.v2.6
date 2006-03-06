@@ -67,6 +67,18 @@ config MISDN_HFCUSB
 	  Enable support for USB ISDN TAs with Cologne Chip AG's
 	  HFC-S USB ISDN Controller
 
+config MISDN_HFCMINI
+	bool "Support for 'HFC-S mini' based TAs"
+	depends on PCI
+	help
+	  Enable support for Cologne Chip AG's 'HFC-S mini' Evaluation Card
+
+config MISDN_XHFC
+	bool "Support for XHFC based cards"
+	depends on PCI
+	help
+	  Enable support for Cologne Chips AG's XHFC Evaluation Card
+
 config MISDN_SPEEDFAX
 	bool "Support for Sedlbauer Speedfax+"
 	depends on PCI || ISA
@@ -85,11 +97,38 @@ config MISDN_DSP
 	  Enable support for digital audio processing capability.
 	  This module may be used for special applications that require
 	  cross connecting of bchannels, conferencing, dtmf decoding
-	  tone generation, and Blowfish encryption and decryption.
+	  echo cancelation, tone generation, and Blowfish encryption and
+	  decryption.
 	  It may use hardware features if available.
 	  E.g. it is required for PBX4Linux. Go to http://isdn.jolly.de
 	  and get more informations about this module and it's usage.
 	  If unsure, say 'N'.
+
+config MISDN_LOOP
+	bool "Loop device"
+	help
+	  Enable support for loop device.
+	  This module may be used for special applications that provide
+	  bchannel data from user space. Applications can directly
+	  access bchannels, so applications can be integrated into DSP
+	  audio processing. 
+	  E.g. it is required for PBX4Linux. Go to http://isdn.jolly.de
+	  and get more informations about this module and it's usage.
+	  If unsure, say 'N'.
+
+config MISDN_L1OIP
+	bool "ISDN over IP tunnel"
+	help
+	  Enable support for ISDN over IP tunnel.
+
+	  It features:
+	    - layer 1 control via network keepalive frames
+	    - dynamic IP exchange, if one or both peers have dynamic IPs
+	    - channel bundeling for reduced IP overhead
+	    - BRI (S0) and PRI (S2M) interface
+
+	  NOTE: This protocol is called 'Layer 1 over IP' and is not
+	  compatible with ISDNoIP (Agfeo) or TDMoIP.
 
 endif
 
