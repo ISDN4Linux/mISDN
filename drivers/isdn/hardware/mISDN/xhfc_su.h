@@ -1,4 +1,4 @@
-/* $Id: xhfc_su.h,v 1.2 2006/03/06 12:58:31 keil Exp $
+/* $Id: xhfc_su.h,v 1.3 2006/03/06 16:20:33 mbachem Exp $
  *
  * mISDN driver for Colognechip xHFC chip
  *
@@ -42,13 +42,14 @@
 #ifndef CHIP_ID_2SU
 #define CHIP_ID_2SU	0x61
 #endif
-	
+
 
 /* define bridge for chip register access */	
 #define BRIDGE_UNKWOWN	0
 #define BRIDGE_PCI2PI	1 /* used at Cologne Chip AG's Evaluation Card */
 #define BRIDGE		BRIDGE_PCI2PI
 
+// #define NUM_XHFCS	1
 
 #define MAX_PORT	4
 #define CHAN_PER_PORT	4	/* D, B1, B2, PCM */
@@ -109,9 +110,9 @@
 
 /* private driver_data */
 typedef struct {
-	int chip_id;
-	char *device_name;
-} xhfc_param;
+	__u8	num_xhfcs;
+	char	*device_name;
+} pi_params;
 
 
 /* port struct for each S/U port */
@@ -141,33 +142,24 @@ typedef struct {
 } xhfc_chan_t;
 
 
-struct _xhfx_hw;
+struct _xhfc_t;
+struct _xhfc_pi;
 
 /**********************/
 /* hardware structure */
 /**********************/
-typedef struct _xhfx_hw {
-
+typedef struct _xhfc_t {
+	char		chip_name[20];	/* XHFC_PI0_0 = ProcessorInterface no. 0, Chip no. 0 */
+	__u8		chipnum;	/* global chip number */
+	__u8		chipidx;	/* index in pi->xhfcs[NUM_XHFCS] */
+	struct _xhfc_pi	* pi;		/* backpointer to xhfc_pi */
+	__u8		param_idx;	/* used to access module param arrays */
+	
 	struct list_head list;
 	spinlock_t lock;
 	struct tasklet_struct tasklet;	/* interrupt bottom half */
-
-	int cardnum;
-	__u8 param_idx;		/* used to access module param arrays */
-	int ifnum;
-	__u8 testirq;
-	int irq;
-	int iobase;
-	int nt_mode;
-	u_char *membase;
-	u_char *hw_membase;
 	
-#if BRIDGE == BRIDGE_PCI2PI
-	struct pci_dev *pdev;
-#endif
-
-	xhfc_param driver_data;
-	char card_name[60];
+	__u8 testirq;
 
 	int chip_id;
 	int num_ports;		/* number of S and U interfaces */
@@ -196,16 +188,27 @@ typedef struct _xhfx_hw {
 	__u32 fifo_irq;		/* fifo bl irq */
 	__u32 fifo_irqmsk;	/* fifo bl irq */
 	
-} xhfc_hw;
+} xhfc_t;
 
 
-/* function prototypes */
-int setup_channel(xhfc_hw * hw, __u8 channel, int protocol);
-void xhfc_write_fifo(xhfc_hw * hw, __u8 channel);
-void xhfc_read_fifo(xhfc_hw * hw, __u8 channel);
-void print_fc(xhfc_hw * hw, __u8 fifo);
-void setup_fifo(xhfc_hw * hw, __u8 fifo, __u8 conhdlc, __u8 subcfg,
-	__u8 fifoctrl, __u8 enable);
-void setup_su(xhfc_hw * hw, __u8 pt, __u8 bc, __u8 enable);
-           
+/**********************/
+/* hardware structure */
+/**********************/
+typedef struct _xhfc_pi {
+#if BRIDGE == BRIDGE_PCI2PI
+	struct pci_dev *pdev;
+	int		irq;
+	int 		iobase;	
+	u_char		*membase;
+	u_char		*hw_membase;
+	int		cardnum;
+	char		card_name[20];
+	pi_params	driver_data;
+#endif
+
+	// xhfc_t	xhfc[NUM_XHFCS];
+	xhfc_t		* xhfc;
+} xhfc_pi;
+
+
 #endif				/* _XHFC_SU_H_ */

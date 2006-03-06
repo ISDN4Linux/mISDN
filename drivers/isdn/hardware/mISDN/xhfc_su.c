@@ -1,4 +1,4 @@
-/* $Id: xhfc_su.c,v 1.2 2006/03/06 12:58:31 keil Exp $
+/* $Id: xhfc_su.c,v 1.3 2006/03/06 16:20:33 mbachem Exp $
  *
  * mISDN driver for CologneChip AG's XHFC
  *
@@ -64,7 +64,7 @@
 #include "xhfc_pci2pi.h"
 #endif
 
-static const char xhfc_rev[] = "$Revision: 1.2 $";
+static const char xhfc_rev[] = "$Revision: 1.3 $";
 
 #define MAX_CARDS	8
 static int card_cnt;
@@ -84,8 +84,13 @@ MODULE_PARM(layermask, MODULE_PARM_T);
 static mISDNobject_t hw_mISDNObj;
 static int debug = 0;
 
-static void release_card(xhfc_hw * hw);
 
+/* static function prototypes */
+static void release_card(xhfc_pi * pi);
+static void setup_fifo(xhfc_t * xhfc, __u8 fifo, __u8 conhdlc, __u8 subcfg,
+                       __u8 fifoctrl, __u8 enable);
+static void setup_su(xhfc_t * xhfc, __u8 pt, __u8 bc, __u8 enable);
+static int  setup_channel(xhfc_t * xhfc, __u8 channel, int protocol);
 
 
 /****************************************************/
@@ -94,8 +99,8 @@ static void release_card(xhfc_hw * hw);
 static void
 xhfc_ph_command(channel_t * dch, u_char command)
 {
-	xhfc_hw *hw = dch->hw;
-	xhfc_port_t *port = hw->chan[dch->channel].port;
+	xhfc_t *xhfc = dch->hw;
+	xhfc_port_t *port = xhfc->chan[dch->channel].port;
 
 	if (dch->debug)
 		mISDN_debugprint(&dch->inst,
@@ -111,8 +116,8 @@ xhfc_ph_command(channel_t * dch, u_char command)
 						 dch->channel);
 			}
 
-			write_xhfc(hw, R_SU_SEL, port->idx);
-			write_xhfc(hw, A_SU_WR_STA, STA_ACTIVATE);
+			write_xhfc(xhfc, R_SU_SEL, port->idx);
+			write_xhfc(xhfc, A_SU_WR_STA, STA_ACTIVATE);
 			break;
 			
 		case HFC_L1_FORCE_DEACTIVATE_TE:
@@ -121,8 +126,8 @@ xhfc_ph_command(channel_t * dch, u_char command)
 						 "HFC_L1_FORCE_DEACTIVATE_TE channel(%i)",
 						 dch->channel);
 
-			write_xhfc(hw, R_SU_SEL, port->idx);
-			write_xhfc(hw, A_SU_WR_STA, STA_DEACTIVATE);
+			write_xhfc(xhfc, R_SU_SEL, port->idx);
+			write_xhfc(xhfc, A_SU_WR_STA, STA_DEACTIVATE);
 			break;
 
 		case HFC_L1_ACTIVATE_NT:
@@ -131,8 +136,8 @@ xhfc_ph_command(channel_t * dch, u_char command)
 					 "HFC_L1_ACTIVATE_NT channel(%i)",
 					 dch->channel);
 
-			write_xhfc(hw, R_SU_SEL, port->idx);
-			write_xhfc(hw, A_SU_WR_STA,
+			write_xhfc(xhfc, R_SU_SEL, port->idx);
+			write_xhfc(xhfc, A_SU_WR_STA,
 				   STA_ACTIVATE | M_SU_SET_G2_G3);
 			break;
 
@@ -142,34 +147,34 @@ xhfc_ph_command(channel_t * dch, u_char command)
 						 "HFC_L1_DEACTIVATE_NT channel(%i)",
 						 dch->channel);
 
-			write_xhfc(hw, R_SU_SEL, port->idx);
-			write_xhfc(hw, A_SU_WR_STA, STA_DEACTIVATE);
+			write_xhfc(xhfc, R_SU_SEL, port->idx);
+			write_xhfc(xhfc, A_SU_WR_STA, STA_DEACTIVATE);
 			break;
 
 		case HFC_L1_TESTLOOP_B1:
-			setup_fifo(hw, port->idx*8,   0xC6, 0, 0, 0);	/* connect B1-SU RX with PCM TX */
-			setup_fifo(hw, port->idx*8+1, 0xC6, 0, 0, 0);	/* connect B1-SU TX with PCM RX */
+			setup_fifo(xhfc, port->idx*8,   0xC6, 0, 0, 0);	/* connect B1-SU RX with PCM TX */
+			setup_fifo(xhfc, port->idx*8+1, 0xC6, 0, 0, 0);	/* connect B1-SU TX with PCM RX */
 
-			write_xhfc(hw, R_SLOT, port->idx*8);		/* PCM timeslot B1 TX */
-			write_xhfc(hw, A_SL_CFG, port->idx*8 + 0x80); 	/* enable B1 TX timeslot on STIO1 */
+			write_xhfc(xhfc, R_SLOT, port->idx*8);		/* PCM timeslot B1 TX */
+			write_xhfc(xhfc, A_SL_CFG, port->idx*8 + 0x80); 	/* enable B1 TX timeslot on STIO1 */
 
-			write_xhfc(hw, R_SLOT, port->idx*8+1);		/* PCM timeslot B1 RX */
-			write_xhfc(hw, A_SL_CFG, port->idx*8+1 + 0xC0); /* enable B1 RX timeslot on STIO1*/
+			write_xhfc(xhfc, R_SLOT, port->idx*8+1);		/* PCM timeslot B1 RX */
+			write_xhfc(xhfc, A_SL_CFG, port->idx*8+1 + 0xC0); /* enable B1 RX timeslot on STIO1*/
 
-			setup_su(hw, port->idx, 0, 1);
+			setup_su(xhfc, port->idx, 0, 1);
 			break;
 
 		case HFC_L1_TESTLOOP_B2:
-			setup_fifo(hw, port->idx*8+2, 0xC6, 0, 0, 0);	/* connect B2-SU RX with PCM TX */
-			setup_fifo(hw, port->idx*8+3, 0xC6, 0, 0, 0);	/* connect B2-SU TX with PCM RX */
+			setup_fifo(xhfc, port->idx*8+2, 0xC6, 0, 0, 0);	/* connect B2-SU RX with PCM TX */
+			setup_fifo(xhfc, port->idx*8+3, 0xC6, 0, 0, 0);	/* connect B2-SU TX with PCM RX */
 
-			write_xhfc(hw, R_SLOT, port->idx*8+2);		/* PCM timeslot B2 TX */
-			write_xhfc(hw, A_SL_CFG, port->idx*8+2 + 0x80); /* enable B2 TX timeslot on STIO1 */
+			write_xhfc(xhfc, R_SLOT, port->idx*8+2);		/* PCM timeslot B2 TX */
+			write_xhfc(xhfc, A_SL_CFG, port->idx*8+2 + 0x80); /* enable B2 TX timeslot on STIO1 */
 
-			write_xhfc(hw, R_SLOT, port->idx*8+3);		/* PCM timeslot B2 RX */
-			write_xhfc(hw, A_SL_CFG, port->idx*8+3 + 0xC0); /* enable B2 RX timeslot on STIO1*/
+			write_xhfc(xhfc, R_SLOT, port->idx*8+3);		/* PCM timeslot B2 RX */
+			write_xhfc(xhfc, A_SL_CFG, port->idx*8+3 + 0xC0); /* enable B2 RX timeslot on STIO1*/
 
-			setup_su(hw, port->idx, 1, 1);
+			setup_su(xhfc, port->idx, 1, 1);
 			break;
 	}
 }
@@ -178,8 +183,8 @@ xhfc_ph_command(channel_t * dch, u_char command)
 static void
 l1_timer_start_t3(channel_t * dch)
 {
-	xhfc_hw * hw = dch->hw;
-	xhfc_port_t * port = hw->chan[dch->channel].port;
+	xhfc_t * xhfc = dch->hw;
+	xhfc_port_t * port = xhfc->chan[dch->channel].port;
 
 	if (!timer_pending(&port->t3_timer)) {
 		if ((dch->debug) & (debug & DEBUG_HFC_S0_STATES))
@@ -195,8 +200,8 @@ l1_timer_start_t3(channel_t * dch)
 static void
 l1_timer_stop_t3(channel_t * dch)
 {
-	xhfc_hw * hw = dch->hw;
-	xhfc_port_t * port = hw->chan[dch->channel].port;
+	xhfc_t * xhfc = dch->hw;
+	xhfc_port_t * port = xhfc->chan[dch->channel].port;
 
 	clear_bit(HFC_L1_ACTIVATING, &port->l1_flags);
 	if (timer_pending(&port->t3_timer)) {
@@ -217,8 +222,8 @@ l1_timer_stop_t3(channel_t * dch)
 static void
 l1_timer_expire_t3(channel_t * dch)
 {
-	xhfc_hw * hw = dch->hw;
-	xhfc_port_t * port = hw->chan[dch->channel].port;
+	xhfc_t * xhfc = dch->hw;
+	xhfc_port_t * port = xhfc->chan[dch->channel].port;
 
 	if ((dch->debug) & (debug & DEBUG_HFC_S0_STATES))
 		mISDN_debugprint(&dch->inst,
@@ -240,8 +245,8 @@ l1_timer_expire_t3(channel_t * dch)
 static void
 l1_timer_start_t4(channel_t * dch)
 {
-	xhfc_hw * hw = dch->hw;
-	xhfc_port_t * port = hw->chan[dch->channel].port;
+	xhfc_t * xhfc = dch->hw;
+	xhfc_port_t * port = xhfc->chan[dch->channel].port;
 
 	set_bit(HFC_L1_DEACTTIMER, &port->l1_flags);
 
@@ -260,8 +265,8 @@ l1_timer_start_t4(channel_t * dch)
 static void
 l1_timer_stop_t4(channel_t * dch)
 {
-	xhfc_hw * hw = dch->hw;
-	xhfc_port_t * port = hw->chan[dch->channel].port;
+	xhfc_t * xhfc = dch->hw;
+	xhfc_port_t * port = xhfc->chan[dch->channel].port;
 
 	clear_bit(HFC_L1_DEACTTIMER, &port->l1_flags);
 	if (timer_pending(&port->t4_timer)) {
@@ -280,8 +285,8 @@ l1_timer_stop_t4(channel_t * dch)
 static void
 l1_timer_expire_t4(channel_t * dch)
 {
-	xhfc_hw * hw = dch->hw;
-	xhfc_port_t * port = hw->chan[dch->channel].port;
+	xhfc_t * xhfc = dch->hw;
+	xhfc_port_t * port = xhfc->chan[dch->channel].port;
 	
 	if ((dch->debug) & (debug & DEBUG_HFC_S0_STATES))
 		mISDN_debugprint(&dch->inst,
@@ -303,8 +308,8 @@ l1_timer_expire_t4(channel_t * dch)
 static void
 su_new_state(channel_t * dch)
 {
-	xhfc_hw * hw = dch->hw;
-	xhfc_port_t * port = hw->chan[dch->channel].port;
+	xhfc_t * xhfc = dch->hw;
+	xhfc_port_t * port = xhfc->chan[dch->channel].port;
 	
 	u_int prim = 0;
 
@@ -352,15 +357,6 @@ su_new_state(channel_t * dch)
 			case (8):
 				l1_timer_stop_t4(dch);
 				return;
-
-			/*
-			case (0):
-			case (1):
-			case (2):
-			case (4):
-			case (5):
-			case (6):
-			*/
 			default:
 				return;
 		}
@@ -374,7 +370,7 @@ su_new_state(channel_t * dch)
 		switch (dch->state) {
 			
 			case (1):
-				test_and_set_bit(FLG_ACTIVE, &dch->Flags);
+				clear_bit(FLG_ACTIVE, &dch->Flags);
 				port->nt_timer = 0;
 				port->mode &= ~NT_TIMER;
 				prim = (PH_DEACTIVATE | INDICATION);
@@ -391,16 +387,16 @@ su_new_state(channel_t * dch)
 					port->nt_timer = NT_T1_COUNT;
 					port->mode |= NT_TIMER;
 
-					write_xhfc(hw, R_SU_SEL, port->idx);
-					write_xhfc(hw, A_SU_WR_STA, M_SU_SET_G2_G3);
+					write_xhfc(xhfc, R_SU_SEL, port->idx);
+					write_xhfc(xhfc, A_SU_WR_STA, M_SU_SET_G2_G3);
 				}
 				return;
 			case (3):
-				test_and_set_bit(FLG_ACTIVE, &dch->Flags);
+				set_bit(FLG_ACTIVE, &dch->Flags);
 				port->nt_timer = 0;
 				port->mode &= ~NT_TIMER;
 				prim = (PH_ACTIVATE | INDICATION);
-				
+
 				if ((dch->debug) & (debug & DEBUG_HFC_S0_STATES))
 					mISDN_debugprint(&dch->inst,
 						 "l1->l2 (PH_ACTIVATE | INDICATION)");				
@@ -427,8 +423,8 @@ su_new_state(channel_t * dch)
 static int
 handle_dmsg(channel_t *dch, struct sk_buff *skb)
 {
-	xhfc_hw * hw = dch->hw;
-	xhfc_port_t * port = hw->chan[dch->channel].port;
+	xhfc_t * xhfc = dch->hw;
+	xhfc_port_t * port = xhfc->chan[dch->channel].port;
 	
 	int		ret = 0;
 	mISDN_head_t	*hh = mISDN_HEAD_P(skb);	
@@ -483,7 +479,7 @@ handle_dmsg(channel_t *dch, struct sk_buff *skb)
 static int
 handle_bmsg(channel_t *bch, struct sk_buff *skb)
 {
-	xhfc_hw 	*hw = bch->hw;
+	xhfc_t 	*xhfc = bch->hw;
 	int		ret = 0;
 	mISDN_head_t	*hh = mISDN_HEAD_P(skb);
 	u_long		flags;
@@ -491,13 +487,13 @@ handle_bmsg(channel_t *bch, struct sk_buff *skb)
 	if ((hh->prim == (PH_ACTIVATE | REQUEST)) ||
 		   (hh->prim == (DL_ESTABLISH | REQUEST))) {
 		if (!test_and_set_bit(FLG_ACTIVE, &bch->Flags)) {
-			spin_lock_irqsave(&hw->lock, flags);
+			spin_lock_irqsave(&xhfc->lock, flags);
 			if (bch->inst.pid.protocol[2] == ISDN_PID_L2_B_TRANS)
 				test_and_set_bit(FLG_L2DATA, &bch->Flags);			
 			ret =
-			    setup_channel(hw, bch->channel,
+			    setup_channel(xhfc, bch->channel,
 					  bch->inst.pid.protocol[1]);
-			spin_unlock_irqrestore(&hw->lock, flags);
+			spin_unlock_irqrestore(&xhfc->lock, flags);
 		}
 #ifdef FIXME
 		if (bch->inst.pid.protocol[2] == ISDN_PID_L2_B_RAWDEV)
@@ -512,7 +508,7 @@ handle_bmsg(channel_t *bch, struct sk_buff *skb)
 		(hh->prim == (DL_RELEASE | REQUEST)) ||
 		((hh->prim == (PH_CONTROL | REQUEST) && (hh->dinfo == HW_DEACTIVATE)))) {
 		   	
-		spin_lock_irqsave(&hw->lock, flags);
+		spin_lock_irqsave(&xhfc->lock, flags);
 		if (test_and_clear_bit(FLG_TX_NEXT, &bch->Flags)) {
 			dev_kfree_skb(bch->next_skb);
 			bch->next_skb = NULL;
@@ -528,9 +524,9 @@ handle_bmsg(channel_t *bch, struct sk_buff *skb)
 		}
 		test_and_clear_bit(FLG_L2DATA, &bch->Flags);
 		test_and_clear_bit(FLG_TX_BUSY, &bch->Flags);
-		setup_channel(hw, bch->channel, ISDN_PID_NONE);
+		setup_channel(xhfc, bch->channel, ISDN_PID_NONE);
 		test_and_clear_bit(FLG_ACTIVE, &bch->Flags);
-		spin_unlock_irqrestore(&hw->lock, flags);
+		spin_unlock_irqrestore(&xhfc->lock, flags);
 		skb_trim(skb, 0);
 		if (hh->prim != (PH_CONTROL | REQUEST)) {
 #ifdef FIXME
@@ -545,7 +541,7 @@ handle_bmsg(channel_t *bch, struct sk_buff *skb)
 
 	} else {
 		printk(KERN_WARNING "%s %s: unknown prim(%x)\n",
-		       hw->card_name, __FUNCTION__, hh->prim);
+		       xhfc->chip_name, __FUNCTION__, hh->prim);
 	}
 	if (!ret)
 		dev_kfree_skb(skb);
@@ -560,7 +556,7 @@ xhfc_l2l1(mISDNinstance_t *inst, struct sk_buff *skb)
 {
 	channel_t	*chan = container_of(inst, channel_t, inst);
 	mISDN_head_t	*hh = mISDN_HEAD_P(skb);
-	xhfc_hw		*hw = inst->privat;
+	xhfc_t		*xhfc = inst->privat;
 	int		ret = 0;
 	u_long		flags;
 	
@@ -568,7 +564,7 @@ xhfc_l2l1(mISDNinstance_t *inst, struct sk_buff *skb)
 		spin_lock_irqsave(inst->hwlock, flags);
 		ret = channel_senddata(chan, hh->dinfo, skb);
 		if (ret > 0) { /* direct TX */
-			tasklet_schedule(&hw->tasklet);
+			tasklet_schedule(&xhfc->tasklet);
 			// printk ("PH_DATA_REQ: %i bytes in channel(%i)\n", ret, chan->channel);
 			ret = 0;
 		}
@@ -595,7 +591,7 @@ xhfc_l2l1(mISDNinstance_t *inst, struct sk_buff *skb)
 static int
 xhfc_manager(void *data, u_int prim, void *arg)
 {
-	xhfc_hw *hw = NULL;
+	xhfc_t *xhfc = NULL;
 	mISDNinstance_t *inst = data;
 	struct sk_buff *skb;
 	int channel = -1;
@@ -606,20 +602,20 @@ xhfc_manager(void *data, u_int prim, void *arg)
 	if (!data) {
 		MGR_HASPROTOCOL_HANDLER(prim, arg, &hw_mISDNObj)
 		    printk(KERN_ERR "%s %s: no data prim %x arg %p\n",
-			   hw->card_name, __FUNCTION__, prim, arg);
+			   xhfc->chip_name, __FUNCTION__, prim, arg);
 		return (-EINVAL);
 	}
 	
 	spin_lock_irqsave(&hw_mISDNObj.lock, flags);
 
 	/* find channel and card */
-	list_for_each_entry(hw, &hw_mISDNObj.ilist, list) {
+	list_for_each_entry(xhfc, &hw_mISDNObj.ilist, list) {
 		i = 0;
 		while (i < MAX_CHAN) {
-			if (hw->chan[i].ch.Flags &&
-				&hw->chan[i].ch.inst == inst) {
+			if (xhfc->chan[i].ch.Flags &&
+				&xhfc->chan[i].ch.inst == inst) {
 				channel = i;
-				chan = &hw->chan[i].ch;
+				chan = &xhfc->chan[i].ch;
 				break;
 			}
 			i++;
@@ -656,7 +652,7 @@ xhfc_manager(void *data, u_int prim, void *arg)
 			break;
 		case MGR_RELEASE | INDICATION:
 			if (channel == 2) {
-				release_card(hw);
+				// release_card(xhfc);
 			} else {
 				hw_mISDNObj.refcnt--;
 			}
@@ -692,7 +688,7 @@ xhfc_manager(void *data, u_int prim, void *arg)
 			PRIM_NOT_HANDLED(MGR_CTRLREADY | INDICATION);
 		default:
 			printk(KERN_WARNING "%s %s: prim %x not handled\n",
-			       hw->card_name, __FUNCTION__, prim);
+			       xhfc->chip_name, __FUNCTION__, prim);
 			return (-EINVAL);
 	}
 	return (0);
@@ -702,10 +698,10 @@ xhfc_manager(void *data, u_int prim, void *arg)
 /* check if new buffer for channel */
 /* is waitinng is transmitt queue  */
 /***********************************/
-int
-next_tx_frame(xhfc_hw * hw, __u8 channel)
+static int
+next_tx_frame(xhfc_t * xhfc, __u8 channel)
 {
-	channel_t *ch = &hw->chan[channel].ch;
+	channel_t *ch = &xhfc->chan[channel].ch;
 
 	if (ch->tx_skb)
 		dev_kfree_skb(ch->tx_skb);
@@ -721,7 +717,7 @@ next_tx_frame(xhfc_hw * hw, __u8 channel)
 		} else {
 			printk(KERN_WARNING
 			       "%s channel(%i) TX_NEXT without skb\n",
-			       hw->card_name, channel);
+			       xhfc->chip_name, channel);
 			test_and_clear_bit(FLG_TX_NEXT, &ch->Flags);
 		}
 	} else
@@ -731,37 +727,37 @@ next_tx_frame(xhfc_hw * hw, __u8 channel)
 }
 
 static inline void
-xhfc_waitbusy(xhfc_hw * hw)
+xhfc_waitbusy(xhfc_t * xhfc)
 {
-	while (read_xhfc(hw, R_STATUS) & M_BUSY);
+	while (read_xhfc(xhfc, R_STATUS) & M_BUSY);
 }
 
 static inline void
-xhfc_selfifo(xhfc_hw * hw, __u8 fifo)
+xhfc_selfifo(xhfc_t * xhfc, __u8 fifo)
 {
-	write_xhfc(hw, R_FIFO, fifo);
-	xhfc_waitbusy(hw);
+	write_xhfc(xhfc, R_FIFO, fifo);
+	xhfc_waitbusy(xhfc);
 }
 
 static inline void
-xhfc_inc_f(xhfc_hw * hw)
+xhfc_inc_f(xhfc_t * xhfc)
 {
-	write_xhfc(hw, A_INC_RES_FIFO, M_INC_F);
-	xhfc_waitbusy(hw);
+	write_xhfc(xhfc, A_INC_RES_FIFO, M_INC_F);
+	xhfc_waitbusy(xhfc);
 }
 
 static inline void
-xhfc_resetfifo(xhfc_hw * hw)
+xhfc_resetfifo(xhfc_t * xhfc)
 {
-	write_xhfc(hw, A_INC_RES_FIFO, M_RES_FIFO | M_RES_FIFO_ERR);
-	xhfc_waitbusy(hw);
+	write_xhfc(xhfc, A_INC_RES_FIFO, M_RES_FIFO | M_RES_FIFO_ERR);
+	xhfc_waitbusy(xhfc);
 }
 
 /**************************/
 /* fill fifo with TX data */
 /**************************/
-void
-xhfc_write_fifo(xhfc_hw * hw, __u8 channel)
+static void
+xhfc_write_fifo(xhfc_t * xhfc, __u8 channel)
 {
 	__u8		fcnt, tcnt, i;
 	__u8		free;
@@ -769,7 +765,7 @@ xhfc_write_fifo(xhfc_hw * hw, __u8 channel)
 	__u8		fstat;
 	__u8		*data;
 	int		remain;
-	channel_t	*ch = &hw->chan[channel].ch;
+	channel_t	*ch = &xhfc->chan[channel].ch;
 
 
       send_buffer:
@@ -779,14 +775,14 @@ xhfc_write_fifo(xhfc_hw * hw, __u8 channel)
 	if (remain <= 0)
 		return;      
       
-	xhfc_selfifo(hw, (channel * 2));
+	xhfc_selfifo(xhfc, (channel * 2));
 
-	fstat = read_xhfc(hw, A_FIFO_STA);
-	free = (hw->max_z - (read_xhfc(hw, A_USAGE)));
+	fstat = read_xhfc(xhfc, A_FIFO_STA);
+	free = (xhfc->max_z - (read_xhfc(xhfc, A_USAGE)));
 	tcnt = (free >= remain) ? remain : free;
 
-	f1 = read_xhfc(hw, A_F1);
-	f2 = read_xhfc(hw, A_F2);
+	f1 = read_xhfc(xhfc, A_F1);
+	f2 = read_xhfc(xhfc, A_F2);
 
 	fcnt = 0x07 - ((f1 - f2) & 0x07);	/* free frame count in tx fifo */
 
@@ -798,7 +794,7 @@ xhfc_write_fifo(xhfc_hw * hw, __u8 channel)
 	}
 
 	/* check for fifo underrun during frame transmission */
-	fstat = read_xhfc(hw, A_FIFO_STA);
+	fstat = read_xhfc(xhfc, A_FIFO_STA);
 	if (fstat & M_FIFO_ERR) {
 		if (debug & DEBUG_HFC_FIFO_ERR) {
 			mISDN_debugprint(&ch->inst,
@@ -807,7 +803,7 @@ xhfc_write_fifo(xhfc_hw * hw, __u8 channel)
 					 ch->tx_idx, fstat);
 		}
 
-		write_xhfc(hw, A_INC_RES_FIFO, M_RES_FIFO_ERR);
+		write_xhfc(xhfc, A_INC_RES_FIFO, M_RES_FIFO_ERR);
 
 		/* restart frame transmission */
 		if ((test_bit(FLG_HDLC, &ch->Flags)) && ch->tx_idx) {
@@ -822,7 +818,7 @@ xhfc_write_fifo(xhfc_hw * hw, __u8 channel)
 
 		if (debug & DEBUG_HFC_FIFO) {
 			printk("%s channel(%i) writing: ",
-			       hw->card_name, channel);
+			       xhfc->chip_name, channel);
 
 			i=0;
 			while (i<tcnt)
@@ -834,10 +830,10 @@ xhfc_write_fifo(xhfc_hw * hw, __u8 channel)
 		i=0;
 		while (i<tcnt) {
 			if ((tcnt-i) >= 4) {
-				write32_xhfc(hw, A_FIFO_DATA, *((__u32 *) (data+i)));
+				write32_xhfc(xhfc, A_FIFO_DATA, *((__u32 *) (data+i)));
 				i += 4;
 			} else {
-				write_xhfc(hw, A_FIFO_DATA, *(data+i));
+				write_xhfc(xhfc, A_FIFO_DATA, *(data+i));
 				i++;
 			}
 		}
@@ -845,13 +841,13 @@ xhfc_write_fifo(xhfc_hw * hw, __u8 channel)
 		if (ch->tx_idx == ch->tx_skb->len) {
 			if (test_bit(FLG_HDLC, &ch->Flags)) {
 				/* terminate frame */
-				xhfc_inc_f(hw);
+				xhfc_inc_f(xhfc);
 			} else {
-				xhfc_selfifo(hw, (channel * 2));
+				xhfc_selfifo(xhfc, (channel * 2));
 			}
 
 			/* check for fifo underrun during frame transmission */
-			fstat = read_xhfc(hw, A_FIFO_STA);
+			fstat = read_xhfc(xhfc, A_FIFO_STA);
 			if (fstat & M_FIFO_ERR) {
 				if (debug & DEBUG_HFC_FIFO_ERR) {
 					mISDN_debugprint(&ch->inst,
@@ -861,7 +857,7 @@ xhfc_write_fifo(xhfc_hw * hw, __u8 channel)
 							 channel,
 							 fstat);
 				}
-				write_xhfc(hw, A_INC_RES_FIFO, M_RES_FIFO_ERR);
+				write_xhfc(xhfc, A_INC_RES_FIFO, M_RES_FIFO_ERR);
 
 				if (test_bit(FLG_HDLC, &ch->Flags)) {
 					// restart frame transmission
@@ -870,7 +866,7 @@ xhfc_write_fifo(xhfc_hw * hw, __u8 channel)
 				}
 			}
 			
-			if (next_tx_frame(hw, channel)) {
+			if (next_tx_frame(xhfc, channel)) {
 				if (debug & DEBUG_HFC_BTRACE)
 					mISDN_debugprint(&ch->inst,
 						"channel(%i) has next_tx_frame",
@@ -887,7 +883,7 @@ xhfc_write_fifo(xhfc_hw * hw, __u8 channel)
 			
 		} else {
 			/* tx buffer not complete, but fifo filled to maximum */
-			xhfc_selfifo(hw, (channel * 2));
+			xhfc_selfifo(xhfc, (channel * 2));
 		}
 	} 
 }
@@ -895,8 +891,8 @@ xhfc_write_fifo(xhfc_hw * hw, __u8 channel)
 /****************************/
 /* read RX data out of fifo */
 /****************************/
-void
-xhfc_read_fifo(xhfc_hw * hw, __u8 channel)
+static void
+xhfc_read_fifo(xhfc_t * xhfc, __u8 channel)
 {
 	__u8	f1=0, f2=0, z1=0, z2=0;
 	__u8	fstat = 0;
@@ -904,36 +900,36 @@ xhfc_read_fifo(xhfc_hw * hw, __u8 channel)
 	int	rcnt;		/* read rcnt bytes out of fifo */
 	__u8	*data;		/* new data pointer */
 	struct sk_buff	*skb;	/* data buffer for upper layer */
-	channel_t	*ch = &hw->chan[channel].ch;
+	channel_t	*ch = &xhfc->chan[channel].ch;
 
       receive_buffer:
 
-	xhfc_selfifo(hw, (channel * 2) + 1);
+	xhfc_selfifo(xhfc, (channel * 2) + 1);
 
-	fstat = read_xhfc(hw, A_FIFO_STA);
+	fstat = read_xhfc(xhfc, A_FIFO_STA);
 	if (fstat & M_FIFO_ERR) {
 		if (debug & DEBUG_HFC_FIFO_ERR)
 			mISDN_debugprint(&ch->inst,
 					 "RX fifo overflow channel(%i), "
 					 "A_FIFO_STA(0x%02x) f0cnt(%i)",
-					 channel, fstat, hw->f0_akku);
-		write_xhfc(hw, A_INC_RES_FIFO, M_RES_FIFO_ERR);
+					 channel, fstat, xhfc->f0_akku);
+		write_xhfc(xhfc, A_INC_RES_FIFO, M_RES_FIFO_ERR);
 	}
 
 	if (test_bit(FLG_HDLC, &ch->Flags)) {
 		/* hdlc rcnt */
-		f1 = read_xhfc(hw, A_F1);
-		f2 = read_xhfc(hw, A_F2);
-		z1 = read_xhfc(hw, A_Z1);
-		z2 = read_xhfc(hw, A_Z2);
+		f1 = read_xhfc(xhfc, A_F1);
+		f2 = read_xhfc(xhfc, A_F2);
+		z1 = read_xhfc(xhfc, A_Z1);
+		z2 = read_xhfc(xhfc, A_Z2);
 
-		rcnt = (z1 - z2) & hw->max_z;
+		rcnt = (z1 - z2) & xhfc->max_z;
 		if (f1 != f2)
 			rcnt++;
 
 	} else {
 		/* transparent rcnt */
-		rcnt = read_xhfc(hw, A_USAGE) - 1;
+		rcnt = read_xhfc(xhfc, A_USAGE) - 1;
 	}
 
 	if (debug & DEBUG_HFC_FIFO) {
@@ -943,7 +939,7 @@ xhfc_read_fifo(xhfc_hw * hw, __u8 channel)
 			i = 0;
 		mISDN_debugprint(&ch->inst, "reading %i bytes channel(%i) "
 			"irq_cnt(%i) fstat(%i) idx(%i) f1(%i) f2(%i) z1(%i) z2(%i)",
-			rcnt, channel, hw->irq_cnt, fstat, i, f1, f2, z1, z2);
+			rcnt, channel, xhfc->irq_cnt, fstat, i, f1, f2, z1, z2);
 	}
 
 	if (rcnt > 0) {
@@ -960,10 +956,10 @@ xhfc_read_fifo(xhfc_hw * hw, __u8 channel)
 		i=0;
 		while (i<rcnt) {
 			if ((rcnt-i) >= 4) {
-				*((__u32 *) (data+i)) = read32_xhfc(hw, A_FIFO_DATA);
+				*((__u32 *) (data+i)) = read32_xhfc(xhfc, A_FIFO_DATA);
 				i += 4;
 			} else {
-				*(data+i) = read_xhfc(hw, A_FIFO_DATA);
+				*(data+i) = read_xhfc(xhfc, A_FIFO_DATA);
 				i++;
 			}
 		}		
@@ -973,7 +969,7 @@ xhfc_read_fifo(xhfc_hw * hw, __u8 channel)
 
 	if (test_bit(FLG_HDLC, &ch->Flags)) {
 		if (f1 != f2) {
-			xhfc_inc_f(hw);
+			xhfc_inc_f(xhfc);
 
 			/* check minimum frame size */
 			if (ch->rx_skb->len < 4) {
@@ -1029,7 +1025,7 @@ xhfc_read_fifo(xhfc_hw * hw, __u8 channel)
 		      read_exit:
 			if (ch->rx_skb)
 				skb_trim(ch->rx_skb, 0);
-			if (read_xhfc(hw, A_USAGE) > 8) {
+			if (read_xhfc(xhfc, A_USAGE) > 8) {
 				if (debug & DEBUG_HFC_FIFO)
 					mISDN_debugprint(&ch->inst,
 							 "%s: channel(%i) continue xhfc_read_fifo",
@@ -1041,10 +1037,10 @@ xhfc_read_fifo(xhfc_hw * hw, __u8 channel)
 
 
 		} else {
-			xhfc_selfifo(hw, (channel * 2) + 1);
+			xhfc_selfifo(xhfc, (channel * 2) + 1);
 		}
 	} else {
-		xhfc_selfifo(hw, (channel * 2) + 1);
+		xhfc_selfifo(xhfc, (channel * 2) + 1);
 		if (ch->rx_skb->len >= TRANSP_PACKET_SIZE) {
 			/* deliver transparent data to layer2 */
 			queue_ch_frame(ch, INDICATION, MISDN_ID_ANY, ch->rx_skb);
@@ -1059,59 +1055,59 @@ xhfc_read_fifo(xhfc_hw * hw, __u8 channel)
 static void
 xhfc_bh_handler(unsigned long ul_hw)
 {
-	xhfc_hw 	*hw = (xhfc_hw *) ul_hw;
+	xhfc_t 	*xhfc = (xhfc_t *) ul_hw;
 	int		i;
 	reg_a_su_rd_sta	su_state;
 	channel_t	*dch;
 
 	/* timer interrupt */
-	if (hw->misc_irq.bit.v_ti_irq) {
-		hw->misc_irq.bit.v_ti_irq = 0;
+	if (xhfc->misc_irq.bit.v_ti_irq) {
+		xhfc->misc_irq.bit.v_ti_irq = 0;
 
 		/* Handle tx Fifos */
-		for (i = 0; i < hw->max_fifo; i++) {
-			if ((1 << (i * 2)) & (hw->fifo_irqmsk)) {
-				hw->fifo_irq &= ~(1 << (i * 2));
-				if (test_bit(FLG_TX_BUSY, &hw->chan[i].ch.Flags))
-					xhfc_write_fifo(hw, i);
+		for (i = 0; i < xhfc->max_fifo; i++) {
+			if ((1 << (i * 2)) & (xhfc->fifo_irqmsk)) {
+				xhfc->fifo_irq &= ~(1 << (i * 2));
+				if (test_bit(FLG_TX_BUSY, &xhfc->chan[i].ch.Flags))
+					xhfc_write_fifo(xhfc, i);
 			}
 		}
 		
 		/* handle NT Timer */
-		for (i = 0; i < hw->num_ports; i++) {
-			if ((hw->port[i].mode & PORT_MODE_NT)
-			    && (hw->port[i].mode & NT_TIMER)) {
-				if ((--hw->port[i].nt_timer) < 0)
-					su_new_state(&hw->chan[(i << 2) + 2].ch);
+		for (i = 0; i < xhfc->num_ports; i++) {
+			if ((xhfc->port[i].mode & PORT_MODE_NT)
+			    && (xhfc->port[i].mode & NT_TIMER)) {
+				if ((--xhfc->port[i].nt_timer) < 0)
+					su_new_state(&xhfc->chan[(i << 2) + 2].ch);
 			}
 		}
 	}
 
 	/* set fifo_irq when RX data over treshold */
-	for (i = 0; i < hw->num_ports; i++) {
-		hw->fifo_irq |= read_xhfc(hw, R_FILL_BL0 + i) << (i * 8);
+	for (i = 0; i < xhfc->num_ports; i++) {
+		xhfc->fifo_irq |= read_xhfc(xhfc, R_FILL_BL0 + i) << (i * 8);
 	}
 
 	/* Handle rx Fifos */
-	if ((hw->fifo_irq & hw->fifo_irqmsk) & FIFO_MASK_RX) {
-		for (i = 0; i < hw->max_fifo; i++) {
-			if ((hw->fifo_irq & (1 << (i * 2 + 1)))
-			    & (hw->fifo_irqmsk)) {
+	if ((xhfc->fifo_irq & xhfc->fifo_irqmsk) & FIFO_MASK_RX) {
+		for (i = 0; i < xhfc->max_fifo; i++) {
+			if ((xhfc->fifo_irq & (1 << (i * 2 + 1)))
+			    & (xhfc->fifo_irqmsk)) {
 
-				hw->fifo_irq &= ~(1 << (i * 2 + 1));
-				xhfc_read_fifo(hw, i);
+				xhfc->fifo_irq &= ~(1 << (i * 2 + 1));
+				xhfc_read_fifo(xhfc, i);
 			}
 		}
 	}
 
 	/* su interrupt */
-	if (hw->su_irq.reg & hw->su_irqmsk.reg) {
-		hw->su_irq.reg = 0;
-		for (i = 0; i < hw->num_ports; i++) {
-			write_xhfc(hw, R_SU_SEL, i);
-			su_state.reg = read_xhfc(hw, A_SU_RD_STA);
+	if (xhfc->su_irq.reg & xhfc->su_irqmsk.reg) {
+		xhfc->su_irq.reg = 0;
+		for (i = 0; i < xhfc->num_ports; i++) {
+			write_xhfc(xhfc, R_SU_SEL, i);
+			su_state.reg = read_xhfc(xhfc, A_SU_RD_STA);
 			
-			dch = &hw->chan[(i << 2) + 2].ch;
+			dch = &xhfc->chan[(i << 2) + 2].ch;
 			if (su_state.bit.v_su_sta != dch->state) {
 				dch->state = su_state.bit.v_su_sta;
 				su_new_state(dch);
@@ -1126,145 +1122,160 @@ xhfc_bh_handler(unsigned long ul_hw)
 static irqreturn_t
 xhfc_interrupt(int intno, void *dev_id, struct pt_regs *regs)
 {
-	xhfc_hw *hw = dev_id;
+	xhfc_pi *pi = dev_id;
+	xhfc_t * xhfc = NULL;
 	__u8 i;
 	__u32 f0_cnt;
+	__u32 xhfc_irqs;
 
-	if (!(hw->irq_ctrl.bit.v_glob_irq_en)
-	    && (read_xhfc(hw, R_IRQ_OVIEW))) {
+	xhfc_irqs = 0;
+	for (i=0; i<pi->driver_data.num_xhfcs; i++) {
+		xhfc = &pi->xhfc[i];
+		if (xhfc->irq_ctrl.bit.v_glob_irq_en && (read_xhfc(xhfc, R_IRQ_OVIEW)))
+		    	xhfc_irqs |= (1 << i);
+	}
+	if (!xhfc_irqs) {
 		if (debug & DEBUG_HFC_IRQ)
 			printk(KERN_INFO
 			       "%s %s NOT M_GLOB_IRQ_EN or R_IRQ_OVIEW \n",
-			       hw->card_name, __FUNCTION__);
+			       xhfc->chip_name, __FUNCTION__);
 		return IRQ_NONE;
 	}
 
-	hw->misc_irq.reg |= read_xhfc(hw, R_MISC_IRQ);
-	hw->su_irq.reg |= read_xhfc(hw, R_SU_IRQ);
+	xhfc_irqs = 0;
+	for (i=0; i<pi->driver_data.num_xhfcs; i++) {
+		xhfc = &pi->xhfc[i];
 
-	/* get fifo IRQ states in bundle */
-	for (i = 0; i < 4; i++) {
-		hw->fifo_irq |=
-		    (read_xhfc(hw, R_FIFO_BL0_IRQ + i) << (i * 8));
-	}
+		xhfc->misc_irq.reg |= read_xhfc(xhfc, R_MISC_IRQ);
+		xhfc->su_irq.reg |= read_xhfc(xhfc, R_SU_IRQ);
 
-	/* call bottom half at events
-	 *   - Timer Interrupt (or other misc_irq sources)
-	 *   - SU State change
-	 *   - Fifo FrameEnd interrupts (only at rx fifos enabled)
-	 */
-	if (!((hw->misc_irq.reg & hw->misc_irqmsk.reg)
-	      || (hw->su_irq.reg & hw->su_irqmsk.reg)
-	      || (hw->fifo_irq & hw->fifo_irqmsk)))
-		return IRQ_NONE;
+		/* get fifo IRQ states in bundle */
+		for (i = 0; i < 4; i++) {
+			xhfc->fifo_irq |=
+			    (read_xhfc(xhfc, R_FIFO_BL0_IRQ + i) << (i * 8));
+		}
 
-	/* queue bottom half */
-	if (!(hw->testirq))
-		tasklet_schedule(&hw->tasklet);
+		/* call bottom half at events
+		 *   - Timer Interrupt (or other misc_irq sources)
+		 *   - SU State change
+		 *   - Fifo FrameEnd interrupts (only at rx fifos enabled)
+		 */
+		if ((xhfc->misc_irq.reg & xhfc->misc_irqmsk.reg)
+		      || (xhfc->su_irq.reg & xhfc->su_irqmsk.reg)
+		      || (xhfc->fifo_irq & xhfc->fifo_irqmsk)) {
+		      	
+		      	
+			xhfc_irqs |= (1 << i);
+	
+			/* queue bottom half */
+			if (!(xhfc->testirq))
+				tasklet_schedule(&xhfc->tasklet);
 
-	/* count irqs */
-	hw->irq_cnt++;
+			/* count irqs */
+			xhfc->irq_cnt++;
 
 #ifdef USE_F0_COUNTER	
-	/* akkumulate f0 counter diffs */
-	f0_cnt = read_xhfc(hw, R_F0_CNTL);
-	f0_cnt += read_xhfc(hw, R_F0_CNTH) << 8;
-	hw->f0_akku += (f0_cnt - hw->f0_cnt);
-	if ((f0_cnt - hw->f0_cnt) < 0)
-		hw->f0_akku += 0xFFFF;
-	hw->f0_cnt = f0_cnt;
+			/* akkumulate f0 counter diffs */
+			f0_cnt = read_xhfc(xhfc, R_F0_CNTL);
+			f0_cnt += read_xhfc(xhfc, R_F0_CNTH) << 8;
+			xhfc->f0_akku += (f0_cnt - xhfc->f0_cnt);
+			if ((f0_cnt - xhfc->f0_cnt) < 0)
+				xhfc->f0_akku += 0xFFFF;
+			xhfc->f0_cnt = f0_cnt;
+		}
 #endif
+	}
 	
-	return IRQ_HANDLED;
+	return ((xhfc_irqs)?IRQ_HANDLED:IRQ_NONE);
 }
 
 /*****************************************************/
 /* disable all interrupts by disabling M_GLOB_IRQ_EN */
 /*****************************************************/
-void
-disable_interrupts(xhfc_hw * hw)
+static void
+disable_interrupts(xhfc_t * xhfc)
 {
 	if (debug & DEBUG_HFC_IRQ)
-		printk(KERN_INFO "%s %s\n", hw->card_name, __FUNCTION__);
-	hw->irq_ctrl.bit.v_glob_irq_en = 0;
-	write_xhfc(hw, R_IRQ_CTRL, hw->irq_ctrl.reg);
+		printk(KERN_INFO "%s %s\n", xhfc->chip_name, __FUNCTION__);
+	xhfc->irq_ctrl.bit.v_glob_irq_en = 0;
+	write_xhfc(xhfc, R_IRQ_CTRL, xhfc->irq_ctrl.reg);
 }
 
 /******************************************/
 /* start interrupt and set interrupt mask */
 /******************************************/
-void
-enable_interrupts(xhfc_hw * hw)
+static void
+enable_interrupts(xhfc_t * xhfc)
 {
 	if (debug & DEBUG_HFC_IRQ)
-		printk(KERN_INFO "%s %s\n", hw->card_name, __FUNCTION__);
+		printk(KERN_INFO "%s %s\n", xhfc->chip_name, __FUNCTION__);
 
-	write_xhfc(hw, R_SU_IRQMSK, hw->su_irqmsk.reg);
+	write_xhfc(xhfc, R_SU_IRQMSK, xhfc->su_irqmsk.reg);
 
 	/* use defined timer interval */
-	write_xhfc(hw, R_TI_WD, hw->ti_wd.reg);
-	hw->misc_irqmsk.bit.v_ti_irqmsk = 1;
-	write_xhfc(hw, R_MISC_IRQMSK, hw->misc_irqmsk.reg);
+	write_xhfc(xhfc, R_TI_WD, xhfc->ti_wd.reg);
+	xhfc->misc_irqmsk.bit.v_ti_irqmsk = 1;
+	write_xhfc(xhfc, R_MISC_IRQMSK, xhfc->misc_irqmsk.reg);
 
 	/* clear all pending interrupts bits */
-	read_xhfc(hw, R_MISC_IRQ);
-	read_xhfc(hw, R_SU_IRQ);
-	read_xhfc(hw, R_FIFO_BL0_IRQ);
-	read_xhfc(hw, R_FIFO_BL1_IRQ);
-	read_xhfc(hw, R_FIFO_BL2_IRQ);
-	read_xhfc(hw, R_FIFO_BL3_IRQ);
+	read_xhfc(xhfc, R_MISC_IRQ);
+	read_xhfc(xhfc, R_SU_IRQ);
+	read_xhfc(xhfc, R_FIFO_BL0_IRQ);
+	read_xhfc(xhfc, R_FIFO_BL1_IRQ);
+	read_xhfc(xhfc, R_FIFO_BL2_IRQ);
+	read_xhfc(xhfc, R_FIFO_BL3_IRQ);
 
 	/* enable global interrupts */
-	hw->irq_ctrl.bit.v_glob_irq_en = 1;
-	hw->irq_ctrl.bit.v_fifo_irq_en = 1;
-	write_xhfc(hw, R_IRQ_CTRL, hw->irq_ctrl.reg);
+	xhfc->irq_ctrl.bit.v_glob_irq_en = 1;
+	xhfc->irq_ctrl.bit.v_fifo_irq_en = 1;
+	write_xhfc(xhfc, R_IRQ_CTRL, xhfc->irq_ctrl.reg);
 }
 
 /***********************************/
 /* initialise the XHFC ISDN Chip   */
 /* return 0 on success.            */
 /***********************************/
-int
-init_xhfc(xhfc_hw * hw)
+static int
+init_xhfc(xhfc_t * xhfc)
 {
 	int err = 0;
 	int timeout = 0x2000;
 
-	hw->chip_id = read_xhfc(hw, R_CHIP_ID);
+	xhfc->chip_id = read_xhfc(xhfc, R_CHIP_ID);
 
 	if (debug & DEBUG_HFC_INIT)
-		printk(KERN_INFO "%s %s ChipID: 0x%x\n", hw->card_name,
-		       __FUNCTION__, hw->chip_id);
+		printk(KERN_INFO "%s %s ChipID: 0x%x\n", xhfc->chip_name,
+		       __FUNCTION__, xhfc->chip_id);
 
-	switch (hw->chip_id) {
+	switch (xhfc->chip_id) {
 		case CHIP_ID_1SU:
-			hw->num_ports = 1;
-			hw->max_fifo = 4;
-			hw->max_z = 0xFF;
-			hw->ti_wd.bit.v_ev_ts = 0x6;	/* timer irq interval 16 ms */
-			write_xhfc(hw, R_FIFO_MD, M1_FIFO_MD * 2);
-			hw->su_irqmsk.bit.v_su0_irqmsk = 1;
+			xhfc->num_ports = 1;
+			xhfc->max_fifo = 4;
+			xhfc->max_z = 0xFF;
+			xhfc->ti_wd.bit.v_ev_ts = 0x6;	/* timer irq interval 16 ms */
+			write_xhfc(xhfc, R_FIFO_MD, M1_FIFO_MD * 2);
+			xhfc->su_irqmsk.bit.v_su0_irqmsk = 1;
 			break;
 		case CHIP_ID_2SU:
-			hw->num_ports = 2;
-			hw->max_fifo = 8;
-			hw->max_z = 0x7F;
-			hw->ti_wd.bit.v_ev_ts = 0x5;	/* timer irq interval 8 ms */
-			write_xhfc(hw, R_FIFO_MD, M1_FIFO_MD * 1);
-			hw->su_irqmsk.bit.v_su0_irqmsk = 1;
-			hw->su_irqmsk.bit.v_su1_irqmsk = 1;
+			xhfc->num_ports = 2;
+			xhfc->max_fifo = 8;
+			xhfc->max_z = 0x7F;
+			xhfc->ti_wd.bit.v_ev_ts = 0x5;	/* timer irq interval 8 ms */
+			write_xhfc(xhfc, R_FIFO_MD, M1_FIFO_MD * 1);
+			xhfc->su_irqmsk.bit.v_su0_irqmsk = 1;
+			xhfc->su_irqmsk.bit.v_su1_irqmsk = 1;
 			break;
 		case CHIP_ID_2S4U:
 		case CHIP_ID_4SU:
-			hw->num_ports = 4;
-			hw->max_fifo = 16;
-			hw->max_z = 0x3F;
-			hw->ti_wd.bit.v_ev_ts = 0x4;	/* timer irq interval 4 ms */
-			write_xhfc(hw, R_FIFO_MD, M1_FIFO_MD * 0);
-			hw->su_irqmsk.bit.v_su0_irqmsk = 1;
-			hw->su_irqmsk.bit.v_su1_irqmsk = 1;
-			hw->su_irqmsk.bit.v_su2_irqmsk = 1;
-			hw->su_irqmsk.bit.v_su3_irqmsk = 1;
+			xhfc->num_ports = 4;
+			xhfc->max_fifo = 16;
+			xhfc->max_z = 0x3F;
+			xhfc->ti_wd.bit.v_ev_ts = 0x4;	/* timer irq interval 4 ms */
+			write_xhfc(xhfc, R_FIFO_MD, M1_FIFO_MD * 0);
+			xhfc->su_irqmsk.bit.v_su0_irqmsk = 1;
+			xhfc->su_irqmsk.bit.v_su1_irqmsk = 1;
+			xhfc->su_irqmsk.bit.v_su2_irqmsk = 1;
+			xhfc->su_irqmsk.bit.v_su3_irqmsk = 1;
 			break;
 		default:
 			err = -ENODEV;
@@ -1273,22 +1284,22 @@ init_xhfc(xhfc_hw * hw)
 	if (err) {
 		if (debug & DEBUG_HFC_INIT)
 			printk(KERN_ERR "%s %s: unkown Chip ID 0x%x\n",
-			       hw->card_name, __FUNCTION__, hw->chip_id);
+			       xhfc->chip_name, __FUNCTION__, xhfc->chip_id);
 		return (err);
 	}
 	
 	/* software reset to enable R_FIFO_MD setting */
-	write_xhfc(hw, R_CIRM, M_SRES);
+	write_xhfc(xhfc, R_CIRM, M_SRES);
 	udelay(5);
-	write_xhfc(hw, R_CIRM, 0);
+	write_xhfc(xhfc, R_CIRM, 0);
 	
 	/* amplitude */
-	write_xhfc(hw, R_PWM_MD, 0x80);
-	write_xhfc(hw, R_PWM1, 0x18);
+	write_xhfc(xhfc, R_PWM_MD, 0x80);
+	write_xhfc(xhfc, R_PWM1, 0x18);
 
-	write_xhfc(hw, R_FIFO_THRES, 0x11);
+	write_xhfc(xhfc, R_FIFO_THRES, 0x11);
 
-	while ((read_xhfc(hw, R_STATUS) & (M_BUSY | M_PCM_INIT))
+	while ((read_xhfc(xhfc, R_STATUS) & (M_BUSY | M_PCM_INIT))
 	       && (timeout))
 		timeout--;
 
@@ -1296,34 +1307,35 @@ init_xhfc(xhfc_hw * hw)
 		if (debug & DEBUG_HFC_INIT)
 			printk(KERN_ERR
 			       "%s %s: initialization sequence could not finish\n",
-			       hw->card_name, __FUNCTION__);
+			       xhfc->chip_name, __FUNCTION__);
 		return (-ENODEV);
 	}
 
 	/* set PCM master mode */
-	hw->pcm_md0.bit.v_pcm_md = 1;
-	write_xhfc(hw, R_PCM_MD0, hw->pcm_md0.reg);
+	xhfc->pcm_md0.bit.v_pcm_md = 1;
+	write_xhfc(xhfc, R_PCM_MD0, xhfc->pcm_md0.reg);
 
 	/* set pll adjust */
-	hw->pcm_md0.bit.v_pcm_idx = IDX_PCM_MD1;
-	hw->pcm_md1.bit.v_pll_adj = 3;
-	write_xhfc(hw, R_PCM_MD0, hw->pcm_md0.reg);
-	write_xhfc(hw, R_PCM_MD1, hw->pcm_md1.reg);
+	xhfc->pcm_md0.bit.v_pcm_idx = IDX_PCM_MD1;
+	xhfc->pcm_md1.bit.v_pll_adj = 3;
+	write_xhfc(xhfc, R_PCM_MD0, xhfc->pcm_md0.reg);
+	write_xhfc(xhfc, R_PCM_MD1, xhfc->pcm_md1.reg);
 
-	enable_interrupts(hw);
 
-	mdelay(1 << hw->ti_wd.bit.v_ev_ts);
-	if (hw->irq_cnt > 2) {
-		disable_interrupts(hw);
-		hw->testirq = 0;
+	/* perfom short irq test */
+	xhfc->testirq=1;
+	enable_interrupts(xhfc);
+	mdelay(1 << xhfc->ti_wd.bit.v_ev_ts);
+	disable_interrupts(xhfc);
+	
+	if (xhfc->irq_cnt > 2) {
+		xhfc->testirq = 0;
 		return (0);
 	} else {
 		if (debug & DEBUG_HFC_INIT)
 			printk(KERN_INFO
 			       "%s %s: ERROR getting IRQ (irq_cnt %i)\n",
-			       hw->card_name, __FUNCTION__, hw->irq_cnt);
-		disable_interrupts(hw);
-		free_irq(hw->irq, hw);
+			       xhfc->chip_name, __FUNCTION__, xhfc->irq_cnt);
 		return (-EIO);
 	}
 }
@@ -1331,18 +1343,18 @@ init_xhfc(xhfc_hw * hw)
 /*************************************/
 /* free memory for all used channels */
 /*************************************/
-void
-release_channels(xhfc_hw * hw)
+static void
+release_channels(xhfc_t * xhfc)
 {
 	int i = 0;
 
 	while (i < MAX_CHAN) {
-		if (hw->chan[i].ch.Flags) {
+		if (xhfc->chan[i].ch.Flags) {
 			if (debug & DEBUG_HFC_INIT)
 				printk(KERN_DEBUG "%s %s: free channel %d\n",
-					hw->card_name, __FUNCTION__, i);
-			mISDN_freechannel(&hw->chan[i].ch);
-			hw_mISDNObj.ctrl(&hw->chan[i].ch.inst, MGR_UNREGLAYER | REQUEST, NULL);
+					xhfc->chip_name, __FUNCTION__, i);
+			mISDN_freechannel(&xhfc->chan[i].ch);
+			hw_mISDNObj.ctrl(&xhfc->chan[i].ch.inst, MGR_UNREGLAYER | REQUEST, NULL);
 		}
 		i++;
 	}
@@ -1351,16 +1363,16 @@ release_channels(xhfc_hw * hw)
 /*********************************************/
 /* setup port (line interface) with SU_CRTLx */
 /*********************************************/
-void
-init_su(xhfc_hw * hw, __u8 pt)
+static void
+init_su(xhfc_t * xhfc, __u8 pt)
 {
-	xhfc_port_t *port = &hw->port[pt];
+	xhfc_port_t *port = &xhfc->port[pt];
 
 	if (debug & DEBUG_HFC_MODE)
-		printk(KERN_INFO "%s %s port(%i)\n", hw->card_name,
+		printk(KERN_INFO "%s %s port(%i)\n", xhfc->chip_name,
 		       __FUNCTION__, pt);
 
-	write_xhfc(hw, R_SU_SEL, pt);
+	write_xhfc(xhfc, R_SU_SEL, pt);
 
 	if (port->mode & PORT_MODE_NT)
 		port->su_ctrl0.bit.v_su_md = 1;
@@ -1370,7 +1382,7 @@ init_su(xhfc_hw * hw, __u8 pt)
 
 	if (port->mode & PORT_MODE_UP) {
 		port->st_ctrl3.bit.v_st_sel = 1;
-		write_xhfc(hw, A_MS_TX, 0x0F);
+		write_xhfc(xhfc, A_MS_TX, 0x0F);
 		port->su_ctrl0.bit.v_st_sq_en = 1;
 	}
 
@@ -1379,52 +1391,53 @@ init_su(xhfc_hw * hw, __u8 pt)
 		       "su_ctrl1(0x%02x) "
 		       "su_ctrl2(0x%02x) "
 		       "st_ctrl3(0x%02x)\n",
-		       hw->card_name, __FUNCTION__,
+		       xhfc->chip_name, __FUNCTION__,
 		       port->su_ctrl0.reg,
 		       port->su_ctrl1.reg,
 		       port->su_ctrl2.reg,
 		       port->st_ctrl3.reg);
 
-	write_xhfc(hw, A_ST_CTRL3, port->st_ctrl3.reg);
-	write_xhfc(hw, A_SU_CTRL0, port->su_ctrl0.reg);
-	write_xhfc(hw, A_SU_CTRL1, port->su_ctrl1.reg);
-	write_xhfc(hw, A_SU_CTRL2, port->su_ctrl2.reg);
+	write_xhfc(xhfc, A_ST_CTRL3, port->st_ctrl3.reg);
+	write_xhfc(xhfc, A_SU_CTRL0, port->su_ctrl0.reg);
+	write_xhfc(xhfc, A_SU_CTRL1, port->su_ctrl1.reg);
+	write_xhfc(xhfc, A_SU_CTRL2, port->su_ctrl2.reg);
 	
 	if (port->mode & PORT_MODE_TE)
-		write_xhfc(hw, A_SU_CLK_DLY, CLK_DLY_TE);
+		write_xhfc(xhfc, A_SU_CLK_DLY, CLK_DLY_TE);
 	else
-		write_xhfc(hw, A_SU_CLK_DLY, CLK_DLY_NT);
+		write_xhfc(xhfc, A_SU_CLK_DLY, CLK_DLY_NT);
 
-	write_xhfc(hw, A_SU_WR_STA, 0);
+	write_xhfc(xhfc, A_SU_WR_STA, 0);
 }
 
 /*********************************************************/
 /* Setup Fifo using A_CON_HDLC, A_SUBCH_CFG, A_FIFO_CTRL */
 /*********************************************************/
-void
-setup_fifo(xhfc_hw * hw, __u8 fifo, __u8 conhdlc, __u8 subcfg,
+static void
+setup_fifo(xhfc_t * xhfc, __u8 fifo, __u8 conhdlc, __u8 subcfg,
 	   __u8 fifoctrl, __u8 enable)
 {
-	xhfc_selfifo(hw, fifo);
-	write_xhfc(hw, A_CON_HDLC, conhdlc);
-	write_xhfc(hw, A_SUBCH_CFG, subcfg);
-	write_xhfc(hw, A_FIFO_CTRL, fifoctrl);
+	xhfc_selfifo(xhfc, fifo);
+	write_xhfc(xhfc, A_CON_HDLC, conhdlc);
+	write_xhfc(xhfc, A_SUBCH_CFG, subcfg);
+	write_xhfc(xhfc, A_FIFO_CTRL, fifoctrl);
 
 	if (enable)
-		hw->fifo_irqmsk |= (1 << fifo);
+		xhfc->fifo_irqmsk |= (1 << fifo);
 	else
-		hw->fifo_irqmsk &= ~(1 << fifo);
+		xhfc->fifo_irqmsk &= ~(1 << fifo);
 
-	xhfc_resetfifo(hw);
-	xhfc_selfifo(hw, fifo);
+	xhfc_resetfifo(xhfc);
+	xhfc_selfifo(xhfc, fifo);
 
 	if (debug & DEBUG_HFC_MODE) {
 		printk(KERN_INFO
-		       "%s %s: fifo(%i) conhdlc(0x%02x) subcfg(0x%02x) fifoctrl(0x%02x)\n",
-		       hw->card_name, __FUNCTION__, fifo, sread_xhfc(hw,
-								     A_CON_HDLC),
-		       sread_xhfc(hw, A_SUBCH_CFG), sread_xhfc(hw,
-							       A_FIFO_CTRL)
+		       "%s %s: fifo(%i) conhdlc(0x%02x) "
+		       "subcfg(0x%02x) fifoctrl(0x%02x)\n",
+		       xhfc->chip_name, __FUNCTION__, fifo,
+		       sread_xhfc(xhfc, A_CON_HDLC),
+		       sread_xhfc(xhfc, A_SUBCH_CFG),
+		       sread_xhfc(xhfc,  A_FIFO_CTRL)
 		    );
 	}
 }
@@ -1432,20 +1445,20 @@ setup_fifo(xhfc_hw * hw, __u8 fifo, __u8 conhdlc, __u8 subcfg,
 /**************************************************/
 /* Setup S/U interface, enable/disable B-Channels */
 /**************************************************/
-void
-setup_su(xhfc_hw * hw, __u8 pt, __u8 bc, __u8 enable)
+static void
+setup_su(xhfc_t * xhfc, __u8 pt, __u8 bc, __u8 enable)
 {
-	xhfc_port_t *port = &hw->port[pt];
+	xhfc_port_t *port = &xhfc->port[pt];
 
 	if (!((bc == 0) || (bc == 1))) {
 		printk(KERN_INFO "%s %s: pt(%i) ERROR: bc(%i) unvalid!\n",
-		       hw->card_name, __FUNCTION__, pt, bc);
+		       xhfc->chip_name, __FUNCTION__, pt, bc);
 		return;
 	}
 
 	if (debug & DEBUG_HFC_MODE)
 		printk(KERN_INFO "%s %s %s pt(%i) bc(%i)\n",
-		       hw->card_name, __FUNCTION__,
+		       xhfc->chip_name, __FUNCTION__,
 		       (enable) ? ("enable") : ("disable"), pt, bc);
 
 	if (bc) {
@@ -1456,121 +1469,121 @@ setup_su(xhfc_hw * hw, __u8 pt, __u8 bc, __u8 enable)
 		port->su_ctrl0.bit.v_b1_tx_en = (enable?1:0);
 	}
 
-	if (hw->port[pt].mode & PORT_MODE_NT)
-		hw->port[pt].su_ctrl0.bit.v_su_md = 1;
+	if (xhfc->port[pt].mode & PORT_MODE_NT)
+		xhfc->port[pt].su_ctrl0.bit.v_su_md = 1;
 
-	write_xhfc(hw, R_SU_SEL, pt);
-	write_xhfc(hw, A_SU_CTRL0, hw->port[pt].su_ctrl0.reg);
-	write_xhfc(hw, A_SU_CTRL2, hw->port[pt].su_ctrl2.reg);
+	write_xhfc(xhfc, R_SU_SEL, pt);
+	write_xhfc(xhfc, A_SU_CTRL0, xhfc->port[pt].su_ctrl0.reg);
+	write_xhfc(xhfc, A_SU_CTRL2, xhfc->port[pt].su_ctrl2.reg);
 }
 
 /*********************************************/
 /* (dis-) connect D/B-Channel using protocol */
 /*********************************************/
-int
-setup_channel(xhfc_hw * hw, __u8 channel, int protocol)
+static int
+setup_channel(xhfc_t * xhfc, __u8 channel, int protocol)
 {
-	xhfc_port_t *port = hw->chan[channel].port;
+	xhfc_port_t *port = xhfc->chan[channel].port;
 	
-	if (test_bit(FLG_BCHANNEL, &hw->chan[channel].ch.Flags)) {
+	if (test_bit(FLG_BCHANNEL, &xhfc->chan[channel].ch.Flags)) {
 		if (debug & DEBUG_HFC_MODE)
-			mISDN_debugprint(&hw->chan[channel].ch.inst,
+			mISDN_debugprint(&xhfc->chan[channel].ch.inst,
 					 "channel(%i) protocol %x-->%x",
 					 channel,
-					 hw->chan[channel].ch.state,
+					 xhfc->chan[channel].ch.state,
 					 protocol);
 
 		switch (protocol) {
 			case (-1):	/* used for init */
-				hw->chan[channel].ch.state = -1;
-				hw->chan[channel].ch.channel = channel;
+				xhfc->chan[channel].ch.state = -1;
+				xhfc->chan[channel].ch.channel = channel;
 				/* fall trough */
 			case (ISDN_PID_NONE):
 				if (debug & DEBUG_HFC_MODE)
-					mISDN_debugprint(&hw->
+					mISDN_debugprint(&xhfc->
 							 chan[channel].ch.inst,
 							 "ISDN_PID_NONE");
-				if (hw->chan[channel].ch.state == ISDN_PID_NONE)
+				if (xhfc->chan[channel].ch.state == ISDN_PID_NONE)
 					return (0);	/* already in idle state */
-				hw->chan[channel].ch.state = ISDN_PID_NONE;
+				xhfc->chan[channel].ch.state = ISDN_PID_NONE;
 
-				setup_fifo(hw, (channel << 1),     4, 0, 0, 0);	/* B-TX fifo */
-				setup_fifo(hw, (channel << 1) + 1, 4, 0, 0, 0);	/* B-RX fifo */
+				setup_fifo(xhfc, (channel << 1),     4, 0, 0, 0);	/* B-TX fifo */
+				setup_fifo(xhfc, (channel << 1) + 1, 4, 0, 0, 0);	/* B-RX fifo */
 
-				setup_su(hw, port->idx, (channel % 4) ? 1 : 0, 0);
+				setup_su(xhfc, port->idx, (channel % 4) ? 1 : 0, 0);
 				
-				test_and_clear_bit(FLG_HDLC, &hw->chan[channel].ch.Flags);
-				test_and_clear_bit(FLG_TRANSPARENT, &hw->chan[channel].ch.Flags);
+				test_and_clear_bit(FLG_HDLC, &xhfc->chan[channel].ch.Flags);
+				test_and_clear_bit(FLG_TRANSPARENT, &xhfc->chan[channel].ch.Flags);
 
 				break;
 
 			case (ISDN_PID_L1_B_64TRANS):
 				if (debug & DEBUG_HFC_MODE)
-					mISDN_debugprint(&hw->chan[channel].ch.inst,
+					mISDN_debugprint(&xhfc->chan[channel].ch.inst,
 							 "ISDN_PID_L1_B_64TRANS");
-				setup_fifo(hw, (channel << 1), 6, 0, 0, 1);	/* B-TX Fifo */
-				setup_fifo(hw, (channel << 1) + 1, 6, 0, 0, 1);	/* B-RX Fifo */
+				setup_fifo(xhfc, (channel << 1), 6, 0, 0, 1);	/* B-TX Fifo */
+				setup_fifo(xhfc, (channel << 1) + 1, 6, 0, 0, 1);	/* B-RX Fifo */
 
-				setup_su(hw, port->idx, (channel % 4) ? 1 : 0, 1);
+				setup_su(xhfc, port->idx, (channel % 4) ? 1 : 0, 1);
 
-				hw->chan[channel].ch.state = ISDN_PID_L1_B_64TRANS;
-				test_and_set_bit(FLG_TRANSPARENT, &hw->chan[channel].ch.Flags);
+				xhfc->chan[channel].ch.state = ISDN_PID_L1_B_64TRANS;
+				test_and_set_bit(FLG_TRANSPARENT, &xhfc->chan[channel].ch.Flags);
 
 				break;
 
 			case (ISDN_PID_L1_B_64HDLC):
 				if (debug & DEBUG_HFC_MODE)
-					mISDN_debugprint(&hw->chan[channel].ch.inst,
+					mISDN_debugprint(&xhfc->chan[channel].ch.inst,
 							 "ISDN_PID_L1_B_64HDLC");
-				setup_fifo(hw, (channel << 1), 4, 0, M_FR_ABO, 1);	// TX Fifo
-				setup_fifo(hw, (channel << 1) + 1, 4, 0, M_FR_ABO | M_FIFO_IRQMSK, 1);	// RX Fifo
+				setup_fifo(xhfc, (channel << 1), 4, 0, M_FR_ABO, 1);	// TX Fifo
+				setup_fifo(xhfc, (channel << 1) + 1, 4, 0, M_FR_ABO | M_FIFO_IRQMSK, 1);	// RX Fifo
 
-				setup_su(hw, port->idx, (channel % 4) ? 1 : 0, 1);
+				setup_su(xhfc, port->idx, (channel % 4) ? 1 : 0, 1);
 
-				hw->chan[channel].ch.state = ISDN_PID_L1_B_64HDLC;
-				test_and_set_bit(FLG_HDLC, &hw->chan[channel].ch.Flags);
+				xhfc->chan[channel].ch.state = ISDN_PID_L1_B_64HDLC;
+				test_and_set_bit(FLG_HDLC, &xhfc->chan[channel].ch.Flags);
 
 				break;
 			default:
-				mISDN_debugprint(&hw->chan[channel].ch.inst,
+				mISDN_debugprint(&xhfc->chan[channel].ch.inst,
 					"prot not known %x",
 					protocol);
 				return (-ENOPROTOOPT);
 		}
 		return (0);
 	}
-	else if (test_bit(FLG_DCHANNEL, &hw->chan[channel].ch.Flags)) {
+	else if (test_bit(FLG_DCHANNEL, &xhfc->chan[channel].ch.Flags)) {
 		if (debug & DEBUG_HFC_MODE)
-			mISDN_debugprint(&hw->chan[channel].ch.inst,
+			mISDN_debugprint(&xhfc->chan[channel].ch.inst,
 					 "D channel(%i) protocol(%i)",
 					 channel, protocol);
 
-		setup_fifo(hw, (channel << 1), 5, 2, M_FR_ABO, 1);	/* D TX fifo */
-		setup_fifo(hw, (channel << 1) + 1, 5, 2, M_FR_ABO | M_FIFO_IRQMSK, 1);	/* D RX fifo */
+		setup_fifo(xhfc, (channel << 1), 5, 2, M_FR_ABO, 1);	/* D TX fifo */
+		setup_fifo(xhfc, (channel << 1) + 1, 5, 2, M_FR_ABO | M_FIFO_IRQMSK, 1);	/* D RX fifo */
 
 		return (0);
 	}
 
 	printk(KERN_INFO
 	       "%s %s ERROR: channel(%i) is NEITHER B nor D !!!\n",
-	       hw->card_name, __FUNCTION__, channel);
+	       xhfc->chip_name, __FUNCTION__, channel);
 
 	return (-1);
 }
 
-/*****************************************************/
-/* register ISDN stack for one XHFC card             */
-/*   - register all ports and channels               */
-/*   - set param_idx                                 */
-/*                                                   */
-/*  channel mapping in mISDN in hw->chan[MAX_CHAN]:  */
-/*    1st line interf:  0=B1,  1=B2,  2=D,  3=PCM    */
-/*    2nd line interf:  4=B1,  5=B2,  6=D,  7=PCM    */
-/*    3rd line interf:  8=B1,  9=B2, 10=D, 11=PCM    */
-/*    4th line interf; 12=B1, 13=B2, 14=D, 15=PCM    */
-/*****************************************************/
-int
-init_mISDN_channels(xhfc_hw * hw)
+/*******************************************************/
+/* register ISDN stack for one XHFC card               */
+/*   - register all ports and channels                 */
+/*   - set param_idx                                   */
+/*                                                     */
+/*  channel mapping in mISDN in xhfc->chan[MAX_CHAN]:  */
+/*    1st line interf:  0=B1,  1=B2,  2=D,  3=PCM      */
+/*    2nd line interf:  4=B1,  5=B2,  6=D,  7=PCM      */
+/*    3rd line interf:  8=B1,  9=B2, 10=D, 11=PCM      */
+/*    4th line interf; 12=B1, 13=B2, 14=D, 15=PCM      */
+/*******************************************************/
+static int
+init_mISDN_channels(xhfc_t * xhfc)
 {
 	int err;
 	int pt;		/* ST/U port index */
@@ -1580,43 +1593,43 @@ init_mISDN_channels(xhfc_hw * hw)
 	mISDN_pid_t pid;
 	u_long flags;
 	
-	for (pt = 0; pt < hw->num_ports; pt++) {
+	for (pt = 0; pt < xhfc->num_ports; pt++) {
 		/* init D channels */
 		ch_idx = (pt << 2) + 2;
 		if (debug & DEBUG_HFC_INIT)
 			printk(KERN_INFO
 			       "%s %s: Registering D-channel, card(%d) "
 			       "ch(%d) port(%d) protocol(%x)\n",
-			       hw->card_name, __FUNCTION__, hw->cardnum,
-			       ch_idx, pt, hw->port[pt].dpid);
+			       xhfc->chip_name, __FUNCTION__, xhfc->chipnum,
+			       ch_idx, pt, xhfc->port[pt].dpid);
 
-		hw->port[pt].idx = pt;
-		hw->chan[ch_idx].port = &hw->port[pt];
-		ch = &hw->chan[ch_idx].ch;
+		xhfc->port[pt].idx = pt;
+		xhfc->chan[ch_idx].port = &xhfc->port[pt];
+		ch = &xhfc->chan[ch_idx].ch;
 		
 		memset(ch, 0, sizeof(channel_t));
 		ch->channel = ch_idx;
 		ch->debug = debug;
 		ch->inst.obj = &hw_mISDNObj;
-		ch->inst.hwlock = &hw->lock;
-		ch->inst.class_dev.dev = &hw->pdev->dev;
-		mISDN_init_instance(&ch->inst, &hw_mISDNObj, hw, xhfc_l2l1);
+		ch->inst.hwlock = &xhfc->lock;
+		ch->inst.class_dev.dev = &xhfc->pi->pdev->dev;
+		mISDN_init_instance(&ch->inst, &hw_mISDNObj, xhfc, xhfc_l2l1);
 		ch->inst.pid.layermask = ISDN_LAYER(0);
-		sprintf(ch->inst.name, "%s/%d", hw->card_name, pt);
+		sprintf(ch->inst.name, "%s_%d", xhfc->chip_name, pt);
 		err = mISDN_initchannel(ch, MSK_INIT_DCHANNEL, MAX_DFRAME_LEN_L1);
 		if (err)
 			goto free_channels;
-		ch->hw = hw;
+		ch->hw = xhfc;
 		
 		/* init t3 timer */
-		init_timer(&hw->port[pt].t3_timer);
-		hw->port[pt].t3_timer.data = (long) ch;
-		hw->port[pt].t3_timer.function = (void *) l1_timer_expire_t3;
+		init_timer(&xhfc->port[pt].t3_timer);
+		xhfc->port[pt].t3_timer.data = (long) ch;
+		xhfc->port[pt].t3_timer.function = (void *) l1_timer_expire_t3;
 
 		/* init t4 timer */
-		init_timer(&hw->port[pt].t4_timer);
-		hw->port[pt].t4_timer.data = (long) ch;
-		hw->port[pt].t4_timer.function = (void *) l1_timer_expire_t4;
+		init_timer(&xhfc->port[pt].t4_timer);
+		xhfc->port[pt].t4_timer.data = (long) ch;
+		xhfc->port[pt].t4_timer.function = (void *) l1_timer_expire_t4;
 
 		/* init B channels */
 		for (b = 0; b < 2; b++) {
@@ -1624,44 +1637,44 @@ init_mISDN_channels(xhfc_hw * hw)
 			if (debug & DEBUG_HFC_INIT)
 				printk(KERN_DEBUG
 				       "%s %s: Registering B-channel, card(%d) "
-				       "ch(%d) port(%d)\n", hw->card_name,
-				       __FUNCTION__, hw->cardnum, ch_idx, pt);
+				       "ch(%d) port(%d)\n", xhfc->chip_name,
+				       __FUNCTION__, xhfc->chipnum, ch_idx, pt);
 
-			hw->chan[ch_idx].port = &hw->port[pt];
-			ch = &hw->chan[ch_idx].ch;
+			xhfc->chan[ch_idx].port = &xhfc->port[pt];
+			ch = &xhfc->chan[ch_idx].ch;
 			
 			memset(ch, 0, sizeof(channel_t));
 			ch->channel = ch_idx;
 			ch->debug = debug;
-			mISDN_init_instance(&ch->inst, &hw_mISDNObj, hw, xhfc_l2l1);
+			mISDN_init_instance(&ch->inst, &hw_mISDNObj, xhfc, xhfc_l2l1);
 			ch->inst.pid.layermask = ISDN_LAYER(0);
-			ch->inst.hwlock = &hw->lock;
-			ch->inst.class_dev.dev = &hw->pdev->dev;			
+			ch->inst.hwlock = &xhfc->lock;
+			ch->inst.class_dev.dev = &xhfc->pi->pdev->dev;			
 			
 			sprintf(ch->inst.name, "%s/%d B%d",
-				hw->card_name, pt, b + 1);
+				xhfc->chip_name, pt, b + 1);
 
 			if (mISDN_initchannel(ch, MSK_INIT_BCHANNEL, MAX_DATA_MEM)) {
 				err = -ENOMEM;
 				goto free_channels;
 			}
-			ch->hw = hw;
+			ch->hw = xhfc;
 		}
 		
 		/* clear PCM */
-		memset(&hw->chan[(pt << 2) + 3], 0, sizeof(channel_t));
+		memset(&xhfc->chan[(pt << 2) + 3], 0, sizeof(channel_t));
 
-		mISDN_set_dchannel_pid(&pid, hw->port[pt].dpid,
-				       layermask[hw->param_idx + pt]);
+		mISDN_set_dchannel_pid(&pid, xhfc->port[pt].dpid,
+				       layermask[xhfc->param_idx + pt]);
 
 		/* register D Channel */
-		ch = &hw->chan[(pt << 2) + 2].ch;
+		ch = &xhfc->chan[(pt << 2) + 2].ch;
 		
 		/* set protocol for NT/TE */
-		if (hw->port[pt].mode & PORT_MODE_NT) {
+		if (xhfc->port[pt].mode & PORT_MODE_NT) {
 			/* NT-mode */
-			hw->port[hw->param_idx + pt].mode |= NT_TIMER;
-			hw->port[hw->param_idx + pt].nt_timer = 0;
+			xhfc->port[xhfc->param_idx + pt].mode |= NT_TIMER;
+			xhfc->port[xhfc->param_idx + pt].nt_timer = 0;
 
 			ch->inst.pid.protocol[0] = ISDN_PID_L0_NT_S0;
 			ch->inst.pid.protocol[1] = ISDN_PID_L1_NT_S0;
@@ -1669,11 +1682,11 @@ init_mISDN_channels(xhfc_hw * hw)
 			pid.protocol[1] = ISDN_PID_L1_NT_S0;
 			ch->inst.pid.layermask |= ISDN_LAYER(1);
 			pid.layermask |= ISDN_LAYER(1);
-			if (layermask[hw->param_idx + pt] & ISDN_LAYER(2))
+			if (layermask[xhfc->param_idx + pt] & ISDN_LAYER(2))
 				pid.protocol[2] = ISDN_PID_L2_LAPD_NET;
 		} else {
 			/* TE-mode */
-			hw->port[hw->param_idx + pt].mode |= PORT_MODE_TE;
+			xhfc->port[xhfc->param_idx + pt].mode |= PORT_MODE_TE;
 			ch->inst.pid.protocol[0] = ISDN_PID_L0_TE_S0;
 			ch->inst.pid.protocol[1] = ISDN_PID_L1_TE_S0;
 			pid.protocol[0] = ISDN_PID_L0_TE_S0;
@@ -1683,14 +1696,14 @@ init_mISDN_channels(xhfc_hw * hw)
 		if (debug & DEBUG_HFC_INIT)
 			printk(KERN_INFO
 			       "%s %s: registering Stack for Port %i\n",
-			       hw->card_name, __FUNCTION__, pt);
+			       xhfc->chip_name, __FUNCTION__, pt);
 
 		/* register stack */
 		err = hw_mISDNObj.ctrl(NULL, MGR_NEWSTACK | REQUEST, &ch->inst);
 		if (err) {
 			printk(KERN_ERR
 			       "%s %s: MGR_NEWSTACK | REQUEST  err(%d)\n",
-			       hw->card_name, __FUNCTION__, err);
+			       xhfc->chip_name, __FUNCTION__, err);
 			goto free_channels;
 		}
 		ch->state = 0;
@@ -1699,11 +1712,11 @@ init_mISDN_channels(xhfc_hw * hw)
 		for (b = 0; b < 2; b++) {
 			err = hw_mISDNObj.ctrl(ch->inst.st,
 				MGR_NEWSTACK | REQUEST,
-				&hw->chan[(pt << 2) + b].ch.inst);
+				&xhfc->chan[(pt << 2) + b].ch.inst);
 			if (err) {
 				printk(KERN_ERR
 				       "%s %s: MGR_ADDSTACK bchan error %d\n",
-				       hw->card_name, __FUNCTION__, err);
+				       xhfc->chip_name, __FUNCTION__, err);
 				goto free_stack;
 			}
 		}
@@ -1713,16 +1726,16 @@ init_mISDN_channels(xhfc_hw * hw)
 		if (err) {
 			printk(KERN_ERR
 			       "%s %s: MGR_SETSTACK REQUEST dch err(%d)\n",
-			       hw->card_name, __FUNCTION__, err);
+			       xhfc->chip_name, __FUNCTION__, err);
 			hw_mISDNObj.ctrl(ch->inst.st,
 					 MGR_DELSTACK | REQUEST, NULL);
 			goto free_stack;
 		}
 
 		/* initial setup of each channel */
-		setup_channel(hw, ch->channel, -1);
+		setup_channel(xhfc, ch->channel, -1);
 		for (b = 0; b < 2; b++)
-			setup_channel(hw, (pt << 2) + b, -1);
+			setup_channel(xhfc, (pt << 2) + b, -1);
 
 		/* delay some time */
 		set_current_state(TASK_UNINTERRUPTIBLE);
@@ -1736,8 +1749,8 @@ init_mISDN_channels(xhfc_hw * hw)
 	hw_mISDNObj.ctrl(ch->inst.st, MGR_DELSTACK | REQUEST, NULL);
       free_channels:
       	spin_lock_irqsave(&hw_mISDNObj.lock, flags);
-	release_channels(hw);
-	list_del(&hw->list);
+	release_channels(xhfc);
+	list_del(&xhfc->list);
 	spin_unlock_irqrestore(&hw_mISDNObj.lock, flags);
 
 	return (err);
@@ -1747,54 +1760,54 @@ init_mISDN_channels(xhfc_hw * hw)
 /* parse module paramaters like */
 /* NE/TE and S0/Up port mode    */
 /********************************/
-void
-parse_module_params(xhfc_hw * hw)
+static void
+parse_module_params(xhfc_t * xhfc)
 {
 	__u8 pt;
 
 	/* parse module parameters */
-	for (pt = 0; pt < hw->num_ports; pt++) {
+	for (pt = 0; pt < xhfc->num_ports; pt++) {
 		/* D-Channel protocol: (2=DSS1) */
-		hw->port[pt].dpid = (protocol[hw->param_idx + pt] & 0x0F);
-		if (hw->port[pt].dpid == 0) {
+		xhfc->port[pt].dpid = (protocol[xhfc->param_idx + pt] & 0x0F);
+		if (xhfc->port[pt].dpid == 0) {
 			printk(KERN_INFO
 			       "%s %s: WARNING: wrong value for protocol[%i], "
 			       "assuming 0x02 (DSS1)...\n",
-			       hw->card_name, __FUNCTION__,
-			       hw->param_idx + pt);
-			hw->port[pt].dpid = 0x02;
+			       xhfc->chip_name, __FUNCTION__,
+			       xhfc->param_idx + pt);
+			xhfc->port[pt].dpid = 0x02;
 		}
 
 		/* Line Interface TE or NT */
-		if (protocol[hw->param_idx + pt] & 0x10)
-			hw->port[pt].mode |= PORT_MODE_NT;
+		if (protocol[xhfc->param_idx + pt] & 0x10)
+			xhfc->port[pt].mode |= PORT_MODE_NT;
 		else
-			hw->port[pt].mode |= PORT_MODE_TE;
+			xhfc->port[pt].mode |= PORT_MODE_TE;
 
 		/* Line Interface in S0 or Up mode */
-		if (protocol[hw->param_idx + pt] & 0x20)
-			hw->port[pt].mode |= PORT_MODE_UP;
+		if (protocol[xhfc->param_idx + pt] & 0x20)
+			xhfc->port[pt].mode |= PORT_MODE_UP;
 		else
-			hw->port[pt].mode |= PORT_MODE_S0;
+			xhfc->port[pt].mode |= PORT_MODE_S0;
 
 		/* st line polarity */
-		if (protocol[hw->param_idx + pt] & 0x40)
-			hw->port[pt].mode |= PORT_MODE_EXCH_POL;
+		if (protocol[xhfc->param_idx + pt] & 0x40)
+			xhfc->port[pt].mode |= PORT_MODE_EXCH_POL;
 			
 		/* link B-channel loop */
-		if (protocol[hw->param_idx + pt] & 0x80)
-			hw->port[pt].mode |= PORT_MODE_LOOP;
+		if (protocol[xhfc->param_idx + pt] & 0x80)
+			xhfc->port[pt].mode |= PORT_MODE_LOOP;
 		
 
 		if (debug & DEBUG_HFC_INIT)
 			printk ("%s %s: protocol[%i]=0x%02x, dpid=%d, mode:%s,%s %s %s\n",
-			        hw->card_name, __FUNCTION__, hw->param_idx+pt,
-			        protocol[hw->param_idx + pt],
-			        hw->port[pt].dpid,
-			        (hw->port[pt].mode & PORT_MODE_TE)?"TE":"NT",
-			        (hw->port[pt].mode & PORT_MODE_S0)?"S0":"Up",
-			        (hw->port[pt].mode & PORT_MODE_EXCH_POL)?"SU_EXCH":"",
-			        (hw->port[pt].mode & PORT_MODE_LOOP)?"B-LOOP":""
+			        xhfc->chip_name, __FUNCTION__, xhfc->param_idx+pt,
+			        protocol[xhfc->param_idx + pt],
+			        xhfc->port[pt].dpid,
+			        (xhfc->port[pt].mode & PORT_MODE_TE)?"TE":"NT",
+			        (xhfc->port[pt].mode & PORT_MODE_S0)?"S0":"Up",
+			        (xhfc->port[pt].mode & PORT_MODE_EXCH_POL)?"SU_EXCH":"",
+			        (xhfc->port[pt].mode & PORT_MODE_LOOP)?"B-LOOP":""
 			        );
 	}
 }
@@ -1804,59 +1817,40 @@ parse_module_params(xhfc_hw * hw)
 /* return 0 on success.         */
 /********************************/
 static int __devinit
-setup_instance(xhfc_hw * hw)
+setup_instance(xhfc_t * xhfc)
 {
 	int err;
 	int pt;
-	xhfc_hw *previous_hw;
+	xhfc_t *previous_hw;
 	u_long flags;
 
-#if BRIDGE == BRIDGE_PCI2PI
-	err = init_pci_bridge(hw);
-	if (err)
-		goto out;
-#endif
+	sprintf(xhfc->chip_name, "%s_%i", xhfc->pi->card_name, xhfc->chipidx);
 
-	if (debug & DEBUG_HFC_INIT)
-		printk(KERN_WARNING "%s %s: requesting IRQ %d\n",
-		       hw->card_name, __FUNCTION__, hw->irq);
-
-	spin_lock_init(&hw->lock);
-	tasklet_init(&hw->tasklet, xhfc_bh_handler, (unsigned long) hw);
+	spin_lock_init(&xhfc->lock);
+	tasklet_init(&xhfc->tasklet, xhfc_bh_handler, (unsigned long) xhfc);
 
 	/* search previous instances to index protocol[] array */
 	list_for_each_entry(previous_hw, &hw_mISDNObj.ilist, list) {
-		hw->param_idx += previous_hw->num_ports;
+		xhfc->param_idx += previous_hw->num_ports;
 	}
 
 	spin_lock_irqsave(&hw_mISDNObj.lock, flags);
 	/* add this instance to hardware list */
-	list_add_tail(&hw->list, &hw_mISDNObj.ilist);
+	list_add_tail(&xhfc->list, &hw_mISDNObj.ilist);
 	spin_unlock_irqrestore(&hw_mISDNObj.lock, flags);
 
-	/* init interrupt engine */
-	hw->testirq = 1;
-	if (request_irq(hw->irq, xhfc_interrupt, SA_SHIRQ, "XHFC", hw)) {
-		printk(KERN_WARNING "%s %s: couldn't get interrupt %d\n",
-		       hw->card_name, __FUNCTION__, hw->irq);
-		hw->irq = 0;
-		err = -EIO;
-		goto out;
-	}
-
-	err = init_xhfc(hw);
+	err = init_xhfc(xhfc);
 	if (err)
 		goto out;
 
-	parse_module_params(hw);
+	parse_module_params(xhfc);
 
 	/* init line interfaces (ports) */
-	for (pt = 0; pt < hw->num_ports; pt++) {
-		init_su(hw, pt);
-	}
+	for (pt = 0; pt < xhfc->num_ports; pt++)
+		init_su(xhfc, pt);
 
 	/* register all channels at ISDN procol stack */
-	err = init_mISDN_channels(hw);
+	err = init_mISDN_channels(xhfc);
 	if (err)
 		goto out;
 
@@ -1864,21 +1858,20 @@ setup_instance(xhfc_hw * hw)
 	set_current_state(TASK_UNINTERRUPTIBLE);
 	schedule_timeout((100 * HZ) / 1000);	/* Timeout 100ms */
 
-	enable_interrupts(hw);
+	enable_interrupts(xhfc);
 
 	/* force initial layer1 statechanges */
-	hw->su_irq.reg = hw->su_irqmsk.reg;
-	
-	
+	xhfc->su_irq.reg = xhfc->su_irqmsk.reg;
+
 	/* init B cbannel loops if desired */
-	for (pt = 0; pt < hw->num_ports; pt++) {
-		if (hw->port[pt].mode & PORT_MODE_LOOP) {
+	for (pt = 0; pt < xhfc->num_ports; pt++) {
+		if (xhfc->port[pt].mode & PORT_MODE_LOOP) {
 		        if (debug & DEBUG_HFC_INIT)
 	        	        printk(KERN_INFO "%s %s init B-channel loop in port(%i)\n",
-	        	               hw->card_name, __FUNCTION__, pt);
+	        	               xhfc->chip_name, __FUNCTION__, pt);
 	        	               
-			xhfc_ph_command(&hw->chan[(pt << 2) + 2].ch, HFC_L1_TESTLOOP_B1);
-			xhfc_ph_command(&hw->chan[(pt << 2) + 2].ch, HFC_L1_TESTLOOP_B2);
+			xhfc_ph_command(&xhfc->chan[(pt << 2) + 2].ch, HFC_L1_TESTLOOP_B1);
+			xhfc_ph_command(&xhfc->chan[(pt << 2) + 2].ch, HFC_L1_TESTLOOP_B2);
 		}
 	}
 
@@ -1892,23 +1885,29 @@ setup_instance(xhfc_hw * hw)
 /* release single card  */
 /************************/
 static void
-release_card(xhfc_hw * hw)
+release_card(xhfc_pi * pi)
 {
 	u_long	flags;
+	__u8 i;
 
-	disable_interrupts(hw);
-	free_irq(hw->irq, hw);
+	for (i=0; i<pi->driver_data.num_xhfcs; i++)
+		disable_interrupts(&pi->xhfc[i]);
+
+	free_irq(pi->irq, pi);
 
 	/* wait for pending tasklet to finish */
 	set_current_state(TASK_UNINTERRUPTIBLE);
 	schedule_timeout((100 * HZ) / 1000);	/* Timeout 100ms */
 
 	spin_lock_irqsave(&hw_mISDNObj.lock, flags);
-	release_channels(hw);
-	list_del(&hw->list);
+	for (i=0; i<pi->driver_data.num_xhfcs; i++) {
+		release_channels(&pi->xhfc[i]);
+		list_del(&pi->xhfc[i].list);
+	}
 	spin_unlock_irqrestore(&hw_mISDNObj.lock, flags);
-	
-	kfree(hw);
+
+	kfree(pi->xhfc);
+	kfree(pi);
 }
 
 #if BRIDGE == BRIDGE_PCI2PI
@@ -1919,39 +1918,73 @@ release_card(xhfc_hw * hw)
 static int __devinit
 xhfc_pci_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 {
-	xhfc_param *driver_data = (xhfc_param *) ent->driver_data;
-	xhfc_hw *hw;
+	pi_params *driver_data = (pi_params *) ent->driver_data;
+	xhfc_pi *pi;
+	__u8 i;
 
 	int err = -ENOMEM;
-
-
-	if (!(hw = kmalloc(sizeof(xhfc_hw), GFP_ATOMIC))) {
+	
+	if (!(pi = kmalloc(sizeof(xhfc_pi), GFP_ATOMIC))) {
 		printk(KERN_ERR "%s %s: No kmem for XHFC card\n",
-		       hw->card_name, __FUNCTION__);
+		       pi->card_name, __FUNCTION__);
 		return (err);
 	}
-	memset(hw, 0, sizeof(xhfc_hw));
+	memset(pi, 0, sizeof(xhfc_pi));
 
-	hw->pdev = pdev;
+	pi->cardnum = card_cnt;
+	sprintf(pi->card_name, "%s_PI%d", DRIVER_NAME, pi->cardnum);
+	printk(KERN_INFO "%s %s: adapter '%s' found on PCI bus %02x dev %02x, using %i XHFC controllers\n",
+	       pi->card_name, __FUNCTION__, driver_data->device_name,
+	       pdev->bus->number, pdev->devfn, driver_data->num_xhfcs);
+
+
+	if (!(pi->xhfc = kmalloc(sizeof(xhfc_t) * driver_data->num_xhfcs, GFP_ATOMIC))) {
+		printk(KERN_ERR "%s %s: No kmem for sizeof(xhfc_t)*%i \n",
+		       pi->card_name, __FUNCTION__, driver_data->num_xhfcs);
+		return (err);
+	}
+	memset(pi->xhfc, 0, sizeof(xhfc_t) * driver_data->num_xhfcs);
+
+	pi->pdev = pdev;
 	err = pci_enable_device(pdev);
+	if (err) {
+		printk(KERN_ERR "%s %s: error with pci_enable_device\n",
+		       pi->card_name, __FUNCTION__);
+		goto out;
+	}
+		
+	if (driver_data->num_xhfcs > PCI2PI_MAX_XHFC) {
+		printk(KERN_ERR "%s %s: max number og adressable XHFCs aceeded\n",
+		       pi->card_name, __FUNCTION__);
+		goto out;
+	}
 
+	pi->driver_data = *driver_data;
+	pi->irq = pdev->irq;
+	pi->hw_membase = (u_char *) pci_resource_start(pdev, 1);
+	pi->membase = ioremap((ulong) pi->hw_membase, 4096);
+	pci_set_drvdata(pdev, pi);
+
+	err = init_pci_bridge(pi);
 	if (err)
 		goto out;
 
-	hw->cardnum = card_cnt;
-	sprintf(hw->card_name, "%s_%d", DRIVER_NAME, hw->cardnum);
-	printk(KERN_INFO "%s %s: adapter '%s' found on PCI bus %02x dev %02x\n",
-	       hw->card_name, __FUNCTION__, driver_data->device_name,
-	       pdev->bus->number, pdev->devfn);
+	/* init interrupt engine */
+	if (request_irq(pi->irq, xhfc_interrupt, SA_SHIRQ, "XHFC", pi)) {
+		printk(KERN_WARNING "%s %s: couldn't get interrupt %d\n",
+		       pi->card_name, __FUNCTION__, pi->irq);
+		pi->irq = 0;
+		err = -EIO;
+		goto out;
+	}
 
-	hw->driver_data = *driver_data;
-	hw->irq = pdev->irq;
+	err = 0;
+	for (i=0; i<pi->driver_data.num_xhfcs; i++) {
+		pi->xhfc[i].pi = pi;
+		pi->xhfc[i].chipidx = i;
+		err |= setup_instance(&pi->xhfc[i]);
+	}
 
-	hw->hw_membase = (u_char *) pci_resource_start(pdev, 1);
-	hw->membase = ioremap((ulong) hw->hw_membase, 4096);
-
-	pci_set_drvdata(pdev, hw);
-	err = setup_instance(hw);
 	if (!err) {
 		card_cnt++;
 		return (0);
@@ -1960,7 +1993,8 @@ xhfc_pci_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	}
 
       out:
-	kfree(hw);
+	kfree(pi->xhfc);
+	kfree(pi);
 	return (err);
 };
 
@@ -1970,10 +2004,10 @@ xhfc_pci_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 static void __devexit
 xhfc_pci_remove(struct pci_dev *pdev)
 {
-	xhfc_hw *hw = pci_get_drvdata(pdev);
-	printk(KERN_INFO "%s %s: removing card\n", hw->card_name,
+	xhfc_pi *pi = pci_get_drvdata(pdev);
+	printk(KERN_INFO "%s %s: removing card\n", pi->card_name,
 	       __FUNCTION__);
-	release_card(hw);
+	release_card(pi);
 	card_cnt--;
 	pci_disable_device(pdev);
 	return;
@@ -1986,7 +2020,7 @@ static struct pci_device_id xhfc_ids[] = {
 	 .subvendor = 0x1397,
 	 .subdevice = 0xA003,
 	 .driver_data =
-	 (unsigned long) &((xhfc_param) {CHIP_ID_4SU, "XHFC Evaluation Board"}),
+	 (unsigned long) &((pi_params) {1, "XHFC Evaluation Board"}),
 	 },
 	{}
 };

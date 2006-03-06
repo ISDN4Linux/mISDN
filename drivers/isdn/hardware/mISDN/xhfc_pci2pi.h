@@ -1,4 +1,4 @@
-/* $Id: xhfc_pci2pi.h,v 1.2 2006/03/06 12:58:31 keil Exp $
+/* $Id: xhfc_pci2pi.h,v 1.3 2006/03/06 16:20:33 mbachem Exp $
  *
  * PCI2PI Pci Bridge support for xhfc_su.c
  *
@@ -7,7 +7,7 @@
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2, or (at your option)
+ * the Free Software Foundation; eit_her version 2, or (at your option)
  * any later version.
  *
  * This program is distributed in the hope that it will be useful,
@@ -59,6 +59,10 @@
 #define XHFC_2SU_BOND	PCI2PI_GPIO0_BOND0
 #define XHFC_2S4U_BOND	PCI2PI_GPIO1_BOND1
 #define XHFC_4SU_BOND	PCI2PI_GPIO1_BOND1 | PCI2PI_GPIO0_BOND0
+
+/* membase offset to address XHFC controllers */
+#define PCI2PI_MAX_XHFC 2
+extern __u32 PCI2PI_XHFC_OFFSETS[PCI2PI_MAX_XHFC];
 
 
 /*******************************************************/
@@ -271,39 +275,39 @@ read and write functions to access registers of the PCI bridge
 */
 
 static inline __u8
-ReadPCI2PI_u8(xhfc_hw * hw, __u16 reg_addr)
+ReadPCI2PI_u8(xhfc_pi * pi, __u16 reg_addr)
 {
-	return (*(volatile __u8 *) (hw->membase + reg_addr));
+	return (*(volatile __u8 *) (pi->membase + reg_addr));
 }
 
 static inline __u16
-ReadPCI2PI_u16(xhfc_hw * hw, __u16 reg_addr)
+ReadPCI2PI_u16(xhfc_pi * pi, __u16 reg_addr)
 {
-	return (*(volatile __u16 *) (hw->membase + reg_addr));
+	return (*(volatile __u16 *) (pi->membase + reg_addr));
 }
 
 static inline __u32
-ReadPCI2PI_u32(xhfc_hw * hw, __u16 reg_addr)
+ReadPCI2PI_u32(xhfc_pi * pi, __u16 reg_addr)
 {
-	return (*(volatile __u32 *) (hw->membase + reg_addr));
+	return (*(volatile __u32 *) (pi->membase + reg_addr));
 }
 
 static inline void
-WritePCI2PI_u8(xhfc_hw * hw, __u16 reg_addr, __u8 value)
+WritePCI2PI_u8(xhfc_pi * pi, __u16 reg_addr, __u8 value)
 {
-	*((volatile __u8 *) (hw->membase + reg_addr)) = value;
+	*((volatile __u8 *) (pi->membase + reg_addr)) = value;
 }
 
 static inline void
-WritePCI2PI_u16(xhfc_hw * hw, __u16 reg_addr, __u16 value)
+WritePCI2PI_u16(xhfc_pi * pi, __u16 reg_addr, __u16 value)
 {
-	*((volatile __u16 *) (hw->membase + reg_addr)) = value;
+	*((volatile __u16 *) (pi->membase + reg_addr)) = value;
 }
 
 static inline void
-WritePCI2PI_u32(xhfc_hw * hw, __u16 reg_addr, __u32 value)
+WritePCI2PI_u32(xhfc_pi * pi, __u16 reg_addr, __u32 value)
 {
-	*((volatile __u32 *) (hw->membase + reg_addr)) = value;
+	*((volatile __u32 *) (pi->membase + reg_addr)) = value;
 }
 
 
@@ -339,9 +343,9 @@ these modes is not interrupted by its own interrupt handler.
 functions for multiplexed access
 */
 static inline __u8
-read_xhfc(xhfc_hw * hw, __u8 reg_addr)
+read_xhfc(xhfc_t * xhfc, __u8 reg_addr)
 {
-	return (*(volatile __u8 *) (hw->membase + (reg_addr << 2)));
+	return (*(volatile __u8 *) (xhfc->pi->membase + PCI2PI_XHFC_OFFSETS[xhfc->chipidx] + (reg_addr << 2)));
 }
 
 
@@ -351,22 +355,22 @@ e.g. A_FIFO_DATA
 this function is only defined for software compatibility here
 */
 static inline __u32
-read32_xhfc(xhfc_hw * hw, __u8 reg_addr)
+read32_xhfc(xhfc_t * xhfc, __u8 reg_addr)
 {
 	__u32 value;
-	
-	value =  (*(volatile __u8 *) (hw->membase + (reg_addr << 2)));
-	value |= (*(volatile __u8 *) (hw->membase + (reg_addr << 2))) << 8;
-	value |= (*(volatile __u8 *) (hw->membase + (reg_addr << 2))) << 16;
-	value |= (*(volatile __u8 *) (hw->membase + (reg_addr << 2))) << 24;
+
+	value =  (*(volatile __u8 *) (xhfc->pi->membase + PCI2PI_XHFC_OFFSETS[xhfc->chipidx] + (reg_addr << 2)));
+	value |= (*(volatile __u8 *) (xhfc->pi->membase + PCI2PI_XHFC_OFFSETS[xhfc->chipidx] + (reg_addr << 2))) << 8;
+	value |= (*(volatile __u8 *) (xhfc->pi->membase + PCI2PI_XHFC_OFFSETS[xhfc->chipidx] + (reg_addr << 2))) << 16;
+	value |= (*(volatile __u8 *) (xhfc->pi->membase + PCI2PI_XHFC_OFFSETS[xhfc->chipidx] + (reg_addr << 2))) << 24;
 
 	return (value);
 }
 
 static inline void
-write_xhfc(xhfc_hw * hw, __u8 reg_addr, __u8 value)
+write_xhfc(xhfc_t * xhfc, __u8 reg_addr, __u8 value)
 {
-	*((volatile __u8 *) (hw->membase + (reg_addr << 2))) = value;
+	*((volatile __u8 *) (xhfc->pi->membase + PCI2PI_XHFC_OFFSETS[xhfc->chipidx] + (reg_addr << 2))) = value;
 }
 
 /*
@@ -375,12 +379,12 @@ e.g. A_FIFO_DATA
 this function is only defined for software compatibility here
 */
 static inline void
-write32_xhfc(xhfc_hw * hw, __u8 reg_addr, __u32 value)
+write32_xhfc(xhfc_t * xhfc, __u8 reg_addr, __u32 value)
 {
-	*((volatile __u8 *) (hw->membase + (reg_addr << 2))) = value & 0xff;
-	*((volatile __u8 *) (hw->membase + (reg_addr << 2))) = (value >>8) & 0xff;
-	*((volatile __u8 *) (hw->membase + (reg_addr << 2))) = (value >>16) & 0xff;
-	*((volatile __u8 *) (hw->membase + (reg_addr << 2))) = (value >>24) & 0xff;
+	*((volatile __u8 *) (xhfc->pi->membase + PCI2PI_XHFC_OFFSETS[xhfc->chipidx] + (reg_addr << 2))) = value & 0xff;
+	*((volatile __u8 *) (xhfc->pi->membase + PCI2PI_XHFC_OFFSETS[xhfc->chipidx] + (reg_addr << 2))) = (value >>8) & 0xff;
+	*((volatile __u8 *) (xhfc->pi->membase + PCI2PI_XHFC_OFFSETS[xhfc->chipidx] + (reg_addr << 2))) = (value >>16) & 0xff;
+	*((volatile __u8 *) (xhfc->pi->membase + PCI2PI_XHFC_OFFSETS[xhfc->chipidx] + (reg_addr << 2))) = (value >>24) & 0xff;
 }
 
 
@@ -389,10 +393,10 @@ this allows to read ram based registers
 that normally requires long read access times
 */
 static inline __u8
-sread_xhfc(xhfc_hw * hw, __u8 reg_addr)
+sread_xhfc(xhfc_t * xhfc, __u8 reg_addr)
 {
-	(*(volatile __u8 *) (hw->membase + (reg_addr << 2)));
-	return (*(volatile __u8 *) (hw->membase + (R_INT_DATA << 2)));
+	(*(volatile __u8 *) (xhfc->pi->membase + PCI2PI_XHFC_OFFSETS[xhfc->chipidx] + (reg_addr << 2)));
+	return (*(volatile __u8 *) (xhfc->pi->membase + PCI2PI_XHFC_OFFSETS[xhfc->chipidx] + (R_INT_DATA << 2)));
 }
 
 /* this function reads the currently selected regsiter from XHFC and is only 
@@ -400,7 +404,7 @@ required for non multiplexed access modes. For multiplexed access modes this
 function is only defined for for software compatibility. */
 
 static inline __u8
-read_xhfcregptr(xhfc_hw * hw)
+read_xhfcregptr(xhfc_t * xhfc)
 {
 	return 0;
 }
@@ -410,7 +414,7 @@ required for non multiplexed access modes. For multiplexed access modes this
 function is only defined for for software compatibility. */
 
 static inline void
-write_xhfcregptr(xhfc_hw * hw, __u8 reg_addr)
+write_xhfcregptr(xhfc_t * xhfc, __u8 reg_addr)
 {
 }
 
@@ -432,10 +436,10 @@ port is accessed with PCI address A2=0
 */
 
 static inline __u8
-read_xhfc(xhfc_hw * hw, __u8 reg_addr)
+read_xhfc(xhfc_t * xhfc, __u8 reg_addr)
 {
-	*((volatile __u8 *) (hw->membase + 4)) = reg_addr;
-	return (*(volatile __u8 *) (hw->membase));
+	*((volatile __u8 *) (xhfc->pi->membase + PCI2PI_XHFC_OFFSETS[xhfc->chipidx] + 4)) = reg_addr;
+	return (*(volatile __u8 *) (xhfc->pi->membase + PCI2PI_XHFC_OFFSETS[xhfc->chipidx]));
 }
 
 
@@ -447,17 +451,17 @@ PCI bridge generates for 8 bit data read cycles at the local bus interface.
 */
 
 static inline __u32
-read32_xhfc(xhfc_hw * hw, __u8 reg_addr)
+read32_xhfc(xhfc_t * xhfc, __u8 reg_addr)
 {
-	*((volatile __u8 *) (hw->membase + 4)) = reg_addr;
-	return (*(volatile __u32 *) hw->membase);
+	*((volatile __u8 *) (xhfc->pi->membase + PCI2PI_XHFC_OFFSETS[xhfc->chipidx] + 4)) = reg_addr;
+	return (*(volatile __u32 *) xhfc->pi->membase + PCI2PI_XHFC_OFFSETS[xhfc->chipidx]);
 }
 
 static inline void
-write_xhfc(xhfc_hw * hw, __u8 reg_addr, __u8 value)
+write_xhfc(xhfc_t * xhfc, __u8 reg_addr, __u8 value)
 {
-	*((volatile __u8 *) (hw->membase + 4)) = reg_addr;
-	*((volatile __u8 *) (hw->membase)) = value;
+	*((volatile __u8 *) (xhfc->pi->membase + PCI2PI_XHFC_OFFSETS[xhfc->chipidx] + 4)) = reg_addr;
+	*((volatile __u8 *) (xhfc->pi->membase + PCI2PI_XHFC_OFFSETS[xhfc->chipidx])) = value;
 }
 
 /*
@@ -468,10 +472,10 @@ local bus interface.
 
 */
 static inline void
-write32_xhfc(xhfc_hw * hw, __u8 reg_addr, __u32 value)
+write32_xhfc(xhfc_t * xhfc, __u8 reg_addr, __u32 value)
 {
-	*((volatile __u8 *) (hw->membase + 4)) = reg_addr;
-	*((volatile __u32 *) (hw->membase)) = value;
+	*((volatile __u8 *) (xhfc->pi->membase + PCI2PI_XHFC_OFFSETS[xhfc->chipidx] + 4)) = reg_addr;
+	*((volatile __u32 *) (xhfc->pi->membase + PCI2PI_XHFC_OFFSETS[xhfc->chipidx])) = value;
 }
 
 
@@ -482,13 +486,13 @@ registers that normally requires long read access times
 
 */
 static inline __u8
-sread_xhfc(xhfc_hw * hw, __u8 reg_addr)
+sread_xhfc(xhfc_t * xhfc, __u8 reg_addr)
 {
 	
-	*((volatile __u8 *) (hw->membase + 4)) = reg_addr;
-	(*(volatile __u8 *) (hw->membase));
-	*((volatile __u8 *) (hw->membase + 4)) = R_INT_DATA;
-	return (*(volatile __u8 *) (hw->membase));
+	*((volatile __u8 *) (xhfc->pi->membase + PCI2PI_XHFC_OFFSETS[xhfc->chipidx] + 4)) = reg_addr;
+	(*(volatile __u8 *) (xhfc->pi->membase + PCI2PI_XHFC_OFFSETS[xhfc->chipidx] ));
+	*((volatile __u8 *) (xhfc->pi->membase + PCI2PI_XHFC_OFFSETS[xhfc->chipidx] + 4)) = R_INT_DATA;
+	return (*(volatile __u8 *) (xhfc->pi->membase + PCI2PI_XHFC_OFFSETS[xhfc->chipidx]));
 }
 
 /*
@@ -497,17 +501,17 @@ this function reads the currently selected regsiter from XHFC
 
 */
 static inline __u8
-read_xhfcregptr(xhfc_hw * hw)
+read_xhfcregptr(xhfc_t * xhfc)
 {
-	return (*(volatile __u8 *) (hw->membase + 4));
+	return (*(volatile __u8 *) (xhfc->pi->membase + PCI2PI_XHFC_OFFSETS[xhfc->chipidx] + 4));
 }
 
 /* this function writes the XHFC register address pointer */
 
 static inline void
-write_xhfcregptr(xhfc_hw * hw, __u8 reg_addr)
+write_xhfcregptr(xhfc_t * xhfc, __u8 reg_addr)
 {
-    *((volatile __u8 *) (hw->membase + 4)) = reg_addr;
+    *((volatile __u8 *) (xhfc->pi->membase + PCI2PI_XHFC_OFFSETS[xhfc->chipidx] + 4)) = reg_addr;
 }
 
 
@@ -535,12 +539,12 @@ functions for SPI access
 
 
 static inline __u8
-read_xhfc(xhfc_hw * hw, __u8 reg_addr)
+read_xhfc(xhfc_t * xhfc, __u8 reg_addr)
 {
 	// wait until SPI master is idle
 	while (!(ReadPCI2PI_u32(hw, PCI2PI_SPI_STATUS) & 1));
 	// initiate a 32 clock SPI master transfer
-	WritePCI2PI_u32(hw, PCI2PI_SPI_MO_DATA, ((SPI_ADDR | SPI_WR) << 24) | (reg_addr << 16) | ((SPI_DATA | SPI_RD) << 8));
+	WritePCI2PI_u32(hw, PCI2PI_SPI_MO_DATA, ((SPI_ADDR | SPI_WR | xhfc->chipidx) << 24) | (reg_addr << 16) | ((SPI_DATA | SPI_RD) << 8));
 	// wait until SPI master is idle
 	while (!(ReadPCI2PI_u32(hw, PCI2PI_SPI_STATUS) & 1));
 	// read data from the SPI data receive register and return one byte
@@ -555,33 +559,33 @@ read four bytes from the same register address by using a SPI multiple read acce
 */
 
 static inline __u32
-read32_xhfc(xhfc_hw * hw, __u8 reg_addr)
+read32_xhfc(xhfc_t * xhfc, __u8 reg_addr)
 {
 	// wait until SPI master is idle
-	while (!(ReadPCI2PI_u32(hw, PCI2PI_SPI_STATUS) & 1));
+	while (!(ReadPCI2PI_u32(xhfc->pi, PCI2PI_SPI_STATUS) & 1));
 	// initiate a 16 clock SPI master transfer
-	WritePCI2PI_u16(hw, PCI2PI_SPI_MO_DATA, ((SPI_ADDR | SPI_WR) << 8) | reg_addr);
+	WritePCI2PI_u16(xhfc->pi, PCI2PI_SPI_MO_DATA, ((SPI_ADDR | SPI_WR | xhfc->chipidx) << 8) | reg_addr);
 	// wait until SPI master is idle
-	while (!(ReadPCI2PI_u32(hw, PCI2PI_SPI_STATUS) & 1));
+	while (!(ReadPCI2PI_u32(xhfc->pi, PCI2PI_SPI_STATUS) & 1));
 	// initiate a 8 clock SPI master transfer
-	WritePCI2PI_u8(hw, PCI2PI_SPI_MO_DATA, (SPI_DATA | SPI_RD | SPI_MULTI));
+	WritePCI2PI_u8(xhfc->pi, PCI2PI_SPI_MO_DATA, (SPI_DATA | SPI_RD | SPI_MULTI));
 	// wait until SPI master is idle
-	while (!(ReadPCI2PI_u32(hw, PCI2PI_SPI_STATUS) & 1));
+	while (!(ReadPCI2PI_u32(xhfc->pi, PCI2PI_SPI_STATUS) & 1));
 	// initiate a 32 clock SPI master transfer
 	// output data is arbitrary
-	WritePCI2PI_u32(hw, PCI2PI_SPI_MO_DATA, 0);
-	while (!(ReadPCI2PI_u32(hw, PCI2PI_SPI_STATUS) & 1));
+	WritePCI2PI_u32(xhfc->pi, PCI2PI_SPI_MO_DATA, 0);
+	while (!(ReadPCI2PI_u32(xhfc->pi, PCI2PI_SPI_STATUS) & 1));
 	// read data from the SPI data receive register and return four bytes
-	return (__u32) be32_to_cpu(ReadPCI2PI_u32(hw, PCI2PI_SPI_MI_DATA));
+	return (__u32) be32_to_cpu(ReadPCI2PI_u32(xhfc->pi, PCI2PI_SPI_MI_DATA));
 }
 
 static inline void
-write_xhfc(xhfc_hw * hw, __u8 reg_addr, __u8 value)
+write_xhfc(xhfc_t * xhfc, __u8 reg_addr, __u8 value)
 {
 	// wait until SPI master is idle
-	while (!(ReadPCI2PI_u32(hw, PCI2PI_SPI_STATUS) & 1));
+	while (!(ReadPCI2PI_u32(xhfc->pi, PCI2PI_SPI_STATUS) & 1));
 	// initiate a 32 clock SPI master transfer
-	WritePCI2PI_u32(hw, PCI2PI_SPI_MO_DATA, ((SPI_ADDR | SPI_WR) << 24) | (reg_addr << 16) | ((SPI_DATA | SPI_WR) << 8) | value);
+	WritePCI2PI_u32(xhfc->pi, PCI2PI_SPI_MO_DATA, ((SPI_ADDR | SPI_WR | xhfc->chipidx) << 24) | (reg_addr << 16) | ((SPI_DATA | SPI_WR) << 8) | value);
 }
 
 /*
@@ -591,20 +595,20 @@ multiple write access
 
 */
 static inline void
-write32_xhfc(xhfc_hw * hw, __u8 reg_addr, __u32 value)
+write32_xhfc(xhfc_t * xhfc, __u8 reg_addr, __u32 value)
 {
 	// wait until SPI master is idle
-	while (!(ReadPCI2PI_u32(hw, PCI2PI_SPI_STATUS) & 1));
+	while (!(ReadPCI2PI_u32(xhfc->pi, PCI2PI_SPI_STATUS) & 1));
 	// initiate a 16 clock SPI master transfer
-	WritePCI2PI_u16(hw, PCI2PI_SPI_MO_DATA, ((SPI_ADDR | SPI_WR) << 8) | reg_addr);
+	WritePCI2PI_u16(xhfc->pi, PCI2PI_SPI_MO_DATA, ((SPI_ADDR | SPI_WR | xhfc->chipidx) << 8) | reg_addr);
 	// wait until SPI master is idle
-	while (!(ReadPCI2PI_u32(hw, PCI2PI_SPI_STATUS) & 1));
+	while (!(ReadPCI2PI_u32(xhfc->pi, PCI2PI_SPI_STATUS) & 1));
 	// initiate a 8 clock SPI master transfer
-	WritePCI2PI_u8(hw, PCI2PI_SPI_MO_DATA, (SPI_DATA | SPI_WR | SPI_MULTI));
+	WritePCI2PI_u8(xhfc->pi, PCI2PI_SPI_MO_DATA, (SPI_DATA | SPI_WR | SPI_MULTI));
 	// wait until SPI master is idle
-	while (!(ReadPCI2PI_u32(hw, PCI2PI_SPI_STATUS) & 1));
+	while (!(ReadPCI2PI_u32(xhfc->pi, PCI2PI_SPI_STATUS) & 1));
 	// initiate a 32 clock SPI master transfer
-	WritePCI2PI_u32(hw, PCI2PI_SPI_MO_DATA, cpu_to_be32(value));
+	WritePCI2PI_u32(xhfc->pi, PCI2PI_SPI_MO_DATA, cpu_to_be32(value));
 }
 
 
@@ -615,24 +619,24 @@ registers that normally requires long read access times
 
 */
 static inline __u8
-sread_xhfc(xhfc_hw * hw, __u8 reg_addr)
+sread_xhfc(xhfc_t * xhfc, __u8 reg_addr)
 {
         // wait until SPI master is idle
-	while (!(ReadPCI2PI_u32(hw, PCI2PI_SPI_STATUS) & 1));
+	while (!(ReadPCI2PI_u32(xhfc->pi, PCI2PI_SPI_STATUS) & 1));
 	// initiate a 32 clock SPI master transfer
-	WritePCI2PI_u32(hw, PCI2PI_SPI_MO_DATA ,((SPI_ADDR | SPI_WR) << 24) | (reg_addr << 16) | ((SPI_DATA | SPI_RD) << 8));
+	WritePCI2PI_u32(xhfc->pi, PCI2PI_SPI_MO_DATA ,((SPI_ADDR | SPI_WR | xhfc->chipidx) << 24) | (reg_addr << 16) | ((SPI_DATA | SPI_RD) << 8));
 	
 	
 	// wait until SPI master is idle
-	while (!(ReadPCI2PI_u32(hw, PCI2PI_SPI_STATUS) & 1));
+	while (!(ReadPCI2PI_u32(xhfc->pi, PCI2PI_SPI_STATUS) & 1));
 	// initiate a 32 clock SPI master transfer to read R_INT_DATA register
-	WritePCI2PI_u32(hw, PCI2PI_SPI_MO_DATA, ((SPI_ADDR | SPI_WR) << 24) | (R_INT_DATA << 16) | ((SPI_DATA | SPI_RD) << 8));
+	WritePCI2PI_u32(xhfc->pi, PCI2PI_SPI_MO_DATA, ((SPI_ADDR | SPI_WR | xhfc->chipidx) << 24) | (R_INT_DATA << 16) | ((SPI_DATA | SPI_RD) << 8));
 	
 	
 	// wait until SPI master is idle
-	while (!(ReadPCI2PI_u32(hw, PCI2PI_SPI_STATUS) & 1));
+	while (!(ReadPCI2PI_u32(xhfc->pi, PCI2PI_SPI_STATUS) & 1));
 	// read data from the SPI data receive register and return one byte
-	return (__u8) (ReadPCI2PI_u32(hw, PCI2PI_SPI_MI_DATA) & 0xFF);
+	return (__u8) (ReadPCI2PI_u32(xhfc->pi, PCI2PI_SPI_MI_DATA) & 0xFF);
 }
 
 /*
@@ -641,27 +645,27 @@ this function reads the currently selected regsiter from XHFC
 
 */
 static inline __u8
-read_xhfcregptr(xhfc_hw * hw)
+read_xhfcregptr(xhfc_t * xhfc)
 {
 	// wait until SPI master is idle
-	while (!(ReadPCI2PI_u32(hw, PCI2PI_SPI_STATUS) & 1));
+	while (!(ReadPCI2PI_u32(xhfc->pi, PCI2PI_SPI_STATUS) & 1));
 	// initiate a 16 clock SPI master transfer
-	WritePCI2PI_u16(hw, PCI2PI_SPI_MO_DATA, ((SPI_ADDR | SPI_RD) << 8));
+	WritePCI2PI_u16(xhfc->pi, PCI2PI_SPI_MO_DATA, ((SPI_ADDR | SPI_RD | xhfc->chipidx) << 8));
 	// wait until SPI master is idle
-	while (!(ReadPCI2PI_u32(hw, PCI2PI_SPI_STATUS) & 1));
+	while (!(ReadPCI2PI_u32(xhfc->pi, PCI2PI_SPI_STATUS) & 1));
 	// read data from the SPI data receive register and return one byte
-	return (__u8) (ReadPCI2PI_u32(hw, PCI2PI_SPI_MI_DATA) & 0xFF);
+	return (__u8) (ReadPCI2PI_u32(xhfc->pi, PCI2PI_SPI_MI_DATA) & 0xFF);
 }
 
 /* this function writes the XHFC register address pointer */
 
 static inline void
-write_xhfcregptr(xhfc_hw * hw, __u8 reg_addr)
+write_xhfcregptr(xhfc_t * xhfc, __u8 reg_addr)
 {
     	// wait until SPI master is idle
-	while (!(ReadPCI2PI_u32(hw, PCI2PI_SPI_STATUS) & 1));
+	while (!(ReadPCI2PI_u32(xhfc->pi, PCI2PI_SPI_STATUS) & 1));
 	// initiate a 16 clock SPI master transfer
-	WritePCI2PI_u16(hw, PCI2PI_SPI_MO_DATA, ((SPI_ADDR | SPI_WR) << 8) | reg_addr);
+	WritePCI2PI_u16(xhfc->pi, PCI2PI_SPI_MO_DATA, ((SPI_ADDR | SPI_WR | xhfc->chipidx) << 8) | reg_addr);
 }
 
 #endif	/* PI_MODE == PI_SPI */
@@ -669,6 +673,6 @@ write_xhfcregptr(xhfc_hw * hw, __u8 reg_addr)
 
 
 /* Function Prototypes */
-int init_pci_bridge(xhfc_hw * hw);
+int init_pci_bridge(xhfc_pi * pi);
 
 #endif	/* _XHFC_PCI2PI_H_ */
