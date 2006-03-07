@@ -346,7 +346,7 @@ function create_misdn_init_conf {
 		addcard "hfcpci"
 		addport 1
 	done
-	for line in $(${LSPCI} -n -d 1244:0xa00); do
+	for line in $(${LSPCI} -n | grep "1244:\(0a00\|0e00\)"); do
 		addcard "avmfritz"
 		addport 1
 	done
