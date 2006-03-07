@@ -1,4 +1,4 @@
-/* $Id: xhfc_su.c,v 1.3 2006/03/06 16:20:33 mbachem Exp $
+/* $Id: xhfc_su.c,v 1.4 2006/03/07 13:28:28 mbachem Exp $
  *
  * mISDN driver for CologneChip AG's XHFC
  *
@@ -64,7 +64,7 @@
 #include "xhfc_pci2pi.h"
 #endif
 
-static const char xhfc_rev[] = "$Revision: 1.3 $";
+static const char xhfc_rev[] = "$Revision: 1.4 $";
 
 #define MAX_CARDS	8
 static int card_cnt;
@@ -1358,6 +1358,11 @@ release_channels(xhfc_t * xhfc)
 		}
 		i++;
 	}
+	
+	if (xhfc->chan)
+		kfree(xhfc->chan);
+	if (xhfc->port)
+		kfree(xhfc->port);
 }
 
 /*********************************************/
@@ -1822,6 +1827,8 @@ setup_instance(xhfc_t * xhfc)
 	int err;
 	int pt;
 	xhfc_t *previous_hw;
+	xhfc_port_t * port = NULL;
+	xhfc_chan_t * chan = NULL;
 	u_long flags;
 
 	sprintf(xhfc->chip_name, "%s_%i", xhfc->pi->card_name, xhfc->chipidx);
@@ -1843,6 +1850,28 @@ setup_instance(xhfc_t * xhfc)
 	if (err)
 		goto out;
 
+	/* alloc mem for all ports and channels */
+	err = -ENOMEM;
+	port = kmalloc(sizeof(xhfc_port_t) * xhfc->num_ports, GFP_KERNEL);
+	if (port) {
+		xhfc->port = port;
+		memset(xhfc->port, 0, sizeof(xhfc_port_t) * xhfc->num_ports);
+		chan = kmalloc(sizeof(xhfc_chan_t) * xhfc->num_ports * CHAN_PER_PORT, GFP_KERNEL);
+		if (chan) {
+			xhfc->chan = chan;
+			memset(xhfc->chan, 0, sizeof(xhfc_chan_t) * xhfc->num_ports * CHAN_PER_PORT);
+			err = 0;
+		} else {
+			printk(KERN_ERR "%s %s: No kmem for xhfc_chan_t*%i \n",
+			       xhfc->chip_name, __FUNCTION__, xhfc->num_ports * CHAN_PER_PORT);	
+			goto out;
+		}
+	} else {
+		printk(KERN_ERR "%s %s: No kmem for xhfc_port_t*%i \n",
+		       xhfc->chip_name, __FUNCTION__, xhfc->num_ports);	
+		goto out;	
+	}
+	
 	parse_module_params(xhfc);
 
 	/* init line interfaces (ports) */
@@ -1878,6 +1907,10 @@ setup_instance(xhfc_t * xhfc)
 	return (0);
 
       out:
+	if (xhfc->chan)
+		kfree(xhfc->chan);
+	if (xhfc->port)
+		kfree(xhfc->port);
 	return (err);
 }
 
@@ -1918,27 +1951,29 @@ release_card(xhfc_pi * pi)
 static int __devinit
 xhfc_pci_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 {
-	pi_params *driver_data = (pi_params *) ent->driver_data;
-	xhfc_pi *pi;
+	pi_params * driver_data = (pi_params *) ent->driver_data;
+	xhfc_pi * pi = NULL;
 	__u8 i;
 
 	int err = -ENOMEM;
-	
-	if (!(pi = kmalloc(sizeof(xhfc_pi), GFP_ATOMIC))) {
+
+	/* alloc mem for ProcessorInterface xhfc_pi */
+	if (!(pi = kmalloc(sizeof(xhfc_pi), GFP_KERNEL))) {
 		printk(KERN_ERR "%s %s: No kmem for XHFC card\n",
 		       pi->card_name, __FUNCTION__);
-		return (err);
+		goto out;
 	}
 	memset(pi, 0, sizeof(xhfc_pi));
 
 	pi->cardnum = card_cnt;
+
 	sprintf(pi->card_name, "%s_PI%d", DRIVER_NAME, pi->cardnum);
 	printk(KERN_INFO "%s %s: adapter '%s' found on PCI bus %02x dev %02x, using %i XHFC controllers\n",
 	       pi->card_name, __FUNCTION__, driver_data->device_name,
 	       pdev->bus->number, pdev->devfn, driver_data->num_xhfcs);
 
-
-	if (!(pi->xhfc = kmalloc(sizeof(xhfc_t) * driver_data->num_xhfcs, GFP_ATOMIC))) {
+	/* alloc mem for all XHFCs (xhfc_t) */
+	if (!(pi->xhfc = kmalloc(sizeof(xhfc_t) * driver_data->num_xhfcs, GFP_KERNEL))) {
 		printk(KERN_ERR "%s %s: No kmem for sizeof(xhfc_t)*%i \n",
 		       pi->card_name, __FUNCTION__, driver_data->num_xhfcs);
 		return (err);
@@ -1952,7 +1987,7 @@ xhfc_pci_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 		       pi->card_name, __FUNCTION__);
 		goto out;
 	}
-		
+
 	if (driver_data->num_xhfcs > PCI2PI_MAX_XHFC) {
 		printk(KERN_ERR "%s %s: max number og adressable XHFCs aceeded\n",
 		       pi->card_name, __FUNCTION__);
@@ -1966,8 +2001,11 @@ xhfc_pci_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	pci_set_drvdata(pdev, pi);
 
 	err = init_pci_bridge(pi);
-	if (err)
+	if (err) {
+		printk(KERN_ERR "%s %s: init_pci_bridge failed!\n",
+		       pi->card_name, __FUNCTION__);
 		goto out;
+	}
 
 	/* init interrupt engine */
 	if (request_irq(pi->irq, xhfc_interrupt, SA_SHIRQ, "XHFC", pi)) {
@@ -1993,8 +2031,10 @@ xhfc_pci_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	}
 
       out:
-	kfree(pi->xhfc);
-	kfree(pi);
+	if (pi->xhfc)
+		kfree(pi->xhfc);
+	if (pi)
+		kfree(pi);
 	return (err);
 };
 
