@@ -215,14 +215,14 @@ int bchdev_echocancel_activate(dsp_t* dev, int deftaps, int training)
 
   }
   
-  if (!dev->ecdis_rd) dev->ecdis_rd = kmalloc(sizeof(echo_can_disable_detector_state_t), GFP_KERNEL);
+  if (!dev->ecdis_rd) dev->ecdis_rd = kmalloc(sizeof(echo_can_disable_detector_state_t), GFP_ATOMIC);
   if (!dev->ecdis_rd) {
 	  kfree(dev->ec); dev->ec = NULL;
 	  return -ENOMEM;
   }
   echo_can_disable_detector_init(dev->ecdis_rd);
   
-  if (!dev->ecdis_wr) dev->ecdis_wr = kmalloc(sizeof(echo_can_disable_detector_state_t), GFP_KERNEL);
+  if (!dev->ecdis_wr) dev->ecdis_wr = kmalloc(sizeof(echo_can_disable_detector_state_t), GFP_ATOMIC);
   if (!dev->ecdis_wr) {
 	  kfree(dev->ec); dev->ec = NULL;
 	  kfree(dev->ecdis_rd); dev->ecdis_rd = NULL;

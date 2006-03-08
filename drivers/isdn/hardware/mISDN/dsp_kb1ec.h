@@ -31,7 +31,7 @@
 #ifdef __KERNEL__
 #include <linux/kernel.h>
 #include <linux/slab.h>
-#define MALLOC(a) kmalloc((a), GFP_KERNEL)
+#define MALLOC(a) kmalloc((a), GFP_ATOMIC)
 #define FREE(a) kfree(a)
 #else
 #include <stdlib.h>
