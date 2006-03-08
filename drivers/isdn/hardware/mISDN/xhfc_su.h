@@ -1,4 +1,4 @@
-/* $Id: xhfc_su.h,v 1.4 2006/03/07 13:28:28 mbachem Exp $
+/* $Id: xhfc_su.h,v 1.5 2006/03/08 14:07:14 mbachem Exp $
  *
  * mISDN driver for Colognechip xHFC chip
  *
@@ -159,7 +159,6 @@ typedef struct _xhfc_t {
 	
 	__u8 testirq;
 
-	int chip_id;
 	int num_ports;		/* number of S and U interfaces */
 	int max_fifo;		/* always 4 fifos per port */
 	__u8 max_z;		/* fifo depth -1 */

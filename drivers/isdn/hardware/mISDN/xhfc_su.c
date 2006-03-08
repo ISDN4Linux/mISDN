@@ -1,4 +1,4 @@
-/* $Id: xhfc_su.c,v 1.4 2006/03/07 13:28:28 mbachem Exp $
+/* $Id: xhfc_su.c,v 1.5 2006/03/08 14:07:14 mbachem Exp $
  *
  * mISDN driver for CologneChip AG's XHFC
  *
@@ -64,7 +64,7 @@
 #include "xhfc_pci2pi.h"
 #endif
 
-static const char xhfc_rev[] = "$Revision: 1.4 $";
+static const char xhfc_rev[] = "$Revision: 1.5 $";
 
 #define MAX_CARDS	8
 static int card_cnt;
@@ -1240,14 +1240,10 @@ init_xhfc(xhfc_t * xhfc)
 {
 	int err = 0;
 	int timeout = 0x2000;
+	__u8 chip_id;
 
-	xhfc->chip_id = read_xhfc(xhfc, R_CHIP_ID);
-
-	if (debug & DEBUG_HFC_INIT)
-		printk(KERN_INFO "%s %s ChipID: 0x%x\n", xhfc->chip_name,
-		       __FUNCTION__, xhfc->chip_id);
-
-	switch (xhfc->chip_id) {
+	chip_id = read_xhfc(xhfc, R_CHIP_ID);
+	switch (chip_id) {
 		case CHIP_ID_1SU:
 			xhfc->num_ports = 1;
 			xhfc->max_fifo = 4;
@@ -1255,7 +1251,12 @@ init_xhfc(xhfc_t * xhfc)
 			xhfc->ti_wd.bit.v_ev_ts = 0x6;	/* timer irq interval 16 ms */
 			write_xhfc(xhfc, R_FIFO_MD, M1_FIFO_MD * 2);
 			xhfc->su_irqmsk.bit.v_su0_irqmsk = 1;
+			sprintf(xhfc->chip_name, "%s_PI%d_%i",
+			        CHIP_NAME_1SU,
+			        xhfc->pi->cardnum,
+			        xhfc->chipidx);
 			break;
+
 		case CHIP_ID_2SU:
 			xhfc->num_ports = 2;
 			xhfc->max_fifo = 8;
@@ -1264,8 +1265,27 @@ init_xhfc(xhfc_t * xhfc)
 			write_xhfc(xhfc, R_FIFO_MD, M1_FIFO_MD * 1);
 			xhfc->su_irqmsk.bit.v_su0_irqmsk = 1;
 			xhfc->su_irqmsk.bit.v_su1_irqmsk = 1;
+			sprintf(xhfc->chip_name, "%s_PI%d_%i",
+			        CHIP_NAME_2SU,
+			        xhfc->pi->cardnum,
+			        xhfc->chipidx);
 			break;
+
 		case CHIP_ID_2S4U:
+			xhfc->num_ports = 4;
+			xhfc->max_fifo = 16;
+			xhfc->max_z = 0x3F;
+			xhfc->ti_wd.bit.v_ev_ts = 0x4;	/* timer irq interval 4 ms */
+			write_xhfc(xhfc, R_FIFO_MD, M1_FIFO_MD * 0);
+			xhfc->su_irqmsk.bit.v_su0_irqmsk = 1;
+			xhfc->su_irqmsk.bit.v_su1_irqmsk = 1;
+			xhfc->su_irqmsk.bit.v_su2_irqmsk = 1;
+			xhfc->su_irqmsk.bit.v_su3_irqmsk = 1;		
+			sprintf(xhfc->chip_name, "%s_PI%d_%i",
+			        CHIP_NAME_2S4U,
+			        xhfc->pi->cardnum,
+			        xhfc->chipidx);
+
 		case CHIP_ID_4SU:
 			xhfc->num_ports = 4;
 			xhfc->max_fifo = 16;
@@ -1276,6 +1296,10 @@ init_xhfc(xhfc_t * xhfc)
 			xhfc->su_irqmsk.bit.v_su1_irqmsk = 1;
 			xhfc->su_irqmsk.bit.v_su2_irqmsk = 1;
 			xhfc->su_irqmsk.bit.v_su3_irqmsk = 1;
+			sprintf(xhfc->chip_name, "%s_PI%d_%i",
+			        CHIP_NAME_4SU,
+			        xhfc->pi->cardnum,
+			        xhfc->chipidx);
 			break;
 		default:
 			err = -ENODEV;
@@ -1284,8 +1308,12 @@ init_xhfc(xhfc_t * xhfc)
 	if (err) {
 		if (debug & DEBUG_HFC_INIT)
 			printk(KERN_ERR "%s %s: unkown Chip ID 0x%x\n",
-			       xhfc->chip_name, __FUNCTION__, xhfc->chip_id);
+			       xhfc->chip_name, __FUNCTION__, chip_id);
 		return (err);
+	} else {
+		if (debug & DEBUG_HFC_INIT)
+			printk(KERN_INFO "%s ChipID: 0x%x\n",
+			       xhfc->chip_name, chip_id);
 	}
 	
 	/* software reset to enable R_FIFO_MD setting */
@@ -1560,7 +1588,7 @@ setup_channel(xhfc_t * xhfc, __u8 channel, int protocol)
 	else if (test_bit(FLG_DCHANNEL, &xhfc->chan[channel].ch.Flags)) {
 		if (debug & DEBUG_HFC_MODE)
 			mISDN_debugprint(&xhfc->chan[channel].ch.inst,
-					 "D channel(%i) protocol(%i)",
+					 "channel(%i) protocol(%i)",
 					 channel, protocol);
 
 		setup_fifo(xhfc, (channel << 1), 5, 2, M_FR_ABO, 1);	/* D TX fifo */
@@ -1620,7 +1648,7 @@ init_mISDN_channels(xhfc_t * xhfc)
 		ch->inst.class_dev.dev = &xhfc->pi->pdev->dev;
 		mISDN_init_instance(&ch->inst, &hw_mISDNObj, xhfc, xhfc_l2l1);
 		ch->inst.pid.layermask = ISDN_LAYER(0);
-		sprintf(ch->inst.name, "%s_%d", xhfc->chip_name, pt);
+		sprintf(ch->inst.name, "%s_%d_D", xhfc->chip_name, pt);
 		err = mISDN_initchannel(ch, MSK_INIT_DCHANNEL, MAX_DFRAME_LEN_L1);
 		if (err)
 			goto free_channels;
@@ -1656,7 +1684,7 @@ init_mISDN_channels(xhfc_t * xhfc)
 			ch->inst.hwlock = &xhfc->lock;
 			ch->inst.class_dev.dev = &xhfc->pi->pdev->dev;			
 			
-			sprintf(ch->inst.name, "%s/%d B%d",
+			sprintf(ch->inst.name, "%s_%d_B%d",
 				xhfc->chip_name, pt, b + 1);
 
 			if (mISDN_initchannel(ch, MSK_INIT_BCHANNEL, MAX_DATA_MEM)) {
@@ -1831,7 +1859,6 @@ setup_instance(xhfc_t * xhfc)
 	xhfc_chan_t * chan = NULL;
 	u_long flags;
 
-	sprintf(xhfc->chip_name, "%s_%i", xhfc->pi->card_name, xhfc->chipidx);
 
 	spin_lock_init(&xhfc->lock);
 	tasklet_init(&xhfc->tasklet, xhfc_bh_handler, (unsigned long) xhfc);
@@ -1976,7 +2003,7 @@ xhfc_pci_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	if (!(pi->xhfc = kmalloc(sizeof(xhfc_t) * driver_data->num_xhfcs, GFP_KERNEL))) {
 		printk(KERN_ERR "%s %s: No kmem for sizeof(xhfc_t)*%i \n",
 		       pi->card_name, __FUNCTION__, driver_data->num_xhfcs);
-		return (err);
+		goto out;
 	}
 	memset(pi->xhfc, 0, sizeof(xhfc_t) * driver_data->num_xhfcs);
 
