@@ -123,7 +123,7 @@ static void ph_state_change(channel_t *ch);
 
 extern const char *CardType[];
 
-static const char *hfcmulti_revision = "$Revision: 1.26 $";
+static const char *hfcmulti_revision = "$Revision: 1.27 $";
 
 static int HFC_cnt, HFC_idx;
 
@@ -2874,8 +2874,26 @@ release_port(hfc_multi_t *hc, int port)
 		return;
 	}
 
+
+#if 1	
 	spin_lock_irqsave(&hc->lock, flags);
 	disable_hwirq(hc);
+	spin_unlock_irqrestore(&hc->lock, flags);
+
+	if (hc->irq) {
+		if (debug & DEBUG_HFCMULTI_INIT)
+			printk(KERN_WARNING "%s: free irq %d\n", __FUNCTION__, hc->irq);
+		free_irq(hc->irq, hc);
+		hc->irq = 0;
+
+	}
+#endif
+
+	
+
+
+	spin_lock_irqsave(&hc->lock, flags);
+	//disable_hwirq(hc);
 	if (port > -1) {
 		i = 0;
 		while(i < hc->type) {
@@ -2887,7 +2905,7 @@ release_port(hfc_multi_t *hc, int port)
 		}
 		if (!any) {
 			printk(KERN_WARNING "%s: ERROR card has no used stacks anymore.\n", __FUNCTION__);
-			spin_unlock_irqrestore(&hc->lock, flags);
+			spin_unlock_irqrestore(&hc->lock,flags);
 			return;
 		}
 	}
@@ -2896,7 +2914,7 @@ release_port(hfc_multi_t *hc, int port)
 
 	if (port>-1 && !hc->created[port]) {
 		printk(KERN_WARNING "%s: ERROR given stack is not used by card (port=%d).\n", __FUNCTION__, port);
-		spin_unlock_irqrestore(&hc->lock, flags);
+		spin_unlock_irqrestore(&hc->lock,flags);
 		return;
 	}
 
@@ -2986,7 +3004,7 @@ release_port(hfc_multi_t *hc, int port)
 		if (debug & DEBUG_HFCMULTI_INIT)
 			printk(KERN_WARNING "%s: card has no more used stacks, so we release hardware.\n", __FUNCTION__);
 		release_io_hfcmulti(hc);
-		spin_unlock_irqrestore(&hc->lock, flags);
+		spin_unlock_irqrestore(&hc->lock,flags);
 		/* release irq */
 		if (hc->irq) {
 			if (debug & DEBUG_HFCMULTI_INIT)
@@ -2998,21 +3016,25 @@ release_port(hfc_multi_t *hc, int port)
 		/* remove us from list and delete */
 		if (debug & DEBUG_HFCMULTI_INIT)
 			printk(KERN_WARNING "%s: remove instance from list\n", __FUNCTION__);
-		spin_lock_irqsave(&HFCM_obj.lock, flags);
+		spin_lock_irqsave(&HFCM_obj.lock,flags);
 		list_del(&hc->list);
-		spin_unlock_irqrestore(&HFCM_obj.lock, flags);
+		spin_unlock_irqrestore(&HFCM_obj.lock,flags);
 		if (debug & DEBUG_HFCMULTI_INIT)
 			printk(KERN_WARNING "%s: delete instance\n", __FUNCTION__);
 //#warning
 //		kfree(hc->davor);
 //		kfree(hc->danach);
+		spin_lock_irqsave(&hc->lock,flags);
 		kfree(hc);
+		hc=NULL;
+		spin_unlock_irqrestore(&hc->lock,flags);
+
 		HFC_cnt--;
 		if (debug & DEBUG_HFCMULTI_INIT)
 			printk(KERN_WARNING "%s: card successfully removed\n", __FUNCTION__);
 	} else {
-		enable_hwirq(hc);
-		spin_unlock_irqrestore(&hc->lock, flags);
+		//enable_hwirq(hc);
+		spin_unlock_irqrestore(&hc->lock,flags);
 	}
 }
 
