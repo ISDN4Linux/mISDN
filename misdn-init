@@ -35,19 +35,20 @@ LSPCI=lspci
 MKNOD=mknod
 
 # HFC 8/4 (S0) Options
-master_clock=16
+master_clock=17
 
 # HFC-E1 Options
-optical=16
-los=18
-ais=19
-slip=20
+optical=17
+los=19
+ais=20
+slip=21
 nocrc4=24
 
 # Card Settings
-ulaw=8
-dtmf=9
-pcm_slave=11
+ulaw=9
+dtmf=10
+pcm_slave=12
+ignore_pcm_frameclock=13
 
 
 function remove_preloaded_modules {
@@ -384,6 +385,9 @@ function create_misdn_init_conf {
 #    <option>	ulaw       - uLaw (instead of aLaw)
 #               dtmf       - enable DTMF detection on all B-channels
 #               pcm_slave  - set PCM bus into slave mode
+#		ignore_pcm_frameclock	- this E1 is NT without PCM frame
+#					  clock
+#
 #"
 		misdn_cfg_pt2="#
 # Port settings
