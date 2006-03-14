@@ -1,4 +1,4 @@
-/* $Id: hfcs_usb.c,v 1.7 2006/03/06 12:52:07 keil Exp $
+/* $Id: hfcs_usb.c,v 1.8 2006/03/14 11:11:29 mbachem Exp $
  *
  * mISDN driver for Colognechip HFC-S USB chip
  *
@@ -39,7 +39,7 @@
 
 
 #define DRIVER_NAME "mISDN_hfcsusb"
-const char *hfcsusb_rev = "$Revision: 1.7 $";
+const char *hfcsusb_rev = "$Revision: 1.8 $";
 
 #define MAX_CARDS	8
 #define MODULE_PARM_T	"1-8i"
@@ -113,6 +113,7 @@ typedef struct _hfcsusb_t {
 	struct usb_ctrlrequest	ctrl_read;	/* same for read request */
 	int			ctrl_paksize;	/* control pipe packet size */
 	int			ctrl_in_pipe, ctrl_out_pipe;	/* handles for control pipe */
+	spinlock_t		ctrl_lock;	/* queueing ctrl urbs needs to be locked */
 
 	volatile __u8		threshold_mask;	/* threshold in fifo flow control */
 	__u8			old_led_state, led_state;
@@ -232,7 +233,8 @@ static int
 queued_Write_hfc(hfcsusb_t * card, __u8 reg, __u8 val)
 {
 	ctrl_buft *buf;
-
+	
+	spin_lock(&card->ctrl_lock);
 	if (card->ctrl_cnt >= HFC_CTRL_BUFSIZE)
 		return (1);	/* no space left */
 	buf = &card->ctrl_buff[card->ctrl_in_idx];	/* pointer to new index */
@@ -242,6 +244,8 @@ queued_Write_hfc(hfcsusb_t * card, __u8 reg, __u8 val)
 		card->ctrl_in_idx = 0;	/* pointer wrap */
 	if (++card->ctrl_cnt == 1)
 		ctrl_start_transfer(card);
+	spin_unlock(&card->ctrl_lock);
+
 	return (0);
 }
 
@@ -1597,6 +1601,8 @@ setup_instance(hfcsusb_t * card)
 	list_add_tail(&card->list, &hw_mISDNObj.ilist);
 	spin_unlock_irqrestore(&hw_mISDNObj.lock, flags);
 	card->chan[D].debug = debug;
+	
+	spin_lock_init(&card->ctrl_lock);
 	
 	/* link card->fifos[] to card->chan[] */
 	card->fifos[HFCUSB_D_RX].ch_idx = D;
