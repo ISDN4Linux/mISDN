@@ -27,6 +27,13 @@ misdn_init_conf="/etc/misdn-init.conf"
 #
 ################################################################################
 
+#
+# change this to modify the user/group settings of /dev/mISDN
+#
+USER=asterisk
+GROUP=asterisk
+
+
 
 MODPROBE=modprobe
 RMMOD=rmmod
@@ -493,6 +500,7 @@ case "$1" in
 		
 		if [ ! -e /dev/mISDN ]; then
 			$MKNOD /dev/mISDN c 46 0
+			chown $USER:$GROUP /dev/mISDN 
 			echo "[i] creating device node: /dev/mISDN"
 		fi
 		;;
