@@ -1,4 +1,4 @@
-/* $Id: xhfc_pci2pi.c,v 1.3 2006/03/06 16:20:33 mbachem Exp $
+/* $Id: xhfc_pci2pi.c,v 1.4 2006/03/17 07:43:41 mbachem Exp $
  *
  * PCI2PI Pci Bridge support for xhfc_su.c
  *
@@ -74,7 +74,7 @@ init_pci_bridge(xhfc_pi * pi)
 	int err = -ENODEV;
 
 	printk(KERN_INFO "%s %s: using PCI2PI Bridge at 0x%p\n",
-	       pi->card_name, __FUNCTION__, pi->hw_membase);
+	       pi->name, __FUNCTION__, pi->hw_membase);
 
 	/* test if Bridge regsiter accessable */
 	WritePCI2PI_u32(pi, PCI2PI_DEL_CS, 0x0);

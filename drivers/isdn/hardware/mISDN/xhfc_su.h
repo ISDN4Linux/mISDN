@@ -1,4 +1,4 @@
-/* $Id: xhfc_su.h,v 1.5 2006/03/08 14:07:14 mbachem Exp $
+/* $Id: xhfc_su.h,v 1.6 2006/03/17 07:43:41 mbachem Exp $
  *
  * mISDN driver for Colognechip xHFC chip
  *
@@ -60,8 +60,12 @@
 #define PORT_MODE_S0		0x0004
 #define PORT_MODE_UP		0x0008
 #define PORT_MODE_EXCH_POL	0x0010
-#define PORT_MODE_LOOP		0x0020
+#define PORT_MODE_LOOP_B1	0x0020
+#define PORT_MODE_LOOP_B2	0x0040
+#define PORT_MODE_LOOP_D	0x0080
 #define NT_TIMER		0x8000
+
+#define PORT_MODE_LOOPS		0xE0	/* mask port mode Loop B1/B2/D */
 
 
 /* NT / TE defines */
@@ -75,12 +79,14 @@
 #define XHFC_TIMER_T4	500	/* 500ms deactivation timer T4 */
 
 /* xhfc Layer1 physical commands */
-#define HFC_L1_ACTIVATE_TE		0x01
-#define HFC_L1_FORCE_DEACTIVATE_TE	0x02
-#define HFC_L1_ACTIVATE_NT		0x03
-#define HFC_L1_DEACTIVATE_NT		0x04
-#define HFC_L1_TESTLOOP_B1		0x05
-#define HFC_L1_TESTLOOP_B2		0x06
+#define HFC_L1_ACTIVATE_TE		0x00
+#define HFC_L1_FORCE_DEACTIVATE_TE	0x01
+#define HFC_L1_ACTIVATE_NT		0x02
+#define HFC_L1_DEACTIVATE_NT		0x03
+#define HFC_L1_TESTLOOP_B1		0x04
+#define HFC_L1_TESTLOOP_B2		0x05
+#define HFC_L1_TESTLOOP_D		0x06
+
 
 /* xhfc Layer1 Flags (stored in xhfc_port_t->l1_flags) */
 #define HFC_L1_ACTIVATING	1
@@ -113,10 +119,15 @@ typedef struct {
 } pi_params;
 
 
+struct _xhfc_t;
+struct _xhfc_pi;
+
 /* port struct for each S/U port */
 typedef struct {
 	int idx;
-
+	struct _xhfc_t * xhfc;
+	char name[20];	/* XHFC_PI0_0_0 = ProcessorInterface no. 0, Chip no. 0, port no 0 */
+	
 	__u8 dpid;		/* DChannel Protocoll ID */
 	__u16 mode;		/* NT/TE + ST/U */
 	int nt_timer;
@@ -140,14 +151,11 @@ typedef struct {
 } xhfc_chan_t;
 
 
-struct _xhfc_t;
-struct _xhfc_pi;
-
 /**********************/
 /* hardware structure */
 /**********************/
 typedef struct _xhfc_t {
-	char		chip_name[20];	/* XHFC_PI0_0 = ProcessorInterface no. 0, Chip no. 0 */
+	char		name[15];	/* XHFC_PI0_0 = ProcessorInterface no. 0, Chip no. 0 */
 	__u8		chipnum;	/* global chip number */
 	__u8		chipidx;	/* index in pi->xhfcs[NUM_XHFCS] */
 	struct _xhfc_pi	* pi;		/* backpointer to xhfc_pi */
@@ -199,7 +207,7 @@ typedef struct _xhfc_pi {
 	u_char		*membase;
 	u_char		*hw_membase;
 	int		cardnum;
-	char		card_name[20];
+	char		name[10];	/* 'XHFC_PI0' = ProcessorInterface no. 0 */
 	pi_params	driver_data;
 #endif
 
