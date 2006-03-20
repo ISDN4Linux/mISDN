@@ -1,4 +1,4 @@
-/* $Id: hfcs_usb.c,v 1.8 2006/03/14 11:11:29 mbachem Exp $
+/* $Id: hfcs_usb.c,v 1.9 2006/03/20 14:01:49 mbachem Exp $
  *
  * mISDN driver for Colognechip HFC-S USB chip
  *
@@ -39,7 +39,7 @@
 
 
 #define DRIVER_NAME "mISDN_hfcsusb"
-const char *hfcsusb_rev = "$Revision: 1.8 $";
+const char *hfcsusb_rev = "$Revision: 1.9 $";
 
 #define MAX_CARDS	8
 #define MODULE_PARM_T	"1-8i"
@@ -1940,7 +1940,6 @@ hfcsusb_disconnect(struct usb_interface *intf)
 /* our driver information structure */
 /************************************/
 static struct usb_driver hfcsusb_drv = {
-	.owner = THIS_MODULE,
 	.name = DRIVER_NAME,
 	.id_table = hfcsusb_idtab,
 	.probe = hfcsusb_probe,
