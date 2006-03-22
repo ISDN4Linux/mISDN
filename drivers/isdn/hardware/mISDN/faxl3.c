@@ -1,4 +1,4 @@
-/* $Id: faxl3.c,v 1.3 2005/04/07 08:59:41 keil Exp $
+/* $Id: faxl3.c,v 1.4 2006/03/22 18:33:04 keil Exp $
  *
  * Linux ISDN subsystem, Fax Layer 3
  *
@@ -116,7 +116,7 @@ static int debug = 0;
 
 static mISDNobject_t faxl3_obj;
 
-static char *mISDN_faxl3_revision = "$Revision: 1.3 $";
+static char *mISDN_faxl3_revision = "$Revision: 1.4 $";
 
 static u_char FaxModulation[] = {24,48,72,74,96,98,122,146};
 static u_char FaxModulationTrain[] = {24,48,72,73,96,97,121,145};
@@ -1920,8 +1920,8 @@ static char MName[] = "FAXL3";
 
 #ifdef MODULE
 MODULE_AUTHOR("Karsten Keil");
-MODULE_PARM(debug, "1i");
-MODULE_PARM(ttt, "1i");
+module_param(debug, uint, S_IRUGO | S_IWUSR);
+module_param(ttt, uint, S_IRUGO | S_IWUSR);
 #ifdef MODULE_LICENSE
 MODULE_LICENSE("GPL");
 #endif

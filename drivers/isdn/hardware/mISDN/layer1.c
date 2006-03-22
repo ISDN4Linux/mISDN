@@ -1,4 +1,4 @@
-/* $Id: layer1.c,v 1.12 2006/03/06 12:52:07 keil Exp $
+/* $Id: layer1.c,v 1.13 2006/03/22 18:33:04 keil Exp $
  *
  * mISDN_l1.c     common low level stuff for I.430 layer1 TE mode
  *
@@ -8,7 +8,7 @@
  *
  */
 
-static char *l1_revision = "$Revision: 1.12 $";
+static char *l1_revision = "$Revision: 1.13 $";
 
 #include <linux/config.h>
 #include <linux/module.h>
@@ -737,7 +737,7 @@ static char MName[] = "ISDNL1";
 
 #ifdef MODULE
 MODULE_AUTHOR("Karsten Keil");
-MODULE_PARM(debug, "1i");
+module_param(debug, uint, S_IRUGO | S_IWUSR);
 #ifdef MODULE_LICENSE
 MODULE_LICENSE("GPL");
 #endif

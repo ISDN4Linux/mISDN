@@ -1,4 +1,4 @@
-/* $Id: l3_udss1.c,v 1.31 2006/03/06 12:52:07 keil Exp $
+/* $Id: l3_udss1.c,v 1.32 2006/03/22 18:33:04 keil Exp $
  *
  * EURO/DSS1 D-channel protocol
  *
@@ -24,7 +24,7 @@ static int debug = 0;
 static mISDNobject_t u_dss1;
 
 
-const char *dss1_revision = "$Revision: 1.31 $";
+const char *dss1_revision = "$Revision: 1.32 $";
 
 static int dss1man(l3_process_t *, u_int, void *);
 
@@ -2922,7 +2922,7 @@ MODULE_AUTHOR("Karsten Keil");
 #ifdef MODULE_LICENSE
 MODULE_LICENSE("GPL");
 #endif
-MODULE_PARM(debug, "1i");
+module_param(debug, uint, S_IRUGO | S_IWUSR);
 #endif
 
 static int

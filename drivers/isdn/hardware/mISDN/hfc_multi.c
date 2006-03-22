@@ -123,7 +123,7 @@ static void ph_state_change(channel_t *ch);
 
 extern const char *CardType[];
 
-static const char *hfcmulti_revision = "$Revision: 1.27 $";
+static const char *hfcmulti_revision = "$Revision: 1.28 $";
 
 static int HFC_cnt, HFC_idx;
 
@@ -207,8 +207,6 @@ static const PCI_ENTRY id_list[] =
 /* NOTE: MAX_PORTS must be 8*MAX_CARDS */
 #define MAX_CARDS	16
 #define MAX_PORTS	128
-#define MODULE_CARDS_T	"1-16i"
-#define MODULE_PORTS_T	"1-128i" /* 16 cards can have 128 ports */
 static u_int type[MAX_CARDS];
 static BYTE allocated[MAX_CARDS];  // remember if card is found
 static int pcm[MAX_PORTS];
@@ -222,12 +220,12 @@ MODULE_AUTHOR("Andreas Eversberg");
 #ifdef MODULE_LICENSE
 MODULE_LICENSE("GPL");
 #endif
-MODULE_PARM(debug, "1i");
-MODULE_PARM(poll, "1i");
-MODULE_PARM(type, MODULE_CARDS_T);
-MODULE_PARM(pcm, MODULE_CARDS_T);
-MODULE_PARM(protocol, MODULE_PORTS_T);
-MODULE_PARM(layermask, MODULE_PORTS_T);
+module_param(debug, uint, S_IRUGO | S_IWUSR);
+module_param(poll, uint, S_IRUGO | S_IWUSR);
+module_param_array(type, uint, NULL, S_IRUGO | S_IWUSR);
+module_param_array(pcm, uint, NULL, S_IRUGO | S_IWUSR);
+module_param_array(protocol, uint, NULL, S_IRUGO | S_IWUSR);
+module_param_array(layermask, uint, NULL, S_IRUGO | S_IWUSR);
 #endif
 
 static void

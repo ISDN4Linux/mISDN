@@ -36,7 +36,7 @@
 
 #include "loop.h"
 
-static const char *loop_revision = "$Revision: 1.2 $";
+static const char *loop_revision = "$Revision: 1.3 $";
 
 static int loop_cnt;
 
@@ -57,8 +57,8 @@ MODULE_AUTHOR("Andreas Eversberg");
 #ifdef MODULE_LICENSE
 MODULE_LICENSE("GPL");
 #endif
-MODULE_PARM(interfaces, "1i");
-MODULE_PARM(debug, "1i");
+module_param(interfaces, uint, S_IRUGO | S_IWUSR);
+module_param(debug, uint, S_IRUGO | S_IWUSR);
 #endif
 
 

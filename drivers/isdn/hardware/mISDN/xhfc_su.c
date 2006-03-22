@@ -1,4 +1,4 @@
-/* $Id: xhfc_su.c,v 1.6 2006/03/17 07:43:41 mbachem Exp $
+/* $Id: xhfc_su.c,v 1.7 2006/03/22 18:33:04 keil Exp $
  *
  * mISDN driver for CologneChip AG's XHFC
  *
@@ -65,26 +65,24 @@
 #include "xhfc_pci2pi.h"
 #endif
 
-static const char xhfc_rev[] = "$Revision: 1.6 $";
+static const char xhfc_rev[] = "$Revision: 1.7 $";
 
 #define MAX_CARDS	8
 static int card_cnt;
 static u_int protocol[MAX_CARDS * MAX_PORT];
 static int layermask[MAX_CARDS * MAX_PORT];
 
+static mISDNobject_t hw_mISDNObj;
+static int debug = 0;
+
 #ifdef MODULE
 #ifdef MODULE_LICENSE
 MODULE_LICENSE("GPL");
 #endif
-#define MODULE_PARM_T	"1-8i"
-MODULE_PARM(debug, "1i");
-MODULE_PARM(protocol, MODULE_PARM_T);
-MODULE_PARM(layermask, MODULE_PARM_T);
+module_param(debug, uint, S_IRUGO | S_IWUSR);
+module_param_array(protocol, uint, NULL, S_IRUGO | S_IWUSR);
+module_param_array(layermask, uint, NULL, S_IRUGO | S_IWUSR);
 #endif
-
-static mISDNobject_t hw_mISDNObj;
-static int debug = 0;
-
 
 /* static function prototypes */
 static void release_card(xhfc_pi * pi);

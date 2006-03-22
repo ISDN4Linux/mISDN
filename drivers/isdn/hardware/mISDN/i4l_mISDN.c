@@ -1,4 +1,4 @@
-/* $Id: i4l_mISDN.c,v 1.7 2006/03/06 12:52:07 keil Exp $
+/* $Id: i4l_mISDN.c,v 1.8 2006/03/22 18:33:04 keil Exp $
  *
  * interface for old I4L hardware drivers to the CAPI driver
  *
@@ -21,7 +21,7 @@
 #include "dss1.h"
 #include "debug.h"
 
-static char *i4lcapi_revision = "$Revision: 1.7 $";
+static char *i4lcapi_revision = "$Revision: 1.8 $";
 
 /* data struct */
 typedef struct _i4l_channel	i4l_channel_t;
@@ -157,7 +157,7 @@ MODULE_AUTHOR("Karsten Keil");
 #ifdef MODULE_LICENSE
 MODULE_LICENSE("GPL");
 #endif
-MODULE_PARM(debug, "1i");
+module_param(debug, uint, S_IRUGO | S_IWUSR);
 #endif
 
 static void

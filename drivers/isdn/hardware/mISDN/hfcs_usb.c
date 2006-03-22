@@ -1,4 +1,4 @@
-/* $Id: hfcs_usb.c,v 1.9 2006/03/20 14:01:49 mbachem Exp $
+/* $Id: hfcs_usb.c,v 1.10 2006/03/22 18:33:04 keil Exp $
  *
  * mISDN driver for Colognechip HFC-S USB chip
  *
@@ -39,10 +39,9 @@
 
 
 #define DRIVER_NAME "mISDN_hfcsusb"
-const char *hfcsusb_rev = "$Revision: 1.9 $";
+const char *hfcsusb_rev = "$Revision: 1.10 $";
 
 #define MAX_CARDS	8
-#define MODULE_PARM_T	"1-8i"
 static int hfcsusb_cnt;
 static u_int protocol[MAX_CARDS] = {2,2,2,2,2,2,2,2};
 static int layermask[MAX_CARDS];
@@ -54,9 +53,9 @@ static int debug = 0x1FFFF; // 0;
 #ifdef MODULE_LICENSE
 MODULE_LICENSE("GPL");
 #endif
-MODULE_PARM(debug, "1i");
-MODULE_PARM(protocol, MODULE_PARM_T);
-MODULE_PARM(layermask, MODULE_PARM_T);
+module_param(debug, uint, S_IRUGO | S_IWUSR);
+module_param_array(protocol, uint, NULL, S_IRUGO | S_IWUSR);
+module_param_array(layermask, uint, NULL, S_IRUGO | S_IWUSR);
 #endif
 
 

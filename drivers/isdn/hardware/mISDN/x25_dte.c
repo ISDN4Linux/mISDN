@@ -1,4 +1,4 @@
-/* $Id: x25_dte.c,v 1.9 2006/03/06 12:52:07 keil Exp $
+/* $Id: x25_dte.c,v 1.10 2006/03/22 18:33:04 keil Exp $
  *
  * Linux modular ISDN subsystem, mISDN
  * X.25/X.31 Layer3 for DTE mode
@@ -22,7 +22,7 @@ static int debug = 0;
 
 static mISDNobject_t x25dte_obj;
 
-static char *mISDN_dte_revision = "$Revision: 1.9 $";
+static char *mISDN_dte_revision = "$Revision: 1.10 $";
 
 /* local prototypes */
 static x25_channel_t *	dte_create_channel(x25_l3_t *, int, u_char, __u16, int, u_char *);
@@ -1256,7 +1256,7 @@ static char MName[] = "X25_DTE";
 
 #ifdef MODULE
 MODULE_AUTHOR("Karsten Keil");
-MODULE_PARM(debug, "1i");
+module_param(debug, uint, S_IRUGO | S_IWUSR);
 #ifdef MODULE_LICENSE
 MODULE_LICENSE("GPL");
 #endif

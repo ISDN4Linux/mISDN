@@ -224,7 +224,7 @@ announced.
 
 extern const char *CardType[];
 
-static const char *l1oip_revision = "$Revision: 1.2 $";
+static const char *l1oip_revision = "$Revision: 1.3 $";
 
 static int l1oip_cnt;
 
@@ -238,7 +238,6 @@ static char l1oipName[] = "Layer1oIP";
 /****************/
 
 #define MAX_CARDS	16
-#define MODULE_CARDS_T	"1-16i"
 static u_int type[MAX_CARDS];
 static u_int codec[MAX_CARDS];
 static u_int protocol[MAX_CARDS];
@@ -250,11 +249,11 @@ MODULE_AUTHOR("Andreas Eversberg");
 #ifdef MODULE_LICENSE
 MODULE_LICENSE("GPL");
 #endif
-MODULE_PARM(type, MODULE_CARDS_T);
-MODULE_PARM(codec, MODULE_CARDS_T);
-MODULE_PARM(protocol, MODULE_CARDS_T);
-MODULE_PARM(layermask, MODULE_CARDS_T);
-MODULE_PARM(debug, "1i");
+module_param_array(type, uint, NULL, S_IRUGO | S_IWUSR);
+module_param_array(codec, uint, NULL, S_IRUGO | S_IWUSR);
+module_param_array(protocol, uint, NULL, S_IRUGO | S_IWUSR);
+module_param_array(layermask, uint, NULL, S_IRUGO | S_IWUSR);
+module_param(debug, uint, S_IRUGO | S_IWUSR);
 #endif
 
 
