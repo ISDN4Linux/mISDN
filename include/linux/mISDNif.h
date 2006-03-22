@@ -1,4 +1,4 @@
-/* $Id: mISDNif.h,v 1.33 2006/03/06 12:52:08 keil Exp $
+/* $Id: mISDNif.h,v 1.34 2006/03/22 18:28:34 keil Exp $
  *
  */
 
@@ -23,8 +23,8 @@
 #define	MISDN_MINOR_VERSION	0
 #define	MISDN_VERSION		((MISDN_MAJOR_VERSION<<16) | MISDN_MINOR_VERSION)
 
-#define MISDN_REVISION		"$Revision: 1.33 $"
-#define MISDN_DATE		"$Date: 2006/03/06 12:52:08 $"
+#define MISDN_REVISION		"$Revision: 1.34 $"
+#define MISDN_DATE		"$Date: 2006/03/22 18:28:34 $"
 
 /* collect some statistics about the message queues */
 #define MISDN_MSG_STATS
@@ -579,11 +579,11 @@
 #define STATUS_INFO_L2	2
 
 typedef struct _mISDN_head {
-	u_int	addr __attribute__((packed));
-	u_int	prim __attribute__((packed));
-	int	dinfo __attribute__((packed));
-	int	len __attribute__((packed));
-} mISDN_head_t;
+	u_int	addr;
+	u_int	prim;
+	int	dinfo;
+	int	len;
+}  __attribute__((packed)) mISDN_head_t;
 
 #define mISDN_HEADER_LEN	sizeof(mISDN_head_t)
 
@@ -693,47 +693,47 @@ typedef struct _ie_info_ext {
 } __attribute__((packed)) ie_info_ext_t;
 
 typedef struct _Q931_info {
-	u_char		type __attribute__((packed));
-	u_char		crlen __attribute__((packed));
-	u16		cr __attribute__((packed));
-	ie_info_t	bearer_capability __attribute__((packed));
-	ie_info_t	cause __attribute__((packed));
-	ie_info_t	call_id __attribute__((packed));
-	ie_info_t	call_state __attribute__((packed));
-	ie_info_t	channel_id __attribute__((packed));
-	ie_info_t	facility __attribute__((packed));
-	ie_info_t	progress __attribute__((packed));
-	ie_info_t	net_fac __attribute__((packed));
-	ie_info_t	notify __attribute__((packed));
-	ie_info_t	display __attribute__((packed));
-	ie_info_t	date __attribute__((packed));
-	ie_info_t	keypad __attribute__((packed));
-	ie_info_t	signal __attribute__((packed));
-	ie_info_t	info_rate __attribute__((packed));
-	ie_info_t	end2end_transit __attribute__((packed));
-	ie_info_t	transit_delay_sel __attribute__((packed));
-	ie_info_t	pktl_bin_para __attribute__((packed));
-	ie_info_t	pktl_window __attribute__((packed));
-	ie_info_t	pkt_size __attribute__((packed));
-	ie_info_t	closed_userg __attribute__((packed));
-	ie_info_t	connected_nr __attribute__((packed));
-	ie_info_t	connected_sub __attribute__((packed));
-	ie_info_t	calling_nr __attribute__((packed));
-	ie_info_t	calling_sub __attribute__((packed));
-	ie_info_t	called_nr __attribute__((packed));
-	ie_info_t	called_sub __attribute__((packed));
-	ie_info_t	redirect_nr __attribute__((packed));
-	ie_info_t	transit_net_sel __attribute__((packed));
-	ie_info_t	restart_ind __attribute__((packed));
-	ie_info_t	llc __attribute__((packed));
-	ie_info_t	hlc __attribute__((packed));
-	ie_info_t	useruser __attribute__((packed));
-	ie_info_t	more_data __attribute__((packed));
-	ie_info_t	sending_complete __attribute__((packed));
-	ie_info_t	congestion_level __attribute__((packed));
-	ie_info_t	fill1 __attribute__((packed));
-	ie_info_ext_t	ext[8] __attribute__((packed));
-} Q931_info_t;
+	u_char		type;
+	u_char		crlen;
+	u16		cr;
+	ie_info_t	bearer_capability;
+	ie_info_t	cause;
+	ie_info_t	call_id;
+	ie_info_t	call_state;
+	ie_info_t	channel_id;
+	ie_info_t	facility;
+	ie_info_t	progress;
+	ie_info_t	net_fac;
+	ie_info_t	notify;
+	ie_info_t	display;
+	ie_info_t	date;
+	ie_info_t	keypad;
+	ie_info_t	signal;
+	ie_info_t	info_rate;
+	ie_info_t	end2end_transit;
+	ie_info_t	transit_delay_sel;
+	ie_info_t	pktl_bin_para;
+	ie_info_t	pktl_window;
+	ie_info_t	pkt_size;
+	ie_info_t	closed_userg;
+	ie_info_t	connected_nr;
+	ie_info_t	connected_sub;
+	ie_info_t	calling_nr;
+	ie_info_t	calling_sub;
+	ie_info_t	called_nr;
+	ie_info_t	called_sub;
+	ie_info_t	redirect_nr;
+	ie_info_t	transit_net_sel;
+	ie_info_t	restart_ind;
+	ie_info_t	llc;
+	ie_info_t	hlc;
+	ie_info_t	useruser;
+	ie_info_t	more_data;
+	ie_info_t	sending_complete;
+	ie_info_t	congestion_level;
+	ie_info_t	fill1;
+	ie_info_ext_t	ext[8];
+}  __attribute__((packed)) Q931_info_t;
 
 #define L3_EXTRA_SIZE	sizeof(Q931_info_t)
 
@@ -755,16 +755,16 @@ typedef int	(if_func_t)(mISDNinstance_t *, struct sk_buff *);
 #define mISDN_HEAD_DINFO(s)	((mISDN_head_t *)&s->cb[0])->dinfo
 
 typedef struct _mISDN_headext {
-	u_int	addr __attribute__((packed));
-	u_int	prim __attribute__((packed));
-	int	dinfo  __attribute__((packed));
+	u_int	addr;
+	u_int	prim;
+	int	dinfo;
 	void	*data[3];
 	union {
 		ctrl_func_t	*ctrl;
 		if_func_t	*iff;
 		void		*func;
 	} func;
-} mISDN_headext_t;
+}  __attribute__((packed)) mISDN_headext_t;
 
 #define mISDN_HEADEXT_P(s) ((mISDN_headext_t *)&s->cb[0])
 

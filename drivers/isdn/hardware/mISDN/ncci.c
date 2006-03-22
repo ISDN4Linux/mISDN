@@ -1,4 +1,4 @@
-/* $Id: ncci.c,v 1.27 2006/03/06 12:52:07 keil Exp $
+/* $Id: ncci.c,v 1.28 2006/03/22 18:28:33 keil Exp $
  *
  */
 
@@ -380,14 +380,14 @@ ncci_manufacturer_req(struct FsmInst *fi, int event, void *arg)
 	_cmsg	*cmsg = arg;
 	int	err, op;
 	struct  _manu_conf_para {
-			u8	len	__attribute__((packed));
-			u16	Info	__attribute__((packed));
-			u16	vol	__attribute__((packed));
+			u8	len;
+			u16	Info;
+			u16	vol;
 		} mcp = {2, CAPI_NOERROR,0};
 	struct  _manu_req_para {
-			u8	len	__attribute__((packed));
-			u16	vol	__attribute__((packed));
-		} *mrp;
+			u8	len;
+			u16	vol;
+		} __attribute__((packed)) *mrp;
 
 	if (!ncci->appl)
 		return;

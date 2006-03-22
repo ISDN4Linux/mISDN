@@ -1,4 +1,4 @@
-/* $Id: avm_fritz.c,v 1.31 2006/03/06 12:52:07 keil Exp $
+/* $Id: avm_fritz.c,v 1.32 2006/03/22 18:28:33 keil Exp $
  *
  * fritz_pci.c    low level stuff for AVM Fritz!PCI and ISA PnP isdn cards
  *              Thanks to AVM, Berlin for informations
@@ -23,7 +23,7 @@
 #include "debug.h"
 
 
-static const char *avm_fritz_rev = "$Revision: 1.31 $";
+static const char *avm_fritz_rev = "$Revision: 1.32 $";
 
 enum {
 	AVM_FRITZ_PCI,
@@ -103,17 +103,17 @@ enum {
 
 struct hdlc_stat_reg {
 #ifdef __BIG_ENDIAN
-	u_char fill __attribute__((packed));
-	u_char mode __attribute__((packed));
-	u_char xml  __attribute__((packed));
-	u_char cmd  __attribute__((packed));
+	u_char fill;
+	u_char mode;
+	u_char xml;
+	u_char cmd;
 #else
-	u_char cmd  __attribute__((packed));
-	u_char xml  __attribute__((packed));
-	u_char mode __attribute__((packed));
-	u_char fill __attribute__((packed));
+	u_char cmd;
+	u_char xml;
+	u_char mode;
+	u_char fill;
 #endif
-};
+} __attribute__((packed));
 
 typedef struct hdlc_hw {
 	union {
