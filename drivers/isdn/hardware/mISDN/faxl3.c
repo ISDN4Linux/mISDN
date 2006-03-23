@@ -1,4 +1,4 @@
-/* $Id: faxl3.c,v 1.4 2006/03/22 18:33:04 keil Exp $
+/* $Id: faxl3.c,v 1.5 2006/03/23 10:05:16 keil Exp $
  *
  * Linux ISDN subsystem, Fax Layer 3
  *
@@ -116,7 +116,7 @@ static int debug = 0;
 
 static mISDNobject_t faxl3_obj;
 
-static char *mISDN_faxl3_revision = "$Revision: 1.4 $";
+static char *mISDN_faxl3_revision = "$Revision: 1.5 $";
 
 static u_char FaxModulation[] = {24,48,72,74,96,98,122,146};
 static u_char FaxModulationTrain[] = {24,48,72,73,96,97,121,145};
@@ -1936,7 +1936,7 @@ l3m_debug(struct FsmInst *fi, char *fmt, ...)
 	va_start(log.args, fmt);
 	log.fmt = fmt;
 	log.head = fl3->inst.name;
-	fl3->inst.obj->ctrl(&fl3->inst, MGR_DEBUGDATA | REQUEST, &log);
+	mISDN_ctrl(&fl3->inst, MGR_DEBUGDATA | REQUEST, &log);
 	va_end(log.args);
 }
 
@@ -1945,12 +1945,10 @@ release_faxl3(faxl3_t *faxl3) {
 	mISDNinstance_t	*inst = &faxl3->inst;
 
 	if (inst->up.peer) {
-		inst->up.peer->obj->ctrl(inst->up.peer,
-			MGR_DISCONNECT | REQUEST, &inst->up);
+		mISDN_ctrl(inst->up.peer, MGR_DISCONNECT | REQUEST, &inst->up);
 	}
 	if (inst->down.peer) {
-		inst->down.peer->obj->ctrl(inst->down.peer,
-			MGR_DISCONNECT | REQUEST, &inst->down);
+		mISDN_ctrl(inst->down.peer, MGR_DISCONNECT | REQUEST, &inst->down);
 	}
 	list_del(&faxl3->list);
 	discard_queue(&faxl3->downq);
@@ -1961,8 +1959,8 @@ release_faxl3(faxl3_t *faxl3) {
 	mISDN_FsmDelTimer(&faxl3->timer1, 99);
 	mISDN_FsmDelTimer(&faxl3->modtimer, 99);
 	if (faxl3->entity != MISDN_ENTITY_NONE)
-		faxl3_obj.ctrl(inst, MGR_DELENTITY | REQUEST, (void *)faxl3->entity);
-	faxl3_obj.ctrl(inst, MGR_UNREGLAYER | REQUEST, NULL);
+		mISDN_ctrl(inst, MGR_DELENTITY | REQUEST, (void *)faxl3->entity);
+	mISDN_ctrl(inst, MGR_UNREGLAYER | REQUEST, NULL);
 	kfree(faxl3);
 }
 
@@ -2049,12 +2047,12 @@ new_faxl3(mISDNstack_t *st, mISDN_pid_t *pid) {
 
 	list_add_tail(&n_faxl3->list, &faxl3_obj.ilist);
 	n_faxl3->entity = MISDN_ENTITY_NONE;
-	err = faxl3_obj.ctrl(&n_faxl3->inst, MGR_NEWENTITY | REQUEST, NULL);
+	err = mISDN_ctrl(&n_faxl3->inst, MGR_NEWENTITY | REQUEST, NULL);
 	if (err) {
 		printk(KERN_WARNING "mISDN %s: MGR_NEWENTITY REQUEST failed err(%d)\n",
 			__FUNCTION__, err);
 	}
-	err = faxl3_obj.ctrl(st, MGR_REGLAYER | INDICATION, &n_faxl3->inst);
+	err = mISDN_ctrl(st, MGR_REGLAYER | INDICATION, &n_faxl3->inst);
 	if (err) {
 		list_del(&n_faxl3->list);
 		kfree(n_faxl3);

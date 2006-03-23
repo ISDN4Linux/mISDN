@@ -1,4 +1,4 @@
-/* $Id: hfcs_mini.c,v 1.3 2006/03/22 18:33:04 keil Exp $
+/* $Id: hfcs_mini.c,v 1.4 2006/03/23 10:05:16 keil Exp $
  *
  * mISDN driver for Colognechip HFC-S mini Evaluation Card
  *
@@ -62,7 +62,7 @@
 #include <linux/pci.h>
 #endif
 
-static const char hfcsmini_rev[] = "$Revision: 1.3 $";
+static const char hfcsmini_rev[] = "$Revision: 1.4 $";
 
 #define MAX_CARDS	8
 static int card_cnt;
@@ -582,7 +582,7 @@ hfcsmini_manager(void *data, u_int prim, void *arg)
 					dev_kfree_skb(skb);
 			} else
 				printk(KERN_WARNING "no SKB in %s MGR_UNREGLAYER | REQUEST\n", __FUNCTION__);
-			hw_mISDNObj.ctrl(inst, MGR_UNREGLAYER | REQUEST, NULL);
+			mISDN_ctrl(inst, MGR_UNREGLAYER | REQUEST, NULL);
 			break;
 		case MGR_CLRSTPARA | INDICATION:
 			arg = NULL;
@@ -1022,7 +1022,7 @@ release_channels(hfcsmini_hw * hw)
 				printk(KERN_DEBUG "%s %s: free channel %d\n",
 					hw->card_name, __FUNCTION__, i);
 			mISDN_freechannel(&hw->chan[i]);
-			hw_mISDNObj.ctrl(&hw->chan[i].inst, MGR_UNREGLAYER | REQUEST, NULL);
+			mISDN_ctrl(&hw->chan[i].inst, MGR_UNREGLAYER | REQUEST, NULL);
 		}
 		i++;
 	}
@@ -1276,7 +1276,7 @@ init_mISDN_channels(hfcsmini_hw * hw)
 		       hw->card_name, __FUNCTION__);
 
 	/* register stack */
-	err = hw_mISDNObj.ctrl(NULL, MGR_NEWSTACK | REQUEST, &hw->chan[ch].inst);
+	err = mISDN_ctrl(NULL, MGR_NEWSTACK | REQUEST, &hw->chan[ch].inst);
 	if (err) {
 		printk(KERN_ERR "%s %s: MGR_NEWSTACK | REQUEST  err(%d)\n",
 		       hw->card_name, __FUNCTION__, err);
@@ -1285,7 +1285,7 @@ init_mISDN_channels(hfcsmini_hw * hw)
 
 	hw->chan[ch].state = 0;
 	for (b = 0; b < 2; b++) {
-		err = hw_mISDNObj.ctrl(hw->chan[ch].inst.st, MGR_NEWSTACK | REQUEST, &hw->chan[b].inst);
+		err = mISDN_ctrl(hw->chan[ch].inst.st, MGR_NEWSTACK | REQUEST, &hw->chan[b].inst);
 		if (err) {
 			printk(KERN_ERR
 			       "%s %s: MGR_ADDSTACK bchan error %d\n",
@@ -1294,14 +1294,13 @@ init_mISDN_channels(hfcsmini_hw * hw)
 		}
 	}
 
-	err = hw_mISDNObj.ctrl(hw->chan[ch].inst.st, MGR_SETSTACK | REQUEST, &pid);
+	err = mISDN_ctrl(hw->chan[ch].inst.st, MGR_SETSTACK | REQUEST, &pid);
 
 	if (err) {
 		printk(KERN_ERR
 		       "%s %s: MGR_SETSTACK REQUEST dch err(%d)\n",
 		       hw->card_name, __FUNCTION__, err);
-		hw_mISDNObj.ctrl(hw->chan[ch].inst.st,
-				 MGR_DELSTACK | REQUEST, NULL);
+		mISDN_ctrl(hw->chan[ch].inst.st, MGR_DELSTACK | REQUEST, NULL);
 		goto free_stack;
 	}
 
@@ -1314,12 +1313,11 @@ init_mISDN_channels(hfcsmini_hw * hw)
 	set_current_state(TASK_UNINTERRUPTIBLE);
 	schedule_timeout((100 * HZ) / 1000);	/* Timeout 100ms */
 
-	hw_mISDNObj.ctrl(hw->chan[ch].inst.st, MGR_CTRLREADY | INDICATION,
-			 NULL);
+	mISDN_ctrl(hw->chan[ch].inst.st, MGR_CTRLREADY | INDICATION, NULL);
 	return (0);
 
       free_stack:
-	hw_mISDNObj.ctrl(hw->chan[ch].inst.st, MGR_DELSTACK | REQUEST, NULL);
+	mISDN_ctrl(hw->chan[ch].inst.st, MGR_DELSTACK | REQUEST, NULL);
       free_channels:
       	spin_lock_irqsave(&hw_mISDNObj.lock, flags);
 	release_channels(hw);

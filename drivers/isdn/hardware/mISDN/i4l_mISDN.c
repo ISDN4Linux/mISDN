@@ -1,4 +1,4 @@
-/* $Id: i4l_mISDN.c,v 1.8 2006/03/22 18:33:04 keil Exp $
+/* $Id: i4l_mISDN.c,v 1.9 2006/03/23 10:05:16 keil Exp $
  *
  * interface for old I4L hardware drivers to the CAPI driver
  *
@@ -21,7 +21,7 @@
 #include "dss1.h"
 #include "debug.h"
 
-static char *i4lcapi_revision = "$Revision: 1.8 $";
+static char *i4lcapi_revision = "$Revision: 1.9 $";
 
 /* data struct */
 typedef struct _i4l_channel	i4l_channel_t;
@@ -217,7 +217,7 @@ init_channel(i4l_capi_t *ic, int nr)
 	ch->inst.pid.layermask = ISDN_LAYER(0);
 	ch->inst.up.owner = &ch->inst;
 	ch->inst.down.owner = &ch->inst;
-	I4Lcapi.ctrl(NULL, MGR_DISCONNECT | REQUEST, &ch->inst.down);
+	mISDN_ctrl(NULL, MGR_DISCONNECT | REQUEST, &ch->inst.down);
 	sprintf(ch->inst.name, "%s B%d", ic->inst.name, nr+1);
 }
 
@@ -1128,10 +1128,10 @@ static int
 i4l_stat_run(i4l_capi_t *ic) {
 	int	err;
 
-	err = I4Lcapi.ctrl(ic->inst.st, MGR_SETSTACK | REQUEST, &ic->pid);
+	err = mISDN_ctrl(ic->inst.st, MGR_SETSTACK | REQUEST, &ic->pid);
 	if (err) {
 		printk(KERN_ERR  "MGR_SETSTACK REQUEST dch err(%d)\n", err);
-		I4Lcapi.ctrl(ic->inst.st, MGR_DELSTACK | REQUEST, NULL);
+		mISDN_ctrl(ic->inst.st, MGR_DELSTACK | REQUEST, NULL);
 		return(err);
 	}
 	return(0);
@@ -1290,7 +1290,7 @@ I4Lcapi_status_callback(isdn_ctrl *c)
 			ret = 0;
 			break;
 		case ISDN_STAT_UNLOAD:
-			ret = I4Lcapi.ctrl(drv->inst.st, MGR_DELSTACK | REQUEST, NULL);
+			ret = mISDN_ctrl(drv->inst.st, MGR_DELSTACK | REQUEST, NULL);
 			MOD_DEC_USE_COUNT;
 			break;
 		case CAPI_PUT_MESSAGE:
@@ -1355,8 +1355,8 @@ I4Lcapi_manager(void *data, u_int prim, void *arg) {
 	    case MGR_REGLAYER | CONFIRM:
 		break;
 	    case MGR_UNREGLAYER | REQUEST:
-		I4Lcapi.ctrl(inst->up.peer, MGR_DISCONNECT | REQUEST, &inst->up);
-		I4Lcapi.ctrl(inst, MGR_UNREGLAYER | REQUEST, NULL);
+		mISDN_ctrl(inst->up.peer, MGR_DISCONNECT | REQUEST, &inst->up);
+		mISDN_ctrl(inst, MGR_UNREGLAYER | REQUEST, NULL);
 		break;
 	    case MGR_RELEASE | INDICATION:
 		if (nr_ch == -1) {
@@ -1446,17 +1446,17 @@ I4Lcapi_register(isdn_if *iif)
 	for (i=0; i < drvmap[drvidx]->nr_ch; i++) {
 		init_channel(drvmap[drvidx], i);
 	}
-	err = I4Lcapi.ctrl(NULL, MGR_NEWSTACK | REQUEST, &drvmap[drvidx]->inst);
+	err = mISDN_ctrl(NULL, MGR_NEWSTACK | REQUEST, &drvmap[drvidx]->inst);
 	if (err) {
 		release_card(drvidx);
 		return(err);
 	}
 	ch = drvmap[drvidx]->ch;
 	for (i=0; i < drvmap[drvidx]->nr_ch; i++) {
-		err = I4Lcapi.ctrl(drvmap[drvidx]->inst.st, MGR_NEWSTACK | REQUEST, &ch->inst);
+		err = mISDN_ctrl(drvmap[drvidx]->inst.st, MGR_NEWSTACK | REQUEST, &ch->inst);
 		if (err) {
 			printk(KERN_ERR "MGR_ADDSTACK bchan error %d\n", err);
-			I4Lcapi.ctrl(drvmap[drvidx]->inst.st, MGR_DELSTACK | REQUEST, NULL);
+			mISDN_ctrl(drvmap[drvidx]->inst.st, MGR_DELSTACK | REQUEST, NULL);
 			return(err);
 		}
 		ch++;

@@ -1,4 +1,4 @@
-/* $Id: w6692.c,v 1.15 2006/03/22 18:33:04 keil Exp $
+/* $Id: w6692.c,v 1.16 2006/03/23 10:05:16 keil Exp $
 
  * w6692.c     low level driver for CCD's hfc-pci based cards
  *
@@ -36,7 +36,7 @@
 
 extern const char *CardType[];
 
-const char *w6692_rev = "$Revision: 1.15 $";
+const char *w6692_rev = "$Revision: 1.16 $";
 
 #define DBUSY_TIMER_VALUE	80
 
@@ -1253,7 +1253,7 @@ release_card(w6692pci *card)
 	mISDN_freechannel(&card->bch[0]);
 	mISDN_freechannel(&card->dch);
 	spin_unlock_irqrestore(&card->lock, flags);
-	w6692.ctrl(&card->dch.inst, MGR_UNREGLAYER | REQUEST, NULL);
+	mISDN_ctrl(&card->dch.inst, MGR_UNREGLAYER | REQUEST, NULL);
 	spin_lock_irqsave(&w6692.lock, flags);
 	list_del(&card->list);
 	spin_unlock_irqrestore(&w6692.lock, flags);
@@ -1315,7 +1315,7 @@ w6692_manager(void *data, u_int prim, void *arg) {
 				dev_kfree_skb(skb);
 		} else
 			printk(KERN_WARNING "no SKB in %s MGR_UNREGLAYER | REQUEST\n", __FUNCTION__);
-		w6692.ctrl(inst, MGR_UNREGLAYER | REQUEST, NULL);
+		mISDN_ctrl(inst, MGR_UNREGLAYER | REQUEST, NULL);
 		break;
 	    case MGR_CLRSTPARA | INDICATION:
 		arg = NULL;
@@ -1415,31 +1415,31 @@ static int __devinit setup_instance(w6692pci *card)
 	card->pots = pots[w6692_cnt];
 	card->led = led[w6692_cnt];
 	w6692_cnt++;
-	err = w6692.ctrl(NULL, MGR_NEWSTACK | REQUEST, &card->dch.inst);
+	err = mISDN_ctrl(NULL, MGR_NEWSTACK | REQUEST, &card->dch.inst);
 	if (err) {
 		release_card(card);
 		return(err);
 	}
 	for (i=0; i<2; i++) {
-		err = w6692.ctrl(card->dch.inst.st, MGR_NEWSTACK | REQUEST, &card->bch[i].inst);
+		err = mISDN_ctrl(card->dch.inst.st, MGR_NEWSTACK | REQUEST, &card->bch[i].inst);
 		if (err) {
 			printk(KERN_ERR "MGR_ADDSTACK bchan error %d\n", err);
-			w6692.ctrl(card->dch.inst.st, MGR_DELSTACK | REQUEST, NULL);
+			mISDN_ctrl(card->dch.inst.st, MGR_DELSTACK | REQUEST, NULL);
 			return(err);
 		}
 	}
-	err = w6692.ctrl(card->dch.inst.st, MGR_SETSTACK | REQUEST, &pid);
+	err = mISDN_ctrl(card->dch.inst.st, MGR_SETSTACK | REQUEST, &pid);
 	if (err) {
 		printk(KERN_ERR  "MGR_SETSTACK REQUEST dch err(%d)\n", err);
-		w6692.ctrl(card->dch.inst.st, MGR_DELSTACK | REQUEST, NULL);
+		mISDN_ctrl(card->dch.inst.st, MGR_DELSTACK | REQUEST, NULL);
 		return(err);
 	}
 	err = init_card(card);
 	if (err) {
-		w6692.ctrl(card->dch.inst.st, MGR_DELSTACK | REQUEST, NULL);
+		mISDN_ctrl(card->dch.inst.st, MGR_DELSTACK | REQUEST, NULL);
 		return(err);
 	}
-	w6692.ctrl(card->dch.inst.st, MGR_CTRLREADY | INDICATION, NULL);
+	mISDN_ctrl(card->dch.inst.st, MGR_CTRLREADY | INDICATION, NULL);
 	printk(KERN_INFO "w6692 %d cards installed\n", w6692_cnt);
 	return(0);
 }
@@ -1476,7 +1476,7 @@ static void __devexit w6692_remove_pci(struct pci_dev *pdev)
 	w6692pci	*card = pci_get_drvdata(pdev);
 
 	if (card)
-		w6692.ctrl(card->dch.inst.st, MGR_DELSTACK | REQUEST, NULL);
+		mISDN_ctrl(card->dch.inst.st, MGR_DELSTACK | REQUEST, NULL);
 	else
 		printk(KERN_WARNING "%s: drvdata allready removed\n", __FUNCTION__);
 }

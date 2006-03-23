@@ -1,4 +1,4 @@
-/* $Id: debug.c,v 1.4 2004/01/28 09:40:04 keil Exp $
+/* $Id: debug.c,v 1.5 2006/03/23 10:05:16 keil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -47,7 +47,7 @@ mISDN_debugprint(mISDNinstance_t *inst, char *fmt, ...)
 	va_start(log.args, fmt);
 	log.head = inst->name;
 	log.fmt = fmt;
-	inst->obj->ctrl(inst, MGR_DEBUGDATA | REQUEST, &log);
+	mISDN_ctrl(inst, MGR_DEBUGDATA | REQUEST, &log);
 	va_end(log.args);
 }
 

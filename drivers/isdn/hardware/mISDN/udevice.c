@@ -1,4 +1,4 @@
-/* $Id: udevice.c,v 1.16 2006/03/06 12:52:07 keil Exp $
+/* $Id: udevice.c,v 1.17 2006/03/23 10:05:16 keil Exp $
  *
  * Copyright 2000  by Karsten Keil <kkeil@isdn4linux.de>
  *
@@ -307,14 +307,14 @@ new_devstack(mISDNdevice_t *dev, stack_info_t *si)
 			return(-EINVAL);
 		}
 	}
-	err = udev_obj.ctrl(NULL, MGR_NEWSTACK | REQUEST, &inst);
+	err = mISDN_ctrl(NULL, MGR_NEWSTACK | REQUEST, &inst);
 	if (err) {
 		int_error();
 		return(err);
 	}
 	if (!(nds = kmalloc(sizeof(devicestack_t), GFP_ATOMIC))) {
 		printk(KERN_ERR "kmalloc devicestack failed\n");
-		udev_obj.ctrl(inst.st, MGR_DELSTACK | REQUEST, NULL);
+		mISDN_ctrl(inst.st, MGR_DELSTACK | REQUEST, NULL);
 		return(-ENOMEM);
 	}
 	memset(nds, 0, sizeof(devicestack_t));
@@ -345,7 +345,7 @@ sel_channel(u_int addr, u_int channel)
 		return(NULL);
 	ci.channel = channel;
 	ci.st.p = NULL;
-	if (udev_obj.ctrl(st, MGR_SELCHANNEL | REQUEST, &ci))
+	if (mISDN_ctrl(st, MGR_SELCHANNEL | REQUEST, &ci))
 		return(NULL);
 	return(ci.st.p);
 }
@@ -509,7 +509,7 @@ create_layer(mISDNdevice_t *dev, struct sk_buff *skb)
 			test_and_set_bit(FLG_MGR_OWNSTACK, &nl->Flags);
 		}
 		if (st)
-			nl->inst.obj->ctrl(st, MGR_ADDLAYER | REQUEST, &nl->inst);
+			mISDN_ctrl(st, MGR_ADDLAYER | REQUEST, &nl->inst);
 	} else {
 		nl->slave = inst;
 		nl->inst.extentions |= EXT_INST_UNUSED;
@@ -542,7 +542,7 @@ del_stack(devicestack_t *ds)
 	if (ds->st) {
 		if (ds->extentions & EXT_STACK_CLONE)
 			INIT_LIST_HEAD(&ds->st->childlist);
-		udev_obj.ctrl(ds->st, MGR_DELSTACK | REQUEST, NULL);
+		mISDN_ctrl(ds->st, MGR_DELSTACK | REQUEST, NULL);
 	}
 	list_del(&ds->list);
 	kfree(ds);
@@ -581,12 +581,12 @@ del_layer(devicelayer_t *dl)
 		if (device_debug & DEBUG_MGR_FUNC)
 			printk(KERN_DEBUG "del_layer: CLEARSTACK id(%x)\n",
 				inst->st->id);
-		udev_obj.ctrl(inst->st, MGR_CLEARSTACK | REQUEST, NULL);
+		mISDN_ctrl(inst->st, MGR_CLEARSTACK | REQUEST, NULL);
 	}
 	dl->id = 0;
 	list_del(&dl->list);
 	if (!(inst->extentions & EXT_INST_UNUSED)) {
-		udev_obj.ctrl(inst, MGR_UNREGLAYER | REQUEST, NULL);
+		mISDN_ctrl(inst, MGR_UNREGLAYER | REQUEST, NULL);
 	}
 	if (test_and_clear_bit(FLG_MGR_OWNSTACK, &dl->Flags)) {
 		if (dl->inst.st) {
@@ -646,7 +646,7 @@ remove_if(devicelayer_t *dl, int stat) {
 		printk(KERN_WARNING "%s: stat not UP/DOWN\n", __FUNCTION__);
 		return(-EINVAL);
 	}
-	err = udev_obj.ctrl(hif->peer, MGR_DISCONNECT | REQUEST, hif);
+	err = mISDN_ctrl(hif->peer, MGR_DISCONNECT | REQUEST, hif);
 	if (phif) {
 		memcpy(phif, shif, sizeof(mISDNif_t));
 		memset(shif, 0, sizeof(mISDNif_t));
@@ -1197,7 +1197,7 @@ mISDN_wdata_if(mISDNdevice_t *dev, struct sk_buff *skb)
 		hp->dinfo = 0;
 		if ((st = get_stack4id(hp->addr))) {
 			stack_inst_flg(dev, st, FLG_MGR_SETSTACK, 0);
-			hp->len = udev_obj.ctrl(st, hp->prim, skb->data);
+			hp->len = mISDN_ctrl(st, hp->prim, skb->data);
 		} else
 			hp->len = -ENODEV;
 		hp->prim = MGR_SETSTACK | CONFIRM;
@@ -1216,7 +1216,7 @@ mISDN_wdata_if(mISDNdevice_t *dev, struct sk_buff *skb)
 		hp->dinfo = 0;
 		if ((st = get_stack4id(hp->addr))) {
 			stack_inst_flg(dev, st, FLG_MGR_SETSTACK, 1);
-			hp->len = udev_obj.ctrl(st, hp->prim, NULL);
+			hp->len = mISDN_ctrl(st, hp->prim, NULL);
 		} else
 			hp->len = -ENODEV;
 		hp->prim = MGR_CLEARSTACK | CONFIRM;
@@ -1278,7 +1278,7 @@ mISDN_wdata_if(mISDNdevice_t *dev, struct sk_buff *skb)
 		if (!(dl = get_devlayer(dev, lay)))
 			return(error_answer(dev, skb, -ENODEV));
 		hp->prim = MGR_REGLAYER | CONFIRM;
-		hp->len = udev_obj.ctrl(st, MGR_REGLAYER | REQUEST, &dl->inst);
+		hp->len = mISDN_ctrl(st, MGR_REGLAYER | REQUEST, &dl->inst);
 		printk(KERN_DEBUG "MGR_REGLAYER | REQUEST: ret(%d)\n", hp->len);
 		break;	
 	    case (MGR_UNREGLAYER | REQUEST):
@@ -1289,7 +1289,7 @@ mISDN_wdata_if(mISDNdevice_t *dev, struct sk_buff *skb)
 		if (!(dl = get_devlayer(dev, lay)))
 			return(error_answer(dev, skb, -ENODEV));
 		hp->prim = MGR_UNREGLAYER | CONFIRM;
-		hp->len = udev_obj.ctrl(st, MGR_UNREGLAYER | REQUEST, &dl->inst);
+		hp->len = mISDN_ctrl(st, MGR_UNREGLAYER | REQUEST, &dl->inst);
 		break;	
 	    case (MGR_DELLAYER | REQUEST):
 		hp->prim = MGR_DELLAYER | CONFIRM;

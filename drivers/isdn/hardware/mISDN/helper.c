@@ -1,4 +1,4 @@
-/* $Id: helper.c,v 1.14 2006/03/06 12:52:07 keil Exp $
+/* $Id: helper.c,v 1.15 2006/03/23 10:05:16 keil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -346,10 +346,6 @@ void
 mISDN_init_instance(mISDNinstance_t *inst, mISDNobject_t *obj, void *data, if_func_t *function)
 {
 	if (!obj) {
-		int_error();
-		return;
-	}
-	if (!obj->ctrl) {
 		int_error();
 		return;
 	}

@@ -1,4 +1,4 @@
-/* $Id: avm_fritz.c,v 1.33 2006/03/22 18:33:04 keil Exp $
+/* $Id: avm_fritz.c,v 1.34 2006/03/23 10:05:16 keil Exp $
  *
  * fritz_pci.c    low level stuff for AVM Fritz!PCI and ISA PnP isdn cards
  *              Thanks to AVM, Berlin for informations
@@ -23,7 +23,7 @@
 #include "debug.h"
 
 
-static const char *avm_fritz_rev = "$Revision: 1.33 $";
+static const char *avm_fritz_rev = "$Revision: 1.34 $";
 
 enum {
 	AVM_FRITZ_PCI,
@@ -1035,7 +1035,7 @@ release_card(fritzpnppci *card)
 	mISDN_freechannel(&card->bch[0]);
 	mISDN_freechannel(&card->dch);
 	spin_unlock_irqrestore(&card->lock, flags);
-	fritz.ctrl(&card->dch.inst, MGR_UNREGLAYER | REQUEST, NULL);
+	mISDN_ctrl(&card->dch.inst, MGR_UNREGLAYER | REQUEST, NULL);
 	spin_lock_irqsave(&fritz.lock, flags);
 	list_del(&card->list);
 	spin_unlock_irqrestore(&fritz.lock, flags);
@@ -1109,7 +1109,7 @@ fritz_manager(void *data, u_int prim, void *arg) {
 			}
 		} else
 			printk(KERN_WARNING "no SKB in %s MGR_UNREGLAYER | REQUEST\n", __FUNCTION__);
-		fritz.ctrl(inst, MGR_UNREGLAYER | REQUEST, NULL);
+		mISDN_ctrl(inst, MGR_UNREGLAYER | REQUEST, NULL);
 		break;
 	    case MGR_CLRSTPARA | INDICATION:
 		arg = NULL;
@@ -1205,31 +1205,31 @@ static int __devinit setup_instance(fritzpnppci *card)
 		return(err);
 	}
 	fritz_cnt++;
-	err = fritz.ctrl(NULL, MGR_NEWSTACK | REQUEST, &card->dch.inst);
+	err = mISDN_ctrl(NULL, MGR_NEWSTACK | REQUEST, &card->dch.inst);
 	if (err) {
 		release_card(card);
 		return(err);
 	}
 	for (i=0; i<2; i++) {
-		err = fritz.ctrl(card->dch.inst.st, MGR_NEWSTACK | REQUEST, &card->bch[i].inst);
+		err = mISDN_ctrl(card->dch.inst.st, MGR_NEWSTACK | REQUEST, &card->bch[i].inst);
 		if (err) {
 			printk(KERN_ERR "MGR_ADDSTACK bchan error %d\n", err);
-			fritz.ctrl(card->dch.inst.st, MGR_DELSTACK | REQUEST, NULL);
+			mISDN_ctrl(card->dch.inst.st, MGR_DELSTACK | REQUEST, NULL);
 			return(err);
 		}
 	}
-	err = fritz.ctrl(card->dch.inst.st, MGR_SETSTACK | REQUEST, &pid);
+	err = mISDN_ctrl(card->dch.inst.st, MGR_SETSTACK | REQUEST, &pid);
 	if (err) {
 		printk(KERN_ERR  "MGR_SETSTACK REQUEST dch err(%d)\n", err);
-		fritz.ctrl(card->dch.inst.st, MGR_DELSTACK | REQUEST, NULL);
+		mISDN_ctrl(card->dch.inst.st, MGR_DELSTACK | REQUEST, NULL);
 		return(err);
 	}
 	err = init_card(card);
 	if (err) {
-		fritz.ctrl(card->dch.inst.st, MGR_DELSTACK | REQUEST, NULL);
+		mISDN_ctrl(card->dch.inst.st, MGR_DELSTACK | REQUEST, NULL);
 		return(err);
 	}
-	fritz.ctrl(card->dch.inst.st, MGR_CTRLREADY | INDICATION, NULL);
+	mISDN_ctrl(card->dch.inst.st, MGR_CTRLREADY | INDICATION, NULL);
 	printk(KERN_INFO "fritz %d cards installed\n", fritz_cnt);
 	return(0);
 }
@@ -1314,7 +1314,7 @@ static void __devexit fritz_remove_pci(struct pci_dev *pdev)
 	fritzpnppci	*card = pci_get_drvdata(pdev);
 
 	if (card)
-		fritz.ctrl(card->dch.inst.st, MGR_DELSTACK | REQUEST, NULL);
+		mISDN_ctrl(card->dch.inst.st, MGR_DELSTACK | REQUEST, NULL);
 	else
 		printk(KERN_WARNING "%s: drvdata allready removed\n", __FUNCTION__);
 }
@@ -1329,7 +1329,7 @@ static void __devexit fritz_remove_pnp(struct pci_dev *pdev)
 	fritzpnppci	*card = pnp_get_drvdata(pdev);
 
 	if (card)
-		fritz.ctrl(card->dch.inst.st, MGR_DELSTACK | REQUEST, NULL);
+		mISDN_ctrl(card->dch.inst.st, MGR_DELSTACK | REQUEST, NULL);
 	else
 		printk(KERN_WARNING "%s: drvdata allready removed\n", __FUNCTION__);
 }

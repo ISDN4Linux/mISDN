@@ -1,4 +1,4 @@
-/* $Id: capi.c,v 1.16 2006/03/22 18:33:04 keil Exp $
+/* $Id: capi.c,v 1.17 2006/03/23 10:05:16 keil Exp $
  *
  */
 
@@ -7,7 +7,7 @@
 #include "helper.h"
 #include "debug.h"
 
-static char *capi_revision = "$Revision: 1.16 $";
+static char *capi_revision = "$Revision: 1.17 $";
 
 static int debug = 0;
 static mISDNobject_t capi_obj;
@@ -376,7 +376,7 @@ capi20_manager(void *data, u_int prim, void *arg) {
 	    case MGR_UNREGLAYER | REQUEST:
 		if (plink) {
 			plink->inst.function = NULL;
-			capi_obj.ctrl(&plink->inst, MGR_UNREGLAYER | REQUEST, NULL);
+			mISDN_ctrl(&plink->inst, MGR_UNREGLAYER | REQUEST, NULL);
 		}
 		break;
 	    case MGR_CTRLREADY | INDICATION:

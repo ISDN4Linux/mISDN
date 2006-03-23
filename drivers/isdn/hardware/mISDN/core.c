@@ -1,4 +1,4 @@
-/* $Id: core.c,v 1.26 2006/03/06 12:52:07 keil Exp $
+/* $Id: core.c,v 1.27 2006/03/23 10:05:16 keil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -19,7 +19,7 @@
 #include <linux/smp_lock.h>
 #endif
 
-static char		*mISDN_core_revision = "$Revision: 1.26 $";
+static char		*mISDN_core_revision = "$Revision: 1.27 $";
 
 LIST_HEAD(mISDN_objectlist);
 static rwlock_t		mISDN_objects_lock = RW_LOCK_UNLOCKED;
@@ -411,8 +411,6 @@ mgr_queue(void *data, u_int prim, struct sk_buff *skb)
 
 #endif
 
-static int central_manager(void *, u_int, void *);
-
 static int
 set_stack_req(mISDNstack_t *st, mISDN_pid_t *pid)
 {
@@ -434,7 +432,7 @@ set_stack_req(mISDNstack_t *st, mISDN_pid_t *pid)
 	err = copy_pid(npid, pid, pbuf);
 	if (err) // FIXME error handling
 		int_errtxt("copy_pid error %d", err);
-	hhe->func.ctrl = central_manager;
+	hhe->func.ctrl = mISDN_ctrl;
 	skb_queue_tail(&mISDN_thread.workq, skb);
 	wake_up_interruptible(&mISDN_thread.waitq);
 	return(0);
@@ -512,7 +510,8 @@ new_entity(mISDNinstance_t *inst)
 	return(ret);
 }
 
-static int central_manager(void *data, u_int prim, void *arg) {
+int 
+mISDN_ctrl(void *data, u_int prim, void *arg) {
 	mISDNstack_t *st = data;
 
 	switch(prim) {
@@ -609,7 +608,6 @@ int mISDN_register(mISDNobject_t *obj) {
 	obj->id = obj_id++;
 	list_add_tail(&obj->list, &mISDN_objectlist);
 	write_unlock_irqrestore(&mISDN_objects_lock, flags);
-	obj->ctrl = central_manager;
 	// register_prop
 	if (debug)
 		printk(KERN_DEBUG "mISDN_register %s id %x\n", obj->name,

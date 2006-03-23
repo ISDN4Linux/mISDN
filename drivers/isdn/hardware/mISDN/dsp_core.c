@@ -1,4 +1,4 @@
-/* $Id: dsp_core.c,v 1.13 2006/03/22 18:33:04 keil Exp $
+/* $Id: dsp_core.c,v 1.14 2006/03/23 10:05:16 keil Exp $
  *
  * Author       Andreas Eversberg (jolly@jolly.de)
  * Based on source code structure by
@@ -169,7 +169,7 @@ There are three things that need to transmit data to card:
  
  */
 
-const char *dsp_revision = "$Revision: 1.13 $";
+const char *dsp_revision = "$Revision: 1.14 $";
 
 #include <linux/delay.h>
 #include <linux/config.h>
@@ -684,7 +684,7 @@ release_dsp(dsp_t *dsp)
 		printk(KERN_DEBUG "%s: remove & destroy object %s\n", __FUNCTION__, dsp->inst.name);
 	list_del(&dsp->list);
 	spin_unlock_irqrestore(&dsp_obj.lock, flags);
-	dsp_obj.ctrl(inst, MGR_UNREGLAYER | REQUEST, NULL);
+	mISDN_ctrl(inst, MGR_UNREGLAYER | REQUEST, NULL);
 	vfree(dsp);
 
 	if (dsp_debug & DEBUG_DSP_MGR)
@@ -790,7 +790,7 @@ new_dsp(mISDNstack_t *st, mISDN_pid_t *pid)
 	/* append and register */
 	list_add_tail(&ndsp->list, &dsp_obj.ilist);
 	spin_unlock_irqrestore(&dsp_obj.lock, flags);
-	err = dsp_obj.ctrl(st, MGR_REGLAYER | INDICATION, &ndsp->inst);
+	err = mISDN_ctrl(st, MGR_REGLAYER | INDICATION, &ndsp->inst);
 	if (err) {
 		printk(KERN_ERR "%s: failed to register layer %s\n", __FUNCTION__, ndsp->inst.name);
 		spin_lock_irqsave(&dsp_obj.lock, flags);

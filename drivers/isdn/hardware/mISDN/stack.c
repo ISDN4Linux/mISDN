@@ -1,4 +1,4 @@
-/* $Id: stack.c,v 1.13 2006/03/06 12:52:07 keil Exp $
+/* $Id: stack.c,v 1.14 2006/03/23 10:05:16 keil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -1157,7 +1157,7 @@ set_stack(mISDNstack_t *st, mISDN_pid_t *pid)
 		int_error();
 		return(-EINVAL);
 	}
-	if (!st->mgr || !st->mgr->obj || !st->mgr->obj->ctrl) {
+	if (!st->mgr || !st->mgr->obj) {
 		int_error();
 		return(-EINVAL);
 	}
@@ -1173,7 +1173,7 @@ set_stack(mISDNstack_t *st, mISDN_pid_t *pid)
 	} else {
 		mISDN_RemoveUsedPID(pid, &st->mgr->pid);
 	}
-	err = st->mgr->obj->ctrl(st, MGR_REGLAYER | REQUEST, st->mgr);
+	err = mISDN_ctrl(st, MGR_REGLAYER | REQUEST, st->mgr);
 	if (err) {
 		int_error();
 		return(err);
@@ -1182,7 +1182,7 @@ set_stack(mISDNstack_t *st, mISDN_pid_t *pid)
 		inst = get_next_instance(st, pid);
 		if (!inst) {
 			int_error();
-			st->mgr->obj->ctrl(st, MGR_CLEARSTACK| REQUEST, (void *)1);
+			mISDN_ctrl(st, MGR_CLEARSTACK| REQUEST, (void *)1);
 			return(-ENOPROTOOPT);
 		}
 		mISDN_RemoveUsedPID(pid, &inst->pid);
@@ -1272,7 +1272,7 @@ test_stack_protocol(mISDNstack_t *st, u_int l1prot, u_int l2prot, u_int l3prot)
 		memset(&st->pid, 0, sizeof(mISDN_pid_t));
 		return(0);
 	}
-	ret = st->mgr->obj->ctrl(st, MGR_REGLAYER | REQUEST, st->mgr);
+	ret = mISDN_ctrl(st, MGR_REGLAYER | REQUEST, st->mgr);
 	if (ret) {
 		clear_stack(st, 1);
 		return(ret);
@@ -1331,7 +1331,7 @@ evaluate_stack_pids(mISDNstack_t *st, mISDN_pid_t *pid)
 		int_error();
 		return(-EINVAL);
 	}
-	if (!st->mgr || !st->mgr->obj || !st->mgr->obj->ctrl) {
+	if (!st->mgr || !st->mgr->obj) {
 		int_error();
 		return(-EINVAL);
 	}

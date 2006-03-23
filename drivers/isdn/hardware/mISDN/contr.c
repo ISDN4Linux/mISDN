@@ -1,4 +1,4 @@
-/* $Id: contr.c,v 1.25 2006/03/06 12:52:07 keil Exp $
+/* $Id: contr.c,v 1.26 2006/03/23 10:05:16 keil Exp $
  *
  */
 
@@ -60,12 +60,10 @@ ControllerDestr(Controller_t *contr)
 	contr->ctrl = NULL;
 #ifdef FIXME
 	if (inst->up.peer) {
-		inst->up.peer->obj->ctrl(inst->up.peer,
-			MGR_DISCONNECT | REQUEST, &inst->up);
+		mISDN_ctrl(inst->up.peer, MGR_DISCONNECT | REQUEST, &inst->up);
 	}
 	if (inst->down.peer) {
-		inst->down.peer->obj->ctrl(inst->down.peer,
-			MGR_DISCONNECT | REQUEST, &inst->down);
+		mISDN_ctrl(inst->down.peer, MGR_DISCONNECT | REQUEST, &inst->down);
 	}
 #endif
 	list_for_each_safe(item, next, &contr->linklist) {
@@ -74,8 +72,8 @@ ControllerDestr(Controller_t *contr)
 		kfree(plink);
 	}
 	if (contr->entity != MISDN_ENTITY_NONE)
-		inst->obj->ctrl(inst, MGR_DELENTITY | REQUEST, (void *)((u_long)contr->entity));
-	inst->obj->ctrl(inst, MGR_UNREGLAYER | REQUEST, NULL);
+		mISDN_ctrl(inst, MGR_DELENTITY | REQUEST, (void *)((u_long)contr->entity));
+	mISDN_ctrl(inst, MGR_UNREGLAYER | REQUEST, NULL);
 	list_del(&contr->list);
 	spin_unlock_irqrestore(&contr->list_lock, flags);
 	kfree(contr);
@@ -102,7 +100,7 @@ ControllerRun(Controller_t *contr)
 	contrDebug(contr, CAPI_DBG_INFO, "%s: %s version(%s)",
 		__FUNCTION__, contr->ctrl->manu, contr->ctrl->serial);
 	// FIXME
-	ret = contr->inst.obj->ctrl(contr->inst.st, MGR_GLOBALOPT | REQUEST, &contr->ctrl->profile.goptions);
+	ret = mISDN_ctrl(contr->inst.st, MGR_GLOBALOPT | REQUEST, &contr->ctrl->profile.goptions);
 	if (ret) {
 		/* Fallback on error, minimum set */
 		contr->ctrl->profile.goptions = GLOBALOPT_INTERNAL_CTRL;
@@ -123,7 +121,7 @@ ControllerRun(Controller_t *contr)
 			ret = -EINVAL;
 		} else {
 			plink = list_entry(contr->linklist.next, PLInst_t, list);
-			ret = plink->inst.obj->ctrl(plink->st, MGR_EVALSTACK | REQUEST, &pidmask);
+			ret = mISDN_ctrl(plink->st, MGR_EVALSTACK | REQUEST, &pidmask);
 		}
 		if (ret) {
 			/* Fallback on error, minimum set */
@@ -345,7 +343,7 @@ LoadFirmware(struct capi_ctr *ctrl, capiloaddata *data)
 		}
 	} else
 		firm.data = data;
-	contr->inst.obj->ctrl(contr->inst.st, MGR_LOADFIRM | REQUEST, &firm);
+	mISDN_ctrl(contr->inst.st, MGR_LOADFIRM | REQUEST, &firm);
 	if (data->firmware.user)
 		vfree(firm.data);
 	return(0);
@@ -691,7 +689,7 @@ ControllerConstr(Controller_t **contr_p, mISDNstack_t *st, mISDN_pid_t *pid, mIS
 	list_add_tail(&contr->list, &ocapi->ilist);
 	spin_unlock_irqrestore(&ocapi->lock, flags);
 	contr->entity = MISDN_ENTITY_NONE;
-	retval = ocapi->ctrl(&contr->inst, MGR_NEWENTITY | REQUEST, NULL);
+	retval = mISDN_ctrl(&contr->inst, MGR_NEWENTITY | REQUEST, NULL);
 	if (retval) {
 		printk(KERN_WARNING "mISDN %s: MGR_NEWENTITY REQUEST failed err(%d)\n",
 			__FUNCTION__, retval);
@@ -725,7 +723,7 @@ ControllerConstr(Controller_t **contr_p, mISDNstack_t *st, mISDN_pid_t *pid, mIS
 			contr->addr, contr->ctrl->cnr, st->id);
 		contr->addr = contr->ctrl->cnr;
 		plciInit(contr);
-		ocapi->ctrl(st, MGR_REGLAYER | INDICATION, &contr->inst);
+		mISDN_ctrl(st, MGR_REGLAYER | INDICATION, &contr->inst);
 //		contr->inst.up.stat = IF_DOWN;
 		*contr_p = contr;
 	} else {
@@ -748,7 +746,7 @@ ControllerSelChannel(Controller_t *contr, u_int channel)
 	}
 	ci.channel = channel;
 	ci.st.p = NULL;
-	ret = contr->inst.obj->ctrl(contr->inst.st, MGR_SELCHANNEL | REQUEST, &ci);
+	ret = mISDN_ctrl(contr->inst.st, MGR_SELCHANNEL | REQUEST, &ci);
 	if (ret) {
 		int_errtxt("MGR_SELCHANNEL ret(%d)", ret);
 		return(NULL);

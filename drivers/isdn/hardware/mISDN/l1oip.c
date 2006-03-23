@@ -224,7 +224,7 @@ announced.
 
 extern const char *CardType[];
 
-static const char *l1oip_revision = "$Revision: 1.3 $";
+static const char *l1oip_revision = "$Revision: 1.4 $";
 
 static int l1oip_cnt;
 
@@ -705,7 +705,7 @@ l1oip_manager(void *data, u_int prim, void *arg)
 				if (hfcmulti_l2l1(inst, skb)) dev_kfree_skb(skb);
 			}
 		}
-		HFCM_obj.ctrl(inst, MGR_UNREGLAYER | REQUEST, NULL);
+		mISDN_ctrl(inst, MGR_UNREGLAYER | REQUEST, NULL);
 		break;
 
 		case MGR_CLRSTPARA | INDICATION:
@@ -799,7 +799,7 @@ release_card(hfc_multi_t *hc)
 		if (debug & DEBUG_L1OIP_INIT)
 			printk(KERN_DEBUG "%s: free port %d D-channel %d (1..32)\n", __FUNCTION__, hc->chan[i].port, i);
 		mISDN_free_dch(hc->chan[i].dch);
-		HFCM_obj.ctrl(&hc->chan[i].dch->inst, MGR_UNREGLAYER | REQUEST, NULL);
+		mISDN_ctrl(&hc->chan[i].dch->inst, MGR_UNREGLAYER | REQUEST, NULL);
 		kfree(hc->chan[i].dch);
 		hc->chan[i].dch = NULL;
 	}
@@ -1106,7 +1106,7 @@ l1oip_init(void)
 	/* add stacks */
 	if (debug & DEBUG_L1OIP_INIT)
 		printk(KERN_DEBUG "%s: Adding d-stack: card(%d)\n", __FUNCTION__, l1oip_cnt+1);
-	if ((ret_err = l1oip_obj.ctrl(NULL, MGR_NEWSTACK | REQUEST, &dch->inst))) {
+	if ((ret_err = mISDN_ctrl(NULL, MGR_NEWSTACK | REQUEST, &dch->inst))) {
 		printk(KERN_ERR  "MGR_ADDSTACK REQUEST dch err(%d)\n", ret_err);
 		free_release:
 		release_network(hc);
@@ -1118,10 +1118,10 @@ l1oip_init(void)
 		bch = hc->bch;
 		if (debug & DEBUG_L1OIP_INIT)
 			printk(KERN_DEBUG "%s: Adding b-stack: card(%d) B-channel(%d)\n", __FUNCTION__, l1oip_cnt+1, bch->channel);
-		if ((ret_err = l1oip_obj.ctrl(dst, MGR_NEWSTACK | REQUEST, &bch->inst))) {
+		if ((ret_err = mISDN_ctrl(dst, MGR_NEWSTACK | REQUEST, &bch->inst))) {
 			printk(KERN_ERR "MGR_ADDSTACK bchan error %d\n", ret_err);
 			free_delstack:
-			l1oip_obj.ctrl(dst, MGR_DELSTACK | REQUEST, NULL);
+			mISDN_ctrl(dst, MGR_DELSTACK | REQUEST, NULL);
 			goto free_release;
 		}
 		bch->st = bch->inst.st;
@@ -1130,7 +1130,7 @@ l1oip_init(void)
 	if (debug & DEBUG_L1OIP_INIT)
 		printk(KERN_DEBUG "%s: (before MGR_SETSTACK REQUEST) layermask=0x%x\n", __FUNCTION__, pids[pt].layermask);
 
-	if ((ret_err = l1oip_obj.ctrl(dst, MGR_SETSTACK | REQUEST, &pids[pt]))) {
+	if ((ret_err = mISDN_ctrl(dst, MGR_SETSTACK | REQUEST, &pids[pt]))) {
 		printk(KERN_ERR "MGR_SETSTACK REQUEST dch err(%d)\n", ret_err);
 		goto free_delstack;
 	}
@@ -1142,7 +1142,7 @@ l1oip_init(void)
 	schedule_timeout((100*HZ)/1000); /* Timeout 100ms */
 
 	/* tell stack, that we are ready */
-	l1oip_obj.ctrl(dst, MGR_CTRLREADY | INDICATION, NULL);
+	mISDN_ctrl(dst, MGR_CTRLREADY | INDICATION, NULL);
 
 	HFC_cnt++;
 	goto next_card;

@@ -1,4 +1,4 @@
-/* $Id: x25_l3.c,v 1.5 2006/03/06 12:52:07 keil Exp $
+/* $Id: x25_l3.c,v 1.6 2006/03/23 10:05:16 keil Exp $
  *
  * Linux modular ISDN subsystem, mISDN
  * X.25/X.31 common Layer3 functions 
@@ -125,7 +125,7 @@ l3m_debug(struct FsmInst *fi, char *fmt, ...)
 	va_start(log.args, fmt);
 	log.fmt = fmt;
 	log.head = l3->inst.name;
-	l3->inst.obj->ctrl(&l3->inst, MGR_DEBUGDATA | REQUEST, &log);
+	mISDN_ctrl(&l3->inst, MGR_DEBUGDATA | REQUEST, &log);
 	va_end(log.args);
 }
 
@@ -229,7 +229,7 @@ l3c_debug(struct FsmInst *fi, char *fmt, ...)
 	va_start(log.args, fmt);
 	log.fmt = fmt;
 	log.head = l3c->l3->inst.name;
-	l3c->l3->inst.obj->ctrl(&l3c->l3->inst, MGR_DEBUGDATA | REQUEST, &log);
+	mISDN_ctrl(&l3c->l3->inst, MGR_DEBUGDATA | REQUEST, &log);
 	va_end(log.args);
 }
 
@@ -575,9 +575,9 @@ X25_release_l3(x25_l3_t *l3) {
 	mISDN_FsmDelTimer(&l3->TR, 3);
 	if (inst->obj) {
 		if (l3->entity != MISDN_ENTITY_NONE)
-			inst->obj->ctrl(inst, MGR_DELENTITY | REQUEST,
+			mISDN_ctrl(inst, MGR_DELENTITY | REQUEST,
 				(void *)((u_long)l3->entity));
-		inst->obj->ctrl(inst, MGR_UNREGLAYER | REQUEST, NULL);
+		mISDN_ctrl(inst, MGR_UNREGLAYER | REQUEST, NULL);
 	}
 	kfree(l3);
 }
@@ -704,12 +704,12 @@ new_x25_l3(x25_l3_t **l3_p, mISDNstack_t *st, mISDN_pid_t *pid, mISDNobject_t *o
 	spin_lock_irqsave(&obj->lock, flags);
 	list_add_tail(&n_l3->list, &obj->ilist);
 	spin_unlock_irqrestore(&obj->lock, flags);
-	err = obj->ctrl(&n_l3->inst, MGR_NEWENTITY | REQUEST, NULL);
+	err = mISDN_ctrl(&n_l3->inst, MGR_NEWENTITY | REQUEST, NULL);
 	if (err) {
 		printk(KERN_WARNING "mISDN %s: MGR_NEWENTITY REQUEST failed err(%d)\n",
 			__FUNCTION__, err);
 	}
-	err = obj->ctrl(st, MGR_REGLAYER | INDICATION, &n_l3->inst);
+	err = mISDN_ctrl(st, MGR_REGLAYER | INDICATION, &n_l3->inst);
 	if (err) {
 		list_del(&n_l3->list);
 		kfree(n_l3);

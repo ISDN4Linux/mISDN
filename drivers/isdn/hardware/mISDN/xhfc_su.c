@@ -1,4 +1,4 @@
-/* $Id: xhfc_su.c,v 1.7 2006/03/22 18:33:04 keil Exp $
+/* $Id: xhfc_su.c,v 1.8 2006/03/23 10:05:16 keil Exp $
  *
  * mISDN driver for CologneChip AG's XHFC
  *
@@ -65,7 +65,7 @@
 #include "xhfc_pci2pi.h"
 #endif
 
-static const char xhfc_rev[] = "$Revision: 1.7 $";
+static const char xhfc_rev[] = "$Revision: 1.8 $";
 
 #define MAX_CARDS	8
 static int card_cnt;
@@ -606,7 +606,7 @@ xhfc_manager(void *data, u_int prim, void *arg)
 					dev_kfree_skb(skb);
 			} else
 				printk(KERN_WARNING "no SKB in %s MGR_UNREGLAYER | REQUEST\n", __FUNCTION__);
-			hw_mISDNObj.ctrl(inst, MGR_UNREGLAYER | REQUEST, NULL);
+			mISDN_ctrl(inst, MGR_UNREGLAYER | REQUEST, NULL);
 			break;
 		case MGR_CLRSTPARA | INDICATION:
 			arg = NULL;
@@ -1345,7 +1345,7 @@ release_channels(xhfc_t * xhfc)
 				printk(KERN_DEBUG "%s %s: free channel %d\n",
 					xhfc->name, __FUNCTION__, i);
 			mISDN_freechannel(&xhfc->chan[i].ch);
-			hw_mISDNObj.ctrl(&xhfc->chan[i].ch.inst, MGR_UNREGLAYER | REQUEST, NULL);
+			mISDN_ctrl(&xhfc->chan[i].ch.inst, MGR_UNREGLAYER | REQUEST, NULL);
 		}
 		i++;
 	}
@@ -1696,7 +1696,7 @@ init_mISDN_channels(xhfc_t * xhfc)
 			       xhfc->name, __FUNCTION__, pt);
 
 		/* register stack */
-		err = hw_mISDNObj.ctrl(NULL, MGR_NEWSTACK | REQUEST, &ch->inst);
+		err = mISDN_ctrl(NULL, MGR_NEWSTACK | REQUEST, &ch->inst);
 		if (err) {
 			printk(KERN_ERR
 			       "%s %s: MGR_NEWSTACK | REQUEST  err(%d)\n",
@@ -1707,8 +1707,7 @@ init_mISDN_channels(xhfc_t * xhfc)
 
 		/* attach two BChannels to this DChannel (ch) */
 		for (b = 0; b < 2; b++) {
-			err = hw_mISDNObj.ctrl(ch->inst.st,
-				MGR_NEWSTACK | REQUEST,
+			err = mISDN_ctrl(ch->inst.st, MGR_NEWSTACK | REQUEST,
 				&xhfc->chan[(pt << 2) + b].ch.inst);
 			if (err) {
 				printk(KERN_ERR
@@ -1718,14 +1717,13 @@ init_mISDN_channels(xhfc_t * xhfc)
 			}
 		}
 
-		err = hw_mISDNObj.ctrl(ch->inst.st, MGR_SETSTACK | REQUEST, &pid);
+		err = mISDN_ctrl(ch->inst.st, MGR_SETSTACK | REQUEST, &pid);
 
 		if (err) {
 			printk(KERN_ERR
 			       "%s %s: MGR_SETSTACK REQUEST dch err(%d)\n",
 			       xhfc->name, __FUNCTION__, err);
-			hw_mISDNObj.ctrl(ch->inst.st,
-					 MGR_DELSTACK | REQUEST, NULL);
+			mISDN_ctrl(ch->inst.st, MGR_DELSTACK | REQUEST, NULL);
 			goto free_stack;
 		}
 
@@ -1738,12 +1736,12 @@ init_mISDN_channels(xhfc_t * xhfc)
 		set_current_state(TASK_UNINTERRUPTIBLE);
 		schedule_timeout((100 * HZ) / 1000);	/* Timeout 100ms */
 
-		hw_mISDNObj.ctrl(ch->inst.st, MGR_CTRLREADY | INDICATION, NULL);
+		mISDN_ctrl(ch->inst.st, MGR_CTRLREADY | INDICATION, NULL);
 	}
 	return (0);
 
       free_stack:
-	hw_mISDNObj.ctrl(ch->inst.st, MGR_DELSTACK | REQUEST, NULL);
+	mISDN_ctrl(ch->inst.st, MGR_DELSTACK | REQUEST, NULL);
       free_channels:
       	spin_lock_irqsave(&hw_mISDNObj.lock, flags);
 	release_channels(xhfc);

@@ -1,4 +1,4 @@
-/* $Id: hfcs_usb.c,v 1.10 2006/03/22 18:33:04 keil Exp $
+/* $Id: hfcs_usb.c,v 1.11 2006/03/23 10:05:16 keil Exp $
  *
  * mISDN driver for Colognechip HFC-S USB chip
  *
@@ -39,7 +39,7 @@
 
 
 #define DRIVER_NAME "mISDN_hfcsusb"
-const char *hfcsusb_rev = "$Revision: 1.10 $";
+const char *hfcsusb_rev = "$Revision: 1.11 $";
 
 #define MAX_CARDS	8
 static int hfcsusb_cnt;
@@ -848,7 +848,7 @@ hfcsusb_manager(void *data, u_int prim, void *arg)
 					dev_kfree_skb(skb);
 			} else
 				printk(KERN_WARNING "no SKB in %s MGR_UNREGLAYER | REQUEST\n", __FUNCTION__);
-			hw_mISDNObj.ctrl(inst, MGR_UNREGLAYER | REQUEST, NULL);
+			mISDN_ctrl(inst, MGR_UNREGLAYER | REQUEST, NULL);
 			break;
 		case MGR_CLRSTPARA | INDICATION:
 			arg = NULL;
@@ -1550,7 +1550,7 @@ release_card(hfcsusb_t * card)
 	mISDN_freechannel(&card->chan[B1]);
 	mISDN_freechannel(&card->chan[B2]);
 	mISDN_freechannel(&card->chan[D]);
-	hw_mISDNObj.ctrl(&card->chan[D].inst, MGR_UNREGLAYER | REQUEST, NULL);
+	mISDN_ctrl(&card->chan[D].inst, MGR_UNREGLAYER | REQUEST, NULL);
 	
 	spin_lock_irqsave(&hw_mISDNObj.lock, flags);
 	list_del(&card->list);
@@ -1684,31 +1684,31 @@ setup_instance(hfcsusb_t * card)
 		return (err);
 	}
 	hfcsusb_cnt++;
-	err = hw_mISDNObj.ctrl(NULL, MGR_NEWSTACK | REQUEST, &card->chan[D].inst);
+	err = mISDN_ctrl(NULL, MGR_NEWSTACK | REQUEST, &card->chan[D].inst);
 	if (err) {
 		release_card(card);
 		return (err);
 	}
 	for (i = B1; i <= B2; i++) {
-		err = hw_mISDNObj.ctrl(card->chan[D].inst.st,
+		err = mISDN_ctrl(card->chan[D].inst.st,
 			MGR_NEWSTACK | REQUEST, &card->chan[i].inst);
 		if (err) {
 			printk(KERN_ERR "MGR_ADDSTACK bchan error %d\n", err);
-			hw_mISDNObj.ctrl(card->chan[D].inst.st, MGR_DELSTACK | REQUEST, NULL);
+			mISDN_ctrl(card->chan[D].inst.st, MGR_DELSTACK | REQUEST, NULL);
 			return (err);
 		}
 		setup_bchannel(&card->chan[i], -1);
 	}
 	if (debug)
 		printk(KERN_DEBUG "%s lm %x\n", __FUNCTION__, pid.layermask);
-	err = hw_mISDNObj.ctrl(card->chan[D].inst.st, MGR_SETSTACK | REQUEST, &pid);
+	err = mISDN_ctrl(card->chan[D].inst.st, MGR_SETSTACK | REQUEST, &pid);
 	if (err) {
 		printk(KERN_ERR "MGR_SETSTACK REQUEST dch err(%d)\n", err);
-		hw_mISDNObj.ctrl(card->chan[D].inst.st, MGR_DELSTACK | REQUEST, NULL);
+		mISDN_ctrl(card->chan[D].inst.st, MGR_DELSTACK | REQUEST, NULL);
 		return (err);
 	}
 
-	hw_mISDNObj.ctrl(card->chan[D].inst.st, MGR_CTRLREADY | INDICATION, NULL);
+	mISDN_ctrl(card->chan[D].inst.st, MGR_CTRLREADY | INDICATION, NULL);
 	usb_set_intfdata(card->intf, card);
 	return (0);
 }
@@ -1929,7 +1929,7 @@ hfcsusb_disconnect(struct usb_interface *intf)
 	if (debug & 0x10000)
 		printk(KERN_DEBUG "%s\n", __FUNCTION__);
 	card->disc_flag = 1;
-	hw_mISDNObj.ctrl(card->chan[D].inst.st, MGR_DELSTACK | REQUEST, NULL);
+	mISDN_ctrl(card->chan[D].inst.st, MGR_DELSTACK | REQUEST, NULL);
 //	release_card(card);
 	usb_set_intfdata(intf, NULL);
 }				/* hfcsusb_disconnect */

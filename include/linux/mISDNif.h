@@ -1,4 +1,4 @@
-/* $Id: mISDNif.h,v 1.34 2006/03/22 18:28:34 keil Exp $
+/* $Id: mISDNif.h,v 1.35 2006/03/23 10:05:16 keil Exp $
  *
  */
 
@@ -23,8 +23,8 @@
 #define	MISDN_MINOR_VERSION	0
 #define	MISDN_VERSION		((MISDN_MAJOR_VERSION<<16) | MISDN_MINOR_VERSION)
 
-#define MISDN_REVISION		"$Revision: 1.34 $"
-#define MISDN_DATE		"$Date: 2006/03/22 18:28:34 $"
+#define MISDN_REVISION		"$Revision: 1.35 $"
+#define MISDN_DATE		"$Date: 2006/03/23 10:05:16 $"
 
 /* collect some statistics about the message queues */
 #define MISDN_MSG_STATS
@@ -777,7 +777,6 @@ struct _mISDNobject {
 	mISDN_pid_t		DPROTO;
 	mISDN_pid_t		BPROTO;
 	ctrl_func_t		*own_ctrl;
-	ctrl_func_t		*ctrl;
 	struct list_head	ilist;
 	spinlock_t		lock;
 	struct module		*owner;
@@ -893,6 +892,7 @@ extern int	mISDN_queue_message(mISDNinstance_t *, u_int, struct sk_buff *);
 
 extern int	mISDN_register(mISDNobject_t *obj);
 extern int	mISDN_unregister(mISDNobject_t *obj);
+extern int	mISDN_ctrl(void *, u_int, void *);
 
 #endif /* __KERNEL__ */
 #endif /* mISDNIF_H */

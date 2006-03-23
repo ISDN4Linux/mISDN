@@ -1,4 +1,4 @@
-/* $Id: app_plci.c,v 1.10 2006/03/06 12:52:07 keil Exp $
+/* $Id: app_plci.c,v 1.11 2006/03/23 10:05:16 keil Exp $
  *
  */
 
@@ -1634,8 +1634,7 @@ AppPlciLinkUp(AppPlci_t *aplci)
 		aplci->link->inst.function = PL_l3l4;
 	else
 		aplci->link->inst.function = PL_l3l4mux;
-	retval = aplci->link->inst.obj->ctrl(aplci->link->st,
-		MGR_ADDLAYER | REQUEST, &aplci->link->inst); 
+	retval = mISDN_ctrl(aplci->link->st, MGR_ADDLAYER | REQUEST, &aplci->link->inst); 
 	if (retval) {
 		printk(KERN_WARNING "%s MGR_ADDLAYER | REQUEST ret(%d)\n",
 			__FUNCTION__, retval);
@@ -1645,14 +1644,12 @@ AppPlciLinkUp(AppPlci_t *aplci)
 	stpara.up_headerlen = CAPI_B3_DATA_IND_HEADER_SIZE;
 	stpara.down_headerlen = 0;
                         
-	retval = aplci->link->inst.obj->ctrl(aplci->link->st,
-		MGR_ADDSTPARA | REQUEST, &stpara);
+	retval = mISDN_ctrl(aplci->link->st, MGR_ADDSTPARA | REQUEST, &stpara);
 	if (retval) {
 		printk(KERN_WARNING "%s MGR_SETSTACK | REQUEST ret(%d)\n",
 			__FUNCTION__, retval);
 	}
-	retval = aplci->link->inst.obj->ctrl(aplci->link->st,
-		MGR_SETSTACK | REQUEST, &pid);
+	retval = mISDN_ctrl(aplci->link->st, MGR_SETSTACK | REQUEST, &pid);
 	if (retval) {
 		printk(KERN_WARNING "%s MGR_SETSTACK | REQUEST ret(%d)\n",
 			__FUNCTION__, retval);
@@ -1671,8 +1668,7 @@ ReleaseLink(AppPlci_t *aplci)
 		if (ncci->ncci_m.state != ST_NCCI_N_0)
 			ncciL4L3(ncci, DL_RELEASE | REQUEST, 0, 0, NULL, NULL);
 #endif
-		retval = aplci->link->inst.obj->ctrl(aplci->link->inst.st,
-			MGR_CLEARSTACK | REQUEST, NULL);
+		retval = mISDN_ctrl(aplci->link->inst.st, MGR_CLEARSTACK | REQUEST, NULL);
 		if (retval)
 			int_error();
 		aplci->link = NULL;

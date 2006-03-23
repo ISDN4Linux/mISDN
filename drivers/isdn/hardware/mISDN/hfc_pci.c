@@ -1,4 +1,4 @@
-/* $Id: hfc_pci.c,v 1.42 2006/03/06 12:52:07 keil Exp $
+/* $Id: hfc_pci.c,v 1.43 2006/03/23 10:05:16 keil Exp $
 
  * hfc_pci.c     low level driver for CCD's hfc-pci based cards
  *
@@ -40,7 +40,7 @@
 
 extern const char *CardType[];
 
-static const char *hfcpci_revision = "$Revision: 1.42 $";
+static const char *hfcpci_revision = "$Revision: 1.43 $";
 
 /* table entry in the PCI devices list */
 typedef struct {
@@ -1951,7 +1951,7 @@ release_card(hfc_pci_t *hc) {
 	mISDN_freechannel(&hc->bch[0]);
 	mISDN_freechannel(&hc->dch);
 	spin_unlock_irqrestore(&hc->lock, flags);
-	HFC_obj.ctrl(&hc->dch.inst, MGR_UNREGLAYER | REQUEST, NULL);
+	mISDN_ctrl(&hc->dch.inst, MGR_UNREGLAYER | REQUEST, NULL);
 	spin_lock_irqsave(&HFC_obj.lock, flags);
 	list_del(&hc->list);
 	spin_unlock_irqrestore(&HFC_obj.lock, flags);
@@ -2008,7 +2008,7 @@ HFC_manager(void *data, u_int prim, void *arg) {
 			if (hfcpci_l2l1(inst, skb))
 				dev_kfree_skb(skb);
 		}
-		HFC_obj.ctrl(inst, MGR_UNREGLAYER | REQUEST, NULL);
+		mISDN_ctrl(inst, MGR_UNREGLAYER | REQUEST, NULL);
 		break;
 	    case MGR_CLRSTPARA | INDICATION:
 		arg = NULL;
@@ -2214,7 +2214,7 @@ static int __init HFC_init(void)
 		if (prev) {
 			dst = prev->dch.inst.st;
 		} else {
-			if ((err = HFC_obj.ctrl(NULL, MGR_NEWSTACK | REQUEST,
+			if ((err = mISDN_ctrl(NULL, MGR_NEWSTACK | REQUEST,
 				&card->dch.inst))) {
 				printk(KERN_ERR  "MGR_ADDSTACK REQUEST dch err(%d)\n", err);
 				release_card(card);
@@ -2226,14 +2226,12 @@ static int __init HFC_init(void)
 			}
 			dst = card->dch.inst.st;
 		}
-		HFC_obj.ctrl(dst, MGR_STOPSTACK | REQUEST, NULL);
+		mISDN_ctrl(dst, MGR_STOPSTACK | REQUEST, NULL);
 		for (i = 0; i < 2; i++) {
 			card->bch[i].inst.class_dev.dev = &card->hw.dev->dev;
-			if ((err = HFC_obj.ctrl(dst,
-				MGR_NEWSTACK | REQUEST, &card->bch[i].inst))) {
+			if ((err = mISDN_ctrl(dst, MGR_NEWSTACK | REQUEST, &card->bch[i].inst))) {
 				printk(KERN_ERR "MGR_ADDSTACK bchan error %d\n", err);
-				HFC_obj.ctrl(card->dch.inst.st,
-					MGR_DELSTACK | REQUEST, NULL);
+				mISDN_ctrl(card->dch.inst.st, MGR_DELSTACK | REQUEST, NULL);
 				if (!HFC_cnt)
 					mISDN_unregister(&HFC_obj);
 				else
@@ -2242,11 +2240,10 @@ static int __init HFC_init(void)
 			}
 		}
 		if (protocol[HFC_cnt] != 0x100) { /* next not second HFC */
-			if ((err = HFC_obj.ctrl(dst, MGR_SETSTACK | REQUEST,
-				&pid))) {
+			if ((err = mISDN_ctrl(dst, MGR_SETSTACK | REQUEST, &pid))) {
 				printk(KERN_ERR "MGR_SETSTACK REQUEST dch err(%d)\n",
 					err);
-				HFC_obj.ctrl(dst, MGR_DELSTACK | REQUEST, NULL);
+				mISDN_ctrl(dst, MGR_DELSTACK | REQUEST, NULL);
 				if (!HFC_cnt)
 					mISDN_unregister(&HFC_obj);
 				else
@@ -2255,15 +2252,15 @@ static int __init HFC_init(void)
 			}
 		}
 		if ((err = init_card(card))) {
-			HFC_obj.ctrl(dst, MGR_DELSTACK | REQUEST, NULL);
+			mISDN_ctrl(dst, MGR_DELSTACK | REQUEST, NULL);
 			if (!HFC_cnt)
 				mISDN_unregister(&HFC_obj);
 			else
 				err = 0;
 			return(err);
 		}
-		HFC_obj.ctrl(dst, MGR_STARTSTACK | REQUEST, NULL);
-		HFC_obj.ctrl(dst, MGR_CTRLREADY | INDICATION, NULL);
+		mISDN_ctrl(dst, MGR_STARTSTACK | REQUEST, NULL);
+		mISDN_ctrl(dst, MGR_CTRLREADY | INDICATION, NULL);
 	}
 	printk(KERN_INFO "HFC %d cards installed\n", HFC_cnt);
 	return(0);

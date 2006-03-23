@@ -1,4 +1,4 @@
-/* $Id: layer1.c,v 1.13 2006/03/22 18:33:04 keil Exp $
+/* $Id: layer1.c,v 1.14 2006/03/23 10:05:16 keil Exp $
  *
  * mISDN_l1.c     common low level stuff for I.430 layer1 TE mode
  *
@@ -8,7 +8,7 @@
  *
  */
 
-static char *l1_revision = "$Revision: 1.13 $";
+static char *l1_revision = "$Revision: 1.14 $";
 
 #include <linux/config.h>
 #include <linux/module.h>
@@ -160,7 +160,7 @@ l1m_debug(struct FsmInst *fi, char *fmt, ...)
 	va_start(log.args, fmt);
 	log.fmt = fmt;
 	log.head = l1->inst.name;
-	l1->inst.obj->ctrl(&l1->inst, MGR_DEBUGDATA | REQUEST, &log);
+	mISDN_ctrl(&l1->inst, MGR_DEBUGDATA | REQUEST, &log);
 	va_end(log.args);
 }
 
@@ -659,7 +659,7 @@ release_l1(layer1_t *l1) {
 	spin_lock_irqsave(&isdnl1.lock, flags);
 	list_del(&l1->list);
 	spin_unlock_irqrestore(&isdnl1.lock, flags);
-	isdnl1.ctrl(inst, MGR_UNREGLAYER | REQUEST, NULL);
+	mISDN_ctrl(inst, MGR_UNREGLAYER | REQUEST, NULL);
 	kfree(l1);
 }
 
@@ -704,7 +704,7 @@ new_l1(mISDNstack_t *st, mISDN_pid_t *pid) {
 	spin_lock_irqsave(&isdnl1.lock, flags);
 	list_add_tail(&nl1->list, &isdnl1.ilist);
 	spin_unlock_irqrestore(&isdnl1.lock, flags);
-	err = isdnl1.ctrl(st, MGR_REGLAYER | INDICATION, &nl1->inst);
+	err = mISDN_ctrl(st, MGR_REGLAYER | INDICATION, &nl1->inst);
 	if (err) {
 		mISDN_FsmDelTimer(&nl1->timer, 0);
 		list_del(&nl1->list);

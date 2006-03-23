@@ -1,4 +1,4 @@
-/* $Id: dtmf.c,v 1.12 2006/03/06 12:52:07 keil Exp $
+/* $Id: dtmf.c,v 1.13 2006/03/23 10:05:16 keil Exp $
  *
  * Linux ISDN subsystem, DTMF tone module
  *
@@ -46,7 +46,7 @@ static u_int debug = 0;
 
 static mISDNobject_t dtmf_obj;
 
-static char *mISDN_dtmf_revision = "$Revision: 1.12 $";
+static char *mISDN_dtmf_revision = "$Revision: 1.13 $";
 
 /*
  * Misc. lookup-tables.
@@ -496,7 +496,7 @@ release_dtmf(dtmf_t *dtmf) {
 	spin_lock_irqsave(&dtmf_obj.lock, flags);
 	list_del(&dtmf->list);
 	spin_unlock_irqrestore(&dtmf_obj.lock, flags);
-	dtmf_obj.ctrl(inst, MGR_UNREGLAYER | REQUEST, NULL);
+	mISDN_ctrl(inst, MGR_UNREGLAYER | REQUEST, NULL);
 	kfree(dtmf);
 }
 
@@ -524,7 +524,7 @@ new_dtmf(mISDNstack_t *st, mISDN_pid_t *pid) {
 	spin_lock_irqsave(&dtmf_obj.lock, flags);
 	list_add_tail(&n_dtmf->list, &dtmf_obj.ilist);
 	spin_unlock_irqrestore(&dtmf_obj.lock, flags);
-	err = dtmf_obj.ctrl(st, MGR_REGLAYER | INDICATION, &n_dtmf->inst);
+	err = mISDN_ctrl(st, MGR_REGLAYER | INDICATION, &n_dtmf->inst);
 	if (err) {
 		list_del(&n_dtmf->list);
 		kfree(n_dtmf);

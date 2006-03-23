@@ -36,7 +36,7 @@
 
 #include "loop.h"
 
-static const char *loop_revision = "$Revision: 1.3 $";
+static const char *loop_revision = "$Revision: 1.4 $";
 
 static int loop_cnt;
 
@@ -259,7 +259,7 @@ found:
 				if (loop_l2l1(inst, skb)) dev_kfree_skb(skb);
 			}
 		}
-		loop_obj.ctrl(inst, MGR_UNREGLAYER | REQUEST, NULL);
+		mISDN_ctrl(inst, MGR_UNREGLAYER | REQUEST, NULL);
 		break;
 
 		case MGR_CLRSTPARA | INDICATION:
@@ -435,7 +435,7 @@ static int __devinit loop_new(void)
 	/* add stacks */
 	if (debug & DEBUG_LOOP_INIT)
 		printk(KERN_DEBUG "%s: Adding d-stack: card(%d)\n", __FUNCTION__, loop_cnt+1);
-	if ((ret_err = loop_obj.ctrl(NULL, MGR_NEWSTACK | REQUEST, &dch->inst))) {
+	if ((ret_err = mISDN_ctrl(NULL, MGR_NEWSTACK | REQUEST, &dch->inst))) {
 		printk(KERN_ERR  "MGR_ADDSTACK REQUEST dch err(%d)\n", ret_err);
 		free_release:
 		loop_delete(hc); /* hc is free */
@@ -449,10 +449,10 @@ static int __devinit loop_new(void)
 		if (debug & DEBUG_LOOP_INIT)
 			printk(KERN_DEBUG "%s: Adding b-stack: card(%d) B-channel(%d)\n", __FUNCTION__, loop_cnt+1, ch+1);
 		bch = hc->bch[ch];
-		if ((ret_err = loop_obj.ctrl(dst, MGR_NEWSTACK | REQUEST, &bch->inst))) {
+		if ((ret_err = mISDN_ctrl(dst, MGR_NEWSTACK | REQUEST, &bch->inst))) {
 			printk(KERN_ERR "MGR_ADDSTACK bchan error %d\n", ret_err);
 			free_delstack:
-			loop_obj.ctrl(dst, MGR_DELSTACK | REQUEST, NULL);
+			mISDN_ctrl(dst, MGR_DELSTACK | REQUEST, NULL);
 			goto free_release;
 		}
 		ch++;
@@ -460,7 +460,7 @@ static int __devinit loop_new(void)
 	if (debug & DEBUG_LOOP_INIT)
 		printk(KERN_DEBUG "%s: (before MGR_SETSTACK REQUEST) layermask=0x%x\n", __FUNCTION__, pid.layermask);
 
-	if ((ret_err = loop_obj.ctrl(dst, MGR_SETSTACK | REQUEST, &pid))) {
+	if ((ret_err = mISDN_ctrl(dst, MGR_SETSTACK | REQUEST, &pid))) {
 		printk(KERN_ERR "MGR_SETSTACK REQUEST dch err(%d)\n", ret_err);
 		goto free_delstack;
 	}
@@ -472,7 +472,7 @@ static int __devinit loop_new(void)
 	schedule_timeout((100*HZ)/1000); /* Timeout 100ms */
 
 	/* tell stack, that we are ready */
-	loop_obj.ctrl(dst, MGR_CTRLREADY | INDICATION, NULL);
+	mISDN_ctrl(dst, MGR_CTRLREADY | INDICATION, NULL);
 
 	loop_cnt++;
 	return(0);

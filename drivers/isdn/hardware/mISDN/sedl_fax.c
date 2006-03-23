@@ -1,4 +1,4 @@
-/* $Id: sedl_fax.c,v 1.23 2006/03/06 12:52:07 keil Exp $
+/* $Id: sedl_fax.c,v 1.24 2006/03/23 10:05:16 keil Exp $
  *
  * sedl_fax.c  low level stuff for Sedlbauer Speedfax + cards
  *
@@ -45,7 +45,7 @@
 
 extern const char *CardType[];
 
-const char *Sedlfax_revision = "$Revision: 1.23 $";
+const char *Sedlfax_revision = "$Revision: 1.24 $";
 
 const char *Sedlbauer_Types[] =
 	{"None", "speed fax+", "speed fax+ pyramid", "speed fax+ pci"};
@@ -501,7 +501,7 @@ release_card(sedl_fax *card) {
 	mISDN_freechannel(&card->bch[0]);
 	mISDN_freechannel(&card->dch);
 	spin_unlock_irqrestore(&card->lock, flags);
-	speedfax.ctrl(&card->dch.inst, MGR_UNREGLAYER | REQUEST, NULL);
+	mISDN_ctrl(&card->dch.inst, MGR_UNREGLAYER | REQUEST, NULL);
 	spin_lock_irqsave(&speedfax.lock, flags);
 	list_del(&card->list);
 	spin_unlock_irqrestore(&speedfax.lock, flags);
@@ -577,7 +577,7 @@ speedfax_manager(void *data, u_int prim, void *arg) {
 			}
 		} else
 			printk(KERN_WARNING "no SKB in %s MGR_UNREGLAYER | REQUEST\n", __FUNCTION__);
-		speedfax.ctrl(inst, MGR_UNREGLAYER | REQUEST, NULL);
+		mISDN_ctrl(inst, MGR_UNREGLAYER | REQUEST, NULL);
 		break;
 	    case MGR_CLRSTPARA | INDICATION:
 		arg = NULL;
@@ -619,7 +619,7 @@ speedfax_manager(void *data, u_int prim, void *arg) {
 			return(isar_load_firmware(&card->bch[0], firm->data, firm->len));
 		}
 	    case MGR_LOADFIRM | CONFIRM:
-		speedfax.ctrl(card->dch.inst.st, MGR_CTRLREADY | INDICATION, NULL);
+		mISDN_ctrl(card->dch.inst.st, MGR_CTRLREADY | INDICATION, NULL);
 		break;
 	    case MGR_SETSTACK | INDICATION:
 		if ((channel!=2) && (inst->pid.global == 2)) {
@@ -704,32 +704,32 @@ static int __devinit setup_instance(sedl_fax *card)
 		return(err);
 	}
 	sedl_cnt++;
-	err = speedfax.ctrl(NULL, MGR_NEWSTACK | REQUEST, &card->dch.inst);
+	err = mISDN_ctrl(NULL, MGR_NEWSTACK | REQUEST, &card->dch.inst);
 	if (err) {
 		release_card(card);
 		return(err);
 	}
-	speedfax.ctrl(card->dch.inst.st, MGR_STOPSTACK | REQUEST, NULL);
+	mISDN_ctrl(card->dch.inst.st, MGR_STOPSTACK | REQUEST, NULL);
 	for (i=0; i<2; i++) {
-		err = speedfax.ctrl(card->dch.inst.st, MGR_NEWSTACK | REQUEST, &card->bch[i].inst);
+		err = mISDN_ctrl(card->dch.inst.st, MGR_NEWSTACK | REQUEST, &card->bch[i].inst);
 		if (err) {
 			printk(KERN_ERR "MGR_ADDSTACK bchan error %d\n", err);
-			speedfax.ctrl(card->dch.inst.st, MGR_DELSTACK | REQUEST, NULL);
+			mISDN_ctrl(card->dch.inst.st, MGR_DELSTACK | REQUEST, NULL);
 			return(err);
 		}
 	}
-	err = speedfax.ctrl(card->dch.inst.st, MGR_SETSTACK | REQUEST, &pid);
+	err = mISDN_ctrl(card->dch.inst.st, MGR_SETSTACK | REQUEST, &pid);
 	if (err) {
 		printk(KERN_ERR  "MGR_SETSTACK REQUEST dch err(%d)\n", err);
-		speedfax.ctrl(card->dch.inst.st, MGR_DELSTACK | REQUEST, NULL);
+		mISDN_ctrl(card->dch.inst.st, MGR_DELSTACK | REQUEST, NULL);
 		return(err);
 	}
 	err = init_card(card);
 	if (err) {
-		speedfax.ctrl(card->dch.inst.st, MGR_DELSTACK | REQUEST, NULL);
+		mISDN_ctrl(card->dch.inst.st, MGR_DELSTACK | REQUEST, NULL);
 		return(err);
 	}
-	speedfax.ctrl(card->dch.inst.st, MGR_STARTSTACK | REQUEST, NULL);
+	mISDN_ctrl(card->dch.inst.st, MGR_STARTSTACK | REQUEST, NULL);
 	printk(KERN_INFO "SpeedFax %d cards installed\n", sedl_cnt);
 	return(0);
 }
@@ -814,7 +814,7 @@ static void __devexit sedl_remove_pci(struct pci_dev *pdev)
 	sedl_fax	*card = pci_get_drvdata(pdev);
 
 	if (card)
-		speedfax.ctrl(card->dch.inst.st, MGR_DELSTACK | REQUEST, NULL);
+		mISDN_ctrl(card->dch.inst.st, MGR_DELSTACK | REQUEST, NULL);
 	else
 		printk(KERN_WARNING "%s: drvdata allready removed\n", __FUNCTION__);
 }
@@ -829,7 +829,7 @@ static void __devexit sedl_remove_pnp(struct pci_dev *pdev)
 	sedl_fax	*card = pnp_get_drvdata(pdev);
 
 	if (card)
-		speedfax.ctrl(card->dch.inst.st, MGR_DELSTACK | REQUEST, NULL);
+		mISDN_ctrl(card->dch.inst.st, MGR_DELSTACK | REQUEST, NULL);
 	else
 		printk(KERN_WARNING "%s: drvdata allready removed\n", __FUNCTION__);
 }

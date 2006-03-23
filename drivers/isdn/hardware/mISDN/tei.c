@@ -1,4 +1,4 @@
-/* $Id: tei.c,v 1.8 2004/01/26 22:21:30 keil Exp $
+/* $Id: tei.c,v 1.9 2006/03/23 10:05:16 keil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -12,7 +12,7 @@
 #include "debug.h"
 #include <linux/random.h>
 
-const char *tei_revision = "$Revision: 1.8 $";
+const char *tei_revision = "$Revision: 1.9 $";
 
 #define ID_REQUEST	1
 #define ID_ASSIGNED	2
@@ -444,7 +444,7 @@ tei_debug(struct FsmInst *fi, char *fmt, ...)
 	sprintf(head,"tei %s", tm->l2->inst.name);
 	log.fmt = fmt;
 	log.head = head;
-	tm->l2->inst.obj->ctrl(&tm->l2->inst, MGR_DEBUGDATA | REQUEST, &log);
+	mISDN_ctrl(&tm->l2->inst, MGR_DEBUGDATA | REQUEST, &log);
 	va_end(log.args);
 }
 

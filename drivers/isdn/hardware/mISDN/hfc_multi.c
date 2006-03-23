@@ -123,7 +123,7 @@ static void ph_state_change(channel_t *ch);
 
 extern const char *CardType[];
 
-static const char *hfcmulti_revision = "$Revision: 1.28 $";
+static const char *hfcmulti_revision = "$Revision: 1.29 $";
 
 static int HFC_cnt, HFC_idx;
 
@@ -2978,7 +2978,7 @@ release_port(hfc_multi_t *hc, int port)
 						test_bit(FLG_DCHANNEL, &hc->chan[i].ch->Flags) ?
 						'D' : 'B', i);
 				mISDN_freechannel(hc->chan[i].ch);
-				HFCM_obj.ctrl(&hc->chan[i].ch->inst, MGR_UNREGLAYER | REQUEST, NULL);
+				mISDN_ctrl(&hc->chan[i].ch->inst, MGR_UNREGLAYER | REQUEST, NULL);
 				kfree(hc->chan[i].ch);
 				hc->chan[i].ch = NULL;
 			}
@@ -3096,7 +3096,7 @@ bugtest
 			if (hfcmulti_l2l1(inst, skb))
 				dev_kfree_skb(skb);
 		}
-		HFCM_obj.ctrl(inst, MGR_UNREGLAYER | REQUEST, NULL);
+		mISDN_ctrl(inst, MGR_UNREGLAYER | REQUEST, NULL);
 bugtest
 		break;
 
@@ -3568,7 +3568,7 @@ static int __devinit hfcpci_probe(struct pci_dev *pdev, const struct pci_device_
 			chan = hc->chan[16].ch;
 		else
 			chan = hc->chan[(pt<<2)+2].ch;
-		if ((ret_err = HFCM_obj.ctrl(NULL, MGR_NEWSTACK | REQUEST, &chan->inst))) {
+		if ((ret_err = mISDN_ctrl(NULL, MGR_NEWSTACK | REQUEST, &chan->inst))) {
 			printk(KERN_ERR  "MGR_ADDSTACK REQUEST dch err(%d)\n", ret_err);
 free_release:
 			release_port(hc, -1); /* all ports, hc is free */
@@ -3587,10 +3587,10 @@ free_release:
 				chan = hc->chan[i + 1 + (i>=15)].ch;
 			else
 				chan = hc->chan[(pt<<2) + i].ch;
-			if ((ret_err = HFCM_obj.ctrl(dst, MGR_NEWSTACK | REQUEST, &chan->inst))) {
+			if ((ret_err = mISDN_ctrl(dst, MGR_NEWSTACK | REQUEST, &chan->inst))) {
 				printk(KERN_ERR "MGR_ADDSTACK bchan error %d\n", ret_err);
 free_delstack:
-				HFCM_obj.ctrl(dst, MGR_DELSTACK | REQUEST, NULL);
+				mISDN_ctrl(dst, MGR_DELSTACK | REQUEST, NULL);
 				goto free_release;
 			}
 			i++;
@@ -3598,7 +3598,7 @@ free_delstack:
 		if (debug & DEBUG_HFCMULTI_INIT)
 			printk(KERN_DEBUG "%s: (before MGR_SETSTACK REQUEST) layermask=0x%x\n", __FUNCTION__, pids[pt].layermask);
 
-		if ((ret_err = HFCM_obj.ctrl(dst, MGR_SETSTACK | REQUEST, &pids[pt]))) {
+		if ((ret_err = mISDN_ctrl(dst, MGR_SETSTACK | REQUEST, &pids[pt]))) {
 			printk(KERN_ERR "MGR_SETSTACK REQUEST dch err(%d)\n", ret_err);
 			goto free_delstack;
 		}
@@ -3610,7 +3610,7 @@ free_delstack:
 		schedule_timeout((100*HZ)/1000); /* Timeout 100ms */
 
 		/* tell stack, that we are ready */
-		HFCM_obj.ctrl(dst, MGR_CTRLREADY | INDICATION, NULL);
+		mISDN_ctrl(dst, MGR_CTRLREADY | INDICATION, NULL);
 
 		pt++;
 	}
@@ -3669,7 +3669,7 @@ static void __devexit hfc_remove_pci(struct pci_dev *pdev)
 				// if created elete stack
 				if (card->chan[ch].ch &&
 					test_bit(FLG_DCHANNEL, &card->chan[ch].ch->Flags))
-					HFCM_obj.ctrl(card->chan[ch].ch->inst.st,
+					mISDN_ctrl(card->chan[ch].ch->inst.st,
 						MGR_DELSTACK | REQUEST, NULL);
 			}
 		}
