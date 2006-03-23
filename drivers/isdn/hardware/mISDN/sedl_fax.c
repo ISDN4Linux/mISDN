@@ -1,4 +1,4 @@
-/* $Id: sedl_fax.c,v 1.24 2006/03/23 10:05:16 keil Exp $
+/* $Id: sedl_fax.c,v 1.25 2006/03/23 12:31:17 crich Exp $
  *
  * sedl_fax.c  low level stuff for Sedlbauer Speedfax + cards
  *
@@ -42,10 +42,11 @@
 #include "layer1.h"
 #include "helper.h"
 #include "debug.h"
+#include "ctrl.h"
 
 extern const char *CardType[];
 
-const char *Sedlfax_revision = "$Revision: 1.24 $";
+const char *Sedlfax_revision = "$Revision: 1.25 $";
 
 const char *Sedlbauer_Types[] =
 	{"None", "speed fax+", "speed fax+ pyramid", "speed fax+ pci"};

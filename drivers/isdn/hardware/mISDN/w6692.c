@@ -1,4 +1,4 @@
-/* $Id: w6692.c,v 1.16 2006/03/23 10:05:16 keil Exp $
+/* $Id: w6692.c,v 1.17 2006/03/23 12:31:17 crich Exp $
 
  * w6692.c     low level driver for CCD's hfc-pci based cards
  *
@@ -31,12 +31,13 @@
 #include "helper.h"
 #include "debug.h"
 #include "w6692.h"
+#include "ctrl.h"
 
 #include <linux/isdn_compat.h>
 
 extern const char *CardType[];
 
-const char *w6692_rev = "$Revision: 1.16 $";
+const char *w6692_rev = "$Revision: 1.17 $";
 
 #define DBUSY_TIMER_VALUE	80
 

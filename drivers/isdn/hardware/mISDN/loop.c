@@ -32,11 +32,12 @@
 #include "channel.h"
 #include "layer1.h"
 #include "debug.h"
+#include "ctrl.h"
 #include <linux/isdn_compat.h>
 
 #include "loop.h"
 
-static const char *loop_revision = "$Revision: 1.4 $";
+static const char *loop_revision = "$Revision: 1.5 $";
 
 static int loop_cnt;
 

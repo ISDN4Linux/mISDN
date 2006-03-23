@@ -1,4 +1,4 @@
-/* $Id: app_plci.c,v 1.11 2006/03/23 10:05:16 keil Exp $
+/* $Id: app_plci.c,v 1.12 2006/03/23 12:31:17 crich Exp $
  *
  */
 
@@ -6,6 +6,7 @@
 #include "helper.h"
 #include "debug.h"
 #include "dss1.h"
+#include "ctrl.h"
 
 #define AppPlciDebug(aplci, lev, fmt, args...) \
 	capidebug(lev, fmt, ## args)

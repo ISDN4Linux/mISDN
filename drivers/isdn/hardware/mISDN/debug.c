@@ -1,4 +1,4 @@
-/* $Id: debug.c,v 1.5 2006/03/23 10:05:16 keil Exp $
+/* $Id: debug.c,v 1.6 2006/03/23 12:31:17 crich Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -11,6 +11,7 @@
 #include <linux/kernel.h>
 #include <linux/string.h>
 #include "debug.h"
+#include "ctrl.h"
 
 #define mISDN_STATUS_BUFSIZE 4096
 

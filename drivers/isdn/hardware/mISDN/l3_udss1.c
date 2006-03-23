@@ -1,4 +1,4 @@
-/* $Id: l3_udss1.c,v 1.33 2006/03/23 10:05:16 keil Exp $
+/* $Id: l3_udss1.c,v 1.34 2006/03/23 12:31:17 crich Exp $
  *
  * EURO/DSS1 D-channel protocol
  *
@@ -19,12 +19,13 @@
 #include "helper.h"
 #include "debug.h"
 #include "dss1.h"
+#include "ctrl.h"
 
 static int debug = 0;
 static mISDNobject_t u_dss1;
 
 
-const char *dss1_revision = "$Revision: 1.33 $";
+const char *dss1_revision = "$Revision: 1.34 $";
 
 static int dss1man(l3_process_t *, u_int, void *);
 

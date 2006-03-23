@@ -1,4 +1,4 @@
-/* $Id: xhfc_su.c,v 1.8 2006/03/23 10:05:16 keil Exp $
+/* $Id: xhfc_su.c,v 1.9 2006/03/23 12:31:17 crich Exp $
  *
  * mISDN driver for CologneChip AG's XHFC
  *
@@ -58,6 +58,8 @@
 #include <asm/timex.h>
 #include "helper.h"
 #include "debug.h"
+#include "ctrl.h"
+
 #include "xhfc_su.h"
 #include "xhfc24succ.h"
 
@@ -65,7 +67,7 @@
 #include "xhfc_pci2pi.h"
 #endif
 
-static const char xhfc_rev[] = "$Revision: 1.8 $";
+static const char xhfc_rev[] = "$Revision: 1.9 $";
 
 #define MAX_CARDS	8
 static int card_cnt;

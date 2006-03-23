@@ -1,4 +1,4 @@
-/* $Id: layer2.c,v 1.23 2006/03/23 10:05:16 keil Exp $
+/* $Id: layer2.c,v 1.24 2006/03/23 12:31:17 crich Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -9,8 +9,9 @@
 #include "layer2.h"
 #include "helper.h"
 #include "debug.h"
+#include "ctrl.h"
 
-static char *l2_revision = "$Revision: 1.23 $";
+static char *l2_revision = "$Revision: 1.24 $";
 
 static void l2m_debug(struct FsmInst *fi, char *fmt, ...);
 

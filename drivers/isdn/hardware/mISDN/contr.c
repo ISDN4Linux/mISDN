@@ -1,4 +1,4 @@
-/* $Id: contr.c,v 1.26 2006/03/23 10:05:16 keil Exp $
+/* $Id: contr.c,v 1.27 2006/03/23 12:31:17 crich Exp $
  *
  */
 
@@ -7,6 +7,7 @@
 #include "m_capi.h"
 #include "helper.h"
 #include "debug.h"
+#include "ctrl.h"
 
 #define contrDebug(contr, lev, fmt, args...) \
 	if (contr->debug & lev) capidebug(lev, fmt, ## args)

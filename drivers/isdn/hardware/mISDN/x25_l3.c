@@ -1,4 +1,4 @@
-/* $Id: x25_l3.c,v 1.6 2006/03/23 10:05:16 keil Exp $
+/* $Id: x25_l3.c,v 1.7 2006/03/23 12:31:17 crich Exp $
  *
  * Linux modular ISDN subsystem, mISDN
  * X.25/X.31 common Layer3 functions 
@@ -17,6 +17,7 @@
 #include "x25_l3.h"
 #include "helper.h"
 #include "debug.h"
+#include "ctrl.h"
 
 /* LinkLayer (L2) maintained by L3 statemachine */
 

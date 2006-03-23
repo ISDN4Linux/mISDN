@@ -1,4 +1,4 @@
-/* $Id: avm_fritz.c,v 1.34 2006/03/23 10:05:16 keil Exp $
+/* $Id: avm_fritz.c,v 1.35 2006/03/23 12:31:17 crich Exp $
  *
  * fritz_pci.c    low level stuff for AVM Fritz!PCI and ISA PnP isdn cards
  *              Thanks to AVM, Berlin for informations
@@ -21,9 +21,10 @@
 #include "isac.h"
 #include "layer1.h"
 #include "debug.h"
+#include "ctrl.h"
 
 
-static const char *avm_fritz_rev = "$Revision: 1.34 $";
+static const char *avm_fritz_rev = "$Revision: 1.35 $";
 
 enum {
 	AVM_FRITZ_PCI,

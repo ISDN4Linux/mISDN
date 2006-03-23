@@ -1,4 +1,4 @@
-/* $Id: layer1.c,v 1.14 2006/03/23 10:05:16 keil Exp $
+/* $Id: layer1.c,v 1.15 2006/03/23 12:31:17 crich Exp $
  *
  * mISDN_l1.c     common low level stuff for I.430 layer1 TE mode
  *
@@ -8,13 +8,14 @@
  *
  */
 
-static char *l1_revision = "$Revision: 1.14 $";
+static char *l1_revision = "$Revision: 1.15 $";
 
 #include <linux/config.h>
 #include <linux/module.h>
 #include "layer1.h"
 #include "helper.h"
 #include "debug.h"
+#include "ctrl.h"
 
 typedef struct _layer1 {
 	struct list_head	list;
