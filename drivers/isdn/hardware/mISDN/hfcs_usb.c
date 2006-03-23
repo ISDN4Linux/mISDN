@@ -1,4 +1,4 @@
-/* $Id: hfcs_usb.c,v 1.12 2006/03/23 12:31:17 crich Exp $
+/* $Id: hfcs_usb.c,v 1.13 2006/03/23 13:11:43 keil Exp $
  *
  * mISDN driver for Colognechip HFC-S USB chip
  *
@@ -35,12 +35,11 @@
 #include "channel.h"
 #include "layer1.h"
 #include "debug.h"
-#include "ctrl.h"
 #include "hfcs_usb.h"
 
 
 #define DRIVER_NAME "mISDN_hfcsusb"
-const char *hfcsusb_rev = "$Revision: 1.12 $";
+const char *hfcsusb_rev = "$Revision: 1.13 $";
 
 #define MAX_CARDS	8
 static int hfcsusb_cnt;

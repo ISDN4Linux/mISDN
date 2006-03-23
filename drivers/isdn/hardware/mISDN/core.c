@@ -1,4 +1,4 @@
-/* $Id: core.c,v 1.28 2006/03/23 12:31:17 crich Exp $
+/* $Id: core.c,v 1.29 2006/03/23 13:11:43 keil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -12,7 +12,6 @@
 #include <linux/module.h>
 #include <linux/spinlock.h>
 #include "core.h"
-#include "ctrl.h"
 #ifdef CONFIG_KMOD
 #include <linux/kmod.h>
 #endif
@@ -20,7 +19,7 @@
 #include <linux/smp_lock.h>
 #endif
 
-static char		*mISDN_core_revision = "$Revision: 1.28 $";
+static char		*mISDN_core_revision = "$Revision: 1.29 $";
 
 LIST_HEAD(mISDN_objectlist);
 static rwlock_t		mISDN_objects_lock = RW_LOCK_UNLOCKED;
@@ -713,7 +712,6 @@ void mISDN_cleanup(void) {
 module_init(mISDNInit);
 module_exit(mISDN_cleanup);
 
+EXPORT_SYMBOL(mISDN_ctrl);
 EXPORT_SYMBOL(mISDN_register);
 EXPORT_SYMBOL(mISDN_unregister);
-
-EXPORT_SYMBOL(mISDN_ctrl);

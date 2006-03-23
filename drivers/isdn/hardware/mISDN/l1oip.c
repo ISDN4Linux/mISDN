@@ -216,8 +216,6 @@ announced.
 #include "layer1.h"
 #include "dsp.h"
 #include "debug.h"
-#include "ctrl.h"
-
 #include <linux/isdn_compat.h>
 
 #include "l1oip.h"
@@ -226,7 +224,7 @@ announced.
 
 extern const char *CardType[];
 
-static const char *l1oip_revision = "$Revision: 1.5 $";
+static const char *l1oip_revision = "$Revision: 1.6 $";
 
 static int l1oip_cnt;
 

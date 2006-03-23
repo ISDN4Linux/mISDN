@@ -1,4 +1,4 @@
-/* $Id: hfcs_mini.c,v 1.5 2006/03/23 12:31:17 crich Exp $
+/* $Id: hfcs_mini.c,v 1.6 2006/03/23 13:11:43 keil Exp $
  *
  * mISDN driver for Colognechip HFC-S mini Evaluation Card
  *
@@ -55,7 +55,6 @@
 #include <asm/timex.h>
 #include "layer1.h"
 #include "debug.h"
-#include "ctrl.h"
 #include "hfcs_mini.h"
 #include "hfcsmcc.h"
 
@@ -63,7 +62,7 @@
 #include <linux/pci.h>
 #endif
 
-static const char hfcsmini_rev[] = "$Revision: 1.5 $";
+static const char hfcsmini_rev[] = "$Revision: 1.6 $";
 
 #define MAX_CARDS	8
 static int card_cnt;

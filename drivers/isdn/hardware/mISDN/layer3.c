@@ -1,4 +1,4 @@
-/* $Id: layer3.c,v 1.18 2006/03/23 12:31:17 crich Exp $
+/* $Id: layer3.c,v 1.19 2006/03/23 13:11:43 keil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -12,9 +12,8 @@
  */
 #include "layer3.h"
 #include "helper.h"
-#include "ctrl.h"
 
-const char *l3_revision = "$Revision: 1.18 $";
+const char *l3_revision = "$Revision: 1.19 $";
 
 static
 struct Fsm l3fsm = {NULL, 0, 0, NULL, NULL};

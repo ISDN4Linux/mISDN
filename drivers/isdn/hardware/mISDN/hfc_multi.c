@@ -101,8 +101,6 @@
 #include "layer1.h"
 #include "dsp.h"
 #include "debug.h"
-#include "ctrl.h"
-
 #include <linux/isdn_compat.h>
 
 #warning
@@ -125,7 +123,7 @@ static void ph_state_change(channel_t *ch);
 
 extern const char *CardType[];
 
-static const char *hfcmulti_revision = "$Revision: 1.30 $";
+static const char *hfcmulti_revision = "$Revision: 1.31 $";
 
 static int HFC_cnt, HFC_idx;
 

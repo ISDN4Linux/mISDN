@@ -1,4 +1,4 @@
-/* $Id: stack.c,v 1.15 2006/03/23 12:31:17 crich Exp $
+/* $Id: stack.c,v 1.16 2006/03/23 13:11:43 keil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -7,7 +7,6 @@
  */
 
 #include "core.h"
-#include "ctrl.h"
 
 static LIST_HEAD(mISDN_stacklist);
 static rwlock_t	stacklist_lock = RW_LOCK_UNLOCKED;

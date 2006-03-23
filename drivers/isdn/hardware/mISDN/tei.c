@@ -1,4 +1,4 @@
-/* $Id: tei.c,v 1.10 2006/03/23 12:31:17 crich Exp $
+/* $Id: tei.c,v 1.11 2006/03/23 13:11:43 keil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -10,10 +10,9 @@
 #include "layer2.h"
 #include "helper.h"
 #include "debug.h"
-#include "ctrl.h"
 #include <linux/random.h>
 
-const char *tei_revision = "$Revision: 1.10 $";
+const char *tei_revision = "$Revision: 1.11 $";
 
 #define ID_REQUEST	1
 #define ID_ASSIGNED	2

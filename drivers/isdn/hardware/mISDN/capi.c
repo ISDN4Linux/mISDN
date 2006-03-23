@@ -1,4 +1,4 @@
-/* $Id: capi.c,v 1.18 2006/03/23 12:31:17 crich Exp $
+/* $Id: capi.c,v 1.19 2006/03/23 13:11:43 keil Exp $
  *
  */
 
@@ -6,9 +6,8 @@
 #include "m_capi.h"
 #include "helper.h"
 #include "debug.h"
-#include "ctrl.h"
 
-static char *capi_revision = "$Revision: 1.18 $";
+static char *capi_revision = "$Revision: 1.19 $";
 
 static int debug = 0;
 static mISDNobject_t capi_obj;

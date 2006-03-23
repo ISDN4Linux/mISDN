@@ -1,4 +1,4 @@
-/* $Id: dsp_core.c,v 1.15 2006/03/23 12:31:17 crich Exp $
+/* $Id: dsp_core.c,v 1.16 2006/03/23 13:11:43 keil Exp $
  *
  * Author       Andreas Eversberg (jolly@jolly.de)
  * Based on source code structure by
@@ -169,7 +169,7 @@ There are three things that need to transmit data to card:
  
  */
 
-const char *dsp_revision = "$Revision: 1.15 $";
+const char *dsp_revision = "$Revision: 1.16 $";
 
 #include <linux/delay.h>
 #include <linux/config.h>
@@ -179,7 +179,6 @@ const char *dsp_revision = "$Revision: 1.15 $";
 #include "helper.h"
 #include "debug.h"
 #include "dsp.h"
-#include "ctrl.h"
 
 static char DSPName[] = "DSP";
 mISDNobject_t dsp_obj;

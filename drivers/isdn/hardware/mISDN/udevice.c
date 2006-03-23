@@ -1,4 +1,4 @@
-/* $Id: udevice.c,v 1.18 2006/03/23 12:31:17 crich Exp $
+/* $Id: udevice.c,v 1.19 2006/03/23 13:11:43 keil Exp $
  *
  * Copyright 2000  by Karsten Keil <kkeil@isdn4linux.de>
  *
@@ -12,7 +12,6 @@
 #include <linux/timer.h>
 #include <linux/devfs_fs_kernel.h>
 #include "core.h"
-#include "ctrl.h"
 
 #define MAX_HEADER_LEN	4
 
