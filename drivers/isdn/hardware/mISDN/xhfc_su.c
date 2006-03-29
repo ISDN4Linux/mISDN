@@ -1,4 +1,4 @@
-/* $Id: xhfc_su.c,v 1.11 2006/03/29 17:24:12 mbachem Exp $
+/* $Id: xhfc_su.c,v 1.12 2006/03/29 17:27:52 mbachem Exp $
  *
  * mISDN driver for CologneChip AG's XHFC
  *
@@ -65,7 +65,7 @@
 #include "xhfc_pci2pi.h"
 #endif
 
-static const char xhfc_rev[] = "$Revision: 1.11 $";
+static const char xhfc_rev[] = "$Revision: 1.12 $";
 
 #define MAX_CARDS	8
 static int card_cnt;
@@ -1095,7 +1095,7 @@ xhfc_interrupt(int intno, void *dev_id, struct pt_regs *regs)
 	for (xn=0; xn<pi->driver_data.num_xhfcs; xn++) {
 		xhfc = &pi->xhfc[xn];
 		if (xhfc->irq_ctrl.bit.v_glob_irq_en && (read_xhfc(xhfc, R_IRQ_OVIEW)))
-		    	xhfc_irqs |= (xn << i);
+		    	xhfc_irqs |= (1 << xn);
 	}
 	if (!xhfc_irqs) {
 		if (debug & DEBUG_HFC_IRQ)
