@@ -1,4 +1,4 @@
-/* $Id: xhfc_su.c,v 1.12 2006/03/29 17:27:52 mbachem Exp $
+/* $Id: xhfc_su.c,v 1.13 2006/03/30 07:52:12 mbachem Exp $
  *
  * mISDN driver for CologneChip AG's XHFC
  *
@@ -65,7 +65,7 @@
 #include "xhfc_pci2pi.h"
 #endif
 
-static const char xhfc_rev[] = "$Revision: 1.12 $";
+static const char xhfc_rev[] = "$Revision: 1.13 $";
 
 #define MAX_CARDS	8
 static int card_cnt;
@@ -165,7 +165,7 @@ xhfc_ph_command(xhfc_port_t * port, u_char command)
 		case HFC_L1_TESTLOOP_D:
 			setup_fifo(xhfc, port->idx*8+4, 0xC4, 2, M_FR_ABO, 1);	/* connect D-SU RX with PCM TX */
 			setup_fifo(xhfc, port->idx*8+5, 0xC4, 2, M_FR_ABO | M_FIFO_IRQMSK, 1);	/* connect D-SU TX with PCM RX */
-
+			
 			write_xhfc(xhfc, R_SLOT, port->idx*8+4);		/* PCM timeslot D TX */
 			write_xhfc(xhfc, A_SL_CFG, port->idx*8 + 4 + 0x80); 	/* enable D TX timeslot on STIO1 */
 
@@ -1087,15 +1087,18 @@ xhfc_interrupt(int intno, void *dev_id, struct pt_regs *regs)
 {
 	xhfc_pi *pi = dev_id;
 	xhfc_t * xhfc = NULL;
-	__u8 i, xn;
-	__u32 f0_cnt;
+	__u8 i, j;
 	__u32 xhfc_irqs;
+#ifdef USE_F0_COUNTER
+	__u32 f0_cnt;
+#endif
 
 	xhfc_irqs = 0;
-	for (xn=0; xn<pi->driver_data.num_xhfcs; xn++) {
-		xhfc = &pi->xhfc[xn];
+	for (i=0; i<pi->driver_data.num_xhfcs; i++) {
+		xhfc = &pi->xhfc[i];
 		if (xhfc->irq_ctrl.bit.v_glob_irq_en && (read_xhfc(xhfc, R_IRQ_OVIEW)))
-		    	xhfc_irqs |= (1 << xn);
+			/* mark this xhfc possibly had irq */
+		    	xhfc_irqs |= (1 << i);
 	}
 	if (!xhfc_irqs) {
 		if (debug & DEBUG_HFC_IRQ)
@@ -1106,16 +1109,16 @@ xhfc_interrupt(int intno, void *dev_id, struct pt_regs *regs)
 	}
 
 	xhfc_irqs = 0;
-	for (xn=0; xn<pi->driver_data.num_xhfcs; xn++) {
-		xhfc = &pi->xhfc[xn];
+	for (i=0; i<pi->driver_data.num_xhfcs; i++) {
+		xhfc = &pi->xhfc[i];
 
 		xhfc->misc_irq.reg |= read_xhfc(xhfc, R_MISC_IRQ);
 		xhfc->su_irq.reg |= read_xhfc(xhfc, R_SU_IRQ);
 
 		/* get fifo IRQ states in bundle */
-		for (i = 0; i < 4; i++) {
+		for (j = 0; j < 4; j++) {
 			xhfc->fifo_irq |=
-			    (read_xhfc(xhfc, R_FIFO_BL0_IRQ + i) << (i * 8));
+			    (read_xhfc(xhfc, R_FIFO_BL0_IRQ + j) << (j * 8));
 		}
 
 		/* call bottom half at events
@@ -1127,8 +1130,8 @@ xhfc_interrupt(int intno, void *dev_id, struct pt_regs *regs)
 		      || (xhfc->su_irq.reg & xhfc->su_irqmsk.reg)
 		      || (xhfc->fifo_irq & xhfc->fifo_irqmsk)) {
 		      	
-		      	
-			xhfc_irqs |= (1 << xn);
+		      	/* mark this xhfc really had irq */
+			xhfc_irqs |= (1 << i);
 	
 			/* queue bottom half */
 			if (!(xhfc->testirq))
@@ -1137,7 +1140,7 @@ xhfc_interrupt(int intno, void *dev_id, struct pt_regs *regs)
 			/* count irqs */
 			xhfc->irq_cnt++;
 
-#ifdef USE_F0_COUNTER	
+#ifdef USE_F0_COUNTER
 			/* akkumulate f0 counter diffs */
 			f0_cnt = read_xhfc(xhfc, R_F0_CNTL);
 			f0_cnt += read_xhfc(xhfc, R_F0_CNTH) << 8;
@@ -1145,8 +1148,8 @@ xhfc_interrupt(int intno, void *dev_id, struct pt_regs *regs)
 			if ((f0_cnt - xhfc->f0_cnt) < 0)
 				xhfc->f0_akku += 0xFFFF;
 			xhfc->f0_cnt = f0_cnt;
-		}
 #endif
+		}
 	}
 	
 	return ((xhfc_irqs)?IRQ_HANDLED:IRQ_NONE);
