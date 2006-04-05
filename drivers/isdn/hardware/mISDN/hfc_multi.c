@@ -123,7 +123,7 @@ static void ph_state_change(channel_t *ch);
 
 extern const char *CardType[];
 
-static const char *hfcmulti_revision = "$Revision: 1.31 $";
+static const char *hfcmulti_revision = "$Revision: 1.32 $";
 
 static int HFC_cnt, HFC_idx;
 
@@ -162,12 +162,14 @@ static u_char silence =	0xff;	/* silence by LAW */
 
 static const PCI_ENTRY id_list[] =
 {
+#if 0
 	{CCAG_VID, 0xffffffff, HFC4S_ID, 0xffffffff, VENDOR_CCD,
 	 "HFC-4S CCAG Eval", 4, 1, 2},
 	{CCAG_VID, 0xffffffff, HFC8S_ID, 0xffffffff, VENDOR_CCD,
 	 "HFC-8S CCAG Eval", 8, 1, 0},
 	{CCAG_VID, 0xffffffff, HFCE1_ID, 0xffffffff, VENDOR_CCD,
 	 "HFC-E1 CCAG Eval", 1, 0, 1}, /* E1 only supports single clock */
+#endif
 	{CCAG_VID, CCAG_VID, HFC4S_ID, 0x08B4, VENDOR_CCD,
 	 "HFC-4S CCAG Eval (old)", 4, 0, 0},
 	{CCAG_VID, CCAG_VID, HFC8S_ID, 0x16B8, VENDOR_CCD,
@@ -196,6 +198,8 @@ static const PCI_ENTRY id_list[] =
 	 "HFC-E1 Beronet Card", 1, 0, 1}, /* E1 only supports single clock */
 	{0x10B5, CCAG_VID, 0x9030, 0x3136, VENDOR_CCD,
 	 "HFC-4S PCIBridgeEval", 4, 0, 0},      // PLX PCI-Bridge
+	{CCAG_VID, CCAG_VID, HFC4S_ID, 0xB566, VENDOR_CCD,
+	 "HFC-2S Beronet Card", 2, 1, 2},
 	{0, 0, 0, 0, NULL, NULL, 0, 0, 0},
 };
 
@@ -3179,7 +3183,7 @@ static void find_type_entry(int hfc_type, int *card, int *port)
 	for(i=0;i<MAX_CARDS;i++)
 	{
 //#warning remove
-//printk(KERN_DEBUG "i=%d type[i]=%d hfc_type=%d allocated[i]=%d\n", i, type[i]&0xff,hfc_type,allocated[i]);
+//	printk(KERN_DEBUG "i=%d type[i]=%d hfc_type=%d allocated[i]=%d\n", i, type[i]&0xff,hfc_type,allocated[i]);
 		if((type[i]&0xff)==hfc_type && !allocated[i])
 		{
 			*card = i;
@@ -3231,6 +3235,7 @@ static int __devinit hfcpci_probe(struct pci_dev *pdev, const struct pci_device_
 	}
 
 	hfc_type=id_list[id_idx].type;
+
 	find_type_entry(hfc_type, &HFC_idx, &port_idx);
 	if(HFC_idx == -1) {
 		printk( KERN_ERR "HFC-MULTI: Card '%s' found, but not given by module's options, ignoring...\n",
@@ -3246,6 +3251,10 @@ static int __devinit hfcpci_probe(struct pci_dev *pdev, const struct pci_device_
 	switch (type[HFC_idx] & 0xff) {
 		case 1:
 		bchperport = 30;
+		break;
+
+		case 2:
+		bchperport = 2;
 		break;
 
 		case 4:
@@ -3682,9 +3691,33 @@ static void __devexit hfc_remove_pci(struct pci_dev *pdev)
 }
 
 static struct pci_device_id hfmultipci_ids[] __devinitdata = {
+
+	/** Cards with HFC-4S Chip**/
+	{ CCAG_VID, 0x08B4   , CCAG_VID, 0xB566, 0, 0, 0 }, //BN2S
+	{ CCAG_VID, 0x08B4   , CCAG_VID, 0xB560, 0, 0, 0 }, //BN4S
+	{ CCAG_VID, 0x08B4   , CCAG_VID, 0x08B4, 0, 0, 0 }, //Old Eval
+	{ CCAG_VID, 0x08B4   , CCAG_VID, 0xB520, 0, 0, 0 }, //IOB4ST
+	{ CCAG_VID, 0x08B4   , CCAG_VID, 0xB620, 0, 0, 0 }, //4S
+	
+	/** Cards with HFC-8S Chip**/
+	{ CCAG_VID, 0x16B8   , CCAG_VID, 0xB562, 0, 0, 0 }, //BN8S
+	{ CCAG_VID, 0x16B8   , CCAG_VID, 0x16B8, 0, 0, 0 }, //old Eval
+	{ CCAG_VID, 0x16B8   , CCAG_VID, 0xB521, 0, 0, 0 }, //IOB8ST Recording
+	{ CCAG_VID, 0x16B8   , CCAG_VID, 0xB522, 0, 0, 0 }, //IOB8ST 
+	{ CCAG_VID, 0x16B8   , CCAG_VID, 0xB622, 0, 0, 0 }, //8S
+
+
+	/** Cards with HFC-E1 Chip**/
+	{ CCAG_VID, 0x30B1   , CCAG_VID, 0xB563, 0, 0, 0 }, //BNE1
+	{ CCAG_VID, 0x30B1   , CCAG_VID, 0x30B1, 0, 0, 0 }, //Old Eval
+	{ CCAG_VID, 0x30B1   , CCAG_VID, 0xB523, 0, 0, 0 }, //IOB1E1
+	{ CCAG_VID, 0x30B1   , CCAG_VID, 0xC523, 0, 0, 0 }, //E1
+	
+#if 0
 	{ CCAG_VID, 0x08B4   , PCI_ANY_ID, PCI_ANY_ID, 0, 0, 0 },
 	{ CCAG_VID, 0x16B8   , PCI_ANY_ID, PCI_ANY_ID, 0, 0, 0 },
 	{ CCAG_VID, 0x30B1   , PCI_ANY_ID, PCI_ANY_ID, 0, 0, 0 },
+#endif
 	{ 0x10B5,   0x9030   , CCAG_VID,   0x3136 ,    0, 0, 0 },  // PLX PCI Bridge
 	{ 0x10B5,   0x9030   , PCI_ANY_ID,   PCI_ANY_ID ,  0, 0, 0 },  // PLX PCI Bridge
 	{0, }

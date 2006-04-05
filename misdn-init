@@ -58,6 +58,9 @@ pcm_slave=12
 ignore_pcm_frameclock=13
 
 
+#dsp defaults
+dsp_options=0
+
 function remove_preloaded_modules {
 	tmp=$(lsmod)
 	cards="hfcmulti hfcpci avmfritz w6692 hfcusb"
@@ -163,6 +166,9 @@ function load_card_modules {
 				;;
 			pcm)
 				pcm=${val}
+				;;
+			dsp_options)
+				export dsp_options=${val}
 				;;
 			debug)
 				debug=${val}
@@ -343,8 +349,15 @@ function create_misdn_init_conf {
 		addport 1
 	done
 	for line in $(${LSPCI} -n -d 1397:08b4); do
-		addcard "0x4"
-		addport 4
+		for l in $( ${LSPCI} -n -v -d 1397:08b4|grep Subsystem); do
+			if echo $l | grep "1397:b566" ; then
+				addcard "0x2"
+				addport 2
+			else
+				addcard "0x4"
+				addport 4
+			fi
+		done
 	done
 	for line in $(${LSPCI} -n -d 1397:16b8); do
 		addcard "0x8"
@@ -450,8 +463,14 @@ function create_misdn_init_conf {
 #
 #        Enable debugging (see hfc_multi.h for debug options).
 #
+# dsp_options=<number>
+#  
+#	set this to 2 and you'll have software bridging instead of 
+#	hardware bridging.
+#
 poll=128
-pcm=-1
+#pcm=1,1
+dsp_options=0
 debug=0"
 
 		if [ -f ${misdn_init_conf} ]; then
@@ -491,7 +510,7 @@ case "$1" in
 		$MODPROBE mISDN_l1 debug=0
 		$MODPROBE mISDN_l2 debug=0
 		$MODPROBE l3udss1 debug=0
-		$MODPROBE mISDN_dsp debug=0x0 options=0x0
+		$MODPROBE mISDN_dsp debug=0x0 options=$dsp_options
 		$MODPROBE mISDN_capi
 		
 		load_card_modules
