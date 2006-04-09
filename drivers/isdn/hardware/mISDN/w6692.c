@@ -1,4 +1,4 @@
-/* $Id: w6692.c,v 1.18 2006/03/23 13:11:43 keil Exp $
+/* $Id: w6692.c,v 1.19 2006/04/09 14:18:28 keil Exp $
 
  * w6692.c     low level driver for CCD's hfc-pci based cards
  *
@@ -36,9 +36,33 @@
 
 extern const char *CardType[];
 
-const char *w6692_rev = "$Revision: 1.18 $";
+const char *w6692_rev = "$Revision: 1.19 $";
 
 #define DBUSY_TIMER_VALUE	80
+
+enum {
+	W6692_ASUS,
+	W6692_WINBOND,
+	W6692_USR
+};
+
+/* private data in the PCI devices list */
+typedef struct _w6692_map{
+	u_int	subtype;
+	char	*name;
+} w6692_map_t;
+
+static w6692_map_t w6692_map[] =
+{
+	{W6692_ASUS, "Dynalink/AsusCom IS64PH"},
+	{W6692_WINBOND, "Winbond W6692"},
+	{W6692_USR, "USR W6692"}
+};
+
+#ifndef PCI_VENDOR_ID_USR2
+#define PCI_VENDOR_ID_USR2	0x16ec
+#define PCI_DEVICE_ID_USR2_6692	0x3409
+#endif
 
 typedef struct _w6692_bc {
 	struct timer_list	timer;
@@ -48,6 +72,7 @@ typedef struct _w6692_bc {
 typedef struct _w6692pci {
 	struct list_head	list;
 	struct pci_dev		*pdev;
+	u_int			subtype;
 	u_int			irq;
 	u_int			irqcnt;
 	u_int			addr;
@@ -118,7 +143,7 @@ W6692Version(w6692pci *card, char *s)
 static void
 w6692_led_handler(w6692pci *card, int on)
 {
-	if (!card->led)
+	if (!card->led || card->subtype == W6692_USR)
 		return;
 	if (on) {
 		card->xdata &= 0xfb;	/*  LED ON */
@@ -926,20 +951,31 @@ void initW6692(w6692pci *card)
 	WriteW6692B(card, 0, W_B_CMDR, W_B_CMDR_RRST | W_B_CMDR_XRST);
 	WriteW6692B(card, 1, W_B_CMDR, W_B_CMDR_RRST | W_B_CMDR_XRST);
 	/* enable peripheral */
-	card->pctl = W_PCTL_OE5 | W_PCTL_OE4 | W_PCTL_OE2 | W_PCTL_OE1 | W_PCTL_OE0;
-	if (card->pots) {
-		card->xaddr = 0x00; /* all sw off */
-		card->xdata = 0x06;  /*  LED OFF / POWER UP / ALAW */
+	if (card->subtype == W6692_USR) {
+		/* seems that USR implemented some power control features
+		 * Pin 79 is connected to the oscilator circuit so we
+		 * have to handle it here
+		 */
+		card->pctl = 0x80;
+		card->xdata = 0;
 		WriteW6692(card, W_PCTL, card->pctl);
-		WriteW6692(card, W_XADDR, card->xaddr);
 		WriteW6692(card, W_XDATA, card->xdata);
-		val = ReadW6692(card, W_XADDR);
-		if (card->dch.debug & L1_DEB_ISAC)
-			mISDN_debugprint(&card->dch.inst, "W_XADDR: %02x", val);
-		if (card->led & W_LED1_ON)
-			w6692_led_handler(card, 1);
-		else
-			w6692_led_handler(card, 0);
+	} else {
+		card->pctl = W_PCTL_OE5 | W_PCTL_OE4 | W_PCTL_OE2 | W_PCTL_OE1 | W_PCTL_OE0;
+		if (card->pots) {
+			card->xaddr = 0x00; /* all sw off */
+			card->xdata |= 0x06;  /*  POWER UP/ LED OFF / ALAW */
+			WriteW6692(card, W_PCTL, card->pctl);
+			WriteW6692(card, W_XADDR, card->xaddr);
+			WriteW6692(card, W_XDATA, card->xdata);
+			val = ReadW6692(card, W_XADDR);
+			if (card->dch.debug & L1_DEB_ISAC)
+				mISDN_debugprint(&card->dch.inst, "W_XADDR: %02x", val);
+			if (card->led & W_LED1_ON)
+				w6692_led_handler(card, 1);
+			else
+				w6692_led_handler(card, 0);
+		}
 	}
 }
 
@@ -1244,7 +1280,7 @@ release_card(w6692pci *card)
 	spin_lock_irqsave(&card->lock, flags);
 	mode_w6692(&card->bch[0], 0, ISDN_PID_NONE);
 	mode_w6692(&card->bch[1], 1, ISDN_PID_NONE);
-	if (card->led) {
+	if (card->led || card->subtype == W6692_USR) {
 		card->xdata |= 0x04;	/*  LED OFF */
 		WriteW6692(card, W_XDATA, card->xdata);
 	}
@@ -1369,7 +1405,7 @@ w6692_manager(void *data, u_int prim, void *arg) {
 	return(0);
 }
 
-static int __devinit setup_instance(w6692pci *card)
+static int setup_instance(w6692pci *card)
 {
 	int		i, err;
 	mISDN_pid_t	pid;
@@ -1448,6 +1484,7 @@ static int __devinit w6692_probe(struct pci_dev *pdev, const struct pci_device_i
 {
 	int		err = -ENOMEM;
 	w6692pci	*card;
+	w6692_map_t	*m = (w6692_map_t *)ent->driver_data;	
 
 	if (!(card = kmalloc(sizeof(w6692pci), GFP_ATOMIC))) {
 		printk(KERN_ERR "No kmem for w6692 card\n");
@@ -1455,6 +1492,7 @@ static int __devinit w6692_probe(struct pci_dev *pdev, const struct pci_device_i
 	}
 	memset(card, 0, sizeof(w6692pci));
 	card->pdev = pdev;
+	card->subtype = m->subtype;
 	err = pci_enable_device(pdev);
 	if (err) {
 		kfree(card);
@@ -1462,7 +1500,7 @@ static int __devinit w6692_probe(struct pci_dev *pdev, const struct pci_device_i
 	}
 
 	printk(KERN_INFO "mISDN_w6692: found adapter %s at %s\n",
-	       (char *) ent->driver_data, pci_name(pdev));
+	       m->name, pci_name(pdev));
 
 	card->addr = pci_resource_start(pdev, 1);
 	card->irq = pdev->irq;
@@ -1481,26 +1519,13 @@ static void __devexit w6692_remove_pci(struct pci_dev *pdev)
 		printk(KERN_WARNING "%s: drvdata allready removed\n", __FUNCTION__);
 }
 
-/* table entry in the PCI devices list */
-typedef struct {
-	int vendor_id;
-	int device_id;
-	char *vendor_name;
-	char *card_name;
-} PCI_ENTRY;
-
-static const PCI_ENTRY id_list[] =
-{
-	{PCI_VENDOR_ID_DYNALINK, PCI_DEVICE_ID_DYNALINK_IS64PH, "Dynalink/AsusCom", "IS64PH"},
-	{PCI_VENDOR_ID_WINBOND2, PCI_DEVICE_ID_WINBOND2_6692, "Winbond", "W6692"},
-	{0, 0, NULL, NULL}
-};
-
-static struct pci_device_id w6692_ids[] __devinitdata = {
+static struct pci_device_id w6692_ids[] = {
 	{ PCI_VENDOR_ID_DYNALINK, PCI_DEVICE_ID_DYNALINK_IS64PH, PCI_ANY_ID, PCI_ANY_ID,
-	  0, 0, (unsigned long) "Dynalink/AsusCom IS64PH" },
+	  0, 0, (unsigned long) &w6692_map[0] },
+	{ PCI_VENDOR_ID_WINBOND2, PCI_DEVICE_ID_WINBOND2_6692, PCI_VENDOR_ID_USR2, PCI_DEVICE_ID_USR2_6692,
+	  0, 0, (unsigned long) &w6692_map[2] },
 	{ PCI_VENDOR_ID_WINBOND2, PCI_DEVICE_ID_WINBOND2_6692, PCI_ANY_ID, PCI_ANY_ID,
-	  0, 0, (unsigned long) "Winbond W6692" },
+	  0, 0, (unsigned long) &w6692_map[1] },
 	{ }
 };
 MODULE_DEVICE_TABLE(pci, w6692_ids);
