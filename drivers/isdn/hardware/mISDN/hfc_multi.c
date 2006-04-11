@@ -123,7 +123,7 @@ static void ph_state_change(channel_t *ch);
 
 extern const char *CardType[];
 
-static const char *hfcmulti_revision = "$Revision: 1.33 $";
+static const char *hfcmulti_revision = "$Revision: 1.34 $";
 
 static int HFC_cnt, HFC_idx;
 
@@ -219,6 +219,7 @@ static int layermask[MAX_PORTS];
 static int debug;
 static int poll;
 
+
 #ifdef MODULE
 MODULE_AUTHOR("Andreas Eversberg");
 #ifdef MODULE_LICENSE
@@ -226,10 +227,21 @@ MODULE_LICENSE("GPL");
 #endif
 module_param(debug, uint, S_IRUGO | S_IWUSR);
 module_param(poll, uint, S_IRUGO | S_IWUSR);
+
+
+#ifdef OLD_MODULE_PARAM_ARRAY
+static int num_type=0, num_pcm=0, num_protocol=0, num_layermask=0;
+module_param_array(type, uint, num_type, S_IRUGO | S_IWUSR);
+module_param_array(pcm, uint, num_pcm, S_IRUGO | S_IWUSR);
+module_param_array(protocol, uint, num_protocol, S_IRUGO | S_IWUSR);
+module_param_array(layermask, uint, num_layermask, S_IRUGO | S_IWUSR);
+#else
 module_param_array(type, uint, NULL, S_IRUGO | S_IWUSR);
 module_param_array(pcm, uint, NULL, S_IRUGO | S_IWUSR);
 module_param_array(protocol, uint, NULL, S_IRUGO | S_IWUSR);
 module_param_array(layermask, uint, NULL, S_IRUGO | S_IWUSR);
+#endif
+
 #endif
 
 

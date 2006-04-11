@@ -1,4 +1,4 @@
-/* $Id: w6692.c,v 1.19 2006/04/09 14:18:28 keil Exp $
+/* $Id: w6692.c,v 1.20 2006/04/11 13:13:30 crich Exp $
 
  * w6692.c     low level driver for CCD's hfc-pci based cards
  *
@@ -36,7 +36,7 @@
 
 extern const char *CardType[];
 
-const char *w6692_rev = "$Revision: 1.19 $";
+const char *w6692_rev = "$Revision: 1.20 $";
 
 #define DBUSY_TIMER_VALUE	80
 
@@ -1037,16 +1037,27 @@ static int debug;
 static int pots[MAX_CARDS];
 static int led[MAX_CARDS];
 
+
 #ifdef MODULE
 MODULE_AUTHOR("Karsten Keil");
 #ifdef MODULE_LICENSE
 MODULE_LICENSE("GPL");
 #endif
 module_param(debug, uint, S_IRUGO | S_IWUSR);
+
+#ifdef OLD_MODULE_PARAM_ARRAY
+static int num_led=0, num_pots=0, num_protocol=0, num_layermask=0; 
+module_param_array(led, uint, num_led, S_IRUGO | S_IWUSR);
+module_param_array(pots, uint, num_pots, S_IRUGO | S_IWUSR);
+module_param_array(protocol, uint, num_protocol, S_IRUGO | S_IWUSR);
+module_param_array(layermask, uint, num_layermask, S_IRUGO | S_IWUSR);
+#else 
 module_param_array(led, uint, NULL, S_IRUGO | S_IWUSR);
 module_param_array(pots, uint, NULL, S_IRUGO | S_IWUSR);
 module_param_array(protocol, uint, NULL, S_IRUGO | S_IWUSR);
 module_param_array(layermask, uint, NULL, S_IRUGO | S_IWUSR);
+#endif
+
 #endif
 
 /******************************/
