@@ -1,4 +1,4 @@
-/* $Id: core.c,v 1.29 2006/03/23 13:11:43 keil Exp $
+/* $Id: core.c,v 1.30 2006/04/11 16:04:58 crich Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -19,7 +19,7 @@
 #include <linux/smp_lock.h>
 #endif
 
-static char		*mISDN_core_revision = "$Revision: 1.29 $";
+static char		*mISDN_core_revision = "$Revision: 1.30 $";
 
 LIST_HEAD(mISDN_objectlist);
 static rwlock_t		mISDN_objects_lock = RW_LOCK_UNLOCKED;
@@ -639,6 +639,7 @@ int mISDN_unregister(mISDNobject_t *obj) {
 	write_lock_irqsave(&mISDN_objects_lock, flags);
 	list_del(&obj->list);
 	write_unlock_irqrestore(&mISDN_objects_lock, flags);
+
 	if (core_debug & DEBUG_CORE_FUNC)
 		printk(KERN_DEBUG "mISDN_unregister: mISDN_objectlist(%p<-%p->%p)\n",
 			mISDN_objectlist.prev, &mISDN_objectlist, mISDN_objectlist.next);

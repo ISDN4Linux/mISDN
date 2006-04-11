@@ -1,4 +1,4 @@
-/* $Id: sysfs_obj.c,v 1.2 2006/03/06 12:58:31 keil Exp $
+/* $Id: sysfs_obj.c,v 1.3 2006/04/11 16:04:58 crich Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -80,8 +80,11 @@ static void release_mISDN_obj(struct class_device *dev)
 	if (obj->owner->mkobj)
 #endif
 		sysfs_remove_link(&dev->kobj, "module");
+#if 0
 	sysfs_remove_group(&obj->class_dev.kobj, &BPROTO_group);
 	sysfs_remove_group(&obj->class_dev.kobj, &DPROTO_group);
+#endif
+
 }
 
 static struct class obj_dev_class = {
