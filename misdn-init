@@ -457,7 +457,6 @@ function create_misdn_init_conf {
 #        Give the id of the PCM bus. All PCM busses with the same ID
 #        are expected to be connected and have equal slots.
 #        Only one chip of the PCM bus must be master, the others slave.
-#        -1 means no support of PCM bus, but the usage of software bridging.
 #
 # debug=<number>
 #
