@@ -63,7 +63,7 @@ dsp_options=0
 
 function remove_preloaded_modules {
 	tmp=$(lsmod)
-	cards="hfcmulti hfcpci avmfritz w6692 hfcusb"
+	cards="hfcmulti hfcpci avmfritz w6692 hfcsusb"
 
 	for i in $cards ; do 
 		echo $tmp | grep $i >/dev/null && (echo "$i already loaded, removing it"; modprobe -r $i)
