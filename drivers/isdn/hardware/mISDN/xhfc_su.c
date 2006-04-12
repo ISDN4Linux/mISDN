@@ -1,4 +1,4 @@
-/* $Id: xhfc_su.c,v 1.14 2006/04/11 13:13:30 crich Exp $
+/* $Id: xhfc_su.c,v 1.15 2006/04/12 10:37:28 mbachem Exp $
  *
  * mISDN driver for CologneChip AG's XHFC
  *
@@ -38,9 +38,9 @@
  *        <bit 4>   0x0010  Net side stack (NT mode)
  *        <bit 5>   0x0020  Line Interface Mode (0=S0, 1=Up)
  *        <bit 6>   0x0040  st line polarity (1=exchanged)
- *        <bit 7>   0x0080  B1 channel loop
- *        <bit 8>   0x0100  B2 channel loop
- *        <bit 9>   0x0200  D channel loop
+ *        <bit 7>   0x0080  B1 channel loop ST-RX -> XHFC PCM -> ST-TX
+ *        <bit 8>   0x0100  B2 channel loop ST-RX -> XHFC PCM -> ST-TX
+ *        <bit 9>   0x0200  D channel loop  ST-RX -> XHFC PCM -> ST-TX
  *
  * - layermask=<l1>[,l2,l3...] (32bit):
  *        mask of layers to be used for D-channel stack
@@ -65,7 +65,7 @@
 #include "xhfc_pci2pi.h"
 #endif
 
-static const char xhfc_rev[] = "$Revision: 1.14 $";
+static const char xhfc_rev[] = "$Revision: 1.15 $";
 
 #define MAX_CARDS	8
 static int card_cnt;
