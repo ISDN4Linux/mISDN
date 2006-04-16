@@ -1,4 +1,4 @@
-/* $Id: hfcs_usb.c,v 1.14 2006/04/11 13:13:30 crich Exp $
+/* $Id: hfcs_usb.c,v 1.15 2006/04/16 11:52:38 mbachem Exp $
  *
  * mISDN driver for Colognechip HFC-S USB chip
  *
@@ -39,7 +39,7 @@
 
 
 #define DRIVER_NAME "mISDN_hfcsusb"
-const char *hfcsusb_rev = "$Revision: 1.14 $";
+const char *hfcsusb_rev = "$Revision: 1.15 $";
 
 #define MAX_CARDS	8
 static int hfcsusb_cnt;
@@ -1062,7 +1062,7 @@ rx_iso_complete(struct urb *urb, struct pt_regs *regs)
 		errcode = usb_submit_urb(urb, GFP_ATOMIC);
 		if (errcode < 0) {
 			printk(KERN_INFO
-			       "HFC-S USB: error submitting ISO URB: %d \n",
+			       "HFC-S USB: error submitting ISO URB: %d\n",
 			       errcode);
 		}
 	} else {
@@ -1094,7 +1094,7 @@ rx_int_complete(struct urb *urb, struct pt_regs *regs)
 	fifon = fifo->fifonum;
 	if ((!fifo->active) || (urb->status)) {
 		printk(KERN_INFO
-		       "HFC-S USB: RX-Fifo %i is going down (%i)", fifon,
+		       "HFC-S USB: RX-Fifo %i is going down (%i)\n", fifon,
 		       urb->status);
 
 		fifo->urb->interval = 0;	/* cancel automatic rescheduling */
