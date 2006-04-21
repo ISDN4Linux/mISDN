@@ -123,7 +123,7 @@ static void ph_state_change(channel_t *ch);
 
 extern const char *CardType[];
 
-static const char *hfcmulti_revision = "$Revision: 1.34 $";
+static const char *hfcmulti_revision = "$Revision: 1.35 $";
 
 static int HFC_cnt, HFC_idx;
 
@@ -196,6 +196,8 @@ static const PCI_ENTRY id_list[] =
 	 "HFC-E1", 1, 0, 1}, /* E1 only supports single clock */
 	{CCAG_VID, CCAG_VID, HFCE1_ID, 0xB563, VENDOR_CCD,
 	 "HFC-E1 Beronet Card", 1, 0, 1}, /* E1 only supports single clock */
+	{CCAG_VID, CCAG_VID, HFCE1_ID, 0xB564, VENDOR_CCD,
+	 "HFC-E1 Beronet Card (Dual)", 1, 0, 1}, /* E1 only supports single clock */
 	{0x10B5, CCAG_VID, 0x9030, 0x3136, VENDOR_CCD,
 	 "HFC-4S PCIBridgeEval", 4, 0, 0},      // PLX PCI-Bridge
 	{CCAG_VID, CCAG_VID, HFC4S_ID, 0xB566, VENDOR_CCD,
@@ -3750,6 +3752,8 @@ static struct pci_device_id hfmultipci_ids[] __devinitdata = {
 
 	/** Cards with HFC-E1 Chip**/
 	{ CCAG_VID, 0x30B1   , CCAG_VID, 0xB563, 0, 0, 0 }, //BNE1
+	{ CCAG_VID, 0x30B1   , CCAG_VID, 0xB564, 0, 0, 0 }, //BNE1 (Dual)
+
 	{ CCAG_VID, 0x30B1   , CCAG_VID, 0x30B1, 0, 0, 0 }, //Old Eval
 	{ CCAG_VID, 0x30B1   , CCAG_VID, 0xB523, 0, 0, 0 }, //IOB1E1
 	{ CCAG_VID, 0x30B1   , CCAG_VID, 0xC523, 0, 0, 0 }, //E1
