@@ -18,6 +18,9 @@
 #   /etc/init.d/misdn-init start|stop|restart|config|scan|help
 #
 
+# chkconfig: 2345 35 60
+# description: mISDN Kernel Modules
+
 #
 # CONFIGURATION:
 #
