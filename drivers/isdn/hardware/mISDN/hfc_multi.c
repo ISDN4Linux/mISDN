@@ -123,7 +123,7 @@ static void ph_state_change(channel_t *ch);
 
 extern const char *CardType[];
 
-static const char *hfcmulti_revision = "$Revision: 1.35 $";
+static const char *hfcmulti_revision = "$Revision: 1.36 $";
 
 static int HFC_cnt, HFC_idx;
 
@@ -2669,8 +2669,14 @@ init_card(hfc_multi_t *hc)
 			if (debug & DEBUG_HFCMULTI_INIT)
 				printk(KERN_DEBUG "%s: done\n", __FUNCTION__);
 			return(0);
-		}
+		} 
 		printk(KERN_WARNING "HFC PCI: IRQ(%d) getting no interrupts during init (try %d)\n", hc->irq, cnt);
+
+		if (test_bit(HFC_CHIP_CLOCK_IGNORE, &hc->chip)) {
+			printk(KERN_WARNING "HFC PCI: Ignoring Clock so we go on here\n");
+			return 0;
+		}
+		
 #ifdef CONFIG_PLX_PCI_BRIDGE
 		plx_acc=(u_short*)(hc->plx_membase+0x4c);
 		*plx_acc=0x00;  // disable PCI & LINT1 irq
