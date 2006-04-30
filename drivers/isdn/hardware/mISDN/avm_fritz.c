@@ -1,4 +1,4 @@
-/* $Id: avm_fritz.c,v 1.37 2006/04/11 13:13:30 crich Exp $
+/* $Id: avm_fritz.c,v 1.38 2006/04/30 17:49:34 crich Exp $
  *
  * fritz_pci.c    low level stuff for AVM Fritz!PCI and ISA PnP isdn cards
  *              Thanks to AVM, Berlin for informations
@@ -23,7 +23,7 @@
 #include "debug.h"
 
 
-static const char *avm_fritz_rev = "$Revision: 1.37 $";
+static const char *avm_fritz_rev = "$Revision: 1.38 $";
 
 enum {
 	AVM_FRITZ_PCI,
@@ -934,7 +934,9 @@ static int init_card(fritzpnppci *fc)
 #define MAX_CARDS	4
 static int fritz_cnt;
 static u_int protocol[MAX_CARDS];
+static int num_protocol=0;
 static int layermask[MAX_CARDS];
+static int num_layermask=0;
 
 
 static mISDNobject_t	fritz;

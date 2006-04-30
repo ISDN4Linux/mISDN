@@ -10,6 +10,8 @@ MODS=/lib/modules/$(shell uname -r)
 LINUX=$(MODS)/build
 LINUX_SOURCE=$(MODS)/source
 
+DEPMOD=$(which depmod)
+
 
 MISDNDIR=$(BASEDIR)
 MISDN_SRC=$(MISDNDIR)/drivers/isdn/hardware/mISDN
@@ -38,15 +40,16 @@ all: test_old_misdn
 	@echo
 	cp $(MISDNDIR)/drivers/isdn/hardware/mISDN/Makefile.v2.6 $(MISDNDIR)/drivers/isdn/hardware/mISDN/Makefile
 
-	 export MINCLUDES=$(MISDNDIR)/include ; make -C $(LINUX) SUBDIRS=$(MISDN_SRC) modules $(CONFIGS) 
+	export MINCLUDES=$(MISDNDIR)/include ; make -C $(LINUX) SUBDIRS=$(MISDN_SRC) modules $(CONFIGS)  
 
 
 install: all
-	cd $(LINUX) ; make SUBDIRS=$(MISDN_SRC) modules_install 
+	cd $(LINUX) ; make INSTALL_MOD_PATH=$(INSTALL_PREFIX) SUBDIRS=$(MISDN_SRC) modules_install 
+	mkdir -p $(INSTALL_PREFIX)/usr/include/linux/
 	cp $(MISDNDIR)/include/linux/*.h $(INSTALL_PREFIX)/usr/include/linux/
-	install -m755 misdn-init /etc/init.d/
-	depmod
-
+	mkdir -p $(INSTALL_PREFIX)/etc/init.d/
+	install -m755 misdn-init $(INSTALL_PREFIX)/etc/init.d/
+	$(DEPMOD)
 
 test_old_misdn:
 	@if echo -ne "#include <linux/mISDNif.h>" | gcc -C -E - 2>/dev/null 1>/dev/null  ; then \
