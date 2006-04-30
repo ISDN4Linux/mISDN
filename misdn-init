@@ -42,7 +42,7 @@ MODPROBE=modprobe
 RMMOD=rmmod
 INSMOD=insmod
 LSPCI=lspci
-LSUSB=lsusb
+LSUSB=`which lsusb 2> /dev/null`
 MKNOD=mknod
 
 # HFC 8/4 (S0) Options
@@ -379,10 +379,13 @@ function create_misdn_init_conf {
 		addcard "w6692pci"
 		addport 1
 	done
-	for line in $(${LSUSB} | grep "0959:2bd0\|0675:1688\|07b0:0007\|0742:200\(7\|8\|9\|A\)\|08e3:0301\|07fa:084\(7\|8\)\|07ba:0006"); do
-		addcard "hfcsusb"
-		addport 1
-	done
+	
+	if [ -e $LSUSB ]; then 
+		for line in $(${LSUSB} | grep "0959:2bd0\|0675:1688\|07b0:0007\|0742:200\(7\|8\|9\|A\)\|08e3:0301\|07fa:084\(7\|8\)\|07ba:0006"); do
+			addcard "hfcsusb"
+			addport 1
+		done
+	fi
 	
 	if [ "${1}" == "scan" ]; then
 		echo "[OK] found the following devices:"
