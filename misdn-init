@@ -517,6 +517,7 @@ case "$1" in
 
 		check_cfg_file
 	
+		$MODPROBE capi
 		$MODPROBE mISDN_core debug=0
 		$MODPROBE mISDN_l1 debug=0
 		$MODPROBE mISDN_l2 debug=0
