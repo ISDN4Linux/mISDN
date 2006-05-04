@@ -1,4 +1,4 @@
-/* $Id: core.h,v 1.14 2006/03/23 13:52:18 keil Exp $
+/* $Id: core.h,v 1.15 2006/05/04 13:42:44 crich Exp $
  * 
  * This file is (c) under GNU PUBLIC LICENSE
  *
@@ -29,15 +29,14 @@
 #define DEBUG_RDATA		0x1000
 #define DEBUG_WDATA		0x2000
 
-/* from udevice.c */
 
+/* from udevice.c */
 extern int		init_mISDNdev(int);
 extern int		free_mISDNdev(void);
 extern mISDNdevice_t	*get_free_rawdevice(void);
 extern int		free_device(mISDNdevice_t *dev);
 
 /* from stack.c */
-
 extern void		get_stack_info(struct sk_buff *);
 extern int		get_stack_cnt(void);
 extern void		check_stacklist(void);
@@ -84,3 +83,18 @@ extern mISDNobject_t	*get_object(int);
 extern mISDNinstance_t	*get_instance4id(u_int);
 extern int		mISDN_alloc_entity(int *);
 extern int		mISDN_delete_entity(int);
+
+
+/* from netdev_main.c */
+void misdn_log_frame(mISDNstack_t *, 		/* Stack for which to log */
+		char *,				/* frame to log */
+		int, 				/* frame len */
+		int );				/* direction (0=rx,1=tx) */
+
+int misdn_netdev_addstack(mISDNstack_t *); 	/* create new netdevice by 
+						   stack */
+
+int              misdn_netdev_init(void); 	/* initialize netdevices */
+void             misdn_netdev_exit(void);	/* exit netdeivces */
+
+

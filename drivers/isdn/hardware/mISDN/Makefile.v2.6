@@ -77,7 +77,7 @@ xhfc-objs := xhfc_su.o xhfc_pci2pi.o
 mISDN_isac-objs := isac.o arcofi.o
 mISDN_core-objs := core.o stack.o udevice.o helper.o debug.o fsm.o \
 			channel.o l3helper.o \
-			sysfs_obj.o sysfs_inst.o sysfs_st.o
+			sysfs_obj.o sysfs_inst.o sysfs_st.o netdev.o
 ifdef CONFIG_MISDN_MEMDEBUG
 mISDN_core-objs += memdbg.o
 endif

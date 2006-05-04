@@ -65,6 +65,7 @@ ignore_pcm_frameclock=13
 #dsp defaults
 dsp_options=0
 
+
 function remove_preloaded_modules {
 	tmp=$(lsmod)
 	cards="hfcmulti hfcpci avmfritz w6692 hfcsusb"
@@ -75,6 +76,10 @@ function remove_preloaded_modules {
 }
 
 function load_card_modules {
+
+	if [ ! -z "$1" ] ; then
+		echo "Loading only $1"
+	fi
 
 	IFS=$'\n'
 
@@ -139,7 +144,7 @@ function load_card_modules {
 				done
 				IFS=$'\n'
 
-				addcapi=1
+				export addcapi=1
 				;;
 			te_capi_ptmp)
 				IFS=$','
@@ -148,7 +153,8 @@ function load_card_modules {
 					protocol[${li}]=2 # 0x2 == 2
 				done
 				IFS=$'\n'
-				addcapi=1
+
+				export addcapi=1
 				;;
 
 			option)
@@ -231,8 +237,16 @@ function load_card_modules {
 				hfcmulti_cmd="${hfcmulti_cmd} debug=${debug}"
 			fi
 
-			echo ${hfcmulti_cmd}
-			eval ${hfcmulti_cmd}
+
+			if [ -z "$1" ] ; then
+				echo ${hfcmulti_cmd}
+				eval ${hfcmulti_cmd}
+			else
+				if [ "$1" = "hfcmulti" ] ; then 
+					echo ${hfcmulti_cmd}
+					eval ${hfcmulti_cmd}
+				fi
+			fi
 		else
 	# MODPROBE COMMAND FOR _NON_ hfcmulti CARD
 			other_cmd="modprobe ${other_card[${card_index}]}"
@@ -270,8 +284,18 @@ function load_card_modules {
 			other_prot="$(echo ${other_prot} | sed -e 's/^\(.*\),$/\1/')"
 			other_layer="$(echo ${other_layer} | sed -e 's/^\(.*\),$/\1/')"
 			other_cmd="${other_cmd} ${other_prot} ${other_layer}"
-			echo "${other_cmd}"
-			eval ${other_cmd}
+
+			if [ -z "$1" ] ; then
+				echo "${other_cmd}"
+				eval ${other_cmd}
+			else
+				if [ "$1" = "${other_card[${card_index}]}" ] ; then 
+					echo ${other_cmd}
+					eval ${other_cmd}
+				fi
+			fi
+
+
 		fi
 	done
 }
@@ -516,22 +540,25 @@ case "$1" in
 		remove_preloaded_modules
 
 		check_cfg_file
-	
+
 		$MODPROBE capi
 		$MODPROBE mISDN_core debug=0
 		$MODPROBE mISDN_l1 debug=0
 		$MODPROBE mISDN_l2 debug=0
 		$MODPROBE l3udss1 debug=0
 		$MODPROBE mISDN_dsp debug=0x0 options=$dsp_options
+
 		$MODPROBE mISDN_capi
 		
-		load_card_modules
+		load_card_modules $2
 	
 		sleep 1
 		
 		if [ ! -e /dev/mISDN ]; then
 			$MKNOD /dev/mISDN c 46 0
-			chown $USER:$GROUP /dev/mISDN 
+			if grep asterisk /etc/passwd > /dev/null; then
+				chown $USER:$GROUP /dev/mISDN 
+			fi
 			echo "[i] creating device node: /dev/mISDN"
 		fi
 		;;
