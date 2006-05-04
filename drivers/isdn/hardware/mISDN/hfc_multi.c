@@ -123,7 +123,7 @@ static void ph_state_change(channel_t *ch);
 
 extern const char *CardType[];
 
-static const char *hfcmulti_revision = "$Revision: 1.36 $";
+static const char *hfcmulti_revision = "$Revision: 1.37 $";
 
 static int HFC_cnt, HFC_idx;
 
@@ -3269,6 +3269,7 @@ static int __devinit hfcpci_probe(struct pci_dev *pdev, const struct pci_device_
 	mISDNstack_t	*dst = NULL; /* make gcc happy */
 	channel_t	*chan;
 	u_long		flags;
+	u_char		dips=0, pmj=0; // dip settings, port mode Jumpers
 
 	id_idx = find_idlist_entry(ent->vendor,ent->subvendor,ent->device,ent->subdevice);
 	if (id_idx == -1) {
@@ -3614,6 +3615,47 @@ static int __devinit hfcpci_probe(struct pci_dev *pdev, const struct pci_device_
 	if (debug & DEBUG_HFCMULTI_INIT)
 		printk(KERN_DEBUG "%s: Init modes card(%d)\n", __FUNCTION__, HFC_idx+1);
 	hfcmulti_initmode(hc);
+	
+	/* check if Port Jumper config matches module param 'protocol' */
+	switch(hc->type) {
+		// E1
+		case 1:
+			break;
+
+		// HFC 4S
+		case 2:
+		case 4:
+			// Dip Setting: (collect GPIO 13/14/15 (R_GPIO_IN1) + GPI 19/20/23 (R_GPI_IN2))
+			dips = ((HFC_inb(hc, R_GPIO_IN1) >> 5)  & 0x7) | (HFC_inb(hc, R_GPI_IN2) & 0x98);
+
+			// Port mode (TE/NT) jumpers
+			pmj = ((HFC_inb(hc, R_GPI_IN3) >> 4)  & 0xf);
+
+			printk(KERN_INFO "%s: DIPs(0x%x) jumpers(0x%x)\n", __FUNCTION__, dips, pmj);
+
+			pt = 0;
+			while(pt < hc->type) {
+				chan = hc->chan[(pt<<2)+2].ch;
+				// check for protocol param mismatch
+				if (((pmj & (1 << pt)) && (chan->inst.pid.protocol[0] == ISDN_PID_L0_TE_S0)) ||
+				    ((!(pmj & (1 << pt))) && (chan->inst.pid.protocol[0] == ISDN_PID_L0_NT_S0))) {
+					printk ("%s: protocol WARNING: port %i is jumpered for %s mode!\n",
+					        __FUNCTION__,
+					        pt,
+					        (pmj & (1 << pt)?"NT":"TE")
+					        );
+				}
+				pt++;
+			}
+			break;
+
+		// HFC 8S
+		case 8:
+			break;
+
+		default:
+			break;
+	}
 
 	/* add stacks */
 	pt = 0;
