@@ -1,4 +1,4 @@
-/* $Id: core.c,v 1.32 2006/05/04 15:15:54 crich Exp $
+/* $Id: core.c,v 1.33 2006/05/04 15:36:26 crich Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -19,7 +19,7 @@
 #include <linux/smp_lock.h>
 #endif
 
-static char		*mISDN_core_revision = "$Revision: 1.32 $";
+static char		*mISDN_core_revision = "$Revision: 1.33 $";
 
 LIST_HEAD(mISDN_objectlist);
 static rwlock_t		mISDN_objects_lock = RW_LOCK_UNLOCKED;
@@ -716,7 +716,6 @@ void mISDN_cleanup(void) {
 
 
 #ifdef CONFIG_MISDN_NETDEV
-#warning Config Netdev is enabled ?
 	misdn_netdev_exit();
 #endif
 	

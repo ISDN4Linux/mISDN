@@ -10,6 +10,12 @@ ifdef CONFIG_MISDN_MEMDEBUG
 	EXTRA_CFLAGS += -DMISDN_MEMDEBUG
 endif
 
+ifdef CONFIG_MISDN_NETDEV
+	EXTRA_CFLAGS += -DCONFIG_MISDN_NETDEV 
+endif
+
+
+
 obj-$(CONFIG_MISDN_DRV) += mISDN_core.o
 obj-$(CONFIG_MISDN_DRV) += mISDN_isac.o
 obj-$(CONFIG_MISDN_DRV) += mISDN_l1.o
@@ -77,7 +83,12 @@ xhfc-objs := xhfc_su.o xhfc_pci2pi.o
 mISDN_isac-objs := isac.o arcofi.o
 mISDN_core-objs := core.o stack.o udevice.o helper.o debug.o fsm.o \
 			channel.o l3helper.o \
-			sysfs_obj.o sysfs_inst.o sysfs_st.o netdev.o
+			sysfs_obj.o sysfs_inst.o sysfs_st.o 
+
+ifdef CONFIG_MISDN_NETDEV			
+mISDN_core-objs += netdev.o
+endif
+
 ifdef CONFIG_MISDN_MEMDEBUG
 mISDN_core-objs += memdbg.o
 endif
