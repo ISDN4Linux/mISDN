@@ -198,27 +198,26 @@ void misdn_log_frame(mISDNstack_t* st, char *data, int len, int direction)
 
 
 
-
 int misdn_netdev_addstack(mISDNstack_t *st) 
 {
-	char name[8]="mISDN";
+	struct net_device *netdev;
+	struct mISDN_netdev *ndev;
+	int err;
+	char name[8];
 	
-	name[6]=st->id/10;
-	name[7]=st->id%10;
-	
-	printk(KERN_NOTICE "allocating %s as netdev\n",name);
-	
-	struct net_device *netdev = alloc_netdev(0, name, setup_lapd);
+	sprintf(name, "mISDN%01x%01x",
+	        (st->id/10) & 0xF,
+	        (st->id%10) & 0xF);
 
+	printk(KERN_NOTICE "allocating %s as netdev\n", name);
+	
+	netdev = alloc_netdev(0, name, setup_lapd);
 	if(!netdev) {
 		printk(KERN_ERR "net_device alloc failed, abort.\n");
 		return -ENOMEM;
 	}
-
-
-	struct mISDN_netdev *ndev;
-	ndev=kmalloc(sizeof(struct mISDN_netdev), GFP_KERNEL);
-
+	
+	ndev = kmalloc(sizeof(struct mISDN_netdev), GFP_KERNEL);
 	if(!ndev) {
 		printk(KERN_ERR "mISDN_netdevice alloc failed, abort.\n");
 		return -ENOMEM;
@@ -227,7 +226,6 @@ int misdn_netdev_addstack(mISDNstack_t *st)
 	memset(&ndev->stats,0,sizeof(ndev->stats));
 
 	skb_queue_head_init(&ndev->workq);
-	
 
 	ndev->netdev=netdev; 
 
@@ -241,7 +239,6 @@ int misdn_netdev_addstack(mISDNstack_t *st)
 	netdev->change_mtu = misdn_netdev_change_mtu;
 	netdev->features = NETIF_F_NO_CSUM;
 	
-
 	switch (st->pid.protocol[0] & ~ISDN_PID_FEATURE_MASK) {
 		case ISDN_PID_L0_TE_S0:
 		case ISDN_PID_L0_TE_E1:
@@ -259,16 +256,17 @@ int misdn_netdev_addstack(mISDNstack_t *st)
 
 	netdev->irq = 0;
 	netdev->base_addr = 0;
+	
+	list_add(&ndev->list, &mISDN_netdev_list);
 
-	list_add(&mISDN_netdev_list, &ndev->list);
-
-	int err = register_netdev(netdev);
+	printk ("10\n");
+	err = register_netdev(netdev);
+	
 	if (err < 0) {
 		printk(KERN_ERR "Cannot register net device %s, aborting.\n",
 		       netdev->name);
 	}
-
-
+	
 
 	return 0;
 }
