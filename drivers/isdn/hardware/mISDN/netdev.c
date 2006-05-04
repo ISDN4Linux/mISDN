@@ -259,7 +259,6 @@ int misdn_netdev_addstack(mISDNstack_t *st)
 	
 	list_add(&ndev->list, &mISDN_netdev_list);
 
-	printk ("10\n");
 	err = register_netdev(netdev);
 	
 	if (err < 0) {
