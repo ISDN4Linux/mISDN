@@ -205,11 +205,8 @@ int misdn_netdev_addstack(mISDNstack_t *st)
 	int err;
 	char name[8];
 	
-	sprintf(name, "mISDN%01x%01x",
-	        (st->id/10) & 0xF,
-	        (st->id%10) & 0xF);
-
-	printk(KERN_NOTICE "allocating %s as netdev\n", name);
+	sprintf(name, "mISDN%02x", (st->id >> 8));
+	printk(KERN_NOTICE "allocating stack(0x%x) netdev(%s) %x %x %x %x\n", st->id, name, (st->id >> 4), (st->id >> 8), (st->id >> 16), (st->id >> 24));
 	
 	netdev = alloc_netdev(0, name, setup_lapd);
 	if(!netdev) {
