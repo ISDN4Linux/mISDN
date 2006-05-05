@@ -52,7 +52,7 @@ install: all
 	cp $(MISDNDIR)/include/linux/*.h $(INSTALL_PREFIX)/usr/include/linux/
 	mkdir -p $(INSTALL_PREFIX)/etc/init.d/
 	install -m755 misdn-init $(INSTALL_PREFIX)/etc/init.d/
-	$(DEPMOD)
+	$(DEPMOD) -a
 
 test_old_misdn:
 	@if echo -ne "#include <linux/mISDNif.h>" | gcc -C -E - 2>/dev/null 1>/dev/null  ; then \
