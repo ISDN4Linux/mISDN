@@ -1,4 +1,4 @@
-/* $Id: core.h,v 1.16 2006/05/04 15:15:54 crich Exp $
+/* $Id: core.h,v 1.17 2006/05/05 10:04:52 mbachem Exp $
  * 
  * This file is (c) under GNU PUBLIC LICENSE
  *
@@ -88,7 +88,7 @@ extern int		mISDN_delete_entity(int);
 #ifdef CONFIG_MISDN_NETDEV
 /* from netdev_main.c */
 void misdn_log_frame(mISDNstack_t *, 		/* Stack for which to log */
-		char *,				/* frame to log */
+		unsigned char *,		/* frame to log */
 		int, 				/* frame len */
 		int );				/* direction (0=rx,1=tx) */
 

@@ -1,4 +1,4 @@
-/* $Id: core.c,v 1.33 2006/05/04 15:36:26 crich Exp $
+/* $Id: core.c,v 1.34 2006/05/05 10:04:52 mbachem Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -19,7 +19,7 @@
 #include <linux/smp_lock.h>
 #endif
 
-static char		*mISDN_core_revision = "$Revision: 1.33 $";
+static char		*mISDN_core_revision = "$Revision: 1.34 $";
 
 LIST_HEAD(mISDN_objectlist);
 static rwlock_t		mISDN_objects_lock = RW_LOCK_UNLOCKED;
@@ -729,3 +729,6 @@ module_exit(mISDN_cleanup);
 EXPORT_SYMBOL(mISDN_ctrl);
 EXPORT_SYMBOL(mISDN_register);
 EXPORT_SYMBOL(mISDN_unregister);
+#ifdef CONFIG_MISDN_NETDEV
+EXPORT_SYMBOL(misdn_log_frame);
+#endif

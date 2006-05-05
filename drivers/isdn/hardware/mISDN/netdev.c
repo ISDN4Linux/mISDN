@@ -174,11 +174,18 @@ static int misdn_netdev_frame_xmit(
 /** Interface Functions **/
 /*************************/
 
-void misdn_log_frame(mISDNstack_t* st, char *data, int len, int direction) 
+void misdn_log_frame(mISDNstack_t* st, unsigned char *data, int len, int direction) 
 {
-	struct sk_buff *skb=alloc_skb(sizeof(struct lapd_prim_hdr)+len, GFP_KERNEL);
+	struct sk_buff *skb;
 	struct mISDN_netdev *ndev;
+	int i;
 
+	skb = alloc_skb(sizeof(struct lapd_prim_hdr)+len, GFP_KERNEL);
+	if (!skb) {
+		printk ("%s: no mem for skb\n", __FUNCTION__);
+		return;
+	}
+	
 	skb_reserve(skb, sizeof(struct lapd_prim_hdr));
 	skb_reserve(skb, 4);
 	memcpy(skb_put(skb, len), data, len);
@@ -187,11 +194,20 @@ void misdn_log_frame(mISDNstack_t* st, char *data, int len, int direction)
 		if (ndev->st==st) break;
 	}
 
+	// use syslog as long as kernel oops when using netdev
+	printk ("%s: st(%x): %s ", __FUNCTION__, st->id, (direction==FLG_MSG_UP)?"-->":"<--");
+	for (i=0; i<len; i++)
+		printk("0x%02x ", data[i]);
+	printk ("\n");
+	
+	kfree_skb(skb);
+
+	/*
 	if (ndev)
 		misdn_chan_frame_xmit(ndev->netdev, skb , 1);
 	else
 		printk(KERN_WARNING "No mISDN_netdev for stack:%x\n",st->id);
-
+	*/
 
 }
 
@@ -205,7 +221,11 @@ int misdn_netdev_addstack(mISDNstack_t *st)
 	int err;
 	char name[8];
 
-	sprintf(name, "mISDN%02x", (st->id >> 8));
+	sprintf(name, "mISDN%02x",
+	       ((((st->id >> 8) & 0xFF) + 
+	       ((st->id >> 12) & 0xFF)) 
+	       & 0xFF));
+	       
 	printk(KERN_NOTICE "allocating netdev(%s) for stack(%x)\n", name, st->id);
 
 	netdev = alloc_netdev(0, name, setup_lapd);
