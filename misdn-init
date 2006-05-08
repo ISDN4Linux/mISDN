@@ -66,13 +66,8 @@ ignore_pcm_frameclock=13
 dsp_options=0
 
 
-function remove_preloaded_modules {
-	tmp=$(lsmod)
-	cards="hfcmulti hfcpci avmfritz w6692 hfcsusb"
-
-	for i in $cards ; do 
-		echo $tmp | grep $i >/dev/null && (echo "$i already loaded, removing it"; modprobe -r $i)
-	done
+function check_asterisk {
+	if ps ax | grep -v grep | grep asterisk > /dev/null ; then asterisk -rx "stop now" ; fi
 }
 
 function load_card_modules {
@@ -226,7 +221,7 @@ function load_card_modules {
 			hfcmulti_type="$(echo ${hfcmulti_type} | sed -e 's/^\(.*\),$/\1/')"
 			hfcmulti_prot="$(echo ${hfcmulti_prot} | sed -e 's/^\(.*\),$/\1/')"
 			hfcmulti_layer="$(echo ${hfcmulti_layer} | sed -e 's/^\(.*\),$/\1/')"
-			hfcmulti_cmd="modprobe hfcmulti ${hfcmulti_type} ${hfcmulti_prot} ${hfcmulti_layer}"
+			hfcmulti_cmd="modprobe --ignore-install hfcmulti ${hfcmulti_type} ${hfcmulti_prot} ${hfcmulti_layer}"
 			if [ ! -z ${poll} ]; then
 				hfcmulti_cmd="${hfcmulti_cmd} poll=${poll}"
 			fi
@@ -249,7 +244,7 @@ function load_card_modules {
 			fi
 		else
 	# MODPROBE COMMAND FOR _NON_ hfcmulti CARD
-			other_cmd="modprobe ${other_card[${card_index}]}"
+			other_cmd="modprobe --ignore-install ${other_card[${card_index}]}"
 			if [ ! -z ${protocol[${port_index}]} ]; then
 				other_prot="protocol=$(echo "obase=16;\"0x\";${protocol[${port_index}]}" | bc),"
 			else
@@ -289,7 +284,7 @@ function load_card_modules {
 				echo "${other_cmd}"
 				eval ${other_cmd}
 			else
-				if [ "$1" = "${other_card[${card_index}]}" ] ; then 
+				if [ "$1" = "${other_card[${prev}]}" ] ; then 
 					echo ${other_cmd}
 					eval ${other_cmd}
 				fi
@@ -536,19 +531,16 @@ function check_cfg_file {
 
 case "$1" in
 	start|--start)
-
-		remove_preloaded_modules
-
+#remove_preloaded_modules
 		check_cfg_file
 
-		$MODPROBE capi
-		$MODPROBE mISDN_core debug=0
-		$MODPROBE mISDN_l1 debug=0
-		$MODPROBE mISDN_l2 debug=0
-		$MODPROBE l3udss1 debug=0
-		$MODPROBE mISDN_dsp debug=0x0 options=$dsp_options
-
-		$MODPROBE mISDN_capi
+		modprobe capi
+		modprobe mISDN_core debug=0
+		modprobe mISDN_l1 debug=0
+		modprobe mISDN_l2 debug=0
+		modprobe l3udss1 debug=0
+		modprobe mISDN_dsp debug=0x0 options=$dsp_options
+		modprobe mISDN_capi
 		
 		load_card_modules $2
 	
@@ -566,6 +558,8 @@ case "$1" in
 	stop|--stop)
 		
 		check_cfg_file
+
+		check_asterisk
 
 		unload_card_modules
 		

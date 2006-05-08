@@ -52,6 +52,8 @@ install: all
 	cp $(MISDNDIR)/include/linux/*.h $(INSTALL_PREFIX)/usr/include/linux/
 	mkdir -p $(INSTALL_PREFIX)/etc/init.d/
 	install -m755 misdn-init $(INSTALL_PREFIX)/etc/init.d/
+	mkdir -p $(INSTALL_PREFIX)/etc/modprobe.d/mISDN
+	cp mISDN.modprobe.d $(INSTALL_PREFIX)/etc/modprobe.d/mISDN
 	$(DEPMOD) 
 
 test_old_misdn:
