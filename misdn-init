@@ -521,9 +521,14 @@ debug=0"
 
 function check_cfg_file {
 	if [ ! -f ${misdn_init_conf} ]; then
-		echo "[!!] failed to load: ${misdn_init_conf}"
-		echo "run \"/etc/init.d/misdn-init config\" to scan your devices and generate a basic config file."
-		exit 1
+
+		if [ ! -z "$1" ] ; then
+			/etc/init.d/misdn-init config
+		else
+			echo "[!!] failed to load: ${misdn_init_conf}"
+			echo "run \"/etc/init.d/misdn-init config\" to scan your devices and generate a basic config file."
+			exit 1
+		fi
 	fi
 }
 
@@ -532,7 +537,7 @@ function check_cfg_file {
 case "$1" in
 	start|--start)
 #remove_preloaded_modules
-		check_cfg_file
+		check_cfg_file $2
 
 		modprobe capi
 		modprobe mISDN_core debug=0
