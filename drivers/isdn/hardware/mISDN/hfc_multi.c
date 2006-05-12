@@ -124,7 +124,7 @@ static void ph_state_change(channel_t *ch);
 
 extern const char *CardType[];
 
-static const char *hfcmulti_revision = "$Revision: 1.39 $";
+static const char *hfcmulti_revision = "$Revision: 1.40 $";
 
 static int HFC_cnt, HFC_idx;
 
@@ -1967,7 +1967,6 @@ handle_dmsg(channel_t *ch, struct sk_buff *skb)
 				hfcmulti_pcm(hc, ch->channel, -1, -1, -1, -1);
 				break;
 			case HW_POWERUP:
-				printk(KERN_INFO "HW_POWERUP\n");
 				HFC_outb(hc, R_ST_SEL, hc->chan[ch->channel].port);
 				HFC_outb(hc, A_ST_WR_STATE, 3 | 0x10); /* activate */
 				udelay(6); /* wait at least 5,21us */

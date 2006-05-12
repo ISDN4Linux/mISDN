@@ -1,4 +1,4 @@
-/* $Id: core.h,v 1.17 2006/05/05 10:04:52 mbachem Exp $
+/* $Id: core.h,v 1.18 2006/05/12 13:27:23 crich Exp $
  * 
  * This file is (c) under GNU PUBLIC LICENSE
  *
@@ -28,6 +28,8 @@
 #define DEBUG_DEV_TIMER		0x0400
 #define DEBUG_RDATA		0x1000
 #define DEBUG_WDATA		0x2000
+#define DEBUG_SYSFS		0x4000
+#define DEBUG_THREADS		0x8000
 
 
 /* from udevice.c */

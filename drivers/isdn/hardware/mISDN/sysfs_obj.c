@@ -1,4 +1,4 @@
-/* $Id: sysfs_obj.c,v 1.3 2006/04/11 16:04:58 crich Exp $
+/* $Id: sysfs_obj.c,v 1.4 2006/05/12 13:27:23 crich Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -74,7 +74,8 @@ static void release_mISDN_obj(struct class_device *dev)
 {
 	mISDNobject_t	*obj = to_mISDNobject(dev);
 
-	printk(KERN_INFO "release object class dev %s\n", dev->class_id);
+	if ( core_debug & DEBUG_SYSFS) 
+		printk(KERN_INFO "release object class dev %s\n", dev->class_id);
 	if (obj->owner)
 #ifdef MODULE_MKOBJ_POINTER
 	if (obj->owner->mkobj)

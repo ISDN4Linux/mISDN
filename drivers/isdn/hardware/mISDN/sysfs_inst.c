@@ -1,4 +1,4 @@
-/* $Id: sysfs_inst.c,v 1.3 2006/04/11 16:04:58 crich Exp $
+/* $Id: sysfs_inst.c,v 1.4 2006/05/12 13:27:23 crich Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -51,8 +51,8 @@ static void release_mISDN_inst(struct class_device *dev)
 #if 0
 	sysfs_remove_group(&inst->class_dev.kobj, &pid_group);
 #endif
-
-	printk(KERN_INFO "release instance class dev %s\n", dev->class_id);
+	if (core_debug & DEBUG_SYSFS)
+		printk(KERN_INFO "release instance class dev %s\n", dev->class_id);
 }
 
 static struct class inst_dev_class = {

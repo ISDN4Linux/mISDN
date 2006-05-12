@@ -1,4 +1,4 @@
-/* $Id: sysfs_st.c,v 1.3 2006/04/11 16:04:58 crich Exp $
+/* $Id: sysfs_st.c,v 1.4 2006/05/12 13:27:23 crich Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -181,7 +181,8 @@ static void release_mISDN_stack(struct class_device *dev)
 	sysfs_remove_group(&st->class_dev.kobj, &pid_group);
 	sysfs_remove_group(&st->class_dev.kobj, &new_pid_group);
 #endif
-	printk(KERN_INFO "release stack class dev %s\n", dev->class_id);
+	if (core_debug & DEBUG_SYSFS)
+		printk(KERN_INFO "release stack class dev %s\n", dev->class_id);
 	if (st->parent) {
 		sysfs_remove_link(&dev->kobj, "parent");
 		snprintf(name, 12, "child%d", (CHILD_ID_MASK & st->id) >> 16);

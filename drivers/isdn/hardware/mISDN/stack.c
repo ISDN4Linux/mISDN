@@ -1,4 +1,4 @@
-/* $Id: stack.c,v 1.16 2006/03/23 13:11:43 keil Exp $
+/* $Id: stack.c,v 1.17 2006/05/12 13:27:23 crich Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -478,7 +478,9 @@ mISDNStackd(void *data)
 #ifdef CONFIG_SMP
 	unlock_kernel();
 #endif
-	printk(KERN_DEBUG "mISDNStackd started for id(%08x)\n", st->id);
+	if ( core_debug & DEBUG_THREADS)
+		printk(KERN_DEBUG "mISDNStackd started for id(%08x)\n", st->id);
+
 	for (;;) {
 		struct sk_buff	*skb, *c_skb;
 		mISDN_head_t	*hh;
