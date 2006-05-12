@@ -10,7 +10,7 @@ MODS=/lib/modules/$(shell uname -r)
 LINUX=$(MODS)/build
 LINUX_SOURCE=$(MODS)/source
 
-DEPMOD=$(which depmod)
+DEPMOD=/sbin/depmod
 
 
 MISDNDIR=$(BASEDIR)
