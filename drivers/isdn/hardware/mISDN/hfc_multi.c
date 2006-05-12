@@ -103,12 +103,13 @@
 #include "debug.h"
 #include <linux/isdn_compat.h>
 
-#warning
-
+//#warning
 //#define IRQCOUNT_DEBUG
+
 #include "hfc_multi.h"
 
-#warning
+//#warning
+
 #define bugtest {}
 #if 0
 #define bugtest \
@@ -123,7 +124,7 @@ static void ph_state_change(channel_t *ch);
 
 extern const char *CardType[];
 
-static const char *hfcmulti_revision = "$Revision: 1.38 $";
+static const char *hfcmulti_revision = "$Revision: 1.39 $";
 
 static int HFC_cnt, HFC_idx;
 
@@ -2438,8 +2439,6 @@ hfcmulti_initmode(hfc_multi_t *hc)
 	if (debug & DEBUG_HFCMULTI_INIT)
 		printk("%s: entered\n", __FUNCTION__);
 
-#warning KARSTEN: this causes a crash on UP and SMP with multiple cards
-//	spin_lock_irqsave(&hc->lock, flags);
 	if (hc->type == 1) {
 		nt_mode = test_bit(HFC_CFG_NTMODE, &hc->chan[16].cfg);
 		hc->chan[16].slot_tx = -1;
@@ -2600,8 +2599,6 @@ hfcmulti_initmode(hfc_multi_t *hc)
 		HFC_outb(hc, R_E1_WR_STA, r_e1_wr_sta);
 
 	}
-#warning KARSTEN: this causes a crash on UP and SMP with multiple cards
-//	spin_unlock_irqrestore(&hc->lock, flags);
 	if (debug & DEBUG_HFCMULTI_INIT)
 		printk("%s: done\n", __FUNCTION__);
 }
