@@ -371,16 +371,14 @@ function create_misdn_init_conf {
 		addcard "0x1"
 		addport 1
 	done
-	for line in $(${LSPCI} -n -d 1397:08b4); do
-		for l in $( ${LSPCI} -n -v -d 1397:08b4|grep Subsystem); do
-			if echo $l | grep "1397:b566" ; then
-				addcard "0x2"
-				addport 2
-			else
-				addcard "0x4"
-				addport 4
-			fi
-		done
+	for l in $( ${LSPCI} -n -v -d 1397:08b4|grep Subsystem); do
+		if echo $l | grep "1397:b566" ; then
+			addcard "0x2"
+			addport 2
+		else
+			addcard "0x4"
+			addport 4
+		fi
 	done
 	for line in $(${LSPCI} -n -d 1397:16b8); do
 		addcard "0x8"
