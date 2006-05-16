@@ -367,22 +367,26 @@ function create_misdn_init_conf {
 
 	portcount=0
 
-	for line in $(${LSPCI} -n -d 1397:30b1); do
-		addcard "0x1"
-		addport 1
-	done
-	for l in $( ${LSPCI} -n -v -d 1397:08b4|grep Subsystem); do
-		if echo $l | grep "1397:b566" ; then
-			addcard "0x2"
-			addport 2
-		else
-			addcard "0x4"
-			addport 4
-		fi
-	done
-	for line in $(${LSPCI} -n -d 1397:16b8); do
-		addcard "0x8"
-		addport 8
+	for line in $(${LSPCI} -n | sed -n 's/^\(0000:\|\)\([0-9a-f]\{2\}:[0-9a-f]\{2\}.[0-9a-f]\{1\}\)\( Class \| \)[0-9a-f]\{4\}: 1397:\([0-9a-f]\{4\}\).*$/\4 \2/p'); do
+		case "${line}" in
+			30b1*)
+				addcard "0x1"
+				addport 1
+				;;
+			16b8*)
+				addcard "0x8"
+				addport 8
+				;;
+			08b4*)
+				if ${LSPCI} -n -v -s "${line:5}" | grep "Subsystem" | grep "1397:b566" > /dev/null ; then
+					addcard "0x2"
+					addport 2
+				else
+					addcard "0x4"
+					addport 4
+				fi
+				;;
+		esac
 	done
 	for line in $(${LSPCI} -n | grep "1397:\(2bd\(0\|6\|7\|8\|9\|a\|b\|c\)\|b100\)\|1043:0675\|0871:ffa\(1\|2\)\|1051:0100\|15b0:2bd0\|114f:007\(0\|1\|2\|3\)\|13d1:2bd1\|182d:3069"); do
 		addcard "hfcpci"
