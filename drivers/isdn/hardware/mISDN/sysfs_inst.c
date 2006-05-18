@@ -1,4 +1,4 @@
-/* $Id: sysfs_inst.c,v 1.4 2006/05/12 13:27:23 crich Exp $
+/* $Id: sysfs_inst.c,v 1.5 2006/05/18 13:33:28 crich Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -46,9 +46,9 @@ static void release_mISDN_inst(struct class_device *dev)
 {
 	mISDNinstance_t	*inst = to_mISDNinstance(dev);
 
+#if SYSFS_REMOVE_WORKS
 	if (inst->obj)
 		sysfs_remove_link(&dev->kobj, "obj");
-#if 0
 	sysfs_remove_group(&inst->class_dev.kobj, &pid_group);
 #endif
 	if (core_debug & DEBUG_SYSFS)
@@ -105,10 +105,13 @@ mISDN_unregister_sysfs_inst(mISDNinstance_t *inst)
 	if (inst->id) {
 		if (inst->st) {
 			sprintf(name,"layer.%d", inst->id & LAYER_ID_MASK);
+
+#if SYSFS_REMOVE_WORKS
 			sysfs_remove_link(&inst->st->class_dev.kobj, name);
 			sysfs_remove_link(&inst->class_dev.kobj, "stack");
 			if (inst->st->mgr == inst)
 				sysfs_remove_link(&inst->st->class_dev.kobj, "mgr");
+#endif
 		}
 		class_device_unregister(&inst->class_dev);
 	}
