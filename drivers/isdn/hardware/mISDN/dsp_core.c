@@ -1,4 +1,4 @@
-/* $Id: dsp_core.c,v 1.16 2006/03/23 13:11:43 keil Exp $
+/* $Id: dsp_core.c,v 1.17 2006/05/23 08:10:59 crich Exp $
  *
  * Author       Andreas Eversberg (jolly@jolly.de)
  * Based on source code structure by
@@ -169,7 +169,7 @@ There are three things that need to transmit data to card:
  
  */
 
-const char *dsp_revision = "$Revision: 1.16 $";
+const char *dsp_revision = "$Revision: 1.17 $";
 
 #include <linux/delay.h>
 #include <linux/config.h>
@@ -701,6 +701,7 @@ dsp_feat(void *arg)
 	dsp_t *dsp = arg;
 	struct sk_buff *nskb;
 	void *feat;
+	
 
 	switch (dsp->feature_state) {
 		case FEAT_STATE_INIT:
@@ -714,7 +715,9 @@ dsp_feat(void *arg)
 			}
 			if (dsp_debug & DEBUG_DSP_MGR)
 				printk(KERN_DEBUG "%s: features will be quered now for instance %s\n", __FUNCTION__, dsp->inst.name);
+			spin_lock(&dsp->feature_lock);
 			dsp->feature_state = FEAT_STATE_WAIT;
+			spin_unlock(&dsp->feature_lock);
 			init_timer(&dsp->feature_tl);
 			dsp->feature_tl.expires = jiffies + (HZ / 100);
 			add_timer(&dsp->feature_tl);
@@ -729,8 +732,19 @@ dsp_feat(void *arg)
 				 dsp->features.pcm_id,
 				 dsp->features.pcm_slots,
 				 dsp->features.pcm_banks);
+			spin_lock(&dsp->feature_lock);
+			dsp->feature_state = FEAT_STATE_RECEIVED;
+			spin_unlock(&dsp->feature_lock);
+
+			if (dsp->queue_conf_id) {
+				/*work on queued conf id*/
+				dsp_cmx_conf(dsp, dsp->queue_conf_id );
+				if (dsp_debug & DEBUG_DSP_CMX)
+					dsp_cmx_debug(dsp);
+			}
 			break;
 	}
+
 }
 
 
@@ -781,6 +795,7 @@ new_dsp(mISDNstack_t *st, mISDN_pid_t *pid)
 	ndsp->feature_tl.function = (void *)dsp_feat;
 	ndsp->feature_tl.data = (long) ndsp;
 	ndsp->feature_state = FEAT_STATE_INIT;
+	spin_lock_init(&ndsp->feature_lock);
 	init_timer(&ndsp->feature_tl);
 	if (!(dsp_options & DSP_OPT_NOHARDWARE)) {
 		ndsp->feature_tl.expires = jiffies + (HZ / 100);

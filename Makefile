@@ -9,8 +9,9 @@ export INSTALL_PREFIX
 MODS=/lib/modules/$(shell uname -r)
 LINUX=$(MODS)/build
 LINUX_SOURCE=$(MODS)/source
-
-DEPMOD=/sbin/depmod
+UPDATE_MODULES=$(shell which update-modules)
+MODULES_UPDATE=$(shell which modules-update)
+DEPMOD=$(shell which depmod)
 
 
 MISDNDIR=$(BASEDIR)
@@ -54,7 +55,11 @@ install: all
 	install -m755 misdn-init $(INSTALL_PREFIX)/etc/init.d/
 	mkdir -p $(INSTALL_PREFIX)/etc/modprobe.d
 	cp mISDN.modprobe.d $(INSTALL_PREFIX)/etc/modprobe.d/mISDN
+	mkdir -p $(INSTALL_PREFIX)/etc/modules.d
+	cp mISDN.modprobe.d $(INSTALL_PREFIX)/etc/modules.d/mISDN
 	$(DEPMOD) 
+	$(UPDATE_MODULES)
+	$(MODULES_UPDATE)
 
 test_old_misdn:
 	@if echo -ne "#include <linux/mISDNif.h>" | gcc -C -E - 2>/dev/null 1>/dev/null  ; then \

@@ -1,4 +1,4 @@
-/* $Id: dsp.h,v 1.8 2006/03/06 12:52:07 keil Exp $
+/* $Id: dsp.h,v 1.9 2006/05/23 08:10:59 crich Exp $
  *
  * Audio support data for ISDN4Linux.
  *
@@ -29,6 +29,7 @@
 
 #define FEAT_STATE_INIT	1
 #define FEAT_STATE_WAIT	2
+#define FEAT_STATE_RECEIVED 3
 
 #include <linux/timer.h>
 
@@ -188,6 +189,9 @@ typedef struct _dsp {
 	conference_t	*conf;
 	conf_member_t	*member;
 
+	/* while we're waiting for the hw */
+	u32		queue_conf_id;
+
 	/* buffer stuff */
 	int		rx_W; /* current write pos for data without timestamp */
 	int		rx_R; /* current read pos for transmit clock */
@@ -200,6 +204,8 @@ typedef struct _dsp {
 	/* hardware stuff */
 	struct dsp_features features; /* features */
 	struct timer_list feature_tl;
+
+	spinlock_t	feature_lock;
 	int		feature_state;
 	int		pcm_slot_rx; /* current PCM slot (or -1) */
 	int		pcm_bank_rx;
