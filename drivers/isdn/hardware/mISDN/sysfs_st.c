@@ -1,4 +1,4 @@
-/* $Id: sysfs_st.c,v 1.6 2006/05/18 13:35:46 crich Exp $
+/* $Id: sysfs_st.c,v 1.7 2006/05/23 12:06:48 crich Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -163,7 +163,9 @@ static ssize_t store_st_parameter(struct class_device *class_dev, const char *bu
 	return(count);
 }
 
+#ifdef SYSFS_SUPPORT
 MISDN_PROTO(mISDNstack, pid, S_IRUGO);
+#endif
 MISDN_PROTO(mISDNstack, new_pid, S_IRUGO);
 
 static ssize_t show_st_qlen(struct class_device *class_dev, char *buf)
@@ -175,10 +177,10 @@ static CLASS_DEVICE_ATTR(qlen, S_IRUGO, show_st_qlen, NULL);
 
 static void release_mISDN_stack(struct class_device *dev)
 {
+#ifdef SYSFS_SUPPORT
 	mISDNstack_t	*st = to_mISDNstack(dev);
 	char		name[12];
 
-#ifdef SYSFS_REMOVE_WORKS
 	sysfs_remove_group(&st->class_dev.kobj, &pid_group);
 	sysfs_remove_group(&st->class_dev.kobj, &new_pid_group);
 	if (core_debug & DEBUG_SYSFS)
@@ -210,7 +212,9 @@ int
 mISDN_register_sysfs_stack(mISDNstack_t *st)
 {
 	int	err;
+#ifdef SYSFS_SUPPORT
 	char	name[12];
+#endif
 
 	st->class_dev.class = &stack_dev_class;
 	if (st->id & FLG_CHILD_STACK)
@@ -224,9 +228,11 @@ mISDN_register_sysfs_stack(mISDNstack_t *st)
 	err = class_device_register(&st->class_dev);
 	if (err)
 		return(err);
+#ifdef SYSFS_SUPPORT
 	err = sysfs_create_group(&st->class_dev.kobj, &pid_group);
 	if (err)
 		goto out_unreg;
+#endif
 	mISDNstack_attr_protocol_new_pid.attr.mode |= S_IWUSR;
 	mISDNstack_attr_protocol_new_pid.store = store_st_protocol;
 	mISDNstack_attr_parameter_new_pid.attr.mode |= S_IWUSR;
@@ -239,6 +245,8 @@ mISDN_register_sysfs_stack(mISDNstack_t *st)
 	class_device_create_file(&st->class_dev, &class_device_attr_id);
 	class_device_create_file(&st->class_dev, &class_device_attr_qlen);
 	class_device_create_file(&st->class_dev, &class_device_attr_status);
+
+#ifdef SYSFS_SUPPORT
 	if (st->parent) {
 		sysfs_create_link(&st->class_dev.kobj, &st->parent->class_dev.kobj, "parent");
 		snprintf(name, 12, "child%d", (CHILD_ID_MASK & st->id) >> 16);
@@ -249,6 +257,7 @@ mISDN_register_sysfs_stack(mISDNstack_t *st)
 		snprintf(name, 12, "clone%d", (CLONE_ID_MASK & st->id) >> 16);
 		sysfs_create_link(&st->master->class_dev.kobj, &st->class_dev.kobj, name);
 	}
+#endif
 	return(err);
 
 out_unreg:

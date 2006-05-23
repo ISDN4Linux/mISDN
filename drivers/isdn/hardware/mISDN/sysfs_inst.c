@@ -1,4 +1,4 @@
-/* $Id: sysfs_inst.c,v 1.6 2006/05/18 13:35:46 crich Exp $
+/* $Id: sysfs_inst.c,v 1.7 2006/05/23 12:06:48 crich Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -40,13 +40,15 @@ static ssize_t show_inst_regcnt(struct class_device *class_dev, char *buf)
 }
 static CLASS_DEVICE_ATTR(regcnt, S_IRUGO, show_inst_regcnt, NULL);
 
+#ifdef SYSFS_SUPPORT
 MISDN_PROTO(mISDNinstance, pid, S_IRUGO);
+#endif
 
 static void release_mISDN_inst(struct class_device *dev)
 {
+#ifdef SYSFS_SUPPORT
 	mISDNinstance_t	*inst = to_mISDNinstance(dev);
 
-#ifdef SYSFS_REMOVE_WORKS
 	if (inst->obj)
 		sysfs_remove_link(&dev->kobj, "obj");
 	sysfs_remove_group(&inst->class_dev.kobj, &pid_group);
@@ -66,7 +68,9 @@ static struct class inst_dev_class = {
 int
 mISDN_register_sysfs_inst(mISDNinstance_t *inst) {
 	int	err;
+#ifdef SYSFS_SUPPORT
 	char	name[8];
+#endif
 
 	inst->class_dev.class = &inst_dev_class;
 	snprintf(inst->class_dev.class_id, BUS_ID_SIZE, "inst-%08x", inst->id);
@@ -77,6 +81,8 @@ mISDN_register_sysfs_inst(mISDNinstance_t *inst) {
 	class_device_create_file(&inst->class_dev, &class_device_attr_name);
 	class_device_create_file(&inst->class_dev, &class_device_attr_extentions);
 	class_device_create_file(&inst->class_dev, &class_device_attr_regcnt);
+
+#ifdef SYSFS_SUPPORT
 	err = sysfs_create_group(&inst->class_dev.kobj, &pid_group);
 	if (err)
 		goto out_unreg;
@@ -90,11 +96,14 @@ mISDN_register_sysfs_inst(mISDNinstance_t *inst) {
 			sysfs_create_link(&inst->st->class_dev.kobj, &inst->class_dev.kobj, "mgr");
 		}
 	}
+#endif
 	return(err);
 
+#ifdef SYSFS_SUPPORT
 out_unreg:
 	class_device_unregister(&inst->class_dev);
 	return(err);
+#endif
 }
 
 void
@@ -106,7 +115,7 @@ mISDN_unregister_sysfs_inst(mISDNinstance_t *inst)
 		if (inst->st) {
 			sprintf(name,"layer.%d", inst->id & LAYER_ID_MASK);
 
-#ifdef SYSFS_REMOVE_WORKS
+#ifdef SYSFS_SUPPORT
 			sysfs_remove_link(&inst->st->class_dev.kobj, name);
 			sysfs_remove_link(&inst->class_dev.kobj, "stack");
 			if (inst->st->mgr == inst)

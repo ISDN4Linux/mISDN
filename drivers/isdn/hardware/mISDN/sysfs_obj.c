@@ -1,4 +1,4 @@
-/* $Id: sysfs_obj.c,v 1.6 2006/05/18 13:35:46 crich Exp $
+/* $Id: sysfs_obj.c,v 1.7 2006/05/23 12:06:48 crich Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -67,17 +67,19 @@ ssize_t mISDN_show_pid_parameter(mISDN_pid_t *pid, char *buf)
 	return (p -buf);
 }
 
+#ifdef SYSFS_SUPPORT
 MISDN_PROTO(mISDNobject, BPROTO, S_IRUGO);
 MISDN_PROTO(mISDNobject, DPROTO, S_IRUGO);
+#endif
 
 static void release_mISDN_obj(struct class_device *dev)
 {
+#ifdef SYSFS_SUPPORT
 	mISDNobject_t	*obj = to_mISDNobject(dev);
 
 	if ( core_debug & DEBUG_SYSFS) 
 		printk(KERN_INFO "release object class dev %s\n", dev->class_id);
 
-#ifdef SYSFS_REMOVE_WORKS
 	if (obj->owner)
 #ifdef MODULE_MKOBJ_POINTER
 	if (obj->owner->mkobj)
@@ -109,6 +111,7 @@ mISDN_register_sysfs_obj(mISDNobject_t *obj) {
 	class_device_create_file(&obj->class_dev, &class_device_attr_id);
 	class_device_create_file(&obj->class_dev, &class_device_attr_name);
 	class_device_create_file(&obj->class_dev, &class_device_attr_refcnt);
+#ifdef SYSFS_SUPPORT
 	err = sysfs_create_group(&obj->class_dev.kobj, &BPROTO_group);
 	if (err)
 		goto out_unreg;
@@ -122,9 +125,15 @@ mISDN_register_sysfs_obj(mISDNobject_t *obj) {
 #else
 		sysfs_create_link(&obj->class_dev.kobj, &obj->owner->mkobj.kobj, "module");
 #endif
+
+#endif
 	return(err);
+
+#ifdef SYSFS_SUPPORT
 out_unreg:
 	class_device_unregister(&obj->class_dev);
+#endif
+
 out:
 	return(err);
 }
