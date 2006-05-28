@@ -1,4 +1,4 @@
-/* $Id: dsp_cmx.c,v 1.12 2006/05/23 08:10:59 crich Exp $
+/* $Id: dsp_cmx.c,v 1.13 2006/05/28 14:13:52 crich Exp $
  *
  * Audio crossconnecting/conferrencing (hardware level).
  *
@@ -995,7 +995,7 @@ dsp_cmx_receive(dsp_t *dsp, struct sk_buff *skb)
 
 	/* show where to write */
 #ifdef CMX_DEBUG
-	printk(KERN_DEBUG "cmx_receive(dsp=%lx): rx_R(dsp) rx_W(dsp)=%05x len=%d %s\n", (u_long)dsp, dsp->rx_R, dsp->rx_W, len, dsp->inst.name);
+	printk( KERN_DEBUG "cmx_receive(dsp=%lx): rx_R(dsp) rx_W(dsp)=%05x len=%d %s\n", (u_long)dsp, dsp->rx_R, dsp->rx_W, len, dsp->inst.name);
 #endif
 
 	/* write data into rx_buffer */
@@ -1035,6 +1035,17 @@ dsp_cmx_send_member(dsp_t *dsp, int len, s32 *c, int members)
 		return;
 	if (!dsp->b_active) /* if not active */
 		return;
+
+#if 1
+	/* If we have 2 members and we are connected to pcm_slot, it looks
+	   like we're bridged on the pcm, so why should we send anything ? 
+	   */
+	if (	members==2 && (dsp->features.pcm_id>=0) && 
+		(dsp->pcm_slot_tx>=0) && (dsp->pcm_slot_rx>=0) ) {
+		return;
+	}
+#endif
+
 #ifdef CMX_DEBUG
 printk(KERN_DEBUG "SEND members=%d dsp=%s, conf=%p, rx_R=%05x rx_W=%05x\n", members, dsp->inst.name, conf, dsp->rx_R, dsp->rx_W);
 #endif

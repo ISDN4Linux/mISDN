@@ -124,7 +124,7 @@ static void ph_state_change(channel_t *ch);
 
 extern const char *CardType[];
 
-static const char *hfcmulti_revision = "$Revision: 1.40 $";
+static const char *hfcmulti_revision = "$Revision: 1.41 $";
 
 static int HFC_cnt, HFC_idx;
 
@@ -3846,6 +3846,7 @@ HFCmulti_cleanup(void)
 	}
 	/* get rid of all devices of this driver */
 	pci_unregister_driver(&hfcmultipci_driver);
+	printk(KERN_NOTICE "HFC PCI card Unregistered from PCI\n");
 
 }
 
