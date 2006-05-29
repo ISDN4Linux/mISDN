@@ -1,4 +1,4 @@
-/* $Id: layer3.c,v 1.19 2006/03/23 13:11:43 keil Exp $
+/* $Id: layer3.c,v 1.20 2006/05/29 16:46:10 crich Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -12,8 +12,9 @@
  */
 #include "layer3.h"
 #include "helper.h"
+#include "dss1.h"
 
-const char *l3_revision = "$Revision: 1.19 $";
+const char *l3_revision = "$Revision: 1.20 $";
 
 static
 struct Fsm l3fsm = {NULL, 0, 0, NULL, NULL};
@@ -309,6 +310,9 @@ l3_process_t
 		return (NULL);
 	}
 	memset(p, 0, sizeof(l3_process_t));
+
+	p->cause=NO_CAUSE;
+	
 	p->l3 = l3;
 	p->id = id;
 	p->callref = cr;

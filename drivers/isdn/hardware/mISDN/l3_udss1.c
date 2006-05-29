@@ -1,4 +1,4 @@
-/* $Id: l3_udss1.c,v 1.35 2006/03/23 13:11:43 keil Exp $
+/* $Id: l3_udss1.c,v 1.36 2006/05/29 16:46:10 crich Exp $
  *
  * EURO/DSS1 D-channel protocol
  *
@@ -24,7 +24,11 @@ static int debug = 0;
 static mISDNobject_t u_dss1;
 
 
-const char *dss1_revision = "$Revision: 1.35 $";
+const char *dss1_revision = "$Revision: 1.36 $";
+
+
+static int comp_required[] = {1,2,3,5,6,7,9,10,11,14,15,-1};
+
 
 static int dss1man(l3_process_t *, u_int, void *);
 
@@ -76,6 +80,8 @@ parseQ931(struct sk_buff *skb) {
 	codeset = maincodeset = 0;
 	ie = &qi->bearer_capability;
 	while (pos < len) {
+
+		
 		if ((p[pos] & 0xf0) == 0x90) {
 			codeset = p[pos] & 0x07;
 			if (!(p[pos] & 0x08))
@@ -91,10 +97,14 @@ parseQ931(struct sk_buff *skb) {
 			if (p[pos] & 0x80) { /* single octett IE */
 				if (p[pos] == IE_MORE_DATA)
 					qi->more_data.off = pos;
-				else if (p[pos] == IE_COMPLETE)
+				else if (p[pos] == IE_COMPLETE) {
 					qi->sending_complete.off = pos;
+				}
 				else if ((p[pos] & 0xf0) == IE_CONGESTION)
 					qi->congestion_level.off = pos;
+				else {
+					printk("parseQ931: Unknown Single Oct IE [%x]\n",p[pos]);
+				}
 				cnt++;
 				pos++;
 			} else {
@@ -128,6 +138,15 @@ parseQ931(struct sk_buff *skb) {
 						qi->ext[eidx].v.val = t;
 						eidx = -1;
 					}
+				} else {
+					int i;
+					for (i=0; comp_required[i] > 0; i++) {
+						if ( p[pos] == comp_required[i] && l==1 ) {
+							qi->comprehension_required.off = pos;
+						} 
+					}
+					if (!qi->comprehension_required.off)
+						printk(" ie not handled ie [%x] l [%x]\n", p[pos],l);
 				}
 				pos += l + 2;
 				cnt++;
@@ -444,7 +463,7 @@ static int ie_RETRIEVE_REJECT[] = {IE_CAUSE | IE_MANDATORY, IE_DISPLAY, -1};
  *		IE_MANDATORY, -1};
  */
 static int ie_FACILITY[] = {IE_FACILITY | IE_MANDATORY, IE_DISPLAY, -1};
-static int comp_required[] = {1,2,3,5,6,7,9,10,11,14,15,-1};
+
 static int l3_valid_states[] = {0,1,2,3,4,6,7,8,9,10,11,12,15,17,19,25,-1};
 
 struct ie_len {
@@ -531,6 +550,7 @@ check_infoelements(l3_process_t *pc, struct sk_buff *skb, int *checklist)
 	p += L3_EXTRA_SIZE;
 	iep = &qi->bearer_capability;
 	oldpos = -1;
+
 	for (i=0; i<32; i++) {
 		if (iep[i].off) {
 			ie = mISDN_l3_pos2ie(i);
@@ -540,8 +560,11 @@ check_infoelements(l3_process_t *pc, struct sk_buff *skb, int *checklist)
 						err_seq++;
 					else
 						oldpos = newpos;
+				} else {
+					printk(KERN_NOTICE "ie_in_set resturned <0  [%d] ie:[%x]\n",newpos,ie);
 				}
 			} else {
+				printk(KERN_NOTICE "Found ie in set which we do not support ie [%x]\n",ie);
 				if (ie_in_set(pc, ie, comp_required))
 					err_compr++;
 				else
@@ -552,6 +575,13 @@ check_infoelements(l3_process_t *pc, struct sk_buff *skb, int *checklist)
 				err_len++;
 		}
 	}
+
+	if (qi->comprehension_required.off) {
+		if ( ! (p[qi->comprehension_required.off +2] &0xf) ) {
+			err_compr++;
+		}
+	}
+	
 	if (err_compr | err_ureg | err_len | err_seq) {
 		if (pc->l3->debug & L3_DEB_CHECK)
 			l3_debug(pc->l3, "check IE MT(%x) %d/%d/%d/%d",
@@ -751,11 +781,17 @@ l3dss1_disconnect_req(l3_process_t *pc, u_char pr, void *arg)
 			*p++ = 2;
 			*p++ = 0x80 | CAUSE_LOC_USER;
 			*p++ = 0x80 | CAUSE_NORMALUNSPECIFIED;
+			pc->cause=CAUSE_NORMALUNSPECIFIED;
+		} else {
+			p=skb->data;
+			p += L3_EXTRA_SIZE + qi->cause.off;
+			pc->cause = (*(p+3) & 0x7f);
 		}
 		SendMsg(pc, arg, 11);
 	} else {
 		newl3state(pc, 11);
 		l3dss1_message_cause(pc, MT_DISCONNECT, CAUSE_NORMALUNSPECIFIED);
+		pc->cause=CAUSE_NORMALUNSPECIFIED;
 	}
 	L3AddTimer(&pc->timer, T305, CC_T305);
 }
@@ -1419,22 +1455,29 @@ l3dss1_release_ind(l3_process_t *pc, u_char pr, void *arg)
 	int		err, callState = -1;
 	Q931_info_t	*qi = (Q931_info_t *)skb->data;
 
-	if (qi->call_state.off) {
-		p = skb->data;
-		p += L3_EXTRA_SIZE + qi->call_state.off;
-		p++;
-		if (1 == *p++)
-			callState = *p;
-	}
-	if (callState == 0) {
-		/* ETS 300-104 7.6.1, 8.6.1, 10.6.1... and 16.1
-		 * set down layer 3 without sending any message
-		 */
+	if (pc->state == 19) {
+		/* ETS 300-102 5.3.5 */
 		newl3state(pc, 0);
 		err = mISDN_l3up(pc, CC_RELEASE | INDICATION, skb);
 		release_l3_process(pc);
 	} else {
-		err = mISDN_l3up(pc, CC_RELEASE | INDICATION, skb);
+		if (qi->call_state.off) {
+			p = skb->data;
+			p += L3_EXTRA_SIZE + qi->call_state.off;
+			p++;
+			if (1 == *p++)
+				callState = *p;
+		}
+		if (callState == 0) {
+			/* ETS 300-104 7.6.1, 8.6.1, 10.6.1... and 16.1
+			 * set down layer 3 without sending any message
+			 */
+			newl3state(pc, 0);
+			err = mISDN_l3up(pc, CC_RELEASE | INDICATION, skb);
+			release_l3_process(pc);
+		} else {
+			err = mISDN_l3up(pc, CC_RELEASE | INDICATION, skb);
+		}
 	}
 	if (err)
 		dev_kfree_skb(skb);
@@ -1679,8 +1722,12 @@ l3dss1_global_restart(l3_process_t *pc, u_char pr, void *arg)
 	list_for_each_entry_safe(up, n, &pc->l3->plist, list) {
 		if ((ri & 7) == 7)
 			dss1man(up, CC_RESTART | REQUEST, NULL);
-		else if (up->bc == chan)
+		else if (up->bc == chan) {
 			mISDN_l3up(up, CC_RESTART | REQUEST, NULL);
+
+			l3_debug(up->l3, "Resetting channel\n");
+			release_l3_process(up);
+		}
 	}
 	dev_kfree_skb(skb);
 	skb = MsgStart(pc, MT_RESTART_ACKNOWLEDGE, chan ? 6 : 3);
@@ -2139,13 +2186,21 @@ l3dss1_t304(l3_process_t *pc, u_char pr, void *arg)
 static void
 l3dss1_t305(l3_process_t *pc, u_char pr, void *arg)
 {
+	int cause;
+	
 	L3DelTimer(&pc->timer);
-#if 0
-	if (pc->cause != NO_CAUSE)
+
+	
+	if (pc->cause != NO_CAUSE) {
+		printk(KERN_NOTICE "Using buffered cause %x\n",pc->cause);
 		cause = pc->cause;
-#endif
+	}
+	else {
+		cause=CAUSE_NORMAL_CLEARING;
+	}
+	
 	newl3state(pc, 19);
-	l3dss1_message_cause(pc, MT_RELEASE, CAUSE_NORMALUNSPECIFIED);
+	l3dss1_message_cause(pc, MT_RELEASE, cause);
 	L3AddTimer(&pc->timer, T308, CC_T308_1);
 }
 
@@ -2281,7 +2336,7 @@ static struct stateentry downstatelist[] =
 	{SBIT(1) | SBIT(2) | SBIT(3) | SBIT(4) | SBIT(6) | SBIT(7) |
 		SBIT(8) | SBIT(9) | SBIT(10) | SBIT(25),
 	 CC_DISCONNECT | REQUEST, l3dss1_disconnect_req},
-	{SBIT(11) | SBIT(12),
+	{SBIT(6) | SBIT(11) | SBIT(12),
 	 CC_RELEASE | REQUEST, l3dss1_release_req},
 	{ALL_STATES,
 	 CC_RESTART | REQUEST, l3dss1_restart},
@@ -2693,6 +2748,7 @@ dss1_fromup(layer3_t *l3, struct sk_buff *skb, mISDN_head_t *hh)
 	}
 	if ((l3->debug & L3_DEB_MSG) && skb->len)
 		mISDN_LogL3Msg(skb);
+	
 	if (!proc && hh->dinfo == MISDN_ID_DUMMY) {
 		if (hh->prim == (CC_FACILITY | REQUEST)) {
 			l3dss1_facility_req(l3->dummy, hh->prim, skb->len ? skb : NULL);
@@ -2714,11 +2770,11 @@ dss1_fromup(layer3_t *l3, struct sk_buff *skb, mISDN_head_t *hh)
 			l3_debug(l3, "dss1down state %d prim %#x unhandled",
 				proc->state, hh->prim);
 		}
-		dev_kfree_skb(skb);
+			dev_kfree_skb(skb);
 	} else {
 		if (l3->debug & L3_DEB_STATE) {
 			l3_debug(l3, "dss1down state %d prim %#x para len %d",
-				proc->state, hh->prim, skb->len);
+				 proc->state, hh->prim, skb->len);
 		}
 		if (skb->len)
 			downstatelist[i].rout(proc, hh->prim, skb);

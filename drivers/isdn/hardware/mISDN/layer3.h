@@ -1,4 +1,4 @@
-/* $Id: layer3.h,v 1.11 2006/03/06 12:52:07 keil Exp $
+/* $Id: layer3.h,v 1.12 2006/05/29 16:46:10 crich Exp $
  *
  * This file is (c) under GNU PUBLIC LICENSE
  *
@@ -42,6 +42,7 @@ typedef struct _l3_process {
 	int			state;
 	L3Timer_t		timer;
 	int			n303;
+	int cause;
 	struct sk_buff		*t303skb;
 	u_int			id;
 	int			bc;

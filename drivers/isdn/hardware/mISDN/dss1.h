@@ -1,4 +1,4 @@
-/* $Id: dss1.h,v 1.2 2006/03/06 12:52:07 keil Exp $
+/* $Id: dss1.h,v 1.3 2006/05/29 16:46:10 crich Exp $
  *
  *  DSS1 (Euro) D-channel protocol defines
  *
@@ -117,6 +117,7 @@
 #define IE_MORE_DATA	0xa0
 #define IE_COMPLETE	0xa1
 #define IE_CONGESTION	0xb0
+#define IE_COMPR_REQ	0x01
 #define IE_REPEAT	0xd0
 
 #define IE_MANDATORY	0x0100
