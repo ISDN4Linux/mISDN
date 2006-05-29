@@ -1,4 +1,4 @@
-/* $Id: layer2.c,v 1.25 2006/03/23 13:11:43 keil Exp $
+/* $Id: layer2.c,v 1.26 2006/05/29 09:25:36 crich Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -10,7 +10,7 @@
 #include "helper.h"
 #include "debug.h"
 
-static char *l2_revision = "$Revision: 1.25 $";
+static char *l2_revision = "$Revision: 1.26 $";
 
 static void l2m_debug(struct FsmInst *fi, char *fmt, ...);
 
@@ -1944,7 +1944,7 @@ l2from_down(layer2_t *l2, struct sk_buff *askb, mISDN_head_t *hh)
 		case (PH_ACTIVATE | CONFIRM):
 		case (PH_ACTIVATE | INDICATION):
 			test_and_set_bit(FLG_L1_ACTIV, &l2->flag);
-			if (test_and_clear_bit(FLG_ESTAB_PEND, &l2->flag))
+			if (test_and_clear_bit(FLG_ESTAB_PEND, &l2->flag)) 
 				ret = mISDN_FsmEvent(&l2->l2m, EV_L2_DL_ESTABLISH_REQ, cskb);
 			break;
 		case (PH_DEACTIVATE | INDICATION):
@@ -2112,6 +2112,11 @@ tei_l2(layer2_t *l2, struct sk_buff *skb)
 		ret = mISDN_FsmEvent(&l2->l2m, EV_L2_MDL_REMOVE, skb);
 		break;
 	    case (MDL_ERROR | RESPONSE):
+		ret = mISDN_FsmEvent(&l2->l2m, EV_L2_MDL_ERROR, skb);
+		break;
+	case (MDL_ERROR | REQUEST):
+		/* ETS 300-125 5.3.2.1 Test: TC13010*/
+		printk(KERN_NOTICE "MDL_ERROR|REQ (tei_l2)\n");
 		ret = mISDN_FsmEvent(&l2->l2m, EV_L2_MDL_ERROR, skb);
 		break;
 	    case (MDL_FINDTEI | REQUEST):
