@@ -1,4 +1,4 @@
-/* $Id: mISDNif.h,v 1.35 2006/03/23 10:05:16 keil Exp $
+/* $Id: mISDNif.h,v 1.36 2006/05/30 09:37:16 crich Exp $
  *
  */
 
@@ -23,8 +23,8 @@
 #define	MISDN_MINOR_VERSION	0
 #define	MISDN_VERSION		((MISDN_MAJOR_VERSION<<16) | MISDN_MINOR_VERSION)
 
-#define MISDN_REVISION		"$Revision: 1.35 $"
-#define MISDN_DATE		"$Date: 2006/03/23 10:05:16 $"
+#define MISDN_REVISION		"$Revision: 1.36 $"
+#define MISDN_DATE		"$Date: 2006/05/30 09:37:16 $"
 
 /* collect some statistics about the message queues */
 #define MISDN_MSG_STATS
@@ -401,6 +401,7 @@
 
 #define ISDN_PID_L2_DF_PTP		0x00100000
 #define ISDN_PID_L2_DF_MULT_TEI		0x00200000
+#define ISDN_PID_L2_DF_WINSIZE7		0x00400000
 #define	ISDN_PID_L3_DF_PTP		0x00100000
 #define ISDN_PID_L3_DF_EXTCID		0x00200000
 #define ISDN_PID_L3_DF_CRLEN2		0x00400000
@@ -731,6 +732,7 @@ typedef struct _Q931_info {
 	ie_info_t	more_data;
 	ie_info_t	sending_complete;
 	ie_info_t	congestion_level;
+	ie_info_t	comprehension_required;
 	ie_info_t	fill1;
 	ie_info_ext_t	ext[8];
 }  __attribute__((packed)) Q931_info_t;
