@@ -1,4 +1,4 @@
-/* $Id: mISDNif.h,v 1.36 2006/05/30 09:37:16 crich Exp $
+/* $Id: mISDNif.h,v 1.37 2006/05/30 14:35:25 keil Exp $
  *
  */
 
@@ -23,8 +23,8 @@
 #define	MISDN_MINOR_VERSION	0
 #define	MISDN_VERSION		((MISDN_MAJOR_VERSION<<16) | MISDN_MINOR_VERSION)
 
-#define MISDN_REVISION		"$Revision: 1.36 $"
-#define MISDN_DATE		"$Date: 2006/05/30 09:37:16 $"
+#define MISDN_REVISION		"$Revision: 1.37 $"
+#define MISDN_DATE		"$Date: 2006/05/30 14:35:25 $"
 
 /* collect some statistics about the message queues */
 #define MISDN_MSG_STATS
@@ -733,7 +733,6 @@ typedef struct _Q931_info {
 	ie_info_t	sending_complete;
 	ie_info_t	congestion_level;
 	ie_info_t	comprehension_required;
-	ie_info_t	fill1;
 	ie_info_ext_t	ext[8];
 }  __attribute__((packed)) Q931_info_t;
 
