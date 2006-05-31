@@ -1,4 +1,4 @@
-/* $Id: l3_udss1.c,v 1.36 2006/05/29 16:46:10 crich Exp $
+/* $Id: l3_udss1.c,v 1.37 2006/05/31 02:25:52 crich Exp $
  *
  * EURO/DSS1 D-channel protocol
  *
@@ -24,7 +24,7 @@ static int debug = 0;
 static mISDNobject_t u_dss1;
 
 
-const char *dss1_revision = "$Revision: 1.36 $";
+const char *dss1_revision = "$Revision: 1.37 $";
 
 
 static int comp_required[] = {1,2,3,5,6,7,9,10,11,14,15,-1};
@@ -204,7 +204,7 @@ calc_msg_len(Q931_info_t *qi)
 	if (qi->congestion_level.off)
 		cnt++;
 	ie = &qi->bearer_capability;
-	while (ie <= &qi->fill1) {
+	while (ie <= &qi->comprehension_required) {
 		if (ie->off)
 			cnt += buf[ie->off + 1] + 2;
 		ie++;
