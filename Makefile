@@ -70,6 +70,15 @@ test_old_misdn:
 		fi ;\
 	fi
 
+	@if echo -ne "#include <linux/mISDNif.h>" | gcc -C -E - 2>/dev/null 1>/dev/null  ; then \
+		if ! echo -ne "#include <linux/mISDNif.h>\n#ifndef ISDN_PID_L2_DF_WINSIZE7\n#error old mISDNif.h\n#endif\n" | gcc -C -E - 2>/dev/null 1>/dev/null ; then \
+			echo -ne "\n!!You should remove the following files:\n\n$(LINUX)/include/linux/mISDNif.h\n$(LINUX)/include/linux/isdn_compat.h\n/usr/include/linux/mISDNif.h\n/usr/include/linux/isdn_compat.h\n\nIn order to upgrade to the mqueue branch\n\n"; \
+			echo -ne "I can do that for you, just type: make force\n\n" ; \
+			exit 1; \
+		fi ;\
+	fi
+
+
 
 .PHONY: install all clean 
 
