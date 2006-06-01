@@ -1,4 +1,4 @@
-/* $Id: layer2.c,v 1.26 2006/05/29 09:25:36 crich Exp $
+/* $Id: layer2.c,v 1.27 2006/06/01 11:02:10 crich Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -10,7 +10,7 @@
 #include "helper.h"
 #include "debug.h"
 
-static char *l2_revision = "$Revision: 1.26 $";
+static char *l2_revision = "$Revision: 1.27 $";
 
 static void l2m_debug(struct FsmInst *fi, char *fmt, ...);
 
@@ -1181,8 +1181,9 @@ l2_st7_got_super(struct FsmInst *fi, int event, void *arg)
 				mISDN_FsmDelTimer(&l2->t203, 9);
 			restart_t200(l2, 12);
 		}
-		if (skb_queue_len(&l2->i_queue) && (typ == RR))
+		if (skb_queue_len(&l2->i_queue) && (typ == RR)) {
 			mISDN_FsmEvent(fi, EV_L2_ACK_PULL, NULL);
+		}
 	} else
 		nrerrorrecovery(fi);
 }
@@ -2240,8 +2241,17 @@ new_l2(mISDNstack_t *st, mISDN_pid_t *pid) {
 			test_and_set_bit(FLG_FIXED_TEI, &nl2->flag);
 			nl2->tei = 0;
 		}
+		
 		nl2->maxlen = MAX_DFRAME_LEN;
-		nl2->window = 1;
+
+		if (pid->protocol[3] & ISDN_PID_L3_DF_CRLEN2) {
+			printk("layer2: Windowsize 7\n");
+			nl2->window = 7;
+		} else {
+			printk("layer2: Windowsize 1\n");
+			nl2->window = 1;
+		}
+		
 		nl2->T200 = 1000;
 		nl2->N200 = 3;
 		nl2->T203 = 10000;

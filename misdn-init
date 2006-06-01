@@ -44,6 +44,7 @@ INSMOD=insmod
 LSPCI=lspci
 LSUSB=`which lsusb 2> /dev/null`
 MKNOD=mknod
+BC=/usr/bin/bc
 
 # HFC 8/4 (S0) Options
 master_clock=17
@@ -87,7 +88,7 @@ function load_card_modules {
 			card)
 				nr=`echo "${val}" | sed -e "s/^\([0-9]*\),.*/\1/"`
 				mod=`echo "${val}" | sed -e "s/^[^,]*,\([^,]*\).*/\1/"`
-				if [ ${#val} -gt $(echo "obase=10;${#nr}+${#mod}+1" | bc) ]; then
+				if [ ${#val} -gt $(echo "obase=10;${#nr}+${#mod}+1" | ${BC}) ]; then
 					opns=`echo "${val}" | sed -e "s/^[^,]*,[^,]*,\(.*\)/\1/"`
 				else
 					opns=""
@@ -98,7 +99,7 @@ function load_card_modules {
 						let "hfcports = ${hfcports} + ${hfcmulti[${nr}]}"
 						IFS=$','
 						for li in ${opns}; do
-							hfcmulti[${nr}]=$(echo "obase=10;2^(${!li}-1)+${hfcmulti[${nr}]}" | bc)
+							hfcmulti[${nr}]=$(echo "obase=10;2^(${!li}-1)+${hfcmulti[${nr}]}" | ${BC})
 						done
 						IFS=$'\n'
 						;;
@@ -162,7 +163,7 @@ function load_card_modules {
 				
 				IFS=$','
 				for li in ${opt}; do
-					protocol[${port}]=$(echo "obase=10;2^(${!li}-1)+${protocol[${port}]}" | bc)
+					protocol[${port}]=$(echo "obase=10;2^(${!li}-1)+${protocol[${port}]}" | ${BC})
 				done
 				IFS=$'\n'
 				;;
@@ -200,13 +201,13 @@ function load_card_modules {
 			hfcmulti_layer="layermask="
 			while [ ! -z ${hfcmulti[${card_index}]} ];
 			do
-				hfcmulti_type="${hfcmulti_type}$(echo "obase=16;\"0x\";${hfcmulti[${card_index}]}" | bc ),"
+				hfcmulti_type="${hfcmulti_type}$(echo "obase=16;\"0x\";${hfcmulti[${card_index}]}" | ${BC} ),"
 				let "card_index = ${card_index} + 1"
 			done
 			while [ ${hfcports} -gt 0 ];
 			do
 				if [ ! -z ${protocol[${port_index}]} ]; then
-					hfcmulti_prot="${hfcmulti_prot}$(echo "obase=16;\"0x\";${protocol[${port_index}]}" | bc),"
+					hfcmulti_prot="${hfcmulti_prot}$(echo "obase=16;\"0x\";${protocol[${port_index}]}" | ${BC}),"
 				else
 					hfcmulti_prot="${hfcmulti_prot}0x2,"
 				fi
@@ -246,7 +247,7 @@ function load_card_modules {
 	# MODPROBE COMMAND FOR _NON_ hfcmulti CARD
 			other_cmd="modprobe --ignore-install ${other_card[${card_index}]}"
 			if [ ! -z ${protocol[${port_index}]} ]; then
-				other_prot="protocol=$(echo "obase=16;\"0x\";${protocol[${port_index}]}" | bc),"
+				other_prot="protocol=$(echo "obase=16;\"0x\";${protocol[${port_index}]}" | ${BC}),"
 			else
 				other_prot="protocol=0x2,"
 			fi
@@ -262,7 +263,7 @@ function load_card_modules {
 			while [ "${other_card[${card_index}]}" == "${other_card[${prev}]}" ];
 			do
 				if [ ! -z ${protocol[${port_index}]} ]; then
-					other_prot="${other_prot}$(echo "obase=16;\"0x\";${protocol[${port_index}]}" | bc),"
+					other_prot="${other_prot}$(echo "obase=16;\"0x\";${protocol[${port_index}]}" | ${BC}),"
 				else
 					other_prot="${other_prot}0x2,"
 				fi

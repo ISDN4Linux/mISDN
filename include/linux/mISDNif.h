@@ -1,4 +1,4 @@
-/* $Id: mISDNif.h,v 1.37 2006/05/30 14:35:25 keil Exp $
+/* $Id: mISDNif.h,v 1.38 2006/06/01 11:02:10 crich Exp $
  *
  */
 
@@ -19,12 +19,12 @@
  *              - changed if any interface is extended but backwards compatible
  *
  */
-#define	MISDN_MAJOR_VERSION	3
+#define	MISDN_MAJOR_VERSION	4
 #define	MISDN_MINOR_VERSION	0
 #define	MISDN_VERSION		((MISDN_MAJOR_VERSION<<16) | MISDN_MINOR_VERSION)
 
-#define MISDN_REVISION		"$Revision: 1.37 $"
-#define MISDN_DATE		"$Date: 2006/05/30 14:35:25 $"
+#define MISDN_REVISION		"$Revision: 1.38 $"
+#define MISDN_DATE		"$Date: 2006/06/01 11:02:10 $"
 
 /* collect some statistics about the message queues */
 #define MISDN_MSG_STATS
@@ -401,7 +401,6 @@
 
 #define ISDN_PID_L2_DF_PTP		0x00100000
 #define ISDN_PID_L2_DF_MULT_TEI		0x00200000
-#define ISDN_PID_L2_DF_WINSIZE7		0x00400000
 #define	ISDN_PID_L3_DF_PTP		0x00100000
 #define ISDN_PID_L3_DF_EXTCID		0x00200000
 #define ISDN_PID_L3_DF_CRLEN2		0x00400000

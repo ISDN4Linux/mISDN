@@ -21,7 +21,8 @@ MISDN_SRC=$(MISDNDIR)/drivers/isdn/hardware/mISDN
 # USER CONFIGS END
 ########################################
 
-CONFIGS+=CONFIG_MISDN_DRV=m CONFIG_MISDN_DSP=m 
+CONFIGS+=CONFIG_MISDN_DRV=m 
+CONFIG_MISDN_DSP=m 
 CONFIGS+=CONFIG_MISDN_HFCMULTI=m 
 CONFIGS+=CONFIG_MISDN_HFCPCI=m
 CONFIGS+=CONFIG_MISDN_HFCUSB=m
@@ -63,15 +64,7 @@ install: all
 
 test_old_misdn:
 	@if echo -ne "#include <linux/mISDNif.h>" | gcc -C -E - 2>/dev/null 1>/dev/null  ; then \
-		if ! echo -ne "#include <linux/mISDNif.h>\n#ifndef FLG_MSG_DOWN\n#error old mISDNif.h\n#endif\n" | gcc -C -E - 2>/dev/null 1>/dev/null ; then \
-			echo -ne "\n!!You should remove the following files:\n\n$(LINUX)/include/linux/mISDNif.h\n$(LINUX)/include/linux/isdn_compat.h\n/usr/include/linux/mISDNif.h\n/usr/include/linux/isdn_compat.h\n\nIn order to upgrade to the mqueue branch\n\n"; \
-			echo -ne "I can do that for you, just type: make force\n\n" ; \
-			exit 1; \
-		fi ;\
-	fi
-
-	@if echo -ne "#include <linux/mISDNif.h>" | gcc -C -E - 2>/dev/null 1>/dev/null  ; then \
-		if ! echo -ne "#include <linux/mISDNif.h>\n#ifndef ISDN_PID_L2_DF_WINSIZE7\n#error old mISDNif.h\n#endif\n" | gcc -C -E - 2>/dev/null 1>/dev/null ; then \
+		if ! echo -ne "#include <linux/mISDNif.h>\n#if MISDN_MAJOR_VERSION < 4\n#error old mISDNif.h\n#endif\n" | gcc -C -E - 2>/dev/null 1>/dev/null ; then \
 			echo -ne "\n!!You should remove the following files:\n\n$(LINUX)/include/linux/mISDNif.h\n$(LINUX)/include/linux/isdn_compat.h\n/usr/include/linux/mISDNif.h\n/usr/include/linux/isdn_compat.h\n\nIn order to upgrade to the mqueue branch\n\n"; \
 			echo -ne "I can do that for you, just type: make force\n\n" ; \
 			exit 1; \

@@ -1,4 +1,4 @@
-/* $Id: l3_udss1.c,v 1.37 2006/05/31 02:25:52 crich Exp $
+/* $Id: l3_udss1.c,v 1.38 2006/06/01 11:02:10 crich Exp $
  *
  * EURO/DSS1 D-channel protocol
  *
@@ -24,7 +24,7 @@ static int debug = 0;
 static mISDNobject_t u_dss1;
 
 
-const char *dss1_revision = "$Revision: 1.37 $";
+const char *dss1_revision = "$Revision: 1.38 $";
 
 
 static int comp_required[] = {1,2,3,5,6,7,9,10,11,14,15,-1};
@@ -681,6 +681,7 @@ l3dss1_get_channel_id(l3_process_t *pc, struct sk_buff *skb) {
 		if (test_bit(FLG_EXTCID, &pc->l3->Flag)) {
 			if (*p != 1) {
 				pc->bc = 1;
+				pc->real_bc=p[3];
 				return (0);
 			}
 		}
@@ -696,6 +697,7 @@ l3dss1_get_channel_id(l3_process_t *pc, struct sk_buff *skb) {
 			return (-3);
 		}
 		pc->bc = *p & 3;
+		pc->real_bc=pc->bc;
 	} else
 		return(-1);
 	return(0);
@@ -1693,10 +1695,11 @@ l3dss1_resume_rej(l3_process_t *pc, u_char pr, void *arg)
 static void
 l3dss1_global_restart(l3_process_t *pc, u_char pr, void *arg)
 {
-	u_char		*p, ri, ch = 0, chan = 0;
+	u_char		*p=NULL, *cp=NULL, ri, ch = 0, chan = 0, chan_len=0;
 	struct sk_buff	*skb = arg;
 	Q931_info_t	*qi = (Q931_info_t *)skb->data;
 	l3_process_t	*up, *n;
+	int i=0;
 
 //	newl3state(pc, 2);
 	L3DelTimer(&pc->timer);
@@ -1713,16 +1716,25 @@ l3dss1_global_restart(l3_process_t *pc, u_char pr, void *arg)
 	if (qi->channel_id.off) {
 		p = skb->data;
 		p += L3_EXTRA_SIZE + qi->channel_id.off;
+		cp=p;
 		p++;
-		chan = p[1] & 3;
-		ch = p[1];
+		chan_len=p[0];
+
+		if (chan_len==1) {
+			chan = p[1] & 0x3;
+			ch = p[1];
+		} else {
+			chan = p[3];
+			ch = p[1];
+		}
+		
 		if (pc->l3->debug)
 			l3_debug(pc->l3, "Restart for channel %d", chan);
 	}
 	list_for_each_entry_safe(up, n, &pc->l3->plist, list) {
 		if ((ri & 7) == 7)
 			dss1man(up, CC_RESTART | REQUEST, NULL);
-		else if (up->bc == chan) {
+		else if (up->real_bc == chan) {
 			mISDN_l3up(up, CC_RESTART | REQUEST, NULL);
 
 			l3_debug(up->l3, "Resetting channel\n");
@@ -1730,13 +1742,31 @@ l3dss1_global_restart(l3_process_t *pc, u_char pr, void *arg)
 		}
 	}
 	dev_kfree_skb(skb);
-	skb = MsgStart(pc, MT_RESTART_ACKNOWLEDGE, chan ? 6 : 3);
-	p = skb_put(skb, chan ? 6 : 3);
-	if (chan) {
-		*p++ = IE_CHANNEL_ID;
-		*p++ = 1;
-		*p++ = ch | 0x80;
+	switch(chan_len) {
+	case 0:
+		skb = MsgStart(pc, MT_RESTART_ACKNOWLEDGE, 3);
+		p = skb_put(skb, 3);
+		
+		break;
+	case 1:
+		skb = MsgStart(pc, MT_RESTART_ACKNOWLEDGE, 6);
+		p = skb_put(skb, 6);
+		if (chan) {
+			*p++ = IE_CHANNEL_ID;
+			*p++ = 1;
+			*p++ = ch | 0x80;
+		}
+		break;
+	case 3:
+		skb = MsgStart(pc, MT_RESTART_ACKNOWLEDGE, 8);
+		p = skb_put(skb, 8);
+
+		/*copy channel ie*/
+		for (i=0; i<5; i++)
+			*p++ = *cp++;
+		break;
 	}
+	
 	*p++ = IE_RESTART_IND;
 	*p++ = 1;
 	*p++ = ri;
@@ -2680,6 +2710,9 @@ dss1_fromdown(layer3_t *l3, struct sk_buff *skb, mISDN_head_t *hh)
 			 * if setup has not been made and a message type
 			 * (except MT_SETUP and RELEASE_COMPLETE) is received,
 			 * we must send MT_RELEASE_COMPLETE cause 81 */
+			
+			printk("We got Message with Invalid Callref\n");
+			
 			if ((proc = new_l3_process(l3, qi->cr, N303, MISDN_ID_ANY))) {
 				l3dss1_msg_without_setup(proc,
 					CAUSE_INVALID_CALLREF);
