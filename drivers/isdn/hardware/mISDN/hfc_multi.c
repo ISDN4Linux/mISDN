@@ -124,7 +124,7 @@ static void ph_state_change(channel_t *ch);
 
 extern const char *CardType[];
 
-static const char *hfcmulti_revision = "$Revision: 1.41 $";
+static const char *hfcmulti_revision = "$Revision: 1.42 $";
 
 static int HFC_cnt, HFC_idx;
 
@@ -202,7 +202,7 @@ static const PCI_ENTRY id_list[] =
 	{0x10B5, CCAG_VID, 0x9030, 0x3136, VENDOR_CCD,
 	 "HFC-4S PCIBridgeEval", 4, 0, 0},      // PLX PCI-Bridge
 	{CCAG_VID, CCAG_VID, HFC4S_ID, 0xB566, VENDOR_CCD,
-	 "HFC-2S Beronet Card", 2, 1, 2},
+	 "HFC-2S Beronet Card", 2, 1, 3},
 	{0, 0, 0, 0, NULL, NULL, 0, 0, 0},
 };
 
@@ -659,6 +659,44 @@ hfcmulti_leds(hfc_multi_t *hc)
 		HFC_outb(hc, R_GPIO_OUT1,
 			((led[0]&1)<<0) | ((led[1]&1)<<1) |
 			((led[2]&1)<<2) | ((led[3]&1)<<3));
+		break;
+
+		case 3:
+		/* red blinking = PH_DEACTIVATE
+		   red steady = PH_ACTIVATE
+		   green flashing = fifo activity
+		*/
+		for(i=0;i<2;i++) {
+			state = 0;
+			active = -1;
+			dch = hc->chan[(i<<2)|2].ch;
+			if (dch && test_bit(FLG_DCHANNEL, &dch->Flags)) {
+				state = dch->state;
+				active = test_bit(HFC_CFG_NTMODE, &hc->chan[dch->channel].cfg)?3:7;
+			}
+			if (state) {
+				if (state==active) {
+					if (hc->activity[i]) {
+						led[i] = 1; /* led green */
+						hc->activity[i] = 0;
+					} else
+						led[i] = 2; /* led red */
+				} else if (hc->ledcount>>11)
+					led[i] = 2; /* led red */
+				else
+					led[i] = 0; /* led off */
+			} else
+				led[i] = 0; /* led off */
+		}
+
+	//	printk("leds %d %d\n", led[0], led[1]);
+	//LEDME
+
+		HFC_outb(hc, R_GPIO_EN1,
+			((led[0]>0)<<0) | ((led[1]>0)<<1) );
+		HFC_outb(hc, R_GPIO_OUT1,
+			((led[0]&1)<<0) | ((led[1]&1)<<1) );
+
 		break;
 	}
 }

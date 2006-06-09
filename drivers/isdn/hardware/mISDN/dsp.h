@@ -1,4 +1,4 @@
-/* $Id: dsp.h,v 1.9 2006/05/23 08:10:59 crich Exp $
+/* $Id: dsp.h,v 1.10 2006/06/09 08:41:26 crich Exp $
  *
  * Audio support data for ISDN4Linux.
  *
@@ -48,6 +48,13 @@
 //#include "dsp_mec2.h"
 //#include "dsp_kb1ec.h"
 #include "dsp_mg2ec.h"
+
+
+
+/*
+*  uncomment this one to cancel echo more aggressive
+*/
+//#define AGGRESSIVE_SUPPRESSOR
 
 extern int dsp_options;
 extern int dsp_debug;
