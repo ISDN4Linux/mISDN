@@ -124,7 +124,7 @@ static void ph_state_change(channel_t *ch);
 
 extern const char *CardType[];
 
-static const char *hfcmulti_revision = "$Revision: 1.42 $";
+static const char *hfcmulti_revision = "$Revision: 1.43 $";
 
 static int HFC_cnt, HFC_idx;
 
@@ -508,6 +508,7 @@ init_chip(hfc_multi_t *hc)
 		break;
 
 		case 2: /* HFC-4S OEM */
+		case 3:
 		HFC_outb(hc, R_GPIO_SEL, 0xf0);
 		HFC_outb(hc, R_GPIO_EN1, 0xff);
 		HFC_outb(hc, R_GPIO_OUT1, 0x00);
@@ -693,9 +694,9 @@ hfcmulti_leds(hfc_multi_t *hc)
 	//LEDME
 
 		HFC_outb(hc, R_GPIO_EN1,
-			((led[0]>0)<<0) | ((led[1]>0)<<1) );
+			((led[0]>0)<<2) | ((led[1]>0)<<3) );
 		HFC_outb(hc, R_GPIO_OUT1,
-			((led[0]&1)<<0) | ((led[1]&1)<<1) );
+			((led[0]&1)<<2) | ((led[1]&1)<<3) );
 
 		break;
 	}
