@@ -44,7 +44,7 @@ INSMOD=insmod
 LSPCI=lspci
 LSUSB=`which lsusb 2> /dev/null`
 MKNOD=mknod
-BC=/usr/bin/bc
+BC=`which bc 2> /dev/null`
 
 # HFC 8/4 (S0) Options
 master_clock=17
