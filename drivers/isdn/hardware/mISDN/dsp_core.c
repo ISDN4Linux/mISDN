@@ -1,4 +1,4 @@
-/* $Id: dsp_core.c,v 1.17 2006/05/23 08:10:59 crich Exp $
+/* $Id: dsp_core.c,v 1.18 2006/06/21 13:25:46 crich Exp $
  *
  * Author       Andreas Eversberg (jolly@jolly.de)
  * Based on source code structure by
@@ -169,7 +169,7 @@ There are three things that need to transmit data to card:
  
  */
 
-const char *dsp_revision = "$Revision: 1.17 $";
+const char *dsp_revision = "$Revision: 1.18 $";
 
 #include <linux/delay.h>
 #include <linux/config.h>
@@ -435,13 +435,34 @@ dsp_from_up(mISDNinstance_t *inst, struct sk_buff *skb)
 			if (skb->len < 1)
 				return(-EINVAL);
 			
-			/* send data to tx-buffer (if no tone is played) */
-			spin_lock_irqsave(&dsp_obj.lock, flags);
-			if (!dsp->tone.tone)
-				dsp_cmx_transmit(dsp, skb);
-			spin_unlock_irqrestore(&dsp_obj.lock, flags);
+			if (!dsp->conf_id) {
+				if (dsp->tx_volume)
+			                dsp_change_volume(skb, dsp->tx_volume);
+				/* cancel echo */
+				if (dsp->cancel_enable)
+					dsp_cancel_tx(dsp, skb->data, skb->len);
+				/* crypt */
+				if (dsp->bf_enable)
+					dsp_bf_encrypt(dsp, skb->data, skb->len);
 			
-			dev_kfree_skb(skb);
+				/* send packet */
+				if (mISDN_queue_down(&dsp->inst, 0, skb)) {
+					dev_kfree_skb(skb);
+					printk(KERN_ERR "%s: failed to send tx-packet\n", __FUNCTION__);
+
+					return (-EIO);
+				}
+
+			} else {
+				/* send data to tx-buffer (if no tone is played) */
+				spin_lock_irqsave(&dsp_obj.lock, flags);
+				if (!dsp->tone.tone) {
+					dsp_cmx_transmit(dsp, skb);
+				} 
+				spin_unlock_irqrestore(&dsp_obj.lock, flags);
+
+				dev_kfree_skb(skb);
+			}
 			break;
 		case PH_CONTROL | REQUEST:
 			
@@ -540,13 +561,17 @@ dsp_from_down(mISDNinstance_t *inst,  struct sk_buff *skb)
 			/* change volume if requested */
 			if (dsp->rx_volume)
 				dsp_change_volume(skb, dsp->rx_volume);
-			/* we need to process receive data if software */
-			spin_lock_irqsave(&dsp_obj.lock, flags);
-			if (dsp->pcm_slot_tx<0 && dsp->pcm_slot_rx<0) {
-				/* process data from card at cmx */
-				dsp_cmx_receive(dsp, skb);
+
+			if (dsp->conf_id) {
+				/* we need to process receive data if software */
+				spin_lock_irqsave(&dsp_obj.lock, flags);
+				if (dsp->pcm_slot_tx<0 && dsp->pcm_slot_rx<0) {
+					/* process data from card at cmx */
+					dsp_cmx_receive(dsp, skb);
+				}
+				spin_unlock_irqrestore(&dsp_obj.lock, flags);
 			}
-			spin_unlock_irqrestore(&dsp_obj.lock, flags);
+
 			if (dsp->rx_disabled) {
 				/* if receive is not allowed */
 				dev_kfree_skb(skb);
