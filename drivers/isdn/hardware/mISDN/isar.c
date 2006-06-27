@@ -1,4 +1,4 @@
-/* $Id: isar.c,v 1.21 2006/03/06 12:52:07 keil Exp $
+/* $Id: isar.c,v 1.22 2006/06/27 13:24:07 keil Exp $
  *
  * isar.c   ISAR (Siemens PSB 7110) specific routines
  *
@@ -20,7 +20,7 @@
 
 #define MIN(a,b) ((a<b)?a:b)
 
-static char *ISAR_revision = "$Revision: 1.21 $";
+static char *ISAR_revision = "$Revision: 1.22 $";
 
 const u_char faxmodulation_s[] = "3,24,48,72,73,74,96,97,98,121,122,145,146";
 const u_char faxmodulation[] = {3,24,48,72,73,74,96,97,98,121,122,145,146};
@@ -1656,7 +1656,8 @@ isar_down(mISDNinstance_t *inst, struct sk_buff *skb)
 		spin_unlock_irqrestore(inst->hwlock, flags);
 		skb_trim(skb, 0);
 		if (hh->prim != (PH_CONTROL | REQUEST))
-			ret = mISDN_queueup_newhead(inst, 0, hh->prim | CONFIRM, 0, skb);
+			if (!mISDN_queueup_newhead(inst, 0, hh->prim | CONFIRM, 0, skb))
+				return(0);
 	} else if (hh->prim == (PH_CONTROL | REQUEST)) {
 		int  *val;
 		int  len;

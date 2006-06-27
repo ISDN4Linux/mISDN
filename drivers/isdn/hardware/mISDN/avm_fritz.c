@@ -1,4 +1,4 @@
-/* $Id: avm_fritz.c,v 1.39 2006/05/08 15:59:39 crich Exp $
+/* $Id: avm_fritz.c,v 1.40 2006/06/27 13:24:07 keil Exp $
  *
  * fritz_pci.c    low level stuff for AVM Fritz!PCI and ISA PnP isdn cards
  *              Thanks to AVM, Berlin for informations
@@ -23,7 +23,7 @@
 #include "debug.h"
 
 
-static const char *avm_fritz_rev = "$Revision: 1.39 $";
+static const char *avm_fritz_rev = "$Revision: 1.40 $";
 
 enum {
 	AVM_FRITZ_PCI,
@@ -804,7 +804,8 @@ hdlc_down(mISDNinstance_t *inst, struct sk_buff *skb)
 		spin_unlock_irqrestore(inst->hwlock, flags);
 		skb_trim(skb, 0);
 		if (hh->prim != (PH_CONTROL | REQUEST))
-			ret = mISDN_queueup_newhead(inst, 0, hh->prim | CONFIRM, 0, skb);
+			if (!mISDN_queueup_newhead(inst, 0, hh->prim | CONFIRM, 0, skb))
+				return(0);
 	} else {
 		printk(KERN_WARNING "hdlc_down unknown prim(%x)\n", hh->prim);
 		ret = -EINVAL;
