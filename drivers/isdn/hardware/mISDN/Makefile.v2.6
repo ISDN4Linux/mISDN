@@ -29,6 +29,10 @@ ifdef CONFIG_MISDN_AVM_FRITZ
 obj-$(CONFIG_MISDN_DRV) += avmfritz.o
 endif
 
+ifdef CONFIG_MISDN_NETJET
+obj-$(CONFIG_MISDN_DRV) += netjetpci.o
+endif
+
 ifdef CONFIG_MISDN_HFCPCI
 obj-$(CONFIG_MISDN_DRV) += hfcpci.o
 endif
@@ -74,6 +78,7 @@ endif
 
 sedlfax-objs := sedl_fax.o isar.o
 avmfritz-objs := avm_fritz.o
+netjetpci-objs := netjet.o
 hfcpci-objs := hfc_pci.o
 hfcsusb-objs := hfcs_usb.o
 hfcsmini-objs := hfcs_mini.o
