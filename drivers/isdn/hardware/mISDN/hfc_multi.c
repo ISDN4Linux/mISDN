@@ -124,7 +124,7 @@ static void ph_state_change(channel_t *ch);
 
 extern const char *CardType[];
 
-static const char *hfcmulti_revision = "$Revision: 1.44 $";
+static const char *hfcmulti_revision = "$Revision: 1.45 $";
 
 static int HFC_cnt, HFC_idx;
 
@@ -228,6 +228,15 @@ MODULE_AUTHOR("Andreas Eversberg");
 #ifdef MODULE_LICENSE
 MODULE_LICENSE("GPL");
 #endif
+#ifdef OLD_MODULE_PARAM
+MODULE_PARM(debug, "1i");
+MODULE_PARM(poll, "1i");
+#define MODULE_PARM_T   "1-4i"
+MODULE_PARM(protocol, MODULE_PARM_T);
+MODULE_PARM(layermask, MODULE_PARM_T);
+MODULE_PARM(type, MODULE_PARM_T);
+MODULE_PARM(pcm, MODULE_PARM_T);
+#else
 module_param(debug, uint, S_IRUGO | S_IWUSR);
 module_param(poll, uint, S_IRUGO | S_IWUSR);
 
@@ -244,7 +253,7 @@ module_param_array(pcm, uint, NULL, S_IRUGO | S_IWUSR);
 module_param_array(protocol, uint, NULL, S_IRUGO | S_IWUSR);
 module_param_array(layermask, uint, NULL, S_IRUGO | S_IWUSR);
 #endif
-
+#endif
 #endif
 
 

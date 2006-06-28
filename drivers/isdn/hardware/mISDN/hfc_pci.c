@@ -1,4 +1,4 @@
-/* $Id: hfc_pci.c,v 1.45 2006/03/23 13:11:43 keil Exp $
+/* $Id: hfc_pci.c,v 1.46 2006/06/28 18:03:52 keil Exp $
 
  * hfc_pci.c     low level driver for CCD's hfc-pci based cards
  *
@@ -40,7 +40,7 @@
 
 extern const char *CardType[];
 
-static const char *hfcpci_revision = "$Revision: 1.45 $";
+static const char *hfcpci_revision = "$Revision: 1.46 $";
 
 /* table entry in the PCI devices list */
 typedef struct {
@@ -1813,6 +1813,12 @@ MODULE_AUTHOR("Karsten Keil");
 #ifdef MODULE_LICENSE
 MODULE_LICENSE("GPL");
 #endif
+#ifdef OLD_MODULE_PARAM
+MODULE_PARM(debug, "1i");
+#define MODULE_PARM_T   "1-4i"
+MODULE_PARM(protocol, MODULE_PARM_T);
+MODULE_PARM(layermask, MODULE_PARM_T);
+#else
 module_param (debug, uint, 0);
 MODULE_PARM_DESC (debug, "hfcpci debug mask");
 #ifdef OLD_MODULE_PARAM_ARRAY
@@ -1853,6 +1859,7 @@ module_param_array(layermask, uint, layermask_cnt, 0);
 module_param_array(layermask, uint, NULL, 0);
 #endif
 MODULE_PARM_DESC(layermask, "hfcpci layer mask");
+#endif
 #endif
 
 static char HFCName[] = "HFC_PCI";

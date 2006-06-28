@@ -91,6 +91,14 @@ typedef struct wait_queue *wait_queue_head_t;
 #undef	OLD_PCI_REGISTER_DRIVER
 #endif
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,8)
+#define __ATTR(_name,_mode,_show,_store) { \
+	.attr = {.name = __stringify(_name), .mode = _mode, .owner = THIS_MODULE },	\
+	.show   = _show,								\
+	.store  = _store,								\
+}
+#endif
+
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,11)
 #define MODULE_MKOBJ_POINTER
 #endif
@@ -100,6 +108,7 @@ typedef struct wait_queue *wait_queue_head_t;
 #endif
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,13)
+#define OLD_MODULE_PARAM
 /* udev sysfs stuff */
 #define CLASS_WITHOUT_OWNER
 #endif

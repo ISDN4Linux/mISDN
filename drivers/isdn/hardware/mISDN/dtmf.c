@@ -1,4 +1,4 @@
-/* $Id: dtmf.c,v 1.15 2006/03/23 13:11:43 keil Exp $
+/* $Id: dtmf.c,v 1.16 2006/06/28 18:03:52 keil Exp $
  *
  * Linux ISDN subsystem, DTMF tone module
  *
@@ -46,7 +46,7 @@ static u_int debug = 0;
 
 static mISDNobject_t dtmf_obj;
 
-static char *mISDN_dtmf_revision = "$Revision: 1.15 $";
+static char *mISDN_dtmf_revision = "$Revision: 1.16 $";
 
 /*
  * Misc. lookup-tables.
@@ -559,7 +559,11 @@ static char MName[] = "DTMF";
 
 #ifdef MODULE
 MODULE_AUTHOR("Karsten Keil");
+#ifdef OLD_MODULE_PARAM
+MODULE_PARM(debug, "1i");
+#else
 module_param (debug, uint, S_IRUGO | S_IWUSR);
+#endif
 MODULE_PARM_DESC (debug, "dtmf debug mask");
 #ifdef MODULE_LICENSE
 MODULE_LICENSE("GPL");

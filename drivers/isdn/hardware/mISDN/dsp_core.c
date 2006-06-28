@@ -1,4 +1,4 @@
-/* $Id: dsp_core.c,v 1.19 2006/06/26 17:25:14 crich Exp $
+/* $Id: dsp_core.c,v 1.20 2006/06/28 18:03:52 keil Exp $
  *
  * Author       Andreas Eversberg (jolly@jolly.de)
  * Based on source code structure by
@@ -169,7 +169,7 @@ There are three things that need to transmit data to card:
  
  */
 
-const char *dsp_revision = "$Revision: 1.19 $";
+const char *dsp_revision = "$Revision: 1.20 $";
 
 #include <linux/delay.h>
 #include <linux/config.h>
@@ -192,9 +192,15 @@ int dsp_poll, dsp_tics;
 
 #ifdef MODULE
 MODULE_AUTHOR("Andreas Eversberg");
+#ifdef OLD_MODULE_PARAM
+MODULE_PARM(debug, "1i");
+MODULE_PARM(options, "1i");
+MODULE_PARM(poll, "1i");
+#else
 module_param(debug, uint, S_IRUGO | S_IWUSR);
 module_param(options, uint, S_IRUGO | S_IWUSR);
 module_param(poll, uint, S_IRUGO | S_IWUSR);
+#endif
 #ifdef MODULE_LICENSE
 MODULE_LICENSE("GPL");
 #endif

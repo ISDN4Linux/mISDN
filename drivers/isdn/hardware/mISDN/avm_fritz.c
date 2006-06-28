@@ -1,4 +1,4 @@
-/* $Id: avm_fritz.c,v 1.40 2006/06/27 13:24:07 keil Exp $
+/* $Id: avm_fritz.c,v 1.41 2006/06/28 18:03:52 keil Exp $
  *
  * fritz_pci.c    low level stuff for AVM Fritz!PCI and ISA PnP isdn cards
  *              Thanks to AVM, Berlin for informations
@@ -23,7 +23,7 @@
 #include "debug.h"
 
 
-static const char *avm_fritz_rev = "$Revision: 1.40 $";
+static const char *avm_fritz_rev = "$Revision: 1.41 $";
 
 enum {
 	AVM_FRITZ_PCI,
@@ -945,6 +945,13 @@ MODULE_AUTHOR("Karsten Keil");
 #ifdef MODULE_LICENSE
 MODULE_LICENSE("GPL");
 #endif
+
+#ifdef OLD_MODULE_PARAM
+MODULE_PARM(debug, "1i");
+#define MODULE_PARM_T   "1-4i"
+MODULE_PARM(protocol, MODULE_PARM_T);
+MODULE_PARM(layermask, MODULE_PARM_T);
+#else
 module_param(debug, uint, S_IRUGO | S_IWUSR);
 
 #ifdef OLD_MODULE_PARAM_ARRAY
@@ -954,6 +961,7 @@ module_param_array(layermask, uint, num_layermask, S_IRUGO | S_IWUSR);
 #else
 module_param_array(protocol, uint, NULL, S_IRUGO | S_IWUSR);
 module_param_array(layermask, uint, NULL, S_IRUGO | S_IWUSR);
+#endif
 #endif
 
 #endif

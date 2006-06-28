@@ -1,4 +1,4 @@
-/* $Id: layer2.c,v 1.27 2006/06/01 11:02:10 crich Exp $
+/* $Id: layer2.c,v 1.28 2006/06/28 18:03:52 keil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -10,7 +10,7 @@
 #include "helper.h"
 #include "debug.h"
 
-static char *l2_revision = "$Revision: 1.27 $";
+static char *l2_revision = "$Revision: 1.28 $";
 
 static void l2m_debug(struct FsmInst *fi, char *fmt, ...);
 
@@ -2423,7 +2423,11 @@ MODULE_AUTHOR("Karsten Keil");
 #ifdef MODULE_LICENSE
 MODULE_LICENSE("GPL");
 #endif
+#ifdef OLD_MODULE_PARAM
+MODULE_PARM(debug, "1i");
+#else
 module_param(debug, uint, S_IRUGO | S_IWUSR);
+#endif
 #endif
 
 static int

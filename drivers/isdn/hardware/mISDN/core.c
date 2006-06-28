@@ -1,4 +1,4 @@
-/* $Id: core.c,v 1.35 2006/06/09 08:41:26 crich Exp $
+/* $Id: core.c,v 1.36 2006/06/28 18:03:52 keil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -19,7 +19,7 @@
 #include <linux/smp_lock.h>
 #endif
 
-static char		*mISDN_core_revision = "$Revision: 1.35 $";
+static char		*mISDN_core_revision = "$Revision: 1.36 $";
 
 LIST_HEAD(mISDN_objectlist);
 static rwlock_t		mISDN_objects_lock = RW_LOCK_UNLOCKED;
@@ -37,7 +37,11 @@ MODULE_AUTHOR("Karsten Keil");
 #ifdef MODULE_LICENSE
 MODULE_LICENSE("GPL");
 #endif
+#ifdef OLD_MODULE_PARAM
+MODULE_PARM(debug, "1i");
+#else
 module_param (debug, uint, S_IRUGO | S_IWUSR);
+#endif
 MODULE_PARM_DESC (debug, "mISDN core debug mask");
 #endif
 

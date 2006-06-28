@@ -1,4 +1,4 @@
-/* $Id: capi.c,v 1.19 2006/03/23 13:11:43 keil Exp $
+/* $Id: capi.c,v 1.20 2006/06/28 18:03:52 keil Exp $
  *
  */
 
@@ -7,7 +7,7 @@
 #include "helper.h"
 #include "debug.h"
 
-static char *capi_revision = "$Revision: 1.19 $";
+static char *capi_revision = "$Revision: 1.20 $";
 
 static int debug = 0;
 static mISDNobject_t capi_obj;
@@ -19,7 +19,11 @@ MODULE_AUTHOR("Karsten Keil");
 #ifdef MODULE_LICENSE
 MODULE_LICENSE("GPL");
 #endif
+#ifdef OLD_MODULE_PARAM
+MODULE_PARM(debug, "1i");
+#else
 module_param(debug, uint, S_IRUGO | S_IWUSR);
+#endif
 #endif
 
 static char deb_buf[256];
