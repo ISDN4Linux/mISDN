@@ -1,4 +1,4 @@
-/* $Id: hfc_pci.c,v 1.46 2006/06/28 18:03:52 keil Exp $
+/* $Id: hfc_pci.c,v 1.47 2006/06/29 08:52:39 keil Exp $
 
  * hfc_pci.c     low level driver for CCD's hfc-pci based cards
  *
@@ -40,7 +40,7 @@
 
 extern const char *CardType[];
 
-static const char *hfcpci_revision = "$Revision: 1.46 $";
+static const char *hfcpci_revision = "$Revision: 1.47 $";
 
 /* table entry in the PCI devices list */
 typedef struct {
@@ -1800,7 +1800,6 @@ SelFreeBChannel(hfc_pci_t *hc, channel_info_t *ci)
 }
 
 #define MAX_CARDS	8
-#define MODULE_PARM_T	"1-8i"
 static int HFC_cnt;
 static uint protocol[MAX_CARDS];
 static uint layermask[MAX_CARDS];
