@@ -28,6 +28,12 @@ config MISDN_AVM_FRITZ
 	help
 	  Enable support for AVM Fritz!Card PCI and PnP.
 
+config MISDN_NETJET
+       bool "Support for NETJet cards"
+       depends on PCI
+       help
+          Enable support for Traverse Technologies' NETJet PCI cards.
+
 config MISDN_HFCPCI
 	bool "Support for HFC PCI cards"
 	depends on PCI
