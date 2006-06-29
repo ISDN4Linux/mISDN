@@ -1,4 +1,4 @@
-/* $Id: sedl_fax.c,v 1.27 2006/06/28 18:03:52 keil Exp $
+/* $Id: sedl_fax.c,v 1.28 2006/06/29 09:11:08 keil Exp $
  *
  * sedl_fax.c  low level stuff for Sedlbauer Speedfax + cards
  *
@@ -45,7 +45,7 @@
 
 extern const char *CardType[];
 
-const char *Sedlfax_revision = "$Revision: 1.27 $";
+const char *Sedlfax_revision = "$Revision: 1.28 $";
 
 const char *Sedlbauer_Types[] =
 	{"None", "speed fax+", "speed fax+ pyramid", "speed fax+ pci"};
@@ -391,12 +391,9 @@ static int init_card(sedl_fax *sf)
 
 
 #define MAX_CARDS	4
-#define MODULE_PARM_T	"1-4i"
 static int sedl_cnt;
 static mISDNobject_t	speedfax;
 static uint debug;
-static uint protocol_num;
-static uint layermask_num;
 static uint protocol[MAX_CARDS];
 static uint layermask[MAX_CARDS];
 
@@ -413,6 +410,8 @@ MODULE_PARM(layermask, MODULE_PARM_T);
 #else
 module_param (debug, uint, S_IRUGO | S_IWUSR);
 MODULE_PARM_DESC (debug, "sedlfax debug mask");
+static uint protocol_num;
+static uint layermask_num;
 #ifdef OLD_MODULE_PARAM_ARRAY
 module_param_array(protocol, uint, protocol_num, S_IRUGO | S_IWUSR);
 module_param_array(layermask, uint, layermask_num, S_IRUGO | S_IWUSR);
