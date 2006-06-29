@@ -25,9 +25,10 @@
 #define DTRACE printk
 #define DPRINT printk
 
-static const char *netjet_rev = "$Revision: 1.3 $";
+static const char *netjet_rev = "$Revision: 1.4 $";
 
 #define MAX_CARDS	4
+static int debug;
 static int netjet_cnt;
 static u_int protocol[MAX_CARDS];
 static int layermask[MAX_CARDS];
@@ -95,7 +96,6 @@ static __u16 fcstab[256] =
 #endif
 
 static mISDNobject_t netjet_mISDN;
-static int debug;
 
 enum {
 	NETJET_S_TJ300,
