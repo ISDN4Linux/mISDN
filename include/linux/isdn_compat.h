@@ -97,6 +97,7 @@ typedef struct wait_queue *wait_queue_head_t;
 	.show   = _show,								\
 	.store  = _store,								\
 }
+#define LOCAL_FCSTAB
 #endif
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,11)
