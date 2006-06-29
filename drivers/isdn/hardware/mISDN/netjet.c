@@ -25,7 +25,7 @@
 #define DTRACE printk
 #define DPRINT printk
 
-static const char *netjet_rev = "$Revision: 1.1 $";
+static const char *netjet_rev = "$Revision: 1.2 $";
 
 #define MAX_CARDS	4
 #define MODULE_PARM_T	"1-4i"
@@ -1727,7 +1727,7 @@ static int __init nj_init (void)
 {
 	int err;
 
-	printk(KERN_INFO "Traverse Tech. NETjet-S driver.\n");
+	printk(KERN_INFO "Traverse Tech. NETjet-S driver, revision %s\n", mISDN_getrev(netjet_rev));
 
 #ifdef MODULE
 	netjet_mISDN.owner = THIS_MODULE;
