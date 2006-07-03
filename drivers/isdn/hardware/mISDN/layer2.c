@@ -1,4 +1,4 @@
-/* $Id: layer2.c,v 1.28 2006/06/28 18:03:52 keil Exp $
+/* $Id: layer2.c,v 1.29 2006/07/03 12:44:37 crich Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -10,7 +10,7 @@
 #include "helper.h"
 #include "debug.h"
 
-static char *l2_revision = "$Revision: 1.28 $";
+static char *l2_revision = "$Revision: 1.29 $";
 
 static void l2m_debug(struct FsmInst *fi, char *fmt, ...);
 
@@ -242,7 +242,7 @@ static int
 l2mgr(layer2_t *l2, u_int prim, void *arg) {
 	long c = (long)arg;
 
-	printk(KERN_WARNING "l2mgr: prim %x %c\n", prim, (char)c);
+	printk(KERN_WARNING "l2mgr: addr:%x prim %x %c\n", l2->inst.id, prim, (char)c);
 	if (test_bit(FLG_LAPD, &l2->flag) &&
 		!test_bit(FLG_FIXED_TEI, &l2->flag)) {
 		struct sk_buff  *skb;
@@ -1832,7 +1832,7 @@ ph_data_indication(layer2_t *l2, mISDN_head_t *hh, struct sk_buff *skb) {
 		psapi = *datap++;
 		ptei = *datap++;
 		if ((psapi & 1) || !(ptei & 1)) {
-			printk(KERN_WARNING "l2 D-channel frame wrong EA0/EA1\n");
+			printk(KERN_WARNING "l2 D-channel addr:%x frame wrong EA0/EA1\n", l2->inst.id);
 			return(ret);
 		}
 		psapi >>= 2;
