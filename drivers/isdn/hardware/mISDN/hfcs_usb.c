@@ -1,4 +1,4 @@
-/* $Id: hfcs_usb.c,v 1.16 2006/06/28 18:03:52 keil Exp $
+/* $Id: hfcs_usb.c,v 1.17 2006/07/03 11:48:02 crich Exp $
  *
  * mISDN driver for Colognechip HFC-S USB chip
  *
@@ -39,7 +39,7 @@
 
 
 #define DRIVER_NAME "mISDN_hfcsusb"
-const char *hfcsusb_rev = "$Revision: 1.16 $";
+const char *hfcsusb_rev = "$Revision: 1.17 $";
 
 #define MAX_CARDS	8
 static int hfcsusb_cnt;
@@ -48,6 +48,7 @@ static int layermask[MAX_CARDS];
 
 static mISDNobject_t hw_mISDNObj;
 static int debug = 0x1FFFF; // 0;
+static int poll = 128;
 
 
 #ifdef MODULE
@@ -56,11 +57,13 @@ MODULE_LICENSE("GPL");
 #endif
 #ifdef OLD_MODULE_PARAM
 MODULE_PARM(debug, "1i");
+MODULE_PARM(poll, "1i");
 #define MODULE_PARM_T   "1-4i"
 MODULE_PARM(protocol, MODULE_PARM_T);
 MODULE_PARM(layermask, MODULE_PARM_T);
 #else
 module_param(debug, uint, S_IRUGO | S_IWUSR);
+module_param(poll, uint, S_IRUGO | S_IWUSR);
 
 #ifdef OLD_MODULE_PARAM_ARRAY
 static int num_protocol=0, num_layermask=0;
@@ -970,7 +973,7 @@ collect_rx_frame(usb_fifo * fifo, __u8 * data, unsigned int len, int finish)
 			}
 		}
 	} else {
-		if (ch->rx_skb->len >= TRANSP_PACKET_SIZE) {
+		if (finish || ch->rx_skb->len >= poll) {
 			/* deliver transparent data to layer2 */
 			queue_ch_frame(ch, INDICATION, MISDN_ID_ANY, ch->rx_skb);
 			ch->rx_skb = NULL;

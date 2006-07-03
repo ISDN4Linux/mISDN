@@ -66,6 +66,7 @@ ignore_pcm_frameclock=13
 #dsp defaults
 dsp_options=0
 
+poll_option=
 
 function check_asterisk {
 	if ps ax | grep -v grep | grep asterisk > /dev/null ; then asterisk -rx "stop now" ; fi
@@ -169,6 +170,7 @@ function load_card_modules {
 				;;
 			poll)
 				poll=${val}
+				poll_option=poll=${val}
 				;;
 			pcm)
 				pcm=${val}
@@ -245,7 +247,8 @@ function load_card_modules {
 			fi
 		else
 	# MODPROBE COMMAND FOR _NON_ hfcmulti CARD
-			other_cmd="modprobe --ignore-install ${other_card[${card_index}]}"
+			other_mod="${other_card[${card_index}]}"
+			other_cmd="$MODPROBE --ignore-install ${other_mod}"
 			if [ ! -z ${protocol[${port_index}]} ]; then
 				other_prot="protocol=$(echo "obase=16;\"0x\";${protocol[${port_index}]}" | ${BC}),"
 			else
@@ -256,6 +259,8 @@ function load_card_modules {
 			else
 				other_layer="layermask=0xf,"
 			fi
+			other_extra=""
+			modinfo $other_mod | egrep -q 'parm: *poll' && other_extra="$other_extra ${poll_option}"
 
 			let "prev = ${card_index}"
 			let "card_index = ${card_index} + 1"
@@ -279,7 +284,7 @@ function load_card_modules {
 			
 			other_prot="$(echo ${other_prot} | sed -e 's/^\(.*\),$/\1/')"
 			other_layer="$(echo ${other_layer} | sed -e 's/^\(.*\),$/\1/')"
-			other_cmd="${other_cmd} ${other_prot} ${other_layer}"
+			other_cmd="${other_cmd} ${other_prot} ${other_layer} ${other_extra}"
 
 			if [ -z "$1" ] ; then
 				echo "${other_cmd}"
@@ -547,7 +552,8 @@ case "$1" in
 		modprobe mISDN_l1 debug=0
 		modprobe mISDN_l2 debug=0
 		modprobe l3udss1 debug=0
-		modprobe mISDN_dsp debug=0x0 options=$dsp_options
+		modprobe mISDN_dsp debug=0x0 options=$dsp_options $poll_option
+
 		modprobe mISDN_capi
 		
 		load_card_modules $2

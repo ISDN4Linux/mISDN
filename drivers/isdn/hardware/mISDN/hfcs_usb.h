@@ -1,6 +1,6 @@
 /*
 * hfcs_usb.h, HFC-S USB mISDN driver
-* $Id: hfcs_usb.h,v 1.4 2006/03/06 12:52:07 keil Exp $ 
+* $Id: hfcs_usb.h,v 1.5 2006/07/03 11:48:02 crich Exp $ 
 *
 */
 
@@ -98,7 +98,6 @@
 #define ISOC_PACKETS_D	8
 #define ISOC_PACKETS_B	8
 #define ISO_BUFFER_SIZE	128
-#define TRANSP_PACKET_SIZE 0
 
 /* defines how much ISO packets are handled in one URB */
 static int iso_packets[8] =
