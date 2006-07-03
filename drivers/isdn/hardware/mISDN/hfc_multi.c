@@ -124,7 +124,7 @@ static void ph_state_change(channel_t *ch);
 
 extern const char *CardType[];
 
-static const char *hfcmulti_revision = "$Revision: 1.45 $";
+static const char *hfcmulti_revision = "$Revision: 1.46 $";
 
 static int HFC_cnt, HFC_idx;
 
@@ -231,7 +231,7 @@ MODULE_LICENSE("GPL");
 #ifdef OLD_MODULE_PARAM
 MODULE_PARM(debug, "1i");
 MODULE_PARM(poll, "1i");
-#define MODULE_PARM_T   "1-4i"
+#define MODULE_PARM_T   "1-128i"
 MODULE_PARM(protocol, MODULE_PARM_T);
 MODULE_PARM(layermask, MODULE_PARM_T);
 MODULE_PARM(type, MODULE_PARM_T);
