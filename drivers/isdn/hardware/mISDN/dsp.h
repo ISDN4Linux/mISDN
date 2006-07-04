@@ -1,4 +1,4 @@
-/* $Id: dsp.h,v 1.10 2006/06/09 08:41:26 crich Exp $
+/* $Id: dsp.h,v 1.11 2006/07/04 13:38:45 crich Exp $
  *
  * Audio support data for ISDN4Linux.
  *
@@ -134,6 +134,7 @@ extern mISDNobject_t dsp_obj;
 #define ECHOCAN_BUFLEN 4*128
 
 typedef struct _dtmf_t {
+	int 		treshold; /* above this is dtmf (square of) */
 	int		software; /* dtmf uses software decoding */
 	int 		hardware; /* dtmf uses hardware decoding */
 	int 		size; /* number of bytes in buffer */

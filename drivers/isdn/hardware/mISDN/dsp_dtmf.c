@@ -1,4 +1,4 @@
-/* $Id: dsp_dtmf.c,v 1.5 2006/03/06 12:52:07 keil Exp $
+/* $Id: dsp_dtmf.c,v 1.6 2006/07/04 13:38:45 crich Exp $
  *
  * DTMF decoder.
  *
@@ -16,7 +16,6 @@
 #include "dsp.h"
 
 #define NCOEFF            8     /* number of frequencies to be analyzed */
-#define DTMF_TRESH     200000L /* above this is dtmf (square of)*/
 
 /* For DTMF recognition:
  * 2 * cos(2 * PI * k / N) precalculated for all k
@@ -160,7 +159,7 @@ again:
 	for (i = 0; i < NCOEFF; i++) {
 		if (result[i] < 0)
 			result[i] = 0;
-		if (result[i] > DTMF_TRESH) {
+		if (result[i] > dsp->dtmf.treshold) {
 			if (result[i] > tresh)
 				tresh = result[i];
 		}

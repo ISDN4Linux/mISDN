@@ -1,4 +1,4 @@
-/* $Id: dsp_core.c,v 1.20 2006/06/28 18:03:52 keil Exp $
+/* $Id: dsp_core.c,v 1.21 2006/07/04 13:38:45 crich Exp $
  *
  * Author       Andreas Eversberg (jolly@jolly.de)
  * Based on source code structure by
@@ -169,7 +169,7 @@ There are three things that need to transmit data to card:
  
  */
 
-const char *dsp_revision = "$Revision: 1.20 $";
+const char *dsp_revision = "$Revision: 1.21 $";
 
 #include <linux/delay.h>
 #include <linux/config.h>
@@ -190,16 +190,20 @@ int dsp_options;
 static int poll = 0;
 int dsp_poll, dsp_tics;
 
+int dtmftreshold=200L;
+
 #ifdef MODULE
 MODULE_AUTHOR("Andreas Eversberg");
 #ifdef OLD_MODULE_PARAM
 MODULE_PARM(debug, "1i");
 MODULE_PARM(options, "1i");
 MODULE_PARM(poll, "1i");
+MODULE_PARM(dtmftreshold, "1i");
 #else
 module_param(debug, uint, S_IRUGO | S_IWUSR);
 module_param(options, uint, S_IRUGO | S_IWUSR);
 module_param(poll, uint, S_IRUGO | S_IWUSR);
+module_param(dtmftreshold, uint, S_IRUGO | S_IWUSR);
 #endif
 #ifdef MODULE_LICENSE
 MODULE_LICENSE("GPL");
@@ -230,6 +234,14 @@ dsp_control_req(dsp_t *dsp, mISDN_head_t *hh, struct sk_buff *skb)
 		case DTMF_TONE_START: /* turn on DTMF */
 			if (dsp_debug & DEBUG_DSP_CORE)
 				printk(KERN_DEBUG "%s: start dtmf\n", __FUNCTION__);
+#if 0
+			if (len == sizeof(int)) {
+				printk(KERN_NOTICE "changing DTMF Threshold to %d\n",*((int*)data));
+				dsp->dtmf.treshold=(*(int*)data)*10000;
+			}
+#endif
+			printk(KERN_NOTICE " --> dtmftreshold=%d\n",dsp->dtmf.treshold);
+
 			dsp_dtmf_goertzel_init(dsp);
 			/* checking for hardware capability */
 			if (dsp->features.hfc_dtmf) {
@@ -831,6 +843,14 @@ new_dsp(mISDNstack_t *st, mISDN_pid_t *pid)
 	ndsp->feature_tl.function = (void *)dsp_feat;
 	ndsp->feature_tl.data = (long) ndsp;
 	ndsp->feature_state = FEAT_STATE_INIT;
+
+	if (dtmftreshold < 20 || dtmftreshold> 500) {
+		dtmftreshold=200;
+	}
+	ndsp->dtmf.treshold=dtmftreshold*10000;
+	printk(KERN_NOTICE " Setting DTMF_TRESH to %d\n",ndsp->dtmf.treshold);
+	
+
 	spin_lock_init(&ndsp->feature_lock);
 	init_timer(&ndsp->feature_tl);
 	if (!(dsp_options & DSP_OPT_NOHARDWARE)) {
@@ -929,7 +949,7 @@ static int dsp_init(void)
 	dsp_debug = debug;
 
 	/* display revision */
-	printk(KERN_INFO "mISDN_dsp: Audio DSP  Rev. %s (debug=0x%x) EchoCancellor %s\n", mISDN_getrev(dsp_revision), debug, EC_TYPE);
+	printk(KERN_INFO "mISDN_dsp: Audio DSP  Rev. %s (debug=0x%x) EchoCancellor %s dtmftreshold(%d)\n", mISDN_getrev(dsp_revision), debug, EC_TYPE, dtmftreshold);
 
 	/* set packet size */
 	if (poll == 0) {

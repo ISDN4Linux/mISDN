@@ -67,6 +67,8 @@ ignore_pcm_frameclock=13
 dsp_options=0
 
 poll_option=
+dtmftreshold_option=
+
 
 function check_asterisk {
 	if ps ax | grep -v grep | grep asterisk > /dev/null ; then asterisk -rx "stop now" ; fi
@@ -177,6 +179,9 @@ function load_card_modules {
 				;;
 			dsp_options)
 				export dsp_options=${val}
+				;;
+			dtmftreshold)
+				export dtmftreshold_option="dtmftreshold=${val}"
 				;;
 			debug)
 				debug=${val}
@@ -506,9 +511,14 @@ function create_misdn_init_conf {
 #	set this to 2 and you'll have software bridging instead of 
 #	hardware bridging.
 #
+# dtmftreshold=<milliseconds>
+#
+#	Here you can tune the sensitivity of the dtmf tone recognizer.
+#
 poll=128
 #pcm=1,1
 dsp_options=0
+dtmftreshold=200
 debug=0"
 
 		if [ -f ${misdn_init_conf} ]; then
@@ -552,11 +562,12 @@ case "$1" in
 		modprobe mISDN_l1 debug=0
 		modprobe mISDN_l2 debug=0
 		modprobe l3udss1 debug=0
-		modprobe mISDN_dsp debug=0x0 options=$dsp_options $poll_option
-
 		modprobe mISDN_capi
 		
 		load_card_modules $2
+		
+		echo "modprobe mISDN_dsp debug=0x0 options=$dsp_options $poll_option $dtmftreshold_option"
+		modprobe mISDN_dsp debug=0x0 options=$dsp_options $poll_option $dtmftreshold_option
 	
 		sleep 1
 		
