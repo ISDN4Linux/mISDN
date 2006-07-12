@@ -518,7 +518,7 @@ function create_misdn_init_conf {
 poll=128
 #pcm=1,1
 dsp_options=0
-dtmftreshold=200
+dtmftreshold=100
 debug=0"
 
 		if [ -f ${misdn_init_conf} ]; then
@@ -586,16 +586,20 @@ case "$1" in
 
 		check_asterisk
 
-		unload_card_modules
 		
 		for mod in $(lsmod | sed -ne '/Module/!{s/\([^ ]*\).*/\1/;p}');
 		do
 			case "${mod}" in
-				mISDN_capi | mISDN_dsp | l3udss1 | mISDN_l2 | mISDN_l1 | mISDN_isac | mISDN_core)
+				mISDN_capi | mISDN_dsp | l3udss1 | mISDN_l2 | mISDN_l1 | mISDN_isac )
 					eval "${RMMOD} ${mod}"
 					;;
 			esac
 		done
+
+		unload_card_modules
+
+		${RMMOD} mISDN_core
+
 		;;
 
 	restart|--restart)
