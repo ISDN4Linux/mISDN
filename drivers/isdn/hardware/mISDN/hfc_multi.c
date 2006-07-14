@@ -124,7 +124,7 @@ static void ph_state_change(channel_t *ch);
 
 extern const char *CardType[];
 
-static const char *hfcmulti_revision = "$Revision: 1.48 $";
+static const char *hfcmulti_revision = "$Revision: 1.49 $";
 
 static int HFC_cnt, HFC_idx;
 
@@ -2935,7 +2935,6 @@ setup_pci(hfc_multi_t *hc, struct pci_dev *pdev, int id_idx)
 static void release_ports_hw(hfc_multi_t *hc)
 {
 	u_long flags;
-	int i;
 
 	printk(KERN_INFO "release_ports_hw called type=%d\n",hc->type);
 
