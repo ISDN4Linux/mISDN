@@ -1,6 +1,6 @@
 # Makefile for the modular ISDN driver
 #
-# EXTRA_CFLAGS += -S -g
+EXTRA_CFLAGS += -ggdb
 #
 
 ifdef MINCLUDES

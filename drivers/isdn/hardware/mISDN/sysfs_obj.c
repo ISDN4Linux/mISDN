@@ -1,4 +1,4 @@
-/* $Id: sysfs_obj.c,v 1.8 2006/07/14 15:30:22 crich Exp $
+/* $Id: sysfs_obj.c,v 1.9 2006/07/14 15:48:17 crich Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -109,10 +109,10 @@ mISDN_register_sysfs_obj(mISDNobject_t *obj) {
 	if (err)
 		goto out;
 
-#ifdef SYSFS_SUPPORT
 	class_device_create_file(&obj->class_dev, &class_device_attr_id);
 	class_device_create_file(&obj->class_dev, &class_device_attr_name);
 	class_device_create_file(&obj->class_dev, &class_device_attr_refcnt);
+#ifdef SYSFS_SUPPORT
 	err = sysfs_create_group(&obj->class_dev.kobj, &BPROTO_group);
 	if (err)
 		goto out_unreg;
