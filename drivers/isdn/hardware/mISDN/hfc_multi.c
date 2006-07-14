@@ -124,7 +124,7 @@ static void ph_state_change(channel_t *ch);
 
 extern const char *CardType[];
 
-static const char *hfcmulti_revision = "$Revision: 1.47 $";
+static const char *hfcmulti_revision = "$Revision: 1.48 $";
 
 static int HFC_cnt, HFC_idx;
 
@@ -301,10 +301,12 @@ release_io_hfcmulti(hfc_multi_t *hc)
 		release_region(hc->pci_iobase, 8);
 #endif
 
+#if 1
 	if (hc->pci_dev) {
 		pci_disable_device(hc->pci_dev);
 		pci_set_drvdata(hc->pci_dev, NULL);
 	}
+#endif
 
 	if (debug & DEBUG_HFCMULTI_INIT)
 		printk(KERN_DEBUG "%s: done\n", __FUNCTION__);
@@ -2676,11 +2678,13 @@ init_card(hfc_multi_t *hc)
 	hc->hw.r_irq_ctrl = V_FIFO_IRQ;
 	disable_hwirq(hc);
 	spin_unlock_irqrestore(&hc->lock, flags);
+
 	if (request_irq(hc->pci_dev->irq, hfcmulti_interrupt, SA_SHIRQ, "HFC-multi", hc)) {
 		printk(KERN_WARNING "mISDN: Could not get interrupt %d.\n", hc->pci_dev->irq);
 		return(-EIO);
 	}
 	hc->irq = hc->pci_dev->irq;
+
 #ifdef CONFIG_PLX_PCI_BRIDGE
 	plx_acc=(u_short*)(hc->plx_membase+0x4c);
 	*plx_acc=0x41;  // enable PCI & LINT1 irq
@@ -2906,6 +2910,7 @@ setup_pci(hfc_multi_t *hc, struct pci_dev *pdev, int id_idx)
 		pci_disable_device(hc->pci_dev);
 		return (-EIO);
 	}
+
 	if (!request_region(hc->pci_iobase, 8, "hfcmulti")) {
 		printk(KERN_WARNING "HFC-multi: failed to rquest address space at 0x%04x (internal error)\n", hc->pci_iobase);
 		hc->pci_iobase = 0;
@@ -2925,77 +2930,34 @@ setup_pci(hfc_multi_t *hc, struct pci_dev *pdev, int id_idx)
 }
 
 
-/*******************************************
- * remove port or complete card from stack *
- *******************************************/
 
-static void
-release_port(hfc_multi_t *hc, int port)
+
+static void release_ports_hw(hfc_multi_t *hc)
 {
-	int	i = 0;
-	int	all = 1;
-	u_long	flags;
+	u_long flags;
+	int i;
 
-	if (debug & DEBUG_HFCMULTI_INIT)
-		printk(KERN_DEBUG "%s: entered\n", __FUNCTION__);
+	printk(KERN_INFO "release_ports_hw called type=%d\n",hc->type);
 
-	if (port >= hc->type) {
-		printk(KERN_WARNING "%s: ERROR port out of range (%d).\n", __FUNCTION__, port);
-		return;
-	}
-
-
-#ifdef HFCM_FIX_IRQS
 	spin_lock_irqsave(&hc->lock, flags);
-	disable_hwirq(hc);
-	spin_unlock_irqrestore(&hc->lock, flags);
-
-	if (hc->irq) {
-		if (debug & DEBUG_HFCMULTI_INIT)
-			printk(KERN_WARNING "%s: free irq %d\n", __FUNCTION__, hc->irq);
-		free_irq(hc->irq, hc);
-		hc->irq = 0;
-
-	}
-#endif
-
 	
-
-
-	spin_lock_irqsave(&hc->lock, flags);
-
-#ifndef HFCM_FIX_IRQS
+	/*first we disable all the hw stuff*/
 	disable_hwirq(hc);
-#endif
 
-#ifndef HFCM_FIX_IRQS
-	if (port > -1) {
-		i = 0;
-		while(i < hc->type) {
-			if (hc->created[i] && i!=port)
-				all = 0;
-			if (hc->created[i])
-				any = 1;
-			i++;
-		}
-		if (!any) {
-			printk(KERN_WARNING "%s: ERROR card has no used stacks anymore.\n", __FUNCTION__);
-			spin_unlock_irqrestore(&hc->lock,flags);
-			return;
-		}
-	}
-	if (debug & DEBUG_HFCMULTI_INIT)
-		printk(KERN_DEBUG "%s: releasing port=%d all=%d any=%d\n", __FUNCTION__, port, all, any);
-
-	if (port>-1 && !hc->created[port]) {
-		printk(KERN_WARNING "%s: ERROR given stack is not used by card (port=%d).\n", __FUNCTION__, port);
-		spin_unlock_irqrestore(&hc->lock,flags);
-		return;
-	}
-
+	spin_unlock_irqrestore(&hc->lock, flags);
+	
+	udelay(1000);
+	
 	/* disable D-channels & B-channels */
 	if (debug & DEBUG_HFCMULTI_INIT)
 		printk(KERN_DEBUG "%s: disable all channels (d and b)\n", __FUNCTION__);
+
+
+	/* dimm leds */
+	if (hc->leds)
+		hfcmulti_leds(hc);
+
+#if 0
 	if (hc->type == 1) {
 		hc->chan[16].slot_tx = -1;
 		hc->chan[16].slot_rx = -1;
@@ -3012,7 +2974,6 @@ release_port(hfc_multi_t *hc, int port)
 	} else {
 		i = 0;
 		while(i < hc->type) {
-			if (all || port==i)
 			if (hc->created[i]) {
 				hc->chan[(i<<2)+2].slot_tx = -1;
 				hc->chan[(i<<2)+2].slot_rx = -1;
@@ -3030,104 +2991,112 @@ release_port(hfc_multi_t *hc, int port)
 			i++;
 		}
 	}
+#endif
 
-	i = 0;
-	while(i < 32) {
-		if (hc->chan[i].ch && test_bit(FLG_DCHANNEL, &hc->chan[i].ch->Flags) &&
-			hc->created[hc->chan[i].port] &&
-			hc->chan[i].ch->timer.function != NULL &&
-			(all || port==i)) {
+	release_io_hfcmulti(hc);
+
+	if (hc->irq) {
+		if (debug & DEBUG_HFCMULTI_INIT)
+			printk(KERN_WARNING "%s: free irq %d\n", __FUNCTION__, hc->irq);
+		free_irq(hc->irq, hc);
+		hc->irq = 0;
+
+	}
+	udelay(1000);	
+	
+	/*now we finish off the lists and stuff*/
+	/* remove us from list and delete */
+	if (debug & DEBUG_HFCMULTI_INIT)
+		printk(KERN_WARNING "%s: remove instance from list\n", __FUNCTION__);
+
+#if 1
+	u_long flags2;
+	spin_lock_irqsave(&HFCM_obj.lock,flags2);
+	list_del(&hc->list);
+	spin_unlock_irqrestore(&HFCM_obj.lock,flags2);
+#endif
+
+	if (debug & DEBUG_HFCMULTI_INIT)
+		printk(KERN_WARNING "%s: delete instance\n", __FUNCTION__);
+	
+
+	kfree(hc);
+	hc=NULL;
+	HFC_cnt--;
+	if (debug & DEBUG_HFCMULTI_INIT)
+		printk(KERN_WARNING "%s: card successfully removed\n", __FUNCTION__);
+
+
+	printk(KERN_INFO "release_ports_hw finished \n");
+	
+}
+
+/***************************
+ * remove port  from stack *
+ ***************************/
+
+static void
+release_port(hfc_multi_t *hc, int port)
+{
+	int	i = 0;
+	u_long	flags;
+
+	if (debug & DEBUG_HFCMULTI_INIT)
+		printk(KERN_DEBUG "%s: entered\n", __FUNCTION__);
+	
+	if (port >= hc->type) {
+		printk(KERN_WARNING "%s: ERROR port out of range (%d).\n", __FUNCTION__, port);
+		return;
+	}
+
+	spin_lock_irqsave(&hc->lock, flags);
+
+	if (debug & DEBUG_HFCMULTI_INIT)
+		printk(KERN_DEBUG "%s: releasing port=%d\n", __FUNCTION__, port);
+	
+	if ( !hc->created[port]) {
+		printk(KERN_WARNING "%s: ERROR given stack is not used by card (port=%d).\n", __FUNCTION__, port);
+		spin_unlock_irqrestore(&hc->lock,flags);
+		return;
+	}
+	
+
+
+	for (i=0;i<32;i++) {
+		if (hc->chan[i].ch && test_bit(FLG_DCHANNEL, &hc->chan[i].ch->Flags)  &&
+		    hc->chan[i].ch->timer.function != NULL ) {
 			del_timer(&hc->chan[i].ch->timer);
 			hc->chan[i].ch->timer.function = NULL;
 		}
-		i++;
 	}
-
-#endif
-
-	if (all)
-		release_io_hfcmulti(hc);
-
-
+	
 	/* free channels */
 	i = 0;
 	while(i < 32) {
-		if ((hc->created[hc->chan[i].port]) &&
-			(hc->chan[i].port == port || all)) {
-			if (hc->chan[i].ch) {
-				if (debug & DEBUG_HFCMULTI_INIT)
-					printk(KERN_DEBUG "%s: free port %d %c-channel %d (1..32)\n",
-						__FUNCTION__, hc->chan[i].port,
-						test_bit(FLG_DCHANNEL, &hc->chan[i].ch->Flags) ?
-						'D' : 'B', i);
-				mISDN_freechannel(hc->chan[i].ch);
-				spin_unlock_irqrestore(&hc->lock,flags);
-
-				if (test_bit(FLG_DCHANNEL, &hc->chan[i].ch->Flags))
-					mISDN_ctrl(&hc->chan[i].ch->inst, MGR_UNREGLAYER | REQUEST, NULL);
-				spin_lock_irqsave(&hc->lock,flags);
-
-				kfree(hc->chan[i].ch);
-				hc->chan[i].ch = NULL;
-			}
-		}
-		i++;
-	}
-	i = 0;
-	while(i < 8) {
-		if (i==port || all)
-			hc->created[i] = 0;
-		i++;
-	}
-
-	/* dimm leds */
-	if (hc->leds)
-		hfcmulti_leds(hc);
-
-	/* release IO & remove card */
-	if (all) {
-		/* release hardware */
-		if (debug & DEBUG_HFCMULTI_INIT)
-			printk(KERN_WARNING "%s: card has no more used stacks, so we release hardware.\n", __FUNCTION__);
-//		release_io_hfcmulti(hc);
-		spin_unlock_irqrestore(&hc->lock,flags);
-		/* release irq */
-		if (hc->irq) {
+		if (hc->chan[i].ch) {
 			if (debug & DEBUG_HFCMULTI_INIT)
-				printk(KERN_WARNING "%s: free irq %d\n", __FUNCTION__, hc->irq);
-			free_irq(hc->irq, hc);
-			hc->irq = 0;
+				printk(KERN_DEBUG "%s: free port %d %c-channel %d (1..32)\n",
+				       __FUNCTION__, hc->chan[i].port,
+				       test_bit(FLG_DCHANNEL, &hc->chan[i].ch->Flags) ?
+				       'D' : 'B', i);
+			mISDN_freechannel(hc->chan[i].ch);
+
+			spin_unlock_irqrestore(&hc->lock,flags);
+			
+			if (test_bit(FLG_DCHANNEL, &hc->chan[i].ch->Flags))
+				mISDN_ctrl(&hc->chan[i].ch->inst, MGR_UNREGLAYER | REQUEST, NULL);
+			spin_lock_irqsave(&hc->lock,flags);
+			
+			kfree(hc->chan[i].ch);
+			hc->chan[i].ch = NULL;
 		}
-
-#ifndef HFCM_FIX_IRQS
-		/* remove us from list and delete */
-		if (debug & DEBUG_HFCMULTI_INIT)
-			printk(KERN_WARNING "%s: remove instance from list\n", __FUNCTION__);
-
-		spin_lock_irqsave(&HFCM_obj.lock,flags);
-		list_del(&hc->list);
-		spin_unlock_irqrestore(&HFCM_obj.lock,flags);
-		if (debug & DEBUG_HFCMULTI_INIT)
-			printk(KERN_WARNING "%s: delete instance\n", __FUNCTION__);
-//#warning
-//		kfree(hc->davor);
-//		kfree(hc->danach);
-//		spin_lock_irqsave(&hc->lock,flags);
-		kfree(hc);
-		hc=NULL;
-//		spin_unlock_irqrestore(&hc->lock,flags);
-
-		HFC_cnt--;
-		if (debug & DEBUG_HFCMULTI_INIT)
-			printk(KERN_WARNING "%s: card successfully removed\n", __FUNCTION__);
-#endif
-
-	} else {
-#ifndef HFCM_FIX_IRQS
-		enable_hwirq(hc);
-#endif
-		spin_unlock_irqrestore(&hc->lock,flags);
+		i++;
 	}
+	
+	hc->created[port]=0;
+
+	spin_unlock_irqrestore(&hc->lock,flags);
+	
 }
 
 static int
@@ -3206,10 +3175,6 @@ bugtest
 		case MGR_RELEASE | INDICATION:
 		if (debug & DEBUG_HFCMULTI_MGR)
 			printk(KERN_DEBUG "%s: MGR_RELEASE = remove port from mISDN\n", __FUNCTION__);
-#if LINUX_VERSION_CODE > KERNEL_VERSION(2,6,10) 
-		if (test_bit(FLG_DCHANNEL, &chan->Flags))
-			release_port(hc, hc->chan[ch].port); /* hc is free */
-#endif
 		break;
 #ifdef FIXME
 		case MGR_CONNECT | REQUEST:
@@ -3315,6 +3280,7 @@ static int __devinit hfcpci_probe(struct pci_dev *pdev, const struct pci_device_
 	channel_t	*chan;
 	u_long		flags;
 	u_char		dips=0, pmj=0; // dip settings, port mode Jumpers
+
 
 	id_idx = find_idlist_entry(ent->vendor,ent->subvendor,ent->device,ent->subdevice);
 	if (id_idx == -1) {
@@ -3713,8 +3679,12 @@ static int __devinit hfcpci_probe(struct pci_dev *pdev, const struct pci_device_
 			chan = hc->chan[(pt<<2)+2].ch;
 		if ((ret_err = mISDN_ctrl(NULL, MGR_NEWSTACK | REQUEST, &chan->inst))) {
 			printk(KERN_ERR  "MGR_ADDSTACK REQUEST dch err(%d)\n", ret_err);
+
+			int i=0;
 free_release:
-			release_port(hc, -1); /* all ports, hc is free */
+			/* all ports, hc is free */
+			for (i=0; i<hc->type; i++)
+				release_port(hc, i); 
 			goto free_object;
 		}
 		/* indicate that this stack is created */
@@ -3803,6 +3773,9 @@ static void __devexit hfc_remove_pci(struct pci_dev *pdev)
 	printk( KERN_INFO "removing hfc_multi card vendor:%x device:%x subvendor:%x subdevice:%x\n",
 			pdev->vendor,pdev->device,pdev->subsystem_vendor,pdev->subsystem_device);
 	if (card) {
+
+		printk( KERN_INFO "releasing card\n");
+#if 1
 		for(i=0;i<card->type;i++) { // type is also number of d-channel
 			if(card->created[i]) {
 				if (card->type == 1)
@@ -3816,14 +3789,12 @@ static void __devexit hfc_remove_pci(struct pci_dev *pdev)
 						MGR_DELSTACK | REQUEST, NULL);
 			}
 		}
+#endif
 		// relase all ports
 		allocated[card->idx] = 0;
-#if 0 
-		release_port(card, -1); // card is free ... */
-#endif
-		printk(KERN_DEBUG "test\n");
 	}
 	else printk(KERN_WARNING "%s: drvdata allready removed\n", __FUNCTION__);
+	printk(KERN_INFO "hfcmulti card removed\n");
 }
 
 static struct pci_device_id hfmultipci_ids[] __devinitdata = {
@@ -3890,14 +3861,25 @@ HFCmulti_cleanup(void)
 	if (debug & DEBUG_HFCMULTI_INIT)
 		printk(KERN_DEBUG "%s: done (refcnt = %d HFC_cnt = %d)\n", __FUNCTION__, HFCM_obj.refcnt, HFC_cnt);
 
+
 	list_for_each_entry_safe(hc, next, &HFCM_obj.ilist, list) {
+		int i;
 		printk(KERN_ERR "HFC PCI card struct not empty refs %d\n", HFCM_obj.refcnt);
-		release_port(hc, -1); /* all ports, hc is free */
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,10)
+		for (i=0;i<hc->type;i++) {
+				release_port(hc, i);
+		}
+#endif
+		release_ports_hw(hc); /* all ports, hc is free */
+		udelay(1000);
 	}
+	
+	printk(KERN_NOTICE "HFC Before unregistering from PCI\n");
 	/* get rid of all devices of this driver */
 	pci_unregister_driver(&hfcmultipci_driver);
-	printk(KERN_NOTICE "HFC PCI card Unregistered from PCI\n");
 
+	printk(KERN_NOTICE "HFC PCI card Unregistered from PCI\n");
 }
 
 static int __init
@@ -3975,6 +3957,7 @@ HFCmulti_init(void)
 	for(i=0;i<MAX_CARDS;i++) allocated[i]=0;
 	HFC_cnt = HFC_idx = 0;
 
+#if 1
 	err = pci_register_driver(&hfcmultipci_driver);
 	if (err < 0)
 	{
@@ -3982,6 +3965,7 @@ HFCmulti_init(void)
 		HFCmulti_cleanup();
 		return(err);
 	}
+#endif
 	printk(KERN_INFO "%d devices registered\n", HFC_cnt);
 
 	return(0);

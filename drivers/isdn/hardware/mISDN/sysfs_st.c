@@ -1,4 +1,4 @@
-/* $Id: sysfs_st.c,v 1.7 2006/05/23 12:06:48 crich Exp $
+/* $Id: sysfs_st.c,v 1.8 2006/07/14 15:30:22 crich Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -239,6 +239,7 @@ mISDN_register_sysfs_stack(mISDNstack_t *st)
 	mISDNstack_attr_parameter_new_pid.store = store_st_parameter;
 	mISDNstack_attr_layermask_new_pid.attr.mode |= S_IWUSR;
 	mISDNstack_attr_layermask_new_pid.store = store_st_layermask;
+#ifdef SYSFS_SUPPORT
 	err = sysfs_create_group(&st->class_dev.kobj, &new_pid_group);
 	if (err)
 		goto out_unreg;
@@ -246,7 +247,6 @@ mISDN_register_sysfs_stack(mISDNstack_t *st)
 	class_device_create_file(&st->class_dev, &class_device_attr_qlen);
 	class_device_create_file(&st->class_dev, &class_device_attr_status);
 
-#ifdef SYSFS_SUPPORT
 	if (st->parent) {
 		sysfs_create_link(&st->class_dev.kobj, &st->parent->class_dev.kobj, "parent");
 		snprintf(name, 12, "child%d", (CHILD_ID_MASK & st->id) >> 16);
