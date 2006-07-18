@@ -255,62 +255,48 @@ void bchdev_echocancel_deactivate(dsp_t* dev)
 }
 
 /** Processes one TX- and one RX-packet with echocancellation */
-void bchdev_echocancel_chunk(dsp_t* dev, uint8_t *rxchunk, uint8_t *txchunk, uint16_t size)
+void bchdev_echocancel_chunk(dsp_t* ss, uint8_t *rxchunk, uint8_t *txchunk, uint16_t size)
 {
   int16_t rxlin, txlin;
-  uint16_t pos;
-
+  uint16_t x;
+  
   /* Perform echo cancellation on a chunk if requested */
-  if (dev->ec) {
-    if (dev->echostate & __ECHO_STATE_MUTE) {
-      if (dev->echostate == ECHO_STATE_STARTTRAINING) {
-	// Transmit impulse now
-	txchunk[0] = dsp_audio_s16_to_law[16384 & 0xffff];
-	memset(txchunk+1, 0, size-1);
-	bchdev_echocancel_setstate(dev, ECHO_STATE_TRAINING); //AWAITINGECHO);
-      } else {
-	// train the echo cancellation
-	for (pos = 0; pos < size; pos++) {
-	  rxlin = dsp_audio_law_to_s32[rxchunk[pos]];
-	  txlin = dsp_audio_law_to_s32[txchunk[pos]];
-	  if (dev->echostate == ECHO_STATE_PRETRAINING) {
-	    if (dev->echotimer <= 0) {
-	      dev->echotimer = 0;
-	      bchdev_echocancel_setstate(dev, ECHO_STATE_STARTTRAINING);
-	    } else {
-	      dev->echotimer--;
-	    }
+  if (ss->ec) {
+	  
+	  if (ss->echostate & __ECHO_STATE_MUTE) {
+		  /* Special stuff for training the echo can */
+		  for (x=0;x<size;x++) {
+			  rxlin = dsp_audio_law_to_s32[rxchunk[x]];
+			  txlin = dsp_audio_law_to_s32[txchunk[x]];
+			  if (ss->echostate == ECHO_STATE_PRETRAINING) {
+				  if (--ss->echotimer <= 0) {
+					  ss->echotimer = 0;
+					  ss->echostate = ECHO_STATE_STARTTRAINING;
+				  }
+			  }
+			  if ((ss->echostate == ECHO_STATE_AWAITINGECHO) && (txlin > 8000)) {
+				  ss->echolastupdate = 0;
+				  ss->echostate = ECHO_STATE_TRAINING;
+			  }
+			  if (ss->echostate == ECHO_STATE_TRAINING) {
+				  if (echo_can_traintap(ss->ec, ss->echolastupdate++, rxlin)) {
+#if 1
+					  printk("Finished training (%d taps trained)!\n", ss->echolastupdate);
+#endif
+					  ss->echostate = ECHO_STATE_ACTIVE;
+				  }
+			  }
+			  rxlin = 0;
+			  rxchunk[x] = dsp_audio_s16_to_law[(int)rxlin];
+		  }
+	  } else {
+		  for (x=0;x<size;x++) {
+			  rxlin = dsp_audio_law_to_s32[rxchunk[x]&0xff];
+			  txlin = dsp_audio_law_to_s32[txchunk[x]&0xff];
+			  rxlin = echo_can_update(ss->ec, txlin, rxlin);
+			  rxchunk[x] = dsp_audio_s16_to_law[rxlin &0xffff];
+		  }
 	  }
-	  if ((dev->echostate == ECHO_STATE_AWAITINGECHO) && (txlin > 8000)) {
-	    dev->echolastupdate = 0;
-	    bchdev_echocancel_setstate(dev, ECHO_STATE_TRAINING);
-	  }
-	  if (dev->echostate == ECHO_STATE_TRAINING) {
-	    if (echo_can_traintap(dev->ec, dev->echolastupdate++, rxlin)) {
-	      bchdev_echocancel_setstate(dev, ECHO_STATE_ACTIVE);
-	    }
-	  }
-
-	  rxchunk[pos] = dsp_silence;
-	  txchunk[pos] = dsp_silence;
-	}
-      }
-    } else {
-      for (pos = 0; pos < size; pos++) {
-	rxlin = dsp_audio_law_to_s32[rxchunk[pos]];
-	txlin = dsp_audio_law_to_s32[txchunk[pos]];
-
-	if (echo_can_disable_detector_update(dev->ecdis_rd, rxlin) || 
-	    echo_can_disable_detector_update(dev->ecdis_wr, txlin)) {
-	  bchdev_echocancel_deactivate(dev);
-	  printk("EC: Disable tone detected\n");
-	  return ;
-	} else	{
-	  rxlin = echo_can_update(dev->ec, txlin, rxlin);
-	  rxchunk[pos] = dsp_audio_s16_to_law[rxlin & 0xffff];
-	}
-      }
-    }
   }
 }
 
