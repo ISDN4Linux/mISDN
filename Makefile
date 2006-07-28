@@ -53,8 +53,12 @@ install: all
 	cd $(LINUX) ; make INSTALL_MOD_PATH=$(INSTALL_PREFIX) SUBDIRS=$(MISDN_SRC) modules_install 
 	mkdir -p $(INSTALL_PREFIX)/usr/include/linux/
 	cp $(MISDNDIR)/include/linux/*.h $(INSTALL_PREFIX)/usr/include/linux/
-	mkdir -p $(INSTALL_PREFIX)/etc/init.d/
-	install -m755 misdn-init $(INSTALL_PREFIX)/etc/init.d/
+	mkdir -p $(INSTALL_PREFIX)/usr/sbin/
+	install -m755 misdn-init $(INSTALL_PREFIX)/usr/sbin/
+	if [ -d $(INSTALL_PREFIX)/etc/init.d ]; then \
+		if [ -e $(INSTALL_PREFIX)/etc/init.d/misdn-init ]; then rm -rf $(INSTALL_PREFIX)/etc/init.d/misdn-init; fi; \
+		ln -s $(INSTALL_PREFIX)/usr/sbin/misdn-init $(INSTALL_PREFIX)/etc/init.d/misdn-init; \
+	fi
 	mkdir -p $(INSTALL_PREFIX)/etc/modprobe.d
 	cp mISDN.modprobe.d $(INSTALL_PREFIX)/etc/modprobe.d/mISDN
 	mkdir -p $(INSTALL_PREFIX)/etc/modules.d

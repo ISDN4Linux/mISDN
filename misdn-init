@@ -15,7 +15,7 @@
 #
 # USAGE:
 #
-#   /etc/init.d/misdn-init start|stop|restart|config|scan|help
+#   /usr/sbin/misdn-init start|stop|restart|config|scan|help
 #
 
 # chkconfig: 2345 35 60
@@ -35,16 +35,6 @@ misdn_init_conf="/etc/misdn-init.conf"
 #
 USER=asterisk
 GROUP=asterisk
-
-
-
-MODPROBE=modprobe
-RMMOD=rmmod
-INSMOD=insmod
-LSPCI=lspci
-LSUSB=`which lsusb 2> /dev/null`
-MKNOD=mknod
-BC=`which bc 2> /dev/null`
 
 # HFC 8/4 (S0) Options
 master_clock=17
@@ -69,6 +59,27 @@ dsp_options=0
 poll_option=
 dtmftreshold_option=
 
+function check_cmd {
+	if ! which "${1}" > /dev/null; then
+		if [ "$(id -u)" != "0" ]; then
+			echo "[!!] FATAL: $1 not in path, please install and/or be root."
+		else
+			echo "[!!] FATAL: $1 not in path, please install."
+		fi
+		exit 1
+	else
+		var=$(echo ${1} | tr a-z A-Z)
+		eval "$var=`which ${1}`"
+	fi
+}
+
+check_cmd modprobe
+check_cmd rmmod
+check_cmd insmod
+check_cmd lspci
+check_cmd lsusb
+check_cmd mknod
+check_cmd bc
 
 function check_asterisk {
 	if ps ax | grep -v grep | grep asterisk > /dev/null ; then asterisk -rx "stop now" ; fi
@@ -421,7 +432,7 @@ function create_misdn_init_conf {
 	
 	if [ "${1}" == "scan" ]; then
 		echo "[OK] found the following devices:"
-		echo "${cardline}[ii] run \"/etc/init.d/misdn-init config\" to store this information to ${misdn_init_conf}"
+		echo "${cardline}[ii] run \"/usr/sbin/misdn-init config\" to store this information to ${misdn_init_conf}"
 	else
 		
 		index=1
@@ -435,7 +446,7 @@ function create_misdn_init_conf {
 		misdn_cfg_pt1="#
 # Configuration file for your misdn hardware
 #
-# Usage: /etc/init.d/misdn-init start|stop|restart|config|scan|help
+# Usage: /usr/sbin/misdn-init start|stop|restart|config|scan|help
 #
 
 #
@@ -528,7 +539,7 @@ debug=0"
 		echo "${misdn_cfg_pt1}${NL}${cardline}${NL}${misdn_cfg_pt2}${NL}${portline}${NL}${NL}${misdn_cfg_pt3}" > ${misdn_init_conf} || die "could not write to /etc/misdn-init.conf!"
 #echo "${misdn_cfg_pt1}${NL}${cardline}${NL}${misdn_cfg_pt2}${NL}${portline}${NL}${NL}${misdn_cfg_pt3}" > testconf || die "could not write to /etc/misdn-init.conf!"
 
-		echo "[OK] ${misdn_init_conf} created. It's now safe to run \"/etc/init.d/misdn-init start\""
+		echo "[OK] ${misdn_init_conf} created. It's now safe to run \"/usr/sbin/misdn-init start\""
 		if [ ${portcount} -gt 1 ]; then
 			echo "[ii] make your ports (1-${portcount}) available in asterisk by editing \"/etc/asterisk/misdn.conf\""
 		elif [ ${portcount} -eq 1 ]; then
@@ -541,10 +552,10 @@ function check_cfg_file {
 	if [ ! -f ${misdn_init_conf} ]; then
 
 		if [ ! -z "$1" ] ; then
-			/etc/init.d/misdn-init config
+			/usr/sbin/misdn-init config
 		else
 			echo "[!!] failed to load: ${misdn_init_conf}"
-			echo "run \"/etc/init.d/misdn-init config\" to scan your devices and generate a basic config file."
+			echo "run \"/usr/sbin/misdn-init config\" to scan your devices and generate a basic config file."
 			exit 1
 		fi
 	fi
