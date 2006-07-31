@@ -51,6 +51,7 @@ ulaw=9
 dtmf=10
 pcm_slave=12
 ignore_pcm_frameclock=13
+watchdog=20
 
 
 #dsp defaults
@@ -462,6 +463,8 @@ function create_misdn_init_conf {
 #               pcm_slave  - set PCM bus into slave mode
 #		ignore_pcm_frameclock	- this E1 is NT without PCM frame
 #					  clock
+#		watchdog   - This dual E1 Board has a Watchdog for 
+#			     transparent mode
 #
 #"
 		misdn_cfg_pt2="#

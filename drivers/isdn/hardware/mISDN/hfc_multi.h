@@ -97,6 +97,8 @@ typedef struct hfcmulti_hw	hfcmulti_hw_t;
 #define HFC_CHIP_ULAW		7 /* ULAW mode */
 #define HFC_CHIP_CLOCK2		8 /* double clock mode */
 #define HFC_CHIP_CRYSTAL_CLOCK	9 /* autarc clocking mode */
+#define HFC_CHIP_WATCHDOG	10 /* wether we should send signals 
+					to the watchdog */
 
 struct hfc_multi {
 	struct list_head	list;
@@ -131,6 +133,9 @@ struct hfc_multi {
 	u_int		slots;	/* number of PCM slots */
 	u_int		leds;	/* type of leds */
 	u_int		ledcount; /* used to animate leds */
+
+	u_long		wdcount; /* every 500 ms we need to send the watchdog a signal */
+	u_char		wdbyte; /* watchdog toggle byte*/
 	u_int		activity[8]; /* if there is any action on this port (will be cleared after showing led-states) */
 
 	spinlock_t	lock;	/* the lock */

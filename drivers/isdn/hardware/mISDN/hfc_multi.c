@@ -43,6 +43,7 @@
 	Bit 16	= Use 64 timeslots instead of 32
 	Bit 17	= Use 128 timeslots instead of anything else
 	Bit 18	= Use crystal clock for PCM and E1, for autarc clocking.
+	Bit 19	= Send the Watchdog a Signal (Dual E1 with Watchdog)
 
  * protocol:
 	NOTE: Must be given for all ports, not for the number of cards.
@@ -124,7 +125,7 @@ static void ph_state_change(channel_t *ch);
 
 extern const char *CardType[];
 
-static const char *hfcmulti_revision = "$Revision: 1.49 $";
+static const char *hfcmulti_revision = "$Revision: 1.50 $";
 
 static int HFC_cnt, HFC_idx;
 
@@ -197,6 +198,8 @@ static const PCI_ENTRY id_list[] =
 	 "HFC-E1", 1, 0, 1}, /* E1 only supports single clock */
 	{CCAG_VID, CCAG_VID, HFCE1_ID, 0xB563, VENDOR_CCD,
 	 "HFC-E1 Beronet Card", 1, 0, 1}, /* E1 only supports single clock */
+	{CCAG_VID, CCAG_VID, HFCE1_ID, 0xB565, VENDOR_CCD,
+	 "HFC-E1+ Beronet Card (Dual)", 1, 0, 1}, /* E1 only supports single clock */
 	{CCAG_VID, CCAG_VID, HFCE1_ID, 0xB564, VENDOR_CCD,
 	 "HFC-E1 Beronet Card (Dual)", 1, 0, 1}, /* E1 only supports single clock */
 	{0x10B5, CCAG_VID, 0x9030, 0x3136, VENDOR_CCD,
@@ -545,6 +548,28 @@ out:
 	spin_unlock_irqrestore(&hc->lock, flags);
 	return(err);
 }
+
+
+/************************/
+/* control the watchdog */
+/************************/
+static void
+hfcmulti_watchdog(hfc_multi_t *hc)
+{
+	hc->wdcount++;
+
+	if (hc->wdcount > 10 ) {
+		hc->wdcount=0;
+		hc->wdbyte = hc->wdbyte==V_GPIO_OUT2?V_GPIO_OUT3:V_GPIO_OUT2;
+
+	/**	printk("Sending Watchdog Kill %x\n",hc->wdbyte); **/
+		
+		HFC_outb(hc, R_GPIO_SEL, V_GPIO_SEL1);
+		HFC_outb(hc, R_GPIO_EN0, V_GPIO_EN2 | V_GPIO_EN3);
+		HFC_outb(hc, R_GPIO_OUT0, hc->wdbyte);
+	}
+}
+
 
 
 /***************/
@@ -1417,6 +1442,9 @@ handle_timer_irq(hfc_multi_t *hc)
 	}
 	if (hc->leds)
 		hfcmulti_leds(hc);
+
+	if (test_bit(HFC_CHIP_WATCHDOG, &hc->chip)) 
+		hfcmulti_watchdog(hc);
 }
 
 static irqreturn_t
@@ -2484,6 +2512,7 @@ hfcmulti_initmode(hfc_multi_t *hc)
 	BYTE		r_sci_msk, a_st_wr_state, r_e1_wr_sta;
 	int		i, port;
 	channel_t	*dch;
+//	u_long		flags;
 
 	if (debug & DEBUG_HFCMULTI_INIT)
 		printk("%s: entered\n", __FUNCTION__);
@@ -2849,6 +2878,7 @@ setup_pci(hfc_multi_t *hc, struct pci_dev *pdev, int id_idx)
 		return (-EIO);
 	}
 	hc->leds = id_list[id_idx].leds;
+	
 #ifdef CONFIG_HFCMULTI_PCIMEM
 	hc->pci_membase = NULL;
 	hc->plx_membase = NULL;
@@ -3375,6 +3405,12 @@ static int __devinit hfcpci_probe(struct pci_dev *pdev, const struct pci_device_
 		hc->slots = 128;
 	if (type[HFC_idx] & 0x40000)
 		test_and_set_bit(HFC_CHIP_CRYSTAL_CLOCK, &hc->chip);
+	if (type[HFC_idx] & 0x80000) {
+		test_and_set_bit(HFC_CHIP_WATCHDOG, &hc->chip);
+		hc->wdcount=0;
+		hc->wdbyte=V_GPIO_OUT2;
+		printk(KERN_NOTICE "Watchdog enabled\n");
+	}
 	if (hc->type == 1)
 		sprintf(hc->name, "HFC-E1#%d", HFC_idx+1);
 	else
@@ -3815,6 +3851,7 @@ static struct pci_device_id hfmultipci_ids[] __devinitdata = {
 
 	/** Cards with HFC-E1 Chip**/
 	{ CCAG_VID, 0x30B1   , CCAG_VID, 0xB563, 0, 0, 0 }, //BNE1
+	{ CCAG_VID, 0x30B1   , CCAG_VID, 0xB565, 0, 0, 0 }, //BNE1 + (Dual)
 	{ CCAG_VID, 0x30B1   , CCAG_VID, 0xB564, 0, 0, 0 }, //BNE1 (Dual)
 
 	{ CCAG_VID, 0x30B1   , CCAG_VID, 0x30B1, 0, 0, 0 }, //Old Eval
