@@ -125,7 +125,7 @@ static void ph_state_change(channel_t *ch);
 
 extern const char *CardType[];
 
-static const char *hfcmulti_revision = "$Revision: 1.50 $";
+static const char *hfcmulti_revision = "$Revision: 1.51 $";
 
 static int HFC_cnt, HFC_idx;
 
@@ -188,6 +188,8 @@ static const PCI_ENTRY id_list[] =
 	 "HFC-8S IOB4ST Recording", 8, 1, 0},
 	{CCAG_VID, CCAG_VID, HFC8S_ID, 0xB522, VENDOR_CCD,
 	 "HFC-8S IOB8ST", 8, 1, 0},
+	{CCAG_VID, CCAG_VID, HFC8S_ID, 0xB552, VENDOR_CCD,
+	 "HFC-8S", 8, 1, 0},
 	{CCAG_VID, CCAG_VID, HFC8S_ID, 0xB622, VENDOR_CCD,
 	 "HFC-8S", 8, 1, 0},
 	{CCAG_VID, CCAG_VID, HFC8S_ID, 0xB562, VENDOR_CCD,
@@ -3846,6 +3848,7 @@ static struct pci_device_id hfmultipci_ids[] __devinitdata = {
 	{ CCAG_VID, 0x16B8   , CCAG_VID, 0x16B8, 0, 0, 0 }, //old Eval
 	{ CCAG_VID, 0x16B8   , CCAG_VID, 0xB521, 0, 0, 0 }, //IOB8ST Recording
 	{ CCAG_VID, 0x16B8   , CCAG_VID, 0xB522, 0, 0, 0 }, //IOB8ST 
+	{ CCAG_VID, 0x16B8   , CCAG_VID, 0xB552, 0, 0, 0 }, //IOB8ST 
 	{ CCAG_VID, 0x16B8   , CCAG_VID, 0xB622, 0, 0, 0 }, //8S
 
 

@@ -1,4 +1,4 @@
-/* $Id: udevice.c,v 1.20 2006/05/12 13:27:23 crich Exp $
+/* $Id: udevice.c,v 1.21 2006/08/01 11:25:10 keil Exp $
  *
  * Copyright 2000  by Karsten Keil <kkeil@isdn4linux.de>
  *
@@ -10,7 +10,9 @@
 #include <linux/vmalloc.h>
 #include <linux/config.h>
 #include <linux/timer.h>
+#ifdef CONFIG_DEVFS_FS
 #include <linux/devfs_fs_kernel.h>
+#endif
 #include "core.h"
 
 #define MAX_HEADER_LEN	4
@@ -1983,9 +1985,11 @@ int init_mISDNdev (int debug) {
 	if (err) {
 		printk(KERN_ERR "Can't register %s error(%d)\n", MName, err);
 		unregister_chrdev(mISDN_MAJOR, "mISDN");
+		return(err);
 	} else
+#ifdef CONFIG_DEVFS_FS
 		devfs_mk_cdev(MKDEV(mISDN_MAJOR, 0), S_IFCHR | S_IRUSR | S_IWUSR, "mISDN");
-
+#endif
 	return(err);
 }
 
@@ -2006,6 +2010,8 @@ int free_mISDNdev(void) {
 	if ((err = unregister_chrdev(mISDN_MAJOR, "mISDN"))) {
 		printk(KERN_WARNING "mISDN: devices busy on remove\n");
 	}
+#ifdef CONFIG_DEVFS_FS
 	devfs_remove("mISDN");
+#endif
 	return(err);
 }

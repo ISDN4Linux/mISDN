@@ -1,4 +1,4 @@
-/* $Id: hfcs_usb.c,v 1.17 2006/07/03 11:48:02 crich Exp $
+/* $Id: hfcs_usb.c,v 1.18 2006/08/01 11:25:10 keil Exp $
  *
  * mISDN driver for Colognechip HFC-S USB chip
  *
@@ -39,7 +39,7 @@
 
 
 #define DRIVER_NAME "mISDN_hfcsusb"
-const char *hfcsusb_rev = "$Revision: 1.17 $";
+const char *hfcsusb_rev = "$Revision: 1.18 $";
 
 #define MAX_CARDS	8
 static int hfcsusb_cnt;
@@ -212,6 +212,8 @@ static struct usb_device_id hfcsusb_idtab[] = {
 	},
 	{ }
 };
+
+MODULE_DEVICE_TABLE(usb, hfcsusb_idtab);
 
 /* some function prototypes */
 static int	hfcsusb_l2l1(mISDNinstance_t *inst, struct sk_buff *skb);
