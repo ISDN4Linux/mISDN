@@ -1,4 +1,4 @@
-/* $Id: app_plci.c,v 1.13 2006/03/23 13:11:43 keil Exp $
+/* $Id: app_plci.c,v 1.14 2006/08/04 17:08:31 keil Exp $
  *
  */
 
@@ -1582,7 +1582,7 @@ AppPlciLinkUp(AppPlci_t *aplci)
 		ISDN_PID_LAYER(1) | ISDN_PID_BCHANNEL_BIT;
 	if (aplci->Bprotocol.B1cfg[0]) {
 		pid.param[1] = &aplci->Bprotocol.B1cfg[0];
-		pid.maxplen += aplci->Bprotocol.B1cfg[0];
+		pid.maxplen += aplci->Bprotocol.B1cfg[0] +1;
 	}
 	if (aplci->Bprotocol.B2 > 23) {
 		int_errtxt("wrong B2 prot %x", aplci->Bprotocol.B2);
@@ -1592,7 +1592,7 @@ AppPlciLinkUp(AppPlci_t *aplci)
 		ISDN_PID_LAYER(2) | ISDN_PID_BCHANNEL_BIT;
 	if (aplci->Bprotocol.B2cfg[0]) {
 		pid.param[2] = &aplci->Bprotocol.B2cfg[0];
-		pid.maxplen += aplci->Bprotocol.B2cfg[0];
+		pid.maxplen += aplci->Bprotocol.B2cfg[0] +1;
 	}
 	/* handle DTMF TODO */
 	if ((pid.protocol[2] == ISDN_PID_L2_B_TRANS) &&
@@ -1606,11 +1606,14 @@ AppPlciLinkUp(AppPlci_t *aplci)
 		ISDN_PID_LAYER(3) | ISDN_PID_BCHANNEL_BIT;
 	if (aplci->Bprotocol.B3cfg[0]) {
 		pid.param[3] = &aplci->Bprotocol.B3cfg[0];
-		pid.maxplen += aplci->Bprotocol.B3cfg[0];
+		pid.maxplen += aplci->Bprotocol.B3cfg[0] +1;
 	}
 	capidebug(CAPI_DBG_PLCI, "AppPlciLinkUp B1(%x) B2(%x) B3(%x) global(%d) ch(%x)",
-   		pid.protocol[1], pid.protocol[2], pid.protocol[3], pid.global, 
+		pid.protocol[1], pid.protocol[2], pid.protocol[3], pid.global, 
 		aplci->channel);
+	capidebug(CAPI_DBG_PLCI, "AppPlciLinkUp B1cfg(%d) B2cfg(%d) B3cfg(%d) maxplen(%d)",
+		aplci->Bprotocol.B1cfg[0], aplci->Bprotocol.B2cfg[0],
+		aplci->Bprotocol.B3cfg[0], pid.maxplen);
 	capidebug(CAPI_DBG_PLCI, "AppPlciLinkUp ch(%d) aplci->contr->linklist(%p)",
 		aplci->channel & 3, aplci->contr->linklist);
 	pid.protocol[4] = ISDN_PID_L4_B_CAPI20;
