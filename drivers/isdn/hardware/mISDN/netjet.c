@@ -25,7 +25,7 @@
 #define DTRACE printk
 #define DPRINT printk
 
-static const char *netjet_rev = "$Revision: 1.4 $";
+static const char *netjet_rev = "$Revision: 1.5 $";
 
 #define MAX_CARDS	4
 static int debug;
@@ -104,7 +104,7 @@ enum {
 
 typedef struct {
 	long size;
-	u_int32_t *dmabuf; 	// purposely 32-bit. (virt)
+	u_int32_t *dmabuf;
 	dma_addr_t dmaaddr; 	// (system phys)
 } tiger_dmabuf_t;
 
@@ -281,7 +281,7 @@ mode_tiger(channel_t *bch, int bc, int protocol)
 					 "Tiger stat rec %d/%d send %d",
 					 tiger->r_tot, tiger->r_err,
 					 tiger->s_tot); 
-		bch->state = protocol; //james
+		bch->state = ISDN_PID_NONE;
 		/* only stop dma and interrupts if both channels NULL */
 		if ((card->bch[0].state == ISDN_PID_NONE) &&
 		    (card->bch[1].state == ISDN_PID_NONE))
@@ -523,7 +523,7 @@ tiger_l2l1B(mISDNinstance_t *inst, struct sk_buff *skb)
 		((hh->prim == (PH_CONTROL | REQUEST) && (hh->dinfo == HW_DEACTIVATE)))) {
 		spin_lock_irqsave(inst->hwlock, flags);
 		if (test_and_clear_bit(FLG_TX_NEXT, &bch->Flags)) {
-			if (bch->next_skb)
+			if (bch->next_skb == NULL)
 				printk(KERN_WARNING "%s: TX_NEXT set with no next_skb\n", __FUNCTION__);
 			else {
 				dev_kfree_skb(bch->next_skb);
@@ -1173,7 +1173,7 @@ read_raw(channel_t *bch, u_int *buf, int cnt)
 	}
 	if ((bch->rx_skb->len + cnt) > bch->maxlen) {
 		if (bch->debug & L1_DEB_WARN)
-			mISDN_debugprint(&bch->inst, "read_raw_transparent overrun %d",
+			mISDN_debugprint(&bch->inst, "read_raw overrun %d",
 				bch->rx_skb->len + cnt);
 		return;
 	}
@@ -1535,15 +1535,19 @@ nj_init_card (netjet_t *card)
 	u_long		flags;
 	int ret;
 
+	spin_lock_irqsave(&card->lock, flags);
+	nj_disable_hwirq(card);
+	spin_unlock_irqrestore(&card->lock, flags);
+
 	if (request_irq(card->irq, nj_interrupt, SA_SHIRQ, "NETjet", card)) {
 		printk(KERN_WARNING "mISDN: couldn't get interrupt %d\n",
 		       card->irq);
 		return (-EIO);
 	}
 
-	nj_reset (card);
-
 	spin_lock_irqsave(&card->lock, flags);
+
+	nj_reset (card);
 	mISDN_clear_isac (&card->dch);
 
 	if ((ret=mISDN_isac_init (&card->dch))) {
@@ -1553,12 +1557,12 @@ nj_init_card (netjet_t *card)
 		return (-EIO);
 	}
 
-	spin_unlock_irqrestore(&card->lock, flags);
-
 	inittiger (card);
 
 	mode_tiger(&card->bch[0], 0, -1);
 	mode_tiger(&card->bch[1], 1, -1);
+
+	spin_unlock_irqrestore(&card->lock, flags);
 
 	return 0;
 }
