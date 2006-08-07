@@ -1,4 +1,4 @@
-/* $Id: sysfs_st.c,v 1.9 2006/07/14 15:48:17 crich Exp $
+/* $Id: sysfs_st.c,v 1.10 2006/08/07 23:35:59 keil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -99,7 +99,7 @@ static ssize_t store_st_parameter(struct class_device *class_dev, const char *bu
 {
 	mISDNstack_t	*st = to_mISDNstack(class_dev);
 	ulong	tmp;
-	char	*d, *p = (char *)buf;
+	char	*p = (char *)buf;
 	u_int	i, j, l;
 
 	memset(&st->new_pid.param, 0, (MAX_LAYER_NR + 1)*sizeof(st->new_pid.param[0]));
@@ -131,12 +131,11 @@ static ssize_t store_st_parameter(struct class_device *class_dev, const char *bu
 		st->new_pid.maxplen = 0;
 		return(count);
 	}
-	st->new_pid.pbuf = kmalloc(l, GFP_ATOMIC);
+	st->new_pid.pbuf = kzalloc(l + 1, GFP_ATOMIC);
 	if (!st->new_pid.pbuf)
 		return(-ENOMEM);
-	st->new_pid.maxplen = l;
-	d = st->new_pid.pbuf;
-	memset(d, 0, l);
+	st->new_pid.maxplen = l + 1;
+	st->new_pid.pidx = 1;
 	p = (char *)buf;
 	for (i=0; i<=MAX_LAYER_NR; i++) {
 		if (!*p)
@@ -146,13 +145,13 @@ static ssize_t store_st_parameter(struct class_device *class_dev, const char *bu
 			p++;
 		if (tmp) {
 			j = tmp;
-			st->new_pid.param[i] = d;
-			*d++ = tmp & 0xff;
+			st->new_pid.param[i] = st->new_pid.pidx;
+			st->new_pid.pbuf[st->new_pid.pidx++] = tmp & 0xff;
 			while(j--) {
 				if (!*p)
 					break;
 				tmp = simple_strtol(p, &p, 0);
-				*d++ = tmp & 0xff;
+				st->new_pid.pbuf[st->new_pid.pidx++] = tmp & 0xff;
 				if (*p)
 					p++;
 				else

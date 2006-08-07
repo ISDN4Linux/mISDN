@@ -1,4 +1,4 @@
-/* $Id: helper.c,v 1.15 2006/03/23 10:05:16 keil Exp $
+/* $Id: helper.c,v 1.16 2006/08/07 23:35:59 keil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -41,26 +41,63 @@ mISDN_set_dchannel_pid(mISDN_pid_t *pid, int protocol, int layermask)
 		pid->protocol[4] = ISDN_PID_L4_CAPI20;
 }
 
+
+int
+mISDN_add_pid_parameter(mISDN_pid_t *pid, int layer, u_char *para)
+{
+	u16	l;
+
+	if (para == NULL || *para == 0) {
+		pid->param[layer] = 0;
+		return 0;
+	}
+	l = 1 + *para;	/* including length itself */
+	if (!pid->pbuf) {
+		pid->maxplen = l + 1; /* pbuf[0] is never used */
+		if (l < 63)
+			pid->maxplen = 64;
+		pid->pbuf = kzalloc(pid->maxplen, GFP_ATOMIC);
+		pid->pidx = 1;
+		if (!pid->pbuf) {
+			pid->maxplen = 0;
+			return -ENOMEM;
+		}
+	} else if ((pid->pidx + l) > pid->maxplen) {
+		u_char *tbuf;
+		
+		tbuf = kmalloc(pid->pidx + l, GFP_ATOMIC);
+		if (!tbuf)
+			return -ENOMEM;
+		memcpy(tbuf, pid->pbuf, pid->pidx);
+		kfree(pid->pbuf);
+		pid->pbuf = tbuf;
+		pid->maxplen = pid->pidx + l;
+	}
+	pid->param[layer] = pid->pidx;
+	memcpy(&pid->pbuf[pid->pidx], para, l);
+	pid->pidx += l;
+	return 0;
+}
+
 int
 mISDN_bprotocol2pid(void *bp, mISDN_pid_t *pid)
 {
-	__u8	*p = bp;
-	__u16	*w = bp;
-	int	i;
+	u8	*p = bp;
+	u16	*w = bp;
+	int	i, ret;
 	
 
 	p += 6;
 	for (i=1; i<=3; i++) {
 		if (*w > 23) {
 			int_errtxt("L%d pid %x\n",i,*w);
-			return(-EINVAL);
+			return -EINVAL;
 		}
 		pid->protocol[i] = (1 <<*w) | ISDN_PID_LAYER(i) |
 			ISDN_PID_BCHANNEL_BIT;
-		if (*p)
-			pid->param[i] = p;
-		else
-			pid->param[i] = NULL;
+		ret = mISDN_add_pid_parameter(pid, i, p);
+		if (ret)
+			return ret;
 		w++;
 		p += *p;
 		p++;
@@ -68,10 +105,10 @@ mISDN_bprotocol2pid(void *bp, mISDN_pid_t *pid)
 	pid->global = 0;
 	if (*p == 2) { // len of 1 word
 		p++;
-		w = (__u16 *)p;
+		w = (u16 *)p;
 		pid->global = *w;
 	}
-	return(0);
+	return 0;
 }
 
 int
@@ -117,6 +154,9 @@ mISDN_SetHandledPID(mISDNobject_t *obj, mISDN_pid_t *pid)
 #endif
 	memcpy(&sav, pid, sizeof(mISDN_pid_t));
 	memset(pid, 0, sizeof(mISDN_pid_t));
+	pid->pbuf = sav.pbuf;
+	pid->maxplen = sav.maxplen;
+	pid->pidx = sav.pidx;
 	pid->global = sav.global;
 	if (!sav.layermask) {
 		printk(KERN_WARNING "%s: no layermask in pid\n", __FUNCTION__);
@@ -156,7 +196,7 @@ mISDN_RemoveUsedPID(mISDN_pid_t *pid, mISDN_pid_t *used)
 		if (!(ISDN_LAYER(layer) & used->layermask))
 				continue;
 		pid->protocol[layer] = ISDN_PID_NONE;
-		pid->param[layer] = NULL;
+		pid->param[layer] = 0;
 		pid->layermask &= ~(ISDN_LAYER(layer));
 	}
 }
@@ -368,4 +408,5 @@ EXPORT_SYMBOL(mISDN_init_instance);
 // EXPORT_SYMBOL(mISDN_SetIF);
 // EXPORT_SYMBOL(mISDN_ConnectIF);
 // EXPORT_SYMBOL(mISDN_DisConnectIF);
+EXPORT_SYMBOL(mISDN_add_pid_parameter);
 EXPORT_SYMBOL(mISDN_bprotocol2pid);

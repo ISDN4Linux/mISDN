@@ -1,4 +1,4 @@
-/* $Id: core.c,v 1.36 2006/06/28 18:03:52 keil Exp $
+/* $Id: core.c,v 1.37 2006/08/07 23:35:59 keil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -19,7 +19,7 @@
 #include <linux/smp_lock.h>
 #endif
 
-static char		*mISDN_core_revision = "$Revision: 1.36 $";
+static char		*mISDN_core_revision = "$Revision: 1.37 $";
 
 LIST_HEAD(mISDN_objectlist);
 static rwlock_t		mISDN_objects_lock = RW_LOCK_UNLOCKED;
@@ -89,7 +89,7 @@ mISDNd(void *data)
 #ifdef CONFIG_SMP
 	unlock_kernel();
 #endif
-	printk(KERN_DEBUG "mISDNd: kernel daemon started (current:%x)\n",current);
+	printk(KERN_DEBUG "mISDNd: kernel daemon started (current:%p)\n", current);
 
 	test_and_set_bit(mISDN_TFLAGS_STARTED, &hkt->Flags);
 
@@ -147,7 +147,7 @@ mISDNd(void *data)
 			printk(KERN_DEBUG "mISDNd: test event done\n");
 	}
 	
-	printk(KERN_DEBUG "mISDNd: daemon exit now (current:%x)\n",current);
+	printk(KERN_DEBUG "mISDNd: daemon exit now (current:%p)\n", current);
 	test_and_clear_bit(mISDN_TFLAGS_STARTED, &hkt->Flags);
 	test_and_clear_bit(mISDN_TFLAGS_ACTIV, &hkt->Flags);
 	discard_queue(&hkt->workq);

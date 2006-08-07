@@ -1,4 +1,4 @@
-/* $Id: sysfs_obj.c,v 1.9 2006/07/14 15:48:17 crich Exp $
+/* $Id: sysfs_obj.c,v 1.10 2006/08/07 23:35:59 keil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -51,14 +51,19 @@ ssize_t mISDN_show_pid_parameter(mISDN_pid_t *pid, char *buf)
 	char	*p = buf, *t;
 	uint	i, l;
 
+
 	for (i=0; i <= MAX_LAYER_NR; i++) {
 		if (pid->param[i]) {
-			t = pid->param[i];
-			l = *t++;
-			p += sprintf(p,"0x%02x,", l);
-			while(l--)
-				p += sprintf(p,"0x%02x,", *t++);
-		}else {
+			if (pid->pbuf) {
+				t = pid->param[i] + pid->pbuf;
+				l = *t++;
+				p += sprintf(p,"0x%02x,", l);
+				while(l--)
+					p += sprintf(p,"0x%02x,", *t++);
+			} else {
+				p += sprintf(p,"0x00,");
+			}
+		} else {
 			p += sprintf(p,"0x00,");
 		}
 	}

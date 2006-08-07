@@ -1,4 +1,4 @@
-/* $Id: helper.h,v 1.15 2006/03/06 12:52:07 keil Exp $
+/* $Id: helper.h,v 1.16 2006/08/07 23:35:59 keil Exp $
  *
  *   Basic declarations, defines and prototypes
  *
@@ -280,6 +280,7 @@ extern	void		mISDN_AddIE(struct sk_buff *, u_char, u_char *);
 extern	ie_info_t	*mISDN_get_last_repeated_ie(Q931_info_t *, ie_info_t *);
 extern	int		mISDN_get_free_ext_ie(Q931_info_t *);
 extern	void		mISDN_LogL3Msg(struct sk_buff *);
+extern	int		mISDN_add_pid_parameter(mISDN_pid_t *, int, u_char *);
 
 /* manager default handler helper macros */
 

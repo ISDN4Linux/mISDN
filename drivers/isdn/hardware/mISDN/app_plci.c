@@ -1,4 +1,4 @@
-/* $Id: app_plci.c,v 1.14 2006/08/04 17:08:31 keil Exp $
+/* $Id: app_plci.c,v 1.15 2006/08/07 23:35:59 keil Exp $
  *
  */
 
@@ -1565,7 +1565,7 @@ AppPlciLinkUp(AppPlci_t *aplci)
 
 	if (aplci->channel == -1) {/* no valid channel set */
 		int_error();
-		return(-EINVAL);
+		return -EINVAL;
 	}
 	memset(&pid, 0, sizeof(mISDN_pid_t));
 	pid.layermask = ISDN_LAYER(1) | ISDN_LAYER(2) | ISDN_LAYER(3) |
@@ -1576,38 +1576,46 @@ AppPlciLinkUp(AppPlci_t *aplci)
 		pid.global = 2; // DCE, answer
 	if (aplci->Bprotocol.B1 > 23) {
 		int_errtxt("wrong B1 prot %x", aplci->Bprotocol.B1);
-		return(0x3001);
+		return 0x3001;
 	}
 	pid.protocol[1] = (1 << aplci->Bprotocol.B1) |
 		ISDN_PID_LAYER(1) | ISDN_PID_BCHANNEL_BIT;
-	if (aplci->Bprotocol.B1cfg[0]) {
-		pid.param[1] = &aplci->Bprotocol.B1cfg[0];
-		pid.maxplen += aplci->Bprotocol.B1cfg[0] +1;
+	retval = mISDN_add_pid_parameter(&pid, 1, &aplci->Bprotocol.B1cfg[0]);
+	if (retval) {/* ressource error */
+		kfree(pid.pbuf);
+		return 0x1008;
 	}
+
 	if (aplci->Bprotocol.B2 > 23) {
 		int_errtxt("wrong B2 prot %x", aplci->Bprotocol.B2);
-		return(0x3002);
+		kfree(pid.pbuf);
+		return 0x3002;
 	}
 	pid.protocol[2] = (1 << aplci->Bprotocol.B2) |
 		ISDN_PID_LAYER(2) | ISDN_PID_BCHANNEL_BIT;
-	if (aplci->Bprotocol.B2cfg[0]) {
-		pid.param[2] = &aplci->Bprotocol.B2cfg[0];
-		pid.maxplen += aplci->Bprotocol.B2cfg[0] +1;
+	retval = mISDN_add_pid_parameter(&pid, 2, &aplci->Bprotocol.B2cfg[0]);
+	if (retval) {/* ressource error */
+		kfree(pid.pbuf);
+		return 0x1008;
 	}
+
 	/* handle DTMF TODO */
 	if ((pid.protocol[2] == ISDN_PID_L2_B_TRANS) &&
 		(pid.protocol[1] == ISDN_PID_L1_B_64TRANS))
 		pid.protocol[2] = ISDN_PID_L2_B_TRANSDTMF;
 	if (aplci->Bprotocol.B3 > 23) {
 		int_errtxt("wrong B3 prot %x", aplci->Bprotocol.B3);
-		return(0x3003);
+		kfree(pid.pbuf);
+		return 0x3003;
 	}
 	pid.protocol[3] = (1 << aplci->Bprotocol.B3) |
 		ISDN_PID_LAYER(3) | ISDN_PID_BCHANNEL_BIT;
-	if (aplci->Bprotocol.B3cfg[0]) {
-		pid.param[3] = &aplci->Bprotocol.B3cfg[0];
-		pid.maxplen += aplci->Bprotocol.B3cfg[0] +1;
+	retval = mISDN_add_pid_parameter(&pid, 3, &aplci->Bprotocol.B3cfg[0]);
+	if (retval) {/* ressource error */
+		kfree(pid.pbuf);
+		return 0x1008;
 	}
+
 	capidebug(CAPI_DBG_PLCI, "AppPlciLinkUp B1(%x) B2(%x) B3(%x) global(%d) ch(%x)",
 		pid.protocol[1], pid.protocol[2], pid.protocol[3], pid.global, 
 		aplci->channel);
@@ -1620,6 +1628,7 @@ AppPlciLinkUp(AppPlci_t *aplci)
 	aplci->link = ControllerSelChannel(aplci->contr, aplci->channel);
 	if (!aplci->link) {
 		int_error();
+		kfree(pid.pbuf);
 		return(-EBUSY);
 	}
 	capidebug(CAPI_DBG_NCCI, "AppPlciLinkUp aplci->link(%p)", aplci->link);
@@ -1653,6 +1662,7 @@ AppPlciLinkUp(AppPlci_t *aplci)
 			__FUNCTION__, retval);
 	}
 	retval = mISDN_ctrl(aplci->link->st, MGR_SETSTACK | REQUEST, &pid);
+	kfree(pid.pbuf);
 	if (retval) {
 		printk(KERN_WARNING "%s MGR_SETSTACK | REQUEST ret(%d)\n",
 			__FUNCTION__, retval);

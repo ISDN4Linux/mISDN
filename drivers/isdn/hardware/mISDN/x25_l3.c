@@ -1,4 +1,4 @@
-/* $Id: x25_l3.c,v 1.8 2006/03/23 13:11:43 keil Exp $
+/* $Id: x25_l3.c,v 1.9 2006/08/07 23:35:59 keil Exp $
  *
  * Linux modular ISDN subsystem, mISDN
  * X.25/X.31 common Layer3 functions 
@@ -679,8 +679,8 @@ new_x25_l3(x25_l3_t **l3_p, mISDNstack_t *st, mISDN_pid_t *pid, mISDNobject_t *o
 	}
 	n_l3->debug = debug;
 	n_l3->B3cfg = (x25_B3_cfg_t)DEFAULT_X25_B3_CFG;
-	if (pid->param[3]) {
-		u_char	*p = pid->param[3];
+	if (pid->param[3] && pid->pbuf) {
+		u_char	*p = pid->pbuf + pid->param[3];
 		memcpy(&n_l3->B3cfg, &p[1], p[0]);
 	}
 	if (n_l3->B3cfg.modulo == 128)

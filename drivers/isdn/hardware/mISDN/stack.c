@@ -1,4 +1,4 @@
-/* $Id: stack.c,v 1.18 2006/06/09 08:41:26 crich Exp $
+/* $Id: stack.c,v 1.19 2006/08/07 23:35:59 keil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -1100,8 +1100,6 @@ unregister_instance(mISDNinstance_t *inst) {
 int
 copy_pid(mISDN_pid_t *dpid, mISDN_pid_t *spid, u_char *pbuf)
 {
-	u_int	i, off;
-
 	memcpy(dpid, spid, sizeof(mISDN_pid_t));
 	if (spid->pbuf && spid->maxplen) {
 		if (!pbuf) {
@@ -1110,39 +1108,6 @@ copy_pid(mISDN_pid_t *dpid, mISDN_pid_t *spid, u_char *pbuf)
 		}
 		dpid->pbuf = pbuf;
 		memcpy(dpid->pbuf, spid->pbuf, spid->maxplen);
-		for (i = 0; i <= MAX_LAYER_NR; i++) {
-			if (spid->param[i]) {
-				off = (u_int)(spid->param[i] - spid->pbuf);
-				dpid->param[i] = dpid->pbuf + off;
-			}
-		}
-	} else if (spid->maxplen) {
-		off = 0;
-		for (i = 0; i <= MAX_LAYER_NR; i++)
-			if (spid->param[i])
-				off += *spid->param[i];
-		if (off == 0) {
-			int_error(); /* we ignore this */
-			dpid->maxplen = 0;
-			return(0);
-		}
-		if (off > spid->maxplen) {
-			int_errtxt("overflow");
-			dpid->maxplen = 0;
-			return(-EINVAL);
-		}
-		if (!pbuf) {
-			int_error();
-			return(-ENOMEM);
-		}
-		for (i = 0; i <= MAX_LAYER_NR; i++) {
-			if (spid->param[i]) {
-				dpid->param[i] = pbuf;
-				off = *dpid->param[i] +1;
-				memcpy(pbuf, dpid->param[i], off);
-				pbuf += off;
-			}
-		}
 	}
 	return(0);
 }

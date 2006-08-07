@@ -1,4 +1,4 @@
-/* $Id: layer2.c,v 1.29 2006/07/03 12:44:37 crich Exp $
+/* $Id: layer2.c,v 1.30 2006/08/07 23:35:59 keil Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -10,7 +10,7 @@
 #include "helper.h"
 #include "debug.h"
 
-static char *l2_revision = "$Revision: 1.29 $";
+static char *l2_revision = "$Revision: 1.30 $";
 
 static void l2m_debug(struct FsmInst *fi, char *fmt, ...);
 
@@ -2272,7 +2272,8 @@ new_l2(mISDNstack_t *st, mISDN_pid_t *pid) {
 		nl2->addr.B = 1;
 		if (nl2->inst.pid.global == 1)
 			test_and_set_bit(FLG_ORIG, &nl2->flag);
-		if ((p=pid->param[2])) {
+		if (pid->param[2] && pid->pbuf) {
+			p = pid->pbuf + pid->param[2];
 			if (*p>=4) {
 				p++;
 				nl2->addr.A = *p++;
