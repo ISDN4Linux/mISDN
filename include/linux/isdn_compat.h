@@ -114,5 +114,9 @@ typedef struct wait_queue *wait_queue_head_t;
 #define CLASS_WITHOUT_OWNER
 #endif
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,14)
+#define kzalloc kmalloc
+#endif
+
 #endif /* __KERNEL__ */
 #endif /* _LINUX_ISDN_COMPAT_H */
