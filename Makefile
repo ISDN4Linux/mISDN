@@ -41,7 +41,7 @@ MINCLUDES+=-I$(MISDNDIR)/include
 
 all: test_old_misdn
 	@echo
-	@echo "Makeing mISDN"
+	@echo "Making mISDN"
 	@echo "============="
 	@echo
 	cp $(MISDNDIR)/drivers/isdn/hardware/mISDN/Makefile.v2.6 $(MISDNDIR)/drivers/isdn/hardware/mISDN/Makefile
