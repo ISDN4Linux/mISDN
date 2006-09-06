@@ -1,4 +1,4 @@
-/* $Id: dsp_core.c,v 1.23 2006/07/13 07:22:27 crich Exp $
+/* $Id: dsp_core.c,v 1.24 2006/09/06 17:24:22 crich Exp $
  *
  * Author       Andreas Eversberg (jolly@jolly.de)
  * Based on source code structure by
@@ -169,7 +169,7 @@ There are three things that need to transmit data to card:
  
  */
 
-const char *dsp_revision = "$Revision: 1.23 $";
+const char *dsp_revision = "$Revision: 1.24 $";
 
 #include <linux/delay.h>
 #include <linux/config.h>
@@ -631,6 +631,17 @@ dsp_from_down(mISDNinstance_t *inst,  struct sk_buff *skb)
 				dev_kfree_skb(skb);
 				break;
 
+				case VOL_CHANGE_TX: /* change volume */
+				if (skb->len != sizeof(int)) {
+					ret = -EINVAL;
+					break;
+				}
+				dsp->tx_volume = *((int *)skb->data);
+				if (dsp_debug & DEBUG_DSP_CORE)
+					printk(KERN_DEBUG "%s: change tx volume to %d\n", __FUNCTION__, dsp->tx_volume);
+				printk(KERN_DEBUG "%s: change tx volume to %d\n", __FUNCTION__, dsp->tx_volume);
+				dsp_cmx_hardware(dsp->conf, dsp);
+				break;
 				default:
 				if (dsp_debug & DEBUG_DSP_CORE)
 					printk(KERN_DEBUG "%s: ctrl ind %x unhandled %s\n", __FUNCTION__, hh->dinfo, dsp->inst.name);
@@ -771,14 +782,16 @@ dsp_feat(void *arg)
 			break;
 		case FEAT_STATE_WAIT:
 			if (dsp_debug & DEBUG_DSP_MGR)
-				printk(KERN_DEBUG "%s: features of %s are: hfc_id=%d hfc_dtmf=%d hfc_loops=%d pcm_id=%d pcm_slots=%d pcm_banks=%d\n",
+				printk(KERN_DEBUG "%s: features of %s are: hfc_id=%d hfc_dtmf=%d hfc_loops=%d hfc_echocanhw:%d pcm_id=%d pcm_slots=%d pcm_banks=%d\n",
 				 __FUNCTION__, dsp->inst.name,
 				 dsp->features.hfc_id,
 				 dsp->features.hfc_dtmf,
 				 dsp->features.hfc_loops,
+				 dsp->features.hfc_echocanhw,
 				 dsp->features.pcm_id,
 				 dsp->features.pcm_slots,
 				 dsp->features.pcm_banks);
+
 			spin_lock(&dsp->feature_lock);
 			dsp->feature_state = FEAT_STATE_RECEIVED;
 			spin_unlock(&dsp->feature_lock);
@@ -788,6 +801,15 @@ dsp_feat(void *arg)
 				dsp_cmx_conf(dsp, dsp->queue_conf_id );
 				if (dsp_debug & DEBUG_DSP_CMX)
 					dsp_cmx_debug(dsp);
+			}
+
+			if (dsp->queue_cancel[2]) {
+				dsp_cancel_init(dsp, 
+						dsp->queue_cancel[0],
+						dsp->queue_cancel[1],
+						dsp->queue_cancel[2]
+					       );
+						
 			}
 			break;
 	}

@@ -1,4 +1,4 @@
-/* $Id: sysfs_st.c,v 1.10 2006/08/07 23:35:59 keil Exp $
+/* $Id: sysfs_st.c,v 1.11 2006/09/06 17:24:22 crich Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -238,11 +238,13 @@ mISDN_register_sysfs_stack(mISDNstack_t *st)
 	mISDNstack_attr_parameter_new_pid.store = store_st_parameter;
 	mISDNstack_attr_layermask_new_pid.attr.mode |= S_IWUSR;
 	mISDNstack_attr_layermask_new_pid.store = store_st_layermask;
+
 #ifdef SYSFS_SUPPORT
 	err = sysfs_create_group(&st->class_dev.kobj, &new_pid_group);
 	if (err)
 		goto out_unreg;
 #endif
+
 	class_device_create_file(&st->class_dev, &class_device_attr_id);
 	class_device_create_file(&st->class_dev, &class_device_attr_qlen);
 	class_device_create_file(&st->class_dev, &class_device_attr_status);

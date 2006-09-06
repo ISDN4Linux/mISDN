@@ -22,6 +22,27 @@
  * 
  * 
  */
+
+/*
+ * send HW message to hfc card
+ */
+static void
+dsp_cancel_hw_message(dsp_t *dsp, u32 message, u32 param)
+{
+	struct sk_buff *nskb;
+
+	nskb = create_link_skb(PH_CONTROL | REQUEST, message, sizeof(param), &param, 0);
+	if (!nskb) {
+		printk(KERN_ERR "%s: No mem for skb.\n", __FUNCTION__);
+		return;
+	}
+	/* unlocking is not required, because we don't expect a response */
+	if (mISDN_queue_down(&dsp->inst, 0, nskb))
+		dev_kfree_skb(nskb);
+}
+
+
+
 void bchdev_echocancel_chunk(dsp_t* dev, uint8_t *rxchunk, uint8_t *txchunk, uint16_t size);
 int bchdev_echocancel_activate(dsp_t* dev, int deftaps, int train);
 void bchdev_echocancel_deactivate(dsp_t* dev);
@@ -84,19 +105,38 @@ dsp_cancel_init(dsp_t *dsp, int deftaps, int training, int delay)
 {
 	
 	if (!dsp) return -1;
+
+	if (dsp->feature_state != FEAT_STATE_RECEIVED) {
+		dsp->queue_cancel[0]=deftaps;
+		dsp->queue_cancel[1]=training;
+		dsp->queue_cancel[2]=delay;
+		return 0;
+	}
 	
 	printk("DSP_CANCEL_INIT called\n");
 	
 	if (delay < 0)
 	{
-		printk("Disabling EC\n");
+		printk(KERN_NOTICE "Disabling EC\n");
 		dsp->cancel_enable = 0;
 		
 		dsp->txbuflen=0;
-		
-		bchdev_echocancel_deactivate(dsp);
+
+		if (dsp->features.hfc_echocanhw) {
+			printk(KERN_NOTICE "Disabling Hardware EC\n");
+			dsp_cancel_hw_message(dsp, HW_ECHOCAN_OFF, deftaps);
+		} else {
+			bchdev_echocancel_deactivate(dsp);
+		}
 		
 		return(0);
+	}
+	
+	
+	if (dsp->features.hfc_echocanhw) {
+		printk(KERN_NOTICE "Using Hardware EC taps [%d]\n",deftaps);
+		dsp_cancel_hw_message(dsp, HW_ECHOCAN_ON, deftaps);
+		return 0;
 	}
 	
 	dsp->txbuflen=0;

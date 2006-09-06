@@ -99,6 +99,8 @@ typedef struct hfcmulti_hw	hfcmulti_hw_t;
 #define HFC_CHIP_CRYSTAL_CLOCK	9 /* autarc clocking mode */
 #define HFC_CHIP_WATCHDOG	10 /* wether we should send signals 
 					to the watchdog */
+#define HFC_CHIP_DIGICARD       11 /* wether we have a b410p with echocan in 
+					hw */
 
 struct hfc_multi {
 	struct list_head	list;
@@ -1235,31 +1237,37 @@ static void _HFC_wait(hfc_multi_t *a, char *function, int line)
 #endif
 
 /* usage: HFC_outX(card,register,value); */
-static inline void HFC_outb(hfc_multi_t *a, u_char b, u_char c)
+static inline void HFC_outb(hfc_multi_t *a, unsigned short b, u_char c)
 {
-	outb(b,(a->pci_iobase)+4);
+	outw(b,(a->pci_iobase)+4);
 	outb(c,a->pci_iobase);
 }
-static inline void HFC_outl(hfc_multi_t *a, u_char b, u_long c)
+static inline void HFC_outl(hfc_multi_t *a, unsigned short b, u_long c)
 {
-	outb(b,(a->pci_iobase)+4);
+	outw(b,(a->pci_iobase)+4);
 	outl(c,a->pci_iobase);
 }
 
-/* usage: value=HFC_inX(card,register); */
-static inline u_char HFC_inb(hfc_multi_t *a, u_char b)
+static inline void HFC_outw(hfc_multi_t *a, unsigned short b, u_long c)
 {
-	outb(b,(a->pci_iobase)+4);
+	outw(b,(a->pci_iobase)+4);
+	outw(c,a->pci_iobase);
+}
+
+/* usage: value=HFC_inX(card,register); */
+static inline u_char HFC_inb(hfc_multi_t *a, unsigned short b)
+{
+	outw(b,(a->pci_iobase)+4);
 	return (inb((volatile u_int)a->pci_iobase));
 }
-static inline u_short HFC_inw(hfc_multi_t *a, u_char b)
+static inline u_short HFC_inw(hfc_multi_t *a, unsigned short b)
 {
-	outb(b,(a->pci_iobase)+4);
+	outw(b,(a->pci_iobase)+4);
 	return (inw((volatile u_int)a->pci_iobase));
 }
-static inline u_long HFC_inl(hfc_multi_t *a, u_char b)
+static inline u_long HFC_inl(hfc_multi_t *a, unsigned short b)
 {
-	outb(b,(a->pci_iobase)+4);
+	outw(b,(a->pci_iobase)+4);
 	return (inl((volatile u_int)a->pci_iobase));
 }
 

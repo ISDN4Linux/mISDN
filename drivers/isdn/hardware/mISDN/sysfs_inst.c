@@ -1,4 +1,4 @@
-/* $Id: sysfs_inst.c,v 1.9 2006/07/14 15:48:17 crich Exp $
+/* $Id: sysfs_inst.c,v 1.10 2006/09/06 17:24:22 crich Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -112,7 +112,7 @@ mISDN_unregister_sysfs_inst(mISDNinstance_t *inst)
 {
 	char	name[8];
 
-	if (inst->id) {
+	if (inst && inst->id) {
 		if (inst->st) {
 			sprintf(name,"layer.%d", inst->id & LAYER_ID_MASK);
 

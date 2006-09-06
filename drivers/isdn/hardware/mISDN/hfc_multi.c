@@ -108,6 +108,9 @@
 //#define IRQCOUNT_DEBUG
 
 #include "hfc_multi.h"
+#ifdef ECHOPREP
+#include "gaintab.h"
+#endif
 
 //#warning
 
@@ -125,7 +128,7 @@ static void ph_state_change(channel_t *ch);
 
 extern const char *CardType[];
 
-static const char *hfcmulti_revision = "$Revision: 1.51 $";
+static const char *hfcmulti_revision = "$Revision: 1.52 $";
 
 static int HFC_cnt, HFC_idx;
 
@@ -184,6 +187,8 @@ static const PCI_ENTRY id_list[] =
 	 "HFC-4S", 4, 1, 2},
 	{CCAG_VID, CCAG_VID, HFC4S_ID, 0xB560, VENDOR_CCD,
 	 "HFC-4S Beronet Card", 4, 1, 2},
+	{0xD161, 0xD161, 0xB410, 0xB410, VENDOR_CCD,
+	 "HFC-4S Digium Card", 4, 0, 2},
 	{CCAG_VID, CCAG_VID, HFC8S_ID, 0xB521, VENDOR_CCD,
 	 "HFC-8S IOB4ST Recording", 8, 1, 0},
 	{CCAG_VID, CCAG_VID, HFC8S_ID, 0xB522, VENDOR_CCD,
@@ -278,6 +283,324 @@ disable_hwirq(hfc_multi_t *hc)
 	HFC_outb(hc, R_IRQ_CTRL, hc->hw.r_irq_ctrl);
 }
 
+
+#define B410P_CARD
+
+#define NUM_EC 2
+#define MAX_TDM_CHAN 32
+
+
+#ifdef B410P_CARD
+inline void enablepcibridge(hfc_multi_t *c)
+{
+	HFC_outb(c, R_BRG_PCM_CFG, (0x0 << 6) | 0x3); /*was _io before*/
+}
+
+inline void disablepcibridge(hfc_multi_t *c)
+{
+	HFC_outb(c, R_BRG_PCM_CFG, (0x0 << 6) | 0x2); /*was _io before*/
+}
+
+inline unsigned char readpcibridge(hfc_multi_t *c, unsigned char address)
+{
+	unsigned short cipv;
+	unsigned char data;
+	
+	// slow down a PCI read access by 1 PCI clock cycle
+	HFC_outb(c, R_CTRL, 0x4); /*was _io before*/
+	
+	if (address == 0)
+		cipv=0x4000;
+	else
+		cipv=0x5800;
+	
+	// select local bridge port address by writing to CIP port
+	//data = HFC_inb(c, cipv); /*was _io before*/
+	outw(cipv, c->pci_iobase + 4);
+	data = inb(c->pci_iobase);
+	
+	// restore R_CTRL for normal PCI read cycle speed
+	HFC_outb(c, R_CTRL, 0x0); /*was _io before*/
+	
+	return data;
+}
+
+inline void writepcibridge(hfc_multi_t *hc, unsigned char address, unsigned char data)
+{
+	unsigned short cipv;
+	unsigned int datav;
+
+	if (address == 0)
+		cipv=0x4000;
+	else
+		cipv=0x5800;
+
+	// select local bridge port address by writing to CIP port
+	outw(cipv, hc->pci_iobase + 4);
+	
+	// define a 32 bit dword with 4 identical bytes for write sequence
+	datav=data | ( (__u32) data <<8) | ( (__u32) data <<16) | ( (__u32) data <<24);
+
+	
+	// write this 32 bit dword to the bridge data port
+	// this will initiate a write sequence of up to 4 writes to the same address on the local bus
+	// interface
+	// the number of write accesses is undefined but >=1 and depends on the next PCI transaction
+	// during write sequence on the local bus
+	outl(datav, hc->pci_iobase);
+}
+	
+inline void cpld_set_reg(hfc_multi_t *hc, unsigned char reg)
+{
+	/* Do data pin read low byte */
+	HFC_outb(hc, R_GPIO_OUT1, reg);
+}
+
+inline void cpld_write_reg(hfc_multi_t *hc, unsigned char reg, unsigned char val)
+{
+	cpld_set_reg(hc, reg);
+
+	enablepcibridge(hc);
+	writepcibridge(hc, 1, val);
+	disablepcibridge(hc);
+
+	return;
+}
+
+inline unsigned char cpld_read_reg(hfc_multi_t *hc, unsigned char reg)
+{
+	unsigned char bytein;
+
+	cpld_set_reg(hc, reg);
+
+	/* Do data pin read low byte */
+	HFC_outb(hc, R_GPIO_OUT1, reg);
+
+	enablepcibridge(hc);
+	bytein = readpcibridge(hc, 1);
+	disablepcibridge(hc);
+
+	return bytein;
+}
+
+inline void vpm_write_address(hfc_multi_t *hc, unsigned short addr)
+{
+	cpld_write_reg(hc, 0, 0xff & addr);
+	cpld_write_reg(hc, 1, 0x01 & (addr >> 8));
+}
+
+inline unsigned short vpm_read_address(hfc_multi_t *c)
+{
+	unsigned short addr;
+	unsigned short highbit;
+	
+	addr = cpld_read_reg(c, 0);
+	highbit = cpld_read_reg(c, 1);
+
+	addr = addr | (highbit << 8);
+
+	return addr & 0x1ff;
+}
+
+inline unsigned char vpm_in(hfc_multi_t *c, int which, unsigned short addr)
+{
+	unsigned char res;
+
+	vpm_write_address(c, addr);
+
+	if (!which)
+		cpld_set_reg(c, 2);
+	else
+		cpld_set_reg(c, 3);
+
+	enablepcibridge(c);
+	res = readpcibridge(c, 1);
+	disablepcibridge(c);
+
+	cpld_set_reg(c, 0);
+
+	return res;
+}
+
+inline void vpm_out(hfc_multi_t *c, int which, unsigned short addr, unsigned char data)
+{
+	vpm_write_address(c, addr);
+
+	enablepcibridge(c);
+
+	if (!which)
+		cpld_set_reg(c, 2);
+	else
+		cpld_set_reg(c, 3);
+
+	writepcibridge(c, 1, data);
+
+	cpld_set_reg(c, 0);
+
+	disablepcibridge(c);
+
+	{
+	unsigned char regin;
+	regin = vpm_in(c, which, addr);
+	if (regin != data)
+		printk("Wrote 0x%x to register 0x%x but got back 0x%x\n", data, addr, regin);
+	}
+	return;
+}
+
+
+void vpm_init(hfc_multi_t *wc)
+{
+	unsigned char reg;
+	unsigned int mask;
+	unsigned int i, x, y;
+	unsigned int ver;
+
+	for (x=0;x<NUM_EC;x++) {
+		/* Setup GPIO's */
+		if (!x) {
+			ver = vpm_in(wc, x, 0x1a0);
+			printk("VPM: Chip %d: ver %02x\n", x, ver);
+		}
+
+		for (y=0;y<4;y++) {
+			vpm_out(wc, x, 0x1a8 + y, 0x00); /* GPIO out */
+			vpm_out(wc, x, 0x1ac + y, 0x00); /* GPIO dir */
+			vpm_out(wc, x, 0x1b0 + y, 0x00); /* GPIO sel */
+		}
+
+		/* Setup TDM path - sets fsync and tdm_clk as inputs */
+		reg = vpm_in(wc, x, 0x1a3); /* misc_con */
+		vpm_out(wc, x, 0x1a3, reg & ~2);
+
+		/* Setup Echo length (256 taps) */
+		vpm_out(wc, x, 0x022, 1);
+		vpm_out(wc, x, 0x023, 0xff);
+
+		/* Setup timeslots */
+		vpm_out(wc, x, 0x02f, 0x00);
+		mask = 0x02020202 << (x * 4);
+
+		/* Setup the tdm channel masks for all chips*/
+		for (i = 0; i < 4; i++)
+			vpm_out(wc, x, 0x33 - i, (mask >> (i << 3)) & 0xff);
+
+		/* Setup convergence rate */
+		printk("VPM: A-law mode\n");
+		reg = 0x00 | 0x10 | 0x01;
+		vpm_out(wc,x,0x20,reg);
+		printk("VPM reg 0x20 is %x\n", reg);
+		//vpm_out(wc,x,0x20,(0x00 | 0x08 | 0x20 | 0x10));
+
+		vpm_out(wc, x, 0x24, 0x02);
+		reg = vpm_in(wc, x, 0x24);
+		printk("NLP Thresh is set to %d (0x%x)\n", reg, reg);
+
+		/* Initialize echo cans */
+		for (i = 0 ; i < MAX_TDM_CHAN; i++) {
+			if (mask & (0x00000001 << i))
+				vpm_out(wc,x,i,0x00);
+		}
+
+		udelay(10000);
+
+		/* Put in bypass mode */
+		for (i = 0 ; i < MAX_TDM_CHAN ; i++) {
+			if (mask & (0x00000001 << i)) {
+				vpm_out(wc,x,i,0x01);
+			}
+		}
+
+		/* Enable bypass */
+		for (i = 0 ; i < MAX_TDM_CHAN ; i++) {
+			if (mask & (0x00000001 << i))
+				vpm_out(wc,x,0x78 + i,0x01);
+		}
+      
+	} 
+}
+
+void vpm_check(hfc_multi_t *hctmp)
+{
+	unsigned char gpi2;
+
+	gpi2 = HFC_inb(hctmp, R_GPI_IN2);
+
+	if ((gpi2 & 0x3) != 0x3) {
+		printk("Got interrupt 0x%x from VPM!\n", gpi2);
+	}
+}
+
+
+/*
+ * Interface to enable/disable the HW Echocan
+ *
+ * these functions are called within a spin_lock_irqsave on
+ * the channel instance lock, so we are not disturbed by irqs 
+ *
+ * we can later easily change the interface to make  other 
+ * things configurable, for now we configure the taps
+ *
+ */
+	
+void vpm_echocan_on(hfc_multi_t *hc, int ch, int taps) 
+{
+	unsigned int timeslot;
+	unsigned int unit;
+	channel_t *bch = hc->chan[ch].ch;
+	struct sk_buff *skb;
+	int txadj = -4;
+
+	if (hc->chan[ch].protocol != ISDN_PID_L1_B_64TRANS)
+		return;
+
+	if (!bch)
+		return;
+
+	skb = create_link_skb(PH_CONTROL | INDICATION, VOL_CHANGE_TX, sizeof(int), &txadj, 0);
+
+	if (mISDN_queue_up(&bch->inst, 0, skb))
+		dev_kfree_skb(skb);
+
+	timeslot = ((ch/4)*8) + ((ch%4)*4) + 1;
+	unit = ch % 4;
+
+	printk(KERN_NOTICE "vpm_echocan_on called taps [%d] on timeslot %d\n", taps, timeslot);
+
+	vpm_out(hc, unit, timeslot, 0x7e);
+}
+
+void vpm_echocan_off(hfc_multi_t *hc, int ch) 
+{
+	unsigned int timeslot;
+	unsigned int unit;
+	channel_t *bch = hc->chan[ch].ch;
+	struct sk_buff *skb;
+	int txadj = 0;
+
+	if (hc->chan[ch].protocol != ISDN_PID_L1_B_64TRANS)
+		return;
+
+	if (!bch)
+		return;
+
+	skb = create_link_skb(PH_CONTROL | INDICATION, VOL_CHANGE_TX, sizeof(int), &txadj, 0);
+
+	if (mISDN_queue_up(&bch->inst, 0, skb))
+		dev_kfree_skb(skb);
+
+	timeslot = ((ch/4)*8) + ((ch%4)*4) + 1;
+	unit = ch % 4;
+
+	printk(KERN_NOTICE "vpm_echocan_off called on timeslot %d\n", timeslot);
+	/*FILLME*/
+	vpm_out(hc, unit, timeslot, 0x01);
+}
+
+#endif  /* B410_CARD */
+
+
+
 /******************************************/
 /* free hardware resources used by driver */
 /******************************************/
@@ -328,7 +651,7 @@ init_chip(hfc_multi_t *hc)
 	u_long 	flags, val, val2 = 0, rev;
 	int	cnt = 0;
 	int	i, err = 0;
-	u_char	r_conf_en, rval;
+	u_char	r_conf_en,rval;
 
 	spin_lock_irqsave(&hc->lock, flags);
 	/* reset all registers */
@@ -354,7 +677,7 @@ init_chip(hfc_multi_t *hc)
 		printk(KERN_WARNING "HFC_multi: WARNING: This driver doesn't consider chip revision = %ld. The chip / bridge may not work.\n", rev);
 	}
 
-	/* set s-ram size */
+/* set s-ram size */
 	hc->Flen = 0x10;
 	hc->Zmin = 0x80;
 	hc->Zlen = 384;
@@ -434,17 +757,36 @@ init_chip(hfc_multi_t *hc)
 		goto out;
 	}
 
+	if (test_bit(HFC_CHIP_DIGICARD,&hc->chip)) {
+		HFC_outb(hc, R_BRG_PCM_CFG, 0x2);
+		HFC_outb(hc, R_PCM_MD0, (0x9<<4) | 0x1);
+		HFC_outb(hc, R_PCM_MD1, 0);
+	
+		printk(KERN_NOTICE "Setting GPIOs\n");
+		HFC_outb(hc, R_GPIO_SEL, 0x30);
+		HFC_outb(hc, R_GPIO_EN1, 0x3);
+
+		udelay(1000);
+		
+		printk(KERN_NOTICE "calling vpm_init\n");
+		
+		vpm_init(hc);
+
+	} else {
+		HFC_outb(hc, R_PCM_MD0, hc->hw.r_pcm_md0 | 0x90);
+		if (hc->slots == 32)
+			HFC_outb(hc, R_PCM_MD1, 0x00);
+		if (hc->slots == 64)
+			HFC_outb(hc, R_PCM_MD1, 0x10);
+		if (hc->slots == 128)
+			HFC_outb(hc, R_PCM_MD1, 0x20);
+		HFC_outb(hc, R_PCM_MD0, hc->hw.r_pcm_md0 | 0xa0);
+		HFC_outb(hc, R_PCM_MD2, 0x00);
+		HFC_outb(hc, R_PCM_MD0, hc->hw.r_pcm_md0 | 0x00);
+		
+	}
+
 	i = 0;
-	HFC_outb(hc, R_PCM_MD0, hc->hw.r_pcm_md0 | 0x90);
-	if (hc->slots == 32)
-		HFC_outb(hc, R_PCM_MD1, 0x00);
-	if (hc->slots == 64)
-		HFC_outb(hc, R_PCM_MD1, 0x10);
-	if (hc->slots == 128)
-		HFC_outb(hc, R_PCM_MD1, 0x20);
-	HFC_outb(hc, R_PCM_MD0, hc->hw.r_pcm_md0 | 0xa0);
-	HFC_outb(hc, R_PCM_MD2, 0x00);
-	HFC_outb(hc, R_PCM_MD0, hc->hw.r_pcm_md0 | 0x00);
 	while (i < 256) {
 		HFC_outb_(hc, R_SLOT, i);
 		HFC_outb_(hc, A_SL_CFG, 0);
@@ -478,14 +820,20 @@ init_chip(hfc_multi_t *hc)
 	}
 	if (debug & DEBUG_HFCMULTI_INIT)
 		printk(KERN_DEBUG "HFC_multi F0_CNT %ld after %dms\n", val2, cnt);
+
 	if (val2 < val+4) {
 		printk(KERN_ERR "HFC_multi ERROR 125us pulse not counting.\n");
 		if (test_bit(HFC_CHIP_PCM_SLAVE, &hc->chip)) {
 			printk(KERN_ERR "HFC_multi This happens in PCM slave mode without connected master.\n");
 		}
-		if (!test_bit(HFC_CHIP_CLOCK_IGNORE, &hc->chip)) {
-			err = -EIO;
-			goto out;
+		if (test_bit(HFC_CHIP_DIGICARD, &hc->chip)) {
+			printk(KERN_ERR "HFC_multi ingoring PCM clock for digicard.\n");
+			
+		} else {
+			if (!test_bit(HFC_CHIP_CLOCK_IGNORE, &hc->chip) ){ 
+				err = -EIO;
+				goto out;
+			}
 		}
 	}
 
@@ -691,13 +1039,27 @@ hfcmulti_leds(hfc_multi_t *hc)
 				led[i] = 0; /* led off */
 			i++;
 		}
-//printk("leds %d %d %d %d\n", led[0], led[1], led[2], led[3]);
-		HFC_outb(hc, R_GPIO_EN1,
-			((led[0]>0)<<0) | ((led[1]>0)<<1) |
-			((led[2]>0)<<2) | ((led[3]>0)<<3));
-		HFC_outb(hc, R_GPIO_OUT1,
-			((led[0]&1)<<0) | ((led[1]&1)<<1) |
-			((led[2]&1)<<2) | ((led[3]&1)<<3));
+
+		if (test_bit(HFC_CHIP_DIGICARD, &hc->chip)) {
+			int leds=0;
+			for (i=0; i<4; i++) {
+				if (led[i]==1) {
+					/*green*/
+					leds |=( 0x2 <<(i*2));
+				} else if (led[i]==2) {
+					/*red*/
+					leds |=( 0x1 <<(i*2));
+				}
+			}
+			vpm_out(hc, 0, 0x1a8+3,leds);
+		} else {
+			HFC_outb(hc, R_GPIO_EN1,
+				 ((led[0]>0)<<0) | ((led[1]>0)<<1) |
+				 ((led[2]>0)<<2) | ((led[3]>0)<<3));
+			HFC_outb(hc, R_GPIO_OUT1,
+				 ((led[0]&1)<<0) | ((led[1]&1)<<1) |
+				 ((led[2]&1)<<2) | ((led[3]&1)<<3));
+		}
 		break;
 
 		case 3:
@@ -951,7 +1313,12 @@ hfcmulti_tx(hfc_multi_t *hc, int ch, channel_t *chan)
 
 	//printk("debug: data: len = %d, txpending = %d!!!!\n", *len, txpending);
 	/* lets see how much data we will have left in buffer */
-	HFC_outb_(hc, R_FIFO, ch << 1);
+	if (test_bit(HFC_CHIP_DIGICARD, &hc->chip) && (hc->chan[ch].protocol == ISDN_PID_L1_B_64TRANS) && (hc->chan[ch].slot_rx < 0) && (hc->chan[ch].bank_rx == 0)
+			&& (hc->chan[ch].slot_tx < 0) && (hc->chan[ch].bank_tx == 0)) {
+		HFC_outb_(hc, R_FIFO, 0x20 | (ch << 1));
+	} else
+		HFC_outb_(hc, R_FIFO, ch << 1);
+
 	HFC_wait_(hc);
 	if (txpending == 2) {
 		/* reset fifo */
@@ -1058,6 +1425,7 @@ next_frame:
 			__FUNCTION__, ch, Zspace, z1, z2, ii-i, len-i,
 			test_bit(FLG_HDLC, &chan->Flags) ? "HDLC":"TRANS");
 
+	/* Have to prep the audio data */
 	write_fifo_data(hc, d, ii - i);
 	chan->tx_idx = ii;
 
@@ -1180,7 +1548,11 @@ hfcmulti_rx(hfc_multi_t *hc, int ch, channel_t *chan)
 	struct sk_buff *skb;
 
 	/* lets see how much data we received */
-	HFC_outb_(hc, R_FIFO, (ch<<1)|1);
+	if (test_bit(HFC_CHIP_DIGICARD, &hc->chip) && (hc->chan[ch].protocol == ISDN_PID_L1_B_64TRANS) && (hc->chan[ch].slot_rx < 0) && (hc->chan[ch].bank_rx == 0)
+			&& (hc->chan[ch].slot_tx < 0) && (hc->chan[ch].bank_tx == 0)) {
+		HFC_outb_(hc, R_FIFO, 0x20 | (ch<<1) | 1);
+	} else 
+		HFC_outb_(hc, R_FIFO, (ch<<1)|1);
 	HFC_wait_(hc);
 next_frame:
 	if (test_bit(FLG_HDLC, &chan->Flags)) {
@@ -1593,6 +1965,11 @@ hfcmulti_interrupt(int intno, void *dev_id, struct pt_regs *regs)
 				j = 0;
 				while(j < 8) {
 					ch = (i<<2) + (j>>1);
+					if (ch >= 16) {
+						if (ch == 16)
+							printk("Shouldn't be servicing high FIFOs.  Continuing.\n");
+						continue;
+					}
 					chan = hc->chan[ch].ch;
 					if (r_irq_fifo_bl & (1 << j)) {
 						if (chan && hc->created[hc->chan[ch].port] &&
@@ -1769,23 +2146,70 @@ mode_hfcmulti(hfc_multi_t *hc, int ch, int protocol, int slot_tx, int bank_tx, i
 			}
 			break;
 		case (ISDN_PID_L1_B_64TRANS): /* B-channel */
-			/* enable TX fifo */
-			HFC_outb(hc, R_FIFO, ch<<1);
-			HFC_wait(hc);
-			HFC_outb(hc, A_CON_HDLC, flow_tx | 0x00 | V_HDLC_TRP | V_IFF);
-			HFC_outb(hc, A_SUBCH_CFG, 0);
-			HFC_outb(hc, A_IRQ_MSK, 0);
-			HFC_outb(hc, R_INC_RES_FIFO, V_RES_F);
-			HFC_wait(hc);
-			HFC_outb_(hc, A_FIFO_DATA0_NOINC, silence); /* tx silence */
-			/* enable RX fifo */
-			HFC_outb(hc, R_FIFO, (ch<<1)|1);
-			HFC_wait(hc);
-			HFC_outb(hc, A_CON_HDLC, flow_rx | 0x00 | V_HDLC_TRP);
-			HFC_outb(hc, A_SUBCH_CFG, 0);
-			HFC_outb(hc, A_IRQ_MSK, 0);
-			HFC_outb(hc, R_INC_RES_FIFO, V_RES_F);
-			HFC_wait(hc);
+			if (test_bit(HFC_CHIP_DIGICARD, &hc->chip) && (hc->chan[ch].slot_rx < 0) && (hc->chan[ch].bank_rx == 0)
+					&& (hc->chan[ch].slot_tx < 0) && (hc->chan[ch].bank_tx == 0)) {
+
+				printk("Setting B-channel %d to echo cancelable state on PCM slot %d\n", ch,
+						((ch/4)*8) + ((ch%4)*4) + 1);
+				printk("Enabling pass through for channel\n");
+				vpm_out(hc, ch, ((ch/4)*8) + ((ch%4)*4) + 1, 0x01);
+				/* rx path */
+				/* S/T -> PCM */
+				HFC_outb(hc, R_FIFO, (ch << 1));
+				HFC_wait(hc);
+				HFC_outb(hc, A_CON_HDLC, 0xc0 | V_HDLC_TRP | V_IFF);
+				HFC_outb(hc, R_SLOT, (((ch/4)*8) + ((ch%4)*4) + 1) << 1);
+				HFC_outb(hc, A_SL_CFG, 0x80 | (ch << 1));
+
+				/* PCM -> FIFO */
+				HFC_outb(hc, R_FIFO, 0x20 | (ch << 1) | 1);
+				HFC_wait(hc);
+				HFC_outb(hc, A_CON_HDLC, 0x20 | V_HDLC_TRP | V_IFF);
+				HFC_outb(hc, A_SUBCH_CFG, 0);
+				HFC_outb(hc, A_IRQ_MSK, 0);
+				HFC_outb(hc, R_INC_RES_FIFO, V_RES_F);
+				HFC_wait(hc);
+				HFC_outb(hc, R_SLOT, ((((ch/4)*8) + ((ch%4)*4) + 1) << 1) | 1);
+				HFC_outb(hc, A_SL_CFG, 0x80 | 0x20 | (ch << 1) | 1);
+
+				/* tx path */
+				/* PCM -> S/T */
+				HFC_outb(hc, R_FIFO, (ch << 1) | 1);
+				HFC_wait(hc);
+				HFC_outb(hc, A_CON_HDLC, 0xc0 | V_HDLC_TRP | V_IFF);
+				HFC_outb(hc, R_SLOT, ((((ch/4)*8) + ((ch%4)*4)) << 1) | 1);
+				HFC_outb(hc, A_SL_CFG, 0x80 | 0x40 | (ch << 1) | 1);
+
+				/* FIFO -> PCM */
+				HFC_outb(hc, R_FIFO, 0x20 | (ch << 1));
+				HFC_wait(hc);
+				HFC_outb(hc, A_CON_HDLC, 0x20 | V_HDLC_TRP | V_IFF);
+				HFC_outb(hc, A_SUBCH_CFG, 0);
+				HFC_outb(hc, A_IRQ_MSK, 0);
+				HFC_outb(hc, R_INC_RES_FIFO, V_RES_F);
+				HFC_wait(hc);
+				HFC_outb_(hc, A_FIFO_DATA0_NOINC, silence); /* tx silence */
+				HFC_outb(hc, R_SLOT, (((ch/4)*8) + ((ch%4)*4)) << 1);
+				HFC_outb(hc, A_SL_CFG, 0x80 | 0x20 | (ch << 1));
+			} else {
+				/* enable TX fifo */
+				HFC_outb(hc, R_FIFO, ch<<1);
+				HFC_wait(hc);
+				HFC_outb(hc, A_CON_HDLC, flow_tx | 0x00 | V_HDLC_TRP | V_IFF);
+				HFC_outb(hc, A_SUBCH_CFG, 0);
+				HFC_outb(hc, A_IRQ_MSK, 0);
+				HFC_outb(hc, R_INC_RES_FIFO, V_RES_F);
+				HFC_wait(hc);
+				HFC_outb_(hc, A_FIFO_DATA0_NOINC, silence); /* tx silence */
+				/* enable RX fifo */
+				HFC_outb(hc, R_FIFO, (ch<<1)|1);
+				HFC_wait(hc);
+				HFC_outb(hc, A_CON_HDLC, flow_rx | 0x00 | V_HDLC_TRP);
+				HFC_outb(hc, A_SUBCH_CFG, 0);
+				HFC_outb(hc, A_IRQ_MSK, 0);
+				HFC_outb(hc, R_INC_RES_FIFO, V_RES_F);
+				HFC_wait(hc);
+			}
 			if (hc->type != 1) {
 				hc->hw.a_st_ctrl0[hc->chan[ch].port] |= ((ch&0x3)==0)?V_B1_EN:V_B2_EN;
 				HFC_outb(hc, R_ST_SEL, hc->chan[ch].port);
@@ -2094,7 +2518,9 @@ handle_dmsg(channel_t *ch, struct sk_buff *skb)
 					__FUNCTION__, hc->chan[ch->channel].port, hc->type-1);
 			spin_lock_irqsave(ch->inst.hwlock, flags);
 hw_deactivate:
-			ch->state = 0;
+			//ch->state = 0;
+			ch->state = 1;
+
 			/* start deactivation */
 			if (hc->type == 1) {
 				if (debug & DEBUG_HFCMULTI_MSG)
@@ -2160,6 +2586,7 @@ handle_bmsg(channel_t *ch, struct sk_buff *skb)
 	int		slot_tx, slot_rx, bank_tx, bank_rx;
 	int		ret = -EAGAIN;
 	struct		dsp_features *features;
+	int taps;
 
 	if ((hh->prim == (PH_ACTIVATE | REQUEST)) ||
 		(hh->prim == (DL_ESTABLISH  | REQUEST))) {
@@ -2255,6 +2682,10 @@ handle_bmsg(channel_t *ch, struct sk_buff *skb)
 				features->pcm_id = hc->pcm;
 				features->pcm_slots = hc->slots;
 				features->pcm_banks = 2;
+				
+				if (test_bit(HFC_CHIP_DIGICARD, &hc->chip))
+					features->hfc_echocanhw=1;
+
 				ret = 0;
 				break;
 			case HW_PCM_CONN: /* connect interface to pcm timeslot (0..N) */
@@ -2321,6 +2752,24 @@ handle_bmsg(channel_t *ch, struct sk_buff *skb)
 						__FUNCTION__);
 				hfcmulti_splloop(hc, ch->channel, NULL, 0);
 				ret = 0;
+				break;
+
+			case HW_ECHOCAN_ON:
+				
+				if (skb->len < sizeof(u32)) {
+					printk(KERN_WARNING "%s: HW_ECHOCAN_ON lacks parameters\n",
+					       __FUNCTION__);
+				}
+				
+				taps = ((u32 *)skb->data)[0];
+				
+				vpm_echocan_on(hc, ch->channel, taps);
+				ret=0;
+				break;
+
+			case HW_ECHOCAN_OFF:
+				vpm_echocan_off(hc, ch->channel);
+				ret=0;
 				break;
 
 			default:
@@ -2750,7 +3199,7 @@ init_card(hfc_multi_t *hc)
 		} 
 		printk(KERN_WARNING "HFC PCI: IRQ(%d) getting no interrupts during init (try %d)\n", hc->irq, cnt);
 
-		if (test_bit(HFC_CHIP_CLOCK_IGNORE, &hc->chip)) {
+		if (test_bit(HFC_CHIP_CLOCK_IGNORE, &hc->chip) || test_bit(HFC_CHIP_DIGICARD, &hc->chip)) {
 			printk(KERN_WARNING "HFC PCI: Ignoring Clock so we go on here\n");
 			return 0;
 		}
@@ -2871,6 +3320,12 @@ setup_pci(hfc_multi_t *hc, struct pci_dev *pdev, int id_idx)
 	hc->pci_dev = pdev;
 	if (id_list[id_idx].clock2)
 		test_and_set_bit(HFC_CHIP_CLOCK2, &hc->chip);
+
+#if 1
+	if (id_list[id_idx].device_id == 0xB410)
+		test_and_set_bit(HFC_CHIP_DIGICARD, &hc->chip);
+#endif
+
 	if (hc->pci_dev->irq <= 0) {
 		printk(KERN_WARNING "HFC-multi: No IRQ for PCI card found.\n");
 		return (-EIO);
@@ -3662,6 +4117,7 @@ static int __devinit hfcpci_probe(struct pci_dev *pdev, const struct pci_device_
 
 	if (debug & DEBUG_HFCMULTI_INIT)
 		printk(KERN_DEBUG "%s: Init modes card(%d)\n", __FUNCTION__, HFC_idx+1);
+
 	hfcmulti_initmode(hc);
 	
 	/* check if Port Jumper config matches module param 'protocol' */
@@ -3678,6 +4134,9 @@ static int __devinit hfcpci_probe(struct pci_dev *pdev, const struct pci_device_
 
 			// Port mode (TE/NT) jumpers
 			pmj = ((HFC_inb(hc, R_GPI_IN3) >> 4)  & 0xf);
+
+			if (test_bit(HFC_CHIP_DIGICARD, &hc->chip))
+				pmj = ~pmj & 0xf;
 
 			printk(KERN_INFO "%s: DIPs(0x%x) jumpers(0x%x)\n", __FUNCTION__, dips, pmj);
 
@@ -3842,6 +4301,7 @@ static struct pci_device_id hfmultipci_ids[] __devinitdata = {
 	{ CCAG_VID, 0x08B4   , CCAG_VID, 0x08B4, 0, 0, 0 }, //Old Eval
 	{ CCAG_VID, 0x08B4   , CCAG_VID, 0xB520, 0, 0, 0 }, //IOB4ST
 	{ CCAG_VID, 0x08B4   , CCAG_VID, 0xB620, 0, 0, 0 }, //4S
+	{ 0xD161, 0xB410   , 0xD161, 0xB410, 0, 0, 0 }, //4S - Digium
 	
 	/** Cards with HFC-8S Chip**/
 	{ CCAG_VID, 0x16B8   , CCAG_VID, 0xB562, 0, 0, 0 }, //BN8S

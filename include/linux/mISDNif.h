@@ -1,4 +1,4 @@
-/* $Id: mISDNif.h,v 1.39 2006/08/07 23:35:59 keil Exp $
+/* $Id: mISDNif.h,v 1.40 2006/09/06 17:24:22 crich Exp $
  *
  */
 
@@ -23,8 +23,8 @@
 #define	MISDN_MINOR_VERSION	0
 #define	MISDN_VERSION		((MISDN_MAJOR_VERSION<<16) | MISDN_MINOR_VERSION)
 
-#define MISDN_REVISION		"$Revision: 1.39 $"
-#define MISDN_DATE		"$Date: 2006/08/07 23:35:59 $"
+#define MISDN_REVISION		"$Revision: 1.40 $"
+#define MISDN_DATE		"$Date: 2006/09/06 17:24:22 $"
 
 /* collect some statistics about the message queues */
 #define MISDN_MSG_STATS
@@ -158,6 +158,8 @@
 #define HW_RECEIVE_ON	0x0585
 #define HW_SPL_LOOP_ON	0x0586
 #define HW_SPL_LOOP_OFF	0x0587
+#define HW_ECHOCAN_ON 	0x0588
+#define HW_ECHOCAN_OFF 	0x0589
 #define HW_TESTLOOP	0xFF00
 #define HW_FIRM_START	0xFF10
 #define HW_FIRM_DATA	0xFF11

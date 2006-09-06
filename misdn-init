@@ -390,6 +390,11 @@ function create_misdn_init_conf {
 
 	portcount=0
 
+	for line in $(${LSPCI} -n -d 0xd161:b410); do
+		addcard "0x4"
+		addport 4
+	done
+
 	for line in $(${LSPCI} -n | sed -n 's/^\(0000:\|\)\([0-9a-f]\{2\}:[0-9a-f]\{2\}.[0-9a-f]\{1\}\)\( Class \| \)[0-9a-f]\{4\}: 1397:\([0-9a-f]\{4\}\).*$/\4 \2/p'); do
 		case "${line}" in
 			30b1*)
@@ -524,6 +529,7 @@ function create_misdn_init_conf {
 #  
 #	set this to 2 and you'll have software bridging instead of 
 #	hardware bridging.
+# 
 #
 # dtmftreshold=<milliseconds>
 #
@@ -582,7 +588,6 @@ case "$1" in
 		
 		echo "modprobe mISDN_dsp debug=0x0 options=$dsp_options $poll_option $dtmftreshold_option"
 		modprobe mISDN_dsp debug=0x0 options=$dsp_options $poll_option $dtmftreshold_option
-	
 		sleep 1
 		
 		if [ ! -e /dev/mISDN ]; then

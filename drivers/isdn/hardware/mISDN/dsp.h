@@ -1,4 +1,4 @@
-/* $Id: dsp.h,v 1.11 2006/07/04 13:38:45 crich Exp $
+/* $Id: dsp.h,v 1.12 2006/09/06 17:24:22 crich Exp $
  *
  * Audio support data for ISDN4Linux.
  *
@@ -44,6 +44,9 @@
  * kb1 Echo cancellor. Just comment the one and comment 
  * out the other.
  */
+
+
+//#define AGGRESSIVE_SUPPRESSOR
 
 //#include "dsp_mec2.h"
 //#include "dsp_kb1ec.h"
@@ -175,6 +178,7 @@ struct dsp_features {
 	int		hfc_id; /* unique id to identify the chip (or -1) */
 	int		hfc_dtmf; /* set if HFCmulti card supports dtmf */
 	int		hfc_loops; /* set if card supports tone loops */
+	int		hfc_echocanhw; /* set if card supports echocancelation*/
 	int		pcm_id; /* unique id to identify the pcm bus (or -1) */
 	int		pcm_slots; /* number of slots on the pcm bus */
 	int		pcm_banks; /* number of IO banks of pcm bus */
@@ -235,7 +239,9 @@ typedef struct _dsp {
 	int		bf_sync;
 
 	/* echo cancellation stuff */
+	int 		queue_cancel[3];
 	int		cancel_enable;
+	int             cancel_hardware; /*we are using hw echo canc*/
 	struct echo_can_state * ec;      /**< == NULL: echo cancellation disabled;
 				      != NULL: echo cancellation enabled */
 
