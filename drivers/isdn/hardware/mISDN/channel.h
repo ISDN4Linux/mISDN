@@ -1,4 +1,4 @@
-/* $Id: channel.h,v 1.3 2006/05/05 10:04:52 mbachem Exp $
+/* $Id: channel.h,v 1.4 2006/09/07 13:02:34 crich Exp $
  *
  *   Basic declarations for a mISDN HW channel
  *
@@ -135,8 +135,10 @@ channel_senddata(channel_t *ch, int di, struct sk_buff *skb)
 	}
 	/* check for pending next_skb */
 	if (ch->next_skb) {
+#ifdef DEBUG_NEXT_SKB_EXISTS
 		printk(KERN_WARNING "%s: next_skb exist ERROR (skb->len=%d next_skb->len=%d)\n",
 			__FUNCTION__, skb->len, ch->next_skb->len);
+#endif
 		return(-EBUSY);
 	}
 	if (test_and_set_bit(FLG_TX_BUSY, &ch->Flags)) {
