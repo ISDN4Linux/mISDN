@@ -406,7 +406,7 @@ function create_misdn_init_conf {
 				addport 8
 				;;
 			08b4*)
-				if ${LSPCI} -n -v -s "${line:5}" | grep "Subsystem" | grep "1397:b566" > /dev/null ; then
+				if ${LSPCI} -n -v -s "${line:5}" | grep "Subsystem" | grep "1397:b566\|1397:b569" > /dev/null ; then
 					addcard "0x2"
 					addport 2
 				else

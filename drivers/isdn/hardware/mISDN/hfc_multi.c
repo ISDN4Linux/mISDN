@@ -128,7 +128,7 @@ static void ph_state_change(channel_t *ch);
 
 extern const char *CardType[];
 
-static const char *hfcmulti_revision = "$Revision: 1.52 $";
+static const char *hfcmulti_revision = "$Revision: 1.53 $";
 
 static int HFC_cnt, HFC_idx;
 
@@ -187,6 +187,8 @@ static const PCI_ENTRY id_list[] =
 	 "HFC-4S", 4, 1, 2},
 	{CCAG_VID, CCAG_VID, HFC4S_ID, 0xB560, VENDOR_CCD,
 	 "HFC-4S Beronet Card", 4, 1, 2},
+	{CCAG_VID, CCAG_VID, HFC4S_ID, 0xB568, VENDOR_CCD,
+	 "HFC-4S Beronet Card (mini PCI)", 4, 1, 2},
 	{0xD161, 0xD161, 0xB410, 0xB410, VENDOR_CCD,
 	 "HFC-4S Digium Card", 4, 0, 2},
 	{CCAG_VID, CCAG_VID, HFC8S_ID, 0xB521, VENDOR_CCD,
@@ -203,6 +205,8 @@ static const PCI_ENTRY id_list[] =
 	 "HFC-E1 IOB1E1", 1, 0, 1}, /* E1 only supports single clock */
 	{CCAG_VID, CCAG_VID, HFCE1_ID, 0xC523, VENDOR_CCD,
 	 "HFC-E1", 1, 0, 1}, /* E1 only supports single clock */
+	{CCAG_VID, CCAG_VID, HFCE1_ID, 0xB56A, VENDOR_CCD,
+	 "HFC-E1 Beronet Card (mini PCI)", 1, 0, 1}, /* E1 only supports single clock */
 	{CCAG_VID, CCAG_VID, HFCE1_ID, 0xB563, VENDOR_CCD,
 	 "HFC-E1 Beronet Card", 1, 0, 1}, /* E1 only supports single clock */
 	{CCAG_VID, CCAG_VID, HFCE1_ID, 0xB565, VENDOR_CCD,
@@ -213,6 +217,8 @@ static const PCI_ENTRY id_list[] =
 	 "HFC-4S PCIBridgeEval", 4, 0, 0},      // PLX PCI-Bridge
 	{CCAG_VID, CCAG_VID, HFC4S_ID, 0xB566, VENDOR_CCD,
 	 "HFC-2S Beronet Card", 2, 1, 3},
+	{CCAG_VID, CCAG_VID, HFC4S_ID, 0xB569, VENDOR_CCD,
+	 "HFC-2S Beronet Card (mini PCI)", 2, 1, 3},
 	{0, 0, 0, 0, NULL, NULL, 0, 0, 0},
 };
 
@@ -4297,7 +4303,9 @@ static struct pci_device_id hfmultipci_ids[] __devinitdata = {
 
 	/** Cards with HFC-4S Chip**/
 	{ CCAG_VID, 0x08B4   , CCAG_VID, 0xB566, 0, 0, 0 }, //BN2S
+	{ CCAG_VID, 0x08B4   , CCAG_VID, 0xB569, 0, 0, 0 }, //BN2S mini PCI
 	{ CCAG_VID, 0x08B4   , CCAG_VID, 0xB560, 0, 0, 0 }, //BN4S
+	{ CCAG_VID, 0x08B4   , CCAG_VID, 0xB568, 0, 0, 0 }, //BN4S mini PCI
 	{ CCAG_VID, 0x08B4   , CCAG_VID, 0x08B4, 0, 0, 0 }, //Old Eval
 	{ CCAG_VID, 0x08B4   , CCAG_VID, 0xB520, 0, 0, 0 }, //IOB4ST
 	{ CCAG_VID, 0x08B4   , CCAG_VID, 0xB620, 0, 0, 0 }, //4S
@@ -4314,6 +4322,7 @@ static struct pci_device_id hfmultipci_ids[] __devinitdata = {
 
 	/** Cards with HFC-E1 Chip**/
 	{ CCAG_VID, 0x30B1   , CCAG_VID, 0xB563, 0, 0, 0 }, //BNE1
+	{ CCAG_VID, 0x30B1   , CCAG_VID, 0xB56A, 0, 0, 0 }, //BNE1 mini PCI
 	{ CCAG_VID, 0x30B1   , CCAG_VID, 0xB565, 0, 0, 0 }, //BNE1 + (Dual)
 	{ CCAG_VID, 0x30B1   , CCAG_VID, 0xB564, 0, 0, 0 }, //BNE1 (Dual)
 
