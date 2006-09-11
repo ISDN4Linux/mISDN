@@ -1,4 +1,4 @@
-/* $Id: xhfc_su.c,v 1.16 2006/06/28 18:03:52 keil Exp $
+/* $Id: xhfc_su.c,v 1.17 2006/09/11 11:44:02 mbachem Exp $
  *
  * mISDN driver for CologneChip AG's XHFC
  *
@@ -65,7 +65,7 @@
 #include "xhfc_pci2pi.h"
 #endif
 
-static const char xhfc_rev[] = "$Revision: 1.16 $";
+static const char xhfc_rev[] = "$Revision: 1.17 $";
 
 #define MAX_CARDS	8
 static int card_cnt;
@@ -1398,6 +1398,12 @@ init_su(xhfc_t * xhfc, __u8 pt)
 		port->st_ctrl3.bit.v_st_sel = 1;
 		write_xhfc(xhfc, A_MS_TX, 0x0F);
 		port->su_ctrl0.bit.v_st_sq_en = 1;
+	}
+
+	/* configure end of pulse control for ST mode (TE & NT) */
+	if (port->mode & PORT_MODE_S0) {
+		port->su_ctrl0.bit.v_st_pu_ctrl = 1;
+		port->st_ctrl3.reg = 0xf8;
 	}
 
 	if (debug & DEBUG_HFC_MODE)
