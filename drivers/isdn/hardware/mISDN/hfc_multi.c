@@ -128,7 +128,7 @@ static void ph_state_change(channel_t *ch);
 
 extern const char *CardType[];
 
-static const char *hfcmulti_revision = "$Revision: 1.53 $";
+static const char *hfcmulti_revision = "$Revision: 1.54 $";
 
 static int HFC_cnt, HFC_idx;
 
@@ -872,9 +872,15 @@ init_chip(hfc_multi_t *hc)
 	/* setting leds */
 	switch(hc->leds) {
 		case 1: /* HFC-E1 OEM */
-		HFC_outb(hc, R_GPIO_SEL, 0x30);
+		if (test_bit(HFC_CHIP_WATCHDOG, &hc->chip)) 
+			HFC_outb(hc, R_GPIO_SEL, 0x32);
+		else
+			HFC_outb(hc, R_GPIO_SEL, 0x30);
+
 		HFC_outb(hc, R_GPIO_EN1, 0x0f);
 		HFC_outb(hc, R_GPIO_OUT1, 0x00);
+
+		HFC_outb(hc, R_GPIO_EN0, V_GPIO_EN2 | V_GPIO_EN3);
 		break;
 
 		case 2: /* HFC-4S OEM */
@@ -919,8 +925,6 @@ hfcmulti_watchdog(hfc_multi_t *hc)
 		hc->wdbyte = hc->wdbyte==V_GPIO_OUT2?V_GPIO_OUT3:V_GPIO_OUT2;
 
 	/**	printk("Sending Watchdog Kill %x\n",hc->wdbyte); **/
-		
-		HFC_outb(hc, R_GPIO_SEL, V_GPIO_SEL1);
 		HFC_outb(hc, R_GPIO_EN0, V_GPIO_EN2 | V_GPIO_EN3);
 		HFC_outb(hc, R_GPIO_OUT0, hc->wdbyte);
 	}
@@ -1820,11 +1824,12 @@ handle_timer_irq(hfc_multi_t *hc)
 				break;
 		}
 	}
-	if (hc->leds)
-		hfcmulti_leds(hc);
 
 	if (test_bit(HFC_CHIP_WATCHDOG, &hc->chip)) 
 		hfcmulti_watchdog(hc);
+
+	if (hc->leds)
+		hfcmulti_leds(hc);
 }
 
 static irqreturn_t
