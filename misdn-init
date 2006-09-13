@@ -51,6 +51,10 @@ ulaw=9
 dtmf=10
 pcm_slave=12
 ignore_pcm_frameclock=13
+
+rxclock=14
+crystalclock=19
+
 watchdog=20
 
 
@@ -468,6 +472,8 @@ function create_misdn_init_conf {
 #               pcm_slave  - set PCM bus into slave mode
 #		ignore_pcm_frameclock	- this E1 is NT without PCM frame
 #					  clock
+#		rxclock    - use clocking for pcm from ST Port
+#		crystalclock - use clocking for pcm from PLL (genrated on board)
 #		watchdog   - This dual E1 Board has a Watchdog for 
 #			     transparent mode
 #
