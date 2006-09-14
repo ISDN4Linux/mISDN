@@ -1,4 +1,4 @@
-/* $Id: contr.c,v 1.29 2006/09/14 15:36:47 gkelleter Exp $
+/* $Id: contr.c,v 1.30 2006/09/14 15:51:46 gkelleter Exp $
  *
  */
 
@@ -95,8 +95,8 @@ ControllerRun(Controller_t *contr)
 	contr->ctrl->version.majormanuversion = 1;
 	contr->ctrl->version.minormanuversion = 0;
 	memset(&contr->ctrl->profile, 0, sizeof(struct capi_profile));
-	contr->ctrl->profile.ncontroller = 1;
-	contr->ctrl->profile.nbchannel = contr->nr_bc;
+	contr->ctrl->profile.ncontroller = cpu_to_le16(1);
+	contr->ctrl->profile.nbchannel = cpu_to_le16(contr->nr_bc);
 	contrDebug(contr, CAPI_DBG_INFO, "%s: %s version(%s)",
 		__FUNCTION__, contr->ctrl->manu, contr->ctrl->serial);
 	// FIXME
@@ -138,6 +138,10 @@ ControllerRun(Controller_t *contr)
 	contrDebug(contr, CAPI_DBG_INFO, "%s: GLOBAL(%08X) B1(%08X) B2(%08X) B3(%08X)",
 		__FUNCTION__, contr->ctrl->profile.goptions, contr->ctrl->profile.support1,
 		contr->ctrl->profile.support2, contr->ctrl->profile.support3);
+	cpu_to_le32s(&contr->ctrl->profile.goptions);
+	cpu_to_le32s(&contr->ctrl->profile.support1);
+	cpu_to_le32s(&contr->ctrl->profile.support2);
+	cpu_to_le32s(&contr->ctrl->profile.support3);
 #ifdef OLDCAPI_DRIVER_INTERFACE
 	contr->ctrl->ready(contr->ctrl);
 #else

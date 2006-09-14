@@ -1,4 +1,4 @@
-/* $Id: ncci.c,v 1.28 2006/03/22 18:28:33 keil Exp $
+/* $Id: ncci.c,v 1.29 2006/09/14 15:51:46 gkelleter Exp $
  *
  */
 
@@ -931,23 +931,23 @@ ncciDataInd(Ncci_t *ncci, int pr, struct sk_buff *skb)
 	ncci->recv_skb_handles[i] = nskb;
 
 	skb_push(nskb, CAPI_B3_DATA_IND_HEADER_SIZE);
-	*((__u16*) nskb->data) = CAPI_B3_DATA_IND_HEADER_SIZE;
-	*((__u16*)(nskb->data+2)) = ncci->appl->ApplId;
-	*((__u8*) (nskb->data+4)) = CAPI_DATA_B3;
-	*((__u8*) (nskb->data+5)) = CAPI_IND;
-	*((__u16*)(nskb->data+6)) = ncci->appl->MsgId++;
-	*((__u32*)(nskb->data+8)) = ncci->addr;
+	CAPIMSG_SETLEN(nskb->data, CAPI_B3_DATA_IND_HEADER_SIZE);
+	CAPIMSG_SETAPPID(nskb->data, ncci->appl->ApplId);
+	CAPIMSG_SETCOMMAND(nskb->data, CAPI_DATA_B3);
+	CAPIMSG_SETSUBCOMMAND(nskb->data, CAPI_IND);
+	CAPIMSG_SETMSGID(nskb->data, ncci->appl->MsgId++);
+	CAPIMSG_SETCONTROL(nskb->data, ncci->addr);
 	if (sizeof(nskb) == 4) {
-		*((__u32*)(nskb->data+12)) = (__u32)(((u_long)nskb->data + CAPI_B3_DATA_IND_HEADER_SIZE) & 0xffffffff);
-		*((__u64*)(nskb->data+22)) = 0;
+		capimsg_setu32(nskb->data, 12, (__u32)(((u_long)nskb->data + CAPI_B3_DATA_IND_HEADER_SIZE) & 0xffffffff));
+		*((__u64*)(nskb->data+22)) = cpu_to_le64(0);
 	} else {
-		*((__u32*)(nskb->data+12)) = 0;
-		*((__u64*)(nskb->data+22)) = (u_long)(nskb->data + CAPI_B3_DATA_IND_HEADER_SIZE);
+		capimsg_setu32(nskb->data, 12, 0);
+		*((__u64*)(nskb->data+22)) = cpu_to_le64((__u64)nskb->data + CAPI_B3_DATA_IND_HEADER_SIZE);
 	}
-	*((__u16*)(nskb->data+16)) = nskb->len - CAPI_B3_DATA_IND_HEADER_SIZE;
-	*((__u16*)(nskb->data+18)) = i;
+	CAPIMSG_SETDATALEN(nskb->data, nskb->len - CAPI_B3_DATA_IND_HEADER_SIZE);
+	capimsg_setu16(nskb->data, 18, i);
 	// FIXME FLAGS
-	*((__u16*)(nskb->data+20)) = 0;
+	capimsg_setu16(nskb->data, 20, 0);
 #ifdef OLDCAPI_DRIVER_INTERFACE
 	ncci->contr->ctrl->handle_capimsg(ncci->contr->ctrl, ncci->appl->ApplId, nskb);
 #else

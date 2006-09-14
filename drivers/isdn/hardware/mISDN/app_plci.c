@@ -1,4 +1,4 @@
-/* $Id: app_plci.c,v 1.17 2006/09/14 15:43:09 gkelleter Exp $
+/* $Id: app_plci.c,v 1.18 2006/09/14 15:51:46 gkelleter Exp $
  *
  */
 
@@ -149,13 +149,13 @@ __u16 AppPlciCheckBprotocol(AppPlci_t *aplci, _cmsg *cmsg)
 	struct capi_ctr	*ctrl = aplci->contr->ctrl;
 	u_long		sprot;
 
-	sprot = ctrl->profile.support1;
+	sprot = le32_to_cpu(ctrl->profile.support1);
 	if (!test_bit(cmsg->B1protocol, &sprot))
 		return CapiB1ProtocolNotSupported;
-	sprot = ctrl->profile.support2;
+	sprot = le32_to_cpu(ctrl->profile.support2);
 	if (!test_bit(cmsg->B2protocol, &sprot))
 		return CapiB2ProtocolNotSupported;
-	sprot = ctrl->profile.support3;
+	sprot = le32_to_cpu(ctrl->profile.support3);
 	if (!test_bit(cmsg->B3protocol, &sprot))
 		return CapiB3ProtocolNotSupported;
 	aplci->Bprotocol.B1 = cmsg->B1protocol;
