@@ -1,4 +1,4 @@
-/* $Id: dsp_audio.c,v 1.5 2005/10/26 14:12:13 keil Exp $
+/* $Id: dsp_audio.c,v 1.6 2006/09/14 15:34:12 gkelleter Exp $
  *
  * Audio support data for mISDN_dsp.
  *
@@ -324,7 +324,7 @@ dsp_audio_generate_s2law_table(void)
 		}
 		j = 255;
 		while(i < 65536) {
-			if (i-0x32768 > dsp_audio_law_to_s32[j])
+			if (i-32768 > dsp_audio_law_to_s32[j])
 				j--;
 			dsp_audio_s16_to_law[(i-32768) & 0xffff] = j;
 			i++;
