@@ -115,7 +115,7 @@ typedef struct wait_queue *wait_queue_head_t;
 #endif
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,14)
-#define kzalloc kmalloc
+#define kzalloc(s,f) kcalloc(1,s,f)
 #endif
 
 #endif /* __KERNEL__ */
