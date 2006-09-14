@@ -1,4 +1,4 @@
-/* $Id: contr.c,v 1.28 2006/03/23 13:11:43 keil Exp $
+/* $Id: contr.c,v 1.29 2006/09/14 15:36:47 gkelleter Exp $
  *
  */
 
@@ -137,7 +137,7 @@ ControllerRun(Controller_t *contr)
 	}
 	contrDebug(contr, CAPI_DBG_INFO, "%s: GLOBAL(%08X) B1(%08X) B2(%08X) B3(%08X)",
 		__FUNCTION__, contr->ctrl->profile.goptions, contr->ctrl->profile.support1,
-		contr->ctrl->profile.support2, contr->ctrl->profile.support2);
+		contr->ctrl->profile.support2, contr->ctrl->profile.support3);
 #ifdef OLDCAPI_DRIVER_INTERFACE
 	contr->ctrl->ready(contr->ctrl);
 #else

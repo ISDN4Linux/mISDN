@@ -1,4 +1,4 @@
-/* $Id: stack.c,v 1.19 2006/08/07 23:35:59 keil Exp $
+/* $Id: stack.c,v 1.20 2006/09/14 15:36:47 gkelleter Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -1005,7 +1005,7 @@ register_layer(mISDNstack_t *st, mISDNinstance_t *inst)
 
 	if (!list_empty(&inst->list)) {
 		if (core_debug & DEBUG_CORE_FUNC)
-			printk(KERN_DEBUG "%s: register preregistered instance st(%p/%p)",
+			printk(KERN_DEBUG "%s: register preregistered instance st(%p/%p)\n",
 				__FUNCTION__, st, inst->st);
 		list_del_init(&inst->list);
 	}
