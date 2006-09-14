@@ -1,4 +1,4 @@
-/* $Id: app_plci.c,v 1.15 2006/08/07 23:35:59 keil Exp $
+/* $Id: app_plci.c,v 1.16 2006/09/14 15:41:05 gkelleter Exp $
  *
  */
 
@@ -516,7 +516,7 @@ plci_alert_req(struct FsmInst *fi, int event, void *arg)
 	if (test_and_set_bit(PLCI_STATE_ALERTING, &plci->state)) {
 		Info = 0x0003; // other app is already alerting
 	} else {
-		struct sk_buff	*skb = mISDN_alloc_l3msg(10, MT_ALERTING);
+		struct sk_buff	*skb = mISDN_alloc_l3msg(260, MT_ALERTING);
 		if (!skb) {
 			int_error();
 			goto answer;
