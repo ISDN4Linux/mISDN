@@ -13,7 +13,12 @@
 #include "helper.h"
 #include "debug.h"
 #include "dsp.h"
+#ifdef ARCH_I386
 #include <asm/i387.h>
+#else
+#define kernel_fpu_begin()
+#define kernel_fpu_end()
+#endif
 
 
 /*
