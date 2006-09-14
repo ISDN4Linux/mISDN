@@ -1,4 +1,4 @@
-/* $Id: app_plci.c,v 1.16 2006/09/14 15:41:05 gkelleter Exp $
+/* $Id: app_plci.c,v 1.17 2006/09/14 15:43:09 gkelleter Exp $
  *
  */
 
@@ -577,12 +577,14 @@ plci_connect_resp(struct FsmInst *fi, int event, void *arg)
 	// plciDetachAppPlci(plci, aplci);
 	if (plci->nAppl == 1) {
 		int prim;
-		if (test_bit(PLCI_STATE_ALERTING, &plci->state))
+		if (test_bit(PLCI_STATE_ALERTING, &plci->state)) {
 			prim = CC_DISCONNECT | REQUEST;
-		else 
+			skb = mISDN_alloc_l3msg(10, MT_DISCONNECT);
+		} else {
 			// if we already answered, we can't just ignore but must clear actively
 			prim = CC_RELEASE_COMPLETE | REQUEST;
-		skb = mISDN_alloc_l3msg(10, MT_DISCONNECT);
+			skb = mISDN_alloc_l3msg(10, MT_RELEASE_COMPLETE);
+		}
 		if (!skb) {
 			plciL4L3(plci, prim, NULL);
 		} else {
