@@ -25,7 +25,7 @@
 #define DTRACE printk
 #define DPRINT printk
 
-static const char *netjet_rev = "$Revision: 1.5 $";
+static const char *netjet_rev = "$Revision: 1.6 $";
 
 #define MAX_CARDS	4
 static int debug;
@@ -1350,13 +1350,16 @@ read_raw(channel_t *bch, u_int *buf, int cnt)
 	tiger->r_bitcnt = bitcnt;
 }
 
+/* read_tiger()
+ *  Read tiger state and process it
+ *  - assumes lock held
+ */
 static void
 read_tiger (netjet_t *card, uint8_t irq_stat)
 {
 	u_int *p;
 	int cnt = NETJET_DMA_RXSIZE/2;
 	channel_t *bch;
-	u_long flags;
 	
 	if ((irq_stat & card->last_is0) & NETJET_IRQM0_READ_MASK) {
 		printk ("netjet: tiger warn read double dma %x/%x",
@@ -1375,27 +1378,27 @@ read_tiger (netjet_t *card, uint8_t irq_stat)
 	/* Note: Unhandled 56K */
 
 	bch = &card->bch[0];
-	spin_lock_irqsave(bch->inst.hwlock, flags);
 	if (test_bit(FLG_HDLC, &bch->Flags)) {
 		read_raw(bch, p, cnt);
 	}
 	if (test_bit(FLG_TRANSPARENT, &bch->Flags)) {
 		read_raw_transparent(bch, p, cnt);
 	}
-	spin_unlock_irqrestore(bch->inst.hwlock, flags);
 
 	bch = &card->bch[1];
-	spin_lock_irqsave(bch->inst.hwlock, flags);
 	if (test_bit(FLG_HDLC, &bch->Flags)) {
 		read_raw(bch, p, cnt);
 	}
 	if (test_bit(FLG_TRANSPARENT, &bch->Flags)) {
 		read_raw_transparent(bch, p, cnt);
 	}
-	spin_unlock_irqrestore(bch->inst.hwlock, flags);
 }
 
 
+/* write_tiger()
+ *  Update tiger state
+ *  - assumes lock held
+ */
 void
 write_tiger (netjet_t *card, uint8_t irq_stat)
 {
@@ -1422,14 +1425,10 @@ write_tiger (netjet_t *card, uint8_t irq_stat)
 
 static void
 write_tiger_bch(channel_t *bch, u_int *buf, int cnt) {
-	u_long flags;
 	mISDN_head_t *hh;
-
-	spin_lock_irqsave(bch->inst.hwlock, flags);
 
 	if (!test_bit(FLG_TRANSPARENT, &bch->Flags)
 	    && !test_bit(FLG_HDLC, &bch->Flags)) {
-		spin_unlock_irqrestore(bch->inst.hwlock, flags);
 		if (test_bit(FLG_TX_BUSY, &bch->Flags))
 			printk(KERN_WARNING "%s: (busy)\n", __FUNCTION__);
 		if (test_bit(FLG_TX_NEXT, &bch->Flags))
@@ -1454,7 +1453,6 @@ write_tiger_bch(channel_t *bch, u_int *buf, int cnt) {
 			test_and_set_bit(FLG_TX_BUSY, &bch->Flags);
 		}
 	}
-	spin_unlock_irqrestore(bch->inst.hwlock, flags);
 }
 
 static irqreturn_t
