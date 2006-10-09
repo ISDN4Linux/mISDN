@@ -128,7 +128,7 @@ static void ph_state_change(channel_t *ch);
 
 extern const char *CardType[];
 
-static const char *hfcmulti_revision = "$Revision: 1.55 $";
+static const char *hfcmulti_revision = "$Revision: 1.56 $";
 
 static int HFC_cnt, HFC_idx;
 
@@ -2786,8 +2786,9 @@ handle_bmsg(channel_t *ch, struct sk_buff *skb)
 				break;
 
 			default:
-				printk(KERN_DEBUG "%s: unknown PH_CONTROL info %x\n",
-					__FUNCTION__, hh->dinfo);
+				if (debug)
+					printk(KERN_DEBUG "%s: unknown PH_CONTROL info %x\n",
+						__FUNCTION__, hh->dinfo);
 				ret = -EINVAL;
 		}
 		spin_unlock_irqrestore(ch->inst.hwlock, flags);
@@ -3436,8 +3437,6 @@ static void release_ports_hw(hfc_multi_t *hc)
 {
 	u_long flags;
 
-	printk(KERN_INFO "release_ports_hw called type=%d\n",hc->type);
-
 	spin_lock_irqsave(&hc->lock, flags);
 	
 	/*first we disable all the hw stuff*/
@@ -3525,9 +3524,6 @@ static void release_ports_hw(hfc_multi_t *hc)
 	if (debug & DEBUG_HFCMULTI_INIT)
 		printk(KERN_WARNING "%s: card successfully removed\n", __FUNCTION__);
 
-
-	printk(KERN_INFO "release_ports_hw finished \n");
-	
 }
 
 /***************************
@@ -4279,11 +4275,10 @@ static void __devexit hfc_remove_pci(struct pci_dev *pdev)
 	int i,ch;
 	hfc_multi_t	*card = pci_get_drvdata(pdev);
 
-	printk( KERN_INFO "removing hfc_multi card vendor:%x device:%x subvendor:%x subdevice:%x\n",
+	if (debug)
+		printk( KERN_INFO "removing hfc_multi card vendor:%x device:%x subvendor:%x subdevice:%x\n",
 			pdev->vendor,pdev->device,pdev->subsystem_vendor,pdev->subsystem_device);
 	if (card) {
-
-		printk( KERN_INFO "releasing card\n");
 #if 1
 		for(i=0;i<card->type;i++) { // type is also number of d-channel
 			if(card->created[i]) {
@@ -4302,8 +4297,10 @@ static void __devexit hfc_remove_pci(struct pci_dev *pdev)
 		// relase all ports
 		allocated[card->idx] = 0;
 	}
-	else printk(KERN_WARNING "%s: drvdata allready removed\n", __FUNCTION__);
-	printk(KERN_INFO "hfcmulti card removed\n");
+	else {
+		if (debug)
+			printk(KERN_WARNING "%s: drvdata allready removed\n", __FUNCTION__);
+	}
 }
 
 static struct pci_device_id hfmultipci_ids[] __devinitdata = {
@@ -4379,7 +4376,7 @@ HFCmulti_cleanup(void)
 
 	list_for_each_entry_safe(hc, next, &HFCM_obj.ilist, list) {
 		int i;
-		printk(KERN_ERR "HFC PCI card struct not empty refs %d\n", HFCM_obj.refcnt);
+		if (debug) printk(KERN_ERR "HFC PCI card struct not empty refs %d\n", HFCM_obj.refcnt);
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,10)
 		for (i=0;i<hc->type;i++) {
@@ -4390,11 +4387,8 @@ HFCmulti_cleanup(void)
 		udelay(1000);
 	}
 	
-	printk(KERN_NOTICE "HFC Before unregistering from PCI\n");
 	/* get rid of all devices of this driver */
 	pci_unregister_driver(&hfcmultipci_driver);
-
-	printk(KERN_NOTICE "HFC PCI card Unregistered from PCI\n");
 }
 
 static int __init

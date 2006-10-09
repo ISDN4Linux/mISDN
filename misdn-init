@@ -469,9 +469,19 @@ function create_misdn_init_conf {
 #               or the name of your card driver module.
 #    <option>	ulaw       - uLaw (instead of aLaw)
 #               dtmf       - enable DTMF detection on all B-channels
+#
 #               pcm_slave  - set PCM bus into slave mode
-#		ignore_pcm_frameclock	- this E1 is NT without PCM frame
-#					  clock
+#			     If you have a set of cards, all wired via PCM. Set 
+#			     all cards into pcm_slave mode and leave one out.
+#			     The left card will automatically be Master.
+#
+#		ignore_pcm_frameclock	- this can be set in conjunction with
+#					pcm_slave. If this card has a  
+#					PCI Bus Position before the Position 
+#					of the Master, then this port cannot
+#					yet receive a frameclock, so it must
+#					ignore the pcm frameclock.
+#					 
 #		rxclock    - use clocking for pcm from ST Port
 #		crystalclock - use clocking for pcm from PLL (genrated on board)
 #		watchdog   - This dual E1 Board has a Watchdog for 
@@ -542,7 +552,6 @@ function create_misdn_init_conf {
 #	Here you can tune the sensitivity of the dtmf tone recognizer.
 #
 poll=128
-#pcm=1,1
 dsp_options=0
 dtmftreshold=100
 debug=0"

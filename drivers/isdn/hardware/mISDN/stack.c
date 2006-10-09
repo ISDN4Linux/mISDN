@@ -1,4 +1,4 @@
-/* $Id: stack.c,v 1.20 2006/09/14 15:36:47 gkelleter Exp $
+/* $Id: stack.c,v 1.21 2006/10/09 12:51:33 crich Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -478,8 +478,8 @@ mISDNStackd(void *data)
 #ifdef CONFIG_SMP
 	unlock_kernel();
 #endif
-//	if ( core_debug & DEBUG_THREADS)
-	printk(KERN_DEBUG "mISDNStackd started for id(%08x)\n", st->id);
+	if ( core_debug & DEBUG_THREADS)
+		printk(KERN_DEBUG "mISDNStackd started for id(%08x)\n", st->id);
 
 	for (;;) {
 		struct sk_buff	*skb, *c_skb;
@@ -622,8 +622,8 @@ mISDNStackd(void *data)
 		st->id, st->msg_cnt, st->clone_cnt, st->sleep_cnt, st->stopped_cnt);
 	printk(KERN_DEBUG "mISDNStackd daemon for id(%08x) utime(%ld) stime(%ld)\n", st->id, st->thread->utime, st->thread->stime);
 	printk(KERN_DEBUG "mISDNStackd daemon for id(%08x) nvcsw(%ld) nivcsw(%ld)\n", st->id, st->thread->nvcsw, st->thread->nivcsw);
-#endif
 	printk(KERN_DEBUG "mISDNStackd daemon for id(%08x) killed now\n", st->id);
+#endif
 	test_and_set_bit(mISDN_STACK_KILLED, &st->status);
 	test_and_clear_bit(mISDN_STACK_RUNNING, &st->status);
 	test_and_clear_bit(mISDN_STACK_ACTIVE, &st->status);

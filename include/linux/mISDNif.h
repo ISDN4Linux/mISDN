@@ -1,4 +1,4 @@
-/* $Id: mISDNif.h,v 1.40 2006/09/06 17:24:22 crich Exp $
+/* $Id: mISDNif.h,v 1.41 2006/10/09 12:51:33 crich Exp $
  *
  */
 
@@ -23,11 +23,11 @@
 #define	MISDN_MINOR_VERSION	0
 #define	MISDN_VERSION		((MISDN_MAJOR_VERSION<<16) | MISDN_MINOR_VERSION)
 
-#define MISDN_REVISION		"$Revision: 1.40 $"
-#define MISDN_DATE		"$Date: 2006/09/06 17:24:22 $"
+#define MISDN_REVISION		"$Revision: 1.41 $"
+#define MISDN_DATE		"$Date: 2006/10/09 12:51:33 $"
 
 /* collect some statistics about the message queues */
-#define MISDN_MSG_STATS
+//#define MISDN_MSG_STATS
 
 /* primitives for information exchange
  * generell format

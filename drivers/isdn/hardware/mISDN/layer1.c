@@ -1,4 +1,4 @@
-/* $Id: layer1.c,v 1.17 2006/06/28 18:03:52 keil Exp $
+/* $Id: layer1.c,v 1.18 2006/10/09 12:51:33 crich Exp $
  *
  * mISDN_l1.c     common low level stuff for I.430 layer1 TE mode
  *
@@ -8,7 +8,7 @@
  *
  */
 
-static char *l1_revision = "$Revision: 1.17 $";
+static char *l1_revision = "$Revision: 1.18 $";
 
 #include <linux/config.h>
 #include <linux/module.h>
@@ -769,7 +769,8 @@ l1_manager(void *data, u_int prim, void *arg) {
 	}
 	spin_unlock_irqrestore(&isdnl1.lock, flags);
 	if (err && (prim != (MGR_NEWLAYER | REQUEST))) {
-		printk(KERN_WARNING "l1_manager connect no instance\n");
+		if (debug)
+			printk(KERN_WARNING "l1_manager connect no instance\n");
 		return(err);
 	}
 
@@ -800,6 +801,7 @@ l1_manager(void *data, u_int prim, void *arg) {
 		break;
 	    PRIM_NOT_HANDLED(MGR_CTRLREADY|INDICATION);
 	    PRIM_NOT_HANDLED(MGR_ADDSTPARA|INDICATION);
+	    PRIM_NOT_HANDLED(MGR_SETSTACK|INDICATION);
 	    default:
 		printk(KERN_WARNING "l1_manager prim %x not handled\n", prim);
 		err = -EINVAL;

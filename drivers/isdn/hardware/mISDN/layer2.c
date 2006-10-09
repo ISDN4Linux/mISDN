@@ -1,4 +1,4 @@
-/* $Id: layer2.c,v 1.30 2006/08/07 23:35:59 keil Exp $
+/* $Id: layer2.c,v 1.31 2006/10/09 12:51:33 crich Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -10,7 +10,7 @@
 #include "helper.h"
 #include "debug.h"
 
-static char *l2_revision = "$Revision: 1.30 $";
+static char *l2_revision = "$Revision: 1.31 $";
 
 static void l2m_debug(struct FsmInst *fi, char *fmt, ...);
 
@@ -2245,10 +2245,12 @@ new_l2(mISDNstack_t *st, mISDN_pid_t *pid) {
 		nl2->maxlen = MAX_DFRAME_LEN;
 
 		if (pid->protocol[3] & ISDN_PID_L3_DF_CRLEN2) {
-			printk("layer2: Windowsize 7\n");
+			if (debug) 
+				printk("layer2: Windowsize 7\n");
 			nl2->window = 7;
 		} else {
-			printk("layer2: Windowsize 1\n");
+			if (debug) 
+				printk("layer2: Windowsize 1\n");
 			nl2->window = 1;
 		}
 		
