@@ -71,7 +71,9 @@ function check_cmd {
 		else
 			echo "[!!] FATAL: $1 not in path, please install."
 		fi
-		exit 1
+		if [ "${2}" != "notfatal" ] ; then
+			exit 1
+		fi
 	else
 		var=$(echo ${1} | tr a-z A-Z)
 		eval "$var=`which ${1}`"
@@ -82,7 +84,7 @@ check_cmd modprobe
 check_cmd rmmod
 check_cmd insmod
 check_cmd lspci
-check_cmd lsusb
+check_cmd lsusb notfatal
 check_cmd mknod
 check_cmd bc
 
