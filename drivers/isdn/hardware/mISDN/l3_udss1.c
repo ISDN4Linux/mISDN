@@ -1,4 +1,4 @@
-/* $Id: l3_udss1.c,v 1.41 2006/10/09 12:51:33 crich Exp $
+/* $Id: l3_udss1.c,v 1.42 2006/10/16 07:43:57 crich Exp $
  *
  * EURO/DSS1 D-channel protocol
  *
@@ -24,7 +24,7 @@ static int debug = 0;
 static mISDNobject_t u_dss1;
 
 
-const char *dss1_revision = "$Revision: 1.41 $";
+const char *dss1_revision = "$Revision: 1.42 $";
 
 
 static int comp_required[] = {1,2,3,5,6,7,9,10,11,14,15,-1};
@@ -1082,7 +1082,7 @@ l3dss1_disconnect(l3_process_t *pc, u_char pr, void *arg)
 		else
 			cause = CAUSE_INVALID_CONTENTS;
 	}
-	else
+	else if (pc->state == 7) /* Call Received*/
 		cause = pc->err;
 	ret = check_infoelements(pc, skb, ie_DISCONNECT);
 	if (ERR_IE_COMPREHENSION == ret)
