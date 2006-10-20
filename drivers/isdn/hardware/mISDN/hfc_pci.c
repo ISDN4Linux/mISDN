@@ -1,4 +1,4 @@
-/* $Id: hfc_pci.c,v 1.47 2006/06/29 08:52:39 keil Exp $
+/* $Id: hfc_pci.c,v 1.48 2006/10/20 14:10:25 srichter Exp $
 
  * hfc_pci.c     low level driver for CCD's hfc-pci based cards
  *
@@ -25,7 +25,6 @@
  *
  */
 
-#include <linux/config.h>
 #include <linux/module.h>
 #include <linux/pci.h>
 #include <linux/delay.h>
@@ -40,7 +39,7 @@
 
 extern const char *CardType[];
 
-static const char *hfcpci_revision = "$Revision: 1.47 $";
+static const char *hfcpci_revision = "$Revision: 1.48 $";
 
 /* table entry in the PCI devices list */
 typedef struct {
@@ -1919,7 +1918,7 @@ setup_hfcpci(hfc_pci_t *hc)
 		return 1;
 	}
 	hc->hw.fifos = buffer;
-	pci_write_config_dword(hc->hw.dev, 0x80, (u_int) cpu_to_le32((unsigned int)virt_to_bus(hc->hw.fifos)));
+	pci_write_config_dword(hc->hw.dev, 0x80, hc->hw.dmahandle);
 	hc->hw.pci_io = ioremap((ulong) hc->hw.pci_io, 256);
 	printk(KERN_INFO
 		"HFC-PCI: defined at mem %#lx fifo %#lx(%#lx) IRQ %d HZ %d\n",
