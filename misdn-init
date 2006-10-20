@@ -62,6 +62,9 @@ watchdog=20
 dsp_options=0
 
 poll_option=
+
+dsp_poll_option=
+
 dtmftreshold_option=
 
 function check_cmd {
@@ -191,6 +194,9 @@ function load_card_modules {
 			poll)
 				poll=${val}
 				poll_option=poll=${val}
+				;;
+			dsp_poll)
+				dsp_poll_option=poll=${val}
 				;;
 			pcm)
 				pcm=${val}
@@ -533,6 +539,18 @@ function create_misdn_init_conf {
 #        reduce cpu load. If unsure, don't mess with it!!!
 #        Valid is 32, 64, 128, 256.
 #
+# dsp_poll=<number>
+#	This is the poll option which is used by mISDN_dsp, this might 
+# 	differ from the one given by poll= for the hfc based cards, since
+# 	they can only use multiples of 32, the dsp_poll is dependant on 
+#	the kernel timer setting which can be found in the CPU section
+#	in the kernel config. Defaults are there either 100Hz, 250Hz 
+#	or 1000Hz. If your setting is either 1000 or 250 it is compatible
+#	with the poll option for the hfc chips, if you have 100 it is 
+#	different and you need here a multiple of 80.
+#	The default is to have no dsp_poll option, then the dsp itself
+#	finds out which option is the best to use by itself
+#
 # pcm=<number>
 #        
 #        Give the id of the PCM bus. All PCM busses with the same ID
@@ -554,6 +572,7 @@ function create_misdn_init_conf {
 #	Here you can tune the sensitivity of the dtmf tone recognizer.
 #
 poll=128
+#dsp_poll=128
 dsp_options=0
 dtmftreshold=100
 debug=0"
@@ -603,8 +622,8 @@ case "$1" in
 		
 		load_card_modules $2
 		
-		echo "modprobe mISDN_dsp debug=0x0 options=$dsp_options $poll_option $dtmftreshold_option"
-		modprobe mISDN_dsp debug=0x0 options=$dsp_options $poll_option $dtmftreshold_option
+		echo "modprobe mISDN_dsp debug=0x0 options=$dsp_options $dsp_poll_option $dtmftreshold_option"
+		modprobe mISDN_dsp debug=0x0 options=$dsp_options $dsp_poll_option $dtmftreshold_option
 		sleep 1
 		
 		if [ ! -e /dev/mISDN ]; then
