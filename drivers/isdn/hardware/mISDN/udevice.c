@@ -1,4 +1,4 @@
-/* $Id: udevice.c,v 1.21 2006/08/01 11:25:10 keil Exp $
+/* $Id: udevice.c,v 1.22 2006/11/02 09:40:53 crich Exp $
  *
  * Copyright 2000  by Karsten Keil <kkeil@isdn4linux.de>
  *
@@ -1410,8 +1410,9 @@ mISDN_wdata_if(mISDNdevice_t *dev, struct sk_buff *skb)
 				err = error_answer(dev, skb, err);
 			}
 		} else {
-			printk(KERN_WARNING "mISDN: prim %x addr %x not implemented\n",
-				hp->prim, hp->addr);
+			if (device_debug)
+				printk(KERN_WARNING "mISDN: prim %x addr %x not implemented\n",
+					hp->prim, hp->addr);
 			err = error_answer(dev, skb, -EINVAL);
 		}
 		return(err);

@@ -118,17 +118,17 @@ dsp_cancel_init(dsp_t *dsp, int deftaps, int training, int delay)
 		return 0;
 	}
 	
-	printk("DSP_CANCEL_INIT called\n");
+	//printk("DSP_CANCEL_INIT called\n");
 	
 	if (delay < 0)
 	{
-		printk(KERN_NOTICE "Disabling EC\n");
+		//printk(KERN_NOTICE "Disabling EC\n");
 		dsp->cancel_enable = 0;
 		
 		dsp->txbuflen=0;
 
 		if (dsp->features.hfc_echocanhw) {
-			printk(KERN_NOTICE "Disabling Hardware EC\n");
+			//printk(KERN_NOTICE "Disabling Hardware EC\n");
 			dsp_cancel_hw_message(dsp, HW_ECHOCAN_OFF, deftaps);
 		} else {
 			bchdev_echocancel_deactivate(dsp);
@@ -139,7 +139,7 @@ dsp_cancel_init(dsp_t *dsp, int deftaps, int training, int delay)
 	
 	
 	if (dsp->features.hfc_echocanhw) {
-		printk(KERN_NOTICE "Using Hardware EC taps [%d]\n",deftaps);
+		//printk(KERN_NOTICE "Using Hardware EC taps [%d]\n",deftaps);
 		dsp_cancel_hw_message(dsp, HW_ECHOCAN_ON, deftaps);
 		return 0;
 	}
@@ -150,7 +150,7 @@ dsp_cancel_init(dsp_t *dsp, int deftaps, int training, int delay)
 	
 	bchdev_echocancel_activate(dsp,deftaps, training);
 	
-	printk("Enabling EC\n");
+	//printk("Enabling EC\n");
 	dsp->cancel_enable = 1;
 	return(0);
 }
@@ -203,10 +203,12 @@ char* bchdev_echocancel_statestr(uint16_t state)
 void bchdev_echocancel_setstate(dsp_t* dev, uint16_t state)
 {
   char* statestr = bchdev_echocancel_statestr(state);
-  
+ 
+#if 0
   printk("bchdev: echo cancel state %d (%s)\n", state & 0xff, statestr);
   if (state == ECHO_STATE_ACTIVE)
 	  printk("bchdev: %d taps trained\n", dev->echolastupdate);
+#endif
   dev->echostate = state;
 }
 
@@ -325,7 +327,7 @@ void bchdev_echocancel_chunk(dsp_t* ss, uint8_t *rxchunk, uint8_t *txchunk, uint
 			  }
 			  if (ss->echostate == ECHO_STATE_TRAINING) {
 				  if (echo_can_traintap(ss->ec, ss->echolastupdate++, rxlin)) {
-#if 1
+#if 0
 					  printk("Finished training (%d taps trained)!\n", ss->echolastupdate);
 #endif
 					  ss->echostate = ECHO_STATE_ACTIVE;
