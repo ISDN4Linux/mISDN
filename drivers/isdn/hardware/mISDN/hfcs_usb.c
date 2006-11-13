@@ -1,4 +1,4 @@
-/* $Id: hfcs_usb.c,v 1.20 2006/11/13 16:27:19 mbachem Exp $
+/* $Id: hfcs_usb.c,v 1.21 2006/11/13 16:45:41 mbachem Exp $
  *
  * mISDN driver for Colognechip HFC-S USB chip
  *
@@ -39,7 +39,7 @@
 
 
 #define DRIVER_NAME "mISDN_hfcsusb"
-const char *hfcsusb_rev = "$Revision: 1.20 $";
+const char *hfcsusb_rev = "$Revision: 1.21 $";
 
 #define MAX_CARDS	8
 static int hfcsusb_cnt;
@@ -816,18 +816,16 @@ hfcsusb_l2l1(mISDNinstance_t *inst, struct sk_buff *skb)
 				return(-EINVAL);
 			}
 
-			/* just some debug: */
-			if (test_bit(FLG_DCHANNEL, &chan->Flags)) {
-				if ((chan->debug) && (debug & DEBUG_HFC_DTRACE)) {
-					mISDN_debugprint(&chan->inst,
-						"new TX len(%i): ",
-						chan->tx_skb->len);
-					i = 0;
-					printk("  ");
-					while (i < chan->tx_skb->len)
-						printk("%02x ", chan->tx_skb->data[i++]);
-					printk("\n");
-				}
+			/* channel data debug: */
+			if ((chan->debug) && (debug & DEBUG_HFC_FIFO)) {
+				mISDN_debugprint(&chan->inst,
+					"new TX channel(%i) len(%i): ",
+					chan->channel, chan->tx_skb->len);
+				i = 0;
+				printk("  ");
+				while (i < chan->tx_skb->len)
+					printk("%02x ", chan->tx_skb->data[i++]);
+				printk("\n");
 			}
 
 			/* data gets transmitted later in USB ISO OUT traffic */
@@ -1014,7 +1012,7 @@ collect_rx_frame(usb_fifo * fifo, __u8 * data, unsigned int len, int finish)
 			if ((ch->rx_skb->len > 3) &&
 			   (!(ch->rx_skb->data[ch->rx_skb->len - 1]))) {
 
-				if (ch->debug) {
+				if ((ch->debug) && (debug & DEBUG_HFC_FIFO)) {
 					mISDN_debugprint(&ch->inst,
 						"fifon(%i) new RX len(%i): ",
 						fifon, ch->rx_skb->len);
@@ -1104,7 +1102,7 @@ rx_iso_complete(struct urb *urb, struct pt_regs *regs)
 	usb_fifo *fifo = context_iso_urb->owner_fifo;
 	hfcsusb_t *card = fifo->card;
 	int k, len, errcode, offset, num_isoc_packets, fifon, maxlen,
-	    status, i;
+	    status;
 	unsigned int iso_status;
 	__u8 *buf;
 	static __u8 eof[8];
@@ -1128,6 +1126,8 @@ rx_iso_complete(struct urb *urb, struct pt_regs *regs)
 				       "HFC-S USB: ISO packet failure - status:%x",
 				       iso_status);
 
+			/*
+			USB data log for every ISO in:
 			if (fifon == 1) {
 				printk ("(%d/%d) len(%d) ", k, num_isoc_packets-1, len);
 				for (i=0; i<len; i++) {
@@ -1135,6 +1135,7 @@ rx_iso_complete(struct urb *urb, struct pt_regs *regs)
 				}
 				printk ("\n");
 			}
+			*/
 
 			if (fifo->last_urblen != maxlen) {
 				/* the threshold mask is in the 2nd status byte */
@@ -1195,7 +1196,6 @@ rx_int_complete(struct urb *urb, struct pt_regs *regs)
 	usb_fifo *fifo = (usb_fifo *) urb->context;
 	hfcsusb_t *card = fifo->card;
 	static __u8 eof[8];
-	int i;
 
 	urb->dev = card->dev;	/* security init */
 
@@ -1212,6 +1212,8 @@ rx_int_complete(struct urb *urb, struct pt_regs *regs)
 	buf = fifo->buffer;
 	maxlen = fifo->usb_packet_maxlen;
 
+	/*
+	USB data log for every INT in:
 	if (fifon == 1) {
 		printk ("fifon %d len %d: ", fifon, len);
 		for (i=0; i<len; i++) {
@@ -1219,6 +1221,7 @@ rx_int_complete(struct urb *urb, struct pt_regs *regs)
 		}
 		printk ("\n");
 	}
+	*/
 
 	if (fifo->last_urblen != fifo->usb_packet_maxlen) {
 		/* the threshold mask is in the 2nd status byte */
