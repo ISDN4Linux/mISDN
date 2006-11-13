@@ -1,4 +1,4 @@
-/* $Id: hfcs_usb.c,v 1.19 2006/08/15 09:38:07 mbachem Exp $
+/* $Id: hfcs_usb.c,v 1.20 2006/11/13 16:27:19 mbachem Exp $
  *
  * mISDN driver for Colognechip HFC-S USB chip
  *
@@ -39,7 +39,7 @@
 
 
 #define DRIVER_NAME "mISDN_hfcsusb"
-const char *hfcsusb_rev = "$Revision: 1.19 $";
+const char *hfcsusb_rev = "$Revision: 1.20 $";
 
 #define MAX_CARDS	8
 static int hfcsusb_cnt;
@@ -47,7 +47,7 @@ static u_int protocol[MAX_CARDS] = {2,2,2,2,2,2,2,2};
 static int layermask[MAX_CARDS];
 
 static mISDNobject_t hw_mISDNObj;
-static int debug = 0x1FFFF; // 0;
+static int debug = 0;
 static int poll = 128;
 
 
@@ -536,6 +536,11 @@ setup_bchannel(channel_t * bch, int protocol)
 	}
 
 	if (protocol >= ISDN_PID_NONE) {
+		/*
+		printk ("HFCS-USB: %s: HFCUSB_FIFO(0x%x) HFCUSB_CON_HDLC(0x%x)\n",
+			__FUNCTION__, (bch->channel)?2:0, conhdlc);
+		*/
+
 		/* set FIFO to transmit register */
 		queued_Write_hfc(card, HFCUSB_FIFO,
 				      (bch->channel)?2:0);
@@ -544,6 +549,11 @@ setup_bchannel(channel_t * bch, int protocol)
 		/* reset fifo */
 		queued_Write_hfc(card, HFCUSB_INC_RES_F, 2);
 		
+		/*
+		printk ("HFCS-USB: %s: HFCUSB_FIFO(0x%x) HFCUSB_CON_HDLC(0x%x)\n",
+			__FUNCTION__, (bch->channel)?2:0, conhdlc);
+		*/
+
 		/* set FIFO to receive register */
 		queued_Write_hfc(card, HFCUSB_FIFO,
 				      ((bch->channel)?3:1));
@@ -564,6 +574,11 @@ setup_bchannel(channel_t * bch, int protocol)
 			sctrl |= ((card->chan[B2].channel)?2:1);
 			sctrl_r |= ((card->chan[B2].channel)?2:1);
 		}
+
+		/*
+		printk ("HFCS-USB: %s: HFCUSB_SCTRL(0x%x) HFCUSB_SCTRL_R(0x%x)\n",
+			__FUNCTION__, sctrl, sctrl_r);
+		*/
 		
 		queued_Write_hfc(card, HFCUSB_SCTRL, sctrl);
 		queued_Write_hfc(card, HFCUSB_SCTRL_R, sctrl_r);
@@ -786,10 +801,35 @@ hfcsusb_l2l1(mISDNinstance_t *inst, struct sk_buff *skb)
 	channel_t	*chan = container_of(inst, channel_t, inst);
 	int		ret = 0;
 	mISDN_head_t	*hh = mISDN_HEAD_P(skb);
+	int		i;
 
 	if ((hh->prim == PH_DATA_REQ) || (hh->prim == DL_DATA_REQ)) {
 		ret = channel_senddata(chan, hh->dinfo, skb);
 		if (ret > 0) { 
+		
+			if (!(chan)) {
+				printk ("CRITICAL ERROR! chan is NULL pointer!\n");
+				return(-EINVAL);
+			}
+			if (!(chan->tx_skb)) {
+				printk ("CRITICAL ERROR! channel_senddata returned %d without chan->tx_skb\n", ret);
+				return(-EINVAL);
+			}
+
+			/* just some debug: */
+			if (test_bit(FLG_DCHANNEL, &chan->Flags)) {
+				if ((chan->debug) && (debug & DEBUG_HFC_DTRACE)) {
+					mISDN_debugprint(&chan->inst,
+						"new TX len(%i): ",
+						chan->tx_skb->len);
+					i = 0;
+					printk("  ");
+					while (i < chan->tx_skb->len)
+						printk("%02x ", chan->tx_skb->data[i++]);
+					printk("\n");
+				}
+			}
+
 			/* data gets transmitted later in USB ISO OUT traffic */
 			ret = 0;
 		}
@@ -930,18 +970,21 @@ collect_rx_frame(usb_fifo * fifo, __u8 * data, unsigned int len, int finish)
 	channel_t	*ch = &card->chan[fifo->ch_idx];
 	struct sk_buff	*skb;	/* data buffer for upper layer */
 	int		fifon;
+	int		i;
 
 	if (!len)
 		return;
 		
 	fifon = fifo->fifonum;
-	
+
 	if (!ch->rx_skb) {
+		printk(KERN_INFO "alloc new skb for fifon(%d), len(%d+%d)\n", fifon, ch->maxlen + 3, ch->up_headerlen);
 		ch->rx_skb = alloc_stack_skb(ch->maxlen + 3, ch->up_headerlen);
 		if (!ch->rx_skb) {
 			printk(KERN_DEBUG "%s: No mem for rx_skb\n", __FUNCTION__);
 			return;
 		}
+		skb_trim(ch->rx_skb, 0);
 	}
 
 	if (fifon == HFCUSB_D_RX) { 
@@ -954,14 +997,15 @@ collect_rx_frame(usb_fifo * fifo, __u8 * data, unsigned int len, int finish)
 		}
 	} else {
 		/* B-Channel SKB range check */
-		if ((ch->rx_skb->len + len) >= MAX_DATA_MEM) {
+		if ((ch->rx_skb->len + len) >= 2000) {
 			printk(KERN_DEBUG "%s: sbk mem exceeded for fifo(%d) HFCUSB_B_RX\n",
 			       __FUNCTION__, fifon);
 			skb_trim(ch->rx_skb, 0);
 			return;
 		}
 	}
-	
+
+	// printk ("skb_put: len(%d) new_len(%d)", ch->rx_skb->len, len);
 	memcpy(skb_put(ch->rx_skb, len), data, len);
 
 	if (test_bit(FLG_HDLC, &ch->Flags)) {
@@ -969,6 +1013,17 @@ collect_rx_frame(usb_fifo * fifo, __u8 * data, unsigned int len, int finish)
 		if (finish) {
 			if ((ch->rx_skb->len > 3) &&
 			   (!(ch->rx_skb->data[ch->rx_skb->len - 1]))) {
+
+				if (ch->debug) {
+					mISDN_debugprint(&ch->inst,
+						"fifon(%i) new RX len(%i): ",
+						fifon, ch->rx_skb->len);
+					i = 0;
+					printk("  ");
+					while (i < ch->rx_skb->len)
+						printk("%02x ", ch->rx_skb->data[i++]);
+					printk("\n");
+				}
 
 				/* remove CRC & status */
 				skb_trim(ch->rx_skb, ch->rx_skb->len - 3);
@@ -988,13 +1043,25 @@ collect_rx_frame(usb_fifo * fifo, __u8 * data, unsigned int len, int finish)
 					ch->rx_skb = NULL;
 				}
 				queue_ch_frame(ch, INDICATION, MISDN_ID_ANY, skb);				
-				
 			} else {
-				printk ("HFC-S USB: CRC or minlen ERROR\n");
+				printk ("HFC-S USB: CRC or minlen ERROR: ");
+				if (ch->debug) {
+					mISDN_debugprint(&ch->inst,
+						"fifon(%i) RX len(%i): ",
+						fifon, ch->rx_skb->len);
+					i = 0;
+					printk("  ");
+					while (i < ch->rx_skb->len)
+						printk("%02x ", ch->rx_skb->data[i++]);
+					printk("\n");
+				}
+				skb_trim(ch->rx_skb, 0);
 			}
 		}
 	} else {
 		if (finish || ch->rx_skb->len >= poll) {
+			printk(KERN_DEBUG "%s: queueing transp data fifon(%i) (%i)\n", __FUNCTION__, fifon, ch->rx_skb->len);
+
 			/* deliver transparent data to layer2 */
 			queue_ch_frame(ch, INDICATION, MISDN_ID_ANY, ch->rx_skb);
 			ch->rx_skb = NULL;
@@ -1037,7 +1104,7 @@ rx_iso_complete(struct urb *urb, struct pt_regs *regs)
 	usb_fifo *fifo = context_iso_urb->owner_fifo;
 	hfcsusb_t *card = fifo->card;
 	int k, len, errcode, offset, num_isoc_packets, fifon, maxlen,
-	    status;
+	    status, i;
 	unsigned int iso_status;
 	__u8 *buf;
 	static __u8 eof[8];
@@ -1048,7 +1115,9 @@ rx_iso_complete(struct urb *urb, struct pt_regs *regs)
 	if (fifo->active && !status) {
 		num_isoc_packets = iso_packets[fifon];
 		maxlen = fifo->usb_packet_maxlen;
+
 		for (k = 0; k < num_isoc_packets; ++k) {
+
 			len = urb->iso_frame_desc[k].actual_length;
 			offset = urb->iso_frame_desc[k].offset;
 			buf = context_iso_urb->buffer + offset;
@@ -1058,6 +1127,14 @@ rx_iso_complete(struct urb *urb, struct pt_regs *regs)
 				printk(KERN_INFO
 				       "HFC-S USB: ISO packet failure - status:%x",
 				       iso_status);
+
+			if (fifon == 1) {
+				printk ("(%d/%d) len(%d) ", k, num_isoc_packets-1, len);
+				for (i=0; i<len; i++) {
+					printk ("%x ", buf[i]);
+				}
+				printk ("\n");
+			}
 
 			if (fifo->last_urblen != maxlen) {
 				/* the threshold mask is in the 2nd status byte */
@@ -1118,6 +1195,7 @@ rx_int_complete(struct urb *urb, struct pt_regs *regs)
 	usb_fifo *fifo = (usb_fifo *) urb->context;
 	hfcsusb_t *card = fifo->card;
 	static __u8 eof[8];
+	int i;
 
 	urb->dev = card->dev;	/* security init */
 
@@ -1133,7 +1211,15 @@ rx_int_complete(struct urb *urb, struct pt_regs *regs)
 	len = urb->actual_length;
 	buf = fifo->buffer;
 	maxlen = fifo->usb_packet_maxlen;
-	
+
+	if (fifon == 1) {
+		printk ("fifon %d len %d: ", fifon, len);
+		for (i=0; i<len; i++) {
+			printk ("%x ", buf[i]);
+		}
+		printk ("\n");
+	}
+
 	if (fifo->last_urblen != fifo->usb_packet_maxlen) {
 		/* the threshold mask is in the 2nd status byte */
 		card->threshold_mask = buf[1];
@@ -1990,6 +2076,7 @@ hfcsusb_init(void)
 {
 	int err;
 
+	debug = 0xFFFF;
 	printk(KERN_INFO "hfcsusb driver Rev. %s (debug=%i)\n",
 	       mISDN_getrev(hfcsusb_rev), debug);
 
