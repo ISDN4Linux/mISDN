@@ -1,5 +1,8 @@
 BASEDIR=$(shell pwd)
 
+MAJOR=1
+MINOR=0
+SUBMINOR=3
 
 INSTALL_PREFIX := /
 export INSTALL_PREFIX
@@ -94,4 +97,20 @@ clean:
 	find . -iname ".*.d" -exec rm -rf {} \;
 	find . -iname "*.mod.c" -exec rm -rf {} \;
 	find . -iname "*.mod" -exec rm -rf {} \;
+
+snapshot: clean
+	DIR=mISDN-$$(date +"20%y_%m_%d") ; \
+	echo $$(date +"20%y_%m_%d" | sed -e "s/\//_/g") > VERSION ; \
+	mkdir -p /tmp/$$DIR ; \
+	cp -a * /tmp/$$DIR ; \
+	cd /tmp/; \
+	tar czf $$DIR.tar.gz $$DIR
+
+release: clean
+	DIR=mISDN-$(MAJOR)_$(MINOR)_$(SUBMINOR) ; \
+	echo $(MAJOR)_$(MINOR)_$(SUBMINOR) > VERSION ; \
+	mkdir -p /tmp/$$DIR ; \
+	cp -a * /tmp/$$DIR ; \
+	cd /tmp/; \
+	tar czf $$DIR.tar.gz $$DIR
 
