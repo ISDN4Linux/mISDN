@@ -109,6 +109,7 @@ struct hfc_multi {
 	int		id;	/* chip number starting with 1 */
 	int		pcm;	/* id of pcm bus */
 	int		type;
+	int		ports;
 
 	u_int		irq;	/* irq used by card */
 	u_int		irqcnt;

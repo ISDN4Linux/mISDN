@@ -1,4 +1,4 @@
-/* $Id: asn1_comp.c,v 1.2 2006/03/06 12:52:07 keil Exp $
+/* $Id: asn1_comp.c,v 1.3 2006/11/14 12:17:02 crich Exp $
  *
  */
 
@@ -192,7 +192,7 @@ ParseRejectComponent(struct asn1_parm *pc, u_char *p, u_char *end, int dummy)
 int
 ParseUnknownComponent(struct asn1_parm *pc, u_char *p, u_char *end, int dummy)
 {
-	int invokeId;
+	//int invokeId;
 	INIT;
 	
 	pc->comp = tag;

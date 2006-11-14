@@ -202,9 +202,9 @@ char* bchdev_echocancel_statestr(uint16_t state)
 /** Changes state of echo cancellation to given state */
 void bchdev_echocancel_setstate(dsp_t* dev, uint16_t state)
 {
-  char* statestr = bchdev_echocancel_statestr(state);
- 
 #if 0
+  char* statestr = bchdev_echocancel_statestr(state);
+
   printk("bchdev: echo cancel state %d (%s)\n", state & 0xff, statestr);
   if (state == ECHO_STATE_ACTIVE)
 	  printk("bchdev: %d taps trained\n", dev->echolastupdate);
