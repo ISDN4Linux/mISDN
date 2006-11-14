@@ -128,9 +128,9 @@ static void ph_state_change(channel_t *ch);
 
 extern const char *CardType[];
 
-static const char *hfcmulti_revision = "$Revision: 1.57 $";
+static const char *hfcmulti_revision = "$Revision: 1.58 $";
 
-static int HFC_cnt, HFC_idx;
+static int HFC_cnt;
 
 static mISDNobject_t	HFCM_obj;
 
@@ -3730,25 +3730,6 @@ bugtest
 	return(0);
 }
 
-static void find_type_entry(int hfc_type, int *card, int *port)
-{
-	int i, j = 0;
-
-	for(i=0;i<MAX_CARDS;i++)
-	{
-//#warning remove
-//	printk(KERN_DEBUG "i=%d type[i]=%d hfc_type=%d allocated[i]=%d\n", i, type[i]&0xff,hfc_type,allocated[i]);
-		if((type[i]&0xff)==hfc_type && !allocated[i])
-		{
-			*card = i;
-			*port = j;
-			return;
-		}
-		j = j + (type[i]&0xff);
-	}
-	*card = -1;
-}
-
 static int find_idlist_entry(int vendor,int subvendor, int device, int subdevice)
 {
 	int cnt;
@@ -3766,7 +3747,9 @@ static int find_idlist_entry(int vendor,int subvendor, int device, int subdevice
 
 static int __devinit hfcpci_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 {
-	int		i, ret_err=0, port_idx;
+	int		i, ret_err=0;
+	static int HFC_idx=0, HFC_port_idx=0;
+	int port_idx;
 	int		bchperport, card_type, pt;
 	int		ch, ch2;
 	int		id_idx;        // index to id_list
@@ -3778,7 +3761,6 @@ static int __devinit hfcpci_probe(struct pci_dev *pdev, const struct pci_device_
 	channel_t	*chan;
 	u_long		flags;
 	u_char		dips=0, pmj=0; // dip settings, port mode Jumpers
-
 
 	id_idx = find_idlist_entry(ent->vendor,ent->subvendor,ent->device,ent->subdevice);
 	if (id_idx == -1) {
@@ -3820,7 +3802,8 @@ static int __devinit hfcpci_probe(struct pci_dev *pdev, const struct pci_device_
 		goto free_object;
 	}
 
-	find_type_entry(hfc_type, &HFC_idx, &port_idx);
+	port_idx=HFC_port_idx;
+
 	if(HFC_idx == -1) {
 		printk( KERN_ERR "HFC-MULTI: Card '%s' found, but not given by module's options, ignoring...\n",
 			id_list[id_idx].card_name);
@@ -3852,6 +3835,8 @@ static int __devinit hfcpci_probe(struct pci_dev *pdev, const struct pci_device_
 	hc->type  = card_type;
 	hc->ports = hfc_ports;
 	
+	printk( KERN_NOTICE "type:%d ports:%d HFC_idx:%d port_idx:%d\n",card_type, hfc_ports, HFC_idx, port_idx);
+
 	if (type[HFC_idx] & 0x100) {
 		test_and_set_bit(HFC_CHIP_ULAW, &hc->chip);
 		silence = 0xff; /* ulaw silence */
@@ -4231,6 +4216,9 @@ free_delstack:
 	allocated[HFC_idx] = 1;
 	HFC_cnt++;
 	spin_unlock_irqrestore(&hc->lock, flags);
+
+	HFC_idx++;
+	HFC_port_idx+=hc->ports;
 	return(0);
 
 	/* if an error ocurred */
@@ -4456,7 +4444,7 @@ HFCmulti_init(void)
 		printk(KERN_DEBUG "%s: new mISDN object (refcnt = %d)\n", __FUNCTION__, HFCM_obj.refcnt);
 
 	for(i=0;i<MAX_CARDS;i++) allocated[i]=0;
-	HFC_cnt = HFC_idx = 0;
+	HFC_cnt = 0;
 
 #if 1
 	err = pci_register_driver(&hfcmultipci_driver);
