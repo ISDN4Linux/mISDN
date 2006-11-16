@@ -95,7 +95,80 @@ function check_asterisk {
 	if ps ax | grep -v grep | grep asterisk > /dev/null ; then asterisk -rx "stop now" ; fi
 }
 
+function create_card_db
+{
+	cardline=""
+	cardcount=1
+
+	IFS=$'\n'
+	NL="
+"
+	function addcard {
+		cardline="${cardline}${cardcount},${1}${NL}"
+		let "cardcount = ${cardcount} + 1"
+	}
+
+	function addport {
+		let "portcount = ${portcount} + ${1}"
+	}
+
+	for line in $(${LSPCI} -n -d 0xd161:b410); do
+		addcard "4,0x4"
+	done
+
+	for line in $(${LSPCI} -n | sed -n 's/^\(0000:\|\)\([0-9a-f]\{2\}:[0-9a-f]\{2\}.[0-9a-f]\{1\}\)\( Class \| \)[0-9a-f]\{4\}: 1397:\([0-9a-f]\{4\}\).*$/\4 \2/p'); do
+		case "${line}" in
+			30b1*)
+				addcard "1,0x1"
+				;;
+			16b8*)
+				addcard "8,0x8"
+				;;
+			08b4*)
+
+				if ${LSPCI} -n -v -s "${line:5}" | grep "Subsystem" | grep "1397:b567" > /dev/null ; then
+					addcard "1,0x4"
+				elif ${LSPCI} -n -v -s "${line:5}" | grep "Subsystem" | grep "1397:b566\|1397:b569" > /dev/null ; then
+					addcard "2,0x4"
+				else
+					addcard "4,0x4"
+				fi
+				;;
+		esac
+	done
+	for line in $(${LSPCI} -n | grep "1397:\(2bd\(0\|6\|7\|8\|9\|a\|b\|c\)\|b100\)\|1043:0675\|0871:ffa\(1\|2\)\|1051:0100\|15b0:2bd0\|114f:007\(0\|1\|2\|3\)\|13d1:2bd1\|182d:3069"); do
+		addcard "1,hfcpci"
+	done
+	for line in $(${LSPCI} -n | grep "1244:\(0a00\|0e00\)"); do
+		addcard "1,avmfritz"
+	done
+	for line in $(${LSPCI} -n -d 1050:6692); do
+		addcard "1,w6692pci"
+	done
+	
+	if [ -e $LSUSB ]; then 
+		for line in $(${LSUSB} | grep "0959:2bd0\|0675:1688\|07b0:0007\|0742:200\(7\|8\|9\|A\)\|08e3:0301\|07fa:084\(7\|8\)\|07ba:0006"); do
+			addcard "1,hfcsusb"
+		done
+	fi
+
+	echo "${cardline}"
+}
+
 function load_card_modules {
+
+	carddb=$(create_card_db)
+
+	function find_carddb_line {
+		i=1
+		for l in ${carddb} ; do
+			if [ $i -eq $1 ] ; then 
+				echo $l
+				return
+			fi
+			let "i=$i+1"
+		done
+	}
 
 	if [ ! -z "$1" ] ; then
 		echo "Loading only $1"
@@ -105,20 +178,20 @@ function load_card_modules {
 
 	for line in $(sed -n -e '/^[^#]/p' ${misdn_init_conf});
 	do
-		var=`echo "${line}" | sed -e "s/^\(.*\)=.*/\1/"`
-		val=`echo "${line}" | sed -e "s/^.*=\(.*\)/\1/"`
+		var=$(echo "${line}" | cut -d "=" -f1)
+		val=$(echo "${line}" | cut -d "=" -f2)
 		
 		case "${var}" in
 			card)
-				nr=`echo "${val}" | sed -e "s/^\([0-9]*\),.*/\1/"`
-				ports=`echo "${val}" | sed -e "s/^[^,]*,\([^,]*\),.*/\1/"`
-				mod=`echo "${val}" | sed -e "s/^[^,]*,[^,]*,\([^,]*\).*/\1/"`
-				#echo "nr $nr ports $ports mod $mod"
-				if [ ${#val} -gt $(echo "obase=10;${#nr}+${#mod}+1" | ${BC}) ]; then
-					opns=`echo "${val}" | sed -e "s/^[^,]*,[^,]*,\(.*\)/\1/"`
-				else
-					opns=""
-				fi
+				#echo "processing line: $val" 
+				nr=$(echo "${val}" | cut -d "," -f1)
+				mod=$(echo "${val}" | cut -d "," -f2)
+				opns=$(echo "${val}" | cut -d "," -f3-)
+
+				#getting portcount from carddb
+				ports=$(find_carddb_line $nr | cut -d "," -f2)
+				#echo "nr $nr ports $ports mod $mod opns: $opns"
+
 				case "${mod}" in
 					0x*)
 						hfcmulti[${nr}]=$(echo ${mod} | sed -e "s/^0x\([0-9]*\)/\1/")
@@ -338,14 +411,13 @@ function unload_card_modules {
 
 	for line in $(sed -ne '/^[^#]/p' ${misdn_init_conf});
 	do
-		var=`echo "${line}" | sed -e "s/^\(.*\)=.*/\1/"`
-		val=`echo "${line}" | sed -e "s/^.*=\(.*\)/\1/"`
+		var=$(echo "${line}" | cut -d "=" -f 1)
+		val=$(echo "${line}" | cut -d "=" -f 2)
 		
 		case "${var}" in
 			card)
-				nr=`echo "${val}" | sed -e "s/^\([0-9]*\),.*/\1/"`
-				ports=`echo "${val}" | sed -e "s/^[^,]*,\([^,]*\),.*/\1/"`
-				mod=`echo "${val}" | sed -e "s/^[^,]*,[^,]*,\([^,]*\).*/\1/"`
+				nr=$(echo "${val}" | cut -d "," -f 1)
+				mod=$(echo "${val}" | cut -d "," -f 2)
 				case "${mod}" in
 					0x*)
 						modulelist[${nr}]=hfcmulti
@@ -382,78 +454,25 @@ function unload_card_modules {
 }
 
 function create_misdn_init_conf {
-	
+	cardline=""	
 	cardcount=1
+	portcount=0
 	cardconf=""
 	IFS=$'\n'
 	NL="
 "
+	carddb=$(create_card_db)
+
+	for line in $carddb ; do 
+		tmp="card=$(echo $line | cut -d, -f1,3)"
+		let "portcount = ${portcount} + $(echo $line | cut -d, -f2)"
+		cardline="${cardline}${tmp}${NL}"	
+	done
 
 	function die {
 		echo "[!!] ${1}"
 		exit 1
 	}
-	
-	function addcard {
-		cardline="${cardline}card=${cardcount},${1}${NL}"
-		let "cardcount = ${cardcount} + 1"
-	}
-
-	function addport {
-		let "portcount = ${portcount} + ${1}"
-	}
-
-	portcount=0
-
-	for line in $(${LSPCI} -n -d 0xd161:b410); do
-		addcard "4,0x4"
-		addport 4
-	done
-
-	for line in $(${LSPCI} -n | sed -n 's/^\(0000:\|\)\([0-9a-f]\{2\}:[0-9a-f]\{2\}.[0-9a-f]\{1\}\)\( Class \| \)[0-9a-f]\{4\}: 1397:\([0-9a-f]\{4\}\).*$/\4 \2/p'); do
-		case "${line}" in
-			30b1*)
-				addcard "1,0x1"
-				addport 1
-				;;
-			16b8*)
-				addcard "8,0x8"
-				addport 8
-				;;
-			08b4*)
-
-				if ${LSPCI} -n -v -s "${line:5}" | grep "Subsystem" | grep "1397:b567" > /dev/null ; then
-					addcard "1,0x4"
-					addport 1
-				elif ${LSPCI} -n -v -s "${line:5}" | grep "Subsystem" | grep "1397:b566\|1397:b569" > /dev/null ; then
-					addcard "2,0x4"
-					addport 2
-				else
-					addcard "4,0x4"
-					addport 4
-				fi
-				;;
-		esac
-	done
-	for line in $(${LSPCI} -n | grep "1397:\(2bd\(0\|6\|7\|8\|9\|a\|b\|c\)\|b100\)\|1043:0675\|0871:ffa\(1\|2\)\|1051:0100\|15b0:2bd0\|114f:007\(0\|1\|2\|3\)\|13d1:2bd1\|182d:3069"); do
-		addcard "hfcpci"
-		addport 1
-	done
-	for line in $(${LSPCI} -n | grep "1244:\(0a00\|0e00\)"); do
-		addcard "avmfritz"
-		addport 1
-	done
-	for line in $(${LSPCI} -n -d 1050:6692); do
-		addcard "w6692pci"
-		addport 1
-	done
-	
-	if [ -e $LSUSB ]; then 
-		for line in $(${LSUSB} | grep "0959:2bd0\|0675:1688\|07b0:0007\|0742:200\(7\|8\|9\|A\)\|08e3:0301\|07fa:084\(7\|8\)\|07ba:0006"); do
-			addcard "hfcsusb"
-			addport 1
-		done
-	fi
 	
 	if [ "${1}" == "scan" ]; then
 		echo "[OK] found the following devices:"
@@ -617,7 +636,6 @@ function check_cfg_file {
 
 case "$1" in
 	start|--start)
-#remove_preloaded_modules
 		check_cfg_file $2
 
 		modprobe capi
@@ -696,4 +714,5 @@ case "$1" in
 		;;
 
 esac
+
 
