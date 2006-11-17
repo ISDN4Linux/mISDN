@@ -549,6 +549,11 @@ function create_misdn_init_conf {
 #              nocrc4	     - turn off crc4 mode use double frame instead 
 #				(only HFC-E1)
 #
+# The master_clock option is essential for retrieving and transmitting
+# faxes to avoid failures during transmission. It tells the driver to 
+# synchronize the Card with the given Port which should be a TE Port and
+# connected to the PSTN in general.
+#
 #option=1,master_clock
 #option=2,ais,nocrc4
 #option=3,optical,los,ais,slip
