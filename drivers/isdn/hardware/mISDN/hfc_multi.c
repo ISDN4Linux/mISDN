@@ -128,7 +128,7 @@ static void ph_state_change(channel_t *ch);
 
 extern const char *CardType[];
 
-static const char *hfcmulti_revision = "$Revision: 1.59 $";
+static const char *hfcmulti_revision = "$Revision: 1.60 $";
 
 static int HFC_cnt;
 
@@ -192,6 +192,8 @@ static const PCI_ENTRY id_list[] =
 	 "HFC-4S Beronet Card (mini PCI)", 0, 4, 1, 2},
 	{0xD161, 0xD161, 0xB410, 0xB410, VENDOR_CCD,
 	 "HFC-4S Digium Card", 0, 4, 0, 2},
+	{CCAG_VID, CCAG_VID, HFC4S_ID, 0xB540, VENDOR_CCD,
+	 "HFC-4S Swyx 4xS0 SX2 QuadBri", 0, 4, 1, 2},
 	{CCAG_VID, CCAG_VID, HFC8S_ID, 0xB521, VENDOR_CCD,
 	 "HFC-8S IOB4ST Recording", 0, 8, 1, 0},
 	{CCAG_VID, CCAG_VID, HFC8S_ID, 0xB522, VENDOR_CCD,
@@ -4294,6 +4296,7 @@ static struct pci_device_id hfmultipci_ids[] __devinitdata = {
 	{ CCAG_VID, 0x08B4   , CCAG_VID, 0xB520, 0, 0, 0 }, //IOB4ST
 	{ CCAG_VID, 0x08B4   , CCAG_VID, 0xB620, 0, 0, 0 }, //4S
 	{ 0xD161, 0xB410   , 0xD161, 0xB410, 0, 0, 0 }, //4S - Digium
+	{ CCAG_VID, 0x08B4   , CCAG_VID, 0xB540, 0, 0, 0 }, //4S Swyx
 	
 	/** Cards with HFC-8S Chip**/
 	{ CCAG_VID, 0x16B8   , CCAG_VID, 0xB562, 0, 0, 0 }, //BN8S
