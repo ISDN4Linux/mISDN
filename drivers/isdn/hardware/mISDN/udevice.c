@@ -1,4 +1,4 @@
-/* $Id: udevice.c,v 1.22 2006/11/02 09:40:53 crich Exp $
+/* $Id: udevice.c,v 1.23 2006/11/22 12:18:00 crich Exp $
  *
  * Copyright 2000  by Karsten Keil <kkeil@isdn4linux.de>
  *
@@ -1509,7 +1509,7 @@ free_device(mISDNdevice_t *dev)
 	list_del(&dev->list);
 	write_unlock_irqrestore(&mISDN_device_lock, flags);
 	if (!list_empty(&dev->entitylist)) {
-		printk(KERN_WARNING "MISDN %s: entitylist not empty\n", __FUNCTION__);
+		if (device_debug ) printk(KERN_WARNING "MISDN %s: entitylist not empty\n", __FUNCTION__);
 		list_for_each_safe(item, ni, &dev->entitylist) {
 			struct entity_item *ei = list_entry(item, struct entity_item, head);
 			list_del(item);
@@ -1918,7 +1918,8 @@ udev_manager(void *data, u_int prim, void *arg) {
 			break;
 	}
 	if (err) {
-		printk(KERN_WARNING "dev_manager prim %x without device layer\n", prim);
+		if (device_debug) 
+			printk(KERN_WARNING "dev_manager prim %x without device layer\n", prim);
 		goto out;
 	}
 	switch(prim) {
@@ -1950,7 +1951,7 @@ udev_manager(void *data, u_int prim, void *arg) {
 		err = 0;
 	    	break;
 	    default:
-		printk(KERN_WARNING "dev_manager prim %x not handled\n", prim);
+		if (device_debug) printk(KERN_WARNING "dev_manager prim %x not handled\n", prim);
 		err = -EINVAL;
 		break;
 	}
