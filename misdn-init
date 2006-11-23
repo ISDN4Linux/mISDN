@@ -220,13 +220,13 @@ function load_card_modules {
 						let "hfcports = ${hfcports} + ${ports}"
 						IFS=$','
 						for li in ${opns}; do
-							hfcmulti[${nr}]=$(echo "obase=10;2^(${!li}-1)+1" | ${BC})
+							hfcmulti[${nr}]=$(echo "obase=10;2^(${!li}-1)+${hfcmulti[${nr}]}" | ${BC})
 							if [ "${li}" != "pcm_slave" ]; then
-								hfcmulti[$((${nr} + 1))]=$(echo "obase=10;2^(${!li}-1)+1" | ${BC})
+								hfcmulti[$((${nr} + 1))]=$(echo "obase=10;2^(${!li}-1)+${hfcmulti[$((${nr}+1))]}" | ${BC})
 							fi
 						done
 						IFS=$'\n'
-						hfcmulti[$((${nr} + 1))]=$(echo "obase=10;2^(${pcm_slave}-1)+1" | ${BC})
+						hfcmulti[$((${nr} + 1))]=$(echo "obase=10;2^(${pcm_slave}-1)+${hfcmulti[$((${nr}+1))]}" | ${BC})
 						let "skipnr = ${skipnr} + 1"
 						;;
 					0x*)
