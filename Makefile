@@ -43,19 +43,20 @@ CONFIGS+=CONFIG_MISDN_NETJET=m
 MINCLUDES+=-I$(MISDNDIR)/include
 
 all: test_old_misdn
-	@echo
-	@echo "Making mISDN"
-	@echo "============="
-	@echo
 	cp $(MISDNDIR)/drivers/isdn/hardware/mISDN/Makefile.v2.6 $(MISDNDIR)/drivers/isdn/hardware/mISDN/Makefile
-
 	export MINCLUDES=$(MISDNDIR)/include ; make -C $(LINUX) SUBDIRS=$(MISDN_SRC) modules $(CONFIGS)  
 
+install: all modules-install misdn-init
+	$(DEPMOD) 
+	$(UPDATE_MODULES)
+	$(MODULES_UPDATE)
 
-install: all
+modules-install:
 	cd $(LINUX) ; make INSTALL_MOD_PATH=$(INSTALL_PREFIX) SUBDIRS=$(MISDN_SRC) modules_install 
 	mkdir -p $(INSTALL_PREFIX)/usr/include/linux/
 	cp $(MISDNDIR)/include/linux/*.h $(INSTALL_PREFIX)/usr/include/linux/
+
+misdn-init:
 	mkdir -p $(INSTALL_PREFIX)/usr/sbin/
 	install -m755 misdn-init $(INSTALL_PREFIX)/usr/sbin/
 	if [ -d $(INSTALL_PREFIX)/etc/init.d ]; then \
@@ -66,9 +67,6 @@ install: all
 	cp mISDN.modprobe.d $(INSTALL_PREFIX)/etc/modprobe.d/mISDN
 	mkdir -p $(INSTALL_PREFIX)/etc/modules.d
 	cp mISDN.modprobe.d $(INSTALL_PREFIX)/etc/modules.d/mISDN
-	$(DEPMOD) 
-	$(UPDATE_MODULES)
-	$(MODULES_UPDATE)
 
 test_old_misdn:
 	@if echo -ne "#include <linux/mISDNif.h>" | gcc -C -E - 2>/dev/null 1>/dev/null  ; then \
@@ -81,7 +79,7 @@ test_old_misdn:
 
 
 
-.PHONY: install all clean 
+.PHONY: modules-install install all clean misdn-init
 
 force:
 	rm -f $(LINUX)/include/linux/mISDNif.h

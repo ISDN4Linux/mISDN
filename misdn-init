@@ -90,6 +90,8 @@ check_cmd lspci
 check_cmd lsusb notfatal
 check_cmd mknod
 check_cmd bc
+check_cmd cut
+check_cmd wc
 
 function check_asterisk {
 	if ps ax | grep -v grep | grep asterisk > /dev/null ; then asterisk -rx "stop now" ; fi
@@ -99,6 +101,7 @@ function create_card_db
 {
 	cardline=""
 	cardcount=1
+	skipnext=0
 
 	IFS=$'\n'
 	NL="
@@ -117,9 +120,25 @@ function create_card_db
 	done
 
 	for line in $(${LSPCI} -n | sed -n 's/^\(0000:\|\)\([0-9a-f]\{2\}:[0-9a-f]\{2\}.[0-9a-f]\{1\}\)\( Class \| \)[0-9a-f]\{4\}: 1397:\([0-9a-f]\{4\}\).*$/\4 \2/p'); do
+		if [ ${skipnext} -eq 1 ]; then
+			skipnext=0
+			continue
+		fi
 		case "${line}" in
 			30b1*)
-				addcard "1,0x1"
+				case "${line:5}" in
+					00*)
+						addcard "1,0x1"
+						;;
+					*)
+						if [ $(${LSPCI} -n -s ${line:5:3} | ${WC} -l) -eq 2 ]; then
+							addcard "2,2E1"
+							skipnext=1
+						else
+							addcard "1,0x1"
+						fi
+						;;
+				esac
 				;;
 			16b8*)
 				addcard "8,0x8"
@@ -146,7 +165,7 @@ function create_card_db
 		addcard "1,w6692pci"
 	done
 	
-	if [ -e $LSUSB ]; then 
+	if [ -e ${LSUSB} ]; then 
 		for line in $(${LSUSB} | grep "0959:2bd0\|0675:1688\|07b0:0007\|0742:200\(7\|8\|9\|A\)\|08e3:0301\|07fa:084\(7\|8\)\|07ba:0006"); do
 			addcard "1,hfcsusb"
 		done
@@ -175,24 +194,41 @@ function load_card_modules {
 	fi
 
 	IFS=$'\n'
+	skipnr=0
 
 	for line in $(sed -n -e '/^[^#]/p' ${misdn_init_conf});
 	do
-		var=$(echo "${line}" | cut -d "=" -f1)
-		val=$(echo "${line}" | cut -d "=" -f2)
+		var=$(echo "${line}" | ${CUT} -d "=" -f1)
+		val=$(echo "${line}" | ${CUT} -d "=" -f2)
 		
 		case "${var}" in
 			card)
 				#echo "processing line: $val" 
-				nr=$(echo "${val}" | cut -d "," -f1)
-				mod=$(echo "${val}" | cut -d "," -f2)
-				opns=$(echo "${val}" | cut -d "," -f3-)
+				nr=$(echo "${val}" | ${CUT} -d "," -f1)
+				mod=$(echo "${val}" | ${CUT} -d "," -f2)
+				opns=$(echo "${val}" | ${CUT} -d "," -f3-)
 
 				#getting portcount from carddb
-				ports=$(find_carddb_line $nr | cut -d "," -f2)
+				ports=$(find_carddb_line $nr | ${CUT} -d "," -f2)
+				let "nr = ${nr} + ${skipnr}"
 				#echo "nr $nr ports $ports mod $mod opns: $opns"
 
 				case "${mod}" in
+					2E1)
+						hfcmulti[${nr}]=1
+						hfcmulti[$((${nr} + 1))]=1
+						let "hfcports = ${hfcports} + ${ports}"
+						IFS=$','
+						for li in ${opns}; do
+							hfcmulti[${nr}]=$(echo "obase=10;2^(${!li}-1)+1" | ${BC})
+							if [ "${li}" != "pcm_slave" ]; then
+								hfcmulti[$((${nr} + 1))]=$(echo "obase=10;2^(${!li}-1)+1" | ${BC})
+							fi
+						done
+						IFS=$'\n'
+						hfcmulti[$((${nr} + 1))]=$(echo "obase=10;2^(${pcm_slave}-1)+1" | ${BC})
+						let "skipnr = ${skipnr} + 1"
+						;;
 					0x*)
 						hfcmulti[${nr}]=$(echo ${mod} | sed -e "s/^0x\([0-9]*\)/\1/")
 						let "hfcports = ${hfcports} + ${ports}"
@@ -328,7 +364,7 @@ function load_card_modules {
 			hfcmulti_type="$(echo ${hfcmulti_type} | sed -e 's/^\(.*\),$/\1/')"
 			hfcmulti_prot="$(echo ${hfcmulti_prot} | sed -e 's/^\(.*\),$/\1/')"
 			hfcmulti_layer="$(echo ${hfcmulti_layer} | sed -e 's/^\(.*\),$/\1/')"
-			hfcmulti_cmd="modprobe --ignore-install hfcmulti ${hfcmulti_type} ${hfcmulti_prot} ${hfcmulti_layer}"
+			hfcmulti_cmd="${MODPROBE} --ignore-install hfcmulti ${hfcmulti_type} ${hfcmulti_prot} ${hfcmulti_layer}"
 			if [ ! -z ${poll} ]; then
 				hfcmulti_cmd="${hfcmulti_cmd} poll=${poll}"
 			fi
@@ -352,7 +388,7 @@ function load_card_modules {
 		else
 	# MODPROBE COMMAND FOR _NON_ hfcmulti CARD
 			other_mod="${other_card[${card_index}]}"
-			other_cmd="$MODPROBE --ignore-install ${other_mod}"
+			other_cmd="${MODPROBE} --ignore-install ${other_mod}"
 			if [ ! -z ${protocol[${port_index}]} ]; then
 				other_prot="protocol=$(echo "obase=16;\"0x\";${protocol[${port_index}]}" | ${BC}),"
 			else
@@ -411,14 +447,17 @@ function unload_card_modules {
 
 	for line in $(sed -ne '/^[^#]/p' ${misdn_init_conf});
 	do
-		var=$(echo "${line}" | cut -d "=" -f 1)
-		val=$(echo "${line}" | cut -d "=" -f 2)
+		var=$(echo "${line}" | ${CUT} -d "=" -f 1)
+		val=$(echo "${line}" | ${CUT} -d "=" -f 2)
 		
 		case "${var}" in
 			card)
-				nr=$(echo "${val}" | cut -d "," -f 1)
-				mod=$(echo "${val}" | cut -d "," -f 2)
+				nr=$(echo "${val}" | ${CUT} -d "," -f 1)
+				mod=$(echo "${val}" | ${CUT} -d "," -f 2)
 				case "${mod}" in
+					2E1)
+						modulelist[${nr}]=hfcmulti
+						;;
 					0x*)
 						modulelist[${nr}]=hfcmulti
 						;;
@@ -464,8 +503,8 @@ function create_misdn_init_conf {
 	carddb=$(create_card_db)
 
 	for line in $carddb ; do 
-		tmp="card=$(echo $line | cut -d, -f1,3)"
-		let "portcount = ${portcount} + $(echo $line | cut -d, -f2)"
+		tmp="card=$(echo $line | ${CUT} -d, -f1,3)"
+		let "portcount = ${portcount} + $(echo $line | ${CUT} -d, -f2)"
 		cardline="${cardline}${tmp}${NL}"	
 	done
 
@@ -643,17 +682,17 @@ case "$1" in
 	start|--start)
 		check_cfg_file $2
 
-		modprobe capi
-		modprobe mISDN_core debug=0
-		modprobe mISDN_l1 debug=0
-		modprobe mISDN_l2 debug=0
-		modprobe l3udss1 debug=0
-		modprobe mISDN_capi
+		${MODPROBE} capi
+		${MODPROBE} mISDN_core debug=0
+		${MODPROBE} mISDN_l1 debug=0
+		${MODPROBE} mISDN_l2 debug=0
+		${MODPROBE} l3udss1 debug=0
+		${MODPROBE} mISDN_capi
 		
 		load_card_modules $2
 		
-		echo "modprobe mISDN_dsp debug=0x0 options=$dsp_options $dsp_poll_option $dtmftreshold_option"
-		modprobe mISDN_dsp debug=0x0 options=$dsp_options $dsp_poll_option $dtmftreshold_option
+		echo "${MODPROBE} mISDN_dsp debug=0x0 options=$dsp_options $dsp_poll_option $dtmftreshold_option"
+		${MODPROBE} mISDN_dsp debug=0x0 options=$dsp_options $dsp_poll_option $dtmftreshold_option
 		sleep 1
 		
 		if [ ! -e /dev/mISDN ]; then
