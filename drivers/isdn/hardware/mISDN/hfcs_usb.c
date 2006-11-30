@@ -1,4 +1,4 @@
-/* $Id: hfcs_usb.c,v 1.25 2006/11/30 15:40:14 mbachem Exp $
+/* $Id: hfcs_usb.c,v 1.26 2006/11/30 16:25:34 mbachem Exp $
  *
  * mISDN driver for Colognechip HFC-S USB chip
  *
@@ -36,7 +36,7 @@
 
 
 #define DRIVER_NAME "mISDN_hfcsusb"
-const char *hfcsusb_rev = "$Revision: 1.25 $";
+const char *hfcsusb_rev = "$Revision: 1.26 $";
 
 #define MAX_CARDS	8
 static int hfcsusb_cnt;
@@ -1322,6 +1322,7 @@ tx_iso_complete(struct urb *urb, struct pt_regs *regs)
 	int k, tx_offset, num_isoc_packets, sink, remain, current_len,
 	    errcode;
 	int frame_complete, fifon, status;
+	int i;
 	__u8 threshbit;
 	__u8 threshtable[8] = { 1, 2, 4, 8, 0x10, 0x20, 0x40, 0x80 };
 
@@ -1349,14 +1350,18 @@ tx_iso_complete(struct urb *urb, struct pt_regs *regs)
 		       sizeof(context_iso_urb->buffer));
 		frame_complete = 0;
 
+
 		/* Generate next Iso Packets */
 		for (k = 0; k < num_isoc_packets; ++k) {
 			if (ch->tx_skb) {
 				remain = ch->tx_skb->len - ch->tx_idx;
+				printk ("k(%d) remain %d\n", k, remain);
 			} else {
 				remain = 0; 
+				printk ("k(%d) remain %d NULL\n", k, remain);
 			}
-			if (remain>0) {
+			if (remain > 0) {
+				
 				/* we lower data margin every msec */
 				fifo->bit_line -= sink;
 				current_len = (0 - fifo->bit_line) / 8;
@@ -1388,6 +1393,19 @@ tx_iso_complete(struct urb *urb, struct pt_regs *regs)
 				/* define packet delimeters within the URB buffer */
 				urb->iso_frame_desc[k].offset = tx_offset;
 				urb->iso_frame_desc[k].length = current_len + 1;
+				
+				
+				// USB data log for every ISO out
+				if (fifon == HFCUSB_D_TX) {
+					printk ("D ISO TX (%d/%d) offset(%d) len(%d) ", k, num_isoc_packets-1,
+					        urb->iso_frame_desc[k].offset,
+					        urb->iso_frame_desc[k].length);
+	
+					for (i=urb->iso_frame_desc[k].offset; i<(urb->iso_frame_desc[k].offset + urb->iso_frame_desc[k].length); i++) {
+						printk ("%x ", context_iso_urb->buffer[i]);
+					}
+					printk (" skb->len(%i) tx-idx(%d)\n", ch->tx_skb->len, ch->tx_idx);
+				}
 
 				tx_offset += (current_len + 1);
 			} else {
@@ -1401,8 +1419,10 @@ tx_iso_complete(struct urb *urb, struct pt_regs *regs)
 				}
 			}
 
-			if (frame_complete)
+			if (frame_complete) {
 				next_tx_frame(card, fifo->ch_idx);
+				frame_complete = 0;
+			}
 
 		}
 		errcode = usb_submit_urb(urb, GFP_ATOMIC);
