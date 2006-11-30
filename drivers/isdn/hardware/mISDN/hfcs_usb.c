@@ -1,4 +1,4 @@
-/* $Id: hfcs_usb.c,v 1.22 2006/11/28 16:58:42 mbachem Exp $
+/* $Id: hfcs_usb.c,v 1.23 2006/11/30 13:53:34 mbachem Exp $
  *
  * mISDN driver for Colognechip HFC-S USB chip
  *
@@ -39,7 +39,7 @@
 
 
 #define DRIVER_NAME "mISDN_hfcsusb"
-const char *hfcsusb_rev = "$Revision: 1.22 $";
+const char *hfcsusb_rev = "$Revision: 1.23 $";
 
 #define MAX_CARDS	8
 static int hfcsusb_cnt;
@@ -131,6 +131,7 @@ typedef struct _hfcsusb_t {
 	int			ctrl_paksize;	/* control pipe packet size */
 	int			ctrl_in_pipe, ctrl_out_pipe;	/* handles for control pipe */
 	spinlock_t		ctrl_lock;	/* queueing ctrl urbs needs to be locked */
+	spinlock_t              lock;
 
 	volatile __u8		threshold_mask;	/* threshold in fifo flow control */
 	__u8			old_led_state, led_state;
@@ -736,14 +737,18 @@ handle_bmsg(channel_t *bch, struct sk_buff *skb)
 {
 	int		ret = 0;
 	mISDN_head_t	*hh = mISDN_HEAD_P(skb);
+	hfcsusb_t       *hw = bch->hw;
+	u_long		flags;
 
 	if ((hh->prim == (PH_ACTIVATE | REQUEST)) ||
 		(hh->prim == (DL_ESTABLISH | REQUEST))) {
+		spin_lock_irqsave(&hw->lock, flags);
 		if (!test_and_set_bit(FLG_ACTIVE, &bch->Flags)) {
 			ret = setup_bchannel(bch, bch->inst.pid.protocol[1]);
 			if (bch->inst.pid.protocol[2] == ISDN_PID_L2_B_TRANS)
 				test_and_set_bit(FLG_L2DATA, &bch->Flags);
 		}
+		spin_unlock_irqrestore(&hw->lock, flags);
 #ifdef FIXME
 		if (bch->inst.pid.protocol[2] == ISDN_PID_L2_B_RAWDEV)
 			if (bch->dev)
@@ -756,6 +761,7 @@ handle_bmsg(channel_t *bch, struct sk_buff *skb)
 		(hh->prim == (DL_RELEASE | REQUEST)) ||
 		((hh->prim == (PH_CONTROL | REQUEST) && (hh->dinfo == HW_DEACTIVATE)))) {
 
+		spin_lock_irqsave(&hw->lock, flags);
 		if (test_and_clear_bit(FLG_TX_NEXT, &bch->Flags)) {
 			dev_kfree_skb(bch->next_skb);
 			bch->next_skb = NULL;
@@ -773,6 +779,7 @@ handle_bmsg(channel_t *bch, struct sk_buff *skb)
 		test_and_clear_bit(FLG_TX_BUSY, &bch->Flags);
 		setup_bchannel(bch, ISDN_PID_NONE);
 		test_and_clear_bit(FLG_ACTIVE, &bch->Flags);
+		spin_unlock_irqrestore(&hw->lock, flags);
 		skb_trim(skb, 0);
 		if (hh->prim != (PH_CONTROL | REQUEST)) {
 #ifdef FIXME
@@ -805,18 +812,23 @@ hfcsusb_l2l1(mISDNinstance_t *inst, struct sk_buff *skb)
 	channel_t	*chan = container_of(inst, channel_t, inst);
 	int		ret = 0;
 	mISDN_head_t	*hh = mISDN_HEAD_P(skb);
+	u_long		flags;
 	int		i;
 
 	if ((hh->prim == PH_DATA_REQ) || (hh->prim == DL_DATA_REQ)) {
+		spin_lock_irqsave(inst->hwlock, flags);
 		ret = channel_senddata(chan, hh->dinfo, skb);
 		if (ret > 0) { 
-		
+
 			if (!(chan)) {
-				printk ("CRITICAL ERROR! chan is NULL pointer!\n");
+				printk (KERN_INFO "HFC-S USB: CRITICAL ERROR! chan is NULL pointer!\n");
+				spin_unlock_irqrestore(inst->hwlock, flags);
 				return(-EINVAL);
 			}
+
 			if (!(chan->tx_skb)) {
-				printk ("CRITICAL ERROR! channel_senddata returned %d without chan->tx_skb\n", ret);
+				printk (KERN_INFO "HFC-S USB: CRITICAL ERROR! channel_senddata returned %d without chan->tx_skb\n", ret);
+				spin_unlock_irqrestore(inst->hwlock, flags);
 				return(-EINVAL);
 			}
 
@@ -835,6 +847,7 @@ hfcsusb_l2l1(mISDNinstance_t *inst, struct sk_buff *skb)
 			/* data gets transmitted later in USB ISO OUT traffic */
 			ret = 0;
 		}
+		spin_unlock_irqrestore(inst->hwlock, flags);
 		return(ret);
 	} 
 	if (test_bit(FLG_DCHANNEL, &chan->Flags)) {
@@ -1734,6 +1747,7 @@ setup_instance(hfcsusb_t * card)
 	card->chan[D].debug = debug;
 	
 	spin_lock_init(&card->ctrl_lock);
+	spin_lock_init(&card->lock);
 	
 	/* link card->fifos[] to card->chan[] */
 	card->fifos[HFCUSB_D_RX].ch_idx = D;
@@ -1747,7 +1761,7 @@ setup_instance(hfcsusb_t * card)
 	
 	card->chan[D].channel = D;
 	card->chan[D].state = 0;
-	card->chan[D].inst.hwlock = NULL;
+	card->chan[D].inst.hwlock = &card->lock;
 	card->chan[D].inst.pid.layermask = ISDN_LAYER(0);
 	card->chan[D].inst.pid.protocol[0] = ISDN_PID_L0_TE_S0;
 	card->chan[D].inst.class_dev.dev = &card->dev->dev;
@@ -1762,7 +1776,7 @@ setup_instance(hfcsusb_t * card)
 		card->chan[i].channel = i;
 		mISDN_init_instance(&card->chan[i].inst, &hw_mISDNObj, card, hfcsusb_l2l1);
 		card->chan[i].inst.pid.layermask = ISDN_LAYER(0);
-		card->chan[i].inst.hwlock = NULL;
+		card->chan[i].inst.hwlock = &card->lock;
 		card->chan[i].inst.class_dev.dev = &card->dev->dev;
 		card->chan[i].debug = debug;
 		sprintf(card->chan[i].inst.name, "%s B%d",
