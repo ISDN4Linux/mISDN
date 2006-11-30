@@ -1,4 +1,4 @@
-/* $Id: hfcs_usb.c,v 1.24 2006/11/30 14:32:53 mbachem Exp $
+/* $Id: hfcs_usb.c,v 1.25 2006/11/30 15:40:14 mbachem Exp $
  *
  * mISDN driver for Colognechip HFC-S USB chip
  *
@@ -36,7 +36,7 @@
 
 
 #define DRIVER_NAME "mISDN_hfcsusb"
-const char *hfcsusb_rev = "$Revision: 1.24 $";
+const char *hfcsusb_rev = "$Revision: 1.25 $";
 
 #define MAX_CARDS	8
 static int hfcsusb_cnt;
@@ -1056,11 +1056,9 @@ collect_rx_frame(usb_fifo * fifo, __u8 * data, unsigned int len, int finish)
 				}
 				queue_ch_frame(ch, INDICATION, MISDN_ID_ANY, skb);				
 			} else {
-				printk ("HFC-S USB: CRC or minlen ERROR: ");
+				printk ("HFC-S USB: CRC or minlen ERROR fifon(%i) RX len(%i): ",
+				         fifon, ch->rx_skb->len);
 				if (ch->debug) {
-					mISDN_debugprint(&ch->inst,
-						"fifon(%i) RX len(%i): ",
-						fifon, ch->rx_skb->len);
 					i = 0;
 					printk("  ");
 					while (i < ch->rx_skb->len)
@@ -1271,6 +1269,7 @@ rx_int_complete(struct urb *urb, struct pt_regs *regs)
 int
 next_tx_frame(hfcsusb_t * hw, __u8 channel)
 {
+	int i;
 	channel_t *ch = &hw->chan[channel];
 
 	if (ch->tx_skb)
@@ -1282,6 +1281,19 @@ next_tx_frame(hfcsusb_t * hw, __u8 channel)
 			ch->next_skb = NULL;
 			test_and_clear_bit(FLG_TX_NEXT, &ch->Flags);
 			ch->tx_idx = 0;
+
+			/* channel data debug: */
+			if ((ch->debug) && (debug & DEBUG_HFC_FIFO)) {
+				mISDN_debugprint(&ch->inst,
+					"new TX channel(%i) len(%i): ",
+					ch->channel, ch->tx_skb->len);
+				i = 0;
+				printk("  ");
+				while (i < ch->tx_skb->len)
+					printk("%02x ", ch->tx_skb->data[i++]);
+				printk(" (TX_NEXT)\n");
+			}
+
 			queue_ch_frame(ch, CONFIRM, hh->dinfo, NULL);
 			return (1);
 		} else {
@@ -1585,7 +1597,7 @@ setup_hfcsusb(hfcsusb_t * card)
 		fifo[i].max_size =
 		    (i <= HFCUSB_B2_RX) ? MAX_BCH_SIZE : MAX_DFRAME_LEN;
 		fifo[i].last_urblen = 0;
-		
+
 		/* set 2 bit for D- & E-channel */
 		write_usb(card, HFCUSB_HDLC_PAR,
 			  ((i <= HFCUSB_B2_RX) ? 0 : 2));
@@ -1594,6 +1606,7 @@ setup_hfcsusb(hfcsusb_t * card)
 		if (i == HFCUSB_D_TX) {
 			// enable Interframe Fill for DChannel TX in TE Mode
 			write_usb(card, HFCUSB_CON_HDLC, (card->portmode & PORT_MODE_NT) ? 0x08 : 0x09);
+			// write_usb(card, HFCUSB_CON_HDLC, 0x08);
 		} else {
 			write_usb(card, HFCUSB_CON_HDLC, 0x08);
 		}
@@ -1603,11 +1616,13 @@ setup_hfcsusb(hfcsusb_t * card)
 
 	if (card->portmode & PORT_MODE_NT) {
 		write_usb(card, HFCUSB_SCTRL, 0x44);		/* disable B transmitters + capacitive mode, enable NT mode */
+		write_usb(card, HFCUSB_SCTRL_E, 0x09);
 		write_usb(card, HFCUSB_CLKDEL, CLKDEL_NT);	/* clock delay value */
 		write_usb(card, HFCUSB_STATES, 1 | 0x10);	/* set deactivated mode */
 		write_usb(card, HFCUSB_STATES, 1);	/* enable state machine */
 	} else {
 		write_usb(card, HFCUSB_SCTRL, 0x40);		/* disable B transmitters + capacitive mode, enable TE mode */
+		write_usb(card, HFCUSB_SCTRL_E, 0x00);
 		write_usb(card, HFCUSB_CLKDEL, CLKDEL_TE);	/* clock delay value */
 		write_usb(card, HFCUSB_STATES, 3 | 0x10);	/* set deactivated mode */
 		write_usb(card, HFCUSB_STATES, 3);	/* enable state machine */
@@ -2101,7 +2116,7 @@ hfcsusb_init(void)
 {
 	int err;
 
-	debug = 0xFFFF;
+	// debug = 0xFFFF;
 	printk(KERN_INFO "hfcsusb driver Rev. %s (debug=%i)\n",
 	       mISDN_getrev(hfcsusb_rev), debug);
 
