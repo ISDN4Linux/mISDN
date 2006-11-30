@@ -1,4 +1,4 @@
-/* $Id: hfcs_usb.c,v 1.23 2006/11/30 13:53:34 mbachem Exp $
+/* $Id: hfcs_usb.c,v 1.24 2006/11/30 14:32:53 mbachem Exp $
  *
  * mISDN driver for Colognechip HFC-S USB chip
  *
@@ -21,14 +21,11 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  * TODO
- *   - hotplug disconnect the USB TA does not unregister mISDN Controller
- *     /proc/capi/controller is still "ready"...
- *     --> use rmmod before disconnecting the TA
  *   - E channel features
  *
  */
 
-#include <linux/config.h>
+// #include <linux/config.h>
 #include <linux/module.h>
 #include <linux/delay.h>
 #include <linux/usb.h>
@@ -39,7 +36,7 @@
 
 
 #define DRIVER_NAME "mISDN_hfcsusb"
-const char *hfcsusb_rev = "$Revision: 1.23 $";
+const char *hfcsusb_rev = "$Revision: 1.24 $";
 
 #define MAX_CARDS	8
 static int hfcsusb_cnt;
@@ -1588,12 +1585,19 @@ setup_hfcsusb(hfcsusb_t * card)
 		fifo[i].max_size =
 		    (i <= HFCUSB_B2_RX) ? MAX_BCH_SIZE : MAX_DFRAME_LEN;
 		fifo[i].last_urblen = 0;
+		
 		/* set 2 bit for D- & E-channel */
 		write_usb(card, HFCUSB_HDLC_PAR,
 			  ((i <= HFCUSB_B2_RX) ? 0 : 2));
-		/* rx hdlc, enable IFF for D-channel */
-		write_usb(card, HFCUSB_CON_HDLC,
-			  ((i == HFCUSB_D_TX) ? 0x09 : 0x08));
+
+		/* enable all fifos */
+		if (i == HFCUSB_D_TX) {
+			// enable Interframe Fill for DChannel TX in TE Mode
+			write_usb(card, HFCUSB_CON_HDLC, (card->portmode & PORT_MODE_NT) ? 0x08 : 0x09);
+		} else {
+			write_usb(card, HFCUSB_CON_HDLC, 0x08);
+		}
+
 		write_usb(card, HFCUSB_INC_RES_F, 2);	/* reset the fifo */
 	}
 
