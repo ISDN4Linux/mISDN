@@ -1,4 +1,4 @@
-/* $Id: hfcs_usb.c,v 1.26 2006/11/30 16:25:34 mbachem Exp $
+/* $Id: hfcs_usb.c,v 1.27 2006/11/30 16:27:00 mbachem Exp $
  *
  * mISDN driver for Colognechip HFC-S USB chip
  *
@@ -36,7 +36,7 @@
 
 
 #define DRIVER_NAME "mISDN_hfcsusb"
-const char *hfcsusb_rev = "$Revision: 1.26 $";
+const char *hfcsusb_rev = "$Revision: 1.27 $";
 
 #define MAX_CARDS	8
 static int hfcsusb_cnt;
@@ -1355,10 +1355,8 @@ tx_iso_complete(struct urb *urb, struct pt_regs *regs)
 		for (k = 0; k < num_isoc_packets; ++k) {
 			if (ch->tx_skb) {
 				remain = ch->tx_skb->len - ch->tx_idx;
-				printk ("k(%d) remain %d\n", k, remain);
 			} else {
 				remain = 0; 
-				printk ("k(%d) remain %d NULL\n", k, remain);
 			}
 			if (remain > 0) {
 				
