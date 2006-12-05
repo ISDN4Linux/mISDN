@@ -642,7 +642,7 @@ function create_misdn_init_conf {
 #	Here you can tune the sensitivity of the dtmf tone recognizer.
 #
 poll=128
-#dsp_poll=128
+dsp_poll=128
 dsp_options=0
 dtmftreshold=100
 debug=0"
