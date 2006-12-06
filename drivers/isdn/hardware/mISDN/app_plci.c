@@ -1,4 +1,4 @@
-/* $Id: app_plci.c,v 1.18 2006/09/14 15:51:46 gkelleter Exp $
+/* $Id: app_plci.c,v 1.19 2006/12/06 15:18:07 gkelleter Exp $
  *
  */
 
@@ -2188,7 +2188,7 @@ AppPlciClearOtherApps(AppPlci_t *aplci)
 	_cmsg			*cm;
 	struct list_head	*item, *next;
 
-	if (aplci->plci)
+	if (!aplci->plci)
 		return;
 	if (aplci->plci->nAppl <= 1)
 		return;
