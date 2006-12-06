@@ -1,4 +1,4 @@
-/* $Id: xhfc_su.c,v 1.17 2006/09/11 11:44:02 mbachem Exp $
+/* $Id: xhfc_su.c,v 1.18 2006/12/06 08:00:17 mbachem Exp $
  *
  * mISDN driver for CologneChip AG's XHFC
  *
@@ -51,7 +51,7 @@
  */
  
 #include <linux/mISDNif.h>
-#include <linux/config.h>
+// #include <linux/config.h>
 #include <linux/module.h>
 #include <linux/delay.h>
 #include <linux/pci.h>
@@ -65,7 +65,7 @@
 #include "xhfc_pci2pi.h"
 #endif
 
-static const char xhfc_rev[] = "$Revision: 1.17 $";
+static const char xhfc_rev[] = "$Revision: 1.18 $";
 
 #define MAX_CARDS	8
 static int card_cnt;
@@ -430,7 +430,13 @@ handle_dmsg(channel_t *dch, struct sk_buff *skb)
 					l1_timer_start_t3(port);
 				}
 			} else {
-				xhfc_ph_command(port, HFC_L1_ACTIVATE_NT);
+				if (dch->state == 3) {
+					mISDN_queue_data(&dch->inst, FLG_MSG_UP,
+					                 PH_ACTIVATE | INDICATION,
+					                 0, 0, NULL, 0);
+				} else {
+					xhfc_ph_command(port, HFC_L1_ACTIVATE_NT);
+				}
 			}
 			break;
 			
