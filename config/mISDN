@@ -63,6 +63,12 @@ declare -a HFCMULTI_layermask
 HFCMULTI_options=''
 MISDNDSP_options=''
 
+AVMFRITZ_protocol=''
+AVMFRITZ_layermask=''
+
+HFCPCI_protocol=''
+HFCPCI_layermask=''
+
 declare -a SCAN_card
 declare -a SCAN_opts
 declare -a SCAN_num_ports
@@ -71,8 +77,16 @@ declare -a SCAN_port_opts
 function parse_config
 {
 	local CONFIG=$(${XSLTPROC} ${MISDN_CONF_XSL} ${MISDN_CONF})
-	local t p l line i tmpcmd
+	local t p l line i tmpcmd curr
 	local IFS=$'\n'
+	
+	START_COMMANDS[${#START_COMMANDS[@]}]="${MODPROBE} --ignore-install capi"
+	START_COMMANDS[${#START_COMMANDS[@]}]="${MODPROBE} --ignore-install mISDN_core debug=0"
+	START_COMMANDS[${#START_COMMANDS[@]}]="${MODPROBE} --ignore-install mISDN_l1 debug=0"
+	START_COMMANDS[${#START_COMMANDS[@]}]="${MODPROBE} --ignore-install mISDN_l2 debug=0"
+	START_COMMANDS[${#START_COMMANDS[@]}]="${MODPROBE} --ignore-install l3udss1 debug=0"
+	START_COMMANDS[${#START_COMMANDS[@]}]="${MODPROBE} --ignore-install mISDN_capi"
+	
 	for line in ${CONFIG}; do
 		case "${line}" in
 			MODULE:hfcmulti*)
@@ -82,6 +96,7 @@ function parse_config
 				MISDNDSP_options=${line:17}
 				;;
 			CARD:BN*)
+				curr='hfcmulti'
 				i=${#HFCMULTI_type[@]}
 				let "t = $(echo $line | ${SED} -n 's/.*type:\([^,]*\).*/\1/p')"
 				HFCMULTI_type[${i}]=$(printf "0x%x" ${t})
@@ -95,21 +110,37 @@ function parse_config
 
 				HFCMULTI_card[${i}]=$(echo ${line:5} | ${CUT} -d" " -f1)
 				;;
+			CARD:hfcpci*)
+				curr='hfcpci'
+				;;
+			CARD:avmfritz*)
+				curr='avmfritz'
+				;;
 			PORT*)
-				let "p = $(echo $line | ${SED} -n 's/.*protocol:\([^ ]*\).*/\1/p')"
-				HFCMULTI_protocol[${i}]="${HFCMULTI_protocol[${i}]:+"${HFCMULTI_protocol[${i}]},"}$(printf "0x%x" ${p})"
-				let "l = $(echo $line | ${SED} -n 's/.*layermask:\([^ ]*\).*/\1/p')"
-				HFCMULTI_layermask[${i}]="${HFCMULTI_layermask[${i}]:+"${HFCMULTI_layermask[${i}]},"}$(printf "0x%x" ${l})"
+				case "${curr}" in
+					hfcmulti)
+						let "p = $(echo $line | ${SED} -n 's/.*protocol:\([^ ]*\).*/\1/p')"
+						HFCMULTI_protocol[${i}]="${HFCMULTI_protocol[${i}]:+"${HFCMULTI_protocol[${i}]},"}$(printf "0x%x" ${p})"
+						let "l = $(echo $line | ${SED} -n 's/.*layermask:\([^ ]*\).*/\1/p')"
+						HFCMULTI_layermask[${i}]="${HFCMULTI_layermask[${i}]:+"${HFCMULTI_layermask[${i}]},"}$(printf "0x%x" ${l})"
+						;;
+					hfcpci)
+						let "p = $(echo $line | ${SED} -n 's/.*protocol:\([^ ]*\).*/\1/p')"
+						HFCPCI_protocol="${HFCPCI_protocol:+"${HFCPCI_protocol},"}$(printf "0x%x" ${p})"
+						let "l = $(echo $line | ${SED} -n 's/.*layermask:\([^ ]*\).*/\1/p')"
+						HFCPCI_layermask="${HFCPCI_layermask:+"${HFCPCI_layermask},"}$(printf "0x%x" ${l})"
+						;;
+					avmfritz)
+						let "p = $(echo $line | ${SED} -n 's/.*protocol:\([^ ]*\).*/\1/p')"
+						AVMFRITZ_protocol="${AVMFRITZ_protocol:+"${AVMFRITZ_protocol},"}$(printf "0x%x" ${p})"
+						let "l = $(echo $line | ${SED} -n 's/.*layermask:\([^ ]*\).*/\1/p')"
+						AVMFRITZ_layermask="${AVMFRITZ_layermask:+"${AVMFRITZ_layermask},"}$(printf "0x%x" ${l})"
+						;;
+				esac
 				;;
 		esac
 	done
 	
-	START_COMMANDS[${#START_COMMANDS[@]}]="${MODPROBE} --ignore-install capi"
-	START_COMMANDS[${#START_COMMANDS[@]}]="${MODPROBE} --ignore-install mISDN_core debug=0"
-	START_COMMANDS[${#START_COMMANDS[@]}]="${MODPROBE} --ignore-install mISDN_l1 debug=0"
-	START_COMMANDS[${#START_COMMANDS[@]}]="${MODPROBE} --ignore-install mISDN_l2 debug=0"
-	START_COMMANDS[${#START_COMMANDS[@]}]="${MODPROBE} --ignore-install l3udss1 debug=0"
-	START_COMMANDS[${#START_COMMANDS[@]}]="${MODPROBE} --ignore-install mISDN_capi"
 	tmpcmd="${MODPROBE} --ignore-install hfcmulti type=${HFCMULTI_type[0]}"
 	i=1
 	while [ ! -z "${HFCMULTI_type[${i}]}" ]; do
@@ -129,6 +160,15 @@ function parse_config
 		let "i = ${i} + 1"
 	done
 	START_COMMANDS[${#START_COMMANDS[@]}]="${tmpcmd} ${HFCMULTI_options}"
+
+	if [ ! -z "${HFCPCI_protocol}" ]; then
+		START_COMMANDS[${#START_COMMANDS[@]}]="${MODPROBE} --ignore-install hfcpci protocol=${HFCPCI_protocol} layermask=${HFCPCI_layermask}"
+	fi
+
+	if [ ! -z "${AVMFRITZ_protocol}" ]; then
+		START_COMMANDS[${#START_COMMANDS[@]}]="${MODPROBE} --ignore-install avmfritz protocol=${AVMFRITZ_protocol} layermask=${AVMFRITZ_layermask}"
+	fi
+
 	START_COMMANDS[${#START_COMMANDS[@]}]="${MODPROBE} --ignore-install mISDN_dsp ${MISDNDSP_options}"
 }
 
@@ -150,7 +190,7 @@ function run_stop_commands
 
 	for mod in $(lsmod | ${SED} -ne '/Module/!{s/\([^ ]*\).*/\1/;p}');	do
 		case "${mod}" in
-			mISDN_capi | mISDN_dsp | l3udss1 | mISDN_l2 | mISDN_l1 | mISDN_isac | hfcmulti)
+			mISDN_capi | mISDN_dsp | l3udss1 | mISDN_l2 | mISDN_l1 | mISDN_isac | hfcmulti | avmfritz)
 				STOP_COMMANDS[0]="${STOP_COMMANDS[0]:-"${MODPROBE} -r --ignore-remove"} ${mod}"
 				;;
 			mISDN_core)
@@ -293,8 +333,6 @@ case "${1}" in
 
 	stop|--stop)
 
-		check_misdn_conf
-		parse_config
 		run_stop_commands
 		;;
 
