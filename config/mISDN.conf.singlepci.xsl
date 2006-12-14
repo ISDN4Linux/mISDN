@@ -3,16 +3,16 @@
 <xsl:output method="text" version="1.0" encoding="UTF-8" indent="yes"/>
 
 <!--
-	Card Type: avmfritz
+	Card Type: hfcmulti, avmfritz, w6692pci
 	Ports: 1
 	Port Attributes: mode=(te|nt), link=(ptp|ptmp), capi=(yes|no)
 -->
-<xsl:template name="avmfritzcard">
+<xsl:template name="singlepcicard">
 <xsl:text>
 </xsl:text>
 </xsl:template>
 
-<xsl:template name="avmfritzport">
+<xsl:template name="singlepciport">
 <xsl:text> layermask:</xsl:text>
 <xsl:choose>
 <xsl:when test="@mode='nt'">

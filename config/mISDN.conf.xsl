@@ -6,8 +6,7 @@
 <xsl:include href='mISDN.conf.mISDN_dsp.xsl' />
 <xsl:include href='mISDN.conf.hfcmulti.xsl' />
 <xsl:include href='mISDN.conf.bnx.xsl' />
-<xsl:include href='mISDN.conf.hfcpci.xsl' />
-<xsl:include href='mISDN.conf.avmfritz.xsl' />
+<xsl:include href='mISDN.conf.singlepci.xsl' />
 
 <!--
 	Main mISDNconf Template
@@ -84,25 +83,14 @@
   </xsl:for-each>
  </xsl:when>
 
- <xsl:when test="@type='hfcpci'">
+ <xsl:when test="@type='hfcpci' or @type='avmfritz' or @type='w6692pci'">
   <xsl:value-of select="concat('CARD:',@type)" />
-  <xsl:call-template name="hfcpcicard" />
+  <xsl:call-template name="singlepcicard" />
   <xsl:for-each select="port">
    <xsl:sort data-type="number" />
    <xsl:text>PORT:</xsl:text>
    <xsl:value-of select="." />
-   <xsl:call-template name="hfcpciport" />
-  </xsl:for-each>
- </xsl:when>
-
- <xsl:when test="@type='avmfritz'">
-  <xsl:value-of select="concat('CARD:',@type)" />
-  <xsl:call-template name="avmfritzcard" />
-  <xsl:for-each select="port">
-   <xsl:sort data-type="number" />
-   <xsl:text>PORT:</xsl:text>
-   <xsl:value-of select="." />
-   <xsl:call-template name="avmfritzport" />
+   <xsl:call-template name="singlepciport" />
   </xsl:for-each>
  </xsl:when>
 
