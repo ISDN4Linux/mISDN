@@ -52,6 +52,7 @@ check_cmd modprobe
 check_cmd sleep
 check_cmd lspci
 check_cmd lsusb opt
+check_cmd mknod
 
 declare -a START_COMMANDS
 declare -a STOP_COMMANDS
@@ -318,6 +319,14 @@ function print_scan_results
 	done
 }
 
+function mk_misdn_dev
+{
+	if [ ! -e /dev/mISDN ]; then
+		echo "creating device node: /dev/mISDN"
+		${MKNOD} /dev/mISDN c 46 0
+	fi
+}
+
 #
 # MAIN
 #
@@ -329,6 +338,7 @@ case "${1}" in
 		check_misdn_conf
 		parse_config
 		run_start_commands
+		mk_misdn_dev
 		;;
 
 	stop|--stop)
@@ -343,6 +353,7 @@ case "${1}" in
 		run_stop_commands
 		${SLEEP} 2
 		run_start_commands
+		mk_misdn_dev
 		;;
 
 	config|--config)
