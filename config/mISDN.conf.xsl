@@ -33,6 +33,36 @@
 
 </xsl:for-each>
 
+<!-- devnode -->
+
+<xsl:for-each select="devnode">
+
+<xsl:choose>
+
+ <xsl:when test=".='mISDN'">
+  <xsl:value-of select="concat('DEVNODE:',.)" />
+  <xsl:call-template name="if-set">
+   <xsl:with-param name="prefix"> user:</xsl:with-param>
+   <xsl:with-param name="val" select="@user" />
+   <xsl:with-param name="val-default">root</xsl:with-param>
+  </xsl:call-template>
+  <xsl:call-template name="if-set">
+   <xsl:with-param name="prefix"> group:</xsl:with-param>
+   <xsl:with-param name="val" select="@group" />
+   <xsl:with-param name="val-default">root</xsl:with-param>
+  </xsl:call-template>
+  <xsl:call-template name="if-set">
+   <xsl:with-param name="prefix"> mode:</xsl:with-param>
+   <xsl:with-param name="val" select="@mode" />
+   <xsl:with-param name="val-default">644</xsl:with-param>
+  </xsl:call-template>
+ </xsl:when>
+</xsl:choose>
+<xsl:text>
+</xsl:text>
+
+</xsl:for-each>
+
 <!-- card, port -->
 
 <xsl:for-each select="card">

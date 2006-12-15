@@ -53,6 +53,8 @@ check_cmd sleep
 check_cmd lspci
 check_cmd lsusb opt
 check_cmd mknod
+check_cmd chown
+check_cmd chmod
 
 declare -a START_COMMANDS
 declare -a STOP_COMMANDS
@@ -70,6 +72,10 @@ AVMFRITZ_layermask=''
 HFCPCI_protocol=''
 HFCPCI_layermask=''
 
+DEVNODE_user='root'
+DEVNODE_group='root'
+DEVNODE_mode='0644'
+
 declare -a SCAN_card
 declare -a SCAN_opts
 declare -a SCAN_num_ports
@@ -78,7 +84,7 @@ declare -a SCAN_port_opts
 function parse_config
 {
 	local CONFIG=$(${XSLTPROC} ${MISDN_CONF_XSL} ${MISDN_CONF})
-	local t p l line i tmpcmd curr
+	local t p l line i tmpcmd curr tmpstr
 	local IFS=$'\n'
 	
 	START_COMMANDS[${#START_COMMANDS[@]}]="${MODPROBE} --ignore-install capi"
@@ -90,6 +96,20 @@ function parse_config
 	
 	for line in ${CONFIG}; do
 		case "${line}" in
+			DEVNODE:mISDN*)
+				tmpstr=$(echo ${line} | ${SED} -n 's/.*user:\([^ ]*\).*/\1/p')
+				if [ ! -z "${tmpstr}" ]; then
+					DEVNODE_user="${tmpstr}"
+				fi
+				tmpstr=$(echo ${line} | ${SED} -n 's/.*group:\([^ ]*\).*/\1/p')
+				if [ ! -z "${tmpstr}" ]; then
+					DEVNODE_group="${tmpstr}"
+				fi
+				tmpstr=$(echo ${line} | ${SED} -n 's/.*mode:\([^ ]*\).*/\1/p')
+				if [ ! -z "${tmpstr}" ]; then
+					DEVNODE_mode="${tmpstr}"
+				fi
+				;;
 			MODULE:hfcmulti*)
 				HFCMULTI_options=${line:16}
 				;;
@@ -99,11 +119,11 @@ function parse_config
 			CARD:BN*)
 				curr='hfcmulti'
 				i=${#HFCMULTI_type[@]}
-				let "t = $(echo $line | ${SED} -n 's/.*type:\([^,]*\).*/\1/p')"
+				let "t = $(echo ${line} | ${SED} -n 's/.*type:\([^,]*\).*/\1/p')"
 				HFCMULTI_type[${i}]=$(printf "0x%x" ${t})
 
 # this is for the BN2E1 card that needs two type numbers
-				t=$(echo $line | ${SED} -n 's/.*type:[^,]*,\([^ ]*\).*/\1/p')
+				t=$(echo ${line} | ${SED} -n 's/.*type:[^,]*,\([^ ]*\).*/\1/p')
 				if [ ! -z "${t}" ]; then
 					let "t = ${t}"
 					HFCMULTI_type[${i}]="${HFCMULTI_type[${i}]},$(printf "0x%x" ${t})"
@@ -120,21 +140,21 @@ function parse_config
 			PORT*)
 				case "${curr}" in
 					hfcmulti)
-						let "p = $(echo $line | ${SED} -n 's/.*protocol:\([^ ]*\).*/\1/p')"
+						let "p = $(echo ${line} | ${SED} -n 's/.*protocol:\([^ ]*\).*/\1/p')"
 						HFCMULTI_protocol[${i}]="${HFCMULTI_protocol[${i}]:+"${HFCMULTI_protocol[${i}]},"}$(printf "0x%x" ${p})"
-						let "l = $(echo $line | ${SED} -n 's/.*layermask:\([^ ]*\).*/\1/p')"
+						let "l = $(echo ${line} | ${SED} -n 's/.*layermask:\([^ ]*\).*/\1/p')"
 						HFCMULTI_layermask[${i}]="${HFCMULTI_layermask[${i}]:+"${HFCMULTI_layermask[${i}]},"}$(printf "0x%x" ${l})"
 						;;
 					hfcpci)
-						let "p = $(echo $line | ${SED} -n 's/.*protocol:\([^ ]*\).*/\1/p')"
+						let "p = $(echo ${line} | ${SED} -n 's/.*protocol:\([^ ]*\).*/\1/p')"
 						HFCPCI_protocol="${HFCPCI_protocol:+"${HFCPCI_protocol},"}$(printf "0x%x" ${p})"
-						let "l = $(echo $line | ${SED} -n 's/.*layermask:\([^ ]*\).*/\1/p')"
+						let "l = $(echo ${line} | ${SED} -n 's/.*layermask:\([^ ]*\).*/\1/p')"
 						HFCPCI_layermask="${HFCPCI_layermask:+"${HFCPCI_layermask},"}$(printf "0x%x" ${l})"
 						;;
 					avmfritz)
-						let "p = $(echo $line | ${SED} -n 's/.*protocol:\([^ ]*\).*/\1/p')"
+						let "p = $(echo ${line} | ${SED} -n 's/.*protocol:\([^ ]*\).*/\1/p')"
 						AVMFRITZ_protocol="${AVMFRITZ_protocol:+"${AVMFRITZ_protocol},"}$(printf "0x%x" ${p})"
-						let "l = $(echo $line | ${SED} -n 's/.*layermask:\([^ ]*\).*/\1/p')"
+						let "l = $(echo ${line} | ${SED} -n 's/.*layermask:\([^ ]*\).*/\1/p')"
 						AVMFRITZ_layermask="${AVMFRITZ_layermask:+"${AVMFRITZ_layermask},"}$(printf "0x%x" ${l})"
 						;;
 				esac
@@ -284,7 +304,8 @@ function write_mISDN_conf
 	local HEADER="<?xml version=\"1.0\"?>
 <mISDNconf>
 ${TAB}<module poll=\"128\" debug=\"0\">hfcmulti</module>
-${TAB}<module debug=\"0\" options=\"0\">mISDN_dsp</module>"
+${TAB}<module debug=\"0\" options=\"0\">mISDN_dsp</module>
+${TAB}<devnode user=\"root\" group=\"root\" mode=\"644\">mISDN</devnode>"
 	local FOOTER="</mISDNconf>"
 	local i=0 j=0 MAIN=""
 
@@ -325,6 +346,8 @@ function mk_misdn_dev
 		echo "creating device node: /dev/mISDN"
 		${MKNOD} /dev/mISDN c 46 0
 	fi
+	${CHOWN} ${DEVNODE_user}:${DEVNODE_group} /dev/mISDN
+	${CHMOD} ${DEVNODE_mode} /dev/mISDN
 }
 
 #
