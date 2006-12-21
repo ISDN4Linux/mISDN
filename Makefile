@@ -50,6 +50,7 @@ install: all modules-install misdn-init
 	$(DEPMOD) 
 	$(UPDATE_MODULES)
 	$(MODULES_UPDATE)
+	make -C config install
 
 modules-install:
 	cd $(LINUX) ; make INSTALL_MOD_PATH=$(INSTALL_PREFIX) SUBDIRS=$(MISDN_SRC) modules_install 
