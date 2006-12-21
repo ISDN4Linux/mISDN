@@ -1,4 +1,4 @@
-/* $Id: sedl_fax.c,v 1.28 2006/06/29 09:11:08 keil Exp $
+/* $Id: sedl_fax.c,v 1.29 2006/12/21 15:25:06 nadi Exp $
  *
  * sedl_fax.c  low level stuff for Sedlbauer Speedfax + cards
  *
@@ -36,6 +36,7 @@
 #else
 #include <linux/isapnp.h>
 #endif
+#include "core.h"
 #include "channel.h"
 #include "isac.h"
 #include "isar.h"
@@ -45,7 +46,7 @@
 
 extern const char *CardType[];
 
-const char *Sedlfax_revision = "$Revision: 1.28 $";
+const char *Sedlfax_revision = "$Revision: 1.29 $";
 
 const char *Sedlbauer_Types[] =
 	{"None", "speed fax+", "speed fax+ pyramid", "speed fax+ pci"};
@@ -929,6 +930,9 @@ static int __init Speedfax_init(void)
 	}
 #endif
 #endif
+
+	mISDN_module_register(THIS_MODULE);
+
 	return 0;
 
 #ifdef OLD_PCI_REGISTER_DRIVER
@@ -951,6 +955,8 @@ static void __exit Speedfax_cleanup(void)
 {
 	int		err;
 	sedl_fax	*card, *next;
+
+	mISDN_module_unregister(THIS_MODULE);
 
 	if ((err = mISDN_unregister(&speedfax))) {
 		printk(KERN_ERR "Can't unregister Speedfax PCI error(%d)\n", err);

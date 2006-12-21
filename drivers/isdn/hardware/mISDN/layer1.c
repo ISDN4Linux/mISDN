@@ -1,4 +1,4 @@
-/* $Id: layer1.c,v 1.18 2006/10/09 12:51:33 crich Exp $
+/* $Id: layer1.c,v 1.19 2006/12/21 15:25:06 nadi Exp $
  *
  * mISDN_l1.c     common low level stuff for I.430 layer1 TE mode
  *
@@ -8,10 +8,11 @@
  *
  */
 
-static char *l1_revision = "$Revision: 1.18 $";
+static char *l1_revision = "$Revision: 1.19 $";
 
 #include <linux/config.h>
 #include <linux/module.h>
+#include "core.h"
 #include "layer1.h"
 #include "helper.h"
 #include "debug.h"
@@ -852,7 +853,8 @@ int Isdnl1Init(void)
 #ifdef OBSOLETE
 		mISDN_FsmFree(&l1fsm_b);
 #endif
-	}
+	} else
+		mISDN_module_register(THIS_MODULE);
 	return(err);
 }
 
@@ -861,6 +863,8 @@ void cleanup_module(void)
 {
 	int 		err;
 	layer1_t	*l1, *nl1;
+
+	mISDN_module_unregister(THIS_MODULE);
 
 	if ((err = mISDN_unregister(&isdnl1))) {
 		printk(KERN_ERR "Can't unregister ISDN layer 1 error(%d)\n", err);

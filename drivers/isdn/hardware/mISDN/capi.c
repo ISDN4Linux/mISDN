@@ -1,13 +1,14 @@
-/* $Id: capi.c,v 1.20 2006/06/28 18:03:52 keil Exp $
+/* $Id: capi.c,v 1.21 2006/12/21 15:25:06 nadi Exp $
  *
  */
 
 #include <linux/module.h>
+#include "core.h"
 #include "m_capi.h"
 #include "helper.h"
 #include "debug.h"
 
-static char *capi_revision = "$Revision: 1.20 $";
+static char *capi_revision = "$Revision: 1.21 $";
 
 static int debug = 0;
 static mISDNobject_t capi_obj;
@@ -423,7 +424,8 @@ int Capi20Init(void)
 		free_AppPlci();
 		free_ncci();
 		free_Application();
-	}
+	} else
+		mISDN_module_register(THIS_MODULE);
 	return(err);
 }
 
@@ -432,6 +434,8 @@ static void Capi20cleanup(void)
 {
 	int		err;
 	Controller_t	*contr, *next;
+
+	mISDN_module_unregister(THIS_MODULE);
 
 	if ((err = mISDN_unregister(&capi_obj))) {
 		printk(KERN_ERR "Can't unregister CAPI20 error(%d)\n", err);

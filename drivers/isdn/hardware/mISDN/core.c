@@ -1,4 +1,4 @@
-/* $Id: core.c,v 1.37 2006/08/07 23:35:59 keil Exp $
+/* $Id: core.c,v 1.38 2006/12/21 15:25:06 nadi Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -19,10 +19,17 @@
 #include <linux/smp_lock.h>
 #endif
 
-static char		*mISDN_core_revision = "$Revision: 1.37 $";
+static char		*mISDN_core_revision = "$Revision: 1.38 $";
 
 LIST_HEAD(mISDN_objectlist);
 static rwlock_t		mISDN_objects_lock = RW_LOCK_UNLOCKED;
+
+LIST_HEAD(mISDN_modulelist);
+static rwlock_t		mISDN_modules_lock = RW_LOCK_UNLOCKED;
+struct modulelist {
+	struct list_head list;
+	struct module *module;
+};
 
 int core_debug;
 
@@ -605,6 +612,62 @@ mISDN_ctrl(void *data, u_int prim, void *arg) {
 	return(-EINVAL);
 }
 
+void
+mISDN_module_register(struct module *module)
+{
+	struct modulelist *ml = kmalloc(sizeof(struct modulelist), GFP_KERNEL);
+
+	if (!ml) {
+		printk(KERN_DEBUG "mISDN_register_module: kmalloc failed!\n");
+		return;
+	}
+	ml->module = module;
+	write_lock(&mISDN_modules_lock);
+	list_add(&ml->list, &mISDN_modulelist);
+	write_unlock(&mISDN_modules_lock);
+
+	printk(KERN_DEBUG "mISDN_register_module(%p)\n", module);
+}
+
+void
+mISDN_module_unregister(struct module *module)
+{
+	struct modulelist *ml, *mi;
+
+	write_lock(&mISDN_modules_lock);
+	list_for_each_entry_safe(ml, mi, &mISDN_modulelist, list)
+		if (ml->module == module) {
+			list_del(&ml->list);
+			kfree(ml);
+			write_unlock(&mISDN_modules_lock);
+			printk(KERN_DEBUG "mISDN_unregister_module(%p)\n", module);
+			return;
+		}
+	write_unlock(&mISDN_modules_lock);
+}
+
+void
+mISDN_inc_usage(void)
+{
+	struct modulelist *ml;
+	
+	read_lock(&mISDN_modules_lock);
+	list_for_each_entry(ml, &mISDN_modulelist, list)
+		try_module_get(ml->module);
+	read_unlock(&mISDN_modules_lock);
+}
+
+void
+mISDN_dec_usage(void)
+{
+	struct modulelist *ml;
+	
+	read_lock(&mISDN_modules_lock);
+	list_for_each_entry(ml, &mISDN_modulelist, list)
+		module_put(ml->module);
+	read_unlock(&mISDN_modules_lock);
+}
+
 int mISDN_register(mISDNobject_t *obj) {
 	u_long	flags;
 	int	retval;
@@ -730,6 +793,10 @@ void mISDN_cleanup(void) {
 module_init(mISDNInit);
 module_exit(mISDN_cleanup);
 
+EXPORT_SYMBOL(mISDN_module_register);
+EXPORT_SYMBOL(mISDN_module_unregister);
+EXPORT_SYMBOL(mISDN_inc_usage);
+EXPORT_SYMBOL(mISDN_dec_usage);
 EXPORT_SYMBOL(mISDN_ctrl);
 EXPORT_SYMBOL(mISDN_register);
 EXPORT_SYMBOL(mISDN_unregister);

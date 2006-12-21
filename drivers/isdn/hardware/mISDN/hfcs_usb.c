@@ -1,4 +1,4 @@
-/* $Id: hfcs_usb.c,v 1.27 2006/11/30 16:27:00 mbachem Exp $
+/* $Id: hfcs_usb.c,v 1.28 2006/12/21 15:25:06 nadi Exp $
  *
  * mISDN driver for Colognechip HFC-S USB chip
  *
@@ -29,6 +29,7 @@
 #include <linux/module.h>
 #include <linux/delay.h>
 #include <linux/usb.h>
+#include "core.h"
 #include "channel.h"
 #include "layer1.h"
 #include "debug.h"
@@ -36,7 +37,7 @@
 
 
 #define DRIVER_NAME "mISDN_hfcsusb"
-const char *hfcsusb_rev = "$Revision: 1.27 $";
+const char *hfcsusb_rev = "$Revision: 1.28 $";
 
 #define MAX_CARDS	8
 static int hfcsusb_cnt;
@@ -2163,6 +2164,9 @@ hfcsusb_init(void)
 		       "hfcsusb: Unable to register hfcsusb module at usb stack\n");
 		goto out;
 	}
+
+	mISDN_module_register(THIS_MODULE);
+
 	return 0;
 
       out:
@@ -2175,6 +2179,8 @@ hfcsusb_cleanup(void)
 {
 	int err;
 	hfcsusb_t *card, *next;
+
+	mISDN_module_unregister(THIS_MODULE);
 
 	if (debug & 0x10000)
 		printk(KERN_DEBUG "%s\n", __FUNCTION__);

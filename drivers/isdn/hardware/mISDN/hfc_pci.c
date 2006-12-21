@@ -1,4 +1,4 @@
-/* $Id: hfc_pci.c,v 1.48 2006/10/20 14:10:25 srichter Exp $
+/* $Id: hfc_pci.c,v 1.49 2006/12/21 15:25:06 nadi Exp $
 
  * hfc_pci.c     low level driver for CCD's hfc-pci based cards
  *
@@ -29,6 +29,7 @@
 #include <linux/pci.h>
 #include <linux/delay.h>
 
+#include "core.h"
 #include "channel.h"
 #include "hfc_pci.h"
 #include "layer1.h"
@@ -39,7 +40,7 @@
 
 extern const char *CardType[];
 
-static const char *hfcpci_revision = "$Revision: 1.48 $";
+static const char *hfcpci_revision = "$Revision: 1.49 $";
 
 /* table entry in the PCI devices list */
 typedef struct {
@@ -2267,6 +2268,7 @@ static int __init HFC_init(void)
 		mISDN_ctrl(dst, MGR_STARTSTACK | REQUEST, NULL);
 		mISDN_ctrl(dst, MGR_CTRLREADY | INDICATION, NULL);
 	}
+	mISDN_module_register(THIS_MODULE);
 	printk(KERN_INFO "HFC %d cards installed\n", HFC_cnt);
 	return(0);
 }
@@ -2276,6 +2278,8 @@ static void __exit HFC_cleanup(void)
 {
 	hfc_pci_t	*card, *next;
 	int		err;
+
+	mISDN_module_unregister(THIS_MODULE);
 
 	if ((err = mISDN_unregister(&HFC_obj))) {
 		printk(KERN_ERR "Can't unregister HFC PCI error(%d)\n", err);

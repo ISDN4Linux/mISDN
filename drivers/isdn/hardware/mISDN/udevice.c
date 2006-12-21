@@ -1,4 +1,4 @@
-/* $Id: udevice.c,v 1.23 2006/11/22 12:18:00 crich Exp $
+/* $Id: udevice.c,v 1.24 2006/12/21 15:25:06 nadi Exp $
  *
  * Copyright 2000  by Karsten Keil <kkeil@isdn4linux.de>
  *
@@ -1556,6 +1556,9 @@ mISDN_open(struct inode *ino, struct file *filep)
 	filep->private_data = dev;
 	if (device_debug & DEBUG_DEV_OP)
 		printk(KERN_DEBUG "mISDN_open out: %p %p\n", filep, filep->private_data);
+
+	mISDN_inc_usage();
+
 	return(0);
 }
 
@@ -1585,10 +1588,12 @@ mISDN_close(struct inode *ino, struct file *filep)
 			filep->private_data = NULL;
 			if (!dev->minor)
 				free_device(dev);
+			mISDN_dec_usage();
 			return 0;
 		}
 	}
 	read_unlock(&mISDN_device_lock);
+	mISDN_dec_usage();
 	printk(KERN_WARNING "mISDN: No private data while closing device\n");
 	return 0;
 }

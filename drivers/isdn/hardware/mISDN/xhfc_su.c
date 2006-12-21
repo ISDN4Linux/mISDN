@@ -1,4 +1,4 @@
-/* $Id: xhfc_su.c,v 1.18 2006/12/06 08:00:17 mbachem Exp $
+/* $Id: xhfc_su.c,v 1.19 2006/12/21 15:25:06 nadi Exp $
  *
  * mISDN driver for CologneChip AG's XHFC
  *
@@ -56,6 +56,7 @@
 #include <linux/delay.h>
 #include <linux/pci.h>
 #include <asm/timex.h>
+#include "core.h"
 #include "helper.h"
 #include "debug.h"
 #include "xhfc_su.h"
@@ -65,7 +66,7 @@
 #include "xhfc_pci2pi.h"
 #endif
 
-static const char xhfc_rev[] = "$Revision: 1.18 $";
+static const char xhfc_rev[] = "$Revision: 1.19 $";
 
 #define MAX_CARDS	8
 static int card_cnt;
@@ -2153,6 +2154,8 @@ xhfc_init(void)
 	}
 #endif
 
+	mISDN_module_register(THIS_MODULE);
+
 	return 0;
 
       out:
@@ -2163,6 +2166,8 @@ static void __exit
 xhfc_cleanup(void)
 {
 	int err;
+
+	mISDN_module_unregister(THIS_MODULE);
 
 #if BRIDGE == BRIDGE_PCI2PI
 	pci_unregister_driver(&xhfc_driver);

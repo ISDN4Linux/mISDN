@@ -1,4 +1,4 @@
-/* $Id: core.h,v 1.18 2006/05/12 13:27:23 crich Exp $
+/* $Id: core.h,v 1.19 2006/12/21 15:25:06 nadi Exp $
  * 
  * This file is (c) under GNU PUBLIC LICENSE
  *
@@ -85,6 +85,10 @@ extern mISDNobject_t	*get_object(int);
 extern mISDNinstance_t	*get_instance4id(u_int);
 extern int		mISDN_alloc_entity(int *);
 extern int		mISDN_delete_entity(int);
+extern void		mISDN_module_register(struct module *);
+extern void		mISDN_module_unregister(struct module *);
+extern void		mISDN_inc_usage(void);
+extern void		mISDN_dec_usage(void);
 
 
 #ifdef CONFIG_MISDN_NETDEV

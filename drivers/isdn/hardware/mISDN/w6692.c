@@ -1,4 +1,4 @@
-/* $Id: w6692.c,v 1.21 2006/06/28 18:03:52 keil Exp $
+/* $Id: w6692.c,v 1.22 2006/12/21 15:25:06 nadi Exp $
 
  * w6692.c     low level driver for CCD's hfc-pci based cards
  *
@@ -26,6 +26,7 @@
 #include <linux/pci.h>
 #include <linux/delay.h>
 
+#include "core.h"
 #include "channel.h"
 #include "layer1.h"
 #include "helper.h"
@@ -36,7 +37,7 @@
 
 extern const char *CardType[];
 
-const char *w6692_rev = "$Revision: 1.21 $";
+const char *w6692_rev = "$Revision: 1.22 $";
 
 #define DBUSY_TIMER_VALUE	80
 
@@ -1589,6 +1590,9 @@ static int __init w6692_init(void)
 		goto out;
 	}
 #endif
+
+	mISDN_module_register(THIS_MODULE);
+
 	return 0;
 
  out:
@@ -1600,6 +1604,8 @@ static void __exit w6692_cleanup(void)
 {
 	int		err;
 	w6692pci	*card, *next;
+
+	mISDN_module_unregister(THIS_MODULE);
 
 	if ((err = mISDN_unregister(&w6692))) {
 		printk(KERN_ERR "Can't unregister Winbond W6692 PCI error(%d)\n", err);

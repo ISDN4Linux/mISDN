@@ -1,4 +1,4 @@
-/* $Id: isac.c,v 1.17 2006/03/06 12:52:07 keil Exp $
+/* $Id: isac.c,v 1.18 2006/12/21 15:25:06 nadi Exp $
  *
  * isac.c   ISAC specific routines
  *
@@ -8,6 +8,7 @@
  */
 
 #include <linux/module.h>
+#include "core.h"
 #include "channel.h"
 #include "isac.h"
 #include "arcofi.h"
@@ -22,7 +23,7 @@
 #define DBUSY_TIMER_VALUE	80
 #define ARCOFI_USE		1
 
-const char *isac_revision = "$Revision: 1.17 $";
+const char *isac_revision = "$Revision: 1.18 $";
 
 #ifdef MODULE
 MODULE_AUTHOR("Karsten Keil");
@@ -823,11 +824,13 @@ mISDN_clear_isac(channel_t *dch)
 static int isac_mod_init(void)
 {
 	printk(KERN_INFO "ISAC module %s\n", isac_revision);
+	mISDN_module_register(THIS_MODULE);
 	return(0);
 }
 
 static void isac_mod_cleanup(void)
 {
+	mISDN_module_unregister(THIS_MODULE);
 	printk(KERN_INFO "ISAC module unloaded\n");
 }
 module_init(isac_mod_init);

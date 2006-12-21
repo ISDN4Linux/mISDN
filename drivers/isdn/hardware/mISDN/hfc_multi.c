@@ -98,6 +98,7 @@
 #include <linux/pci.h>
 #include <linux/delay.h>
 
+#include "core.h"
 #include "channel.h"
 #include "layer1.h"
 #include "dsp.h"
@@ -128,7 +129,7 @@ static void ph_state_change(channel_t *ch);
 
 extern const char *CardType[];
 
-static const char *hfcmulti_revision = "$Revision: 1.60 $";
+static const char *hfcmulti_revision = "$Revision: 1.61 $";
 
 static int HFC_cnt;
 
@@ -4341,6 +4342,8 @@ HFCmulti_cleanup(void)
 	hfc_multi_t *hc,*next;
 	int err;
 
+	mISDN_module_unregister(THIS_MODULE);
+
 	/* unregister mISDN object */
 	if (debug & DEBUG_HFCMULTI_INIT)
 		printk(KERN_DEBUG "%s: entered (refcnt = %d HFC_cnt = %d)\n", __FUNCTION__, HFCM_obj.refcnt, HFC_cnt);
@@ -4459,6 +4462,8 @@ HFCmulti_init(void)
 	}
 #endif
 	printk(KERN_INFO "%d devices registered\n", HFC_cnt);
+
+	mISDN_module_register(THIS_MODULE);
 
 	return(0);
 }

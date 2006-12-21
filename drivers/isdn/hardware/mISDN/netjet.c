@@ -11,6 +11,7 @@
 #include <linux/module.h>
 #include <linux/pci.h>
 #include <linux/delay.h>
+#include "core.h"
 #include "channel.h"
 #include "isac.h"
 #include "layer1.h"
@@ -25,7 +26,7 @@
 #define DTRACE printk
 #define DPRINT printk
 
-static const char *netjet_rev = "$Revision: 1.6 $";
+static const char *netjet_rev = "$Revision: 1.7 $";
 
 #define MAX_CARDS	4
 static int debug;
@@ -1801,6 +1802,8 @@ static int __init nj_init (void)
 	err = pci_register_driver (&nj_pci_driver);
 	if (err < 0)
 		return err;
+	
+	mISDN_module_register(THIS_MODULE);
 
 	return 0;
 }
@@ -1810,6 +1813,8 @@ static void __exit nj_cleanup (void)
 {
 	int err;
 	netjet_t *card, *next;
+
+	mISDN_module_unregister(THIS_MODULE);
 
 	if ((err = mISDN_unregister (&netjet_mISDN))) {
 		printk(KERN_ERR "Can't unregister NETJet PCI error(%d)\n", err);

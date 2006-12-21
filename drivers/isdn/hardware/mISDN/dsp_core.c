@@ -1,4 +1,4 @@
-/* $Id: dsp_core.c,v 1.24 2006/09/06 17:24:22 crich Exp $
+/* $Id: dsp_core.c,v 1.25 2006/12/21 15:25:06 nadi Exp $
  *
  * Author       Andreas Eversberg (jolly@jolly.de)
  * Based on source code structure by
@@ -169,12 +169,13 @@ There are three things that need to transmit data to card:
  
  */
 
-const char *dsp_revision = "$Revision: 1.24 $";
+const char *dsp_revision = "$Revision: 1.25 $";
 
 #include <linux/delay.h>
 #include <linux/config.h>
 #include <linux/module.h>
 #include <linux/vmalloc.h>
+#include "core.h"
 #include "layer1.h"
 #include "helper.h"
 #include "debug.h"
@@ -1031,6 +1032,8 @@ static int dsp_init(void)
 	dsp_spl_jiffies = dsp_spl_tl.expires;
 	add_timer(&dsp_spl_tl);
 	
+	mISDN_module_register(THIS_MODULE);
+	
 	return(0);
 }
 
@@ -1042,6 +1045,8 @@ static void dsp_cleanup(void)
 {
 	dsp_t	*dspl, *nd;	
 	int	err;
+
+	mISDN_module_unregister(THIS_MODULE);
 
 	if (timer_pending(&dsp_spl_tl))
 		del_timer(&dsp_spl_tl);

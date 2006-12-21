@@ -1,4 +1,4 @@
-/* $Id: layer2.c,v 1.31 2006/10/09 12:51:33 crich Exp $
+/* $Id: layer2.c,v 1.32 2006/12/21 15:25:06 nadi Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -6,11 +6,12 @@
  *
  */
 #include <linux/module.h>
+#include "core.h"
 #include "layer2.h"
 #include "helper.h"
 #include "debug.h"
 
-static char *l2_revision = "$Revision: 1.31 $";
+static char *l2_revision = "$Revision: 1.32 $";
 
 static void l2m_debug(struct FsmInst *fi, char *fmt, ...);
 
@@ -2529,7 +2530,8 @@ int Isdnl2_Init(void)
 	if ((err = mISDN_register(&isdnl2))) {
 		printk(KERN_ERR "Can't register %s error(%d)\n", MName, err);
 		mISDN_FsmFree(&l2fsm);
-	}
+	} else
+		mISDN_module_register(THIS_MODULE);
 	return(err);
 }
 
@@ -2537,6 +2539,8 @@ void Isdnl2_cleanup(void)
 {
 	int		err;
 	layer2_t	*l2, *nl2;
+
+	mISDN_module_unregister(THIS_MODULE);
 
 	if ((err = mISDN_unregister(&isdnl2))) {
 		printk(KERN_ERR "Can't unregister ISDN layer 2 error(%d)\n", err);

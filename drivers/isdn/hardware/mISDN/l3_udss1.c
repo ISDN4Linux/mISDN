@@ -1,4 +1,4 @@
-/* $Id: l3_udss1.c,v 1.42 2006/10/16 07:43:57 crich Exp $
+/* $Id: l3_udss1.c,v 1.43 2006/12/21 15:25:06 nadi Exp $
  *
  * EURO/DSS1 D-channel protocol
  *
@@ -15,6 +15,7 @@
 
 #include <linux/module.h>
 
+#include "core.h"
 #include "layer3.h"
 #include "helper.h"
 #include "debug.h"
@@ -24,7 +25,7 @@ static int debug = 0;
 static mISDNobject_t u_dss1;
 
 
-const char *dss1_revision = "$Revision: 1.42 $";
+const char *dss1_revision = "$Revision: 1.43 $";
 
 
 static int comp_required[] = {1,2,3,5,6,7,9,10,11,14,15,-1};
@@ -3111,7 +3112,8 @@ int UDSS1Init(void)
 	if ((err = mISDN_register(&u_dss1))) {
 		printk(KERN_ERR "Can't register %s error(%d)\n", MName, err);
 		mISDNl3Free();
-	}
+	} else
+		mISDN_module_register(THIS_MODULE);
 	return(err);
 }
 
@@ -3120,6 +3122,8 @@ void UDSS1_cleanup(void)
 {
 	int err;
 	layer3_t	*l3, *next;
+
+	mISDN_module_unregister(THIS_MODULE);
 
 	if ((err = mISDN_unregister(&u_dss1))) {
 		printk(KERN_ERR "Can't unregister User DSS1 error(%d)\n", err);

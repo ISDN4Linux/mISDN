@@ -1,4 +1,4 @@
-/* $Id: x25_dte.c,v 1.11 2006/06/28 18:03:52 keil Exp $
+/* $Id: x25_dte.c,v 1.12 2006/12/21 15:25:06 nadi Exp $
  *
  * Linux modular ISDN subsystem, mISDN
  * X.25/X.31 Layer3 for DTE mode
@@ -14,6 +14,7 @@
 
 #include <linux/config.h>
 #include <linux/module.h>
+#include "core.h"
 #include "x25_l3.h"
 #include "helper.h"
 #include "debug.h"
@@ -22,7 +23,7 @@ static int debug = 0;
 
 static mISDNobject_t x25dte_obj;
 
-static char *mISDN_dte_revision = "$Revision: 1.11 $";
+static char *mISDN_dte_revision = "$Revision: 1.12 $";
 
 /* local prototypes */
 static x25_channel_t *	dte_create_channel(x25_l3_t *, int, u_char, __u16, int, u_char *);
@@ -1369,6 +1370,7 @@ x25_dte_init(void)
 		dte_dfsm.strEvent = X25strDEvent;
 		dte_dfsm.strState = X25strDState;
 		mISDN_FsmNew(&dte_dfsm, DFnList, D_FN_COUNT);
+		mISDN_module_register(THIS_MODULE);
 	}
 	return(err);
 }
@@ -1378,6 +1380,8 @@ x25_dte_cleanup(void)
 {
 	x25_l3_t	*l3, *nl3;
 	int		err;
+
+	mISDN_module_unregister(THIS_MODULE);
 
 	if ((err = mISDN_unregister(&x25dte_obj))) {
 		printk(KERN_ERR "Can't unregister l3x25 error(%d)\n", err);

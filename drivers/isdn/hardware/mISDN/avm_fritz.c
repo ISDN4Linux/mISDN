@@ -1,4 +1,4 @@
-/* $Id: avm_fritz.c,v 1.41 2006/06/28 18:03:52 keil Exp $
+/* $Id: avm_fritz.c,v 1.42 2006/12/21 15:25:06 nadi Exp $
  *
  * fritz_pci.c    low level stuff for AVM Fritz!PCI and ISA PnP isdn cards
  *              Thanks to AVM, Berlin for informations
@@ -17,13 +17,14 @@
 #include <linux/isapnp.h>
 #endif
 #include <linux/delay.h>
+#include "core.h"
 #include "channel.h"
 #include "isac.h"
 #include "layer1.h"
 #include "debug.h"
 
 
-static const char *avm_fritz_rev = "$Revision: 1.41 $";
+static const char *avm_fritz_rev = "$Revision: 1.42 $";
 
 enum {
 	AVM_FRITZ_PCI,
@@ -1440,6 +1441,9 @@ static int __init Fritz_init(void)
 	}
 #endif
 #endif
+	
+	mISDN_module_register(THIS_MODULE);
+
 	return 0;
 
 #if !defined(CONFIG_HOTPLUG) || defined(MODULE)
@@ -1463,6 +1467,8 @@ static void __exit Fritz_cleanup(void)
 	fritzpnppci *card, *next;
 	int err;
 
+	mISDN_module_unregister(THIS_MODULE);
+	
 	if ((err = mISDN_unregister(&fritz))) {
 		printk(KERN_ERR "Can't unregister Fritz PCI error(%d)\n", err);
 	}
