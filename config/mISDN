@@ -302,6 +302,33 @@ function write_mISDN_conf
 "
 	local TAB="	"
 	local HEADER="<?xml version=\"1.0\"?>
+<!--
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+Card Type: BN2S0, BN4S0, BN8S0
+Card Attributes: ulaw=(yes|no), dtmf=(yes|no), pcm_slave=(yes|no),
+                 ignore_pcm_frameclock=(yes|no), rxclock=(yes|no),
+                 crystalclock=(yes|no), watchdog=(yes|no)
+Port Attributes: mode=(te|nt), link=(ptp|ptmp), master-clock=(yes|no),
+                 capi=(yes|no)
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+Card Type: BN2E1
+Card Attributes: ulaw=(yes|no), dtmf=(yes|no), pcm_slave=(yes|no),
+                 ignore_pcm_frameclock=(yes|no), rxclock=(yes|no),
+                 crystalclock=(yes|no), watchdog=(yes|no)
+Port Attributes: mode=(te|nt), link=(ptp|ptmp), optical=(yes|no), los=(yes|no),
+                 ais=(yes|no), slip=(yes|no), nocrc4=(yes|no), capi=(yes|no)
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+Card Type: hfcmulti, avmfritz, w6692pci
+Port Attributes: mode=(te|nt), link=(ptp|ptmp), capi=(yes|no)
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+Module: hfcmulti
+Options: poll=<number>, pcm=<number>, debug=<number>
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+Module: mISDN_dsp
+Options: debug=<number>, options=<number>, poll=<number>,
+         dtmfthreshold=<number>
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+-->
 <mISDNconf>
 ${TAB}<module poll=\"128\" debug=\"0\">hfcmulti</module>
 ${TAB}<module debug=\"0\" options=\"0\">mISDN_dsp</module>
