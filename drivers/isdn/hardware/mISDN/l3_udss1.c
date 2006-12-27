@@ -1,4 +1,4 @@
-/* $Id: l3_udss1.c,v 1.43 2006/12/21 15:25:06 nadi Exp $
+/* $Id: l3_udss1.c,v 1.44 2006/12/27 18:50:50 jolly Exp $
  *
  * EURO/DSS1 D-channel protocol
  *
@@ -25,7 +25,7 @@ static int debug = 0;
 static mISDNobject_t u_dss1;
 
 
-const char *dss1_revision = "$Revision: 1.43 $";
+const char *dss1_revision = "$Revision: 1.44 $";
 
 
 static int comp_required[] = {1,2,3,5,6,7,9,10,11,14,15,-1};
@@ -245,7 +245,7 @@ compose_msg(struct sk_buff *skb, Q931_info_t *qi)
 		*p = buf[qi->congestion_level.off];
 	}
 	ie = &qi->bearer_capability;
-	for (i=0; i<32; i++) {
+	for (i=0; i<33; i++) {
 		if (ie[i].off) {
 			l = buf[ie[i].off + 1] +1;
 			p = skb_put(skb, l + 1);
@@ -414,10 +414,10 @@ l3dss1_msg_without_setup(l3_process_t *pc, u_char cause)
 }
 
 static int ie_ALERTING[] = {IE_BEARER, IE_CHANNEL_ID | IE_MANDATORY_1,
-		IE_FACILITY, IE_PROGRESS, IE_DISPLAY, IE_SIGNAL, IE_HLC,
-		IE_USER_USER, -1};
+		IE_FACILITY, IE_PROGRESS, IE_DISPLAY, IE_SIGNAL, IE_REDIR_DN,
+		IE_HLC, IE_USER_USER, -1};
 static int ie_CALL_PROCEEDING[] = {IE_BEARER, IE_CHANNEL_ID | IE_MANDATORY_1,
-		IE_FACILITY, IE_PROGRESS, IE_DISPLAY, IE_HLC, -1};
+		IE_FACILITY, IE_PROGRESS, IE_DISPLAY, IE_REDIR_DN, IE_HLC, -1};
 static int ie_CONNECT[] = {IE_BEARER, IE_CHANNEL_ID | IE_MANDATORY_1,
 		IE_FACILITY, IE_PROGRESS, IE_DISPLAY, IE_DATE, IE_SIGNAL,
 		IE_CONNECT_PN, IE_CONNECT_SUB, IE_LLC, IE_HLC, IE_USER_USER, -1};
@@ -501,6 +501,7 @@ struct ie_len max_ie_len[] = {
 	{IE_CALLED_PN, 24},
 	{IE_CALLED_SUB, 23},
 	{IE_REDIR_NR, 255},
+	{IE_REDIR_DN, 255},
 	{IE_TRANS_SEL, 255},
 	{IE_RESTART_IND, 3},
 	{IE_LLC, 18},
@@ -552,7 +553,7 @@ check_infoelements(l3_process_t *pc, struct sk_buff *skb, int *checklist)
 	iep = &qi->bearer_capability;
 	oldpos = -1;
 
-	for (i=0; i<32; i++) {
+	for (i=0; i<33; i++) {
 		if (iep[i].off) {
 			ie = mISDN_l3_pos2ie(i);
 			if ((newpos = ie_in_set(pc, ie, cl))) {

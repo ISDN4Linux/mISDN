@@ -1,4 +1,4 @@
-/* $Id: l3helper.c,v 1.7 2006/03/06 12:52:07 keil Exp $
+/* $Id: l3helper.c,v 1.8 2006/12/27 18:50:50 jolly Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -22,14 +22,15 @@ static signed char _mISDN_l3_ie2pos[128] = {
 			13,-1,14,15,16,17,18,19,-1,-1,-1,-1,20,21,-1,-1,
 			-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
 			-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,22,23,-1,-1,
-			24,25,-1,-1,26,-1,-1,-1,27,28,-1,-1,29,30,31,-1
+			24,25,-1,-1,26,-1,27,-1,28,29,-1,-1,30,31,32,-1
 };
 			
-static unsigned char _mISDN_l3_pos2ie[32] = {
+static unsigned char _mISDN_l3_pos2ie[33] = {
 			0x04, 0x08, 0x10, 0x14, 0x18, 0x1c, 0x1e, 0x20,
 			0x27, 0x28, 0x29, 0x2c, 0x34, 0x40, 0x42, 0x43,
 			0x44, 0x45, 0x46, 0x47, 0x4c, 0x4d, 0x6c, 0x6d,
-			0x70, 0x71, 0x74, 0x78, 0x79, 0x7c, 0x7d, 0x7e
+			0x70, 0x71, 0x74, 0x76, 0x78, 0x79, 0x7c, 0x7d,
+		       	0x7e
 };
 
 signed int
@@ -224,7 +225,7 @@ void mISDN_LogL3Msg(struct sk_buff *skb)
 	ps += L3_EXTRA_SIZE;
 	printk(KERN_DEBUG "L3Msg type(%02x) qi(%p) ies(%p) ps(%p)\n",
 		qi->type, qi, ies, ps);
-	for (i=0;i<32;i++) {
+	for (i=0;i<33;i++) {
 		if (ies[i].off) {
 			p = ps + ies[i].off;
 			t = tmp;
