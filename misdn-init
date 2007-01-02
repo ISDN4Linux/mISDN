@@ -65,7 +65,7 @@ poll_option=
 
 dsp_poll_option=
 
-dtmftreshold_option=
+dtmfthreshold_option=
 
 function check_cmd {
 	if ! which "${1}" > /dev/null; then
@@ -315,8 +315,8 @@ function load_card_modules {
 			dsp_options)
 				export dsp_options=${val}
 				;;
-			dtmftreshold)
-				export dtmftreshold_option="dtmftreshold=${val}"
+			dtmfthreshold)
+				export dtmfthreshold_option="dtmfthreshold=${val}"
 				;;
 			debug)
 				debug=${val}
@@ -637,14 +637,14 @@ function create_misdn_init_conf {
 #	hardware bridging.
 # 
 #
-# dtmftreshold=<milliseconds>
+# dtmfthreshold=<milliseconds>
 #
 #	Here you can tune the sensitivity of the dtmf tone recognizer.
 #
 poll=128
 dsp_poll=128
 dsp_options=0
-dtmftreshold=100
+dtmfthreshold=100
 debug=0"
 
 		if [ -f ${misdn_init_conf} ]; then
@@ -691,8 +691,8 @@ case "$1" in
 		
 		load_card_modules $2
 		
-		echo "${MODPROBE} mISDN_dsp debug=0x0 options=$dsp_options $dsp_poll_option $dtmftreshold_option"
-		${MODPROBE} mISDN_dsp debug=0x0 options=$dsp_options $dsp_poll_option $dtmftreshold_option
+		echo "${MODPROBE} mISDN_dsp debug=0x0 options=$dsp_options $dsp_poll_option $dtmfthreshold_option"
+		${MODPROBE} mISDN_dsp debug=0x0 options=$dsp_options $dsp_poll_option $dtmfthreshold_option
 		sleep 1
 		
 		if [ ! -e /dev/mISDN ]; then
