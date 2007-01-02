@@ -1,4 +1,4 @@
-/* $Id: l3_udss1.c,v 1.44 2006/12/27 18:50:50 jolly Exp $
+/* $Id: l3_udss1.c,v 1.45 2007/01/02 13:38:20 crich Exp $
  *
  * EURO/DSS1 D-channel protocol
  *
@@ -25,7 +25,7 @@ static int debug = 0;
 static mISDNobject_t u_dss1;
 
 
-const char *dss1_revision = "$Revision: 1.44 $";
+const char *dss1_revision = "$Revision: 1.45 $";
 
 
 static int comp_required[] = {1,2,3,5,6,7,9,10,11,14,15,-1};
@@ -2796,7 +2796,7 @@ dss1_fromup(layer3_t *l3, struct sk_buff *skb, mISDN_head_t *hh)
 
 	if (!proc && (hh->prim == (CC_RELEASE_COMPLETE | REQUEST)) ) {
 		/* crich: */
-		l3_debug(l3, "mISDN dss1 sending RELEASE_COMPLETE without proc pr=%04x dinof(%x)\n", hh->prim, hh->dinfo);
+		if (l3->debug) l3_debug(l3, "mISDN dss1 sending RELEASE_COMPLETE without proc pr=%04x dinof(%x)", hh->prim, hh->dinfo);
 		SendMsg(l3->dummy, skb, -1);
 
 		return 0;
