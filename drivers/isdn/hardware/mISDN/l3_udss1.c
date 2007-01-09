@@ -1,4 +1,4 @@
-/* $Id: l3_udss1.c,v 1.45 2007/01/02 13:38:20 crich Exp $
+/* $Id: l3_udss1.c,v 1.46 2007/01/09 16:51:47 crich Exp $
  *
  * EURO/DSS1 D-channel protocol
  *
@@ -25,7 +25,7 @@ static int debug = 0;
 static mISDNobject_t u_dss1;
 
 
-const char *dss1_revision = "$Revision: 1.45 $";
+const char *dss1_revision = "$Revision: 1.46 $";
 
 
 static int comp_required[] = {1,2,3,5,6,7,9,10,11,14,15,-1};
@@ -933,6 +933,14 @@ l3dss1_progress_req(l3_process_t *pc, u_char pr, void *arg)
 
 static void
 l3dss1_facility_req(l3_process_t *pc, u_char pr, void *arg)
+{
+	if (arg) {
+		SendMsg(pc, arg, -1);
+	}
+}
+
+static void
+l3dss1_restart_req(l3_process_t *pc, u_char pr, void *arg)
 {
 	if (arg) {
 		SendMsg(pc, arg, -1);
@@ -2789,6 +2797,14 @@ dss1_fromup(layer3_t *l3, struct sk_buff *skb, mISDN_head_t *hh)
 	if (!proc && hh->dinfo == MISDN_ID_DUMMY) {
 		if (hh->prim == (CC_FACILITY | REQUEST)) {
 			l3dss1_facility_req(l3->dummy, hh->prim, skb->len ? skb : NULL);
+			ret = 0;
+		}
+		return(ret);
+	}
+
+	if (!proc && hh->dinfo == MISDN_ID_DUMMY) {
+		if (hh->prim == (CC_RESTART | REQUEST)) {
+			l3dss1_restart_req(l3->dummy, hh->prim, skb->len ? skb : NULL);
 			ret = 0;
 		}
 		return(ret);
