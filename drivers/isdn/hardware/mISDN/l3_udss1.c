@@ -1,4 +1,4 @@
-/* $Id: l3_udss1.c,v 1.46 2007/01/09 16:51:47 crich Exp $
+/* $Id: l3_udss1.c,v 1.47 2007/01/10 12:56:45 crich Exp $
  *
  * EURO/DSS1 D-channel protocol
  *
@@ -25,7 +25,7 @@ static int debug = 0;
 static mISDNobject_t u_dss1;
 
 
-const char *dss1_revision = "$Revision: 1.46 $";
+const char *dss1_revision = "$Revision: 1.47 $";
 
 
 static int comp_required[] = {1,2,3,5,6,7,9,10,11,14,15,-1};
@@ -563,10 +563,10 @@ check_infoelements(l3_process_t *pc, struct sk_buff *skb, int *checklist)
 					else
 						oldpos = newpos;
 				} else {
-					printk(KERN_NOTICE "ie_in_set resturned <0  [%d] ie:[%x]\n",newpos,ie);
+					printk(KERN_NOTICE "ie_in_set returned <0  [%d] ie:[%x]\n",newpos,ie);
 				}
 			} else {
-				printk(KERN_NOTICE "Found ie in set which we do not support ie [%x]\n",ie);
+				if (debug) printk(KERN_NOTICE "Found ie in set which we do not support ie [%x]\n",ie);
 				if (ie_in_set(pc, ie, comp_required))
 					err_compr++;
 				else
@@ -1786,6 +1786,13 @@ l3dss1_global_restart(l3_process_t *pc, u_char pr, void *arg)
 		kfree_skb(skb);
 }
 
+
+static void
+l3dss1_restart_ack(l3_process_t *pc, u_char pr, void *arg)
+{
+	printk(KERN_NOTICE "Restart Acknowledge\n");
+}
+
 static void
 l3dss1_dummy(l3_process_t *pc, u_char pr, void *arg)
 {
@@ -2500,9 +2507,8 @@ static struct stateentry globalmes_list[] =
 	 MT_STATUS, l3dss1_status},
 	{SBIT(0),
 	 MT_RESTART, l3dss1_global_restart},
-/*	{SBIT(1),
+	{SBIT(1),
 	 MT_RESTART_ACKNOWLEDGE, l3dss1_restart_ack},
-*/
 };
 #define GLOBALM_LEN \
 	(sizeof(globalmes_list) / sizeof(struct stateentry))
@@ -2642,12 +2648,17 @@ dss1_fromdown(layer3_t *l3, struct sk_buff *skb, mISDN_head_t *hh)
 	if (l3->debug & L3_DEB_STATE)
 		l3_debug(l3, "dss1up cr %d", qi->cr);
 	if (qi->crlen == 0) {	/* Dummy Callref */
-		if (qi->type == MT_FACILITY) {
-			l3dss1_facility(l3->dummy, hh->prim, skb);
+		switch(qi->type) {
+			case MT_FACILITY:
+				l3dss1_facility(l3->dummy, hh->prim, skb);
 			return(0);
-		} else if (l3->debug & L3_DEB_WARN)
-			l3_debug(l3, "dss1up dummy Callref (no facility msg or ie)");
-		dev_kfree_skb(skb);
+			default:
+			if (l3->debug & L3_DEB_WARN)
+				l3_debug(l3, "dss1up dummy Callref (no facility msg or ie)");
+
+			break;
+		}
+
 		return(0);
 	} else if ((qi->cr & 0x7fff) == 0) {	/* Global CallRef */
 		if (l3->debug & L3_DEB_STATE)
@@ -2802,8 +2813,9 @@ dss1_fromup(layer3_t *l3, struct sk_buff *skb, mISDN_head_t *hh)
 		return(ret);
 	}
 
-	if (!proc && hh->dinfo == MISDN_ID_DUMMY) {
+	if (!proc && hh->dinfo == MISDN_ID_GLOBAL) {
 		if (hh->prim == (CC_RESTART | REQUEST)) {
+			printk(KERN_NOTICE "Global Restart Req\n");
 			l3dss1_restart_req(l3->dummy, hh->prim, skb->len ? skb : NULL);
 			ret = 0;
 		}
