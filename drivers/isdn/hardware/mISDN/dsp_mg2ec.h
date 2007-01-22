@@ -61,11 +61,16 @@
 /* Uncomment to generate per-sample statistics - this will severely degrade system performance and audio quality */
 /* #define MEC2_STATS_DETAILED */
 
+/* Uncomment to generate per-call DC bias offset messages */
+/* #define MEC2_DCBIAS_MESSAGE */
+
 /* Get optimized routines for math */
 #include "dsp_arith.h"
 
 /* Bring in definitions for the various constants and thresholds */
 #include "dsp_mg2ec_const.h"
+
+#define DC_NORMALIZE
 
 #ifndef NULL
 #define NULL 0
@@ -155,9 +160,12 @@ struct echo_can_state {
 	int avg_Lu_i_toolow; 
 	int avg_Lu_i_ok;
 #endif 
-	short lastsig[256];
-	int lastpos;
+	short lastsig;
+	int lastcount;
 	int backup;
+#ifdef DC_NORMALIZE
+	int dc_estimate;
+#endif
 
 };
 
@@ -260,8 +268,19 @@ static inline void init_cc(struct echo_can_state *ec, int N, int maxy, int maxu)
 
 static inline void echo_can_free(struct echo_can_state *ec)
 {
+#if defined(DC_NORMALIZE) && defined(MEC2_DCBIAS_MESSAGE)
+	printk("EC: DC bias calculated: %d V\n", ec->dc_estimate >> 15);
+#endif
 	FREE(ec);
 }
+
+#ifdef DC_NORMALIZE
+static short inline dc_removal(int *dc_estimate, short samp)
+{
+	*dc_estimate += ((((int)samp << 15) - *dc_estimate) >> 9);
+	return samp - (*dc_estimate >> 15);
+}
+#endif
 
 static inline short echo_can_update(struct echo_can_state *ec, short iref, short isig) 
 {
@@ -277,6 +296,10 @@ static inline short echo_can_update(struct echo_can_state *ec, short iref, short
 	int Py_i;
 	/* ... */
 	int two_beta_i;
+
+#ifdef DC_NORMALIZE
+	isig = dc_removal(&ec->dc_estimate, isig);
+#endif
 	
 	/* flow A on pg. 428 */
 	/* eq. (16): high-pass filter the input to generate the next value;
@@ -306,18 +329,18 @@ static inline short echo_can_update(struct echo_can_state *ec, short iref, short
   			ec->N_d);
 	rs >>= 15;
 
-	ec->lastsig[ec->lastpos++] = isig;
-	if (ec->lastpos >= 256)
-		ec->lastpos = 0;
-
-	for (k=0; k < 256; k++) {
-		if (isig != ec->lastsig[k])
-			break;
+	if (ec->lastsig == isig) {
+		ec->lastcount++;
+	} else {
+		ec->lastcount = 0;
+		ec->lastsig = isig;
 	}
 
 	if (isig == 0) {
 		u = 0;
-	} else if (k == 256) {
+	} else if (ec->lastcount > 255) {
+		/* We have seen the same input-signal more than 255 times,
+		 * we should pass it through uncancelled, as we are likely on hold */
 		u = isig;
 	} else {
 		if (rs < -32768) {
