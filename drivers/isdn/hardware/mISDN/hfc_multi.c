@@ -129,13 +129,18 @@ static void ph_state_change(channel_t *ch);
 
 extern const char *CardType[];
 
-static const char *hfcmulti_revision = "$Revision: 1.61 $";
+static const char *hfcmulti_revision = "$Revision: 1.62 $";
 
 static int HFC_cnt;
 
 static mISDNobject_t	HFCM_obj;
 
 static char HFCName[] = "HFC_multi";
+
+extern void ztdummy_extern_interrupt(void);
+static void (* hfc_interrupt)(void);
+extern void ztdummy_register_interrupt(void);
+static void (* register_interrupt)(void);
 
 /* table entry in the PCI devices list */
 typedef struct {
@@ -243,6 +248,7 @@ static u_int protocol[MAX_PORTS];
 static int layermask[MAX_PORTS];
 static int debug;
 static int poll;
+static int timer;
 
 
 #ifdef MODULE
@@ -253,6 +259,7 @@ MODULE_LICENSE("GPL");
 #ifdef OLD_MODULE_PARAM
 MODULE_PARM(debug, "1i");
 MODULE_PARM(poll, "1i");
+MODULE_PARM(timer, "1i");
 #define MODULE_PARM_T   "1-128i"
 MODULE_PARM(protocol, MODULE_PARM_T);
 MODULE_PARM(layermask, MODULE_PARM_T);
@@ -261,6 +268,7 @@ MODULE_PARM(pcm, MODULE_PARM_T);
 #else
 module_param(debug, uint, S_IRUGO | S_IWUSR);
 module_param(poll, uint, S_IRUGO | S_IWUSR);
+module_param(timer, uint, S_IRUGO | S_IWUSR);
 
 
 #ifdef OLD_MODULE_PARAM_ARRAY
@@ -853,6 +861,16 @@ init_chip(hfc_multi_t *hc)
 	/* set up timer */
 	HFC_outb(hc, R_TI_WD, poll_timer);
 	hc->hw.r_irqmsk_misc |= V_TI_IRQMSK;
+
+	/* set up 125us interrupt, only if function pointer is available 
+	   and module parameter timer is set */
+	if (timer!=0 && hfc_interrupt && register_interrupt) {
+		/* only one chip should use this interrupt */
+		timer = 0;
+		hc->hw.r_irqmsk_misc |= V_PROC_IRQMSK;
+		/* deactivate other interrupts in ztdummy */
+		register_interrupt();
+	}
 
 	/* set E1 state machine IRQ */
 	if (hc->type == 1)
@@ -1845,6 +1863,7 @@ hfcmulti_interrupt(int intno, void *dev_id, struct pt_regs *regs)
 #ifdef IRQCOUNT_DEBUG
 	static int iq1=0,iq2=0,iq3=0,iq4=0,iq5=0,iq6=0,iqcnt=0;
 #endif
+	static int count=0;
 	hfc_multi_t	*hc = dev_id;
 	channel_t	*chan;
 	u_char 		r_irq_statech, status, r_irq_misc, r_irq_oview, r_irq_fifo_bl;
@@ -1965,6 +1984,17 @@ hfcmulti_interrupt(int intno, void *dev_id, struct pt_regs *regs)
 			/* -> DTMF IRQ */
 			hfcmulti_dtmf(hc);
 		}
+		if (r_irq_misc & V_IRQ_PROC) {
+			/* IRQ every 125us */
+			count++;
+			/* generate 1kHz signal */
+			if(count==8) {
+				if (hfc_interrupt) 
+					hfc_interrupt();
+				count = 0;
+			}
+		}
+				 
 	}
 	if (status & V_FR_IRQSTA) {
 		/* FIFO IRQ */
@@ -4162,9 +4192,9 @@ static int __devinit hfcpci_probe(struct pci_dev *pdev, const struct pci_device_
 		else
 			chan = hc->chan[(pt<<2)+2].ch;
 		if ((ret_err = mISDN_ctrl(NULL, MGR_NEWSTACK | REQUEST, &chan->inst))) {
+			int i=0;
 			printk(KERN_ERR  "MGR_ADDSTACK REQUEST dch err(%d)\n", ret_err);
 
-			int i=0;
 free_release:
 			/* all ports, hc is free */
 			for (i=0; i<hc->ports; i++)
@@ -4344,6 +4374,13 @@ HFCmulti_cleanup(void)
 
 	mISDN_module_unregister(THIS_MODULE);
 
+	/* unload interrupt function symbol*/
+	if (hfc_interrupt) {
+		symbol_put(ztdummy_extern_interrupt);
+	}
+	if (register_interrupt) {
+		symbol_put(ztdummy_register_interrupt);
+	}
 	/* unregister mISDN object */
 	if (debug & DEBUG_HFCMULTI_INIT)
 		printk(KERN_DEBUG "%s: entered (refcnt = %d HFC_cnt = %d)\n", __FUNCTION__, HFCM_obj.refcnt, HFC_cnt);
@@ -4393,6 +4430,9 @@ HFCmulti_init(void)
 #error "not running on big endian machines now"
 #endif
 	strcpy(tmpstr, hfcmulti_revision);
+	/* get interrupt function pointer */
+	hfc_interrupt = symbol_get(ztdummy_extern_interrupt);
+	register_interrupt = symbol_get(ztdummy_register_interrupt);
 	printk(KERN_INFO "mISDN: HFC-multi driver Rev. %s\n", mISDN_getrev(tmpstr));
 
 	switch(poll) {
