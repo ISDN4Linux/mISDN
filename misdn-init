@@ -321,6 +321,9 @@ function load_card_modules {
 			debug)
 				debug=${val}
 				;;
+			timer)
+				timer=${val}
+				;;
 			*)
 				echo "unknown variable: ${var}"
 				;;
@@ -375,6 +378,9 @@ function load_card_modules {
 				hfcmulti_cmd="${hfcmulti_cmd} debug=${debug}"
 			fi
 
+			if [ ! -z ${timer} ]; then
+				hfcmulti_cmd="${hfcmulti_cmd} timer=${timer}"
+			fi
 
 			if [ -z "$1" ] ; then
 				echo ${hfcmulti_cmd}
@@ -640,6 +646,14 @@ function create_misdn_init_conf {
 # dtmfthreshold=<milliseconds>
 #
 #	Here you can tune the sensitivity of the dtmf tone recognizer.
+#
+# timer=<1|0>
+# 
+#	set this to 1 if you want hfcmulti to register at ztdummy (zaptel) 
+#	and provide a 1khz timing source for it. This makes it possible
+#	to have an accurate timing source for asterisk through zaptel from
+#	hfcmulti to make applications like Meetme and faxing between wctdm
+#	and hfcmulti work properly.
 #
 poll=128
 dsp_poll=128
