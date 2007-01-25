@@ -322,7 +322,7 @@ Card Type: hfcmulti, avmfritz, w6692pci
 Port Attributes: mode=(te|nt), link=(ptp|ptmp), capi=(yes|no)
 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 Module: hfcmulti
-Options: poll=<number>, pcm=<number>, debug=<number>
+Options: poll=<number>, pcm=<number>, debug=<number>, timer=(yes|no)
 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 Module: mISDN_dsp
 Options: debug=<number>, options=<number>, poll=<number>,
@@ -330,7 +330,7 @@ Options: debug=<number>, options=<number>, poll=<number>,
 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 -->
 <mISDNconf>
-${TAB}<module poll=\"128\" debug=\"0\">hfcmulti</module>
+${TAB}<module poll=\"128\" debug=\"0\" timer=\"no\">hfcmulti</module>
 ${TAB}<module debug=\"0\" options=\"0\">mISDN_dsp</module>
 ${TAB}<devnode user=\"root\" group=\"root\" mode=\"644\">mISDN</devnode>"
 	local FOOTER="</mISDNconf>"
