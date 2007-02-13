@@ -120,5 +120,13 @@ typedef struct wait_queue *wait_queue_head_t;
 #define kzalloc(s,f) kcalloc(1,s,f)
 #endif
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,19)
+#include <linux/config.h>
+#endif
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,19)
+#include <linux/config.h>
+#endif
+
 #endif /* __KERNEL__ */
 #endif /* _LINUX_ISDN_COMPAT_H */

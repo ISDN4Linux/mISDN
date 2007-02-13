@@ -1,4 +1,4 @@
-/* $Id: x25_l3.c,v 1.9 2006/08/07 23:35:59 keil Exp $
+/* $Id: x25_l3.c,v 1.10 2007/02/13 10:43:45 crich Exp $
  *
  * Linux modular ISDN subsystem, mISDN
  * X.25/X.31 common Layer3 functions 
@@ -12,7 +12,6 @@
  *
  */
 
-#include <linux/config.h>
 #include <linux/module.h>
 #include "x25_l3.h"
 #include "helper.h"

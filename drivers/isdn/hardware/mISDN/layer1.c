@@ -1,4 +1,4 @@
-/* $Id: layer1.c,v 1.19 2006/12/21 15:25:06 nadi Exp $
+/* $Id: layer1.c,v 1.20 2007/02/13 10:43:45 crich Exp $
  *
  * mISDN_l1.c     common low level stuff for I.430 layer1 TE mode
  *
@@ -8,9 +8,8 @@
  *
  */
 
-static char *l1_revision = "$Revision: 1.19 $";
+static char *l1_revision = "$Revision: 1.20 $";
 
-#include <linux/config.h>
 #include <linux/module.h>
 #include "core.h"
 #include "layer1.h"

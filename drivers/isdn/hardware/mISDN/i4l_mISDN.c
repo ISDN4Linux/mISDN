@@ -1,4 +1,4 @@
-/* $Id: i4l_mISDN.c,v 1.11 2006/03/23 13:11:43 keil Exp $
+/* $Id: i4l_mISDN.c,v 1.12 2007/02/13 10:43:45 crich Exp $
  *
  * interface for old I4L hardware drivers to the CAPI driver
  *
@@ -10,7 +10,6 @@
  *
  */
 
-#include <linux/config.h>
 #include <linux/module.h>
 #include <linux/isdnif.h>
 #include <linux/delay.h>
@@ -21,7 +20,7 @@
 #include "dss1.h"
 #include "debug.h"
 
-static char *i4lcapi_revision = "$Revision: 1.11 $";
+static char *i4lcapi_revision = "$Revision: 1.12 $";
 
 /* data struct */
 typedef struct _i4l_channel	i4l_channel_t;

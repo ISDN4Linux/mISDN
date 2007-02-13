@@ -207,7 +207,6 @@ announced.
 */
 
 
-#include <linux/config.h>
 #include <linux/module.h>
 #include <linux/delay.h>
 
@@ -224,7 +223,7 @@ announced.
 
 extern const char *CardType[];
 
-static const char *l1oip_revision = "$Revision: 1.6 $";
+static const char *l1oip_revision = "$Revision: 1.7 $";
 
 static int l1oip_cnt;
 

@@ -22,7 +22,6 @@
 
 
 #include <linux/vmalloc.h>
-#include <linux/config.h>
 #include <linux/in.h>
 #include <net/sock.h>
 

@@ -93,7 +93,6 @@
 /* debug using register map (never use this, it will flood your system log) */
 //#define HFC_REGISTER_MAP
 
-#include <linux/config.h>
 #include <linux/module.h>
 #include <linux/pci.h>
 #include <linux/delay.h>
@@ -129,7 +128,7 @@ static void ph_state_change(channel_t *ch);
 
 extern const char *CardType[];
 
-static const char *hfcmulti_revision = "$Revision: 1.63 $";
+static const char *hfcmulti_revision = "$Revision: 1.64 $";
 
 static int HFC_cnt;
 

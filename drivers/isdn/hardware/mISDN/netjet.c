@@ -7,7 +7,6 @@
  * Based on HiSax NETJet driver by Karsten Keil
  */
 
-#include <linux/config.h>
 #include <linux/module.h>
 #include <linux/pci.h>
 #include <linux/delay.h>
@@ -26,7 +25,7 @@
 #define DTRACE printk
 #define DPRINT printk
 
-static const char *netjet_rev = "$Revision: 1.7 $";
+static const char *netjet_rev = "$Revision: 1.8 $";
 
 #define MAX_CARDS	4
 static int debug;

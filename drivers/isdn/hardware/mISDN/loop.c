@@ -25,7 +25,6 @@
 
  */
 
-#include <linux/config.h>
 #include <linux/module.h>
 #include <linux/delay.h>
 
@@ -36,7 +35,7 @@
 
 #include "loop.h"
 
-static const char *loop_revision = "$Revision: 1.6 $";
+static const char *loop_revision = "$Revision: 1.7 $";
 
 static int loop_cnt;
 

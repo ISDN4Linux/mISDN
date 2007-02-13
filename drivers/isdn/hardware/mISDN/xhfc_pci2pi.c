@@ -1,4 +1,4 @@
-/* $Id: xhfc_pci2pi.c,v 1.4 2006/03/17 07:43:41 mbachem Exp $
+/* $Id: xhfc_pci2pi.c,v 1.5 2007/02/13 10:43:45 crich Exp $
  *
  * PCI2PI Pci Bridge support for xhfc_su.c
  *
@@ -21,7 +21,6 @@
  *
  */
 
-#include <linux/config.h>
 #include <linux/module.h>
 #include <linux/delay.h>
 #include "xhfc_su.h"

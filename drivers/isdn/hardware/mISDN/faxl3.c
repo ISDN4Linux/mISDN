@@ -1,4 +1,4 @@
-/* $Id: faxl3.c,v 1.7 2006/03/23 13:11:43 keil Exp $
+/* $Id: faxl3.c,v 1.8 2007/02/13 10:43:45 crich Exp $
  *
  * Linux ISDN subsystem, Fax Layer 3
  *
@@ -11,7 +11,6 @@
  *
  */
 
-#include <linux/config.h>
 #include <linux/module.h>
 #include "layer1.h"
 #include "m_capi.h"
@@ -116,7 +115,7 @@ static int debug = 0;
 
 static mISDNobject_t faxl3_obj;
 
-static char *mISDN_faxl3_revision = "$Revision: 1.7 $";
+static char *mISDN_faxl3_revision = "$Revision: 1.8 $";
 
 static u_char FaxModulation[] = {24,48,72,74,96,98,122,146};
 static u_char FaxModulationTrain[] = {24,48,72,73,96,97,121,145};

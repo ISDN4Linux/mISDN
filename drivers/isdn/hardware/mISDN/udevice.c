@@ -1,4 +1,4 @@
-/* $Id: udevice.c,v 1.24 2006/12/21 15:25:06 nadi Exp $
+/* $Id: udevice.c,v 1.25 2007/02/13 10:43:45 crich Exp $
  *
  * Copyright 2000  by Karsten Keil <kkeil@isdn4linux.de>
  *
@@ -8,7 +8,6 @@
 #include <linux/stddef.h>
 #include <linux/poll.h>
 #include <linux/vmalloc.h>
-#include <linux/config.h>
 #include <linux/timer.h>
 #ifdef CONFIG_DEVFS_FS
 #include <linux/devfs_fs_kernel.h>

@@ -1,4 +1,4 @@
-/* $Id: sedl_fax.c,v 1.29 2006/12/21 15:25:06 nadi Exp $
+/* $Id: sedl_fax.c,v 1.30 2007/02/13 10:43:45 crich Exp $
  *
  * sedl_fax.c  low level stuff for Sedlbauer Speedfax + cards
  *
@@ -26,7 +26,6 @@
  * the firmware onto the card.
  */
 
-#include <linux/config.h>
 #include <linux/module.h>
 #include <linux/pci.h>
 #include <linux/delay.h>
@@ -46,7 +45,7 @@
 
 extern const char *CardType[];
 
-const char *Sedlfax_revision = "$Revision: 1.29 $";
+const char *Sedlfax_revision = "$Revision: 1.30 $";
 
 const char *Sedlbauer_Types[] =
 	{"None", "speed fax+", "speed fax+ pyramid", "speed fax+ pci"};

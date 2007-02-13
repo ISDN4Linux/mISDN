@@ -1,4 +1,4 @@
-/* $Id: core.c,v 1.39 2007/02/13 10:27:01 crich Exp $
+/* $Id: core.c,v 1.40 2007/02/13 10:43:45 crich Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -8,7 +8,6 @@
 
 #include <linux/types.h>
 #include <linux/stddef.h>
-#include <linux/config.h>
 #include <linux/module.h>
 #include <linux/spinlock.h>
 #include "core.h"
@@ -19,7 +18,7 @@
 #include <linux/smp_lock.h>
 #endif
 
-static char		*mISDN_core_revision = "$Revision: 1.39 $";
+static char		*mISDN_core_revision = "$Revision: 1.40 $";
 static char		*mISDN_core_version = MISDNVERSION ;
 
 LIST_HEAD(mISDN_objectlist);

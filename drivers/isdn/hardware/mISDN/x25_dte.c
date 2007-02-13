@@ -1,4 +1,4 @@
-/* $Id: x25_dte.c,v 1.12 2006/12/21 15:25:06 nadi Exp $
+/* $Id: x25_dte.c,v 1.13 2007/02/13 10:43:45 crich Exp $
  *
  * Linux modular ISDN subsystem, mISDN
  * X.25/X.31 Layer3 for DTE mode
@@ -12,7 +12,6 @@
  *
  */
 
-#include <linux/config.h>
 #include <linux/module.h>
 #include "core.h"
 #include "x25_l3.h"
@@ -23,7 +22,7 @@ static int debug = 0;
 
 static mISDNobject_t x25dte_obj;
 
-static char *mISDN_dte_revision = "$Revision: 1.12 $";
+static char *mISDN_dte_revision = "$Revision: 1.13 $";
 
 /* local prototypes */
 static x25_channel_t *	dte_create_channel(x25_l3_t *, int, u_char, __u16, int, u_char *);
