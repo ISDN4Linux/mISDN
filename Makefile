@@ -80,7 +80,7 @@ test_old_misdn:
 
 
 
-.PHONY: modules-install install all clean misdn-init
+.PHONY: modules-install install all clean misdn-init VERSION
 
 force:
 	rm -f $(LINUX)/include/linux/mISDNif.h
