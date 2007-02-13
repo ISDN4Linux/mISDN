@@ -1,4 +1,4 @@
-/* $Id: core.c,v 1.38 2006/12/21 15:25:06 nadi Exp $
+/* $Id: core.c,v 1.39 2007/02/13 10:27:01 crich Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -19,7 +19,8 @@
 #include <linux/smp_lock.h>
 #endif
 
-static char		*mISDN_core_revision = "$Revision: 1.38 $";
+static char		*mISDN_core_revision = "$Revision: 1.39 $";
+static char		*mISDN_core_version = MISDNVERSION ;
 
 LIST_HEAD(mISDN_objectlist);
 static rwlock_t		mISDN_objects_lock = RW_LOCK_UNLOCKED;
@@ -723,7 +724,7 @@ mISDNInit(void)
 	DECLARE_MUTEX_LOCKED(sem);
 	int err;
 
-	printk(KERN_INFO "Modular ISDN Stack core %s\n", mISDN_core_revision);
+	printk(KERN_INFO "Modular ISDN Stack core version (%s) revision (%s)\n", mISDN_core_version, mISDN_core_revision);
 	core_debug = debug;
 #ifdef MISDN_MEMDEBUG
 	err = __mid_init();

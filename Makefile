@@ -38,13 +38,13 @@ CONFIGS+=CONFIG_MISDN_NETJET=m
 
 #CONFIGS+=CONFIG_MISDN_NETDEV=y
 
-
+MISDNVERSION=$(shell cat VERSION)
 
 MINCLUDES+=-I$(MISDNDIR)/include
 
 all: test_old_misdn
 	cp $(MISDNDIR)/drivers/isdn/hardware/mISDN/Makefile.v2.6 $(MISDNDIR)/drivers/isdn/hardware/mISDN/Makefile
-	export MINCLUDES=$(MISDNDIR)/include ; make -C $(LINUX) SUBDIRS=$(MISDN_SRC) modules $(CONFIGS)  
+	export MINCLUDES=$(MISDNDIR)/include ; export MISDNVERSION=$(MISDNVERSION); make -C $(LINUX) SUBDIRS=$(MISDN_SRC) modules $(CONFIGS)  
 
 install: all modules-install misdn-init
 	$(DEPMOD) 
@@ -97,9 +97,16 @@ clean:
 	find . -iname "*.mod.c" -exec rm -rf {} \;
 	find . -iname "*.mod" -exec rm -rf {} \;
 
+VERSION:
+	if cvs status Makefile | grep "Sticky Tag"  | grep none > /dev/null ; then \
+		echo $(MAJOR)_$(MINOR)_$(SUBMINOR)-$$(date +"20%y_%m_%d" | sed -e "s/\//_/g") > VERSION ; \
+	else \
+		echo $(MAJOR)_$(MINOR)_$(SUBMINOR) > VERSION ; \
+	fi
+
 snapshot: clean
 	DIR=mISDN-$$(date +"20%y_%m_%d") ; \
-	echo $$(date +"20%y_%m_%d" | sed -e "s/\//_/g") > VERSION ; \
+	echo $(MAJOR)_$(MINOR)_$(SUBMINOR)-$$(date +"20%y_%m_%d" | sed -e "s/\//_/g") > VERSION ; \
 	mkdir -p /tmp/$$DIR ; \
 	cp -a * /tmp/$$DIR ; \
 	cd /tmp/; \

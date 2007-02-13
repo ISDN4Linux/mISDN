@@ -129,7 +129,7 @@ static void ph_state_change(channel_t *ch);
 
 extern const char *CardType[];
 
-static const char *hfcmulti_revision = "$Revision: 1.62 $";
+static const char *hfcmulti_revision = "$Revision: 1.63 $";
 
 static int HFC_cnt;
 
@@ -210,6 +210,8 @@ static const PCI_ENTRY id_list[] =
 	 "HFC-8S", 0, 8, 1, 0},
 	{CCAG_VID, CCAG_VID, HFC8S_ID, 0xB562, VENDOR_CCD,
 	 "HFC-8S Beronet Card", 0, 8, 1, 0},
+	{CCAG_VID, CCAG_VID, HFC8S_ID, 0xB56B, VENDOR_CCD,
+	 "HFC-8S Beronet Card (+)", 0, 8, 1, 8},
 	{CCAG_VID, CCAG_VID, HFCE1_ID, 0xB523, VENDOR_CCD,
 	 "HFC-E1 IOB1E1", 1, 1, 0, 1}, /* E1 only supports single clock */
 	{CCAG_VID, CCAG_VID, HFCE1_ID, 0xC523, VENDOR_CCD,
@@ -1134,6 +1136,36 @@ hfcmulti_leds(hfc_multi_t *hc)
 			((led[0]&1)<<2) | ((led[1]&1)<<3) );
 
 		break;
+		case 8:
+		{
+			unsigned long led=0;
+			int off=0;
+
+			if (hc->ledcount>2048) 
+				off=1;
+
+			for (i=0;i<8;i++) {
+				state = 0;
+				active = -1;
+				dch = hc->chan[(i<<2)|2].ch;
+				if (dch && test_bit(FLG_DCHANNEL, &dch->Flags)) {
+					state = dch->state;
+					active = test_bit(HFC_CFG_NTMODE, &hc->chan[dch->channel].cfg)?3:7;
+				}
+				if (state) {
+					if (state!=active && off)
+						led |= 1<<i;
+				} else
+					led |= 1<<i;
+			}
+			unsigned long leddw=led << 24 | led << 16 | led << 8 | led;
+			HFC_outb(hc, R_BRG_PCM_CFG, 1);
+			outw(0x4000, hc->pci_iobase + 4);
+			outl(leddw, hc->pci_iobase);
+			HFC_outb(hc, R_BRG_PCM_CFG, 0);
+		}
+
+		break;
 	}
 }
 /**************************/
@@ -1855,6 +1887,7 @@ handle_timer_irq(hfc_multi_t *hc)
 
 	if (hc->leds)
 		hfcmulti_leds(hc);
+
 }
 
 static irqreturn_t
@@ -3244,6 +3277,8 @@ init_card(hfc_multi_t *hc)
 		if (hc->irqcnt) {
 			if (debug & DEBUG_HFCMULTI_INIT)
 				printk(KERN_DEBUG "%s: done\n", __FUNCTION__);
+
+			
 			return(0);
 		} 
 		printk(KERN_WARNING "HFC PCI: IRQ(%d) getting no interrupts during init (try %d)\n", hc->irq, cnt);
@@ -4331,6 +4366,7 @@ static struct pci_device_id hfmultipci_ids[] __devinitdata = {
 	
 	/** Cards with HFC-8S Chip**/
 	{ CCAG_VID, 0x16B8   , CCAG_VID, 0xB562, 0, 0, 0 }, //BN8S
+	{ CCAG_VID, 0x16B8   , CCAG_VID, 0xB56B, 0, 0, 0 }, //BN8S+
 	{ CCAG_VID, 0x16B8   , CCAG_VID, 0x16B8, 0, 0, 0 }, //old Eval
 	{ CCAG_VID, 0x16B8   , CCAG_VID, 0xB521, 0, 0, 0 }, //IOB8ST Recording
 	{ CCAG_VID, 0x16B8   , CCAG_VID, 0xB522, 0, 0, 0 }, //IOB8ST 
