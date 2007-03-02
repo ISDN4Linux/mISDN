@@ -128,7 +128,7 @@ static void ph_state_change(channel_t *ch);
 
 extern const char *CardType[];
 
-static const char *hfcmulti_revision = "$Revision: 1.66 $";
+static const char *hfcmulti_revision = "$Revision: 1.67 $";
 
 static int HFC_cnt;
 
@@ -4126,7 +4126,7 @@ static int __devinit hfcpci_probe(struct pci_dev *pdev, const struct pci_device_
 			/* set optical line type */
 			if (protocol[port_idx] & 0x10000) {
 				if (!id_list[id_idx].opticalsupport)  {
-					print(KERN_INFO "This board has no optical support\n");
+					printk(KERN_INFO "This board has no optical support\n");
 				} else {
 
 					if (debug & DEBUG_HFCMULTI_INIT)
