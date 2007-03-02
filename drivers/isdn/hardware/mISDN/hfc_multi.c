@@ -128,7 +128,7 @@ static void ph_state_change(channel_t *ch);
 
 extern const char *CardType[];
 
-static const char *hfcmulti_revision = "$Revision: 1.65 $";
+static const char *hfcmulti_revision = "$Revision: 1.66 $";
 
 static int HFC_cnt;
 
@@ -153,6 +153,7 @@ typedef struct {
 	int ports;
 	int clock2;
 	int leds;
+	int opticalsupport;
 } PCI_ENTRY;
 
 static int poll_timer = 6;	/* default = 128 samples = 16ms */
@@ -182,58 +183,58 @@ static const PCI_ENTRY id_list[] =
 	 "HFC-E1 CCAG Eval", 1, 0, 1}, /* E1 only supports single clock */
 #endif
 	{CCAG_VID, CCAG_VID, HFC4S_ID, 0x08B4, VENDOR_CCD,
-	 "HFC-4S CCAG Eval (old)", 0, 4, 0, 0},
+	 "HFC-4S CCAG Eval (old)", 0, 4, 0, 0, 0},
 	{CCAG_VID, CCAG_VID, HFC8S_ID, 0x16B8, VENDOR_CCD,
-	 "HFC-8S CCAG Eval (old)", 0, 8, 0, 0},
+	 "HFC-8S CCAG Eval (old)", 0, 8, 0, 0, 0},
 	{CCAG_VID, CCAG_VID, HFCE1_ID, 0x30B1, VENDOR_CCD,
-	 "HFC-E1 CCAG Eval (old)", 1, 1, 0, 0},
+	 "HFC-E1 CCAG Eval (old)", 1, 1, 0, 0, 0},
 	{CCAG_VID, CCAG_VID, HFC4S_ID, 0xB520, VENDOR_CCD,
-	 "HFC-4S IOB4ST", 0, 4, 1, 2},
+	 "HFC-4S IOB4ST", 0, 4, 1, 2, 0},
 	{CCAG_VID, CCAG_VID, HFC4S_ID, 0xB620, VENDOR_CCD,
-	 "HFC-4S", 0, 4, 1, 2},
+	 "HFC-4S", 0, 4, 1, 2, 0},
 	{CCAG_VID, CCAG_VID, HFC4S_ID, 0xB550, VENDOR_CCD,
-	 "HFC-4S (junghanns 2.0)", 0, 4, 1, 2},
+	 "HFC-4S (junghanns 2.0)", 0, 4, 1, 2, 0},
 	{CCAG_VID, CCAG_VID, HFC4S_ID, 0xB560, VENDOR_CCD,
-	 "HFC-4S Beronet Card", 0, 4, 1, 2},
+	 "HFC-4S Beronet Card", 0, 4, 1, 2, 0},
 	{CCAG_VID, CCAG_VID, HFC4S_ID, 0xB568, VENDOR_CCD,
-	 "HFC-4S Beronet Card (mini PCI)", 0, 4, 1, 2},
+	 "HFC-4S Beronet Card (mini PCI)", 0, 4, 1, 2, 0},
 	{0xD161, 0xD161, 0xB410, 0xB410, VENDOR_CCD,
-	 "HFC-4S Digium Card", 0, 4, 0, 2},
+	 "HFC-4S Digium Card", 0, 4, 0, 2, 0},
 	{CCAG_VID, CCAG_VID, HFC4S_ID, 0xB540, VENDOR_CCD,
-	 "HFC-4S Swyx 4xS0 SX2 QuadBri", 0, 4, 1, 2},
+	 "HFC-4S Swyx 4xS0 SX2 QuadBri", 0, 4, 1, 2, 0},
 	{CCAG_VID, CCAG_VID, HFC8S_ID, 0xB521, VENDOR_CCD,
-	 "HFC-8S IOB4ST Recording", 0, 8, 1, 0},
+	 "HFC-8S IOB4ST Recording", 0, 8, 1, 0, 0},
 	{CCAG_VID, CCAG_VID, HFC8S_ID, 0xB522, VENDOR_CCD,
-	 "HFC-8S IOB8ST", 0, 8, 1, 0},
+	 "HFC-8S IOB8ST", 0, 8, 1, 0, 0},
 	{CCAG_VID, CCAG_VID, HFC8S_ID, 0xB552, VENDOR_CCD,
-	 "HFC-8S", 0, 8, 1, 0},
+	 "HFC-8S", 0, 8, 1, 0, 0},
 	{CCAG_VID, CCAG_VID, HFC8S_ID, 0xB622, VENDOR_CCD,
-	 "HFC-8S", 0, 8, 1, 0},
+	 "HFC-8S", 0, 8, 1, 0, 0},
 	{CCAG_VID, CCAG_VID, HFC8S_ID, 0xB562, VENDOR_CCD,
-	 "HFC-8S Beronet Card", 0, 8, 1, 0},
+	 "HFC-8S Beronet Card", 0, 8, 1, 0, 0},
 	{CCAG_VID, CCAG_VID, HFC8S_ID, 0xB56B, VENDOR_CCD,
-	 "HFC-8S Beronet Card (+)", 0, 8, 1, 8},
+	 "HFC-8S Beronet Card (+)", 0, 8, 1, 8, 0},
 	{CCAG_VID, CCAG_VID, HFCE1_ID, 0xB523, VENDOR_CCD,
-	 "HFC-E1 IOB1E1", 1, 1, 0, 1}, /* E1 only supports single clock */
+	 "HFC-E1 IOB1E1", 1, 1, 0, 1, 0}, /* E1 only supports single clock */
 	{CCAG_VID, CCAG_VID, HFCE1_ID, 0xC523, VENDOR_CCD,
-	 "HFC-E1", 1, 1, 0, 1}, /* E1 only supports single clock */
+	 "HFC-E1", 1, 1, 0, 1, 0}, /* E1 only supports single clock */
 	{CCAG_VID, CCAG_VID, HFCE1_ID, 0xB56A, VENDOR_CCD,
-	 "HFC-E1 Beronet Card (mini PCI)", 1, 1, 0, 1}, /* E1 only supports single clock */
+	 "HFC-E1 Beronet Card (mini PCI)", 1, 1, 0, 1, 0}, /* E1 only supports single clock */
 	{CCAG_VID, CCAG_VID, HFCE1_ID, 0xB563, VENDOR_CCD,
-	 "HFC-E1 Beronet Card", 1, 1, 0, 1}, /* E1 only supports single clock */
+	 "HFC-E1 Beronet Card", 1, 1, 0, 1, 0}, /* E1 only supports single clock */
 	{CCAG_VID, CCAG_VID, HFCE1_ID, 0xB565, VENDOR_CCD,
-	 "HFC-E1+ Beronet Card (Dual)", 1, 1, 0, 1}, /* E1 only supports single clock */
+	 "HFC-E1+ Beronet Card (Dual)", 1, 1, 0, 1, 0}, /* E1 only supports single clock */
 	{CCAG_VID, CCAG_VID, HFCE1_ID, 0xB564, VENDOR_CCD,
-	 "HFC-E1 Beronet Card (Dual)", 1, 1, 0, 1}, /* E1 only supports single clock */
+	 "HFC-E1 Beronet Card (Dual)", 1, 1, 0, 1, 0}, /* E1 only supports single clock */
 	{0x10B5, CCAG_VID, 0x9030, 0x3136, VENDOR_CCD,
-	 "HFC-4S PCIBridgeEval", 0, 4, 0, 0},      // PLX PCI-Bridge
+	 "HFC-4S PCIBridgeEval", 0, 4, 0, 0, 0},      // PLX PCI-Bridge
 	{CCAG_VID, CCAG_VID, HFC4S_ID, 0xB566, VENDOR_CCD,
-	 "HFC-2S Beronet Card", 0, 2, 1, 3},
+	 "HFC-2S Beronet Card", 0, 2, 1, 3, 0},
 	{CCAG_VID, CCAG_VID, HFC4S_ID, 0xB569, VENDOR_CCD,
-	 "HFC-2S Beronet Card (mini PCI)", 0, 2, 1, 3},
+	 "HFC-2S Beronet Card (mini PCI)", 0, 2, 1, 3, 0},
 	{CCAG_VID, CCAG_VID, HFC4S_ID, 0xB567, VENDOR_CCD,
-	 "HFC-1S Beronet Card (mini PCI)", 0, 1, 1, 3},
-	{0, 0, 0, 0, NULL, NULL, 0, 0, 0},
+	 "HFC-1S Beronet Card (mini PCI)", 0, 1, 1, 3, 0},
+	{0, 0, 0, 0, NULL, NULL, 0, 0, 0, 0},
 };
 
 
@@ -1160,10 +1161,12 @@ hfcmulti_leds(hfc_multi_t *hc)
 					led |= 1<<i;
 			}
 			unsigned long leddw=led << 24 | led << 16 | led << 8 | led;
-			HFC_outb(hc, R_BRG_PCM_CFG, 1);
+			//HFC_outb(hc, R_BRG_PCM_CFG, 1);
+			//HFC_outb(c, R_BRG_PCM_CFG, (0x0 << 6) | 0x3); /*was _io before*/
+			HFC_outb(hc, R_BRG_PCM_CFG, 1 | V_PCM_CLK);
 			outw(0x4000, hc->pci_iobase + 4);
 			outl(leddw, hc->pci_iobase);
-			HFC_outb(hc, R_BRG_PCM_CFG, 0);
+			HFC_outb(hc, R_BRG_PCM_CFG, V_PCM_CLK);
 		}
 
 		break;
@@ -3420,6 +3423,7 @@ setup_pci(hfc_multi_t *hc, struct pci_dev *pdev, int id_idx)
 		return (-EIO);
 	}
 	hc->leds = id_list[id_idx].leds;
+	hc->opticalsupport = id_list[id_idx].opticalsupport;
 	
 #ifdef CONFIG_HFCMULTI_PCIMEM
 	hc->pci_membase = NULL;
@@ -3859,6 +3863,12 @@ static int __devinit hfcpci_probe(struct pci_dev *pdev, const struct pci_device_
 		hfc_type=0x4;
 		break;
 
+		case 0xB410:
+		bchperport = 2;
+		card_type=0;
+		hfc_type=0x4;
+		break;
+
 		case HFC8S_ID:
 		bchperport = 2;
 		card_type=0;
@@ -4115,9 +4125,14 @@ static int __devinit hfcpci_probe(struct pci_dev *pdev, const struct pci_device_
 			/* E1 */
 			/* set optical line type */
 			if (protocol[port_idx] & 0x10000) {
-				if (debug & DEBUG_HFCMULTI_INIT)
-					printk(KERN_DEBUG "%s: PROTOCOL set optical interfacs: card(%d) port(%d)\n", __FUNCTION__, HFC_idx+1, pt);
-				test_and_set_bit(HFC_CFG_OPTICAL, &hc->chan[ch].cfg);
+				if (!id_list[id_idx].opticalsupport)  {
+					print(KERN_INFO "This board has no optical support\n");
+				} else {
+
+					if (debug & DEBUG_HFCMULTI_INIT)
+						printk(KERN_DEBUG "%s: PROTOCOL set optical interfacs: card(%d) port(%d)\n", __FUNCTION__, HFC_idx+1, pt);
+					test_and_set_bit(HFC_CFG_OPTICAL, &hc->chan[ch].cfg);
+				}
 			}
 
 			/* set LOS report */
