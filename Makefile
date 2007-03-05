@@ -9,7 +9,12 @@ export INSTALL_PREFIX
 
 #PATH to linux source/headers
 #LINUX=/usr/src/linux
-MODS=/lib/modules/$(shell uname -r)
+
+ifndef KVERS
+KVERS:=$(shell uname -r)
+endif
+
+MODS=/lib/modules/$(KVERS)
 LINUX=$(MODS)/build
 LINUX_SOURCE=$(MODS)/source
 UPDATE_MODULES=$(shell which update-modules)
