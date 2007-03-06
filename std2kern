@@ -128,6 +128,7 @@ usage() {
 	-r      reverse directions of diff
 	-c FILE	Use FILE as control file for $PREPARSER (only with -u)
 	-t      Test, don't really copy files
+	-p PREFIX use PREFIX to install mISDNif.h in the system in the path $PREFIX/usr/include/linux
 
 	Without any files given, within the whole tree, the "right"
 	files are copied. When any files are given in the commandline,
@@ -190,7 +191,7 @@ calc_version_file() {
 	return 1
 }
 
-while getopts :dhk:uc:vtidr a ; do
+while getopts :p:dhk:uc:vtidr a ; do
 	case $a in
 		\?)	case $OPTARG in
 				k)	echo "-k requires Kernel directory parameter"
@@ -218,6 +219,8 @@ while getopts :dhk:uc:vtidr a ; do
 			;;
 		r)      DIFFREV=true;
 			;;
+		p)      PREFIX=$OPTARG;
+			;;
 		h)	usage
 			;;
 	esac
@@ -228,6 +231,7 @@ echo
 echo "BE AWARE!!"
 echo 
 echo "You are just attempting to overwrite your Kernel mISDN Sources"
+echo "and to install mISDNif.h in your /usr/include/linux directory"
 echo "you probably prefer to use make install."
 echo
 echo "KERNELDIR=$KERNELDIR"
@@ -240,6 +244,11 @@ if [ ! $i == "yes" ] ; then
 	echo "OK exiting"
 	exit 1
 fi
+
+#copy mISDNif.h to allow userspace apps to compile againt mISDN
+echo "Installing mISDNif.h in $PREFIX/usr/include/linux/mISDNif.h"
+mkdir -p $PREFIX/usr/include/linux/
+cp include/linux/mISDNif.h $PREFIX/usr/include/linux/
 
 if [ -z "$VERSION" -o -z "$PATCHLEVEL" ] ; then
     if ! [ -f $KERNELDIR/Makefile ] ; then
