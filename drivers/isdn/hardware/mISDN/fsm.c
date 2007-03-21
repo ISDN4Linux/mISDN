@@ -1,4 +1,4 @@
-/* $Id: fsm.c,v 1.4 2004/01/27 01:50:20 keil Exp $
+/* $Id: fsm.c,v 1.5 2007/03/21 13:26:56 crich Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -127,8 +127,10 @@ mISDN_FsmAddTimer(struct FsmTimer *ft,
 #endif
 
 	if (timer_pending(&ft->tl)) {
-		printk(KERN_WARNING "mISDN_FsmAddTimer: timer already active!\n");
-		ft->fi->printdebug(ft->fi, "mISDN_FsmAddTimer already active!");
+		if (ft->fi->debug) {
+			printk(KERN_WARNING "mISDN_FsmAddTimer: timer already active!\n");
+			ft->fi->printdebug(ft->fi, "mISDN_FsmAddTimer already active!");
+		}
 		return -1;
 	}
 	init_timer(&ft->tl);
