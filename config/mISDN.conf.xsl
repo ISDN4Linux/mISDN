@@ -29,6 +29,12 @@
   <xsl:call-template name="MISDNDSPmodule" />
  </xsl:when>
 
+ <xsl:otherwise>
+  <xsl:value-of select="concat('MODULE:',.)" />
+<xsl:text>
+</xsl:text>
+ </xsl:otherwise>
+
 </xsl:choose>
 
 </xsl:for-each>

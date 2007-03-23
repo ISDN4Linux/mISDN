@@ -1,4 +1,4 @@
-/* $Id: dsp_audio.c,v 1.6 2006/09/14 15:34:12 gkelleter Exp $
+/* $Id: dsp_audio.c,v 1.6.2.1 2007/03/23 13:48:57 nadi Exp $
  *
  * Audio support data for mISDN_dsp.
  *
@@ -153,9 +153,11 @@ s32 dsp_audio_alaw_to_s32[256] =
 };
 
 s32 *dsp_audio_law_to_s32;
+EXPORT_SYMBOL(dsp_audio_law_to_s32);
 
 /* signed 16-bit -> law */
 u8 dsp_audio_s16_to_law[65536];
+EXPORT_SYMBOL(dsp_audio_s16_to_law);
 
 /* table is used to generate s16_to_alaw */
 static short dsp_audio_alaw_relations[512] =

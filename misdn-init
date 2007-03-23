@@ -84,6 +84,7 @@ function check_cmd {
 }
 
 check_cmd modprobe
+check_cmd modinfo
 check_cmd rmmod
 check_cmd insmod
 check_cmd lspci
@@ -690,6 +691,19 @@ function check_cfg_file {
 	fi
 }
 
+function dsp_modules {
+	moddir=$(LC_ALL=C ${MODINFO} mISDN_core | sed -ne 's/filename:[^\/]*\(.*\/\)mISDN_core.ko/\1/p')
+
+	for mod in $(ls ${moddir}); do
+		case "${mod}" in
+			mISDN_dsp_*)
+				echo "${1} ${mod%%.ko}"
+				${1} ${mod%%.ko}
+				;;
+		esac
+	done
+}
+
 # MAIN #############
 
 case "$1" in
@@ -707,6 +721,7 @@ case "$1" in
 		
 		echo "${MODPROBE} mISDN_dsp debug=0x0 options=$dsp_options $dsp_poll_option $dtmfthreshold_option"
 		${MODPROBE} mISDN_dsp debug=0x0 options=$dsp_options $dsp_poll_option $dtmfthreshold_option
+		dsp_modules ${MODPROBE}
 		sleep 1
 		
 		if [ ! -e /dev/mISDN ]; then
@@ -725,6 +740,7 @@ case "$1" in
 		check_asterisk
 
 		
+		dsp_modules "${MODPROBE} -r"
 		for mod in $(lsmod | sed -ne '/Module/!{s/\([^ ]*\).*/\1/;p}');
 		do
 			case "${mod}" in

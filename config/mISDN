@@ -84,7 +84,7 @@ declare -a SCAN_port_opts
 function parse_config
 {
 	local CONFIG=$(${XSLTPROC} ${MISDN_CONF_XSL} ${MISDN_CONF})
-	local t p l line i tmpcmd curr tmpstr
+	local t p l line i tmpcmd curr tmpstr extra_modules
 	local IFS=$'\n'
 	
 	START_COMMANDS[${#START_COMMANDS[@]}]="${MODPROBE} --ignore-install capi"
@@ -112,6 +112,9 @@ function parse_config
 				;;
 			MODULE:hfcmulti*)
 				HFCMULTI_options=${line:16}
+				;;
+			MODULE:mISDN_dsp_*)
+				extra_modules[${#extra_modules[@]}]=${line:7}
 				;;
 			MODULE:mISDN_dsp*)
 				MISDNDSP_options=${line:17}
@@ -191,6 +194,12 @@ function parse_config
 	fi
 
 	START_COMMANDS[${#START_COMMANDS[@]}]="${MODPROBE} --ignore-install mISDN_dsp ${MISDNDSP_options}"
+	
+	i=1
+	while [ ! -z "${extra_modules[${i}]}" ]; do
+		START_COMMANDS[${#START_COMMANDS[@]}]="${MODPROBE} --ignore-install ${extra_modules[${i}]}"
+		let "i = ${i} + 1"
+	done
 }
 
 function run_start_commands
@@ -211,7 +220,7 @@ function run_stop_commands
 
 	for mod in $(lsmod | ${SED} -ne '/Module/!{s/\([^ ]*\).*/\1/;p}');	do
 		case "${mod}" in
-			mISDN_capi | mISDN_dsp | l3udss1 | mISDN_l2 | mISDN_l1 | mISDN_isac | hfcmulti | avmfritz)
+			mISDN_capi | mISDN_dsp* | l3udss1 | mISDN_l2 | mISDN_l1 | mISDN_isac | hfcmulti | avmfritz)
 				STOP_COMMANDS[0]="${STOP_COMMANDS[0]:-"${MODPROBE} -r --ignore-remove"} ${mod}"
 				;;
 			mISDN_core)
@@ -332,6 +341,9 @@ Options: debug=<number>, options=<number>, poll=<number>,
 <mISDNconf>
 ${TAB}<module poll=\"128\" debug=\"0\" timer=\"no\">hfcmulti</module>
 ${TAB}<module debug=\"0\" options=\"0\">mISDN_dsp</module>
+${TAB}<module>mISDN_dsp_mec2</module>
+${TAB}<module>mISDN_dsp_mg2ec</module>
+${TAB}<module>mISDN_dsp_kb1ec</module>
 ${TAB}<devnode user=\"root\" group=\"root\" mode=\"644\">mISDN</devnode>"
 	local FOOTER="</mISDNconf>"
 	local i=0 j=0 MAIN=""

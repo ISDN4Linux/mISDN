@@ -1,4 +1,4 @@
-/* $Id: dsp.h,v 1.12 2006/09/06 17:24:22 crich Exp $
+/* $Id: dsp.h,v 1.12.2.1 2007/03/23 13:48:57 nadi Exp $
  *
  * Audio support data for ISDN4Linux.
  *
@@ -38,26 +38,6 @@
 #endif
 
 #include "dsp_ecdis.h"
-
-/*
- * You are now able to choose between the Mark2 and the 
- * kb1 Echo cancellor. Just comment the one and comment 
- * out the other.
- */
-
-
-//#define AGGRESSIVE_SUPPRESSOR
-
-//#include "dsp_mec2.h"
-//#include "dsp_kb1ec.h"
-#include "dsp_mg2ec.h"
-
-
-
-/*
-*  uncomment this one to cancel echo more aggressive
-*/
-//#define AGGRESSIVE_SUPPRESSOR
 
 extern int dsp_options;
 extern int dsp_debug;
@@ -148,11 +128,13 @@ typedef struct _dtmf_t {
 } dtmf_t;
 
 
-/****************
- * cancel stuff *
- ****************/
-
-
+/******************
+ * pipeline stuff *
+ ******************/
+typedef struct _dsp_pipeline {
+	rwlock_t  lock;
+	struct list_head list;
+} dsp_pipeline_t;
 
 /***************
  * tones stuff *
@@ -238,26 +220,7 @@ typedef struct _dsp {
 	u8		bf_data_out[9];
 	int		bf_sync;
 
-	/* echo cancellation stuff */
-	int 		queue_cancel[3];
-	int		cancel_enable;
-	int             cancel_hardware; /*we are using hw echo canc*/
-	struct echo_can_state * ec;      /**< == NULL: echo cancellation disabled;
-				      != NULL: echo cancellation enabled */
-
-	echo_can_disable_detector_state_t* ecdis_rd;
-	echo_can_disable_detector_state_t* ecdis_wr;
-	
-	uint16_t echotimer;
-	uint16_t echostate;
-	uint16_t echolastupdate;
-	
-	char txbuf[ECHOCAN_BUFLEN];
-	int txbuflen;
-	
-	char rxbuf[ECHOCAN_BUFLEN];
-	int rxbuflen;
-	
+	dsp_pipeline_t pipeline;
 } dsp_t;
 
 /* functions */
@@ -290,8 +253,11 @@ extern void dsp_bf_decrypt(dsp_t *dsp, u8 *data, int len);
 extern int dsp_bf_init(dsp_t *dsp, const u8 *key, unsigned int keylen);
 extern void dsp_bf_cleanup(dsp_t *dsp);
 
-extern void dsp_cancel_tx(dsp_t *dsp, u8 *data, int len);
-extern void dsp_cancel_rx(dsp_t *dsp, u8 *data, int len);
-extern int dsp_cancel_init(dsp_t *dsp, int taps, int training, int delay);
-
+extern int  dsp_pipeline_module_init (void);
+extern void dsp_pipeline_module_exit (void);
+extern int  dsp_pipeline_init        (dsp_pipeline_t *pipeline);
+extern void dsp_pipeline_destroy     (dsp_pipeline_t *pipeline);
+extern int  dsp_pipeline_build       (dsp_pipeline_t *pipeline, const char *cfg);
+extern void dsp_pipeline_process_tx  (dsp_pipeline_t *pipeline, u8 *data, int len);
+extern void dsp_pipeline_process_rx  (dsp_pipeline_t *pipeline, u8 *data, int len);
 
