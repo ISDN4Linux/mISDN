@@ -1,4 +1,4 @@
-/* $Id: dsp_core.c,v 1.27 2007/02/13 10:43:45 crich Exp $
+/* $Id: dsp_core.c,v 1.28 2007/03/23 17:23:03 crich Exp $
  *
  * Author       Andreas Eversberg (jolly@jolly.de)
  * Based on source code structure by
@@ -169,7 +169,7 @@ There are three things that need to transmit data to card:
  
  */
 
-const char *dsp_revision = "$Revision: 1.27 $";
+const char *dsp_revision = "$Revision: 1.28 $";
 
 #include <linux/delay.h>
 #include <linux/module.h>
@@ -476,6 +476,11 @@ dsp_from_up(mISDNinstance_t *inst, struct sk_buff *skb)
 				}
 
 			} else {
+				if (dsp->features.pcm_id>=0) {
+					printk("Not sending Data to CMX -- > returning because of HW bridge\n");
+					dev_kfree_skb(skb);
+					break;
+				}
 				/* send data to tx-buffer (if no tone is played) */
 				spin_lock_irqsave(&dsp_obj.lock, flags);
 				if (!dsp->tone.tone) {
