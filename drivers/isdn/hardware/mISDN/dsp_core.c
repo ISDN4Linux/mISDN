@@ -1,4 +1,4 @@
-/* $Id: dsp_core.c,v 1.27.2.1 2007/03/23 13:48:57 nadi Exp $
+/* $Id: dsp_core.c,v 1.27.2.2 2007/03/23 17:31:13 crich Exp $
  *
  * Author       Andreas Eversberg (jolly@jolly.de)
  * Based on source code structure by
@@ -169,7 +169,7 @@ There are three things that need to transmit data to card:
  
  */
 
-const char *dsp_revision = "$Revision: 1.27.2.1 $";
+const char *dsp_revision = "$Revision: 1.27.2.2 $";
 
 #include <linux/delay.h>
 #include <linux/module.h>
@@ -476,6 +476,12 @@ dsp_from_up(mISDNinstance_t *inst, struct sk_buff *skb)
 			spin_lock_irqsave(&dsp_obj.lock, flags);
 			ret = dsp_control_req(dsp, hh, skb);
 			spin_unlock_irqrestore(&dsp_obj.lock, flags);
+				printk("%x Having Conference, still receiving Data !!!\n", dsp->inst.id);
+				if (dsp->features.pcm_id>=0) {
+					printk(" -- > returning cause HW bridge\n");
+					dev_kfree_skb(skb);
+					break;
+				}
 			
 			break;
 		case DL_ESTABLISH | REQUEST:
