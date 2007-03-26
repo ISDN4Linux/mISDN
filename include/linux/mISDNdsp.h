@@ -4,8 +4,8 @@
 typedef struct _mISDN_dsp_element {
 	void* (* new)        (const char *arg);
 	void  (* free)       (void *p);
-	void  (* process_tx) (void *p, u8 *data, int len);
-	void  (* process_rx) (void *p, u8 *data, int len);
+	void  (* process_tx) (void *p, unsigned char *data, int len);
+	void  (* process_rx) (void *p, unsigned char *data, int len);
 	char  name[];
 } mISDN_dsp_element_t;
 
