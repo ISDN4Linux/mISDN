@@ -105,7 +105,7 @@ mISDN_capi-objs := capi.o contr.o listen.o appl.o plci.o app_plci.o ncci.o asn1.
                    asn1_basic_service.o asn1_address.o asn1_enc.o capi_enc.o \
                    supp_serv.o
 mISDN_dtmf-objs := dtmf.o
-mISDN_dsp-objs := dsp_core.o dsp_cmx.o dsp_tones.o dsp_dtmf.o dsp_audio.o dsp_blowfish.o dsp_pipeline.o
+mISDN_dsp-objs := dsp_core.o dsp_cmx.o dsp_tones.o dsp_dtmf.o dsp_audio.o dsp_blowfish.o dsp_pipeline.o dsp_hwec.o
 mISDN_dsp_mec2-objs := dsp_mec2.o
 mISDN_dsp_kb1ec-objs := dsp_kb1ec.o
 mISDN_dsp_mg2ec-objs := dsp_mg2ec.o

@@ -33,7 +33,12 @@
 #include "layer1.h"
 #include "dsp.h"
 
-/* Structures */
+extern mISDN_dsp_element_t *dsp_hwec;
+extern void dsp_hwec_enable          (dsp_t *dsp, const char *arg);
+extern void dsp_hwec_disable         (dsp_t *dsp);
+extern int  dsp_hwec_init            (void);
+extern void dsp_hwec_exit            (void);
+
 typedef struct _dsp_pipeline_entry {
 	mISDN_dsp_element_t *elem;
 	void                *p;
@@ -45,11 +50,9 @@ typedef struct _dsp_element_entry {
 	struct list_head     list;
 } dsp_element_entry_t;
 
-/* Static Variables */
-rwlock_t dsp_elements_lock;
+static rwlock_t dsp_elements_lock;
 static LIST_HEAD(dsp_elements);
 
-/* Code */
 int mISDN_dsp_element_register (mISDN_dsp_element_t *elem)
 {
 	dsp_element_entry_t *entry;
@@ -101,6 +104,8 @@ int dsp_pipeline_module_init (void)
 
 	printk(KERN_DEBUG "%s: dsp pipeline module initialized\n", __FUNCTION__);
 
+	dsp_hwec_init();
+
 	return 0;
 }
 
@@ -108,6 +113,8 @@ void dsp_pipeline_module_exit (void)
 {
 	dsp_element_entry_t *entry, *n;
 	u_long flags;
+
+	dsp_hwec_exit();
 
 	write_lock_irqsave(&dsp_elements_lock, flags);
 	list_for_each_entry_safe(entry, n, &dsp_elements, list) {
@@ -139,7 +146,10 @@ static inline void _dsp_pipeline_destroy (dsp_pipeline_t *pipeline)
 
 	list_for_each_entry_safe(entry, n, &pipeline->list, list) {
 		list_del(&entry->list);
-		entry->elem->free(entry->p);
+		if (entry->elem == dsp_hwec)
+			dsp_hwec_disable(container_of(pipeline, dsp_t, pipeline));
+		else
+			entry->elem->free(entry->p);
 		kfree(entry);
 	}
 }
@@ -210,10 +220,22 @@ int dsp_pipeline_build (dsp_pipeline_t *pipeline, const char *cfg)
 					goto _out;
 				}
 				pipeline_entry->elem = elem;
-				pipeline_entry->p = elem->new(args);
-				list_add_tail(&pipeline_entry->list, &pipeline->list);
-				
-				printk(KERN_DEBUG "%s: created instance of %s%s%s\n", __FUNCTION__, name, args ? " with args " : "", args ? args : "");
+
+				if (elem == dsp_hwec) {
+					/* This is a hack to make the hwec available as a pipeline module */
+					dsp_hwec_enable(container_of(pipeline, dsp_t, pipeline), args);
+					list_add_tail(&pipeline_entry->list, &pipeline->list);
+				} else {
+					pipeline_entry->p = elem->new(args);
+					if (pipeline_entry->p) {
+						list_add_tail(&pipeline_entry->list, &pipeline->list);
+						printk(KERN_DEBUG "%s: created instance of %s%s%s\n", __FUNCTION__, name, args ? " with args " : "", args ? args : "");
+					} else {
+						printk(KERN_DEBUG "%s: failed to add entry to pipeline: %s (new() returned NULL)\n", __FUNCTION__, elem->name);
+						kfree(pipeline_entry);
+						incomplete = 1;
+					}
+				}
 				found = 1;
 				break;
 			}
@@ -246,7 +268,8 @@ void dsp_pipeline_process_tx (dsp_pipeline_t *pipeline, u8 *data, int len)
 		return;
 	}
 	list_for_each_entry(entry, &pipeline->list, list)
-		entry->elem->process_tx(entry->p, data, len);
+		if (entry->elem->process_tx)
+			entry->elem->process_tx(entry->p, data, len);
 	read_unlock(&pipeline->lock);
 }
 
@@ -262,7 +285,8 @@ void dsp_pipeline_process_rx (dsp_pipeline_t *pipeline, u8 *data, int len)
 		return;
 	}
 	list_for_each_entry_reverse(entry, &pipeline->list, list)
-		entry->elem->process_rx(entry->p, data, len);
+		if (entry->elem->process_rx)
+			entry->elem->process_rx(entry->p, data, len);
 	read_unlock(&pipeline->lock);
 }
 
