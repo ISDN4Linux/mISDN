@@ -1,7 +1,7 @@
 /*
  * loop.c  loop driver for looped bchannel pairs
  *
- * Author	Andreas Eversberg (jolly@jolly.de)
+ * Author	Andreas Eversberg (jolly@eversberg.eu)
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -35,7 +35,7 @@
 
 #include "loop.h"
 
-static const char *loop_revision = "$Revision: 1.7 $";
+static const char *loop_revision = "$Revision: 1.8 $";
 
 static int loop_cnt;
 

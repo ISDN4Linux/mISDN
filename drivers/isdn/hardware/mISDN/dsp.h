@@ -1,8 +1,8 @@
-/* $Id: dsp.h,v 1.12 2006/09/06 17:24:22 crich Exp $
+/* $Id: dsp.h,v 1.13 2007/03/27 15:06:29 jolly Exp $
  *
  * Audio support data for ISDN4Linux.
  *
- * Copyright 2002/2003 by Andreas Eversberg (jolly@jolly.de)
+ * Copyright 2002/2003 by Andreas Eversberg (jolly@eversberg.eu)
  *
  * This software may be used and distributed according to the terms
  * of the GNU General Public License, incorporated herein by reference.

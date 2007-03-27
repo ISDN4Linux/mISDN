@@ -1,8 +1,8 @@
-/* $Id: dsp_tones.c,v 1.7 2006/03/06 12:52:07 keil Exp $ 
+/* $Id: dsp_tones.c,v 1.8 2007/03/27 15:06:29 jolly Exp $ 
  *
  * Audio support data for ISDN4Linux.
  *
- * Copyright Andreas Eversberg (jolly@jolly.de)
+ * Copyright Andreas Eversberg (jolly@eversberg.eu)
  *
  * This software may be used and distributed according to the terms
  * of the GNU General Public License, incorporated herein by reference.

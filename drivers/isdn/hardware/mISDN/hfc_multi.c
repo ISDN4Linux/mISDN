@@ -1,7 +1,7 @@
 /*
  * hfc_multi.c  low level driver for hfc-4s/hfc-8s/hfc-e1 based cards
  *
- * Author	Andreas Eversberg (jolly@jolly.de)
+ * Author	Andreas Eversberg (jolly@eversberg.eu)
  * ported to mqueue mechanism:
  * 		Peter Sprenger (sprengermoving-bytes.de)
  *
@@ -128,7 +128,7 @@ static void ph_state_change(channel_t *ch);
 
 extern const char *CardType[];
 
-static const char *hfcmulti_revision = "$Revision: 1.67 $";
+static const char *hfcmulti_revision = "$Revision: 1.68 $";
 
 static int HFC_cnt;
 

@@ -1,8 +1,8 @@
-/* $Id: dsp_dtmf.c,v 1.6 2006/07/04 13:38:45 crich Exp $
+/* $Id: dsp_dtmf.c,v 1.7 2007/03/27 15:06:29 jolly Exp $
  *
  * DTMF decoder.
  *
- * Copyright            by Andreas Eversberg (jolly@jolly.de)
+ * Copyright            by Andreas Eversberg (jolly@eversberg.eu)
  *			based on different decoders such as ISDN4Linux
  *
  * This software may be used and distributed according to the terms

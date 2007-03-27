@@ -4,7 +4,7 @@
  *
  * NOTE: It is not compatible with TDMoIP nor "ISDN over IP".
  *
- * Author	Andreas Eversberg (jolly@jolly.de)
+ * Author	Andreas Eversberg (jolly@eversberg.eu)
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -223,7 +223,7 @@ announced.
 
 extern const char *CardType[];
 
-static const char *l1oip_revision = "$Revision: 1.7 $";
+static const char *l1oip_revision = "$Revision: 1.8 $";
 
 static int l1oip_cnt;
 

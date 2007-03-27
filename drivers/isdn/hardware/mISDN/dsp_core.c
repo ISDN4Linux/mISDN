@@ -1,6 +1,6 @@
-/* $Id: dsp_core.c,v 1.28 2007/03/23 17:23:03 crich Exp $
+/* $Id: dsp_core.c,v 1.29 2007/03/27 15:06:29 jolly Exp $
  *
- * Author       Andreas Eversberg (jolly@jolly.de)
+ * Author       Andreas Eversberg (jolly@eversberg.eu)
  * Based on source code structure by
  *		Karsten Keil (keil@isdn4linux.de)
  *
@@ -169,7 +169,7 @@ There are three things that need to transmit data to card:
  
  */
 
-const char *dsp_revision = "$Revision: 1.28 $";
+const char *dsp_revision = "$Revision: 1.29 $";
 
 #include <linux/delay.h>
 #include <linux/module.h>

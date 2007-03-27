@@ -1,8 +1,8 @@
-/* $Id: dsp_cmx.c,v 1.14 2006/06/21 13:25:46 crich Exp $
+/* $Id: dsp_cmx.c,v 1.15 2007/03/27 15:06:29 jolly Exp $
  *
  * Audio crossconnecting/conferrencing (hardware level).
  *
- * Copyright 2002 by Andreas Eversberg (jolly@jolly.de)
+ * Copyright 2002 by Andreas Eversberg (jolly@eversberg.eu)
  *
  * This software may be used and distributed according to the terms
  * of the GNU General Public License, incorporated herein by reference.
