@@ -161,26 +161,28 @@ function parse_config
 				;;
 		esac
 	done
-	
-	tmpcmd="${MODPROBE} --ignore-install hfcmulti type=${HFCMULTI_type[0]}"
-	i=1
-	while [ ! -z "${HFCMULTI_type[${i}]}" ]; do
-		tmpcmd="${tmpcmd},${HFCMULTI_type[${i}]}"
-		let "i = ${i} + 1"
-	done
-	tmpcmd="${tmpcmd} protocol=${HFCMULTI_protocol[0]}"
-	i=1
-	while [ ! -z "${HFCMULTI_protocol[${i}]}" ]; do
-		tmpcmd="${tmpcmd},${HFCMULTI_protocol[${i}]}"
-		let "i = ${i} + 1"
-	done
-	tmpcmd="${tmpcmd} layermask=${HFCMULTI_layermask[0]}"
-	i=1
-	while [ ! -z "${HFCMULTI_layermask[${i}]}" ]; do
-		tmpcmd="${tmpcmd},${HFCMULTI_layermask[${i}]}"
-		let "i = ${i} + 1"
-	done
-	START_COMMANDS[${#START_COMMANDS[@]}]="${tmpcmd} ${HFCMULTI_options}"
+
+	if [ ! -z "${HFCMULTI_protocol[0]}" ]; then
+		tmpcmd="${MODPROBE} --ignore-install hfcmulti type=${HFCMULTI_type[0]}"
+		i=1
+		while [ ! -z "${HFCMULTI_type[${i}]}" ]; do
+			tmpcmd="${tmpcmd},${HFCMULTI_type[${i}]}"
+			let "i = ${i} + 1"
+		done
+		tmpcmd="${tmpcmd} protocol=${HFCMULTI_protocol[0]}"
+		i=1
+		while [ ! -z "${HFCMULTI_protocol[${i}]}" ]; do
+			tmpcmd="${tmpcmd},${HFCMULTI_protocol[${i}]}"
+			let "i = ${i} + 1"
+		done
+		tmpcmd="${tmpcmd} layermask=${HFCMULTI_layermask[0]}"
+		i=1
+		while [ ! -z "${HFCMULTI_layermask[${i}]}" ]; do
+			tmpcmd="${tmpcmd},${HFCMULTI_layermask[${i}]}"
+			let "i = ${i} + 1"
+		done
+		START_COMMANDS[${#START_COMMANDS[@]}]="${tmpcmd} ${HFCMULTI_options}"
+	fi
 
 	if [ ! -z "${HFCPCI_protocol}" ]; then
 		START_COMMANDS[${#START_COMMANDS[@]}]="${MODPROBE} --ignore-install hfcpci protocol=${HFCPCI_protocol} layermask=${HFCPCI_layermask}"
