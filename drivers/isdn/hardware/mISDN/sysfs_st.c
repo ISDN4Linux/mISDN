@@ -1,4 +1,4 @@
-/* $Id: sysfs_st.c,v 1.11 2006/09/06 17:24:22 crich Exp $
+/* $Id: sysfs_st.c,v 1.11.2.1 2007/04/02 15:39:30 nadi Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -18,6 +18,13 @@ static ssize_t show_st_id(struct class_device *class_dev, char *buf)
 	return sprintf(buf, "%08x\n", st->id);
 }
 static CLASS_DEVICE_ATTR(id, S_IRUGO, show_st_id, NULL);
+
+static ssize_t show_st_protocol(struct class_device *class_dev, char *buf)
+{
+	mISDNstack_t	*st = to_mISDNstack(class_dev);
+	return sprintf(buf, "0x%08x\n", st->pid.modparm_protocol);
+}
+static CLASS_DEVICE_ATTR(protocol, S_IRUGO, show_st_protocol, NULL);
 
 static ssize_t show_st_status(struct class_device *class_dev, char *buf)
 {
@@ -247,6 +254,7 @@ mISDN_register_sysfs_stack(mISDNstack_t *st)
 
 	class_device_create_file(&st->class_dev, &class_device_attr_id);
 	class_device_create_file(&st->class_dev, &class_device_attr_qlen);
+	class_device_create_file(&st->class_dev, &class_device_attr_protocol);
 	class_device_create_file(&st->class_dev, &class_device_attr_status);
 
 #ifdef SYSFS_SUPPORT

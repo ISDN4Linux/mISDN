@@ -1,4 +1,4 @@
-/* $Id: helper.c,v 1.16 2006/08/07 23:35:59 keil Exp $
+/* $Id: helper.c,v 1.16.2.1 2007/04/02 15:39:30 nadi Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -22,6 +22,7 @@ mISDN_set_dchannel_pid(mISDN_pid_t *pid, int protocol, int layermask)
 	
 	memset(pid, 0, sizeof(mISDN_pid_t));
 	pid->layermask = layermask;
+	pid->modparm_protocol = protocol;
 	if (layermask & ISDN_LAYER(0))
 		pid->protocol[0] = ISDN_PID_L0_TE_S0;
 	if (layermask & ISDN_LAYER(1))
