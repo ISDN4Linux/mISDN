@@ -1,0 +1,5 @@
+mISDN-1-1-2:
+	- added a workaround that fixes a kernel panic when bridging is done after already a few 
+	  voice frames where transceived on both legs (like when you transfer a call from SIP 2 ISDN)
+	- jollys mail has changed
+	- minor tweaks to misdn-init and to the Kernel-Patch script
