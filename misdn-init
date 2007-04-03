@@ -92,6 +92,8 @@ check_cmd mknod
 check_cmd bc
 check_cmd cut
 check_cmd wc
+check_cmd seq
+check_cmd sed
 
 function check_asterisk {
 	if ps ax | grep -v grep | grep asterisk > /dev/null ; then asterisk -rx "stop now" ; fi
@@ -119,7 +121,7 @@ function create_card_db
 		addcard "4,0x4"
 	done
 
-	for line in $(${LSPCI} -n | sed -n 's/^\(0000:\|\)\([0-9a-f]\{2\}:[0-9a-f]\{2\}.[0-9a-f]\{1\}\)\( Class \| \)[0-9a-f]\{4\}: 1397:\([0-9a-f]\{4\}\).*$/\4 \2/p'); do
+	for line in $(${LSPCI} -n | ${SED} -n 's/^\(0000:\|\)\([0-9a-f]\{2\}:[0-9a-f]\{2\}.[0-9a-f]\{1\}\)\( Class \| \)[0-9a-f]\{4\}: 1397:\([0-9a-f]\{4\}\).*$/\4 \2/p'); do
 		if [ ${skipnext} -eq 1 ]; then
 			skipnext=0
 			continue
@@ -174,6 +176,18 @@ function create_card_db
 	echo "${cardline}"
 }
 
+function expand
+{
+	local IFS=$','
+	for tok in $1; do
+		if [ "$(echo $tok | ${SED} -ne 's/\([0-9]*\)-\([0-9]*\)/\1 \2/p')" != "" ]; then
+			${SEQ} $(echo $tok | ${SED} -ne 's/\([0-9]*\)-[0-9]*/\1/p') $(echo $tok | ${SED} -ne 's/[0-9]*-\([0-9]*\)/\1/p')
+		else
+			echo $tok
+		fi
+	done
+}
+
 function load_card_modules {
 
 	carddb=$(create_card_db)
@@ -196,7 +210,7 @@ function load_card_modules {
 	IFS=$'\n'
 	skipnr=0
 
-	for line in $(sed -n -e '/^[^#]/p' ${misdn_init_conf});
+	for line in $(${SED} -n -e '/^[^#]/p' ${misdn_init_conf});
 	do
 		var=$(echo "${line}" | ${CUT} -d "=" -f1)
 		val=$(echo "${line}" | ${CUT} -d "=" -f2)
@@ -230,7 +244,7 @@ function load_card_modules {
 						let "skipnr = ${skipnr} + 1"
 						;;
 					0x*)
-						hfcmulti[${nr}]=$(echo ${mod} | sed -e "s/^0x\([0-9]*\)/\1/")
+						hfcmulti[${nr}]=$(echo ${mod} | ${SED} -e "s/^0x\([0-9]*\)/\1/")
 						let "hfcports = ${hfcports} + ${ports}"
 						IFS=$','
 						for li in ${opns}; do
@@ -244,53 +258,43 @@ function load_card_modules {
 				esac
 				;;
 			te_ptp)
-				IFS=$','
-				for li in ${val}; do
+				for li in $(expand "${val}"); do
 					layermask[${li}]="0xf"
 					protocol[${li}]=34 # 0x22 == 34
 				done
-				IFS=$'\n'
 				;;
 			te_ptmp)
-				IFS=$','
-				for li in ${val}; do
+				for li in $(expand "${val}"); do
 					layermask[${li}]="0xf"
 					protocol[${li}]=2 # 0x2 == 2
 				done
-				IFS=$'\n'
 				;;
 			nt_*)
-				IFS=$','
-				for li in ${val}; do
+				for li in $(expand "${val}"); do
 					layermask[${li}]="0x3"
 					protocol[${li}]=18 # 0x12 == 18
 				done
-				IFS=$'\n'
 				;;
 			te_capi_ptp)
-				IFS=$','
-				for li in ${val}; do
+				for li in $(expand "${val}"); do
 					layermask[${li}]="0x0"
 					protocol[${li}]=34 # 0x22 == 34
 				done
-				IFS=$'\n'
 
 				export addcapi=1
 				;;
 			te_capi_ptmp)
-				IFS=$','
-				for li in ${val}; do
+				for li in $(expand "${val}"); do
 					layermask[${li}]="0x0"
 					protocol[${li}]=2 # 0x2 == 2
 				done
-				IFS=$'\n'
 
 				export addcapi=1
 				;;
 
 			option)
-				port=`echo "${val}" | sed -e "s/^\([0-9]*\),.*/\1/"`
-				opt=`echo "${val}" | sed -e "s/^[0-9]*,\(.*\)/\1/"`
+				port=`echo "${val}" | ${SED} -e "s/^\([0-9]*\),.*/\1/"`
+				opt=`echo "${val}" | ${SED} -e "s/^[0-9]*,\(.*\)/\1/"`
 
 				if [ -z ${protocol[${port}]} ]; then
 					protocol[${port}]="0"
@@ -364,9 +368,9 @@ function load_card_modules {
 				let "port_index = ${port_index} + 1"
 				let "hfcports = ${hfcports} - 1"
 			done
-			hfcmulti_type="$(echo ${hfcmulti_type} | sed -e 's/^\(.*\),$/\1/')"
-			hfcmulti_prot="$(echo ${hfcmulti_prot} | sed -e 's/^\(.*\),$/\1/')"
-			hfcmulti_layer="$(echo ${hfcmulti_layer} | sed -e 's/^\(.*\),$/\1/')"
+			hfcmulti_type="$(echo ${hfcmulti_type} | ${SED} -e 's/^\(.*\),$/\1/')"
+			hfcmulti_prot="$(echo ${hfcmulti_prot} | ${SED} -e 's/^\(.*\),$/\1/')"
+			hfcmulti_layer="$(echo ${hfcmulti_layer} | ${SED} -e 's/^\(.*\),$/\1/')"
 			hfcmulti_cmd="${MODPROBE} --ignore-install hfcmulti ${hfcmulti_type} ${hfcmulti_prot} ${hfcmulti_layer}"
 			if [ ! -z ${poll} ]; then
 				hfcmulti_cmd="${hfcmulti_cmd} poll=${poll}"
@@ -428,8 +432,8 @@ function load_card_modules {
 				let "port_index = ${port_index} + 1"
 			done
 			
-			other_prot="$(echo ${other_prot} | sed -e 's/^\(.*\),$/\1/')"
-			other_layer="$(echo ${other_layer} | sed -e 's/^\(.*\),$/\1/')"
+			other_prot="$(echo ${other_prot} | ${SED} -e 's/^\(.*\),$/\1/')"
+			other_layer="$(echo ${other_layer} | ${SED} -e 's/^\(.*\),$/\1/')"
 			other_cmd="${other_cmd} ${other_prot} ${other_layer} ${other_extra}"
 
 			if [ -z "$1" ] ; then
@@ -451,7 +455,7 @@ function unload_card_modules {
 
 	IFS=$'\n'
 
-	for line in $(sed -ne '/^[^#]/p' ${misdn_init_conf});
+	for line in $(${SED} -ne '/^[^#]/p' ${misdn_init_conf});
 	do
 		var=$(echo "${line}" | ${CUT} -d "=" -f 1)
 		val=$(echo "${line}" | ${CUT} -d "=" -f 2)
@@ -530,7 +534,7 @@ function create_misdn_init_conf {
 			portline="${portline}${index},"
 			let "index = ${index} + 1"
 		done
-		portline="$(echo ${portline} | sed -e 's/^\(.*\),$/\1/')"
+		portline="$(echo ${portline} | ${SED} -e 's/^\(.*\),$/\1/')"
 
 		misdn_cfg_pt1="#
 # Configuration file for your misdn hardware
@@ -725,7 +729,7 @@ case "$1" in
 		check_asterisk
 
 		
-		for mod in $(lsmod | sed -ne '/Module/!{s/\([^ ]*\).*/\1/;p}');
+		for mod in $(lsmod | ${SED} -ne '/Module/!{s/\([^ ]*\).*/\1/;p}');
 		do
 			case "${mod}" in
 				mISDN_capi | mISDN_dsp | l3udss1 | mISDN_l2 | mISDN_l1 | mISDN_isac )
