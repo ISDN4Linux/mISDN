@@ -113,3 +113,5 @@ release: clean
 	cd /tmp/; \
 	tar czf $$DIR.tar.gz $$DIR
 
+%-package:
+	git-archive --format=tar $* | gzip > $*-$$(date +"20%y_%m_%d").tar.gz
