@@ -1,4 +1,4 @@
-/* $Id: mISDNif.h,v 1.42 2006/12/27 18:50:50 jolly Exp $
+/* $Id: mISDNif.h,v 1.42.2.3 2007/04/02 15:39:31 nadi Exp $
  *
  */
 
@@ -19,12 +19,12 @@
  *              - changed if any interface is extended but backwards compatible
  *
  */
-#define	MISDN_MAJOR_VERSION	5
+#define	MISDN_MAJOR_VERSION	6
 #define	MISDN_MINOR_VERSION	0
 #define	MISDN_VERSION		((MISDN_MAJOR_VERSION<<16) | MISDN_MINOR_VERSION)
 
-#define MISDN_REVISION		"$Revision: 1.42 $"
-#define MISDN_DATE		"$Date: 2006/12/27 18:50:50 $"
+#define MISDN_REVISION		"$Revision: 1.42.2.3 $"
+#define MISDN_DATE		"$Date: 2007/04/02 15:39:31 $"
 
 /* collect some statistics about the message queues */
 //#define MISDN_MSG_STATS
@@ -190,8 +190,7 @@
 #define BF_DISABLE	0x2315
 #define BF_ACCEPT	0x2316
 #define BF_REJECT	0x2317
-#define ECHOCAN_ON	0x2318
-#define ECHOCAN_OFF	0x2319
+#define PIPELINE_CFG 0x2318
 #define HW_POTS_ON		0x1001
 #define HW_POTS_OFF		0x1002
 #define HW_POTS_SETMICVOL	0x1100
@@ -615,6 +614,7 @@ typedef struct _mISDN_pid {
 	u16	param[MAX_LAYER_NR +1];
 	u16	global;
 	u16	pidx;
+	u_char modparm_protocol;
 	u_char	*pbuf;
 } mISDN_pid_t;
 

@@ -84,21 +84,19 @@
  <xsl:with-param name="match-true">te</xsl:with-param>
  <xsl:with-param name="match-false">nt</xsl:with-param>
  <xsl:with-param name="val-true">34</xsl:with-param>
- <xsl:with-param name="val-false">18</xsl:with-param>
+ <xsl:with-param name="val-false">50</xsl:with-param>
  <xsl:with-param name="val-default">34</xsl:with-param>
 </xsl:call-template>
 <xsl:text>+</xsl:text>
-<xsl:if test="@mode!='nt'">
- <xsl:call-template name="if-match">
-  <xsl:with-param name="val" select="@link" />
-  <xsl:with-param name="match-true">ptp</xsl:with-param>
-  <xsl:with-param name="match-false">ptmp</xsl:with-param>
-  <xsl:with-param name="val-true">0</xsl:with-param>
-  <xsl:with-param name="val-false">(-32)</xsl:with-param>
-  <xsl:with-param name="val-default">(-32)</xsl:with-param>
- </xsl:call-template>
- <xsl:text>+</xsl:text>
-</xsl:if>
+<xsl:call-template name="if-match">
+ <xsl:with-param name="val" select="@link" />
+ <xsl:with-param name="match-true">ptp</xsl:with-param>
+ <xsl:with-param name="match-false">ptmp</xsl:with-param>
+ <xsl:with-param name="val-true">0</xsl:with-param>
+ <xsl:with-param name="val-false">(-32)</xsl:with-param>
+ <xsl:with-param name="val-default">(-32)</xsl:with-param>
+</xsl:call-template>
+<xsl:text>+</xsl:text>
 <xsl:call-template name="if-match">
  <xsl:with-param name="val" select="@master-clock" />
  <xsl:with-param name="val-true">(2**16)</xsl:with-param>

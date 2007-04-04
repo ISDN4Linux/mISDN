@@ -526,12 +526,14 @@ dsp_cmx_hardware(conference_t *conf, dsp_t *dsp)
 				printk(KERN_DEBUG "%s dsp %s cannot form a conf, because encryption is enabled\n", __FUNCTION__, member->dsp->inst.name);
 			goto conf_software;
 		}
+#if 0
 		/* check if echo cancellation is enabled */
 		if (member->dsp->cancel_enable) {
 			if (dsp_debug & DEBUG_DSP_CMX)
 				printk(KERN_DEBUG "%s dsp %s cannot form a conf, because echo cancellation is enabled\n", __FUNCTION__, member->dsp->inst.name);
 			goto conf_software;
 		}
+#endif
 		/* check if member is on a card with PCM support */
 		if (member->dsp->features.pcm_id < 0) {
 			if (dsp_debug & DEBUG_DSP_CMX)
@@ -1220,9 +1222,11 @@ send_packet:
 	if (dsp->tx_volume)
 		dsp_change_volume(nskb, dsp->tx_volume);
 	
+#if 0
 	/* cancel echo */
 	if (dsp->cancel_enable)
 		dsp_cancel_tx(dsp, nskb->data, nskb->len);
+#endif
 	
 	/* crypt */
 	if (dsp->bf_enable)

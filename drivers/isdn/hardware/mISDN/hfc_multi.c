@@ -140,6 +140,9 @@ extern void ztdummy_extern_interrupt(void);
 static void (* hfc_interrupt)(void);
 extern void ztdummy_register_interrupt(void);
 static void (* register_interrupt)(void);
+extern int ztdummy_unregister_interrupt(void);
+static int (* unregister_interrupt)(void);
+static int interrupt_registered = 0;
 
 /* table entry in the PCI devices list */
 typedef struct {
@@ -154,15 +157,20 @@ typedef struct {
 	int clock2;
 	int leds;
 	int opticalsupport;
+	int dip_type;
 } PCI_ENTRY;
 
 static int poll_timer = 6;	/* default = 128 samples = 16ms */
-/* number of POLL_TIMER interrupts for G2 timeout (min 120ms) */
-static int nt_t1_count[] = { 480, 240, 120, 60, 30, 15, 8, 4 };
+/* number of POLL_TIMER interrupts for G2 timeout (ca 1s) */
+static int nt_t1_count[] = { 3840, 1920, 960, 480, 240, 120, 64, 32  };
+//static int nt_t1_count[] = { 480, 240, 120, 60, 30, 15, 8, 4 };
 #define CLKDEL_TE	0x0f	/* CLKDEL in TE mode */
 #define CLKDEL_NT	0x0c	/* CLKDEL in NT mode (0x60 MUST not be included!) */
 static u_char silence =	0xff;	/* silence by LAW */
 
+#define DIP_4S   0x1		/* DIP Switches for Beronet 1S/2S/4S cards */
+#define DIP_8S   0x2		/* DIP Switches for Beronet 8S+ cards */
+#define DIP_E1   0x3		/* DIP Switches for Beronet E1 cards */
 /* enable 32 bit fifo access (PC usage) */
 #define FIFO_32BIT_ACCESS
 
@@ -183,58 +191,58 @@ static const PCI_ENTRY id_list[] =
 	 "HFC-E1 CCAG Eval", 1, 0, 1}, /* E1 only supports single clock */
 #endif
 	{CCAG_VID, CCAG_VID, HFC4S_ID, 0x08B4, VENDOR_CCD,
-	 "HFC-4S CCAG Eval (old)", 0, 4, 0, 0, 0},
+	 "HFC-4S CCAG Eval (old)", 0, 4, 0, 0, 0, 0},
 	{CCAG_VID, CCAG_VID, HFC8S_ID, 0x16B8, VENDOR_CCD,
-	 "HFC-8S CCAG Eval (old)", 0, 8, 0, 0, 0},
+	 "HFC-8S CCAG Eval (old)", 0, 8, 0, 0, 0, 0},
 	{CCAG_VID, CCAG_VID, HFCE1_ID, 0x30B1, VENDOR_CCD,
-	 "HFC-E1 CCAG Eval (old)", 1, 1, 0, 0, 0},
+	 "HFC-E1 CCAG Eval (old)", 1, 1, 0, 0, 0, 0},
 	{CCAG_VID, CCAG_VID, HFC4S_ID, 0xB520, VENDOR_CCD,
-	 "HFC-4S IOB4ST", 0, 4, 1, 2, 0},
+	 "HFC-4S IOB4ST", 0, 4, 1, 2, 0, 0},
 	{CCAG_VID, CCAG_VID, HFC4S_ID, 0xB620, VENDOR_CCD,
-	 "HFC-4S", 0, 4, 1, 2, 0},
+	 "HFC-4S", 0, 4, 1, 2, 0, 0},
 	{CCAG_VID, CCAG_VID, HFC4S_ID, 0xB550, VENDOR_CCD,
-	 "HFC-4S (junghanns 2.0)", 0, 4, 1, 2, 0},
+	 "HFC-4S (junghanns 2.0)", 0, 4, 1, 2, 0, 0},
 	{CCAG_VID, CCAG_VID, HFC4S_ID, 0xB560, VENDOR_CCD,
-	 "HFC-4S Beronet Card", 0, 4, 1, 2, 0},
+	 "HFC-4S Beronet Card", 0, 4, 1, 2, 0, DIP_4S},
 	{CCAG_VID, CCAG_VID, HFC4S_ID, 0xB568, VENDOR_CCD,
-	 "HFC-4S Beronet Card (mini PCI)", 0, 4, 1, 2, 0},
+	 "HFC-4S Beronet Card (mini PCI)", 0, 4, 1, 2, 0, 0},
 	{0xD161, 0xD161, 0xB410, 0xB410, VENDOR_CCD,
-	 "HFC-4S Digium Card", 0, 4, 0, 2, 0},
+	 "HFC-4S Digium Card", 0, 4, 0, 2, 0, 0},
 	{CCAG_VID, CCAG_VID, HFC4S_ID, 0xB540, VENDOR_CCD,
-	 "HFC-4S Swyx 4xS0 SX2 QuadBri", 0, 4, 1, 2, 0},
+	 "HFC-4S Swyx 4xS0 SX2 QuadBri", 0, 4, 1, 2, 0, 0},
 	{CCAG_VID, CCAG_VID, HFC8S_ID, 0xB521, VENDOR_CCD,
-	 "HFC-8S IOB4ST Recording", 0, 8, 1, 0, 0},
+	 "HFC-8S IOB4ST Recording", 0, 8, 1, 0, 0, 0},
 	{CCAG_VID, CCAG_VID, HFC8S_ID, 0xB522, VENDOR_CCD,
-	 "HFC-8S IOB8ST", 0, 8, 1, 0, 0},
+	 "HFC-8S IOB8ST", 0, 8, 1, 0, 0, 0},
 	{CCAG_VID, CCAG_VID, HFC8S_ID, 0xB552, VENDOR_CCD,
-	 "HFC-8S", 0, 8, 1, 0, 0},
+	 "HFC-8S", 0, 8, 1, 0, 0, 0},
 	{CCAG_VID, CCAG_VID, HFC8S_ID, 0xB622, VENDOR_CCD,
-	 "HFC-8S", 0, 8, 1, 0, 0},
+	 "HFC-8S", 0, 8, 1, 0, 0, 0},
 	{CCAG_VID, CCAG_VID, HFC8S_ID, 0xB562, VENDOR_CCD,
-	 "HFC-8S Beronet Card", 0, 8, 1, 0, 0},
+	 "HFC-8S Beronet Card", 0, 8, 1, 0, 0, 0},
 	{CCAG_VID, CCAG_VID, HFC8S_ID, 0xB56B, VENDOR_CCD,
-	 "HFC-8S Beronet Card (+)", 0, 8, 1, 8, 0},
+	 "HFC-8S Beronet Card (+)", 0, 8, 1, 8, 0, DIP_8S},
 	{CCAG_VID, CCAG_VID, HFCE1_ID, 0xB523, VENDOR_CCD,
-	 "HFC-E1 IOB1E1", 1, 1, 0, 1, 0}, /* E1 only supports single clock */
+	 "HFC-E1 IOB1E1", 1, 1, 0, 1, 0, 0}, /* E1 only supports single clock */
 	{CCAG_VID, CCAG_VID, HFCE1_ID, 0xC523, VENDOR_CCD,
-	 "HFC-E1", 1, 1, 0, 1, 0}, /* E1 only supports single clock */
+	 "HFC-E1", 1, 1, 0, 1, 0, 0}, /* E1 only supports single clock */
 	{CCAG_VID, CCAG_VID, HFCE1_ID, 0xB56A, VENDOR_CCD,
-	 "HFC-E1 Beronet Card (mini PCI)", 1, 1, 0, 1, 0}, /* E1 only supports single clock */
+	 "HFC-E1 Beronet Card (mini PCI)", 1, 1, 0, 1, 0, 0}, /* E1 only supports single clock */
 	{CCAG_VID, CCAG_VID, HFCE1_ID, 0xB563, VENDOR_CCD,
-	 "HFC-E1 Beronet Card", 1, 1, 0, 1, 0}, /* E1 only supports single clock */
+	 "HFC-E1 Beronet Card", 1, 1, 0, 1, 0, DIP_E1}, /* E1 only supports single clock */
 	{CCAG_VID, CCAG_VID, HFCE1_ID, 0xB565, VENDOR_CCD,
-	 "HFC-E1+ Beronet Card (Dual)", 1, 1, 0, 1, 0}, /* E1 only supports single clock */
+	 "HFC-E1+ Beronet Card (Dual)", 1, 1, 0, 1, 0, DIP_E1}, /* E1 only supports single clock */
 	{CCAG_VID, CCAG_VID, HFCE1_ID, 0xB564, VENDOR_CCD,
-	 "HFC-E1 Beronet Card (Dual)", 1, 1, 0, 1, 0}, /* E1 only supports single clock */
+	 "HFC-E1 Beronet Card (Dual)", 1, 1, 0, 1, 0, DIP_E1}, /* E1 only supports single clock */
 	{0x10B5, CCAG_VID, 0x9030, 0x3136, VENDOR_CCD,
-	 "HFC-4S PCIBridgeEval", 0, 4, 0, 0, 0},      // PLX PCI-Bridge
+	 "HFC-4S PCIBridgeEval", 0, 4, 0, 0, 0, 0},      // PLX PCI-Bridge
 	{CCAG_VID, CCAG_VID, HFC4S_ID, 0xB566, VENDOR_CCD,
-	 "HFC-2S Beronet Card", 0, 2, 1, 3, 0},
+	 "HFC-2S Beronet Card", 0, 2, 1, 3, 0, DIP_4S},
 	{CCAG_VID, CCAG_VID, HFC4S_ID, 0xB569, VENDOR_CCD,
-	 "HFC-2S Beronet Card (mini PCI)", 0, 2, 1, 3, 0},
+	 "HFC-2S Beronet Card (mini PCI)", 0, 2, 1, 3, 0, DIP_4S},
 	{CCAG_VID, CCAG_VID, HFC4S_ID, 0xB567, VENDOR_CCD,
-	 "HFC-1S Beronet Card (mini PCI)", 0, 1, 1, 3, 0},
-	{0, 0, 0, 0, NULL, NULL, 0, 0, 0, 0},
+	 "HFC-1S Beronet Card (mini PCI)", 0, 1, 1, 3, 0, DIP_4S},
+	{0, 0, 0, 0, NULL, NULL, 0, 0, 0, 0, 0},
 };
 
 
@@ -758,14 +766,14 @@ init_chip(hfc_multi_t *hc)
 	HFC_outb(hc, R_RAM_ADDR1, 0);
 	HFC_outb(hc, R_RAM_ADDR2, 0);
 
-	for(i=0;i<256;i++) {
+	for (i = 0; i < 256; i++) {
 		HFC_outb(hc, R_RAM_ADDR0,i);
 		HFC_outb(hc, R_RAM_DATA,((i*3)&0xff));
 		//udelay(5);
 		//HFC_outb(hc, R_RAM_DATA,((i*3)&0xff));
 	}
 
-	for(i=0;i<256;i++) {
+	for (i = 0; i < 256; i++) {
 		HFC_outb(hc, R_RAM_ADDR0,i);
 		HFC_inb(hc, R_RAM_DATA);
 		rval=HFC_inb(hc, R_INT_DATA);
@@ -811,13 +819,11 @@ init_chip(hfc_multi_t *hc)
 		
 	}
 
-	i = 0;
-	while (i < 256) {
+	for (i = 0; i < 256; i++) {
 		HFC_outb_(hc, R_SLOT, i);
 		HFC_outb_(hc, A_SL_CFG, 0);
 		HFC_outb_(hc, A_CONF, 0);
 		hc->slot_owner[i] = -1;
-		i++;
 	}
 
 	/* set clock speed */
@@ -871,6 +877,7 @@ init_chip(hfc_multi_t *hc)
 	if (timer!=0 && hfc_interrupt && register_interrupt) {
 		/* only one chip should use this interrupt */
 		timer = 0;
+		interrupt_registered = 1;
 		hc->hw.r_irqmsk_misc |= V_PROC_IRQMSK;
 		/* deactivate other interrupts in ztdummy */
 		register_interrupt();
@@ -967,7 +974,8 @@ hfcmulti_watchdog(hfc_multi_t *hc)
 static void
 hfcmulti_leds(hfc_multi_t *hc)
 {
-	int i, state, active;
+	unsigned long lled, leddw;
+	int i, state, active, leds;
 	channel_t *dch;
 	int led[4];
 
@@ -977,176 +985,87 @@ hfcmulti_leds(hfc_multi_t *hc)
 
 	switch(hc->leds) {
 		case 1: /* HFC-E1 OEM */
-		/* 2 red blinking: LOS
-		   1 red: AIS
-		   left green: PH_ACTIVATE
-		   right green flashing: FIFO activity
-		*/
-		i = HFC_inb(hc, R_GPI_IN0) & 0xf0;
-		if (!(i & 0x40)) { /* LOS */
-			if (hc->e1_switch != i) {
-				hc->e1_switch = i;
-				hc->hw.r_tx0 &= ~V_OUT_EN;
-				HFC_outb(hc, R_TX0, hc->hw.r_tx0);
-			}
-			if (hc->ledcount & 512)
-				led[0] = led[1] = 1;
-			else
-				led[0] = led[1] = 0;
-			led[2] = led[3] = 0;
-		} else
-		if (!(i & 0x80)) { /* AIS */
-			if (hc->e1_switch != i) {
-				hc->e1_switch = i;
-				hc->hw.r_tx0 |= V_OUT_EN;
-				hc->hw.r_tx1 |= V_AIS_OUT;
-				HFC_outb(hc, R_TX0, hc->hw.r_tx0);
-				HFC_outb(hc, R_TX1, hc->hw.r_tx1);
-			}
-			if (hc->ledcount & 512)
-				led[2] = led[3] = 1;
-			else
-				led[2] = led[3] = 0;
-			led[0] = led[1] = 0;
-		} else {
-			if (hc->e1_switch != i) {
-				/* reset LOS/AIS */
-				hc->e1_switch = i;
-				hc->hw.r_tx0 |= V_OUT_EN;
-				hc->hw.r_tx1 &= ~V_AIS_OUT;
-				HFC_outb(hc, R_TX0, hc->hw.r_tx0);
-				HFC_outb(hc, R_TX1, hc->hw.r_tx1);
-			}
-			if (HFC_inb_(hc, R_RX_STA0) & V_SIG_LOS) {
-				if (hc->ledcount>>11)
-					led[0] = led[1] = 1; /* both red blinking */
+			/* 2 red blinking: LOS
+			   1 red: AIS
+			   left green: PH_ACTIVATE
+			   right green flashing: FIFO activity
+			   */
+			i = HFC_inb(hc, R_GPI_IN0) & 0xf0;
+			if (!(i & 0x40)) { /* LOS */
+				if (hc->e1_switch != i) {
+					hc->e1_switch = i;
+					hc->hw.r_tx0 &= ~V_OUT_EN;
+					HFC_outb(hc, R_TX0, hc->hw.r_tx0);
+				}
+				if (hc->ledcount & 512)
+					led[0] = led[1] = 1;
 				else
 					led[0] = led[1] = 0;
-			} else
-			if (HFC_inb_(hc, R_RX_STA0) & V_AIS) {
-				led[0] = led[1] = 1; /* both red */
+				led[2] = led[3] = 0;
 			} else {
-				led[0] = led[1] = 0; /* no red */
-			}
-			state = 0;
-			active = 1;
-			dch = hc->chan[16].ch;
-			if (dch && test_bit(FLG_DCHANNEL, &dch->Flags))
-				state = dch->state;
-			if (state == active) {
-				led[2] = 1; /* left green */
-				if (hc->activity[0]) {
-					led[3] = 1; /* right green */
-					hc->activity[0] = 0;
-				} else
-					led[3] = 0; /* no right green */
-
-			} else
-				led[2] = led[3] = 0; /* no green */
-		}
-		HFC_outb(hc, R_GPIO_OUT1,
-			(led[0] | (led[1]<<2) | (led[2]<<1) | (led[3]<<3))^0xf); /* leds are inverted */
-
-		break;
-
-		case 2: /* HFC-4S OEM */
-		/* red blinking = PH_DEACTIVATE
-		   red steady = PH_ACTIVATE
-		   green flashing = fifo activity
-		*/
-		i = 0;
-		while(i < 4) {
-			state = 0;
-			active = -1;
-			dch = hc->chan[(i<<2)|2].ch;
-			if (dch && test_bit(FLG_DCHANNEL, &dch->Flags)) {
-				state = dch->state;
-				active = test_bit(HFC_CFG_NTMODE, &hc->chan[dch->channel].cfg)?3:7;
-			}
-			if (state) {
-				if (state==active) {
-					if (hc->activity[i]) {
-						led[i] = 1; /* led green */
-						hc->activity[i] = 0;
+				if (!(i & 0x80)) { /* AIS */
+					if (hc->e1_switch != i) {
+						hc->e1_switch = i;
+						hc->hw.r_tx0 |= V_OUT_EN;
+						hc->hw.r_tx1 |= V_AIS_OUT;
+						HFC_outb(hc, R_TX0, hc->hw.r_tx0);
+						HFC_outb(hc, R_TX1, hc->hw.r_tx1);
+					}
+					if (hc->ledcount & 512)
+						led[2] = led[3] = 1;
+					else
+						led[2] = led[3] = 0;
+					led[0] = led[1] = 0;
+				} else {
+					if (hc->e1_switch != i) {
+						/* reset LOS/AIS */
+						hc->e1_switch = i;
+						hc->hw.r_tx0 |= V_OUT_EN;
+						hc->hw.r_tx1 &= ~V_AIS_OUT;
+						HFC_outb(hc, R_TX0, hc->hw.r_tx0);
+						HFC_outb(hc, R_TX1, hc->hw.r_tx1);
+					}
+					if (HFC_inb_(hc, R_RX_STA0) & V_SIG_LOS) {
+						if (hc->ledcount>>11)
+							led[0] = led[1] = 1; /* both red blinking */
+						else
+							led[0] = led[1] = 0;
 					} else
-						led[i] = 2; /* led red */
-				} else if (hc->ledcount>>11)
-					led[i] = 2; /* led red */
-				else
-					led[i] = 0; /* led off */
-			} else
-				led[i] = 0; /* led off */
-			i++;
-		}
+						if (HFC_inb_(hc, R_RX_STA0) & V_AIS) {
+							led[0] = led[1] = 1; /* both red */
+						} else {
+							led[0] = led[1] = 0; /* no red */
+						}
+					state = 0;
+					active = 1;
+					dch = hc->chan[16].ch;
+					if (dch && test_bit(FLG_DCHANNEL, &dch->Flags))
+						state = dch->state;
+					if (state == active) {
+						led[2] = 1; /* left green */
+						if (hc->activity[0]) {
+							led[3] = 1; /* right green */
+							hc->activity[0] = 0;
+						} else
+							led[3] = 0; /* no right green */
 
-		if (test_bit(HFC_CHIP_DIGICARD, &hc->chip)) {
-			int leds=0;
-			for (i=0; i<4; i++) {
-				if (led[i]==1) {
-					/*green*/
-					leds |=( 0x2 <<(i*2));
-				} else if (led[i]==2) {
-					/*red*/
-					leds |=( 0x1 <<(i*2));
+					} else
+						led[2] = led[3] = 0; /* no green */
 				}
 			}
-			vpm_out(hc, 0, 0x1a8+3,leds);
-		} else {
-			HFC_outb(hc, R_GPIO_EN1,
-				 ((led[0]>0)<<0) | ((led[1]>0)<<1) |
-				 ((led[2]>0)<<2) | ((led[3]>0)<<3));
-			HFC_outb(hc, R_GPIO_OUT1,
-				 ((led[0]&1)<<0) | ((led[1]&1)<<1) |
-				 ((led[2]&1)<<2) | ((led[3]&1)<<3));
-		}
-		break;
-
-		case 3:
-		/* red blinking = PH_DEACTIVATE
-		   red steady = PH_ACTIVATE
-		   green flashing = fifo activity
-		*/
-		for(i=0;i<2;i++) {
-			state = 0;
-			active = -1;
-			dch = hc->chan[(i<<2)|2].ch;
-			if (dch && test_bit(FLG_DCHANNEL, &dch->Flags)) {
-				state = dch->state;
-				active = test_bit(HFC_CFG_NTMODE, &hc->chan[dch->channel].cfg)?3:7;
+			leds = (led[0] | (led[1]<<2) | (led[2]<<1) | (led[3]<<3))^0xf; /* leds are inverted */
+			if (leds != (int)hc->ledstate) {
+				HFC_outb(hc, R_GPIO_OUT1, leds);
+				hc->ledstate = leds;
 			}
-			if (state) {
-				if (state==active) {
-					if (hc->activity[i]) {
-						led[i] = 1; /* led green */
-						hc->activity[i] = 0;
-					} else
-						led[i] = 2; /* led red */
-				} else if (hc->ledcount>>11)
-					led[i] = 2; /* led red */
-				else
-					led[i] = 0; /* led off */
-			} else
-				led[i] = 0; /* led off */
-		}
+			break;
 
-	//	printk("leds %d %d\n", led[0], led[1]);
-	//LEDME
-
-		HFC_outb(hc, R_GPIO_EN1,
-			((led[0]>0)<<2) | ((led[1]>0)<<3) );
-		HFC_outb(hc, R_GPIO_OUT1,
-			((led[0]&1)<<2) | ((led[1]&1)<<3) );
-
-		break;
-		case 8:
-		{
-			unsigned long led=0;
-			int off=0;
-
-			if (hc->ledcount>2048) 
-				off=1;
-
-			for (i=0;i<8;i++) {
+		case 2: /* HFC-4S OEM */
+			/* red blinking = PH_DEACTIVATE NT Mode
+			   red steady   = PH_DEACTIVATE TE Mode 
+			   green steady = PH_ACTIVATE
+			   */
+			for (i=0; i < 4; i++) {
 				state = 0;
 				active = -1;
 				dch = hc->chan[(i<<2)|2].ch;
@@ -1155,21 +1074,119 @@ hfcmulti_leds(hfc_multi_t *hc)
 					active = test_bit(HFC_CFG_NTMODE, &hc->chan[dch->channel].cfg)?3:7;
 				}
 				if (state) {
-					if (state!=active && off)
-						led |= 1<<i;
+					if (state==active) {
+						led[i] = 1; /* led green */
+					} else if (!test_bit(HFC_CFG_NTMODE, &hc->chan[dch->channel].cfg)) 
+						/* TE mode: led red */
+						led[i] = 2;
+					else if (hc->ledcount>>11)
+						led[i] = 2; /* led red */
+					else
+						led[i] = 0; /* led off */
 				} else
-					led |= 1<<i;
+					led[i] = 0; /* led off */
 			}
-			unsigned long leddw=led << 24 | led << 16 | led << 8 | led;
-			//HFC_outb(hc, R_BRG_PCM_CFG, 1);
-			//HFC_outb(c, R_BRG_PCM_CFG, (0x0 << 6) | 0x3); /*was _io before*/
-			HFC_outb(hc, R_BRG_PCM_CFG, 1 | V_PCM_CLK);
-			outw(0x4000, hc->pci_iobase + 4);
-			outl(leddw, hc->pci_iobase);
-			HFC_outb(hc, R_BRG_PCM_CFG, V_PCM_CLK);
-		}
 
-		break;
+			if (test_bit(HFC_CHIP_DIGICARD, &hc->chip)) {
+				leds = 0;
+				for (i=0; i<4; i++) {
+					if (led[i]==1) {
+						/*green*/
+						leds |=( 0x2 <<(i*2));
+					} else if (led[i]==2) {
+						/*red*/
+						leds |=( 0x1 <<(i*2));
+					}
+				}
+				if (leds != (int)hc->ledstate) {
+					vpm_out(hc, 0, 0x1a8+3, leds);
+					hc->ledstate = leds;
+				}
+
+			} else {
+				leds = ((led[3]>0)<<0) | ((led[1]>0)<<1) |
+				       ((led[0]>0)<<2) | ((led[2]>0)<<3) |
+				       ((led[3]&1)<<4) | ((led[1]&1)<<5) |
+				       ((led[0]&1)<<6) | ((led[2]&1)<<7);
+				if (leds != (int)hc->ledstate) {
+					HFC_outb(hc, R_GPIO_EN1, leds & 0x0F);
+					HFC_outb(hc, R_GPIO_OUT1, leds >> 4);
+					hc->ledstate = leds;
+				}
+			}
+			break;
+
+		case 3: /* HFC 1S/2S Beronet */
+			/* red blinking = PH_DEACTIVATE NT Mode
+			   red steady   = PH_DEACTIVATE TE Mode 
+			   green steady = PH_ACTIVATE
+			   */
+			for (i = 0; i < 2; i++) {
+				state = 0;
+				active = -1;
+				dch = hc->chan[(i<<2)|2].ch;
+				if (dch && test_bit(FLG_DCHANNEL, &dch->Flags)) {
+					state = dch->state;
+					active = test_bit(HFC_CFG_NTMODE, &hc->chan[dch->channel].cfg)?3:7;
+				}
+				if (state) {
+					if (state==active) {
+						led[i] = 1; /* led green */
+					} else if (!test_bit(HFC_CFG_NTMODE, &hc->chan[dch->channel].cfg)) 
+						/* TE mode: led red */
+						led[i] = 2;
+					else if (hc->ledcount>>11)
+						led[i] = 2; /* led red */
+					else
+						led[i] = 0; /* led off */
+				} else
+					led[i] = 0; /* led off */
+			}
+
+			//	printk("leds %d %d\n", led[0], led[1]);
+			//LEDME
+
+			leds = (led[0]>0) | ((led[1]>0)<<1) | ((led[0]&1)<<2) | ((led[1]&1)<<3);
+			if (leds != (int)hc->ledstate) {
+				HFC_outb(hc, R_GPIO_EN1,
+						((led[0]>0)<<2) | ((led[1]>0)<<3) );
+				HFC_outb(hc, R_GPIO_OUT1,
+						((led[0]&1)<<2) | ((led[1]&1)<<3) );
+				hc->ledstate = leds;
+			}
+			break;
+		case 8: /* HFC 8S+ Beronet */
+			lled = 0;
+
+			for (i = 0; i < 8; i++) {
+				state = 0;
+				active = -1;
+				dch = hc->chan[(i<<2)|2].ch;
+				if (dch && test_bit(FLG_DCHANNEL, &dch->Flags)) {
+					state = dch->state;
+					active = test_bit(HFC_CFG_NTMODE, &hc->chan[dch->channel].cfg)?3:7;
+				}
+				if (state) {
+					if (state==active) {
+						lled |= 0<<i;
+					} else if (hc->ledcount>>11)
+						lled |= 0<<i;
+					else
+						lled |= 1<<i;
+				} else
+					lled |= 1<<i;
+			}
+			leddw = lled << 24 | lled << 16 | lled << 8 | lled;
+			if (leddw != hc->ledstate) {
+				//HFC_outb(hc, R_BRG_PCM_CFG, 1);
+				//HFC_outb(c, R_BRG_PCM_CFG, (0x0 << 6) | 0x3); /*was _io before*/
+				HFC_outb(hc, R_BRG_PCM_CFG, 1 | V_PCM_CLK);
+				outw(0x4000, hc->pci_iobase + 4);
+				outl(leddw, hc->pci_iobase);
+				HFC_outb(hc, R_BRG_PCM_CFG, V_PCM_CLK);
+				hc->ledstate = leddw;
+			}
+			break;
 	}
 }
 /**************************/
@@ -1191,27 +1208,22 @@ hfcmulti_dtmf(hfc_multi_t *hc)
 
 	if (debug & DEBUG_HFCMULTI_DTMF)
 		printk(KERN_DEBUG "%s: dtmf detection irq\n", __FUNCTION__);
-	ch = 0;
-	while(ch < 32) {
+	for (ch = 0; ch < 32; ch++) {
 		// only process enabled B-channels
 		bch = hc->chan[ch].ch;
 		if ((!bch) || !test_bit(FLG_BCHANNEL, &bch->Flags)) {
-			ch++;
 			continue;
 		}
 		if (!hc->created[hc->chan[ch].port]) {
-			ch++;
 			continue;
 		}
 		if (!test_bit(FLG_TRANSPARENT, &bch->Flags)) {
-			ch++;
 			continue;
 		}
 		if (debug & DEBUG_HFCMULTI_DTMF)
 			printk(KERN_DEBUG "%s: dtmf channel %d:", __FUNCTION__, ch);
 		dtmf = 1;
-		co = 0;
-		while(co < 8) {
+		for (co = 0; co < 8; co++) {
 			// read W(n-1) coefficient
 			addr = hc->DTMFbase + ((co<<7) | (ch<<2));
 			HFC_outb_(hc, R_RAM_ADDR0, addr);
@@ -1261,12 +1273,10 @@ hfcmulti_dtmf(hfc_multi_t *hc)
 
 			// store coefficient
 			coeff[(co<<1)|1] = mantissa;
-			co++;
 		}
 		skb = create_link_skb(PH_CONTROL | INDICATION, HW_HFC_COEFF, sizeof(coeff), coeff, 0);
 		if (!skb) {
 			printk(KERN_WARNING "%s: No memory for skb\n", __FUNCTION__);
-			ch++;
 			continue;
 		}
 		if (debug & DEBUG_HFCMULTI_DTMF) {
@@ -1284,7 +1294,6 @@ hfcmulti_dtmf(hfc_multi_t *hc)
 		if (mISDN_queue_up(&bch->inst, 0, skb))
 			dev_kfree_skb(skb);
 
-		ch++;
 	}
 
 	// restart DTMF processing
@@ -1778,8 +1787,7 @@ handle_timer_irq(hfc_multi_t *hc)
 	int		ch, temp;
 	channel_t	*chan;
 
-	ch = 0;
-	while(ch < 32) {
+	for (ch = 0; ch < 32; ch++) {
 		chan = hc->chan[ch].ch;
 		if (chan && hc->created[hc->chan[ch].port]) {
 			hfcmulti_tx(hc, ch, chan);
@@ -1795,7 +1803,6 @@ handle_timer_irq(hfc_multi_t *hc)
 				}
 			}
 		}
-		ch++;
 	}
 	if (hc->type == 1 && hc->created[0]) {
 		chan = hc->chan[16].ch;
@@ -1913,10 +1920,8 @@ hfcmulti_interrupt(int intno, void *dev_id, struct pt_regs *regs)
 #ifdef CONFIG_PLX_PCI_BRIDGE
 	plx_acc=(u_short*)(hc->plx_membase+0x4c);
 	wval=*plx_acc;
-	if(!(wval&0x04))
-	{
-		if(wval&0x20)
-		{
+	if(!(wval&0x04)) {
+		if(wval&0x20) {
 			//printk(KERN_WARNING "NO irq  LINTI1:%x\n",wval);
 			printk(KERN_WARNING "got irq  LINTI2\n");
 		}
@@ -1967,8 +1972,7 @@ hfcmulti_interrupt(int intno, void *dev_id, struct pt_regs *regs)
 	if (r_irq_statech) {
 		if (hc->type != 1) {
 			/* state machine */
-			ch = 0;
-			while(ch < 32) {
+			for (ch = 0; ch < 32; ch++) {
 				chan = hc->chan[ch].ch;
 				if (chan && test_bit(FLG_DCHANNEL, &chan->Flags)) {
 					if (r_irq_statech & 1) {
@@ -1989,7 +1993,6 @@ hfcmulti_interrupt(int intno, void *dev_id, struct pt_regs *regs)
 					}
 					r_irq_statech >>= 1;
 				}
-				ch++;
 			}
 		}
 	}
@@ -2037,8 +2040,7 @@ hfcmulti_interrupt(int intno, void *dev_id, struct pt_regs *regs)
 		/* FIFO IRQ */
 		r_irq_oview = HFC_inb_(hc, R_IRQ_OVIEW);
 		//if(r_irq_oview) printk(KERN_DEBUG "OV:%x\n",r_irq_oview);
-		i = 0;
-		while(i < 8) {
+		for (i = 0; i < 8; i++) {
 			if (r_irq_oview & (1 << i)) {
 				r_irq_fifo_bl = HFC_inb_(hc, R_IRQ_FIFO_BL0 + i);
 				//r_irq_fifo_bl = HFC_inb_(hc, R_INT_DATA);
@@ -2047,8 +2049,7 @@ hfcmulti_interrupt(int intno, void *dev_id, struct pt_regs *regs)
 				//bl2 = HFC_inb_(hc, R_IRQ_FIFO_BL0);
 				//printk(KERN_DEBUG "zero:%x :%x\n",bl1,bl2);
 				r_irq_fifo_bl = HFC_inb_(hc, R_IRQ_FIFO_BL0 + i);
-				j = 0;
-				while(j < 8) {
+				for (j = 0; j < 8; j++) {
 					ch = (i<<2) + (j>>1);
 					if (ch >= 16) {
 						if (ch == 16)
@@ -2074,10 +2075,8 @@ hfcmulti_interrupt(int intno, void *dev_id, struct pt_regs *regs)
 							//printk(KERN_DEBUG "rxchan:%d\n",ch);
 						}
 					}
-					j++;
 				}
 			}
-			i++;
 		}
 	}
 
@@ -3064,17 +3063,14 @@ hfcmulti_initmode(hfc_multi_t *hc)
 		hc->chan[16].ch->timer.data = (long) &hc->chan[16].ch;
 		init_timer(&hc->chan[16].ch->timer);
 
-		i = 0;
-		while (i < 30) {
+		for (i = 0; i < 30; i++) {
 			hc->chan[i+1+(i>=15)].slot_tx = -1;
 			hc->chan[i+1+(i>=15)].slot_rx = -1;
 			hc->chan[i+1+(i>=15)].conf = -1;
 			mode_hfcmulti(hc, i+1+(i>=15), ISDN_PID_NONE, -1, 0, -1, 0);
-			i++;
 		}
 	} else {
-		i = 0;
-		while (i < hc->ports) {
+		for (i = 0; i < hc->ports; i++) {
 			nt_mode = test_bit(HFC_CFG_NTMODE, &hc->chan[(i<<2)+2].cfg);
 			hc->chan[(i<<2)+2].slot_tx = -1;
 			hc->chan[(i<<2)+2].slot_rx = -1;
@@ -3092,7 +3088,6 @@ hfcmulti_initmode(hfc_multi_t *hc)
 			hc->chan[(i<<2)+1].slot_rx = -1;
 			hc->chan[(i<<2)+1].conf = -1;
 			mode_hfcmulti(hc, (i<<2)+1, ISDN_PID_NONE, -1, 0, -1, 0);
-			i++;
 		}
 	}
 
@@ -3100,11 +3095,9 @@ hfcmulti_initmode(hfc_multi_t *hc)
 	if (hc->type != 1) {
 		/* ST */
 		r_sci_msk = 0;
-		i = 0;
-		while(i < 32) {
+		for (i = 0; i < 32; i++) {
 			dch = hc->chan[i].ch;
 			if (!dch || !test_bit(FLG_DCHANNEL, &dch->Flags)) {
-				i++;
 				continue;
 			}
 			port = hc->chan[i].port;
@@ -3141,7 +3134,6 @@ hfcmulti_initmode(hfc_multi_t *hc)
 			udelay(6); /* wait at least 5,21us */
 			HFC_outb(hc, A_ST_WR_STATE, a_st_wr_state);
 			r_sci_msk |= 1 << port;
-			i++;
 		}
 		/* state machine interrupts */
 		HFC_outb(hc, R_SCI_MSK, r_sci_msk);
@@ -3423,6 +3415,7 @@ setup_pci(hfc_multi_t *hc, struct pci_dev *pdev, int id_idx)
 		return (-EIO);
 	}
 	hc->leds = id_list[id_idx].leds;
+	hc->ledstate = 0xFFFFFFFF;
 	hc->opticalsupport = id_list[id_idx].opticalsupport;
 	
 #ifdef CONFIG_HFCMULTI_PCIMEM
@@ -3641,8 +3634,7 @@ release_port(hfc_multi_t *hc, int port)
 	}
 	
 	/* free channels */
-	i = 0;
-	while(i < 32) {
+	for (i = 0; i < 32; i++) {
 		if (hc->chan[i].ch) {
 			if (debug & DEBUG_HFCMULTI_INIT)
 				printk(KERN_DEBUG "%s: free port %d %c-channel %d (1..32)\n",
@@ -3660,7 +3652,6 @@ release_port(hfc_multi_t *hc, int port)
 			kfree(hc->chan[i].ch);
 			hc->chan[i].ch = NULL;
 		}
-		i++;
 	}
 	
 	hc->created[port]=0;
@@ -3689,8 +3680,7 @@ HFC_manager(void *data, u_int prim, void *arg)
 	/* find channel and card */
 	spin_lock_irqsave(&HFCM_obj.lock, flags);
 	list_for_each_entry(hc, &HFCM_obj.ilist, list) {
-		i = 0;
-		while(i < 32) {
+		for (i = 0; i < 32; i++) {
 //printk(KERN_DEBUG "comparing (D-channel) card=%08x inst=%08x with inst=%08x\n", hc, &hc->dch[i].inst, inst);
 			if ((hc->chan[i].ch) &&
 				(&hc->chan[i].ch->inst == inst)) {
@@ -3698,7 +3688,6 @@ HFC_manager(void *data, u_int prim, void *arg)
 				chan = hc->chan[i].ch;
 				break;
 			}
-			i++;
 		}
 		if (ch >= 0)
 			break;
@@ -3964,8 +3953,7 @@ static int __devinit hfcpci_probe(struct pci_dev *pdev, const struct pci_device_
 
 	spin_lock_init(&hc->lock);
 
-	pt = 0;
-	while (pt < hc->ports) {
+	for (pt = 0; pt < hc->ports; pt++) {
 		if (port_idx >= MAX_PORTS) {
 			printk(KERN_ERR "Invalid HFC type.\n");
 			ret_err = -EINVAL;
@@ -4003,8 +3991,7 @@ static int __devinit hfcpci_probe(struct pci_dev *pdev, const struct pci_device_
 			goto free_channels;
 		hc->chan[ch].ch = chan;
 
-		i=0;
-		while(i < bchperport) {
+		for (i = 0; i < bchperport; i++) {
 			if (hc->type == 1)
 				ch2 = i + 1 + (i>=15);
 			else
@@ -4038,7 +4025,6 @@ static int __devinit hfcpci_probe(struct pci_dev *pdev, const struct pci_device_
 				chan->dev->wport.pif.fdata = chan;
 			}
 #endif
-			i++;
 		}
 		chan = hc->chan[ch].ch;
 
@@ -4180,7 +4166,6 @@ static int __devinit hfcpci_probe(struct pci_dev *pdev, const struct pci_device_
 
 		memcpy(&pids[pt], &pid, sizeof(pid));
 
-		pt++;
 		port_idx++;
 	}
 
@@ -4205,37 +4190,65 @@ static int __devinit hfcpci_probe(struct pci_dev *pdev, const struct pci_device_
 
 	hfcmulti_initmode(hc);
 	
-	/* check if Port Jumper config matches module param 'protocol' */
-	if (!hc->type && hc->ports<=4) {
-		// Dip Setting: (collect GPIO 13/14/15 (R_GPIO_IN1) + GPI 19/20/23 (R_GPI_IN2))
-		dips = ((HFC_inb(hc, R_GPIO_IN1) >> 5)  & 0x7) | (HFC_inb(hc, R_GPI_IN2) & 0x98);
+	switch (id_list[id_idx].dip_type) {
+		case DIP_4S:
+			/* get DIP Setting for beroNet 1S/2S/4S cards
+			   check if Port Jumper config matches module param 'protocol'
+			   DIP Setting: (collect GPIO 13/14/15 (R_GPIO_IN1) + GPI 19/23 (R_GPI_IN2)) */
+			dips = ((~HFC_inb(hc, R_GPIO_IN1) & 0xE0 ) >> 5) | 
+				((~HFC_inb(hc, R_GPI_IN2) & 0x80) >> 3) | (~HFC_inb(hc, R_GPI_IN2) & 0x08);
 
-		// Port mode (TE/NT) jumpers
-		pmj = ((HFC_inb(hc, R_GPI_IN3) >> 4)  & 0xf);
+			// Port mode (TE/NT) jumpers
+			pmj = ((HFC_inb(hc, R_GPI_IN3) >> 4)  & 0xf);
 
-		if (test_bit(HFC_CHIP_DIGICARD, &hc->chip))
-			pmj = ~pmj & 0xf;
+			if (test_bit(HFC_CHIP_DIGICARD, &hc->chip))
+				pmj = ~pmj & 0xf;
 
-		printk(KERN_INFO "%s: DIPs(0x%x) jumpers(0x%x)\n", __FUNCTION__, dips, pmj);
+			printk(KERN_INFO "%s: %s DIPs(0x%x) jumpers(0x%x)\n", __FUNCTION__, id_list[id_idx].card_name, dips, pmj);
 
-		pt = 0;
-		while(pt < hc->type) {
-			chan = hc->chan[(pt<<2)+2].ch;
-			// check for protocol param mismatch
-			if (((pmj & (1 << pt)) && (chan->inst.pid.protocol[0] == ISDN_PID_L0_TE_S0)) ||
-			    ((!(pmj & (1 << pt))) && (chan->inst.pid.protocol[0] == ISDN_PID_L0_NT_S0))) {
-				printk ("%s: protocol WARNING: port %i is jumpered for %s mode!\n",
-				        __FUNCTION__,
-				        pt,
-				        (pmj & (1 << pt)?"NT":"TE")
-				        );
+			for (pt = 0; pt < hc->type; pt++) {
+				chan = hc->chan[(pt<<2)+2].ch;
+				// check for protocol param mismatch
+				if (((pmj & (1 << pt)) && (chan->inst.pid.protocol[0] == ISDN_PID_L0_TE_S0)) ||
+						((!(pmj & (1 << pt))) && (chan->inst.pid.protocol[0] == ISDN_PID_L0_NT_S0))) {
+					printk ("%s: protocol WARNING: port %i is jumpered for %s mode!\n",
+							__FUNCTION__,
+							pt,
+							(pmj & (1 << pt)?"NT":"TE")
+					       );
+				}
 			}
-			pt++;
-		}
+			break;
+		case DIP_8S:
+			/* get DIP Setting for beroNet 8S0+ cards
+			 
+			   enable PCI auxbridge function */
+			HFC_outb(hc, R_BRG_PCM_CFG, 1 | V_PCM_CLK);
+			// disables interrupts
+			disable_hwirq(hc);
+			// prepare access to auxport
+			outw(0x4000, hc->pci_iobase + 4);
+			// some dummy reads are required to read valid DIP switch data
+			dips = inb(hc->pci_iobase);
+			dips = inb(hc->pci_iobase);
+			dips = inb(hc->pci_iobase);
+			dips = ~inb(hc->pci_iobase) & 0x3F;
+			// enable interrups 
+			enable_hwirq(hc);
+			outw(0x0, hc->pci_iobase + 4);
+			// disable PCI auxbridge function
+			HFC_outb(hc, R_BRG_PCM_CFG, V_PCM_CLK);
+			printk(KERN_INFO "%s: %s DIPs(0x%x)\n", __FUNCTION__, id_list[id_idx].card_name, dips);
+			break;
+		case DIP_E1:
+			/* get DIP Setting for beroNet E1 cards 
+			   DIP Setting: collect GPI 4/5/6/7 (R_GPI_IN0) */
+			dips = (~HFC_inb(hc, R_GPI_IN0) & 0xF0)>>4;
+			printk(KERN_INFO "%s: %s DIPs(0x%x)\n", __FUNCTION__, id_list[id_idx].card_name, dips);
+			break;
 	}
 	/* add stacks */
-	pt = 0;
-	while(pt < hc->ports) {
+	for (pt = 0; pt < hc->ports; pt++) {
 		if (debug & DEBUG_HFCMULTI_INIT)
 			printk(KERN_DEBUG "%s: Adding d-stack: card(%d) port(%d)\n", __FUNCTION__, HFC_idx+1, pt+1);
 		if (hc->type == 1)
@@ -4257,8 +4270,7 @@ free_release:
 
 		dst = chan->inst.st;
 
-		i = 0;
-		while(i < bchperport) {
+		for (i = 0; i < bchperport; i++) {
 			if (debug & DEBUG_HFCMULTI_INIT)
 				printk(KERN_DEBUG "%s: Adding b-stack: card(%d) port(%d) B-channel(%d)\n", __FUNCTION__, HFC_idx+1, pt+1, i+1);
 			if (hc->type == 1)
@@ -4271,7 +4283,6 @@ free_delstack:
 				mISDN_ctrl(dst, MGR_DELSTACK | REQUEST, NULL);
 				goto free_release;
 			}
-			i++;
 		}
 		if (debug & DEBUG_HFCMULTI_INIT)
 			printk(KERN_DEBUG "%s: (before MGR_SETSTACK REQUEST) layermask=0x%x\n", __FUNCTION__, pids[pt].layermask);
@@ -4290,7 +4301,6 @@ free_delstack:
 		/* tell stack, that we are ready */
 		mISDN_ctrl(dst, MGR_CTRLREADY | INDICATION, NULL);
 
-		pt++;
 	}
 
 	/* now turning on irq */
@@ -4307,8 +4317,7 @@ free_delstack:
 
 	/* if an error ocurred */
 	free_channels:
-	i = 0;
-	while(i < 32) {
+	for (i = 0; i < 32; i++) {
 		if (hc->chan[i].ch) {
 			if (debug & DEBUG_HFCMULTI_INIT)
 				printk(KERN_DEBUG "%s: free %c-channel %d (1..32)\n",
@@ -4318,7 +4327,6 @@ free_delstack:
 			kfree(hc->chan[i].ch);
 			hc->chan[i].ch = NULL;
 		}
-		i++;
 	}
 	if (debug & DEBUG_HFCMULTI_INIT)
 		printk(KERN_DEBUG "%s: before REMOVE_FROM_LIST (refcnt = %d)\n", __FUNCTION__, HFCM_obj.refcnt);
@@ -4434,6 +4442,13 @@ HFCmulti_cleanup(void)
 	if (register_interrupt) {
 		symbol_put(ztdummy_register_interrupt);
 	}
+	if (unregister_interrupt) {
+		if (interrupt_registered) { 
+			interrupt_registered = 0;
+			unregister_interrupt();
+		}
+		symbol_put(ztdummy_unregister_interrupt);
+	}
 	/* unregister mISDN object */
 	if (debug & DEBUG_HFCMULTI_INIT)
 		printk(KERN_DEBUG "%s: entered (refcnt = %d HFC_cnt = %d)\n", __FUNCTION__, HFCM_obj.refcnt, HFC_cnt);
@@ -4486,6 +4501,7 @@ HFCmulti_init(void)
 	/* get interrupt function pointer */
 	hfc_interrupt = symbol_get(ztdummy_extern_interrupt);
 	register_interrupt = symbol_get(ztdummy_register_interrupt);
+	unregister_interrupt = symbol_get(ztdummy_unregister_interrupt);
 	printk(KERN_INFO "mISDN: HFC-multi driver Rev. %s\n", mISDN_getrev(tmpstr));
 
 	switch(poll) {

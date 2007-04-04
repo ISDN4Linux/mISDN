@@ -136,6 +136,7 @@ struct hfc_multi {
 	u_int		slots;	/* number of PCM slots */
 	u_int		leds;	/* type of leds */
 	u_int		ledcount; /* used to animate leds */
+	u_long		ledstate; /* save last state of leds */
 	int		opticalsupport; /* has the e1 board an optical Interface*/
 
 	u_long		wdcount; /* every 500 ms we need to send the watchdog a signal */

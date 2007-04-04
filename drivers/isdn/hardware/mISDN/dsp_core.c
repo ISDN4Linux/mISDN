@@ -32,7 +32,7 @@
  * - (4) echo generation for delay test
  * - (5) volume control
  * - (6) disable receive data
- * - (7) echo cancelation
+ * - (7) pipelined audio processing
  * - (8) encryption/decryption
  *
  * Look:
@@ -71,7 +71,7 @@
  *        +----+-------------+----+
  *        |(7)                    |
  *        |                       |
- *        |   Echo Cancellation   |
+ *        |  Pipelined Processing |
  *        |                       |
  *        |                       |
  *        +----+-------------+----+
@@ -169,7 +169,11 @@ There are three things that need to transmit data to card:
  
  */
 
+<<<<<<< .merge_file_7uzZdj
 const char *dsp_revision = "$Revision: 1.29 $";
+=======
+const char *dsp_revision = "$Revision: 1.27.2.3 $";
+>>>>>>> .merge_file_pb23yi
 
 #include <linux/delay.h>
 #include <linux/module.h>
@@ -364,26 +368,12 @@ dsp_control_req(dsp_t *dsp, mISDN_head_t *hh, struct sk_buff *skb)
 			if (dsp_debug & DEBUG_DSP_CMX)
 				dsp_cmx_debug(dsp);
 			break;
-		case ECHOCAN_ON: /* turn echo calcellation on */
-			if (len<4) {
+		case PIPELINE_CFG:
+			if (len > 0 && ((char *)data)[len - 1]) {
+				printk(KERN_DEBUG "%s: pipeline config string is not NULL terminated!\n", __FUNCTION__);
 				ret = -EINVAL;
-			} else {
-				int ec_arr[2];
-				memcpy(&ec_arr,data,sizeof(ec_arr));
-				if (dsp_debug & DEBUG_DSP_CORE)
-					printk(KERN_DEBUG "%s: turn echo cancelation on (delay=%d attenuation-shift=%d\n",
-						__FUNCTION__, ec_arr[0], ec_arr[1]);
-			
-				ret = dsp_cancel_init(dsp, ec_arr[0], ec_arr[1] ,1);
-				dsp_cmx_hardware(dsp->conf, dsp);
-			}
-			break;
-		case ECHOCAN_OFF: /* turn echo calcellation off */
-			if (dsp_debug & DEBUG_DSP_CORE)
-				printk(KERN_DEBUG "%s: turn echo cancelation off\n", __FUNCTION__);
-			
-			ret = dsp_cancel_init(dsp, 0,0,-1);
-			dsp_cmx_hardware(dsp->conf, dsp);
+			} else
+				ret = dsp_pipeline_build(&dsp->pipeline, len > 0 ? (char *)data : NULL);
 			break;
 		case BF_ENABLE_KEY: /* turn blowfish on */
 			if (len<4 || len>56) {
@@ -461,9 +451,8 @@ dsp_from_up(mISDNinstance_t *inst, struct sk_buff *skb)
 
 				if (dsp->tx_volume)
 			                dsp_change_volume(skb, dsp->tx_volume);
-				/* cancel echo */
-				if (dsp->cancel_enable)
-					dsp_cancel_tx(dsp, skb->data, skb->len);
+				/* pipeline */
+				dsp_pipeline_process_tx(&dsp->pipeline, skb->data, skb->len);
 				/* crypt */
 				if (dsp->bf_enable)
 					dsp_bf_encrypt(dsp, skb->data, skb->len);
@@ -569,9 +558,8 @@ dsp_from_down(mISDNinstance_t *inst,  struct sk_buff *skb)
 			/* decrypt if enabled */
 			if (dsp->bf_enable)
 				dsp_bf_decrypt(dsp, skb->data, skb->len);
-			/* if echo cancellation is enabled */
-			if (dsp->cancel_enable)
-				dsp_cancel_rx(dsp, skb->data, skb->len);
+			/* pipeline */
+			dsp_pipeline_process_rx(&dsp->pipeline, skb->data, skb->len);
 			/* check if dtmf soft decoding is turned on */
 			if (dsp->dtmf.software) {
 				digits = dsp_dtmf_goertzel_decode(dsp, skb->data, skb->len, (dsp_options&DSP_OPT_ULAW)?1:0);
@@ -743,6 +731,8 @@ release_dsp(dsp_t *dsp)
 		}
 	}
 
+	dsp_pipeline_destroy(&dsp->pipeline);
+
 	if (dsp_debug & DEBUG_DSP_MGR)
 		printk(KERN_DEBUG "%s: remove & destroy object %s\n", __FUNCTION__, dsp->inst.name);
 	list_del(&dsp->list);
@@ -807,15 +797,6 @@ dsp_feat(void *arg)
 				if (dsp_debug & DEBUG_DSP_CMX)
 					dsp_cmx_debug(dsp);
 			}
-
-			if (dsp->queue_cancel[2]) {
-				dsp_cancel_init(dsp, 
-						dsp->queue_cancel[0],
-						dsp->queue_cancel[1],
-						dsp->queue_cancel[2]
-					       );
-						
-			}
 			break;
 	}
 
@@ -843,6 +824,9 @@ new_dsp(mISDNstack_t *st, mISDN_pid_t *pid)
 	}
 	memset(ndsp, 0, sizeof(dsp_t));
 	memcpy(&ndsp->inst.pid, pid, sizeof(mISDN_pid_t));
+
+	dsp_pipeline_init(&ndsp->pipeline);
+
 	mISDN_init_instance(&ndsp->inst, &dsp_obj, ndsp, dsp_function);
 	if (!mISDN_SetHandledPID(&dsp_obj, &ndsp->inst.pid)) {
 		int_error();
@@ -973,7 +957,7 @@ static int dsp_init(void)
 	dsp_debug = debug;
 
 	/* display revision */
-	printk(KERN_INFO "mISDN_dsp: Audio DSP  Rev. %s (debug=0x%x) EchoCancellor %s dtmfthreshold(%d)\n", mISDN_getrev(dsp_revision), debug, EC_TYPE, dtmfthreshold);
+	printk(KERN_INFO "mISDN_dsp: Audio DSP  Rev. %s (debug=0x%x) dtmfthreshold(%d)\n", mISDN_getrev(dsp_revision), debug, dtmfthreshold);
 
 	/* set packet size */
 	if (poll == 0) {
@@ -1021,6 +1005,12 @@ static int dsp_init(void)
 	if (dsp_options & DSP_OPT_ULAW)
 		dsp_audio_generate_ulaw_samples();
 	dsp_audio_generate_volume_changes();
+
+	/* initialize pipeline */
+	if ((err = dsp_pipeline_module_init())) {
+		printk(KERN_ERR "mISDN_dsp: Can't initialize pipeline, %s, error(%d)\n", DSPName, err);
+		return(err);
+	}
 
 	/* register object */
 	if ((err = mISDN_register(&dsp_obj))) {
@@ -1070,6 +1060,8 @@ static void dsp_cleanup(void)
 	if (!list_empty(&Conf_list)) {
 		printk(KERN_ERR "mISDN_dsp: Conference list not empty. Not all memory freed.\n");
 	}
+
+	dsp_pipeline_module_exit();
 }
 
 #ifdef MODULE
