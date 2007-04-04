@@ -169,11 +169,7 @@ There are three things that need to transmit data to card:
  
  */
 
-<<<<<<< .merge_file_7uzZdj
 const char *dsp_revision = "$Revision: 1.29 $";
-=======
-const char *dsp_revision = "$Revision: 1.27.2.3 $";
->>>>>>> .merge_file_pb23yi
 
 #include <linux/delay.h>
 #include <linux/module.h>
