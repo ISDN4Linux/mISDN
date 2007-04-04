@@ -61,6 +61,7 @@ modules-install:
 	cd $(LINUX) ; make INSTALL_MOD_PATH=$(INSTALL_PREFIX) SUBDIRS=$(MISDN_SRC) modules_install 
 	mkdir -p $(INSTALL_PREFIX)/usr/include/linux/
 	cp $(MISDNDIR)/include/linux/*.h $(INSTALL_PREFIX)/usr/include/linux/
+	if [ -e $(INSTALL_PREFIX)/usr/include/linux/mISDNdsp.h ]; then rm -f $(INSTALL_PREFIX)/usr/include/linux/mISDNdsp.h; fi
 
 misdn-init:
 	mkdir -p $(INSTALL_PREFIX)/usr/sbin/
@@ -103,11 +104,7 @@ clean:
 	find . -iname "*.mod" -exec rm -rf {} \;
 
 VERSION:
-	if cvs status Makefile | grep "Sticky Tag"  | grep none > /dev/null ; then \
-		echo $(MAJOR)_$(MINOR)_$(SUBMINOR)-$$(date +"20%y_%m_%d" | sed -e "s/\//_/g") > VERSION ; \
-	else \
-		echo $(MAJOR)_$(MINOR)_$(SUBMINOR) > VERSION ; \
-	fi
+	echo $(MAJOR)_$(MINOR)_$(SUBMINOR) > VERSION ; \
 
 snapshot: clean
 	DIR=mISDN-$$(date +"20%y_%m_%d") ; \
