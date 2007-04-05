@@ -91,12 +91,19 @@ static void process_rx (void *p, u8 *data, int len)
 	dsp_cancel_rx(p, data, len);
 }
 
+static mISDN_dsp_element_arg_t args[] = {
+	{ "deftaps", "128", "Set the number of taps of cancellation." },
+	{ "training", "0", "Enable echotraining (0: disabled, 1: enabled)." },
+};
+
 static mISDN_dsp_element_t dsp_mec2 = {
+	.name = "mec2",
 	.new = new,
 	.free = free,
 	.process_tx = process_tx,
 	.process_rx = process_rx,
-	.name = "mec2",
+	.num_args = sizeof(args) / sizeof(mISDN_dsp_element_arg_t),
+	.args = args,
 };
 
 #ifdef MODULE

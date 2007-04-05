@@ -47,16 +47,52 @@ typedef struct _dsp_pipeline_entry {
 
 typedef struct _dsp_element_entry {
 	mISDN_dsp_element_t *elem;
+	struct class_device  dev;
 	struct list_head     list;
 } dsp_element_entry_t;
 
 static rwlock_t dsp_elements_lock;
 static LIST_HEAD(dsp_elements);
 
+/* sysfs */
+static void elements_class_release (struct class_device *dev)
+{}
+
+static struct class elements_class = {
+	.name = "mISDN-dsp-elements",
+#ifndef CLASS_WITHOUT_OWNER
+	.owner = THIS_MODULE,
+#endif
+	.release = &elements_class_release,
+};
+
+static ssize_t attr_show_args (struct class_device *dev, char *buf)
+{
+	mISDN_dsp_element_t *elem = class_get_devdata(dev);
+	ssize_t len = 0;
+	int i = 0;
+
+	*buf = 0;
+	for (; i < elem->num_args; ++i)
+		len = sprintf(buf, "%sName:        %s\n%s%s%sDescription: %s\n\n", buf,
+					  elem->args[i].name,
+					  elem->args[i].def ? "Default:     " : "",
+					  elem->args[i].def ? elem->args[i].def : "",
+					  elem->args[i].def ? "\n" : "",
+					  elem->args[i].desc);
+
+	return len;
+}
+
+static struct class_device_attribute element_attributes[] = {
+	__ATTR(args, 0444, attr_show_args, NULL),
+};
+
 int mISDN_dsp_element_register (mISDN_dsp_element_t *elem)
 {
 	dsp_element_entry_t *entry;
 	u_long flags;
+	int re, i;
 
 	if (!elem)
 		return -EINVAL;
@@ -64,9 +100,20 @@ int mISDN_dsp_element_register (mISDN_dsp_element_t *elem)
 	entry = kmalloc(sizeof(dsp_element_entry_t), GFP_KERNEL);
 	if (!entry)
 		return -ENOMEM;
+	memset(entry, 0, sizeof(dsp_element_entry_t));
 
 	entry->elem = elem;
-	
+
+	entry->dev.class = &elements_class;
+	class_set_devdata(&entry->dev, elem);
+	snprintf(entry->dev.class_id, BUS_ID_SIZE, elem->name);
+	if ((re = class_device_register(&entry->dev)))
+		goto err1;
+
+	for (i = 0; i < (sizeof(element_attributes) / sizeof(struct class_device_attribute)); ++i)
+		if ((re = class_device_create_file(&entry->dev, &element_attributes[i])))
+			goto err2;
+
 	write_lock_irqsave(&dsp_elements_lock, flags);
 	list_add_tail(&entry->list, &dsp_elements);
 	write_unlock_irqrestore(&dsp_elements_lock, flags);
@@ -74,6 +121,12 @@ int mISDN_dsp_element_register (mISDN_dsp_element_t *elem)
 	printk(KERN_DEBUG "%s: %s registered\n", __FUNCTION__, elem->name);
 
 	return 0;
+
+err2:
+	class_device_unregister(&entry->dev);
+err1:
+	kfree(entry);
+	return re;
 }
 
 void mISDN_dsp_element_unregister (mISDN_dsp_element_t *elem)
@@ -90,6 +143,7 @@ void mISDN_dsp_element_unregister (mISDN_dsp_element_t *elem)
 		if (entry->elem == elem) {
 			list_del(&entry->list);
 			write_unlock_irqrestore(&dsp_elements_lock, flags);
+			class_device_unregister(&entry->dev);
 			kfree(entry);
 			printk(KERN_DEBUG "%s: %s unregistered\n", __FUNCTION__, elem->name);
 			return;
@@ -100,7 +154,12 @@ void mISDN_dsp_element_unregister (mISDN_dsp_element_t *elem)
 
 int dsp_pipeline_module_init (void)
 {
+	int re;
+
 	rwlock_init(&dsp_elements_lock);
+
+	if ((re = class_register(&elements_class)))
+		return re;
 
 	printk(KERN_DEBUG "%s: dsp pipeline module initialized\n", __FUNCTION__);
 
@@ -115,6 +174,8 @@ void dsp_pipeline_module_exit (void)
 	u_long flags;
 
 	dsp_hwec_exit();
+
+	class_unregister(&elements_class);
 
 	write_lock_irqsave(&dsp_elements_lock, flags);
 	list_for_each_entry_safe(entry, n, &dsp_elements, list) {

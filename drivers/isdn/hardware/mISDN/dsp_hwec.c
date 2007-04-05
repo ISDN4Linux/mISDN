@@ -31,12 +31,18 @@
 #include "dsp.h"
 #include "helper.h"
 
+static mISDN_dsp_element_arg_t args[] = {
+	{ "deftaps", "128", "Set the number of taps of cancellation." },
+};
+
 static mISDN_dsp_element_t dsp_hwec_p = {
+	.name = "hwec",
 	.new = NULL,
 	.free = NULL,
 	.process_tx = NULL,
 	.process_rx = NULL,
-	.name = "hwec",
+	.num_args = sizeof(args) / sizeof(mISDN_dsp_element_arg_t),
+	.args = args,
 };
 mISDN_dsp_element_t *dsp_hwec = &dsp_hwec_p;
 
