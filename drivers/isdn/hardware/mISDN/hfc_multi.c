@@ -124,6 +124,10 @@
 	hc->irq = hc->pci_dev->irq; }
 #endif
 		
+/* NOTE: MAX_PORTS must be 8*MAX_CARDS */
+#define MAX_CARDS	16
+#define MAX_PORTS	128
+
 static void ph_state_change(channel_t *ch);
 
 extern const char *CardType[];
@@ -131,6 +135,8 @@ extern const char *CardType[];
 static const char *hfcmulti_revision = "$Revision: 1.68 $";
 
 static int HFC_cnt;
+static struct pci_device_id *HFC_dev_id[MAX_CARDS];
+static struct pci_dev *HFC_dev[MAX_CARDS];
 
 static mISDNobject_t	HFCM_obj;
 
@@ -250,9 +256,6 @@ static const PCI_ENTRY id_list[] =
 /* module stuff */
 /****************/
 
-/* NOTE: MAX_PORTS must be 8*MAX_CARDS */
-#define MAX_CARDS	16
-#define MAX_PORTS	128
 static u_int type[MAX_CARDS];
 static BYTE allocated[MAX_CARDS];  // remember if card is found
 static int pcm[MAX_PORTS];
@@ -980,8 +983,10 @@ hfcmulti_leds(hfc_multi_t *hc)
 	int led[4];
 
 	hc->ledcount += poll;
-	if (hc->ledcount > 4096)
+	if (hc->ledcount > 4096) {
 		hc->ledcount -= 4096;
+		hc->ledstate = 0xAFFEAFFE;
+	}
 
 	switch(hc->leds) {
 		case 1: /* HFC-E1 OEM */
@@ -990,6 +995,7 @@ hfcmulti_leds(hfc_multi_t *hc)
 			   left green: PH_ACTIVATE
 			   right green flashing: FIFO activity
 			   */
+#if 0
 			i = HFC_inb(hc, R_GPI_IN0) & 0xf0;
 			if (!(i & 0x40)) { /* LOS */
 				if (hc->e1_switch != i) {
@@ -997,10 +1003,13 @@ hfcmulti_leds(hfc_multi_t *hc)
 					hc->hw.r_tx0 &= ~V_OUT_EN;
 					HFC_outb(hc, R_TX0, hc->hw.r_tx0);
 				}
-				if (hc->ledcount & 512)
+				if (!test_bit(HFC_CFG_NTMODE, &hc->chan[16].cfg)) {
 					led[0] = led[1] = 1;
-				else
+				} else if (hc->ledcount>>11) {
+					led[0] = led[1] = 1;
+				} else {
 					led[0] = led[1] = 0;
+				}
 				led[2] = led[3] = 0;
 			} else {
 				if (!(i & 0x80)) { /* AIS */
@@ -1053,7 +1062,28 @@ hfcmulti_leds(hfc_multi_t *hc)
 						led[2] = led[3] = 0; /* no green */
 				}
 			}
-			leds = (led[0] | (led[1]<<2) | (led[2]<<1) | (led[3]<<3))^0xf; /* leds are inverted */
+#endif
+			i = HFC_inb(hc, R_GPI_IN0) & 0xF0;
+			if (hc->e1_switch != i) {
+				hc->e1_switch = i;
+				hc->hw.r_tx0 &= ~V_OUT_EN;
+				HFC_outb(hc, R_TX0, hc->hw.r_tx0);
+			}
+			if (hc->chan[16].sync != 2) { /* no frame sync */
+				if (!test_bit(HFC_CFG_NTMODE, &hc->chan[16].cfg)) {
+					led[0] = led[1] = 1;
+				} else if (hc->ledcount>>11) {
+					led[0] = led[1] = 1;
+				} else {
+					led[0] = led[1] = 0;
+				}
+				led[2] = led[3] = 0;
+			} else { /* with frame sync */
+				led[0] = led[1] = 0;
+				led[2] = 0;
+				led[3] = 1;
+			}
+			leds = (led[0] | (led[1]<<2) | (led[2]<<1) | (led[3]<<3))^0xF; /* leds are inverted */
 			if (leds != (int)hc->ledstate) {
 				HFC_outb(hc, R_GPIO_OUT1, leds);
 				hc->ledstate = leds;
@@ -2013,8 +2043,8 @@ hfcmulti_interrupt(int intno, void *dev_id, struct pt_regs *regs)
 				chan->state = HFC_inb_(hc, R_E1_RD_STA) & 0x7;
 				ph_state_change(chan);
 				if (debug & DEBUG_HFCMULTI_STATE)
-					printk(KERN_DEBUG "%s: E1 newstate %x\n",
-						__FUNCTION__, chan->state);
+					printk(KERN_DEBUG "%s: E1 (id=%d) newstate %x\n",
+						__FUNCTION__, hc->id ,chan->state);
 			}
 		}
 		if (r_irq_misc & V_TI_IRQ)
@@ -2049,7 +2079,8 @@ hfcmulti_interrupt(int intno, void *dev_id, struct pt_regs *regs)
 				//bl2 = HFC_inb_(hc, R_IRQ_FIFO_BL0);
 				//printk(KERN_DEBUG "zero:%x :%x\n",bl1,bl2);
 				r_irq_fifo_bl = HFC_inb_(hc, R_IRQ_FIFO_BL0 + i);
-				for (j = 0; j < 8; j++) {
+				j = 0;
+				while(j < 8) {
 					ch = (i<<2) + (j>>1);
 					if (ch >= 16) {
 						if (ch == 16)
@@ -2075,6 +2106,7 @@ hfcmulti_interrupt(int intno, void *dev_id, struct pt_regs *regs)
 							//printk(KERN_DEBUG "rxchan:%d\n",ch);
 						}
 					}
+					j++;
 				}
 			}
 		}
@@ -2934,10 +2966,10 @@ static void ph_state_change(channel_t *dch)
 	if (hc->type == 1) {
 		if (!test_bit(HFC_CFG_NTMODE, &hc->chan[ch].cfg)) {
 			if (debug & DEBUG_HFCMULTI_STATE)
-				printk(KERN_DEBUG "%s: E1 TE newstate %x\n", __FUNCTION__, dch->state);
+				printk(KERN_DEBUG "%s: E1 TE (id=%d) newstate %x\n", __FUNCTION__, hc->id, dch->state);
 		} else {
 			if (debug & DEBUG_HFCMULTI_STATE)
-				printk(KERN_DEBUG "%s: E1 NT newstate %x\n", __FUNCTION__, dch->state);
+				printk(KERN_DEBUG "%s: E1 NT (id=%d) newstate %x\n", __FUNCTION__, hc->id, dch->state);
 		}
 		switch (dch->state) {
 			case (1):
@@ -3415,7 +3447,7 @@ setup_pci(hfc_multi_t *hc, struct pci_dev *pdev, int id_idx)
 		return (-EIO);
 	}
 	hc->leds = id_list[id_idx].leds;
-	hc->ledstate = 0xFFFFFFFF;
+	hc->ledstate = 0xAFFEAFFE;
 	hc->opticalsupport = id_list[id_idx].opticalsupport;
 	
 #ifdef CONFIG_HFCMULTI_PCIMEM
@@ -3807,11 +3839,33 @@ static int find_idlist_entry(int vendor,int subvendor, int device, int subdevice
 	return(-1);
 }
 
+/* just check for cards, initializise later */
 static int __devinit hfcpci_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 {
+	int		id_idx;        // index to id_list
+
+	id_idx = find_idlist_entry(ent->vendor,ent->subvendor,ent->device,ent->subdevice);
+	if (id_idx == -1) {
+		if (ent->vendor == CCAG_VID)
+			if (ent->device == HFC4S_ID
+			 || ent->device == HFC8S_ID
+			 || ent->device == HFCE1_ID)
+				printk( KERN_ERR "unknown HFC multiport controller (vendor:%x device:%x subvendor:%x subdevice:%x) Please contact the driver maintainer for support.\n",
+					ent->vendor,ent->device,ent->subvendor,ent->subdevice);
+		return (-ENODEV);
+	}
+	allocated[HFC_cnt] = 1;    /* mark card as found */
+	HFC_dev_id[HFC_cnt] = ent; /* remember ent & pdev for initialization */
+	HFC_dev[HFC_cnt++] = pdev;
+	return 0;
+
+}
+
+static int __devinit hfcpci_init(struct pci_dev *pdev, const struct pci_device_id *ent, int type)
+{
 	int		i, ret_err=0;
-	static int HFC_idx=0, HFC_port_idx=0;
-	int port_idx;
+	static int 	HFC_idx=0, HFC_port_idx=0;
+	int		port_idx;
 	int		bchperport, card_type, pt;
 	int		ch, ch2;
 	int		id_idx;        // index to id_list
@@ -3825,19 +3879,11 @@ static int __devinit hfcpci_probe(struct pci_dev *pdev, const struct pci_device_
 	u_char		dips=0, pmj=0; // dip settings, port mode Jumpers
 
 	id_idx = find_idlist_entry(ent->vendor,ent->subvendor,ent->device,ent->subdevice);
-	if (id_idx == -1) {
-		if (ent->vendor == CCAG_VID)
-			if (ent->device == HFC4S_ID
-			 || ent->device == HFC8S_ID
-			 || ent->device == HFCE1_ID)
-				printk( KERN_ERR "unknown HFC multiport controller (vendor:%x device:%x subvendor:%x subdevice:%x) Please contact the driver maintainer for support.\n",
-					ent->vendor,ent->device,ent->subvendor,ent->subdevice);
-		return (-ENODEV);
-	}
 
 	//hfc_type=id_list[id_idx].type;
 	hfc_ports=id_list[id_idx].ports;
 
+	printk("Check card type: %x\n", ent->device);
 	/* check card type */
 	switch (ent->device) {
 		case HFCE1_ID:
@@ -3865,7 +3911,7 @@ static int __devinit hfcpci_probe(struct pci_dev *pdev, const struct pci_device_
 		break;
 
 		default:
-		printk(KERN_ERR "Card type(%d) not supported.\n", type[HFC_idx] & 0xff);
+		printk(KERN_ERR "Card type(%d) not supported.\n", type & 0xff);
 		ret_err = -EINVAL;
 		goto free_object;
 	}
@@ -3880,7 +3926,7 @@ static int __devinit hfcpci_probe(struct pci_dev *pdev, const struct pci_device_
 
 	if (debug & DEBUG_HFCMULTI_INIT)
 		printk(KERN_DEBUG "%s: Registering chip type %d (0x%x)\n",
-			__FUNCTION__, type[HFC_idx] & 0xff, type[HFC_idx]);
+			__FUNCTION__, type & 0xff, type);
 
 	/* allocate card+fifo structure */
 //#warning
@@ -3905,33 +3951,33 @@ static int __devinit hfcpci_probe(struct pci_dev *pdev, const struct pci_device_
 	
 //	printk( KERN_NOTICE "type:%d ports:%d HFC_idx:%d port_idx:%d\n",card_type, hfc_ports, HFC_idx, port_idx);
 
-	if (type[HFC_idx] & 0x100) {
+	if (type & 0x100) {
 		test_and_set_bit(HFC_CHIP_ULAW, &hc->chip);
 		silence = 0xff; /* ulaw silence */
 	} else
 		silence = 0x2a; /* alaw silence */
-	if (type[HFC_idx] & 0x200)
+	if (type & 0x200)
 		test_and_set_bit(HFC_CHIP_DTMF, &hc->chip);
-//		if ((type[HFC_idx]&0x400) && hc->type==4)
+//		if ((type&0x400) && hc->type==4)
 //			test_and_set_bit(HFC_CHIP_LEDS, &hc->chip);
-	if (type[HFC_idx] & 0x800)
+	if (type & 0x800)
 		test_and_set_bit(HFC_CHIP_PCM_SLAVE, &hc->chip);
-	if (type[HFC_idx] & 0x1000)
+	if (type & 0x1000)
 		test_and_set_bit(HFC_CHIP_CLOCK_IGNORE, &hc->chip);
-	if (type[HFC_idx] & 0x2000)
+	if (type & 0x2000)
 		test_and_set_bit(HFC_CHIP_RX_SYNC, &hc->chip);
-	if (type[HFC_idx] & 0x4000)
+	if (type & 0x4000)
 		test_and_set_bit(HFC_CHIP_EXRAM_128, &hc->chip);
-	if (type[HFC_idx] & 0x8000)
+	if (type & 0x8000)
 		test_and_set_bit(HFC_CHIP_EXRAM_512, &hc->chip);
 	hc->slots = 32;
-	if (type[HFC_idx] & 0x10000)
+	if (type & 0x10000)
 		hc->slots = 64;
-	if (type[HFC_idx] & 0x20000)
+	if (type & 0x20000)
 		hc->slots = 128;
-	if (type[HFC_idx] & 0x40000)
+	if (type & 0x40000)
 		test_and_set_bit(HFC_CHIP_CRYSTAL_CLOCK, &hc->chip);
-	if (type[HFC_idx] & 0x80000) {
+	if (type & 0x80000) {
 		test_and_set_bit(HFC_CHIP_WATCHDOG, &hc->chip);
 		hc->wdcount=0;
 		hc->wdbyte=V_GPIO_OUT2;
@@ -4306,9 +4352,6 @@ free_delstack:
 	/* now turning on irq */
 	spin_lock_irqsave(&hc->lock, flags);
 	enable_hwirq(hc);
-	/* we are on air! */
-	allocated[HFC_idx] = 1;
-	HFC_cnt++;
 	spin_unlock_irqrestore(&hc->lock, flags);
 
 	HFC_idx++;
@@ -4351,7 +4394,7 @@ static void __devexit hfc_remove_pci(struct pci_dev *pdev)
 			pdev->vendor,pdev->device,pdev->subsystem_vendor,pdev->subsystem_device);
 	if (card) {
 #if 1
-		for(i=0;i<card->ports;i++) { // type is also number of d-channel
+		for (i = 0; i < card->ports; i++) { // type is also number of d-channel
 			if(card->created[i]) {
 				if (card->type == 1)
 					ch = 16;
@@ -4485,7 +4528,7 @@ HFCmulti_cleanup(void)
 static int __init
 HFCmulti_init(void)
 {
-	int err, i;
+	int err, i, j;
 	char tmpstr[64];
 
 #if !defined(CONFIG_HOTPLUG) || !defined(MODULE)
@@ -4558,17 +4601,74 @@ HFCmulti_init(void)
 	if (debug & DEBUG_HFCMULTI_INIT)
 		printk(KERN_DEBUG "%s: new mISDN object (refcnt = %d)\n", __FUNCTION__, HFCM_obj.refcnt);
 
-	for(i=0;i<MAX_CARDS;i++) allocated[i]=0;
+	for (i = 0; i < MAX_CARDS; i++) allocated[i] = 0;
 	HFC_cnt = 0;
 
 #if 1
 	err = pci_register_driver(&hfcmultipci_driver);
-	if (err < 0)
-	{
+	if (err < 0) {
 		printk(KERN_ERR "error registering pci driver:%x\n",err);
 		HFCmulti_cleanup();
 		return(err);
 	}
+	/* now we have an array of cards and an array of module type parameters.
+	 * let's match them together. */
+	for (i = 0; i < HFC_cnt; i++) {
+		switch(type[i] & 0xF) {
+			case 0x1: /* HFC-E1 chip */
+				for (j = 0; j < HFC_cnt; j++) {
+					/* looking for first card to match type parameter */
+					if (HFC_dev_id[j]->device == HFCE1_ID && allocated[j]) {
+						allocated[j] = 0; /* mark card as allready used */
+						err = hfcpci_init(HFC_dev[j], HFC_dev_id[j], type[i]);
+						if (err < 0) {
+							printk(KERN_ERR "error initializing cards:%x\n",err);
+							HFCmulti_cleanup();
+							return(err);
+						}
+						break;
+					}
+				}
+				break;
+			case 0x4: /* HFC-S4 chip */
+				for (j = 0; j < HFC_cnt; j++) {
+					if ((HFC_dev_id[j]->device == HFCE1_ID ||
+							HFC_dev_id[j]->device == 0xB410) && allocated[j]) {
+						allocated[j] = 0;
+						err = hfcpci_init(HFC_dev[j], HFC_dev_id[j], type[i]);
+						if (err < 0) {
+							printk(KERN_ERR "error initializing cards:%x\n",err);
+							HFCmulti_cleanup();
+							return(err);
+						}
+						break;
+					}
+				}
+				break;
+			case 0x8: /* HFC-S8 chip */
+				for (j = 0; j < HFC_cnt; j++) {
+					if (HFC_dev_id[j]->device == HFC8S_ID && allocated[j]) {
+						allocated[j] = 0;
+						err = hfcpci_init(HFC_dev[j], HFC_dev_id[j], type[i]);
+						if (err < 0) {
+							printk(KERN_ERR "error initializing cards:%x\n",err);
+							HFCmulti_cleanup();
+							return(err);
+						}
+						break;
+					}
+				}
+
+				break;
+			default:
+				printk(KERN_ERR "wrong module parameter, unknown type of card\n");
+				return -EINVAL;
+		}
+	}
+	for (i = 0; i < HFC_cnt; i++) { /* set marker back */
+		allocated[i] = 1;
+	}
+
 #endif
 	printk(KERN_INFO "%d devices registered\n", HFC_cnt);
 
