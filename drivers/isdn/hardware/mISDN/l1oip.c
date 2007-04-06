@@ -1449,8 +1449,6 @@ next_card:
 	init_timer(&hc->timeout_tl);
 	hc->timeout_tl.expires = jiffies; /* make timer already timed out */
 
-
-	add_timer(&hc->keep_tl);
 	l1oip_cnt++;
 	goto next_card;
 
