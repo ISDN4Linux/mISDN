@@ -66,8 +66,8 @@ ifdef CONFIG_MISDN_DSP
 obj-$(CONFIG_MISDN_DRV) += mISDN_dsp.o mISDN_dsp_mec2.o mISDN_dsp_kb1ec.o mISDN_dsp_mg2ec.o mISDN_dsp_octwareec.o
 endif
 
-ifdef CONFIG_MISDN_LOOP
-obj-$(CONFIG_MISDN_DRV) += mISDN_loop.o
+ifdef CONFIG_MISDN_L1OIP
+obj-$(CONFIG_MISDN_DRV) += l1oip.o
 endif
 
 ifdef CONFIG_I4L_CAPI_LAYER
@@ -110,7 +110,6 @@ mISDN_dsp_mec2-objs := dsp_mec2.o
 mISDN_dsp_kb1ec-objs := dsp_kb1ec.o
 mISDN_dsp_mg2ec-objs := dsp_mg2ec.o
 mISDN_dsp_octwareec-objs := dsp_octwareec.o
-mISDN_loop-objs := loop.o
 mISDN_x25dte-objs := x25_dte.o x25_l3.o
 I4LmISDN-objs := i4l_mISDN.o
 
