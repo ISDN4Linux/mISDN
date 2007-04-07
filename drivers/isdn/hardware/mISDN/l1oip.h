@@ -58,6 +58,7 @@ struct _l1oip_t {
 	spinlock_t 		socket_lock;	/* lock before access socket outside socket thread */	
 	u8			remoteip[4];	/* if all set, ip is assigned */
 	u16	 		remoteport;	/* must always be set */
+	u16	 		localport;	/* must always be set */
 	struct sockaddr_in	sin_local;	/* local socket name */
 	struct sockaddr_in	sin_remote;	/* remote socket name */
 	struct msghdr		sendmsg;	/* ip message to send */

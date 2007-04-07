@@ -53,8 +53,14 @@
 
  * port:
 	port number (remote interface)
-	If not given or 0, port 931 is used for fist instance, 932 for next...
+	If not given or 0, port 931 is used for first instance, 932 for next...
 	For multiple interfaces, different ports must be given.
+
+* localport:
+	port number (local interface)
+	If not given or 0, port 931 is used for first instance, 932 for next...
+	For multiple interfaces, different ports must be given.
+
 
  * ondemand:
 	0 = fixed (always transmit packets, even when remote side timed out)
@@ -219,6 +225,7 @@ static int layermask[MAX_CARDS];
 static char *ip[MAX_CARDS];
 
 static u_int port[MAX_CARDS*4];
+static u_int localport[MAX_CARDS*4];
 static u_int ondemand[MAX_CARDS];
 static u_int limit[MAX_CARDS];
 static u_int id[MAX_CARDS];
@@ -235,6 +242,7 @@ module_param_array(protocol, uint, NULL, S_IRUGO | S_IWUSR);
 module_param_array(layermask, uint, NULL, S_IRUGO | S_IWUSR);
 module_param_array(ip, charp, NULL, S_IRUGO | S_IWUSR);
 module_param_array(port, uint, NULL, S_IRUGO | S_IWUSR);
+module_param_array(localport, uint, NULL, S_IRUGO | S_IWUSR);
 module_param_array(ondemand, uint, NULL, S_IRUGO | S_IWUSR);
 //module_param_array(limit, uint, NULL, S_IRUGO | S_IWUSR);
 module_param_array(id, uint, NULL, S_IRUGO | S_IWUSR);
@@ -559,7 +567,7 @@ l1oip_socket_thread(void *data)
 	/* set incoming address */
 	hc->sin_local.sin_family = AF_INET;
 	hc->sin_local.sin_addr.s_addr = INADDR_ANY;
-	hc->sin_local.sin_port = htons((unsigned short)hc->remoteport); /* local and remote port are equal */
+	hc->sin_local.sin_port = htons((unsigned short)hc->localport); /* local and remote port are equal */
 
 	/* set outgoing address */
 	hc->sin_remote.sin_family = AF_INET;
@@ -1302,8 +1310,9 @@ next_card:
 	if (ipb) hc->remoteip[3] = simple_strtol(ipb,NULL,10);
 
 	hc->remoteport = port[l1oip_cnt]?:(L1OIP_DEFAULTPORT+l1oip_cnt);
+	hc->localport= localport[l1oip_cnt]?:(L1OIP_DEFAULTPORT+l1oip_cnt);
 	if (debug & DEBUG_L1OIP_INIT)
-		printk(KERN_DEBUG "%s: using remote ip %d.%d.%d.%d port %d ondemand %d\n", __FUNCTION__, hc->remoteip[0], hc->remoteip[1], hc->remoteip[2], hc->remoteip[3], hc->remoteport, hc->ondemand);
+		printk(KERN_DEBUG "%s: using remote ip %d.%d.%d.%d port %d localport %d ondemand %d\n", __FUNCTION__, hc->remoteip[0], hc->remoteip[1], hc->remoteip[2], hc->remoteip[3], hc->remoteport, hc->localport, hc->ondemand);
 	
 	if (debug & DEBUG_L1OIP_INIT)
 		printk(KERN_DEBUG "%s: Registering D-channel, card(%d) protocol(%x)\n", __FUNCTION__, l1oip_cnt+1, protocol[l1oip_cnt]);
