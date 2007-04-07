@@ -56,6 +56,11 @@
 	If not given or 0, port 931 is used for fist instance, 932 for next...
 	For multiple interfaces, different ports must be given.
 
+ * localport:
+	port number (local interface)
+	If not given or 0, port equals remote port
+	For multiple interfaces on equal sites, different ports must be given.
+
  * ondemand:
 	0 = fixed (always transmit packets, even when remote side timed out)
 	1 = on demand (only transmit packets, when remote side is detected)
@@ -75,8 +80,10 @@ Special PH_CONTROL messages:
 
  dinfo = L1OIP_SETPEER*
  data bytes 0-3 : remote IP address in network order (left element first)
- data bytes 4-5 : local port in network order (high byte first)
-
+ data bytes 4-5 : remote port in network order (high byte first)
+ optional:
+ data bytes 6-7 : local port in network order (high byte first)
+ 
  dinfo = L1OIP_UNSETPEER*
 
  * Use l1oipctrl for comfortable setting or removing ip address.
@@ -215,7 +222,8 @@ static u_int codec[MAX_CARDS];
 static u_int protocol[MAX_CARDS];
 static int layermask[MAX_CARDS];
 static u_int ip[MAX_CARDS*4];
-static u_int port[MAX_CARDS*4];
+static u_int port[MAX_CARDS];
+static u_int remoteport[MAX_CARDS];
 static u_int ondemand[MAX_CARDS];
 static u_int limit[MAX_CARDS];
 static u_int id[MAX_CARDS];
@@ -232,6 +240,7 @@ module_param_array(protocol, uint, NULL, S_IRUGO | S_IWUSR);
 module_param_array(layermask, uint, NULL, S_IRUGO | S_IWUSR);
 module_param_array(ip, uint, NULL, S_IRUGO | S_IWUSR);
 module_param_array(port, uint, NULL, S_IRUGO | S_IWUSR);
+module_param_array(remoteport, uint, NULL, S_IRUGO | S_IWUSR);
 module_param_array(ondemand, uint, NULL, S_IRUGO | S_IWUSR);
 //module_param_array(limit, uint, NULL, S_IRUGO | S_IWUSR);
 module_param_array(id, uint, NULL, S_IRUGO | S_IWUSR);
@@ -556,7 +565,7 @@ l1oip_socket_thread(void *data)
 	/* set incoming address */
 	hc->sin_local.sin_family = AF_INET;
 	hc->sin_local.sin_addr.s_addr = INADDR_ANY;
-	hc->sin_local.sin_port = htons((unsigned short)hc->remoteport); /* local and remote port are equal */
+	hc->sin_local.sin_port = htons((unsigned short)hc->localport);
 
 	/* set outgoing address */
 	hc->sin_remote.sin_family = AF_INET;
@@ -814,7 +823,13 @@ l1oip_channel(mISDNinstance_t *inst, struct sk_buff *skb)
 				break;
 			}
 			memcpy(hc->remoteip, skb->data, 4);
+			hc->localport = 0;
 			hc->remoteport = (skb->data[4]<<8) + skb->data[5];
+			if (skb->len >= 8) {
+				hc->remoteport = (skb->data[4]<<8) + skb->data[5];
+			}
+			if (!hc->localport)
+				hc->localport = hc->remoteport;
 			if (debug & DEBUG_L1OIP_SOCKET)
 				printk(KERN_DEBUG "%s: got new ip address from user space.\n", __FUNCTION__);
 			l1oip_socket_open(hc);
@@ -1288,8 +1303,12 @@ next_card:
 	hc->remoteip[2] = ip[(l1oip_cnt<<2)+2];
 	hc->remoteip[3] = ip[(l1oip_cnt<<2)+3];
 	hc->remoteport = port[l1oip_cnt]?:(L1OIP_DEFAULTPORT+l1oip_cnt);
+	if (remoteport[l1oip_cnt])
+		hc->remoteport = remoteport[l1oip_cnt];
+	else
+		hc->remoteport = hc->localport;
 	if (debug & DEBUG_L1OIP_INIT)
-		printk(KERN_DEBUG "%s: using remote ip %d.%d.%d.%d port %d ondemand %d\n", __FUNCTION__, hc->remoteip[0], hc->remoteip[1], hc->remoteip[2], hc->remoteip[3], hc->remoteport, hc->ondemand);
+		printk(KERN_DEBUG "%s: using local port %d remote ip %d.%d.%d.%d port %d ondemand %d\n", __FUNCTION__, hc->localport, hc->remoteip[0], hc->remoteip[1], hc->remoteip[2], hc->remoteip[3], hc->remoteport, hc->ondemand);
 	
 	if (debug & DEBUG_L1OIP_INIT)
 		printk(KERN_DEBUG "%s: Registering D-channel, card(%d) protocol(%x)\n", __FUNCTION__, l1oip_cnt+1, protocol[l1oip_cnt]);
@@ -1449,8 +1468,6 @@ next_card:
 	init_timer(&hc->timeout_tl);
 	hc->timeout_tl.expires = jiffies; /* make timer already timed out */
 
-
-	add_timer(&hc->keep_tl);
 	l1oip_cnt++;
 	goto next_card;
 
