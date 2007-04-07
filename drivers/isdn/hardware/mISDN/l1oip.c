@@ -56,11 +56,10 @@
 	If not given or 0, port 931 is used for first instance, 932 for next...
 	For multiple interfaces, different ports must be given.
 
-* localport:
+ * localport:
 	port number (local interface)
-	If not given or 0, port 931 is used for first instance, 932 for next...
-	For multiple interfaces, different ports must be given.
-
+	If not given or 0, port equals remote port
+	For multiple interfaces on equal sites, different ports must be given.
 
  * ondemand:
 	0 = fixed (always transmit packets, even when remote side timed out)
@@ -81,8 +80,10 @@ Special PH_CONTROL messages:
 
  dinfo = L1OIP_SETPEER*
  data bytes 0-3 : remote IP address in network order (left element first)
- data bytes 4-5 : local port in network order (high byte first)
-
+ data bytes 4-5 : remote port in network order (high byte first)
+ optional:
+ data bytes 6-7 : local port in network order (high byte first)
+ 
  dinfo = L1OIP_UNSETPEER*
 
  * Use l1oipctrl for comfortable setting or removing ip address.
@@ -223,9 +224,9 @@ static u_int protocol[MAX_CARDS];
 static int layermask[MAX_CARDS];
 
 static char *ip[MAX_CARDS];
+static u_int port[MAX_CARDS];
+static u_int localport[MAX_CARDS];
 
-static u_int port[MAX_CARDS*4];
-static u_int localport[MAX_CARDS*4];
 static u_int ondemand[MAX_CARDS];
 static u_int limit[MAX_CARDS];
 static u_int id[MAX_CARDS];
@@ -567,7 +568,7 @@ l1oip_socket_thread(void *data)
 	/* set incoming address */
 	hc->sin_local.sin_family = AF_INET;
 	hc->sin_local.sin_addr.s_addr = INADDR_ANY;
-	hc->sin_local.sin_port = htons((unsigned short)hc->localport); /* local and remote port are equal */
+	hc->sin_local.sin_port = htons((unsigned short)hc->localport);
 
 	/* set outgoing address */
 	hc->sin_remote.sin_family = AF_INET;
@@ -825,7 +826,13 @@ l1oip_channel(mISDNinstance_t *inst, struct sk_buff *skb)
 				break;
 			}
 			memcpy(hc->remoteip, skb->data, 4);
+			hc->localport = 0;
 			hc->remoteport = (skb->data[4]<<8) + skb->data[5];
+			if (skb->len >= 8) {
+				hc->remoteport = (skb->data[4]<<8) + skb->data[5];
+			}
+			if (!hc->localport)
+				hc->localport = hc->remoteport;
 			if (debug & DEBUG_L1OIP_SOCKET)
 				printk(KERN_DEBUG "%s: got new ip address from user space.\n", __FUNCTION__);
 			l1oip_socket_open(hc);
@@ -1294,23 +1301,28 @@ next_card:
 	hc->limit = limit[l1oip_cnt];
 
 	/* set remote ip, remote port, local port */
+
+	/*parse the IP address*/
 	char *p=ip[l1oip_cnt];
 	char *ipb;
 	
 	ipb=strsep(&p,".");	
 	if (ipb) hc->remoteip[0] = simple_strtol(ipb,NULL,10);
-
 	ipb=strsep(&p,".");	
 	if (ipb) hc->remoteip[1] = simple_strtol(ipb,NULL,10);
-
 	ipb=strsep(&p,".");	
 	if (ipb) hc->remoteip[2] = simple_strtol(ipb,NULL,10);
-
 	ipb=strsep(&p,".");	
 	if (ipb) hc->remoteip[3] = simple_strtol(ipb,NULL,10);
 
 	hc->remoteport = port[l1oip_cnt]?:(L1OIP_DEFAULTPORT+l1oip_cnt);
-	hc->localport= localport[l1oip_cnt]?:(L1OIP_DEFAULTPORT+l1oip_cnt);
+
+	/*check if localport is given*/
+	if (localport[l1oip_cnt])
+		hc->localport= localport[l1oip_cnt];
+	else
+		hc->localport = hc->remoteport;
+
 	if (debug & DEBUG_L1OIP_INIT)
 		printk(KERN_DEBUG "%s: using remote ip %d.%d.%d.%d port %d localport %d ondemand %d\n", __FUNCTION__, hc->remoteip[0], hc->remoteip[1], hc->remoteip[2], hc->remoteip[3], hc->remoteport, hc->localport, hc->ondemand);
 	
