@@ -181,6 +181,7 @@ socket process and create a new one.
 */
 
 
+#include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/delay.h>
 
@@ -214,7 +215,9 @@ static u_int type[MAX_CARDS];
 static u_int codec[MAX_CARDS];
 static u_int protocol[MAX_CARDS];
 static int layermask[MAX_CARDS];
-static u_int ip[MAX_CARDS*4];
+
+static char *ip[MAX_CARDS];
+
 static u_int port[MAX_CARDS*4];
 static u_int ondemand[MAX_CARDS];
 static u_int limit[MAX_CARDS];
@@ -230,7 +233,7 @@ module_param_array(type, uint, NULL, S_IRUGO | S_IWUSR);
 module_param_array(codec, uint, NULL, S_IRUGO | S_IWUSR);
 module_param_array(protocol, uint, NULL, S_IRUGO | S_IWUSR);
 module_param_array(layermask, uint, NULL, S_IRUGO | S_IWUSR);
-module_param_array(ip, uint, NULL, S_IRUGO | S_IWUSR);
+module_param_array(ip, charp, NULL, S_IRUGO | S_IWUSR);
 module_param_array(port, uint, NULL, S_IRUGO | S_IWUSR);
 module_param_array(ondemand, uint, NULL, S_IRUGO | S_IWUSR);
 //module_param_array(limit, uint, NULL, S_IRUGO | S_IWUSR);
@@ -1283,10 +1286,21 @@ next_card:
 	hc->limit = limit[l1oip_cnt];
 
 	/* set remote ip, remote port, local port */
-	hc->remoteip[0] = ip[l1oip_cnt<<2];
-	hc->remoteip[1] = ip[(l1oip_cnt<<2)+1];
-	hc->remoteip[2] = ip[(l1oip_cnt<<2)+2];
-	hc->remoteip[3] = ip[(l1oip_cnt<<2)+3];
+	char *p=ip[l1oip_cnt];
+	char *ipb;
+	
+	ipb=strsep(&p,".");	
+	if (ipb) hc->remoteip[0] = simple_strtol(ipb,NULL,10);
+
+	ipb=strsep(&p,".");	
+	if (ipb) hc->remoteip[1] = simple_strtol(ipb,NULL,10);
+
+	ipb=strsep(&p,".");	
+	if (ipb) hc->remoteip[2] = simple_strtol(ipb,NULL,10);
+
+	ipb=strsep(&p,".");	
+	if (ipb) hc->remoteip[3] = simple_strtol(ipb,NULL,10);
+
 	hc->remoteport = port[l1oip_cnt]?:(L1OIP_DEFAULTPORT+l1oip_cnt);
 	if (debug & DEBUG_L1OIP_INIT)
 		printk(KERN_DEBUG "%s: using remote ip %d.%d.%d.%d port %d ondemand %d\n", __FUNCTION__, hc->remoteip[0], hc->remoteip[1], hc->remoteip[2], hc->remoteip[3], hc->remoteport, hc->ondemand);
