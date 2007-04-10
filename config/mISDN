@@ -65,12 +65,23 @@ declare -a HFCMULTI_protocol
 declare -a HFCMULTI_layermask
 HFCMULTI_options=''
 MISDNDSP_options=''
+L1OIP_options=''
 
 AVMFRITZ_protocol=''
 AVMFRITZ_layermask=''
 
 HFCPCI_protocol=''
 HFCPCI_layermask=''
+
+L1OIP_type=''
+L1OIP_protocol=''
+L1OIP_layermask=''
+L1OIP_codec=''
+L1OIP_ip=''
+L1OIP_port=''
+L1OIP_localport=''
+L1OIP_ondemand=''
+L1OIP_id=''
 
 DEVNODE_user='root'
 DEVNODE_group='root'
@@ -84,7 +95,7 @@ declare -a SCAN_port_opts
 function parse_config
 {
 	local CONFIG=$(${XSLTPROC} ${MISDN_CONF_XSL} ${MISDN_CONF})
-	local t p l line i tmpcmd curr tmpstr
+	local t p l line i tmpcmd curr tmpstr val
 	local IFS=$'\n'
 	
 	START_COMMANDS[${#START_COMMANDS[@]}]="${MODPROBE} --ignore-install capi"
@@ -116,6 +127,9 @@ function parse_config
 			MODULE:mISDN_dsp*)
 				MISDNDSP_options=${line:17}
 				;;
+			MODULE:l1oip*)
+				L1OIP_options=${line:13}
+				;;
 			CARD:BN*)
 				curr='hfcmulti'
 				i=${#HFCMULTI_type[@]}
@@ -137,6 +151,9 @@ function parse_config
 			CARD:avmfritz*)
 				curr='avmfritz'
 				;;
+			CARD:l1oip*)
+				curr='l1oip'
+				;;
 			PORT*)
 				case "${curr}" in
 					hfcmulti)
@@ -156,6 +173,26 @@ function parse_config
 						AVMFRITZ_protocol="${AVMFRITZ_protocol:+"${AVMFRITZ_protocol},"}$(printf "0x%x" ${p})"
 						let "l = $(echo ${line} | ${SED} -n 's/.*layermask:\([^ ]*\).*/\1/p')"
 						AVMFRITZ_layermask="${AVMFRITZ_layermask:+"${AVMFRITZ_layermask},"}$(printf "0x%x" ${l})"
+						;;
+					l1oip)
+						let "val = $(echo ${line} | ${SED} -n 's/.*type:\([^ ]*\).*/\1/p')"
+						L1OIP_type="${L1OIP_type:+"${L1OIP_type},"}$(printf "0x%x" ${val})"
+						let "val = $(echo ${line} | ${SED} -n 's/.*protocol:\([^ ]*\).*/\1/p')"
+						L1OIP_protocol="${L1OIP_protocol:+"${L1OIP_protocol},"}$(printf "0x%x" ${val})"
+						let "val = $(echo ${line} | ${SED} -n 's/.*layermask:\([^ ]*\).*/\1/p')"
+						L1OIP_layermask="${L1OIP_layermask:+"${L1OIP_layermask},"}$(printf "0x%x" ${val})"
+						val="$(echo ${line} | ${SED} -n 's/.*codec:\([^ ]*\).*/\1/p')"
+						L1OIP_codec="${L1OIP_codec:+"${L1OIP_codec},"}${val}"
+						val="$(echo ${line} | ${SED} -n 's/.*ip:\([^ ]*\).*/\1/p')"
+						L1OIP_ip="${L1OIP_ip:+"${L1OIP_ip},"}${val}"
+						val="$(echo ${line} | ${SED} -n 's/.*port:\([^ ]*\).*/\1/p')"
+						L1OIP_port="${L1OIP_port:+"${L1OIP_port},"}${val}"
+						val="$(echo ${line} | ${SED} -n 's/.*localport:\([^ ]*\).*/\1/p')"
+						L1OIP_localport="${L1OIP_localport:+"${L1OIP_localport},"}${val}"
+						val="$(echo ${line} | ${SED} -n 's/.*ondemand:\([^ ]*\).*/\1/p')"
+						L1OIP_ondemand="${L1OIP_ondemand:+"${L1OIP_ondemand},"}${val}"
+						val="$(echo ${line} | ${SED} -n 's/.*id:\([^ ]*\).*/\1/p')"
+						L1OIP_id="${L1OIP_id:+"${L1OIP_id},"}${val}"
 						;;
 				esac
 				;;
@@ -192,6 +229,10 @@ function parse_config
 		START_COMMANDS[${#START_COMMANDS[@]}]="${MODPROBE} --ignore-install avmfritz protocol=${AVMFRITZ_protocol} layermask=${AVMFRITZ_layermask}"
 	fi
 
+	if [ ! -z "${L1OIP_type}" ]; then
+		START_COMMANDS[${#START_COMMANDS[@]}]="${MODPROBE} --ignore-install l1oip type=${L1OIP_type} protocol=${L1OIP_protocol} layermask=${L1OIP_layermask} codec=${L1OIP_codec} ip=${L1OIP_ip} port=${L1OIP_port} localport=${L1OIP_localport} ondemand=${L1OIP_ondemand} id=${L1OIP_id} ${L1OIP_options}"
+	fi
+
 	START_COMMANDS[${#START_COMMANDS[@]}]="${MODPROBE} --ignore-install mISDN_dsp ${MISDNDSP_options}"
 }
 
@@ -213,7 +254,7 @@ function run_stop_commands
 
 	for mod in $(lsmod | ${SED} -ne '/Module/!{s/\([^ ]*\).*/\1/;p}');	do
 		case "${mod}" in
-			mISDN_capi | mISDN_dsp | l3udss1 | mISDN_l2 | mISDN_l1 | mISDN_isac | hfcmulti | avmfritz)
+			mISDN_capi | mISDN_dsp | l3udss1 | mISDN_l2 | mISDN_l1 | mISDN_isac | hfcmulti | avmfritz | l1oip)
 				STOP_COMMANDS[0]="${STOP_COMMANDS[0]:-"${MODPROBE} -r --ignore-remove"} ${mod}"
 				;;
 			mISDN_core)

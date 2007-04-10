@@ -7,6 +7,7 @@
 <xsl:include href='mISDN.conf.hfcmulti.xsl' />
 <xsl:include href='mISDN.conf.bnx.xsl' />
 <xsl:include href='mISDN.conf.singlepci.xsl' />
+<xsl:include href='mISDN.conf.l1oip.xsl' />
 
 <!--
 	Main mISDNconf Template
@@ -22,6 +23,11 @@
  <xsl:when test=".='hfcmulti'">
   <xsl:value-of select="concat('MODULE:',.)" />
   <xsl:call-template name="HFCMULTImodule" />
+ </xsl:when>
+
+ <xsl:when test=".='l1oip'">
+  <xsl:value-of select="concat('MODULE:',.)" />
+  <xsl:call-template name="L1OIPmodule" />
  </xsl:when>
 
  <xsl:when test=".='mISDN_dsp'">
@@ -115,12 +121,23 @@
 
  <xsl:when test="@type='hfcpci' or @type='avmfritz' or @type='w6692pci'">
   <xsl:value-of select="concat('CARD:',@type)" />
-  <xsl:call-template name="singlepcicard" />
+  <xsl:call-template name="SINGLEPCIcard" />
   <xsl:for-each select="port">
    <xsl:sort data-type="number" />
    <xsl:text>PORT:</xsl:text>
    <xsl:value-of select="." />
-   <xsl:call-template name="singlepciport" />
+   <xsl:call-template name="SINGLEPCIport" />
+  </xsl:for-each>
+ </xsl:when>
+
+ <xsl:when test="@type='l1oip'">
+  <xsl:value-of select="concat('CARD:',@type)" />
+  <xsl:call-template name="L1OIPcard" />
+  <xsl:for-each select="port">
+   <xsl:sort data-type="number" />
+   <xsl:text>PORT:</xsl:text>
+   <xsl:value-of select="." />
+   <xsl:call-template name="L1OIPport" />
   </xsl:for-each>
  </xsl:when>
 
