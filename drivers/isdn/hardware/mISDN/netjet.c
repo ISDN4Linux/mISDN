@@ -1710,6 +1710,9 @@ nj_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	int cfg;
 	netjet_t *card;
 
+	if (pdev->subsystem_vendor == PCI_VENDOR_ID_INTEL && pdev->subsystem_device == 0x0003) 
+		return -ENODEV;
+
 	if (!(card = kmalloc(sizeof(netjet_t), GFP_ATOMIC))) {
 		printk(KERN_ERR "No kmem for netjet\n");
 		return(err);
