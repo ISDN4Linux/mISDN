@@ -257,7 +257,8 @@ static const PCI_ENTRY id_list[] =
 /****************/
 
 static u_int type[MAX_CARDS];
-static BYTE allocated[MAX_CARDS];  // remember if card is found
+static BYTE found[MAX_CARDS];  // remember if card is found
+static BYTE allocated[MAX_CARDS];
 static int pcm[MAX_PORTS];
 static u_int protocol[MAX_PORTS];
 static int layermask[MAX_PORTS];
@@ -3824,7 +3825,7 @@ bugtest
 	return(0);
 }
 
-static int find_idlist_entry(int vendor,int subvendor, int device, int subdevice)
+static int find_idlist_entry(int vendor, int subvendor, int device, int subdevice)
 {
 	int cnt;
 
@@ -3839,7 +3840,7 @@ static int find_idlist_entry(int vendor,int subvendor, int device, int subdevice
 	return(-1);
 }
 
-/* just check for cards, initializise later */
+/* just check for cards, initialize later */
 static int __devinit hfcpci_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 {
 	int		id_idx;        // index to id_list
@@ -3854,7 +3855,7 @@ static int __devinit hfcpci_probe(struct pci_dev *pdev, const struct pci_device_
 					ent->vendor,ent->device,ent->subvendor,ent->subdevice);
 		return (-ENODEV);
 	}
-	allocated[HFC_cnt] = 1;    /* mark card as found */
+	found[HFC_cnt] = 1;    /* mark card as found */
 	HFC_dev_id[HFC_cnt] = ent; /* remember ent & pdev for initialization */
 	HFC_dev[HFC_cnt++] = pdev;
 	return 0;
@@ -4352,6 +4353,9 @@ free_delstack:
 	/* now turning on irq */
 	spin_lock_irqsave(&hc->lock, flags);
 	enable_hwirq(hc);
+	/* we are on air! */
+	allocated[HFC_idx] = 1;
+
 	spin_unlock_irqrestore(&hc->lock, flags);
 
 	HFC_idx++;
@@ -4386,13 +4390,18 @@ free_delstack:
 
 static void __devexit hfc_remove_pci(struct pci_dev *pdev)
 {
-	int i,ch;
+	int i, ch, id;
 	hfc_multi_t	*card = pci_get_drvdata(pdev);
 
 	if (debug)
 		printk( KERN_INFO "removing hfc_multi card vendor:%x device:%x subvendor:%x subdevice:%x\n",
 			pdev->vendor,pdev->device,pdev->subsystem_vendor,pdev->subsystem_device);
-	if (card) {
+	// which card is this?
+	for (id = 0; id < HFC_cnt; id++) {
+		if (pdev == HFC_dev[id]) break;
+	}
+	// remove card only if initialized
+	if (card && !found[id]) {
 #if 1
 		for (i = 0; i < card->ports; i++) { // type is also number of d-channel
 			if(card->created[i]) {
@@ -4400,7 +4409,7 @@ static void __devexit hfc_remove_pci(struct pci_dev *pdev)
 					ch = 16;
 				else
 					ch = (i*4)+2;
-				// if created elete stack
+				// if created delete stack
 				if (card->chan[ch].ch &&
 					test_bit(FLG_DCHANNEL, &card->chan[ch].ch->Flags))
 					mISDN_ctrl(card->chan[ch].ch->inst.st,
@@ -4513,8 +4522,8 @@ HFCmulti_cleanup(void)
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,10)
 		int i;
-		for (i=0;i<hc->ports;i++) {
-				release_port(hc, i);
+		for (i = 0; i < hc->ports; i++) {
+			release_port(hc, i);
 		}
 #endif
 		release_ports_hw(hc); /* all ports, hc is free */
@@ -4601,7 +4610,10 @@ HFCmulti_init(void)
 	if (debug & DEBUG_HFCMULTI_INIT)
 		printk(KERN_DEBUG "%s: new mISDN object (refcnt = %d)\n", __FUNCTION__, HFCM_obj.refcnt);
 
-	for (i = 0; i < MAX_CARDS; i++) allocated[i] = 0;
+	for (i = 0; i < MAX_CARDS; i++) {
+		allocated[i] = 0;
+		found[i]     = 0;
+	}
 	HFC_cnt = 0;
 
 #if 1
@@ -4618,14 +4630,14 @@ HFCmulti_init(void)
 			case 0x1: /* HFC-E1 chip */
 				for (j = 0; j < HFC_cnt; j++) {
 					/* looking for first card to match type parameter */
-					if (HFC_dev_id[j]->device == HFCE1_ID && allocated[j]) {
-						allocated[j] = 0; /* mark card as allready used */
+					if (HFC_dev_id[j]->device == HFCE1_ID && found[j]) {
 						err = hfcpci_init(HFC_dev[j], HFC_dev_id[j], type[i]);
 						if (err < 0) {
 							printk(KERN_ERR "error initializing cards:%x\n",err);
 							HFCmulti_cleanup();
 							return(err);
 						}
+						found[j] = 0; /* mark card as already used */
 						break;
 					}
 				}
@@ -4633,28 +4645,28 @@ HFCmulti_init(void)
 			case 0x4: /* HFC-S4 chip */
 				for (j = 0; j < HFC_cnt; j++) {
 					if ((HFC_dev_id[j]->device == HFCE1_ID ||
-							HFC_dev_id[j]->device == 0xB410) && allocated[j]) {
-						allocated[j] = 0;
+							HFC_dev_id[j]->device == 0xB410) && found[j]) {
 						err = hfcpci_init(HFC_dev[j], HFC_dev_id[j], type[i]);
 						if (err < 0) {
 							printk(KERN_ERR "error initializing cards:%x\n",err);
 							HFCmulti_cleanup();
 							return(err);
 						}
+						found[j] = 0;
 						break;
 					}
 				}
 				break;
 			case 0x8: /* HFC-S8 chip */
 				for (j = 0; j < HFC_cnt; j++) {
-					if (HFC_dev_id[j]->device == HFC8S_ID && allocated[j]) {
-						allocated[j] = 0;
+					if (HFC_dev_id[j]->device == HFC8S_ID && found[j]) {
 						err = hfcpci_init(HFC_dev[j], HFC_dev_id[j], type[i]);
 						if (err < 0) {
 							printk(KERN_ERR "error initializing cards:%x\n",err);
 							HFCmulti_cleanup();
 							return(err);
 						}
+						found[j] = 0;
 						break;
 					}
 				}
@@ -4662,11 +4674,9 @@ HFCmulti_init(void)
 				break;
 			default:
 				printk(KERN_ERR "wrong module parameter, unknown type of card\n");
+				HFCmulti_cleanup();
 				return -EINVAL;
 		}
-	}
-	for (i = 0; i < HFC_cnt; i++) { /* set marker back */
-		allocated[i] = 1;
 	}
 
 #endif
