@@ -3514,7 +3514,7 @@ setup_pci(hfc_multi_t *hc, struct pci_dev *pdev, int id_idx)
 	}
 
 	if (!request_region(hc->pci_iobase, 8, "hfcmulti")) {
-		printk(KERN_WARNING "HFC-multi: failed to rquest address space at 0x%04x (internal error)\n", hc->pci_iobase);
+		printk(KERN_WARNING "HFC-multi: failed to request address space at 0x%04x (internal error)\n", hc->pci_iobase);
 		hc->pci_iobase = 0;
 		pci_disable_device(hc->pci_dev);
 		return (-EIO);
@@ -4375,6 +4375,13 @@ free_delstack:
 			hc->chan[i].ch = NULL;
 		}
 	}
+#ifdef CONFIG_HFCMULTI_PCIMEM
+	if (hc->pci_membase) iounmap((void *)hc->pci_membase);
+	if (hc->plx_membase) iounmap((void *)hc->plx_membase);
+#else
+	if (hc->pci_iobase)
+		release_region(hc->pci_iobase, 8);
+#endif
 	if (debug & DEBUG_HFCMULTI_INIT)
 		printk(KERN_DEBUG "%s: before REMOVE_FROM_LIST (refcnt = %d)\n", __FUNCTION__, HFCM_obj.refcnt);
 	spin_lock_irqsave(&HFCM_obj.lock, flags);
