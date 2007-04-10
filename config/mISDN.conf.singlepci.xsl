@@ -7,12 +7,12 @@
 	Ports: 1
 	Port Attributes: mode=(te|nt), link=(ptp|ptmp), capi=(yes|no)
 -->
-<xsl:template name="singlepcicard">
+<xsl:template name="SINGLEPCIcard">
 <xsl:text>
 </xsl:text>
 </xsl:template>
 
-<xsl:template name="singlepciport">
+<xsl:template name="SINGLEPCIport">
 <xsl:text> layermask:</xsl:text>
 <xsl:choose>
 <xsl:when test="@mode='nt'">
