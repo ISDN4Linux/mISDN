@@ -110,6 +110,7 @@ mISDN_dsp_mec2-objs := dsp_mec2.o
 mISDN_dsp_kb1ec-objs := dsp_kb1ec.o
 mISDN_dsp_mg2ec-objs := dsp_mg2ec.o
 mISDN_dsp_octwareec-objs := dsp_octwareec.o
+l1oip-objs := l1oip_core.o l1oip_codec.o
 mISDN_x25dte-objs := x25_dte.o x25_l3.o
 I4LmISDN-objs := i4l_mISDN.o
 
