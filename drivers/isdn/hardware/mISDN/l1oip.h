@@ -27,6 +27,7 @@
 struct l1oip_chan {
 	channel_t       	*ch;
 	u16			counter;	/* counts bytes/packets */
+	u32			codecstate;	/* used by codec to save data */
 };
 
 
@@ -57,16 +58,24 @@ struct _l1oip_t {
 	int			socket_pid;
 	spinlock_t 		socket_lock;	/* lock before access socket outside socket thread */	
 	u8			remoteip[4];	/* if all set, ip is assigned */
-	u16	 		remoteport;	/* must always be set */
 	u16	 		localport;	/* must always be set */
+	u16	 		remoteport;	/* must always be set */
 	struct sockaddr_in	sin_local;	/* local socket name */
 	struct sockaddr_in	sin_remote;	/* remote socket name */
 	struct msghdr		sendmsg;	/* ip message to send */
 	struct iovec		sendiov;	/* iov for message */
 
 	/* frame */
-	struct l1oip_chan	chan[32];	/* channel instances */
+	struct l1oip_chan	chan[128];	/* channel instances */
 };
 
 typedef struct _l1oip_t		l1oip_t;
 
+extern int l1oip_law_to_4bit(u8 *data, int len, u8 *result, u32 *state);
+extern int l1oip_4bit_to_law(u8 *data, int len, u8 *result);
+extern int l1oip_alaw_to_ulaw(u8 *data, int len, u8 *result);
+extern int l1oip_ulaw_to_alaw(u8 *data, int len, u8 *result);
+extern void l1oip_4bit_free(void);
+extern int l1oip_4bit_alloc(int ulaw);
+
+	
