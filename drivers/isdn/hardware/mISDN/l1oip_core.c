@@ -243,6 +243,7 @@ socket process and create a new one.
 #include <linux/init.h>
 #include <linux/in.h>
 #include <linux/inet.h>
+#include <linux/workqueue.h>
 #include <net/sock.h>
 
 #include "l1oip.h"
@@ -562,7 +563,7 @@ multiframe:
 
 	/* if inactive, we send up a PH_ACTIVATE and activate */
 	if (!test_bit(FLG_ACTIVE, &hc->chan[hc->dch].ch->Flags)) {
-		if (debug & DEBUG_L1OIP_MSG)
+		if (debug & (DEBUG_L1OIP_MSG|DEBUG_L1OIP_SOCKET))
 			printk(KERN_DEBUG "%s: interface become active due to received packet\n", __FUNCTION__);
 		test_and_set_bit(FLG_ACTIVE, &hc->chan[hc->dch].ch->Flags);
 		mISDN_queue_data(&hc->chan[hc->dch].ch->inst, FLG_MSG_UP, PH_ACTIVATE | INDICATION, 0, 0, NULL, 0);
@@ -759,15 +760,25 @@ l1oip_socket_open(l1oip_t *hc)
  * keepalife timer expires
  */
 static void
+l1oip_keepalive_bh(void *data)
+{
+	l1oip_t *hc = (l1oip_t *)data;
+
+	if (debug & (DEBUG_L1OIP_MSG|DEBUG_L1OIP_SOCKET))
+		printk(KERN_DEBUG "%s: keepalive bh called, sending empty frame on dchannel\n", __FUNCTION__);
+
+	/* send an empty l1oip frame at D-channel */
+	l1oip_socket_send(hc, 0, hc->dch, 0, 0, NULL, 0);
+}
+static void
 l1oip_keepalive(void *data)
 {
 	l1oip_t *hc = (l1oip_t *)data;
 
-	if (debug & DEBUG_L1OIP_MSG)
-		printk(KERN_DEBUG "%s: keepalive timer expired, sending empty frame on dchannel\n", __FUNCTION__);
+	if (debug & (DEBUG_L1OIP_MSG|DEBUG_L1OIP_SOCKET))
+		printk(KERN_DEBUG "%s: keepalive timer expired, scheduling keepalive transmission...\n", __FUNCTION__);
 
-	/* send an empty l1oip frame at D-channel */
-	l1oip_socket_send(hc, 0, hc->dch, 0, 0, NULL, 0);
+	schedule_work(&hc->tqueue);
 }
 
 
@@ -784,7 +795,7 @@ l1oip_timeout(void *data)
 
 	/* if timeout, we send up a PH_DEACTIVATE and deactivate */
 	if (test_bit(FLG_ACTIVE, &hc->chan[hc->dch].ch->Flags)) {
-		if (debug & DEBUG_L1OIP_MSG)
+		if (debug & (DEBUG_L1OIP_MSG|DEBUG_L1OIP_SOCKET))
 			printk(KERN_DEBUG "%s: interface become deactivated due to timeout\n", __FUNCTION__);
 		test_and_clear_bit(FLG_ACTIVE, &hc->chan[hc->dch].ch->Flags);
 		mISDN_queue_data(&hc->chan[hc->dch].ch->inst, FLG_MSG_UP, PH_DEACTIVATE | INDICATION, 0, 0, NULL, 0);
@@ -911,7 +922,7 @@ l1oip_channel(mISDNinstance_t *inst, struct sk_buff *skb)
 			ret = -EINVAL;
 		}
 	} else if (hh->prim == (PH_ACTIVATE | REQUEST)) {
-		if (debug & DEBUG_L1OIP_MSG)
+		if (debug & (DEBUG_L1OIP_MSG|DEBUG_L1OIP_SOCKET))
 			printk(KERN_DEBUG "%s: PH_ACTIVATE channel %d (1..%d)\n", __FUNCTION__, ch->channel, hc->numbch+1);
 		if (ch->channel == hc->dch) {
 			if (test_bit(FLG_ACTIVE, &ch->Flags))
@@ -923,7 +934,7 @@ l1oip_channel(mISDNinstance_t *inst, struct sk_buff *skb)
 		hc->chan[ch->channel].codecstate = 0;
 		return(mISDN_queueup_newhead(inst, 0, PH_ACTIVATE | CONFIRM, 0, skb));
 	} else if (hh->prim == (PH_DEACTIVATE | REQUEST)) {
-		if (debug & DEBUG_L1OIP_MSG)
+		if (debug & (DEBUG_L1OIP_MSG|DEBUG_L1OIP_SOCKET))
 			printk(KERN_DEBUG "%s: PH_DEACTIVATE channel %d (1..%d)\n", __FUNCTION__, ch->channel, hc->numbch+1);
 		if (ch->channel == hc->dch) {
 			if (test_bit(FLG_ACTIVE, &ch->Flags))
@@ -1001,7 +1012,7 @@ l1oip_manager(void *data, u_int prim, void *arg)
 	spin_lock_irqsave(&l1oip_obj.lock, flags);
 	list_for_each_entry(hc, &l1oip_obj.ilist, list) {
 		i = 0;
-		ii = hc->numbch; /* channel 0 to numbch */
+		ii = hc->numbch+1; /* channel 0 to numbch+1 */
 		if (ii < hc->dch) /* set ii to highest channel */
 			ii = hc->dch;
 		while(i <= ii) { /* loop from 0 to ii (inclusive) */
@@ -1255,7 +1266,12 @@ l1oip_init(void)
 	if (debug & DEBUG_L1OIP_INIT)
 		printk(KERN_DEBUG "%s: new mISDN object (refcnt = %d)\n", __FUNCTION__, l1oip_obj.refcnt);
 
-	l1oip_4bit_alloc(ulaw);
+printk(KERN_DEBUG "1\n");
+	if (l1oip_4bit_alloc(ulaw)) {
+		ret_err = -ENOMEM;
+		goto free_object;
+	}
+printk(KERN_DEBUG "2\n");
 	
 	l1oip_cnt = 0;
 
@@ -1412,7 +1428,7 @@ next_card:
 	dch->inst.hwlock = &hc->dummylock;
 	mISDN_init_instance(&dch->inst, &l1oip_obj, hc, l1oip_channel);
 	dch->inst.pid.layermask = ISDN_LAYER(0);
-	sprintf(dch->inst.name, "L1OIP%d", l1oip_cnt);
+	sprintf(dch->inst.name, "L1OIP%d", l1oip_cnt+1);
 //	if (!(hc->chan[ch].rx_buf = kmalloc(MAX_DFRAME_LEN_L1, GFP_ATOMIC))) {
 //		ret_err = -ENOMEM;
 //		goto free_channels;
@@ -1440,7 +1456,7 @@ next_card:
 		bch->inst.hwlock = &hc->dummylock;
 		//bch->debug = debug;
 		sprintf(bch->inst.name, "%s B%d",
-			dch->inst.name, i+1);
+			dch->inst.name, ch);
 		if (mISDN_initchannel(bch, MSK_INIT_BCHANNEL, L1OIP_MAX_LEN)) {
 			kfree(bch);
 			ret_err = -ENOMEM;
@@ -1538,7 +1554,7 @@ next_card:
 
 	/* run card setup */
 	if (debug & DEBUG_L1OIP_INIT)
-		printk(KERN_DEBUG "%s: Setting up network(%d)\n", __FUNCTION__, l1oip_cnt+1);
+		printk(KERN_DEBUG "%s: Setting up network card(%d)\n", __FUNCTION__, l1oip_cnt+1);
 	if ((ret_err = l1oip_socket_open(hc))) {
 		goto free_channels;
 	}
@@ -1549,6 +1565,7 @@ next_card:
 	init_timer(&hc->keep_tl);
 	hc->keep_tl.expires = jiffies + 2*HZ; /* two seconds for the first time */
 	add_timer(&hc->keep_tl);
+	INIT_WORK(&hc->tqueue, (void *)l1oip_keepalive_bh, hc);
 
 	/* set timeout timer */
 	hc->timeout_tl.function = (void *)l1oip_timeout;
