@@ -969,7 +969,8 @@ ncciDataReq(Ncci_t *ncci, struct sk_buff *skb)
 		goto fail;
 	}
 	for (i = 0; i < CAPI_MAXDATAWINDOW; i++) {
-		if (ncci->xmit_skb_handles[i].PktId == 0)
+		/* try reserving a slot atomically (use an invalid Id) */
+		if (cmpxchg(&ncci->xmit_skb_handles[i].PktId, 0, MISDN_ID_DUMMY) == 0)
 			break;
 	}
 	if (i == CAPI_MAXDATAWINDOW) {
@@ -1051,13 +1052,13 @@ ncciDataConf(Ncci_t *ncci, int pr, struct sk_buff *skb)
 			printk(KERN_DEBUG "%s: PktId[%d] %x\n", __FUNCTION__, i, ncci->xmit_skb_handles[i].PktId);
 		return(-EINVAL);
 	}
-	ncci->xmit_skb_handles[i].PktId = 0;
 	capidebug(CAPI_DBG_NCCI_L3, "%s: entry %d/%d handle (%x)",
 		__FUNCTION__, i, CAPI_MAXDATAWINDOW, ncci->xmit_skb_handles[i].DataHandle);
 
 	cmsg = cmsg_alloc();
 	if (!cmsg) {
 		int_error();
+		ncci->xmit_skb_handles[i].PktId = 0;
 		return(-ENOMEM);
 	}
 	dev_kfree_skb(skb);
@@ -1065,6 +1066,7 @@ ncciDataConf(Ncci_t *ncci, int pr, struct sk_buff *skb)
 			 ncci->xmit_skb_handles[i].MsgId, ncci->addr);
 	cmsg->DataHandle = ncci->xmit_skb_handles[i].DataHandle;
 	cmsg->Info = 0;
+	ncci->xmit_skb_handles[i].PktId = 0;
 	Send2Application(ncci, cmsg);
 	if (test_bit(NCCI_STATE_FCTRL, &ncci->state)) {
 		if (skb_queue_len(&ncci->squeue)) {
