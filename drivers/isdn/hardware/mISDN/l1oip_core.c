@@ -30,6 +30,7 @@
 	Value 4 = PRI (multi channel frame)
 	A multi channel frame reduces overhead to a single frame for all
        	b-channels, but increases delay.
+	(NOTE: Multi channel frames are not implemented yet.)
 
  * codec:
 	Value 0 = transparent
@@ -521,11 +522,9 @@ multiframe:
 		return;
 	}
 
-	/* get multiframe flag */
-	m = (*buf>>4)&1;
-
-	/* check channel */
+	/* get channel and multiframe flag */
 	channel = *buf&0x7f;
+	m = *buf >> 7;
 	buf++;
 	len--;
 
@@ -581,11 +580,12 @@ multiframe:
 		goto multiframe;
 
 	/* restart timer */
-	if ((int)(hc->timeout_tl.expires-jiffies) < 5*HZ) {
+	if ((int)(hc->timeout_tl.expires-jiffies) < 5*HZ || !hc->timeout_on) {
+		hc->timeout_on = 1;
 		del_timer(&hc->timeout_tl);
 		hc->timeout_tl.expires = jiffies + L1OIP_TIMEOUT*HZ;
 		add_timer(&hc->timeout_tl);
-	} else
+	} else // only adjust timer
 		hc->timeout_tl.expires = jiffies + L1OIP_TIMEOUT*HZ;
 
 	/* if ip changes */
@@ -792,6 +792,9 @@ l1oip_timeout(void *data)
 
 	if (debug & DEBUG_L1OIP_MSG)
 		printk(KERN_DEBUG "%s: timeout timer expired, turn layer one down.\n", __FUNCTION__);
+
+	/* reset timeout state */
+	hc->timeout_on = 0; /* state that timer must be initialized next time */
 
 	/* if timeout, we send up a PH_DEACTIVATE and deactivate */
 	if (test_bit(FLG_ACTIVE, &hc->chan[hc->dch].ch->Flags)) {
@@ -1571,7 +1574,7 @@ next_card:
 	hc->timeout_tl.function = (void *)l1oip_timeout;
 	hc->timeout_tl.data = (u32)hc;
 	init_timer(&hc->timeout_tl);
-	hc->timeout_tl.expires = jiffies; /* make timer already timed out */
+	hc->timeout_on = 0; /* state that we have time off */
 
 	l1oip_cnt++;
 	goto next_card;
