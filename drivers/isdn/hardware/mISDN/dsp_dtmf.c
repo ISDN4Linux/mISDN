@@ -46,6 +46,43 @@ void dsp_dtmf_goertzel_init(dsp_t *dsp)
 	dsp->dtmf.count = 0;
 }
 
+/* check for hardware or software features
+ */
+void dsp_dtmf_hardware(dsp_t *dsp)
+{
+	int hardware = 1;
+
+	if (!dsp->features.hfc_dtmf)
+		hardware = 0;
+	
+	/* check for volume change */
+	if (dsp->tx_volume) {
+		if (dsp_debug & DEBUG_DSP_DTMF)
+			printk(KERN_DEBUG "%s dsp %s cannot do hardware DTMF, because tx_volume is changed\n", __FUNCTION__, dsp->inst.name);
+		hardware = 0;
+	}
+	if (dsp->rx_volume) {
+		if (dsp_debug & DEBUG_DSP_DTMF)
+			printk(KERN_DEBUG "%s dsp %s cannot do hardware DTMF, because rx_volume is changed\n", __FUNCTION__, dsp->inst.name);
+		hardware = 0;
+	}
+	/* check if encryption is enabled */
+	if (dsp->bf_enable) {
+		if (dsp_debug & DEBUG_DSP_DTMF)
+			printk(KERN_DEBUG "%s dsp %s cannot do hardware DTMF, because encryption is enabled\n", __FUNCTION__, dsp->inst.name);
+		hardware = 0;
+	}
+	/* check if pipeline exists */
+	if (dsp->pipeline.inuse) {
+		if (dsp_debug & DEBUG_DSP_DTMF)
+			printk(KERN_DEBUG "%s dsp %s cannot do hardware DTMF, because pipeline exists.\n", __FUNCTION__, dsp->inst.name);
+		hardware = 0;
+	}
+
+	dsp->dtmf.hardware = hardware;
+	dsp->dtmf.software = !hardware;
+}
+
 
 /*************************************************************
  * calculate the coefficients of the given sample and decode *

@@ -867,7 +867,7 @@ ncciDestr(Ncci_t *ncci)
 #endif
 	/* cleanup data queues */
 	discard_queue(&ncci->squeue);
-	for (i = 0; i < ncci->window; i++) {
+	for (i = 0; i < CAPI_MAXDATAWINDOW; i++) {
 		if (ncci->xmit_skb_handles[i].PktId)
 			ncci->xmit_skb_handles[i].PktId = 0;
 	}
@@ -904,12 +904,12 @@ ncciDataInd(Ncci_t *ncci, int pr, struct sk_buff *skb)
 	struct sk_buff *nskb;
 	int i;
 
-	for (i = 0; i < CAPI_MAXDATAWINDOW; i++) {
+	for (i = 0; i < ncci->window; i++) {
 		if (ncci->recv_skb_handles[i] == 0)
 			break;
 	}
 
-	if (i == CAPI_MAXDATAWINDOW) {
+	if (i == ncci->window) {
 		// FIXME: trigger flow control if supported by L2 protocol
 		printk(KERN_DEBUG "%s: frame %d dropped\n", __FUNCTION__, skb->len);
 		dev_kfree_skb(skb);
@@ -968,11 +968,12 @@ ncciDataReq(Ncci_t *ncci, struct sk_buff *skb)
 		int_error();
 		goto fail;
 	}
-	for (i = 0; i < ncci->window; i++) {
-		if (ncci->xmit_skb_handles[i].PktId == 0)
+	for (i = 0; i < CAPI_MAXDATAWINDOW; i++) {
+		/* try reserving a slot atomically (use an invalid Id) */
+		if (cmpxchg(&ncci->xmit_skb_handles[i].PktId, 0, MISDN_ID_DUMMY) == 0)
 			break;
 	}
-	if (i == ncci->window) {
+	if (i == CAPI_MAXDATAWINDOW) {
 		return(CAPI_SENDQUEUEFULL);
 	}
 	mISDN_HEAD_DINFO(skb) = ControllerNextId(ncci->contr);
@@ -1002,11 +1003,11 @@ ncciDataReq(Ncci_t *ncci, struct sk_buff *skb)
 	skb_push(skb, len);
 	capierr = CAPI_MSGBUSY;
 	if (i == -1) {
-		for (i = 0; i < ncci->window; i++) {
+		for (i = 0; i < CAPI_MAXDATAWINDOW; i++) {
 			if (ncci->xmit_skb_handles[i].PktId == mISDN_HEAD_DINFO(skb))
 				break;
 		}
-		if (i == ncci->window)
+		if (i == CAPI_MAXDATAWINDOW)
 			int_error();
 		else
 			ncci->xmit_skb_handles[i].PktId = 0;
@@ -1040,24 +1041,24 @@ ncciDataConf(Ncci_t *ncci, int pr, struct sk_buff *skb)
 	int	i;
 	_cmsg	*cmsg;
 
-	for (i = 0; i < ncci->window; i++) {
+	for (i = 0; i < CAPI_MAXDATAWINDOW; i++) {
 		if (ncci->xmit_skb_handles[i].PktId == mISDN_HEAD_DINFO(skb))
 			break;
 	}
-	if (i == ncci->window) {
+	if (i == CAPI_MAXDATAWINDOW) {
 		int_error();
 		printk(KERN_DEBUG "%s: dinfo(%x)\n", __FUNCTION__, mISDN_HEAD_DINFO(skb));
-		for (i = 0; i < ncci->window; i++)
+		for (i = 0; i < CAPI_MAXDATAWINDOW; i++)
 			printk(KERN_DEBUG "%s: PktId[%d] %x\n", __FUNCTION__, i, ncci->xmit_skb_handles[i].PktId);
 		return(-EINVAL);
 	}
-	ncci->xmit_skb_handles[i].PktId = 0;
 	capidebug(CAPI_DBG_NCCI_L3, "%s: entry %d/%d handle (%x)",
-		__FUNCTION__, i, ncci->window, ncci->xmit_skb_handles[i].DataHandle);
+		__FUNCTION__, i, CAPI_MAXDATAWINDOW, ncci->xmit_skb_handles[i].DataHandle);
 
 	cmsg = cmsg_alloc();
 	if (!cmsg) {
 		int_error();
+		ncci->xmit_skb_handles[i].PktId = 0;
 		return(-ENOMEM);
 	}
 	dev_kfree_skb(skb);
@@ -1065,6 +1066,7 @@ ncciDataConf(Ncci_t *ncci, int pr, struct sk_buff *skb)
 			 ncci->xmit_skb_handles[i].MsgId, ncci->addr);
 	cmsg->DataHandle = ncci->xmit_skb_handles[i].DataHandle;
 	cmsg->Info = 0;
+	ncci->xmit_skb_handles[i].PktId = 0;
 	Send2Application(ncci, cmsg);
 	if (test_bit(NCCI_STATE_FCTRL, &ncci->state)) {
 		if (skb_queue_len(&ncci->squeue)) {
@@ -1089,7 +1091,7 @@ ncciDataResp(Ncci_t *ncci, struct sk_buff *skb)
 	int i;
 
 	i = CAPIMSG_RESP_DATAHANDLE(skb->data);
-	if (i < 0 || i > CAPI_MAXDATAWINDOW) {
+	if (i < 0 || i > ncci->window) {
 		int_error();
 		return;
 	}

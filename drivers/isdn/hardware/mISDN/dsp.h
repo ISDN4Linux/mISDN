@@ -79,7 +79,7 @@ extern u8 dsp_silence;
 #define MAX_SECONDS_JITTER_CHECK 5
 
 extern struct timer_list dsp_spl_tl;
-extern u64 dsp_spl_jiffies;
+extern u32 dsp_spl_jiffies;
 
 /* the structure of conferences:
  *
@@ -134,6 +134,7 @@ typedef struct _dtmf_t {
 typedef struct _dsp_pipeline {
 	rwlock_t  lock;
 	struct list_head list;
+	int inuse;
 } dsp_pipeline_t;
 
 /***************
@@ -183,9 +184,6 @@ typedef struct _dsp {
 	conference_t	*conf;
 	conf_member_t	*member;
 
-	/* while we're waiting for the hw */
-	u32		queue_conf_id;
-
 	/* buffer stuff */
 	int		rx_W; /* current write pos for data without timestamp */
 	int		rx_R; /* current read pos for transmit clock */
@@ -194,13 +192,13 @@ typedef struct _dsp {
 	int		delay[MAX_SECONDS_JITTER_CHECK];
 	u8		tx_buff[CMX_BUFF_SIZE];
 	u8		rx_buff[CMX_BUFF_SIZE];
+	int		last_tx; /* if set, we transmitted last poll interval */
+	int		cmx_delay; /* initial delay of buffers,
+       			              or 0 for dynamic jitter buffer */
+	int		tx_data; /* enables tx-data of CMX to upper layer */
 
 	/* hardware stuff */
-	struct dsp_features features; /* features */
-	struct timer_list feature_tl;
-
-	spinlock_t	feature_lock;
-	int		feature_state;
+	struct dsp_features features;
 	int		pcm_slot_rx; /* current PCM slot (or -1) */
 	int		pcm_bank_rx;
 	int		pcm_slot_tx;
@@ -242,6 +240,7 @@ extern int dsp_cmx_del_conf_member(dsp_t *dsp);
 extern int dsp_cmx_del_conf(conference_t *conf);
 
 extern void dsp_dtmf_goertzel_init(dsp_t *dsp);
+extern void dsp_dtmf_hardware(dsp_t *dsp);
 extern u8 *dsp_dtmf_goertzel_decode(dsp_t *dsp, u8 *data, int len, int fmt);
 
 extern int dsp_tone(dsp_t *dsp, int tone);

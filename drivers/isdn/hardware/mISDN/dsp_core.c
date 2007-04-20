@@ -1,4 +1,4 @@
-/* $Id: dsp_core.c,v 1.29 2007/03/27 15:06:29 jolly Exp $
+/* $Id: dsp_core.c,v 1.30 2007/04/03 17:47:26 jolly Exp $
  *
  * Author       Andreas Eversberg (jolly@eversberg.eu)
  * Based on source code structure by
@@ -28,11 +28,11 @@
  *
  * - (1) generation of tones
  * - (2) detection of dtmf tones
- * - (3) crossconnecting and conferences
+ * - (3) crossconnecting and conferences (clocking)
  * - (4) echo generation for delay test
  * - (5) volume control
  * - (6) disable receive data
- * - (7) pipelined audio processing
+ * - (7) pipeline
  * - (8) encryption/decryption
  *
  * Look:
@@ -49,9 +49,9 @@
  *       |           |       ^
  *       |           |       |
  *       |+---------+|  +----+----+
- *       ||(1)      ||  |(5)      |
+ *       ||(1)      ||  |(2)      |
  *       ||         ||  |         |
- *       ||  Tones  ||  |RX Volume|
+ *       ||  Tones  ||  |  DTMF   |
  *       ||         ||  |         |
  *       ||         ||  |         |
  *       |+----+----+|  +----+----+
@@ -59,9 +59,9 @@
  *             |             | 
  *             v             |
  *        +----+----+   +----+----+
- *        |(5)      |   |(2)      |
+ *        |(5)      |   |(5)      |
  *        |         |   |         |
- *        |TX Volume|   |  DTMF   |
+ *        |TX Volume|   |RX Volume|
  *        |         |   |         |
  *        |         |   |         |
  *        +----+----+   +----+----+
@@ -71,7 +71,7 @@
  *        +----+-------------+----+
  *        |(7)                    |
  *        |                       |
- *        |  Pipelined Processing |
+ *        |  Pipeline Processing  |
  *        |                       |
  *        |                       |
  *        +----+-------------+----+
@@ -146,30 +146,10 @@
  * PH_CONTROL must not change any settings, join or split conference members
  * during process of data.
  * 
- *
- * TRANSMISSION:
- *
-
-TBD
-
-There are three things that need to receive data from card:
- - software DTMF decoder
- - software cmx (if conference exists)
- - upper layer, if rx-data not disabled
-
-Whenever dtmf decoder is turned on or off, software cmx changes, rx-data is disabled or enabled, or card becomes activated, then rx-data is disabled or enabled using a special command to the card.
-
-There are three things that need to transmit data to card:
- - software tone generation (part of cmx)
- - software cmx
- - upper layer, if tx-data is written to tx-buffer
-
-
-
  
  */
 
-const char *dsp_revision = "$Revision: 1.29 $";
+const char *dsp_revision = "$Revision: 1.30 $";
 
 #include <linux/delay.h>
 #include <linux/module.h>
@@ -240,16 +220,11 @@ dsp_control_req(dsp_t *dsp, mISDN_head_t *hh, struct sk_buff *skb)
 				dsp->dtmf.treshold=(*(int*)data)*10000;
 			}
 #endif
-
+			/* init goertzel */
 			dsp_dtmf_goertzel_init(dsp);
-			/* checking for hardware capability */
-			if (dsp->features.hfc_dtmf) {
-				dsp->dtmf.hardware = 1;
-				dsp->dtmf.software = 0;
-			} else {
-				dsp->dtmf.hardware = 0;
-				dsp->dtmf.software = 1;
-			}
+
+			/* check dtmf hardware */
+			dsp_dtmf_hardware(dsp);
 			break;
 		case DTMF_TONE_STOP: /* turn off DTMF */
 			if (dsp_debug & DEBUG_DSP_CORE)
@@ -258,7 +233,7 @@ dsp_control_req(dsp_t *dsp, mISDN_head_t *hh, struct sk_buff *skb)
 			dsp->dtmf.software = 0;
 			break;
 		case CMX_CONF_JOIN: /* join / update conference */
-			if (len != sizeof(int)) {
+			if (len < sizeof(int)) {
 				ret = -EINVAL;
 				break;
 			}
@@ -266,7 +241,7 @@ dsp_control_req(dsp_t *dsp, mISDN_head_t *hh, struct sk_buff *skb)
 				goto conf_split;
 			if (dsp_debug & DEBUG_DSP_CORE)
 				printk(KERN_DEBUG "%s: join conference %d\n", __FUNCTION__, *((u32 *)data));
-			ret = dsp_cmx_conf(dsp, *((u32 *)data));
+			ret = dsp_cmx_conf(dsp, *((u32 *)data)); /* dsp_cmx_hardware will also be called here */
 			if (dsp_debug & DEBUG_DSP_CMX)
 				dsp_cmx_debug(dsp);
 			break;
@@ -274,12 +249,12 @@ dsp_control_req(dsp_t *dsp, mISDN_head_t *hh, struct sk_buff *skb)
 			conf_split:
 			if (dsp_debug & DEBUG_DSP_CORE)
 				printk(KERN_DEBUG "%s: release conference\n", __FUNCTION__);
-			ret = dsp_cmx_conf(dsp, 0);
+			ret = dsp_cmx_conf(dsp, 0); /* dsp_cmx_hardware will also be called here */
 			if (dsp_debug & DEBUG_DSP_CMX)
 				dsp_cmx_debug(dsp);
 			break;
 		case TONE_PATT_ON: /* play tone */
-			if (len != sizeof(int)) {
+			if (len < sizeof(int)) {
 				ret = -EINVAL;
 				break;
 			}
@@ -301,7 +276,7 @@ dsp_control_req(dsp_t *dsp, mISDN_head_t *hh, struct sk_buff *skb)
 			dsp->tx_R = dsp->tx_W = 0;
 			break;
 		case VOL_CHANGE_TX: /* change volume */
-			if (len != sizeof(int)) {
+			if (len < sizeof(int)) {
 				ret = -EINVAL;
 				break;
 			}
@@ -309,9 +284,10 @@ dsp_control_req(dsp_t *dsp, mISDN_head_t *hh, struct sk_buff *skb)
 			if (dsp_debug & DEBUG_DSP_CORE)
 				printk(KERN_DEBUG "%s: change tx volume to %d\n", __FUNCTION__, dsp->tx_volume);
 			dsp_cmx_hardware(dsp->conf, dsp);
+			dsp_dtmf_hardware(dsp);
 			break;
 		case VOL_CHANGE_RX: /* change volume */
-			if (len != sizeof(int)) {
+			if (len < sizeof(int)) {
 				ret = -EINVAL;
 				break;
 			}
@@ -319,6 +295,7 @@ dsp_control_req(dsp_t *dsp, mISDN_head_t *hh, struct sk_buff *skb)
 			if (dsp_debug & DEBUG_DSP_CORE)
 				printk(KERN_DEBUG "%s: change rx volume to %d\n", __FUNCTION__, dsp->tx_volume);
 			dsp_cmx_hardware(dsp->conf, dsp);
+			dsp_dtmf_hardware(dsp);
 			break;
 		case CMX_ECHO_ON: /* enable echo */
 			dsp->echo = 1; /* soft echo */
@@ -364,12 +341,48 @@ dsp_control_req(dsp_t *dsp, mISDN_head_t *hh, struct sk_buff *skb)
 			if (dsp_debug & DEBUG_DSP_CMX)
 				dsp_cmx_debug(dsp);
 			break;
+		case CMX_TXDATA_ON: /* enable txdata */
+			dsp->tx_data = 1;
+			if (dsp_debug & DEBUG_DSP_CORE)
+				printk(KERN_DEBUG "%s: enable tx-data\n", __FUNCTION__);
+			dsp_cmx_hardware(dsp->conf, dsp);
+			if (dsp_debug & DEBUG_DSP_CMX)
+				dsp_cmx_debug(dsp);
+			break;
+		case CMX_TXDATA_OFF: /* disable txdata */
+			dsp->tx_data = 0;
+			if (dsp_debug & DEBUG_DSP_CORE)
+				printk(KERN_DEBUG "%s: disable tx-data\n", __FUNCTION__);
+			dsp_cmx_hardware(dsp->conf, dsp);
+			if (dsp_debug & DEBUG_DSP_CMX)
+				dsp_cmx_debug(dsp);
+			break;
+		case CMX_DELAY: /* use delay algorithm instead of dynamic jitter algorithm */
+			if (len < sizeof(int)) {
+				ret = -EINVAL;
+				break;
+			}
+			dsp->cmx_delay = (*((int *)data)) << 3; /* miliseconds to samples */
+			if (dsp->cmx_delay >= (CMX_BUFF_HALF>>1)) /* clip to half of maximum usable buffer (half of half buffer) */ 
+				dsp->cmx_delay = (CMX_BUFF_HALF>>1) - 1;
+			if (dsp_debug & DEBUG_DSP_CORE)
+				printk(KERN_DEBUG "%s: use delay algorithm to compensate jitter (%d samples)\n", __FUNCTION__, dsp->cmx_delay);
+			break;
+		case CMX_JITTER: /* use dynamic jitter algorithm instead of delay algorithm */
+			dsp->cmx_delay = 0;
+			if (dsp_debug & DEBUG_DSP_CORE)
+				printk(KERN_DEBUG "%s: use jitter algorithm to compensate jitter\n", __FUNCTION__);
+			break;
 		case PIPELINE_CFG:
 			if (len > 0 && ((char *)data)[len - 1]) {
 				printk(KERN_DEBUG "%s: pipeline config string is not NULL terminated!\n", __FUNCTION__);
 				ret = -EINVAL;
-			} else
+			} else {
+				dsp->pipeline.inuse = 1;
+				dsp_cmx_hardware(dsp->conf, dsp);
 				ret = dsp_pipeline_build(&dsp->pipeline, len > 0 ? (char *)data : NULL);
+				dsp_cmx_hardware(dsp->conf, dsp);
+			}
 			break;
 		case BF_ENABLE_KEY: /* turn blowfish on */
 			if (len<4 || len>56) {
@@ -388,14 +401,17 @@ dsp_control_req(dsp_t *dsp, mISDN_head_t *hh, struct sk_buff *skb)
 			nskb = create_link_skb(PH_CONTROL | INDICATION, 0, sizeof(int), &cont, 0);
 			if (mISDN_queue_up(&dsp->inst, 0, nskb))
 				dev_kfree_skb(nskb);
-			if (!ret)
+			if (!ret) {
 				dsp_cmx_hardware(dsp->conf, dsp);
+				dsp_dtmf_hardware(dsp);
+			}
 			break;
 		case BF_DISABLE: /* turn blowfish off */
 			if (dsp_debug & DEBUG_DSP_CORE)
 				printk(KERN_DEBUG "%s: turn blowfish off\n", __FUNCTION__);
 			dsp_bf_cleanup(dsp);
 			dsp_cmx_hardware(dsp->conf, dsp);
+			dsp_dtmf_hardware(dsp);
 			break;
 		default:
 			if (dsp_debug & DEBUG_DSP_CORE)
@@ -438,43 +454,13 @@ dsp_from_up(mISDNinstance_t *inst, struct sk_buff *skb)
 			if (skb->len < 1)
 				return(-EINVAL);
 			
-			if (!dsp->conf_id) {
-				/* PROCESS TONES/TX-DATA ONLY */
-				if (dsp->tone.tone) {
-					/* -> copy tone */
-					dsp_tone_copy(dsp, skb->data, skb->len);
-				}
+			/* send data to tx-buffer (if no tone is played) */
+			spin_lock_irqsave(&dsp_obj.lock, flags);
+			if (!dsp->tone.tone)
+				dsp_cmx_transmit(dsp, skb);
+			spin_unlock_irqrestore(&dsp_obj.lock, flags);
 
-				if (dsp->tx_volume)
-			                dsp_change_volume(skb, dsp->tx_volume);
-				/* pipeline */
-				dsp_pipeline_process_tx(&dsp->pipeline, skb->data, skb->len);
-				/* crypt */
-				if (dsp->bf_enable)
-					dsp_bf_encrypt(dsp, skb->data, skb->len);
-				/* send packet */
-				if (mISDN_queue_down(&dsp->inst, 0, skb)) {
-					dev_kfree_skb(skb);
-					printk(KERN_ERR "%s: failed to send tx-packet\n", __FUNCTION__);
-
-					return (-EIO);
-				}
-
-			} else {
-				if (dsp->features.pcm_id>=0) {
-					printk("Not sending Data to CMX -- > returning because of HW bridge\n");
-					dev_kfree_skb(skb);
-					break;
-				}
-				/* send data to tx-buffer (if no tone is played) */
-				spin_lock_irqsave(&dsp_obj.lock, flags);
-				if (!dsp->tone.tone) {
-					dsp_cmx_transmit(dsp, skb);
-				} 
-				spin_unlock_irqrestore(&dsp_obj.lock, flags);
-
-				dev_kfree_skb(skb);
-			}
+			dev_kfree_skb(skb);
 			break;
 		case PH_CONTROL | REQUEST:
 			
@@ -490,6 +476,17 @@ dsp_from_up(mISDNinstance_t *inst, struct sk_buff *skb)
 			
 			if (dsp->dtmf.hardware || dsp->dtmf.software)
 				dsp_dtmf_goertzel_init(dsp);
+
+			/* send feature request prior PH_ACTIVATE_REQ, so confirm is received prior PH_ACTIVATE_CONF */
+			if (!(dsp_options & DSP_OPT_NOHARDWARE)) {
+				struct sk_buff *nskb;
+				nskb = create_link_skb(PH_CONTROL | REQUEST, HW_FEATURES, 0, NULL, 0);
+				if (nskb) if (mISDN_queue_down(&dsp->inst, 0, nskb)) {
+					dev_kfree_skb(nskb);
+				}
+			}
+
+			/* send ph_activate */
 			hh->prim = PH_ACTIVATE | REQUEST;
 			ret = mISDN_queue_down(&dsp->inst, 0, skb);
 			
@@ -555,7 +552,12 @@ dsp_from_down(mISDNinstance_t *inst,  struct sk_buff *skb)
 			if (dsp->bf_enable)
 				dsp_bf_decrypt(dsp, skb->data, skb->len);
 			/* pipeline */
-			dsp_pipeline_process_rx(&dsp->pipeline, skb->data, skb->len);
+			if (dsp->pipeline.inuse)
+				dsp_pipeline_process_rx(&dsp->pipeline, skb->data, skb->len);
+			/* change volume if requested */
+			if (dsp->rx_volume)
+				dsp_change_volume(skb, dsp->rx_volume);
+
 			/* check if dtmf soft decoding is turned on */
 			if (dsp->dtmf.software) {
 				digits = dsp_dtmf_goertzel_decode(dsp, skb->data, skb->len, (dsp_options&DSP_OPT_ULAW)?1:0);
@@ -569,19 +571,13 @@ dsp_from_down(mISDNinstance_t *inst,  struct sk_buff *skb)
 					digits++;
 				}
 			}
-			/* change volume if requested */
-			if (dsp->rx_volume)
-				dsp_change_volume(skb, dsp->rx_volume);
-
-			if (dsp->conf_id) {
-				/* we need to process receive data if software */
-				spin_lock_irqsave(&dsp_obj.lock, flags);
-				if (dsp->pcm_slot_tx<0 && dsp->pcm_slot_rx<0) {
-					/* process data from card at cmx */
-					dsp_cmx_receive(dsp, skb);
-				}
-				spin_unlock_irqrestore(&dsp_obj.lock, flags);
+			/* we need to process receive data if software */
+			spin_lock_irqsave(&dsp_obj.lock, flags);
+			if (dsp->pcm_slot_tx<0 && dsp->pcm_slot_rx<0) {
+				/* process data from card at cmx */
+				dsp_cmx_receive(dsp, skb);
 			}
+			spin_unlock_irqrestore(&dsp_obj.lock, flags);
 
 			if (dsp->rx_disabled) {
 				/* if receive is not allowed */
@@ -591,12 +587,12 @@ dsp_from_down(mISDNinstance_t *inst,  struct sk_buff *skb)
 			}
 			hh->prim = DL_DATA | INDICATION;
 			ret = mISDN_queue_up(&dsp->inst, 0, skb);
-			
+
 			break;
 		case PH_CONTROL | INDICATION:
 			
 			if (dsp_debug & DEBUG_DSP_DTMFCOEFF)
-				printk(KERN_DEBUG "%s: PH_CONTROL received: %x (len %d) %s\n", __FUNCTION__, hh->dinfo, skb->len, dsp->inst.name);
+				printk(KERN_DEBUG "%s: PH_CONTROL INDICATION received: %x (len %d) %s\n", __FUNCTION__, hh->dinfo, skb->len, dsp->inst.name);
 			switch (hh->dinfo) {
 				case HW_HFC_COEFF: /* getting coefficients */
 				if (!dsp->dtmf.hardware) {
@@ -630,6 +626,7 @@ dsp_from_down(mISDNinstance_t *inst,  struct sk_buff *skb)
 					printk(KERN_DEBUG "%s: change tx volume to %d\n", __FUNCTION__, dsp->tx_volume);
 				printk(KERN_DEBUG "%s: change tx volume to %d\n", __FUNCTION__, dsp->tx_volume);
 				dsp_cmx_hardware(dsp->conf, dsp);
+				dsp_dtmf_hardware(dsp);
 				break;
 				default:
 				if (dsp_debug & DEBUG_DSP_CORE)
@@ -638,8 +635,27 @@ dsp_from_down(mISDNinstance_t *inst,  struct sk_buff *skb)
 			}
 			
 			break;
+		case PH_CONTROL | CONFIRM:
+			switch (hh->dinfo) {
+				case HW_FEATURES: /* getting hardware features */
+				if (skb->len == sizeof(dsp->features)) {
+					if (dsp_debug & DEBUG_DSP_CORE)
+						printk(KERN_DEBUG "%s: hardware features received.\n", __FUNCTION__);
+					memcpy(&dsp->features, skb->data, skb->len);
+					dev_kfree_skb(skb);
+				} else {
+					if (dsp_debug & DEBUG_DSP_CORE)
+						printk(KERN_DEBUG "%s: length of HW_FEATURES data missmatch.\n", __FUNCTION__);
+					ret = -EINVAL;
+				}
+				break;
+				default:
+				if (dsp_debug & DEBUG_DSP_CORE)
+					printk(KERN_DEBUG "%s: ctrl ind %x unhandled %s\n", __FUNCTION__, hh->dinfo, dsp->inst.name);
+				ret = -EINVAL;
+			}
+			break;
 		case PH_ACTIVATE | CONFIRM:
-			
 			if (dsp_debug & DEBUG_DSP_CORE)
 				printk(KERN_DEBUG "%s: b_channel is now active %s\n", __FUNCTION__, dsp->inst.name);
 			/* bchannel now active */
@@ -649,6 +665,7 @@ dsp_from_down(mISDNinstance_t *inst,  struct sk_buff *skb)
 			dsp->rx_W = dsp->rx_R = -1; /* reset RX buffer */
 			memset(dsp->rx_buff, 0, sizeof(dsp->rx_buff));
 			dsp_cmx_hardware(dsp->conf, dsp);
+			dsp_dtmf_hardware(dsp);
 			spin_unlock_irqrestore(&dsp_obj.lock, flags);
 			if (dsp_debug & DEBUG_DSP_CORE)
 				printk(KERN_DEBUG "%s: done with activation, sending confirm to user space. %s\n", __FUNCTION__, dsp->inst.name);
@@ -658,7 +675,6 @@ dsp_from_down(mISDNinstance_t *inst,  struct sk_buff *skb)
 			
 			break;
 		case PH_DEACTIVATE | CONFIRM:
-			
 			if (dsp_debug & DEBUG_DSP_CORE)
 				printk(KERN_DEBUG "%s: b_channel is now inactive %s\n", __FUNCTION__, dsp->inst.name);
 			/* bchannel now inactive */
@@ -713,8 +729,6 @@ release_dsp(dsp_t *dsp)
 	u_long		flags;
 
 	spin_lock_irqsave(&dsp_obj.lock, flags);
-	if (timer_pending(&dsp->feature_tl))
-		del_timer(&dsp->feature_tl);
 	if (timer_pending(&dsp->tone.tl))
 		del_timer(&dsp->tone.tl);
 	if (dsp_debug & DEBUG_DSP_MGR)
@@ -738,64 +752,6 @@ release_dsp(dsp_t *dsp)
 
 	if (dsp_debug & DEBUG_DSP_MGR)
 		printk(KERN_DEBUG "%s: dsp instance released\n", __FUNCTION__);
-}
-
-
-/*
- * ask for hardware features
- */
-static void
-dsp_feat(void *arg)
-{
-	dsp_t *dsp = arg;
-	struct sk_buff *nskb;
-	void *feat;
-	
-
-	switch (dsp->feature_state) {
-		case FEAT_STATE_INIT:
-			feat = &dsp->features;
-			nskb = create_link_skb(PH_CONTROL | REQUEST, HW_FEATURES, sizeof(feat), &feat, 0);
-			if (!nskb)
-				break;
-			if (mISDN_queue_down(&dsp->inst, 0, nskb)) {
-				dev_kfree_skb(nskb);
-				break;
-			}
-			if (dsp_debug & DEBUG_DSP_MGR)
-				printk(KERN_DEBUG "%s: features will be quered now for instance %s\n", __FUNCTION__, dsp->inst.name);
-			spin_lock(&dsp->feature_lock);
-			dsp->feature_state = FEAT_STATE_WAIT;
-			spin_unlock(&dsp->feature_lock);
-			init_timer(&dsp->feature_tl);
-			dsp->feature_tl.expires = jiffies + (HZ / 100);
-			add_timer(&dsp->feature_tl);
-			break;
-		case FEAT_STATE_WAIT:
-			if (dsp_debug & DEBUG_DSP_MGR)
-				printk(KERN_DEBUG "%s: features of %s are: hfc_id=%d hfc_dtmf=%d hfc_loops=%d hfc_echocanhw:%d pcm_id=%d pcm_slots=%d pcm_banks=%d\n",
-				 __FUNCTION__, dsp->inst.name,
-				 dsp->features.hfc_id,
-				 dsp->features.hfc_dtmf,
-				 dsp->features.hfc_loops,
-				 dsp->features.hfc_echocanhw,
-				 dsp->features.pcm_id,
-				 dsp->features.pcm_slots,
-				 dsp->features.pcm_banks);
-
-			spin_lock(&dsp->feature_lock);
-			dsp->feature_state = FEAT_STATE_RECEIVED;
-			spin_unlock(&dsp->feature_lock);
-
-			if (dsp->queue_conf_id) {
-				/*work on queued conf id*/
-				dsp_cmx_conf(dsp, dsp->queue_conf_id );
-				if (dsp_debug & DEBUG_DSP_CMX)
-					dsp_cmx_debug(dsp);
-			}
-			break;
-	}
-
 }
 
 
@@ -845,22 +801,12 @@ new_dsp(mISDNstack_t *st, mISDN_pid_t *pid)
 	ndsp->tone.tl.function = (void *)dsp_tone_timeout;
 	ndsp->tone.tl.data = (long) ndsp;
 	init_timer(&ndsp->tone.tl);
-	/* set dsp feture timer */
-	ndsp->feature_tl.function = (void *)dsp_feat;
-	ndsp->feature_tl.data = (long) ndsp;
-	ndsp->feature_state = FEAT_STATE_INIT;
 
 	if (dtmfthreshold < 20 || dtmfthreshold> 500) {
 		dtmfthreshold=200;
 	}
 	ndsp->dtmf.treshold=dtmfthreshold*10000;
 
-	spin_lock_init(&ndsp->feature_lock);
-	init_timer(&ndsp->feature_tl);
-	if (!(dsp_options & DSP_OPT_NOHARDWARE)) {
-		ndsp->feature_tl.expires = jiffies + (HZ / 100);
-		add_timer(&ndsp->feature_tl);
-	}
 	spin_lock_irqsave(&dsp_obj.lock, flags);
 	/* append and register */
 	list_add_tail(&ndsp->list, &dsp_obj.ilist);
@@ -1018,7 +964,7 @@ static int dsp_init(void)
 	dsp_spl_tl.function = (void *)dsp_cmx_send;
 	dsp_spl_tl.data = 0;
 	init_timer(&dsp_spl_tl);
-	dsp_spl_tl.expires = jiffies + dsp_tics + 1; /* safer */
+	dsp_spl_tl.expires = jiffies + dsp_tics;
 	dsp_spl_jiffies = dsp_spl_tl.expires;
 	add_timer(&dsp_spl_tl);
 	

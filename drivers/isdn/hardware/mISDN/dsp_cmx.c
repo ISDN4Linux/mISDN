@@ -1,4 +1,4 @@
-/* $Id: dsp_cmx.c,v 1.15 2007/03/27 15:06:29 jolly Exp $
+/* $Id: dsp_cmx.c,v 1.17 2007/04/03 17:47:26 jolly Exp $
  *
  * Audio crossconnecting/conferrencing (hardware level).
  *
@@ -78,7 +78,7 @@
  *
  * A Clock is required, because the data source
  *  - has multiple clocks.
- *  - has no clock due to jitter (VoIP).
+ *  - has no usable clock due to jitter or packet loss (VoIP).
  * In this case the system's clock is used. The clock resolution depends on
  * the jiffie resolution.
  *
@@ -520,20 +520,24 @@ dsp_cmx_hardware(conference_t *conf, dsp_t *dsp)
 				printk(KERN_DEBUG "%s dsp %s cannot form a conf, because rx_volume is changed\n", __FUNCTION__, member->dsp->inst.name);
 			goto conf_software;
 		}
+		/* check if tx-data turned on */
+		if (member->dsp->tx_data) {
+			if (dsp_debug & DEBUG_DSP_CMX)
+				printk(KERN_DEBUG "%s dsp %s cannot form a conf, because tx_data is turned on\n", __FUNCTION__, member->dsp->inst.name);
+			goto conf_software;
+		}
+		/* check if pipeline exists */
+		if (member->dsp->pipeline.inuse) {
+			if (dsp_debug & DEBUG_DSP_CMX)
+				printk(KERN_DEBUG "%s dsp %s cannot form a conf, because pipeline exists\n", __FUNCTION__, member->dsp->inst.name);
+			goto conf_software;
+		}
 		/* check if encryption is enabled */
 		if (member->dsp->bf_enable) {
 			if (dsp_debug & DEBUG_DSP_CMX)
 				printk(KERN_DEBUG "%s dsp %s cannot form a conf, because encryption is enabled\n", __FUNCTION__, member->dsp->inst.name);
 			goto conf_software;
 		}
-#if 0
-		/* check if echo cancellation is enabled */
-		if (member->dsp->cancel_enable) {
-			if (dsp_debug & DEBUG_DSP_CMX)
-				printk(KERN_DEBUG "%s dsp %s cannot form a conf, because echo cancellation is enabled\n", __FUNCTION__, member->dsp->inst.name);
-			goto conf_software;
-		}
-#endif
 		/* check if member is on a card with PCM support */
 		if (member->dsp->features.pcm_id < 0) {
 			if (dsp_debug & DEBUG_DSP_CMX)
@@ -866,14 +870,6 @@ dsp_cmx_conf(dsp_t *dsp, u32 conf_id)
 	if (dsp->conf_id == conf_id)
 		return(0);
 
-	spin_lock(&dsp->feature_lock);
-	if (dsp->feature_state != FEAT_STATE_RECEIVED) {
-		dsp->queue_conf_id=conf_id;	
-		spin_unlock(&dsp->feature_lock);
-		return 0;
-	}
-	spin_unlock(&dsp->feature_lock);
-
 	/* first remove us from current conf */
 	if (dsp->conf_id) {
 		if (dsp_debug & DEBUG_DSP_CMX)
@@ -947,28 +943,14 @@ dsp_cmx_conf(dsp_t *dsp, u32 conf_id)
 void 
 dsp_cmx_receive(dsp_t *dsp, struct sk_buff *skb)
 {
-//	s32 *c;
 	u8 *d, *p;
 	int len = skb->len;
 	mISDN_head_t *hh = mISDN_HEAD_P(skb);
 	int w, i, ii;
-//	int direct = 0; /* use rx data to clock tx-data */
 
 	/* check if we have sompen */
 	if (len < 1)
 		return;
-
-#if 0
-	/* check if we can use our clock and directly forward data */
-	if (!dsp->features.has_jitter) {
-		if (!conf)
-			direct = 1;
-		else {
-			if (count_list_member(&conf->mlist) <= 2)
-				direct = 1;
-		}
-	}
-#endif
 
 	/* half of the buffer should be larger than maximum packet size */
 	if (len >= CMX_BUFF_HALF) {
@@ -976,28 +958,42 @@ dsp_cmx_receive(dsp_t *dsp, struct sk_buff *skb)
 		return;
 	}
 
-	/* initialize pointers if not already */
+	/* initialize pointers if not already - also add delay if requested by PH_SIGNAL */
 	if (dsp->rx_W < 0) {
-		if (dsp->features.has_jitter)
-			dsp->rx_R = dsp->rx_W = (hh->dinfo & CMX_BUFF_MASK);
-		else
-			dsp->rx_R = dsp->rx_W = 0;
-	} else {
 		if (dsp->features.has_jitter) {
-			dsp->rx_W = (hh->dinfo & CMX_BUFF_MASK);
+			dsp->rx_R = (hh->dinfo & CMX_BUFF_MASK);
+			dsp->rx_W = (dsp->rx_R+dsp->cmx_delay) & CMX_BUFF_MASK;
+		} else {
+			dsp->rx_R = 0;
+			dsp->rx_W = dsp->cmx_delay;
 		}
-		/* if we underrun (or maybe overrun), we set our new read pointer, and write silence to buffer */
-		if (((dsp->rx_W-dsp->rx_R) & CMX_BUFF_MASK) >= CMX_BUFF_HALF) {
-			if (dsp_debug & DEBUG_DSP_CMX)
-				printk(KERN_DEBUG "cmx_receive(dsp=%lx): UNDERRUN (or overrun), adjusting read pointer! (inst %s)\n", (u_long)dsp, dsp->inst.name);
-			dsp->rx_R = dsp->rx_W;
-			memset(dsp->rx_buff, dsp_silence, sizeof(dsp->rx_buff));
-		}
+	}
+	/* if frame contains time code, write directly */
+	if (dsp->features.has_jitter) {
+		dsp->rx_W = (hh->dinfo & CMX_BUFF_MASK);
+	}
+	/* if we underrun (or maybe overrun), we set our new read pointer, and write silence to buffer */
+	if (((dsp->rx_W-dsp->rx_R) & CMX_BUFF_MASK) >= CMX_BUFF_HALF) {
+		if (dsp_debug & DEBUG_DSP_CMX)
+			printk(KERN_DEBUG "cmx_receive(dsp=%lx): UNDERRUN (or overrun the maximum delay), adjusting read pointer! (inst %s)\n", (u_long)dsp, dsp->inst.name);
+		/* flush buffer */
+		dsp->rx_R = 0;
+		dsp->rx_W = dsp->cmx_delay;
+		memset(dsp->rx_buff, dsp_silence, sizeof(dsp->rx_buff));
+	}
+	/* if we have reached double delay, jump back to middle */
+	if (dsp->cmx_delay) if (((dsp->rx_W-dsp->rx_R) & CMX_BUFF_MASK) >= (dsp->cmx_delay<<1)) {
+		if (dsp_debug & DEBUG_DSP_CMX)
+			printk(KERN_DEBUG "cmx_receive(dsp=%lx): OVERRUN (because twice the delay is reached), adjusting read pointer! (inst %s)\n", (u_long)dsp, dsp->inst.name);
+		/* flush buffer */
+		dsp->rx_R = 0;
+		dsp->rx_W = dsp->cmx_delay;
+		memset(dsp->rx_buff, dsp_silence, sizeof(dsp->rx_buff));
 	}
 
 	/* show where to write */
 #ifdef CMX_DEBUG
-	printk( KERN_DEBUG "cmx_receive(dsp=%lx): rx_R(dsp) rx_W(dsp)=%05x len=%d %s\n", (u_long)dsp, dsp->rx_R, dsp->rx_W, len, dsp->inst.name);
+	printk( KERN_DEBUG "cmx_receive(dsp=%lx): rx_R(dsp)=%05x rx_W(dsp)=%05x len=%d %s\n", (u_long)dsp, dsp->rx_R, dsp->rx_W, len, dsp->inst.name);
 #endif
 
 	/* write data into rx_buffer */
@@ -1027,48 +1023,57 @@ dsp_cmx_send_member(dsp_t *dsp, int len, s32 *c, int members)
 	dsp_t *member, *other;
 	register s32 sample;
 	u8 *d, *p, *q, *o_q;
-	struct sk_buff *nskb;
+	struct sk_buff *nskb, *txskb;
 	int r, rr, t, tt, o_r, o_rr;
+	int preload = 0;
 	
 	/* don't process if: */
-	if (dsp->pcm_slot_tx >= 0 /* connected to pcm slot */
-	 && dsp->tx_R == dsp->tx_W /* AND no tx-data */
-	 && !(dsp->tone.tone && dsp->tone.software)) /* AND not soft tones */
-		return;
-	if (!dsp->b_active) /* if not active */
-		return;
-
-#if 1
-	/* If we have 2 members and we are connected to pcm_slot, it looks
-	   like we're bridged on the pcm, so why should we send anything ? 
-	   */
-	if (	members==2 && (dsp->features.pcm_id>=0) && 
-		(dsp->pcm_slot_tx>=0) && (dsp->pcm_slot_rx>=0) ) {
+	if (!dsp->b_active) { /* if not active */
+		dsp->last_tx = 0;
 		return;
 	}
-#endif
+	if (dsp->pcm_slot_tx >= 0 /* connected to pcm slot */
+	 && dsp->tx_R == dsp->tx_W /* AND no tx-data */
+	 && !(dsp->tone.tone && dsp->tone.software)) { /* AND not soft tones */
+		dsp->last_tx = 0;
+		return;
+	}
 
 #ifdef CMX_DEBUG
 printk(KERN_DEBUG "SEND members=%d dsp=%s, conf=%p, rx_R=%05x rx_W=%05x\n", members, dsp->inst.name, conf, dsp->rx_R, dsp->rx_W);
 #endif
 
+	/* preload if we have delay set */
+	if (dsp->cmx_delay && !dsp->last_tx) {
+		preload = len;
+		if (preload < 128)
+			preload = 128;
+	}
+
 	/* PREPARE RESULT */
-	nskb = alloc_skb(len, GFP_ATOMIC);
+	nskb = alloc_skb(len + preload, GFP_ATOMIC);
 	if (!nskb) {
-		printk(KERN_ERR "FATAL ERROR in mISDN_dsp.o: cannot alloc %d bytes\n", len);
+		printk(KERN_ERR "FATAL ERROR in mISDN_dsp.o: cannot alloc %d bytes\n", len + preload);
 		return;
 	}
 	mISDN_sethead(PH_DATA | REQUEST, dinfo, nskb);
+	dsp->last_tx = 1;
 
 	/* set pointers, indexes and stuff */
 	member = dsp;
 	p = dsp->tx_buff; /* transmit data */
 	q = dsp->rx_buff; /* received data */
-	d = skb_put(nskb, len); /* result */
+	d = skb_put(nskb, len + preload); /* result */
 	t = dsp->tx_R; /* tx-pointers */
 	tt = dsp->tx_W;
 	r = dsp->rx_R; /* rx-pointers */
 	rr = (r + len) & CMX_BUFF_MASK;
+
+	/* preload with silence, if required */
+	if (preload) {
+		memset(d, dsp_silence, preload);
+		d += len;
+	}
 
 	/* PROCESS TONES/TX-DATA ONLY */
 	if (dsp->tone.tone && dsp->tone.software) {
@@ -1218,15 +1223,29 @@ printk(KERN_DEBUG "SEND members=%d dsp=%s, conf=%p, rx_R=%05x rx_W=%05x\n", memb
 	goto send_packet;
 
 send_packet:
+	/* send tx-data if enabled - don't filter, becuase we want what we send, not what we filtered */
+	if (dsp->tx_data) {
+		/* PREPARE RESULT */
+		txskb = alloc_skb(len, GFP_ATOMIC);
+		if (!txskb) {
+			printk(KERN_ERR "FATAL ERROR in mISDN_dsp.o: cannot alloc %d bytes\n", len);
+		} else {
+			mISDN_sethead(PH_SIGNAL | INDICATION, CMX_TX_DATA, txskb);
+			memcpy(skb_put(txskb, len), nskb->data+preload, len);
+			if (mISDN_queue_up(&dsp->inst, 0, txskb)) {
+				dev_kfree_skb(txskb);
+				printk(KERN_ERR "%s: failed to send tx-packet\n", __FUNCTION__);
+			}
+		}
+	}
+
 	/* adjust volume */
 	if (dsp->tx_volume)
 		dsp_change_volume(nskb, dsp->tx_volume);
 	
-#if 0
-	/* cancel echo */
-	if (dsp->cancel_enable)
-		dsp_cancel_tx(dsp, nskb->data, nskb->len);
-#endif
+	/* pipeline */
+	if (dsp->pipeline.inuse)
+		dsp_pipeline_process_tx(&dsp->pipeline, nskb->data, nskb->len);
 	
 	/* crypt */
 	if (dsp->bf_enable)
@@ -1241,7 +1260,7 @@ send_packet:
 
 u32	samplecount;
 struct timer_list dsp_spl_tl;
-u64	dsp_spl_jiffies;
+u32	dsp_spl_jiffies;
 
 void dsp_cmx_send(void *data)
 {
@@ -1258,7 +1277,7 @@ void dsp_cmx_send(void *data)
 	/* lock */
 	spin_lock_irqsave(&dsp_obj.lock, flags);
 
-	/* check if jitter needs to be checked */
+	/* check if jitter needs to be checked (this is every second = 8000 samples) */
 	samplecount += dsp_poll;
 	if (samplecount%8000 < dsp_poll)
 		jittercheck = 1;
@@ -1279,7 +1298,7 @@ void dsp_cmx_send(void *data)
 		}
 		
 		/* transmission required */
-		if (!mustmix && dsp->conf_id)
+		if (!mustmix)
 			dsp_cmx_send_member(dsp, dsp_poll, mixbuffer, members); // unused mixbuffer is given to prevent a potential null-pointer-bug
 	}
 	
@@ -1311,8 +1330,7 @@ void dsp_cmx_send(void *data)
 			/* process each member */
 			list_for_each_entry(member, &conf->mlist, list) {
 				/* transmission */
-				if (member->dsp->conf_id)
-					dsp_cmx_send_member(member->dsp, dsp_poll, mixbuffer, members);
+				dsp_cmx_send_member(member->dsp, dsp_poll, mixbuffer, members);
 			}
 		}
 	}
@@ -1346,8 +1364,8 @@ void dsp_cmx_send(void *data)
 					delay = dsp->delay[i];
 				i++;
 			}
-			/* remove delay */
-			if (delay) {
+			/* remove delay only if we have delay AND we have not preset cmx_delay */
+			if (delay && !dsp->cmx_delay) {
 				if (dsp_debug & DEBUG_DSP_CMX)
 					printk(KERN_DEBUG "%s lowest delay of %d bytes for dsp %s are now removed.\n", __FUNCTION__, delay, dsp->inst.name);
 				r = dsp->rx_R;
@@ -1370,9 +1388,9 @@ void dsp_cmx_send(void *data)
 		}
 	}
 
-	/* restart timer */
-//	init_timer(&dsp_spl_tl);
-	if (dsp_spl_jiffies + dsp_tics < jiffies) /* if next event would be in the past ... */
+	/* restart timer, due to hang of CPU for too long */
+// old	if (dsp_spl_jiffies + dsp_tics < jiffies) /* if next event would be in the past ... */
+	if ((s32)(dsp_spl_jiffies+dsp_tics-jiffies) < 0) /* if next event would be in the past ... */
 		dsp_spl_jiffies = jiffies;
 	else
 		dsp_spl_jiffies += dsp_tics;
@@ -1392,12 +1410,7 @@ dsp_cmx_transmit(dsp_t *dsp, struct sk_buff *skb)
 {
 	u_int w, ww;
 	u8 *d, *p;
-	int space, l;
-
-	/* check if we have sompen */
-	l = skb->len;
-	if (l < 1)
-		return;
+	int space; // todo: , l = skb->len;
 
 	/* check if there is enough space, and then copy */
 	w = dsp->tx_W;

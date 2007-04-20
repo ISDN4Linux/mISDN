@@ -106,6 +106,7 @@
 
 //#warning
 //#define IRQCOUNT_DEBUG
+#define SINGLE_INTERRUPT
 
 #include "hfc_multi.h"
 #ifdef ECHOPREP
@@ -135,7 +136,7 @@ extern const char *CardType[];
 static const char *hfcmulti_revision = "$Revision: 1.68 $";
 
 static int HFC_cnt;
-static struct pci_device_id *HFC_dev_id[MAX_CARDS];
+static const struct pci_device_id *HFC_dev_id[MAX_CARDS];
 static struct pci_dev *HFC_dev[MAX_CARDS];
 
 static mISDNobject_t	HFCM_obj;
@@ -169,7 +170,6 @@ typedef struct {
 static int poll_timer = 6;	/* default = 128 samples = 16ms */
 /* number of POLL_TIMER interrupts for G2 timeout (ca 1s) */
 static int nt_t1_count[] = { 3840, 1920, 960, 480, 240, 120, 64, 32  };
-//static int nt_t1_count[] = { 480, 240, 120, 60, 30, 15, 8, 4 };
 #define CLKDEL_TE	0x0f	/* CLKDEL in TE mode */
 #define CLKDEL_NT	0x0c	/* CLKDEL in NT mode (0x60 MUST not be included!) */
 static u_char silence =	0xff;	/* silence by LAW */
@@ -181,7 +181,7 @@ static u_char silence =	0xff;	/* silence by LAW */
 #define FIFO_32BIT_ACCESS
 
 #define VENDOR_CCD "Cologne Chip AG"
-#define CCAG_VID 0x1397      // Cologne Chip Vendor ID
+#define CCAG_VID 0x1397      /* Cologne Chip Vendor ID */
 #define HFC4S_ID 0x08B4
 #define HFC8S_ID 0x16B8
 #define HFCE1_ID 0x30B1
@@ -241,7 +241,7 @@ static const PCI_ENTRY id_list[] =
 	{CCAG_VID, CCAG_VID, HFCE1_ID, 0xB564, VENDOR_CCD,
 	 "HFC-E1 Beronet Card (Dual)", 1, 1, 0, 1, 0, DIP_E1}, /* E1 only supports single clock */
 	{0x10B5, CCAG_VID, 0x9030, 0x3136, VENDOR_CCD,
-	 "HFC-4S PCIBridgeEval", 0, 4, 0, 0, 0, 0},      // PLX PCI-Bridge
+	 "HFC-4S PCIBridgeEval", 0, 4, 0, 0, 0, 0},      /* PLX PCI-Bridge */
 	{CCAG_VID, CCAG_VID, HFC4S_ID, 0xB566, VENDOR_CCD,
 	 "HFC-2S Beronet Card", 0, 2, 1, 3, 0, DIP_4S},
 	{CCAG_VID, CCAG_VID, HFC4S_ID, 0xB569, VENDOR_CCD,
@@ -257,7 +257,7 @@ static const PCI_ENTRY id_list[] =
 /****************/
 
 static u_int type[MAX_CARDS];
-static BYTE found[MAX_CARDS];  // remember if card is found
+static BYTE found[MAX_CARDS];  /* remember if card is found */
 static BYTE allocated[MAX_CARDS];
 static int pcm[MAX_PORTS];
 static u_int protocol[MAX_PORTS];
@@ -342,7 +342,7 @@ inline unsigned char readpcibridge(hfc_multi_t *c, unsigned char address)
 	unsigned short cipv;
 	unsigned char data;
 	
-	// slow down a PCI read access by 1 PCI clock cycle
+	/* slow down a PCI read access by 1 PCI clock cycle */
 	HFC_outb(c, R_CTRL, 0x4); /*was _io before*/
 	
 	if (address == 0)
@@ -350,12 +350,12 @@ inline unsigned char readpcibridge(hfc_multi_t *c, unsigned char address)
 	else
 		cipv=0x5800;
 	
-	// select local bridge port address by writing to CIP port
+	/* select local bridge port address by writing to CIP port */
 	//data = HFC_inb(c, cipv); /*was _io before*/
 	outw(cipv, c->pci_iobase + 4);
 	data = inb(c->pci_iobase);
 	
-	// restore R_CTRL for normal PCI read cycle speed
+	/* restore R_CTRL for normal PCI read cycle speed */
 	HFC_outb(c, R_CTRL, 0x0); /*was _io before*/
 	
 	return data;
@@ -371,18 +371,18 @@ inline void writepcibridge(hfc_multi_t *hc, unsigned char address, unsigned char
 	else
 		cipv=0x5800;
 
-	// select local bridge port address by writing to CIP port
+	/* select local bridge port address by writing to CIP port */
 	outw(cipv, hc->pci_iobase + 4);
 	
-	// define a 32 bit dword with 4 identical bytes for write sequence
+	/* define a 32 bit dword with 4 identical bytes for write sequence */
 	datav=data | ( (__u32) data <<8) | ( (__u32) data <<16) | ( (__u32) data <<24);
 
 	
-	// write this 32 bit dword to the bridge data port
-	// this will initiate a write sequence of up to 4 writes to the same address on the local bus
-	// interface
-	// the number of write accesses is undefined but >=1 and depends on the next PCI transaction
-	// during write sequence on the local bus
+	/* write this 32 bit dword to the bridge data port
+	   this will initiate a write sequence of up to 4 writes to the same address on the local bus
+	   interface
+	   the number of write accesses is undefined but >=1 and depends on the next PCI transaction
+	   during write sequence on the local bus */
 	outl(datav, hc->pci_iobase);
 }
 	
@@ -685,6 +685,9 @@ release_io_hfcmulti(hfc_multi_t *hc)
 static int
 init_chip(hfc_multi_t *hc)
 {
+#ifdef SINGLE_INTERRUPT	
+	static int t_int = 0;
+#endif
 	u_long 	flags, val, val2 = 0, rev;
 	int	cnt = 0;
 	int	i, err = 0;
@@ -765,7 +768,7 @@ init_chip(hfc_multi_t *hc)
 		hc->hw.r_pcm_md0 |= V_PCM_MD;
 	}
 
-	// RAM access test
+	/* RAM access test */
 	HFC_outb(hc, R_RAM_ADDR0, 0);
 	HFC_outb(hc, R_RAM_ADDR1, 0);
 	HFC_outb(hc, R_RAM_ADDR2, 0);
@@ -871,14 +874,22 @@ init_chip(hfc_multi_t *hc)
 			}
 		}
 	}
-
+#ifdef SINGLE_INTERRUPT
+	/* set up timer, only one timer needed for all chips */
+	if(!t_int) {
+		HFC_outb(hc, R_TI_WD, poll_timer);
+		hc->hw.r_irqmsk_misc |= V_TI_IRQMSK;
+		t_int++;
+	}
+#else
 	/* set up timer */
 	HFC_outb(hc, R_TI_WD, poll_timer);
 	hc->hw.r_irqmsk_misc |= V_TI_IRQMSK;
+#endif
 
 	/* set up 125us interrupt, only if function pointer is available 
 	   and module parameter timer is set */
-	if (timer!=0 && hfc_interrupt && register_interrupt) {
+	if (timer && hfc_interrupt && register_interrupt) {
 		/* only one chip should use this interrupt */
 		timer = 0;
 		interrupt_registered = 1;
@@ -991,79 +1002,12 @@ hfcmulti_leds(hfc_multi_t *hc)
 
 	switch(hc->leds) {
 		case 1: /* HFC-E1 OEM */
-			/* 2 red blinking: LOS
-			   1 red: AIS
-			   left green: PH_ACTIVATE
-			   right green flashing: FIFO activity
+			/* 2 red blinking: NT mode deactivate
+			   2 red steady:   TE mode deactivate
+			   left green:     L1 active
+			   left red:       frame sync, but no L1
+			   right green:    L2 active
 			   */
-#if 0
-			i = HFC_inb(hc, R_GPI_IN0) & 0xf0;
-			if (!(i & 0x40)) { /* LOS */
-				if (hc->e1_switch != i) {
-					hc->e1_switch = i;
-					hc->hw.r_tx0 &= ~V_OUT_EN;
-					HFC_outb(hc, R_TX0, hc->hw.r_tx0);
-				}
-				if (!test_bit(HFC_CFG_NTMODE, &hc->chan[16].cfg)) {
-					led[0] = led[1] = 1;
-				} else if (hc->ledcount>>11) {
-					led[0] = led[1] = 1;
-				} else {
-					led[0] = led[1] = 0;
-				}
-				led[2] = led[3] = 0;
-			} else {
-				if (!(i & 0x80)) { /* AIS */
-					if (hc->e1_switch != i) {
-						hc->e1_switch = i;
-						hc->hw.r_tx0 |= V_OUT_EN;
-						hc->hw.r_tx1 |= V_AIS_OUT;
-						HFC_outb(hc, R_TX0, hc->hw.r_tx0);
-						HFC_outb(hc, R_TX1, hc->hw.r_tx1);
-					}
-					if (hc->ledcount & 512)
-						led[2] = led[3] = 1;
-					else
-						led[2] = led[3] = 0;
-					led[0] = led[1] = 0;
-				} else {
-					if (hc->e1_switch != i) {
-						/* reset LOS/AIS */
-						hc->e1_switch = i;
-						hc->hw.r_tx0 |= V_OUT_EN;
-						hc->hw.r_tx1 &= ~V_AIS_OUT;
-						HFC_outb(hc, R_TX0, hc->hw.r_tx0);
-						HFC_outb(hc, R_TX1, hc->hw.r_tx1);
-					}
-					if (HFC_inb_(hc, R_RX_STA0) & V_SIG_LOS) {
-						if (hc->ledcount>>11)
-							led[0] = led[1] = 1; /* both red blinking */
-						else
-							led[0] = led[1] = 0;
-					} else
-						if (HFC_inb_(hc, R_RX_STA0) & V_AIS) {
-							led[0] = led[1] = 1; /* both red */
-						} else {
-							led[0] = led[1] = 0; /* no red */
-						}
-					state = 0;
-					active = 1;
-					dch = hc->chan[16].ch;
-					if (dch && test_bit(FLG_DCHANNEL, &dch->Flags))
-						state = dch->state;
-					if (state == active) {
-						led[2] = 1; /* left green */
-						if (hc->activity[0]) {
-							led[3] = 1; /* right green */
-							hc->activity[0] = 0;
-						} else
-							led[3] = 0; /* no right green */
-
-					} else
-						led[2] = led[3] = 0; /* no green */
-				}
-			}
-#endif
 			i = HFC_inb(hc, R_GPI_IN0) & 0xF0;
 			if (hc->e1_switch != i) {
 				hc->e1_switch = i;
@@ -1080,6 +1024,7 @@ hfcmulti_leds(hfc_multi_t *hc)
 				}
 				led[2] = led[3] = 0;
 			} else { /* with frame sync */
+				/* TODO make it work */
 				led[0] = led[1] = 0;
 				led[2] = 0;
 				led[3] = 1;
@@ -1174,8 +1119,6 @@ hfcmulti_leds(hfc_multi_t *hc)
 					led[i] = 0; /* led off */
 			}
 
-			//	printk("leds %d %d\n", led[0], led[1]);
-			//LEDME
 
 			leds = (led[0]>0) | ((led[1]>0)<<1) | ((led[0]&1)<<2) | ((led[1]&1)<<3);
 			if (leds != (int)hc->ledstate) {
@@ -1240,7 +1183,7 @@ hfcmulti_dtmf(hfc_multi_t *hc)
 	if (debug & DEBUG_HFCMULTI_DTMF)
 		printk(KERN_DEBUG "%s: dtmf detection irq\n", __FUNCTION__);
 	for (ch = 0; ch < 32; ch++) {
-		// only process enabled B-channels
+		/* only process enabled B-channels */
 		bch = hc->chan[ch].ch;
 		if ((!bch) || !test_bit(FLG_BCHANNEL, &bch->Flags)) {
 			continue;
@@ -1255,7 +1198,7 @@ hfcmulti_dtmf(hfc_multi_t *hc)
 			printk(KERN_DEBUG "%s: dtmf channel %d:", __FUNCTION__, ch);
 		dtmf = 1;
 		for (co = 0; co < 8; co++) {
-			// read W(n-1) coefficient
+			/* read W(n-1) coefficient */
 			addr = hc->DTMFbase + ((co<<7) | (ch<<2));
 			HFC_outb_(hc, R_RAM_ADDR0, addr);
 			HFC_outb_(hc, R_RAM_ADDR1, addr>>8);
@@ -1269,7 +1212,7 @@ hfcmulti_dtmf(hfc_multi_t *hc)
 			if (debug & DEBUG_HFCMULTI_DTMF)
 				printk(" %04x", w_float);
 
-			// decode float (see chip doc)
+			/* decode float (see chip doc) */
 			mantissa = w_float & 0x0fff;
 			if (w_float & 0x8000)
 				mantissa |= 0xfffff000;
@@ -1279,10 +1222,10 @@ hfcmulti_dtmf(hfc_multi_t *hc)
 				mantissa <<= (exponent-1);
 			}
 
-			// store coefficient
+			/* store coefficient */
 			coeff[co<<1] = mantissa;
 
-			// read W(n) coefficient
+			/* read W(n) coefficient */
 			w_float = HFC_inb_(hc, R_RAM_DATA);
 #ifdef CONFIG_HFCMULTI_PCIMEM
 			w_float |= (HFC_inb_(hc, R_RAM_DATA) << 8);
@@ -1292,7 +1235,7 @@ hfcmulti_dtmf(hfc_multi_t *hc)
 			if (debug & DEBUG_HFCMULTI_DTMF)
 				printk(" %04x", w_float);
 
-			// decode float (see chip doc)
+			/* decode float (see chip doc) */
 			mantissa = w_float & 0x0fff;
 			if (w_float & 0x8000)
 				mantissa |= 0xfffff000;
@@ -1302,7 +1245,7 @@ hfcmulti_dtmf(hfc_multi_t *hc)
 				mantissa <<= (exponent-1);
 			}
 
-			// store coefficient
+			/* store coefficient */
 			coeff[(co<<1)|1] = mantissa;
 		}
 		skb = create_link_skb(PH_CONTROL | INDICATION, HW_HFC_COEFF, sizeof(coeff), coeff, 0);
@@ -1316,7 +1259,7 @@ hfcmulti_dtmf(hfc_multi_t *hc)
 			coeff[0], coeff[1], coeff[2], coeff[3], coeff[4], coeff[5], coeff[6], coeff[7], skb->len);
 		}
 
-#ifdef FIXME   // TODO changed
+#ifdef FIXME   /* TODO changed */
 				if ((bch->inst.pid.protocol[2] == ISDN_PID_L2_B_RAWDEV) && bch->dev)
 					hif = &bch->dev->rport.pif;
 				else
@@ -1327,7 +1270,7 @@ hfcmulti_dtmf(hfc_multi_t *hc)
 
 	}
 
-	// restart DTMF processing
+	/* restart DTMF processing */
 	hc->dtmf = dtmf;
 	if (dtmf)
 		HFC_outb_(hc, R_DTMF, hc->hw.r_dtmf | V_RST_DTMF);
@@ -1552,7 +1495,7 @@ next_frame:
 		HFC_outb_(hc, R_INC_RES_FIFO, V_INC_F);
 		HFC_wait_(hc);
 	}
-	// check for next frame
+	/* check for next frame */
 	if (chan->tx_skb) {
 		dev_kfree_skb(chan->tx_skb);
 	} 
@@ -1812,124 +1755,137 @@ static void signal_state_up(channel_t *dch, int dinfo, char *msg)
 		dev_kfree_skb(skb);
 }
 
+#ifdef SINGLE_INTERRUPT
+static inline void
+handle_timer_irq(void)
+{
+	hfc_multi_t     *hc, *next;
+#else
 static inline void
 handle_timer_irq(hfc_multi_t *hc)
 {
+#endif
 	int		ch, temp;
 	channel_t	*chan;
 
-	for (ch = 0; ch < 32; ch++) {
-		chan = hc->chan[ch].ch;
-		if (chan && hc->created[hc->chan[ch].port]) {
-			hfcmulti_tx(hc, ch, chan);
-			/* fifo is started when switching to rx-fifo */
-			hfcmulti_rx(hc, ch, chan);
-			if (test_bit(FLG_DCHANNEL, &chan->Flags) &&
-				hc->chan[ch].nt_timer > -1) {
-				if (!(--hc->chan[ch].nt_timer)) {
-					ph_state_change(chan);
-					if (debug & DEBUG_HFCMULTI_STATE)
-						printk(KERN_DEBUG "%s: nt_timer at state %x\n",
-							__FUNCTION__, chan->state);
+#ifdef SINGLE_INTERRUPT
+	/* handle timer interrupt for all HFC chips */
+	list_for_each_entry_safe(hc, next, &HFCM_obj.ilist, list) {
+#endif
+		for (ch = 0; ch < 32; ch++) {
+			chan = hc->chan[ch].ch;
+			if (chan && hc->created[hc->chan[ch].port]) {
+				hfcmulti_tx(hc, ch, chan);
+				/* fifo is started when switching to rx-fifo */
+				hfcmulti_rx(hc, ch, chan);
+				if (test_bit(FLG_DCHANNEL, &chan->Flags) &&
+						hc->chan[ch].nt_timer > -1) {
+					if (!(--hc->chan[ch].nt_timer)) {
+						ph_state_change(chan);
+						if (debug & DEBUG_HFCMULTI_STATE)
+							printk(KERN_DEBUG "%s: nt_timer at state %x\n",
+									__FUNCTION__, chan->state);
+					}
 				}
 			}
 		}
-	}
-	if (hc->type == 1 && hc->created[0]) {
-		chan = hc->chan[16].ch;
-		if (test_bit(HFC_CFG_REPORT_LOS, &hc->chan[16].cfg)) {
-			if (debug & DEBUG_HFCMULTI_SYNC)
-				printk(KERN_DEBUG "%s: (id=%d) E1 got LOS\n",
-					__FUNCTION__, hc->id);
-					/* LOS */
-			temp = HFC_inb_(hc, R_RX_STA0) & V_SIG_LOS;
-			if (!temp && hc->chan[16].los)
-				signal_state_up(chan, HW_LOS, "LOS detected");
-			if (temp && !hc->chan[16].los)
-				signal_state_up(chan, HW_LOS_OFF, "LOS gone");
-			hc->chan[16].los = temp;
-		}
-		if (test_bit(HFC_CFG_REPORT_AIS, &hc->chan[16].cfg)) {
-			if (debug & DEBUG_HFCMULTI_SYNC)
-				printk(KERN_DEBUG "%s: (id=%d) E1 got AIS\n",
-					__FUNCTION__, hc->id);
-			/* AIS */
-			temp = HFC_inb_(hc, R_RX_STA0) & V_AIS;
-			if (!temp && hc->chan[16].ais)
-				signal_state_up(chan, HW_AIS, "AIS detected");
-			if (temp && !hc->chan[16].ais)
-				signal_state_up(chan, HW_AIS_OFF, "AIS gone");
-			hc->chan[16].ais = temp;
-		}
-		if (test_bit(HFC_CFG_REPORT_SLIP, &hc->chan[16].cfg)) {
-			if (debug & DEBUG_HFCMULTI_SYNC)
-				printk(KERN_DEBUG "%s: (id=%d) E1 got SLIP (RX)\n",
-					__FUNCTION__, hc->id);
-			/* SLIP */
-			temp = HFC_inb_(hc, R_SLIP) & V_FOSLIP_RX;
-			if (!temp && hc->chan[16].slip_rx)
-				signal_state_up(chan, HW_SLIP_RX, " bit SLIP detected RX");
-			hc->chan[16].slip_rx = temp;
-			temp = HFC_inb_(hc, R_SLIP) & V_FOSLIP_TX;
-			if (!temp && hc->chan[16].slip_tx)
-				signal_state_up(chan, HW_SLIP_TX, " bit SLIP detected TX");
-			hc->chan[16].slip_tx = temp;
-		}
-		temp = HFC_inb_(hc, R_JATT_DIR);
-		switch(hc->chan[16].sync) {
-			case 0:
-				if ((temp & 0x60) == 0x60) {
-					if (debug & DEBUG_HFCMULTI_SYNC)
-						printk(KERN_DEBUG "%s: (id=%d) E1 now in clock sync\n",
+		if (hc->type == 1 && hc->created[0]) {
+			chan = hc->chan[16].ch;
+			if (test_bit(HFC_CFG_REPORT_LOS, &hc->chan[16].cfg)) {
+				if (debug & DEBUG_HFCMULTI_SYNC)
+					printk(KERN_DEBUG "%s: (id=%d) E1 got LOS\n",
 							__FUNCTION__, hc->id);
-					HFC_outb(hc, R_RX_OFF, hc->chan[16].jitter | V_RX_INIT);
-					HFC_outb(hc, R_TX_OFF, hc->chan[16].jitter | V_RX_INIT);
-					hc->chan[16].sync = 1;
-					goto check_framesync;
-				}
-				break;
-			case 1:
-				if ((temp & 0x60) != 0x60) {
-					if (debug & DEBUG_HFCMULTI_SYNC)
-						printk(KERN_DEBUG "%s: (id=%d) E1 lost clock sync\n",
+				/* LOS */
+				temp = HFC_inb_(hc, R_RX_STA0) & V_SIG_LOS;
+				if (!temp && hc->chan[16].los)
+					signal_state_up(chan, HW_LOS, "LOS detected");
+				if (temp && !hc->chan[16].los)
+					signal_state_up(chan, HW_LOS_OFF, "LOS gone");
+				hc->chan[16].los = temp;
+			}
+			if (test_bit(HFC_CFG_REPORT_AIS, &hc->chan[16].cfg)) {
+				if (debug & DEBUG_HFCMULTI_SYNC)
+					printk(KERN_DEBUG "%s: (id=%d) E1 got AIS\n",
 							__FUNCTION__, hc->id);
-					hc->chan[16].sync = 0;
+				/* AIS */
+				temp = HFC_inb_(hc, R_RX_STA0) & V_AIS;
+				if (!temp && hc->chan[16].ais)
+					signal_state_up(chan, HW_AIS, "AIS detected");
+				if (temp && !hc->chan[16].ais)
+					signal_state_up(chan, HW_AIS_OFF, "AIS gone");
+				hc->chan[16].ais = temp;
+			}
+			if (test_bit(HFC_CFG_REPORT_SLIP, &hc->chan[16].cfg)) {
+				if (debug & DEBUG_HFCMULTI_SYNC)
+					printk(KERN_DEBUG "%s: (id=%d) E1 got SLIP (RX)\n",
+							__FUNCTION__, hc->id);
+				/* SLIP */
+				temp = HFC_inb_(hc, R_SLIP) & V_FOSLIP_RX;
+				if (!temp && hc->chan[16].slip_rx)
+					signal_state_up(chan, HW_SLIP_RX, " bit SLIP detected RX");
+				hc->chan[16].slip_rx = temp;
+				temp = HFC_inb_(hc, R_SLIP) & V_FOSLIP_TX;
+				if (!temp && hc->chan[16].slip_tx)
+					signal_state_up(chan, HW_SLIP_TX, " bit SLIP detected TX");
+				hc->chan[16].slip_tx = temp;
+			}
+			temp = HFC_inb_(hc, R_JATT_DIR);
+			switch(hc->chan[16].sync) {
+				case 0:
+					if ((temp & 0x60) == 0x60) {
+						if (debug & DEBUG_HFCMULTI_SYNC)
+							printk(KERN_DEBUG "%s: (id=%d) E1 now in clock sync\n",
+									__FUNCTION__, hc->id);
+						HFC_outb(hc, R_RX_OFF, hc->chan[16].jitter | V_RX_INIT);
+						HFC_outb(hc, R_TX_OFF, hc->chan[16].jitter | V_RX_INIT);
+						hc->chan[16].sync = 1;
+						goto check_framesync;
+					}
 					break;
-				}
-				check_framesync:
-				temp = HFC_inb_(hc, R_RX_STA0);
-				if (temp == 0x27) {
-					if (debug & DEBUG_HFCMULTI_SYNC)
-						printk(KERN_DEBUG "%s: (id=%d) E1 now in frame sync\n",
-							__FUNCTION__, hc->id);
-					hc->chan[16].sync = 2;
-				}
-				break;
-			case 2:
-				if ((temp & 0x60) != 0x60) {
-					if (debug & DEBUG_HFCMULTI_SYNC)
-						printk(KERN_DEBUG "%s: (id=%d) E1 lost clock & frame sync\n",
-							__FUNCTION__, hc->id);
-					hc->chan[16].sync = 0;
+				case 1:
+					if ((temp & 0x60) != 0x60) {
+						if (debug & DEBUG_HFCMULTI_SYNC)
+							printk(KERN_DEBUG "%s: (id=%d) E1 lost clock sync\n",
+									__FUNCTION__, hc->id);
+						hc->chan[16].sync = 0;
+						break;
+					}
+check_framesync:
+					temp = HFC_inb_(hc, R_RX_STA0);
+					if (temp == 0x27) {
+						if (debug & DEBUG_HFCMULTI_SYNC)
+							printk(KERN_DEBUG "%s: (id=%d) E1 now in frame sync\n",
+									__FUNCTION__, hc->id);
+						hc->chan[16].sync = 2;
+					}
 					break;
-				}
-				temp = HFC_inb_(hc, R_RX_STA0);
-				if (temp != 0x27) {
-					if (debug & DEBUG_HFCMULTI_SYNC)
-						printk(KERN_DEBUG "%s: (id=%d) E1 lost frame sync\n",
-							__FUNCTION__, hc->id);
-					hc->chan[16].sync = 1;
-				}
-				break;
+				case 2:
+					if ((temp & 0x60) != 0x60) {
+						if (debug & DEBUG_HFCMULTI_SYNC)
+							printk(KERN_DEBUG "%s: (id=%d) E1 lost clock & frame sync\n",
+									__FUNCTION__, hc->id);
+						hc->chan[16].sync = 0;
+						break;
+					}
+					temp = HFC_inb_(hc, R_RX_STA0);
+					if (temp != 0x27) {
+						if (debug & DEBUG_HFCMULTI_SYNC)
+							printk(KERN_DEBUG "%s: (id=%d) E1 lost frame sync\n",
+									__FUNCTION__, hc->id);
+						hc->chan[16].sync = 1;
+					}
+					break;
+			}
 		}
+
+		if (test_bit(HFC_CHIP_WATCHDOG, &hc->chip)) 
+			hfcmulti_watchdog(hc);
+
+		if (hc->leds)
+			hfcmulti_leds(hc);
+#ifdef SINGLE_INTERRUPT
 	}
-
-	if (test_bit(HFC_CHIP_WATCHDOG, &hc->chip)) 
-		hfcmulti_watchdog(hc);
-
-	if (hc->leds)
-		hfcmulti_leds(hc);
-
+#endif
 }
 
 static irqreturn_t
@@ -2049,7 +2005,12 @@ hfcmulti_interrupt(int intno, void *dev_id, struct pt_regs *regs)
 			}
 		}
 		if (r_irq_misc & V_TI_IRQ)
+#ifdef SINGLE_INTERRUPT
+			/* only one chip will call timer interrupt */
+			handle_timer_irq();
+#else
 			handle_timer_irq(hc);
+#endif
 
 		if (r_irq_misc & V_DTMF_IRQ) {
 			/* -> DTMF IRQ */
@@ -2432,7 +2393,7 @@ hfcmulti_conf(hfc_multi_t *hc, int ch, int num)
 /***************************/
 /* set/disable sample loop */
 /***************************/
-// NOTE: this function is experimental and therefore disabled
+/* NOTE: this function is experimental and therefore disabled */
 static void
 hfcmulti_splloop(hfc_multi_t *hc, int ch, u_char *data, int len)
 {
@@ -2673,7 +2634,7 @@ hw_deactivate:
 			ret = -EINVAL;
 		}
 	} else if ((hh->prim & MISDN_CMD_MASK) == MGR_SHORTSTATUS) {
-		u_int		temp = hh->dinfo & SSTATUS_ALL; // remove SSTATUS_BROADCAST_BIT
+		u_int		temp = hh->dinfo & SSTATUS_ALL; /* remove SSTATUS_BROADCAST_BIT */
 		if (((hc->type == 1) || test_bit(HFC_CFG_NTMODE,
 			&hc->chan[ch->channel].cfg)) &&
 			(temp == SSTATUS_ALL || temp == SSTATUS_L1)) {
@@ -2702,7 +2663,8 @@ handle_bmsg(channel_t *ch, struct sk_buff *skb)
 	u_long		flags, num;
 	int		slot_tx, slot_rx, bank_tx, bank_rx;
 	int		ret = -EAGAIN;
-	struct		dsp_features *features;
+	struct		dsp_features features;
+	struct sk_buff	*nskb;
 	int taps;
 
 	if ((hh->prim == (PH_ACTIVATE | REQUEST)) ||
@@ -2782,28 +2744,27 @@ handle_bmsg(channel_t *ch, struct sk_buff *skb)
 		spin_lock_irqsave(ch->inst.hwlock, flags);
 		switch (hh->dinfo) {
 			case HW_FEATURES: /* fill features structure */
-				#warning this is dangerous, the skb should never used to transfer a pointer please use a message
-				if (skb->len != sizeof(void *)) {
-					printk(KERN_WARNING "%s: HW_FEATURES lacks parameters\n",
-						__FUNCTION__);
-					break;
-				}
 				if (debug & DEBUG_HFCMULTI_MSG)
 					printk(KERN_DEBUG "%s: HW_FEATURE request\n",
 						__FUNCTION__);
-				features = *((struct dsp_features **)skb->data);
-				features->hfc_id = hc->id;
+				/* create confirm */
+				memset(&features, 0, sizeof(features));
+				features.hfc_id = hc->id;
 				if (test_bit(HFC_CHIP_DTMF, &hc->chip))
-					features->hfc_dtmf = 1;
-				features->hfc_loops = 0;
-				features->pcm_id = hc->pcm;
-				features->pcm_slots = hc->slots;
-				features->pcm_banks = 2;
-				
+					features.hfc_dtmf = 1;
+				features.hfc_loops = 0;
+				features.pcm_id = hc->pcm;
+				features.pcm_slots = hc->slots;
+				features.pcm_banks = 2;
 				if (test_bit(HFC_CHIP_DIGICARD, &hc->chip))
-					features->hfc_echocanhw=1;
-
+					features.hfc_echocanhw=1;
+				nskb = create_link_skb(PH_CONTROL | CONFIRM, HW_FEATURES, sizeof(features), &features, 0);
+				if (!nskb)
+					break;
 				ret = 0;
+				/* send confirm */
+				if (mISDN_queue_up(&ch->inst, 0, nskb))
+					dev_kfree_skb(nskb);
 				break;
 			case HW_PCM_CONN: /* connect interface to pcm timeslot (0..N) */
 				if (skb->len < 4*sizeof(s32)) {
@@ -3278,7 +3239,7 @@ init_card(hfc_multi_t *hc)
 
 #ifdef CONFIG_PLX_PCI_BRIDGE
 	plx_acc=(u_short*)(hc->plx_membase+0x4c);
-	*plx_acc=0x41;  // enable PCI & LINT1 irq
+	*plx_acc=0x41;  /* enable PCI & LINT1 irq */
 #endif
 
 	if (debug & DEBUG_HFCMULTI_INIT)
@@ -3319,7 +3280,7 @@ init_card(hfc_multi_t *hc)
 		
 #ifdef CONFIG_PLX_PCI_BRIDGE
 		plx_acc=(u_short*)(hc->plx_membase+0x4c);
-		*plx_acc=0x00;  // disable PCI & LINT1 irq
+		*plx_acc=0x00;  /* disable PCI & LINT1 irq */
 #endif
 		cnt--;
 		err = -EIO;
@@ -3456,7 +3417,7 @@ setup_pci(hfc_multi_t *hc, struct pci_dev *pdev, int id_idx)
 	hc->plx_membase = NULL;
 
 #ifdef CONFIG_PLX_PCI_BRIDGE
-	hc->plx_origmembase =  get_pcibase(hc->pci_dev, 0);  // MEMBASE 1 is PLX PCI Bridge
+	hc->plx_origmembase =  get_pcibase(hc->pci_dev, 0);  /* MEMBASE 1 is PLX PCI Bridge */
 
 	if (!hc->plx_origmembase) {
 		printk(KERN_WARNING "HFC-multi: No IO-Memory for PCI PLX bridge found\n");
@@ -3472,7 +3433,7 @@ setup_pci(hfc_multi_t *hc, struct pci_dev *pdev, int id_idx)
 	}
 	printk(KERN_WARNING "HFC-multi: plx_membase:%#x plx_origmembase:%#x\n",(u_int) hc->plx_membase, (u_int)hc->plx_origmembase);
 
-	hc->pci_origmembase =  get_pcibase(hc->pci_dev, 2);  // MEMBASE 1 is PLX PCI Bridge
+	hc->pci_origmembase =  get_pcibase(hc->pci_dev, 2);  /* MEMBASE 1 is PLX PCI Bridge */
 	if (!hc->pci_origmembase) {
 		printk(KERN_WARNING "HFC-multi: No IO-Memory for PCI card found\n");
 		pci_disable_device(hc->pci_dev);
@@ -3488,7 +3449,7 @@ setup_pci(hfc_multi_t *hc, struct pci_dev *pdev, int id_idx)
 
 	printk(KERN_INFO "%s: defined at MEMBASE %#x (%#x) IRQ %d HZ %d leds-type %d\n", hc->name, (u_int) hc->pci_membase, (u_int) hc->pci_origmembase, hc->pci_dev->irq, HZ, hc->leds);
 	pci_write_config_word(hc->pci_dev, PCI_COMMAND, PCI_ENA_MEMIO);
-#else // CONFIG_PLX_PCI_BRIDGE
+#else /* CONFIG_PLX_PCI_BRIDGE */
 	hc->pci_origmembase = get_pcibase(hc->pci_dev, 1);
 	if (!hc->pci_origmembase) {
 		printk(KERN_WARNING "HFC-multi: No IO-Memory for PCI card found\n");
@@ -3504,7 +3465,7 @@ setup_pci(hfc_multi_t *hc, struct pci_dev *pdev, int id_idx)
 	}
 	printk(KERN_INFO "%s: defined at MEMBASE %#x (%#x) IRQ %d HZ %d leds-type %d\n", hc->name, (u_int) hc->pci_membase, (u_int) hc->pci_origmembase, hc->pci_dev->irq, HZ, hc->leds);
 	pci_write_config_word(hc->pci_dev, PCI_COMMAND, PCI_ENA_MEMIO);
-#endif // CONFIG_PLX_PCI_BRIDGE
+#endif /* CONFIG_PLX_PCI_BRIDGE */
 #else
 	hc->pci_iobase = (u_int) get_pcibase(hc->pci_dev, 0);
 	if (!hc->pci_iobase) {
@@ -3561,13 +3522,13 @@ static void release_ports_hw(hfc_multi_t *hc)
 		hc->chan[16].slot_tx = -1;
 		hc->chan[16].slot_rx = -1;
 		hc->chan[16].conf = -1;
-		mode_hfcmulti(hc, 16, ISDN_PID_NONE, -1, 0, -1, 0);//d
+		mode_hfcmulti(hc, 16, ISDN_PID_NONE, -1, 0, -1, 0);/* d */
 		i = 0;
 		while(i < 30) {
 			hc->chan[i+1+(i>=15)].slot_tx = -1;
 			hc->chan[i+1+(i>=15)].slot_rx = -1;
 			hc->chan[i+1+(i>=15)].conf = -1;
-			mode_hfcmulti(hc, i+1+(i>=15), ISDN_PID_NONE, -1, 0, -1, 0); //b
+			mode_hfcmulti(hc, i+1+(i>=15), ISDN_PID_NONE, -1, 0, -1, 0); /* b */
 			i++;
 		}
 	} else {
@@ -3577,15 +3538,15 @@ static void release_ports_hw(hfc_multi_t *hc)
 				hc->chan[(i<<2)+2].slot_tx = -1;
 				hc->chan[(i<<2)+2].slot_rx = -1;
 				hc->chan[(i<<2)+2].conf = -1;
-				mode_hfcmulti(hc, (i<<2)+2, ISDN_PID_NONE, -1, 0, -1, 0); //d
+				mode_hfcmulti(hc, (i<<2)+2, ISDN_PID_NONE, -1, 0, -1, 0); /* d */
 				hc->chan[i<<2].slot_tx = -1;
 				hc->chan[i<<2].slot_rx = -1;
 				hc->chan[i<<2].conf = -1;
-				mode_hfcmulti(hc, i<<2, ISDN_PID_NONE, -1, 0, -1, 0); //b1
+				mode_hfcmulti(hc, i<<2, ISDN_PID_NONE, -1, 0, -1, 0); /* b1 */
 				hc->chan[(i<<2)+1].slot_tx = -1;
 				hc->chan[(i<<2)+1].slot_rx = -1;
 				hc->chan[(i<<2)+1].conf = -1;
-				mode_hfcmulti(hc, (i<<2)+1, ISDN_PID_NONE, -1, 0, -1, 0); //b2
+				mode_hfcmulti(hc, (i<<2)+1, ISDN_PID_NONE, -1, 0, -1, 0); /* b2 */
 			}
 			i++;
 		}
@@ -3757,7 +3718,7 @@ bugtest
 
 		case MGR_CLRSTPARA | INDICATION:
 		arg = NULL;
-		// fall through
+		/* fall through */
 		case MGR_ADDSTPARA | INDICATION:
 		if (debug & DEBUG_HFCMULTI_MGR)
 			printk(KERN_DEBUG "%s: MGR_***STPARA\n", __FUNCTION__);
@@ -3843,7 +3804,7 @@ static int find_idlist_entry(int vendor, int subvendor, int device, int subdevic
 /* just check for cards, initialize later */
 static int __devinit hfcpci_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 {
-	int		id_idx;        // index to id_list
+	int		id_idx;        /* index to id_list */
 
 	id_idx = find_idlist_entry(ent->vendor,ent->subvendor,ent->device,ent->subdevice);
 	if (id_idx == -1) {
@@ -3869,15 +3830,15 @@ static int __devinit hfcpci_init(struct pci_dev *pdev, const struct pci_device_i
 	int		port_idx;
 	int		bchperport, card_type, pt;
 	int		ch, ch2;
-	int		id_idx;        // index to id_list
-	int		hfc_type;      // chip type
-	int		hfc_ports;     // chip ports
+	int		id_idx;        /* index to id_list */
+	int		hfc_type;      /* chip type */
+	int		hfc_ports;     /* chip ports */
 	hfc_multi_t	*hc;
 	mISDN_pid_t	pid, pids[8];
 	mISDNstack_t	*dst = NULL; /* make gcc happy */
 	channel_t	*chan;
 	u_long		flags;
-	u_char		dips=0, pmj=0; // dip settings, port mode Jumpers
+	u_char		dips=0, pmj=0; /* dip settings, port mode Jumpers */
 
 	id_idx = find_idlist_entry(ent->vendor,ent->subvendor,ent->device,ent->subdevice);
 
@@ -3963,8 +3924,15 @@ static int __devinit hfcpci_init(struct pci_dev *pdev, const struct pci_device_i
 //			test_and_set_bit(HFC_CHIP_LEDS, &hc->chip);
 	if (type & 0x800)
 		test_and_set_bit(HFC_CHIP_PCM_SLAVE, &hc->chip);
+#ifdef SINGLE_INTERRUPT
+	/* only first device gets timer interrupt, so the
+	   others don't have to wait for it */
+	if (HFC_idx > 0)
+		test_and_set_bit(HFC_CHIP_CLOCK_IGNORE, &hc->chip);
+#else
 	if (type & 0x1000)
 		test_and_set_bit(HFC_CHIP_CLOCK_IGNORE, &hc->chip);
+#endif
 	if (type & 0x2000)
 		test_and_set_bit(HFC_CHIP_RX_SYNC, &hc->chip);
 	if (type & 0x4000)
@@ -4066,7 +4034,7 @@ static int __devinit hfcpci_init(struct pci_dev *pdev, const struct pci_device_i
 				goto free_channels;
 			}
 			hc->chan[ch2].ch = chan;
-#ifdef FIXME  // TODO
+#ifdef FIXME  /* TODO */
 			if (chan->dev) {
 				chan->dev->wport.pif.func = hfcmulti_l2l1;
 				chan->dev->wport.pif.fdata = chan;
@@ -4245,7 +4213,7 @@ static int __devinit hfcpci_init(struct pci_dev *pdev, const struct pci_device_i
 			dips = ((~HFC_inb(hc, R_GPIO_IN1) & 0xE0 ) >> 5) | 
 				((~HFC_inb(hc, R_GPI_IN2) & 0x80) >> 3) | (~HFC_inb(hc, R_GPI_IN2) & 0x08);
 
-			// Port mode (TE/NT) jumpers
+			/* Port mode (TE/NT) jumpers */
 			pmj = ((HFC_inb(hc, R_GPI_IN3) >> 4)  & 0xf);
 
 			if (test_bit(HFC_CHIP_DIGICARD, &hc->chip))
@@ -4255,7 +4223,7 @@ static int __devinit hfcpci_init(struct pci_dev *pdev, const struct pci_device_i
 
 			for (pt = 0; pt < hc->type; pt++) {
 				chan = hc->chan[(pt<<2)+2].ch;
-				// check for protocol param mismatch
+				/* check for protocol param mismatch */
 				if (((pmj & (1 << pt)) && (chan->inst.pid.protocol[0] == ISDN_PID_L0_TE_S0)) ||
 						((!(pmj & (1 << pt))) && (chan->inst.pid.protocol[0] == ISDN_PID_L0_NT_S0))) {
 					printk ("%s: protocol WARNING: port %i is jumpered for %s mode!\n",
@@ -4271,19 +4239,19 @@ static int __devinit hfcpci_init(struct pci_dev *pdev, const struct pci_device_i
 			 
 			   enable PCI auxbridge function */
 			HFC_outb(hc, R_BRG_PCM_CFG, 1 | V_PCM_CLK);
-			// disables interrupts
+			/* disables interrupts */
 			disable_hwirq(hc);
-			// prepare access to auxport
+			/* prepare access to auxport */
 			outw(0x4000, hc->pci_iobase + 4);
-			// some dummy reads are required to read valid DIP switch data
+			/* some dummy reads are required to read valid DIP switch data */
 			dips = inb(hc->pci_iobase);
 			dips = inb(hc->pci_iobase);
 			dips = inb(hc->pci_iobase);
 			dips = ~inb(hc->pci_iobase) & 0x3F;
-			// enable interrups 
+			/* enable interrups */
 			enable_hwirq(hc);
 			outw(0x0, hc->pci_iobase + 4);
-			// disable PCI auxbridge function
+			/* disable PCI auxbridge function */
 			HFC_outb(hc, R_BRG_PCM_CFG, V_PCM_CLK);
 			printk(KERN_INFO "%s: %s DIPs(0x%x)\n", __FUNCTION__, id_list[id_idx].card_name, dips);
 			break;
@@ -4403,20 +4371,20 @@ static void __devexit hfc_remove_pci(struct pci_dev *pdev)
 	if (debug)
 		printk( KERN_INFO "removing hfc_multi card vendor:%x device:%x subvendor:%x subdevice:%x\n",
 			pdev->vendor,pdev->device,pdev->subsystem_vendor,pdev->subsystem_device);
-	// which card is this?
+	/* which card is this? */
 	for (id = 0; id < HFC_cnt; id++) {
 		if (pdev == HFC_dev[id]) break;
 	}
-	// remove card only if initialized
+	/* remove card only if initialized */
 	if (card && !found[id]) {
 #if 1
-		for (i = 0; i < card->ports; i++) { // type is also number of d-channel
+		for (i = 0; i < card->ports; i++) { /* type is also number of d-channel */
 			if(card->created[i]) {
 				if (card->type == 1)
 					ch = 16;
 				else
 					ch = (i*4)+2;
-				// if created delete stack
+				/* if created delete stack */
 				if (card->chan[ch].ch &&
 					test_bit(FLG_DCHANNEL, &card->chan[ch].ch->Flags))
 					mISDN_ctrl(card->chan[ch].ch->inst.st,
@@ -4424,7 +4392,7 @@ static void __devexit hfc_remove_pci(struct pci_dev *pdev)
 			}
 		}
 #endif
-		// relase all ports
+		/* relase all ports */
 		allocated[card->idx] = 0;
 	}
 	else {
@@ -4436,45 +4404,45 @@ static void __devexit hfc_remove_pci(struct pci_dev *pdev)
 static struct pci_device_id hfmultipci_ids[] __devinitdata = {
 
 	/** Cards with HFC-4S Chip**/
-	{ CCAG_VID, 0x08B4   , CCAG_VID, 0xB567, 0, 0, 0 }, //BN1S mini PCI
-	{ CCAG_VID, 0x08B4   , CCAG_VID, 0xB566, 0, 0, 0 }, //BN2S
-	{ CCAG_VID, 0x08B4   , CCAG_VID, 0xB569, 0, 0, 0 }, //BN2S mini PCI
-	{ CCAG_VID, 0x08B4   , CCAG_VID, 0xB560, 0, 0, 0 }, //BN4S
-	{ CCAG_VID, 0x08B4   , CCAG_VID, 0xB568, 0, 0, 0 }, //BN4S mini PCI
-	{ CCAG_VID, 0x08B4   , CCAG_VID, 0x08B4, 0, 0, 0 }, //Old Eval
-	{ CCAG_VID, 0x08B4   , CCAG_VID, 0xB520, 0, 0, 0 }, //IOB4ST
-	{ CCAG_VID, 0x08B4   , CCAG_VID, 0xB620, 0, 0, 0 }, //4S
-	{ 0xD161, 0xB410   , 0xD161, 0xB410, 0, 0, 0 }, //4S - Digium
-	{ CCAG_VID, 0x08B4   , CCAG_VID, 0xB540, 0, 0, 0 }, //4S Swyx
-	{ CCAG_VID, 0x08B4   , CCAG_VID, 0xB550, 0, 0, 0 }, //4S junghanns 2.0
+	{ CCAG_VID, 0x08B4   , CCAG_VID, 0xB567, 0, 0, 0 }, /* BN1S mini PCI */
+	{ CCAG_VID, 0x08B4   , CCAG_VID, 0xB566, 0, 0, 0 }, /* BN2S */
+	{ CCAG_VID, 0x08B4   , CCAG_VID, 0xB569, 0, 0, 0 }, /* BN2S mini PCI */
+	{ CCAG_VID, 0x08B4   , CCAG_VID, 0xB560, 0, 0, 0 }, /* BN4S */
+	{ CCAG_VID, 0x08B4   , CCAG_VID, 0xB568, 0, 0, 0 }, /* BN4S mini PCI */
+	{ CCAG_VID, 0x08B4   , CCAG_VID, 0x08B4, 0, 0, 0 }, /* Old Eval */
+	{ CCAG_VID, 0x08B4   , CCAG_VID, 0xB520, 0, 0, 0 }, /* IOB4ST */
+	{ CCAG_VID, 0x08B4   , CCAG_VID, 0xB620, 0, 0, 0 }, /* 4S */
+	{ 0xD161, 0xB410   , 0xD161, 0xB410, 0, 0, 0 }, /* 4S - Digium */
+	{ CCAG_VID, 0x08B4   , CCAG_VID, 0xB540, 0, 0, 0 }, /* 4S Swyx */
+	{ CCAG_VID, 0x08B4   , CCAG_VID, 0xB550, 0, 0, 0 }, /* 4S junghanns 2.0 */
 	
 	/** Cards with HFC-8S Chip**/
-	{ CCAG_VID, 0x16B8   , CCAG_VID, 0xB562, 0, 0, 0 }, //BN8S
-	{ CCAG_VID, 0x16B8   , CCAG_VID, 0xB56B, 0, 0, 0 }, //BN8S+
-	{ CCAG_VID, 0x16B8   , CCAG_VID, 0x16B8, 0, 0, 0 }, //old Eval
-	{ CCAG_VID, 0x16B8   , CCAG_VID, 0xB521, 0, 0, 0 }, //IOB8ST Recording
-	{ CCAG_VID, 0x16B8   , CCAG_VID, 0xB522, 0, 0, 0 }, //IOB8ST 
-	{ CCAG_VID, 0x16B8   , CCAG_VID, 0xB552, 0, 0, 0 }, //IOB8ST 
-	{ CCAG_VID, 0x16B8   , CCAG_VID, 0xB622, 0, 0, 0 }, //8S
+	{ CCAG_VID, 0x16B8   , CCAG_VID, 0xB562, 0, 0, 0 }, /* BN8S */
+	{ CCAG_VID, 0x16B8   , CCAG_VID, 0xB56B, 0, 0, 0 }, /* BN8S+ */
+	{ CCAG_VID, 0x16B8   , CCAG_VID, 0x16B8, 0, 0, 0 }, /* old Eval */
+	{ CCAG_VID, 0x16B8   , CCAG_VID, 0xB521, 0, 0, 0 }, /* IOB8ST Recording */
+	{ CCAG_VID, 0x16B8   , CCAG_VID, 0xB522, 0, 0, 0 }, /* IOB8ST  */
+	{ CCAG_VID, 0x16B8   , CCAG_VID, 0xB552, 0, 0, 0 }, /* IOB8ST  */
+	{ CCAG_VID, 0x16B8   , CCAG_VID, 0xB622, 0, 0, 0 }, /* 8S */
 
 
 	/** Cards with HFC-E1 Chip**/
-	{ CCAG_VID, 0x30B1   , CCAG_VID, 0xB563, 0, 0, 0 }, //BNE1
-	{ CCAG_VID, 0x30B1   , CCAG_VID, 0xB56A, 0, 0, 0 }, //BNE1 mini PCI
-	{ CCAG_VID, 0x30B1   , CCAG_VID, 0xB565, 0, 0, 0 }, //BNE1 + (Dual)
-	{ CCAG_VID, 0x30B1   , CCAG_VID, 0xB564, 0, 0, 0 }, //BNE1 (Dual)
+	{ CCAG_VID, 0x30B1   , CCAG_VID, 0xB563, 0, 0, 0 }, /* BNE1 */
+	{ CCAG_VID, 0x30B1   , CCAG_VID, 0xB56A, 0, 0, 0 }, /* BNE1 mini PCI */
+	{ CCAG_VID, 0x30B1   , CCAG_VID, 0xB565, 0, 0, 0 }, /* BNE1 + (Dual) */
+	{ CCAG_VID, 0x30B1   , CCAG_VID, 0xB564, 0, 0, 0 }, /* BNE1 (Dual) */
 
-	{ CCAG_VID, 0x30B1   , CCAG_VID, 0x30B1, 0, 0, 0 }, //Old Eval
-	{ CCAG_VID, 0x30B1   , CCAG_VID, 0xB523, 0, 0, 0 }, //IOB1E1
-	{ CCAG_VID, 0x30B1   , CCAG_VID, 0xC523, 0, 0, 0 }, //E1
+	{ CCAG_VID, 0x30B1   , CCAG_VID, 0x30B1, 0, 0, 0 }, /* Old Eval */
+	{ CCAG_VID, 0x30B1   , CCAG_VID, 0xB523, 0, 0, 0 }, /* IOB1E1 */
+	{ CCAG_VID, 0x30B1   , CCAG_VID, 0xC523, 0, 0, 0 }, /* E1 */
 	
 #if 0
 	{ CCAG_VID, 0x08B4   , PCI_ANY_ID, PCI_ANY_ID, 0, 0, 0 },
 	{ CCAG_VID, 0x16B8   , PCI_ANY_ID, PCI_ANY_ID, 0, 0, 0 },
 	{ CCAG_VID, 0x30B1   , PCI_ANY_ID, PCI_ANY_ID, 0, 0, 0 },
 #endif
-	{ 0x10B5,   0x9030   , CCAG_VID,   0x3136 ,    0, 0, 0 },  // PLX PCI Bridge
-	{ 0x10B5,   0x9030   , PCI_ANY_ID,   PCI_ANY_ID ,  0, 0, 0 },  // PLX PCI Bridge
+	{ 0x10B5,   0x9030   , CCAG_VID,   0x3136 ,    0, 0, 0 },  /* PLX PCI Bridge */
+	{ 0x10B5,   0x9030   , PCI_ANY_ID,   PCI_ANY_ID ,  0, 0, 0 },  /* PLX PCI Bridge */
 	{0, }
 };
 MODULE_DEVICE_TABLE(pci, hfmultipci_ids);
@@ -4626,12 +4594,12 @@ HFCmulti_init(void)
 #if 1
 	err = pci_register_driver(&hfcmultipci_driver);
 	if (err < 0) {
-		printk(KERN_ERR "error registering pci driver:%x\n",err);
+		printk(KERN_ERR "error registering pci driver: %x\n",err);
 		HFCmulti_cleanup();
 		return(err);
 	}
 	/* now we have an array of cards and an array of module type parameters.
-	 * let's match them together. */
+	   let's match them together. */
 	for (i = 0; i < HFC_cnt; i++) {
 		switch(type[i] & 0xF) {
 			case 0x1: /* HFC-E1 chip */
@@ -4640,11 +4608,11 @@ HFCmulti_init(void)
 					if (HFC_dev_id[j]->device == HFCE1_ID && found[j]) {
 						err = hfcpci_init(HFC_dev[j], HFC_dev_id[j], type[i]);
 						if (err < 0) {
-							printk(KERN_ERR "error initializing cards:%x\n",err);
+							printk(KERN_ERR "error initializing cards: %x\n",err);
 							HFCmulti_cleanup();
 							return(err);
 						}
-						found[j] = 0; /* mark card as already used */
+						found[j] = 0; /* mark card as allready used */
 						break;
 					}
 				}
@@ -4655,7 +4623,7 @@ HFCmulti_init(void)
 							HFC_dev_id[j]->device == 0xB410) && found[j]) {
 						err = hfcpci_init(HFC_dev[j], HFC_dev_id[j], type[i]);
 						if (err < 0) {
-							printk(KERN_ERR "error initializing cards:%x\n",err);
+							printk(KERN_ERR "error initializing cards: %x\n",err);
 							HFCmulti_cleanup();
 							return(err);
 						}
@@ -4669,7 +4637,7 @@ HFCmulti_init(void)
 					if (HFC_dev_id[j]->device == HFC8S_ID && found[j]) {
 						err = hfcpci_init(HFC_dev[j], HFC_dev_id[j], type[i]);
 						if (err < 0) {
-							printk(KERN_ERR "error initializing cards:%x\n",err);
+							printk(KERN_ERR "error initializing cards: %x\n",err);
 							HFCmulti_cleanup();
 							return(err);
 						}
@@ -4680,9 +4648,8 @@ HFCmulti_init(void)
 
 				break;
 			default:
-				printk(KERN_ERR "wrong module parameter, unknown type of card\n");
-				HFCmulti_cleanup();
-				return -EINVAL;
+				printk(KERN_INFO "device without configuration found\n");
+				break;
 		}
 	}
 

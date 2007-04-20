@@ -311,6 +311,11 @@ int dsp_pipeline_build (dsp_pipeline_t *pipeline, const char *cfg)
 	}
 
 _out:
+	if (!list_empty(&pipeline->list)) 
+		pipeline->inuse=1;
+	else
+		pipeline->inuse=0;
+
 	write_unlock_irqrestore(&pipeline->lock, pipeline_flags);
 	printk(KERN_DEBUG "%s: dsp pipeline built%s: %s\n", __FUNCTION__, incomplete ? " incomplete" : "", cfg);
 
