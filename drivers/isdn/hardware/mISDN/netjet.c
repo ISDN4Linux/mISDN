@@ -1823,8 +1823,9 @@ static void __exit nj_cleanup (void)
 	}
 
 	list_for_each_entry_safe(card, next, &netjet_mISDN.ilist, list) {
-		printk(KERN_ERR "NetJet PCI card struct not empty refs %d\n",
-		       netjet_mISDN.refcnt);
+		if (debug)
+			printk(KERN_ERR "NetJet PCI card struct not empty refs %d\n",
+				   netjet_mISDN.refcnt);
 		nj_release_card(card);
 	}
 

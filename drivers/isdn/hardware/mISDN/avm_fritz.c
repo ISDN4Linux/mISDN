@@ -1333,7 +1333,8 @@ static void __devexit fritz_remove_pci(struct pci_dev *pdev)
 	if (card)
 		mISDN_ctrl(card->dch.inst.st, MGR_DELSTACK | REQUEST, NULL);
 	else
-		printk(KERN_WARNING "%s: drvdata allready removed\n", __FUNCTION__);
+		if (debug)
+			printk(KERN_WARNING "%s: drvdata allready removed\n", __FUNCTION__);
 }
 
 #if defined(CONFIG_PNP)
@@ -1348,7 +1349,8 @@ static void __devexit fritz_remove_pnp(struct pci_dev *pdev)
 	if (card)
 		mISDN_ctrl(card->dch.inst.st, MGR_DELSTACK | REQUEST, NULL);
 	else
-		printk(KERN_WARNING "%s: drvdata allready removed\n", __FUNCTION__);
+		if (debug)
+			printk(KERN_WARNING "%s: drvdata allready removed\n", __FUNCTION__);
 }
 #endif /* CONFIG_PNP */
 
@@ -1472,8 +1474,9 @@ static void __exit Fritz_cleanup(void)
 		printk(KERN_ERR "Can't unregister Fritz PCI error(%d)\n", err);
 	}
 	list_for_each_entry_safe(card, next, &fritz.ilist, list) {
-		printk(KERN_ERR "Fritz PCI card struct not empty refs %d\n",
-			fritz.refcnt);
+		if (debug)
+			printk(KERN_ERR "Fritz PCI card struct not empty refs %d\n",
+				   fritz.refcnt);
 		release_card(card);
 	}
 #if defined(CONFIG_PNP)

@@ -2285,8 +2285,9 @@ static void __exit HFC_cleanup(void)
 		printk(KERN_ERR "Can't unregister HFC PCI error(%d)\n", err);
 	}
 	list_for_each_entry_safe(card, next, &HFC_obj.ilist, list) {
-		printk(KERN_ERR "HFC PCI card struct not empty refs %d\n",
-			HFC_obj.refcnt);
+		if (debug)
+			printk(KERN_ERR "HFC PCI card struct not empty refs %d\n",
+				   HFC_obj.refcnt);
 		release_card(card);
 	}
 	return;

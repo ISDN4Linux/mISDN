@@ -1533,7 +1533,8 @@ static void __devexit w6692_remove_pci(struct pci_dev *pdev)
 	if (card)
 		mISDN_ctrl(card->dch.inst.st, MGR_DELSTACK | REQUEST, NULL);
 	else
-		printk(KERN_WARNING "%s: drvdata allready removed\n", __FUNCTION__);
+		if (debug)
+			printk(KERN_WARNING "%s: drvdata allready removed\n", __FUNCTION__);
 }
 
 static struct pci_device_id w6692_ids[] = {
@@ -1610,8 +1611,9 @@ static void __exit w6692_cleanup(void)
 		printk(KERN_ERR "Can't unregister Winbond W6692 PCI error(%d)\n", err);
 	}
 	list_for_each_entry_safe(card, next, &w6692.ilist, list) {
-		printk(KERN_ERR "Winbond W6692 PCI card struct not empty refs %d\n",
-			w6692.refcnt);
+		if (debug)
+			printk(KERN_ERR "Winbond W6692 PCI card struct not empty refs %d\n",
+				   w6692.refcnt);
 		release_card(card);
 	}
 	pci_unregister_driver(&w6692_driver);

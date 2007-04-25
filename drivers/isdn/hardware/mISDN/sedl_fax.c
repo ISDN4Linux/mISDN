@@ -821,7 +821,8 @@ static void __devexit sedl_remove_pci(struct pci_dev *pdev)
 	if (card)
 		mISDN_ctrl(card->dch.inst.st, MGR_DELSTACK | REQUEST, NULL);
 	else
-		printk(KERN_WARNING "%s: drvdata allready removed\n", __FUNCTION__);
+		if (debug)
+			printk(KERN_WARNING "%s: drvdata allready removed\n", __FUNCTION__);
 }
 
 #if defined(CONFIG_PNP)
@@ -836,7 +837,8 @@ static void __devexit sedl_remove_pnp(struct pci_dev *pdev)
 	if (card)
 		mISDN_ctrl(card->dch.inst.st, MGR_DELSTACK | REQUEST, NULL);
 	else
-		printk(KERN_WARNING "%s: drvdata allready removed\n", __FUNCTION__);
+		if (debug)
+			printk(KERN_WARNING "%s: drvdata allready removed\n", __FUNCTION__);
 }
 #endif
 
@@ -961,8 +963,9 @@ static void __exit Speedfax_cleanup(void)
 		printk(KERN_ERR "Can't unregister Speedfax PCI error(%d)\n", err);
 	}
 	list_for_each_entry_safe(card, next, &speedfax.ilist, list) {
-		printk(KERN_ERR "Speedfax PCI card struct not empty refs %d\n",
-			speedfax.refcnt);
+		if (debug)
+			printk(KERN_ERR "Speedfax PCI card struct not empty refs %d\n",
+				   speedfax.refcnt);
 		release_card(card);
 	}
 #if defined(CONFIG_PNP)

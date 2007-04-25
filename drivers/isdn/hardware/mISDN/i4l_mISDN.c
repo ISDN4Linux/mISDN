@@ -1571,8 +1571,9 @@ I4Lcapi_cleanup(void)
 		return;
 	}
 	while(I4Lcapi.ilist) {
-		printk(KERN_ERR "I4Lcapi card struct not empty refs %d\n",
-			I4Lcapi.refcnt);
+		if (debug)
+			printk(KERN_ERR "I4Lcapi card struct not empty refs %d\n",
+				   I4Lcapi.refcnt);
 		release_card(((i4l_capi_t *)I4Lcapi.ilist)->idx);
 	}
 	mISDN_FsmFree(&i4lfsm_s);
