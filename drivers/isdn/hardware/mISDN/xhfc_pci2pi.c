@@ -29,7 +29,6 @@
 
 
 static PCI2PI_cfg PCI2PI_config = {
-	/* default PI_INTELMX config */
 	.del_cs = 0,
 	.del_rd = 0,
 	.del_wr = 0,
@@ -53,7 +52,7 @@ static PCI2PI_cfg PCI2PI_config = {
 	.pi_int_pol = 0,
 	.pi_wait_enable = 0,
 	.spi_cfg0 = 0,
-	.spi_cfg1 = 0,
+	.spi_cfg1 = 2,
 	.spi_cfg2 = 0,
 	.spi_cfg3 = 0,
 	.eep_recover = 4,
@@ -72,8 +71,10 @@ init_pci_bridge(xhfc_pi * pi)
 {
 	int err = -ENODEV;
 
-	printk(KERN_INFO "%s %s: using PCI2PI Bridge at 0x%p\n",
-	       pi->name, __FUNCTION__, pi->hw_membase);
+	printk(KERN_INFO "%s %s: using PCI2PI Bridge at 0x%p, PI-Mode(0x%x)\n",
+	       pi->name, __FUNCTION__, pi->hw_membase, PCI2PI_config.pi_mode);
+	       
+	spin_lock_init(&pi->lock);
 
 	/* test if Bridge regsiter accessable */
 	WritePCI2PI_u32(pi, PCI2PI_DEL_CS, 0x0);

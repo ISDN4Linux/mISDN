@@ -70,7 +70,7 @@ extern __u32 PCI2PI_XHFC_OFFSETS[PCI2PI_MAX_XHFC];
 
 /* Select processor interface mode and Bond option     */
 /* of PCI2PI bridge */
-#define PI_MODE		PI_INTELMX
+#define PI_MODE		PI_SPI
 #define XHFC_BOND	XHFC_4SU_BOND
 
 /*******************************************************/
@@ -541,14 +541,23 @@ functions for SPI access
 static inline __u8
 read_xhfc(xhfc_t * xhfc, __u8 reg_addr)
 {
+	u_long flags;
+	__u8 data;
+
+	spin_lock_irqsave(&xhfc->pi->lock, flags);
+
 	// wait until SPI master is idle
-	while (!(ReadPCI2PI_u32(hw, PCI2PI_SPI_STATUS) & 1));
+	while (!(ReadPCI2PI_u32(xhfc->pi, PCI2PI_SPI_STATUS) & 1));
 	// initiate a 32 clock SPI master transfer
-	WritePCI2PI_u32(hw, PCI2PI_SPI_MO_DATA, ((SPI_ADDR | SPI_WR | xhfc->chipidx) << 24) | (reg_addr << 16) | ((SPI_DATA | SPI_RD) << 8));
+	WritePCI2PI_u32(xhfc->pi, PCI2PI_SPI_MO_DATA, ((SPI_ADDR | SPI_WR | xhfc->chipidx) << 24) | (reg_addr << 16) | ((SPI_DATA | SPI_RD) << 8));
 	// wait until SPI master is idle
-	while (!(ReadPCI2PI_u32(hw, PCI2PI_SPI_STATUS) & 1));
+	while (!(ReadPCI2PI_u32(xhfc->pi, PCI2PI_SPI_STATUS) & 1));
+
 	// read data from the SPI data receive register and return one byte
-	return (__u8) (ReadPCI2PI_u32(hw, PCI2PI_SPI_MI_DATA) & 0xFF);
+	data = ReadPCI2PI_u32(xhfc->pi, PCI2PI_SPI_MI_DATA) & 0xFF;
+
+	spin_unlock_irqrestore(&xhfc->pi->lock, flags);
+	return data;
 }
 
 
@@ -561,6 +570,11 @@ read four bytes from the same register address by using a SPI multiple read acce
 static inline __u32
 read32_xhfc(xhfc_t * xhfc, __u8 reg_addr)
 {
+	u_long flags;
+	__u32 data;
+	
+	spin_lock_irqsave(&xhfc->pi->lock, flags);
+	
 	// wait until SPI master is idle
 	while (!(ReadPCI2PI_u32(xhfc->pi, PCI2PI_SPI_STATUS) & 1));
 	// initiate a 16 clock SPI master transfer
@@ -575,17 +589,26 @@ read32_xhfc(xhfc_t * xhfc, __u8 reg_addr)
 	// output data is arbitrary
 	WritePCI2PI_u32(xhfc->pi, PCI2PI_SPI_MO_DATA, 0);
 	while (!(ReadPCI2PI_u32(xhfc->pi, PCI2PI_SPI_STATUS) & 1));
+	
 	// read data from the SPI data receive register and return four bytes
-	return (__u32) be32_to_cpu(ReadPCI2PI_u32(xhfc->pi, PCI2PI_SPI_MI_DATA));
+	data = be32_to_cpu(ReadPCI2PI_u32(xhfc->pi, PCI2PI_SPI_MI_DATA));
+
+	spin_unlock_irqrestore(&xhfc->pi->lock, flags);
+	return data;
 }
 
 static inline void
 write_xhfc(xhfc_t * xhfc, __u8 reg_addr, __u8 value)
 {
+	u_long flags;
+	spin_lock_irqsave(&xhfc->pi->lock, flags);
+	
 	// wait until SPI master is idle
 	while (!(ReadPCI2PI_u32(xhfc->pi, PCI2PI_SPI_STATUS) & 1));
 	// initiate a 32 clock SPI master transfer
 	WritePCI2PI_u32(xhfc->pi, PCI2PI_SPI_MO_DATA, ((SPI_ADDR | SPI_WR | xhfc->chipidx) << 24) | (reg_addr << 16) | ((SPI_DATA | SPI_WR) << 8) | value);
+	
+	spin_unlock_irqrestore(&xhfc->pi->lock, flags);
 }
 
 /*
@@ -597,6 +620,9 @@ multiple write access
 static inline void
 write32_xhfc(xhfc_t * xhfc, __u8 reg_addr, __u32 value)
 {
+	u_long flags;
+	spin_lock_irqsave(&xhfc->pi->lock, flags);
+	
 	// wait until SPI master is idle
 	while (!(ReadPCI2PI_u32(xhfc->pi, PCI2PI_SPI_STATUS) & 1));
 	// initiate a 16 clock SPI master transfer
@@ -609,6 +635,8 @@ write32_xhfc(xhfc_t * xhfc, __u8 reg_addr, __u32 value)
 	while (!(ReadPCI2PI_u32(xhfc->pi, PCI2PI_SPI_STATUS) & 1));
 	// initiate a 32 clock SPI master transfer
 	WritePCI2PI_u32(xhfc->pi, PCI2PI_SPI_MO_DATA, cpu_to_be32(value));
+
+	spin_unlock_irqrestore(&xhfc->pi->lock, flags);
 }
 
 
@@ -621,6 +649,11 @@ registers that normally requires long read access times
 static inline __u8
 sread_xhfc(xhfc_t * xhfc, __u8 reg_addr)
 {
+	u_long flags;
+	__u8 data;
+	
+	spin_lock_irqsave(&xhfc->pi->lock, flags);
+	
         // wait until SPI master is idle
 	while (!(ReadPCI2PI_u32(xhfc->pi, PCI2PI_SPI_STATUS) & 1));
 	// initiate a 32 clock SPI master transfer
@@ -635,8 +668,12 @@ sread_xhfc(xhfc_t * xhfc, __u8 reg_addr)
 	
 	// wait until SPI master is idle
 	while (!(ReadPCI2PI_u32(xhfc->pi, PCI2PI_SPI_STATUS) & 1));
+	
 	// read data from the SPI data receive register and return one byte
-	return (__u8) (ReadPCI2PI_u32(xhfc->pi, PCI2PI_SPI_MI_DATA) & 0xFF);
+	data = ReadPCI2PI_u32(xhfc->pi, PCI2PI_SPI_MI_DATA) & 0xFF;
+	
+	spin_unlock_irqrestore(&xhfc->pi->lock, flags);
+	return data;
 }
 
 /*
@@ -647,14 +684,23 @@ this function reads the currently selected regsiter from XHFC
 static inline __u8
 read_xhfcregptr(xhfc_t * xhfc)
 {
+	u_long flags;
+	__u8 data;
+	
+	spin_lock_irqsave(&xhfc->pi->lock, flags);
+	
 	// wait until SPI master is idle
 	while (!(ReadPCI2PI_u32(xhfc->pi, PCI2PI_SPI_STATUS) & 1));
 	// initiate a 16 clock SPI master transfer
 	WritePCI2PI_u16(xhfc->pi, PCI2PI_SPI_MO_DATA, ((SPI_ADDR | SPI_RD | xhfc->chipidx) << 8));
 	// wait until SPI master is idle
 	while (!(ReadPCI2PI_u32(xhfc->pi, PCI2PI_SPI_STATUS) & 1));
+
 	// read data from the SPI data receive register and return one byte
-	return (__u8) (ReadPCI2PI_u32(xhfc->pi, PCI2PI_SPI_MI_DATA) & 0xFF);
+	data = ReadPCI2PI_u32(xhfc->pi, PCI2PI_SPI_MI_DATA) & 0xFF;
+
+	spin_unlock_irqrestore(&xhfc->pi->lock, flags);
+	return data;
 }
 
 /* this function writes the XHFC register address pointer */
@@ -662,10 +708,16 @@ read_xhfcregptr(xhfc_t * xhfc)
 static inline void
 write_xhfcregptr(xhfc_t * xhfc, __u8 reg_addr)
 {
+	u_long flags;
+	
+	spin_lock_irqsave(&xhfc->pi->lock, flags);
+
     	// wait until SPI master is idle
 	while (!(ReadPCI2PI_u32(xhfc->pi, PCI2PI_SPI_STATUS) & 1));
 	// initiate a 16 clock SPI master transfer
 	WritePCI2PI_u16(xhfc->pi, PCI2PI_SPI_MO_DATA, ((SPI_ADDR | SPI_WR | xhfc->chipidx) << 8) | reg_addr);
+
+	spin_unlock_irqrestore(&xhfc->pi->lock, flags);
 }
 
 #endif	/* PI_MODE == PI_SPI */
