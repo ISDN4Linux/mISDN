@@ -970,8 +970,20 @@ ncciDataReq(Ncci_t *ncci, struct sk_buff *skb)
 	}
 	for (i = 0; i < CAPI_MAXDATAWINDOW; i++) {
 		/* try reserving a slot atomically (use an invalid Id) */
-		if (cmpxchg(&ncci->xmit_skb_handles[i].PktId, 0, MISDN_ID_DUMMY) == 0)
+		/*
+		 * cmpxchng not supported on ARM, so we don't use it if
+		 * we are not compiling for SMP
+		 */
+
+#if !defined(CONFIG_SMP)
+		if (ncci->xmit_skb_handles[i].PktId == 0) {
+			ncci->xmit_skb_handles[i].PktId = MISDN_ID_DUMMY;
 			break;
+		}
+#else
+ 		if (cmpxchg(&ncci->xmit_skb_handles[i].PktId, 0, MISDN_ID_DUMMY) == 0)
+		 			break;
+#endif
 	}
 	if (i == CAPI_MAXDATAWINDOW) {
 		return(CAPI_SENDQUEUEFULL);
