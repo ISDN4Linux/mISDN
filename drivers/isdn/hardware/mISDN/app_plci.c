@@ -825,6 +825,7 @@ plci_cc_setup_ind(struct FsmInst *fi, int event, void *arg)
 			cmsg->LLC = &p[qi->llc.off + 1];
 		if (qi->hlc.off)
 			cmsg->HLC = &p[qi->hlc.off + 1];
+#ifdef CAPIUTIL_VERSION
 #if CAPIUTIL_VERSION > 1
 		/* ETS 300 092 Annex B */
 		if (qi->calling_nr.repeated) {
@@ -833,6 +834,7 @@ plci_cc_setup_ind(struct FsmInst *fi, int event, void *arg)
 			else
 				int_error();
 		}
+#endif
 #endif
 		// all else set to default
 	}
