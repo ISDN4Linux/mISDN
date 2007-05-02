@@ -74,8 +74,6 @@ init_pci_bridge(xhfc_pi * pi)
 	printk(KERN_INFO "%s %s: using PCI2PI Bridge at 0x%p, PI-Mode(0x%x)\n",
 	       pi->name, __FUNCTION__, pi->hw_membase, PCI2PI_config.pi_mode);
 	       
-	spin_lock_init(&pi->lock);
-
 	/* test if Bridge regsiter accessable */
 	WritePCI2PI_u32(pi, PCI2PI_DEL_CS, 0x0);
 	if (ReadPCI2PI_u32(pi, PCI2PI_DEL_CS) == 0x00) {

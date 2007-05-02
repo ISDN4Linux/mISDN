@@ -1303,6 +1303,8 @@ init_xhfc(xhfc_t * xhfc)
 			       xhfc->name, chip_id);
 	}
 	
+	spin_lock_init(&xhfc->lock);
+
 	/* software reset to enable R_FIFO_MD setting */
 	write_xhfc(xhfc, R_CIRM, M_SRES);
 	udelay(5);

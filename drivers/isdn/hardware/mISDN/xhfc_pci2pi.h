@@ -544,7 +544,7 @@ read_xhfc(xhfc_t * xhfc, __u8 reg_addr)
 	u_long flags;
 	__u8 data;
 
-	spin_lock_irqsave(&xhfc->pi->lock, flags);
+	spin_lock_irqsave(&xhfc->lock, flags);
 
 	// wait until SPI master is idle
 	while (!(ReadPCI2PI_u32(xhfc->pi, PCI2PI_SPI_STATUS) & 1));
@@ -556,7 +556,7 @@ read_xhfc(xhfc_t * xhfc, __u8 reg_addr)
 	// read data from the SPI data receive register and return one byte
 	data = ReadPCI2PI_u32(xhfc->pi, PCI2PI_SPI_MI_DATA) & 0xFF;
 
-	spin_unlock_irqrestore(&xhfc->pi->lock, flags);
+	spin_unlock_irqrestore(&xhfc->lock, flags);
 	return data;
 }
 
@@ -573,7 +573,7 @@ read32_xhfc(xhfc_t * xhfc, __u8 reg_addr)
 	u_long flags;
 	__u32 data;
 	
-	spin_lock_irqsave(&xhfc->pi->lock, flags);
+	spin_lock_irqsave(&xhfc->lock, flags);
 	
 	// wait until SPI master is idle
 	while (!(ReadPCI2PI_u32(xhfc->pi, PCI2PI_SPI_STATUS) & 1));
@@ -593,7 +593,7 @@ read32_xhfc(xhfc_t * xhfc, __u8 reg_addr)
 	// read data from the SPI data receive register and return four bytes
 	data = be32_to_cpu(ReadPCI2PI_u32(xhfc->pi, PCI2PI_SPI_MI_DATA));
 
-	spin_unlock_irqrestore(&xhfc->pi->lock, flags);
+	spin_unlock_irqrestore(&xhfc->lock, flags);
 	return data;
 }
 
@@ -601,14 +601,14 @@ static inline void
 write_xhfc(xhfc_t * xhfc, __u8 reg_addr, __u8 value)
 {
 	u_long flags;
-	spin_lock_irqsave(&xhfc->pi->lock, flags);
+	spin_lock_irqsave(&xhfc->lock, flags);
 	
 	// wait until SPI master is idle
 	while (!(ReadPCI2PI_u32(xhfc->pi, PCI2PI_SPI_STATUS) & 1));
 	// initiate a 32 clock SPI master transfer
 	WritePCI2PI_u32(xhfc->pi, PCI2PI_SPI_MO_DATA, ((SPI_ADDR | SPI_WR | xhfc->chipidx) << 24) | (reg_addr << 16) | ((SPI_DATA | SPI_WR) << 8) | value);
 	
-	spin_unlock_irqrestore(&xhfc->pi->lock, flags);
+	spin_unlock_irqrestore(&xhfc->lock, flags);
 }
 
 /*
@@ -621,7 +621,7 @@ static inline void
 write32_xhfc(xhfc_t * xhfc, __u8 reg_addr, __u32 value)
 {
 	u_long flags;
-	spin_lock_irqsave(&xhfc->pi->lock, flags);
+	spin_lock_irqsave(&xhfc->lock, flags);
 	
 	// wait until SPI master is idle
 	while (!(ReadPCI2PI_u32(xhfc->pi, PCI2PI_SPI_STATUS) & 1));
@@ -636,7 +636,7 @@ write32_xhfc(xhfc_t * xhfc, __u8 reg_addr, __u32 value)
 	// initiate a 32 clock SPI master transfer
 	WritePCI2PI_u32(xhfc->pi, PCI2PI_SPI_MO_DATA, cpu_to_be32(value));
 
-	spin_unlock_irqrestore(&xhfc->pi->lock, flags);
+	spin_unlock_irqrestore(&xhfc->lock, flags);
 }
 
 
@@ -652,7 +652,7 @@ sread_xhfc(xhfc_t * xhfc, __u8 reg_addr)
 	u_long flags;
 	__u8 data;
 	
-	spin_lock_irqsave(&xhfc->pi->lock, flags);
+	spin_lock_irqsave(&xhfc->lock, flags);
 	
         // wait until SPI master is idle
 	while (!(ReadPCI2PI_u32(xhfc->pi, PCI2PI_SPI_STATUS) & 1));
@@ -672,7 +672,7 @@ sread_xhfc(xhfc_t * xhfc, __u8 reg_addr)
 	// read data from the SPI data receive register and return one byte
 	data = ReadPCI2PI_u32(xhfc->pi, PCI2PI_SPI_MI_DATA) & 0xFF;
 	
-	spin_unlock_irqrestore(&xhfc->pi->lock, flags);
+	spin_unlock_irqrestore(&xhfc->lock, flags);
 	return data;
 }
 
@@ -687,7 +687,7 @@ read_xhfcregptr(xhfc_t * xhfc)
 	u_long flags;
 	__u8 data;
 	
-	spin_lock_irqsave(&xhfc->pi->lock, flags);
+	spin_lock_irqsave(&xhfc->lock, flags);
 	
 	// wait until SPI master is idle
 	while (!(ReadPCI2PI_u32(xhfc->pi, PCI2PI_SPI_STATUS) & 1));
@@ -699,7 +699,7 @@ read_xhfcregptr(xhfc_t * xhfc)
 	// read data from the SPI data receive register and return one byte
 	data = ReadPCI2PI_u32(xhfc->pi, PCI2PI_SPI_MI_DATA) & 0xFF;
 
-	spin_unlock_irqrestore(&xhfc->pi->lock, flags);
+	spin_unlock_irqrestore(&xhfc->lock, flags);
 	return data;
 }
 
@@ -710,14 +710,14 @@ write_xhfcregptr(xhfc_t * xhfc, __u8 reg_addr)
 {
 	u_long flags;
 	
-	spin_lock_irqsave(&xhfc->pi->lock, flags);
+	spin_lock_irqsave(&xhfc->lock, flags);
 
     	// wait until SPI master is idle
 	while (!(ReadPCI2PI_u32(xhfc->pi, PCI2PI_SPI_STATUS) & 1));
 	// initiate a 16 clock SPI master transfer
 	WritePCI2PI_u16(xhfc->pi, PCI2PI_SPI_MO_DATA, ((SPI_ADDR | SPI_WR | xhfc->chipidx) << 8) | reg_addr);
 
-	spin_unlock_irqrestore(&xhfc->pi->lock, flags);
+	spin_unlock_irqrestore(&xhfc->lock, flags);
 }
 
 #endif	/* PI_MODE == PI_SPI */
