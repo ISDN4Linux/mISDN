@@ -250,12 +250,26 @@ mISDN_register_sysfs_stack(mISDNstack_t *st)
 	err = sysfs_create_group(&st->class_dev.kobj, &new_pid_group);
 	if (err)
 		goto out_unreg;
+#else
+	err = (int)&new_pid_group; /* avoid unused var warn with no SYSFS */
 #endif
 
-	class_device_create_file(&st->class_dev, &class_device_attr_id);
-	class_device_create_file(&st->class_dev, &class_device_attr_qlen);
-	class_device_create_file(&st->class_dev, &class_device_attr_protocol);
-	class_device_create_file(&st->class_dev, &class_device_attr_status);
+	err = class_device_create_file(&st->class_dev,
+	    &class_device_attr_id);
+	if (err)
+		goto out_unreg;
+	err = class_device_create_file(&st->class_dev,
+	    &class_device_attr_qlen);
+	if (err)
+		goto out_unreg;
+	err = class_device_create_file(&st->class_dev,
+	    &class_device_attr_protocol);
+	if (err)
+		goto out_unreg;
+	err = class_device_create_file(&st->class_dev,
+	    &class_device_attr_status);
+	if (err)
+		goto out_unreg;
 
 #ifdef SYSFS_SUPPORT
 	if (st->parent) {
@@ -271,11 +285,11 @@ mISDN_register_sysfs_stack(mISDNstack_t *st)
 #endif
 	return(err);
 
-#ifdef SYSFS_SUPPORT
 out_unreg:
+#ifdef SYSFS_SUPPORT
 	class_device_unregister(&st->class_dev);
-	return(err);
 #endif
+	return(err);
 }
 
 void

@@ -78,10 +78,22 @@ mISDN_register_sysfs_inst(mISDNinstance_t *inst) {
 	if (err)
 		return(err);
 
-	class_device_create_file(&inst->class_dev, &class_device_attr_id);
-	class_device_create_file(&inst->class_dev, &class_device_attr_name);
-	class_device_create_file(&inst->class_dev, &class_device_attr_extentions);
-	class_device_create_file(&inst->class_dev, &class_device_attr_regcnt);
+	err = class_device_create_file(&inst->class_dev,
+	    &class_device_attr_id);
+	if (err)
+		return(err);
+	err = class_device_create_file(&inst->class_dev,
+	    &class_device_attr_name);
+	if (err)
+		return(err);
+	err = class_device_create_file(&inst->class_dev,
+	    &class_device_attr_extentions);
+	if (err)
+		return(err);
+	err = class_device_create_file(&inst->class_dev,
+	    &class_device_attr_regcnt);
+	if (err)
+		return(err);
 
 #ifdef SYSFS_SUPPORT
 	err = sysfs_create_group(&inst->class_dev.kobj, &pid_group);

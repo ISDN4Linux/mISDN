@@ -114,9 +114,17 @@ mISDN_register_sysfs_obj(mISDNobject_t *obj) {
 	if (err)
 		goto out;
 
-	class_device_create_file(&obj->class_dev, &class_device_attr_id);
-	class_device_create_file(&obj->class_dev, &class_device_attr_name);
-	class_device_create_file(&obj->class_dev, &class_device_attr_refcnt);
+	err = class_device_create_file(&obj->class_dev, &class_device_attr_id);
+	if (err)
+		goto out;
+	err = class_device_create_file(&obj->class_dev,
+	    &class_device_attr_name);
+	if (err)
+		goto out;
+	err = class_device_create_file(&obj->class_dev,
+	    &class_device_attr_refcnt);
+	if (err)
+		goto out;
 #ifdef SYSFS_SUPPORT
 	err = sysfs_create_group(&obj->class_dev.kobj, &BPROTO_group);
 	if (err)
