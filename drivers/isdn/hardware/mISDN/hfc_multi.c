@@ -538,7 +538,19 @@ void vpm_init(hfc_multi_t *wc)
 				vpm_out(wc,x,i,0x00);
 		}
 
-		udelay(10000);
+		/*
+		 * ARM arch at least disallows a udelay of
+		 * more than 2ms... it gives a fake "__bad_udelay"
+		 * reference at link-time.
+		 * long delays in kernel code are pretty sucky anyway
+		 * for now work around it using 5 x 2ms instead of 1 x 10ms
+		 */
+
+		udelay(2000);
+		udelay(2000);
+		udelay(2000);
+		udelay(2000);
+		udelay(2000);
 
 		/* Put in bypass mode */
 		for (i = 0 ; i < MAX_TDM_CHAN ; i++) {
