@@ -45,10 +45,10 @@ void capidebug(int level, char *fmt, ...)
 struct capi_driver_interface *cdrv_if;
 #endif
 
-kmem_cache_t	*mISDN_cmsg_cp;
-kmem_cache_t	*mISDN_AppPlci_cp;
-kmem_cache_t	*mISDN_ncci_cp;
-kmem_cache_t	*mISDN_sspc_cp;
+struct kmem_cache	*mISDN_cmsg_cp;
+struct kmem_cache	*mISDN_AppPlci_cp;
+struct kmem_cache	*mISDN_ncci_cp;
+struct kmem_cache	*mISDN_sspc_cp;
 
 #ifdef MISDN_KMEM_DEBUG
 static struct list_head mISDN_kmem_garbage = LIST_HEAD_INIT(mISDN_kmem_garbage);

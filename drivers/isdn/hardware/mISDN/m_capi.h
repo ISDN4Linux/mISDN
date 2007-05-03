@@ -537,10 +537,10 @@ int capiEncodeFacIndSuspend(__u8 *dest, __u16  SupplementaryServiceReason);
 // ---------------------------------------------------------------------------
 
 /* kmem caches */
-extern kmem_cache_t	*mISDN_cmsg_cp;
-extern kmem_cache_t	*mISDN_AppPlci_cp;
-extern kmem_cache_t	*mISDN_ncci_cp;
-extern kmem_cache_t	*mISDN_sspc_cp;
+extern struct kmem_cache	*mISDN_cmsg_cp;
+extern struct kmem_cache	*mISDN_AppPlci_cp;
+extern struct kmem_cache	*mISDN_ncci_cp;
+extern struct kmem_cache	*mISDN_sspc_cp;
 
 #ifdef MISDN_KMEM_DEBUG
 typedef struct _kd_cmsg		_kd_cmsg_t;
