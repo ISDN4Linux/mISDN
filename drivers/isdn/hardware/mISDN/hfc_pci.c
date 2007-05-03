@@ -1884,7 +1884,7 @@ setup_hfcpci(hfc_pci_t *hc)
 	hc->hw.cirm = 0;
 	hc->dch.state = 0;
 	while (id_list[i].vendor_id) {
-		tmp_hfcpci = pci_find_device(id_list[i].vendor_id,
+		tmp_hfcpci = pci_get_device(id_list[i].vendor_id,
 				id_list[i].device_id, dev_hfcpci);
 		i++;
 		if (tmp_hfcpci) {
