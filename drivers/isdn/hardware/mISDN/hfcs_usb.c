@@ -270,7 +270,11 @@ queued_Write_hfc(hfcsusb_t * card, __u8 reg, __u8 val)
 /* control completion routine handling background control cmds */
 /***************************************************************/
 static void
-ctrl_complete(struct urb *urb, struct pt_regs *regs)
+ctrl_complete(struct urb *urb
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,20)
+, struct pt_regs *regs
+#endif
+)
 {
 	hfcsusb_t *card = (hfcsusb_t *) urb->context;
 	ctrl_buft *buf;
@@ -1108,7 +1112,11 @@ fill_isoc_urb(struct urb *urb, struct usb_device *dev, unsigned int pipe,
 /* receive completion routine for all ISO tx fifos   */
 /*****************************************************/
 static void
-rx_iso_complete(struct urb *urb, struct pt_regs *regs)
+rx_iso_complete(struct urb *urb
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,20)
+, struct pt_regs *regs
+#endif
+)
 {
 	iso_urb_struct *context_iso_urb = (iso_urb_struct *) urb->context;
 	usb_fifo *fifo = context_iso_urb->owner_fifo;
@@ -1200,7 +1208,11 @@ rx_iso_complete(struct urb *urb, struct pt_regs *regs)
 /* receive completion routine for all interrupt rx fifos */
 /*********************************************************/
 static void
-rx_int_complete(struct urb *urb, struct pt_regs *regs)
+rx_int_complete(struct urb *urb
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,20)
+, struct pt_regs *regs
+#endif
+)
 {
 	int len;
 	int status;
@@ -1313,7 +1325,11 @@ next_tx_frame(hfcsusb_t * hw, __u8 channel)
 /* transmit completion routine for all ISO tx fifos */
 /*****************************************************/
 static void
-tx_iso_complete(struct urb *urb, struct pt_regs *regs)
+tx_iso_complete(struct urb *urb
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,20)
+, struct pt_regs *regs
+#endif
+)
 {
 	iso_urb_struct *context_iso_urb = (iso_urb_struct *) urb->context;
 	usb_fifo *fifo = context_iso_urb->owner_fifo;

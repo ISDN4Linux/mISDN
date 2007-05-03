@@ -688,7 +688,11 @@ HDLC_irq_main(fritzpnppci *fc)
 }
 
 static irqreturn_t
-avm_fritz_interrupt(int intno, void *dev_id, struct pt_regs *regs)
+avm_fritz_interrupt(int intno, void *dev_id
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,20)
+, struct pt_regs *regs
+#endif
+)
 {
 	fritzpnppci	*fc = dev_id;
 	u_char val;
@@ -721,7 +725,11 @@ avm_fritz_interrupt(int intno, void *dev_id, struct pt_regs *regs)
 }
 
 static irqreturn_t
-avm_fritzv2_interrupt(int intno, void *dev_id, struct pt_regs *regs)
+avm_fritzv2_interrupt(int intno, void *dev_id
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,20)
+, struct pt_regs *regs
+#endif
+)
 {
 	fritzpnppci	*fc = dev_id;
 	u_char val;

@@ -1901,7 +1901,11 @@ check_framesync:
 }
 
 static irqreturn_t
-hfcmulti_interrupt(int intno, void *dev_id, struct pt_regs *regs)
+hfcmulti_interrupt(int intno, void *dev_id
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,20)
+, struct pt_regs *regs
+#endif
+)
 {
 #ifdef IRQCOUNT_DEBUG
 	static int iq1=0,iq2=0,iq3=0,iq4=0,iq5=0,iq6=0,iqcnt=0;

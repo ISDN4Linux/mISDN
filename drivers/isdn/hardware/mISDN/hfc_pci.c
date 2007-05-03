@@ -1034,7 +1034,11 @@ tx_irq(channel_t *chan)
 }
 
 static irqreturn_t
-hfcpci_interrupt(int intno, void *dev_id, struct pt_regs *regs)
+hfcpci_interrupt(int intno, void *dev_id
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,20)
+, struct pt_regs *regs
+#endif
+)
 {
 	hfc_pci_t	*hc = dev_id;
 	u_char		exval;

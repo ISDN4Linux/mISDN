@@ -855,7 +855,11 @@ W6692B_interrupt(w6692pci *card, int ch)
 }
 
 static irqreturn_t
-w6692_interrupt(int intno, void *dev_id, struct pt_regs *regs)
+w6692_interrupt(int intno, void *dev_id
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,20)
+, struct pt_regs *regs
+#endif
+)
 {
 	w6692pci	*card = dev_id;
 	u_char		ista;

@@ -1104,7 +1104,11 @@ xhfc_bh_handler(unsigned long ul_hw)
 /* Interrupt handler */
 /*********************/
 static irqreturn_t
-xhfc_interrupt(int intno, void *dev_id, struct pt_regs *regs)
+xhfc_interrupt(int intno, void *dev_id
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,20)
+, struct pt_regs *regs
+#endif
+)
 {
 	xhfc_pi *pi = dev_id;
 	xhfc_t * xhfc = NULL;
