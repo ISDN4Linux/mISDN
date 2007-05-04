@@ -1708,7 +1708,7 @@ static void
 l3dss1_global_restart(l3_process_t *pc, u_char pr, void *arg)
 {
 	u_char		*p=NULL, *cp=NULL, ri, ch = 0, chan = 0, chan_len=0;
-	struct sk_buff	*skb = arg;
+	struct sk_buff	*skb = arg, *nskb=NULL;
 	Q931_info_t	*qi = (Q931_info_t *)skb->data;
 	l3_process_t	*up, *n;
 	int i=0;
@@ -1756,13 +1756,13 @@ l3dss1_global_restart(l3_process_t *pc, u_char pr, void *arg)
 	dev_kfree_skb(skb);
 	switch(chan_len) {
 	case 0:
-		skb = MsgStart(pc, MT_RESTART_ACKNOWLEDGE, 3);
-		p = skb_put(skb, 3);
+		nskb = MsgStart(pc, MT_RESTART_ACKNOWLEDGE, 3);
+		p = skb_put(nskb, 3);
 		
 		break;
 	case 1:
-		skb = MsgStart(pc, MT_RESTART_ACKNOWLEDGE, 6);
-		p = skb_put(skb, 6);
+		nskb = MsgStart(pc, MT_RESTART_ACKNOWLEDGE, 6);
+		p = skb_put(nskb, 6);
 		if (chan) {
 			*p++ = IE_CHANNEL_ID;
 			*p++ = 1;
@@ -1770,8 +1770,8 @@ l3dss1_global_restart(l3_process_t *pc, u_char pr, void *arg)
 		}
 		break;
 	case 3:
-		skb = MsgStart(pc, MT_RESTART_ACKNOWLEDGE, 8);
-		p = skb_put(skb, 8);
+		nskb = MsgStart(pc, MT_RESTART_ACKNOWLEDGE, 8);
+		p = skb_put(nskb, 8);
 
 		/*copy channel ie*/
 		for (i=0; i<5; i++)
@@ -1782,8 +1782,8 @@ l3dss1_global_restart(l3_process_t *pc, u_char pr, void *arg)
 	*p++ = IE_RESTART_IND;
 	*p++ = 1;
 	*p++ = ri;
-	if (l3_msg(pc->l3, DL_DATA | REQUEST, 0, 0, skb))
-		kfree_skb(skb);
+	if (l3_msg(pc->l3, DL_DATA | REQUEST, 0, 0, nskb))
+		kfree_skb(nskb);
 }
 
 
