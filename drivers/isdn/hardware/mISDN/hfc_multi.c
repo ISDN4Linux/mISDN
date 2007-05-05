@@ -3652,13 +3652,17 @@ release_port(hfc_multi_t *hc, int port)
 				       test_bit(FLG_DCHANNEL, &hc->chan[i].ch->Flags) ?
 				       'D' : 'B', i);
 			mISDN_freechannel(hc->chan[i].ch);
+		}
+	}
 
+	/* unreg layers */
+	for (i = 0; i < 32; i++) {
+		if (hc->chan[i].ch) {
 			spin_unlock_irqrestore(&hc->lock,flags);
 			
 			if (test_bit(FLG_DCHANNEL, &hc->chan[i].ch->Flags))
 				mISDN_ctrl(&hc->chan[i].ch->inst, MGR_UNREGLAYER | REQUEST, NULL);
 			spin_lock_irqsave(&hc->lock,flags);
-			
 			kfree(hc->chan[i].ch);
 			hc->chan[i].ch = NULL;
 		}

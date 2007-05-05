@@ -1,4 +1,5 @@
 #include <linux/stddef.h>
+#include <linux/config.h>
 #include <linux/module.h>
 #include <linux/list.h>
 #include <linux/slab.h>
@@ -177,6 +178,24 @@ __mid_dev_alloc_skb(unsigned int size, char *fn, int line)
 	return(skb);
 }
 
+void
+__mid_kfree_skb(struct sk_buff *skb)
+{
+	if (skb->destructor)
+		skb->destructor(skb);
+	skb->destructor = NULL;
+	kfree_skb(skb);
+}
+
+void
+__mid_dev_kfree_skb(struct sk_buff *skb)
+{
+	if (skb->destructor)
+		skb->destructor(skb);
+	skb->destructor = NULL;
+	dev_kfree_skb(skb);
+}
+
 struct sk_buff
 *__mid_skb_clone(struct sk_buff *skb, int gfp_mask, char *fn, int line)
 {
@@ -280,6 +299,8 @@ EXPORT_SYMBOL(__mid_vmalloc);
 EXPORT_SYMBOL(__mid_vfree);
 EXPORT_SYMBOL(__mid_alloc_skb);
 EXPORT_SYMBOL(__mid_dev_alloc_skb);
+EXPORT_SYMBOL(__mid_kfree_skb);
+EXPORT_SYMBOL(__mid_dev_kfree_skb);
 EXPORT_SYMBOL(__mid_skb_clone);
 EXPORT_SYMBOL(__mid_skb_copy);
 EXPORT_SYMBOL(__mid_skb_realloc_headroom);

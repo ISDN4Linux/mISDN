@@ -1153,14 +1153,6 @@ release_card(l1oip_t *hc)
 	if (hc->socket_pid)
 		l1oip_socket_close(hc);
 	
-	if (hc->chan[hc->dch].ch) {
-		if (debug & DEBUG_L1OIP_INIT)
-			printk(KERN_DEBUG "%s: free D-channel %d\n", __FUNCTION__, hc->dch);
-		mISDN_freechannel(hc->chan[hc->dch].ch);
-		mISDN_ctrl(&hc->chan[hc->dch].ch->inst, MGR_UNREGLAYER | REQUEST, NULL);
-		kfree(hc->chan[hc->dch].ch);
-		hc->chan[hc->dch].ch = NULL;
-	}
 	i = 0;
 	while(i < hc->numbch+2) {
 		if (hc->chan[i].ch && i!=hc->dch) {
@@ -1171,6 +1163,14 @@ release_card(l1oip_t *hc)
 			hc->chan[i].ch = NULL;
 		}
 		i++;
+	}
+	if (hc->chan[hc->dch].ch) {
+		if (debug & DEBUG_L1OIP_INIT)
+			printk(KERN_DEBUG "%s: free D-channel %d\n", __FUNCTION__, hc->dch);
+		mISDN_freechannel(hc->chan[hc->dch].ch);
+		mISDN_ctrl(&hc->chan[hc->dch].ch->inst, MGR_UNREGLAYER | REQUEST, NULL);
+		kfree(hc->chan[hc->dch].ch);
+		hc->chan[hc->dch].ch = NULL;
 	}
 
 	/* remove us from list and delete */

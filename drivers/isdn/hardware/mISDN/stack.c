@@ -1058,7 +1058,9 @@ unregister_instance(mISDNinstance_t *inst) {
 			int_errtxt("unregister %08x  st(%08x) wrong layer", inst->id, inst->st->id);
 			return(-EINVAL);
 		}
-		if (inst->st->i_array[i] == inst) {
+#warning JOLLY debug workaround, must be removed
+		if (inst->st->i_array[i] /* == inst (workaround) */) {
+//		if (inst->st->i_array[i] == inst) {
 			inst->regcnt--;
 			inst->st->i_array[i] = NULL;
 		} else if (inst->st->i_array[i]) {

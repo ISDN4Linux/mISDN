@@ -11,6 +11,8 @@
 #undef vfree
 #undef alloc_skb
 #undef dev_alloc_skb
+#undef kfree_skb
+#undef dev_kfree_skb
 #undef skb_clone
 #undef skb_copy
 #undef skb_realloc_headroom
@@ -21,6 +23,8 @@
 #define vfree(p)			__mid_vfree(p)
 #define alloc_skb(a, b)			__mid_alloc_skb(a, b, __FILE__, __LINE__)
 #define dev_alloc_skb(a)		__mid_dev_alloc_skb(a, __FILE__, __LINE__)
+#define kfree_skb(a)			__mid_kfree_skb(a)
+#define dev_kfree_skb(a)		__mid_dev_kfree_skb(a)
 #define skb_clone(a, b)			__mid_skb_clone(a, b, __FILE__, __LINE__)
 #define skb_copy(a, b)			__mid_skb_copy(a, b, __FILE__, __LINE__)
 #define skb_realloc_headroom(a, b)	__mid_skb_realloc_headroom(a, b, __FILE__, __LINE__)
@@ -33,6 +37,8 @@ extern void		__mid_cleanup(void);
 extern int		__mid_init(void);
 extern struct sk_buff	*__mid_alloc_skb(unsigned int,int, char *, int);
 extern struct sk_buff	*__mid_dev_alloc_skb(unsigned int,char *, int);
+extern void		__mid_kfree_skb(struct sk_buff *);
+extern void		__mid_dev_kfree_skb(struct sk_buff *);
 extern struct sk_buff	*__mid_skb_clone(struct sk_buff *, int, char *, int);
 extern struct sk_buff	*__mid_skb_copy(struct sk_buff *, int, char *, int);
 extern struct sk_buff	*__mid_skb_realloc_headroom(struct sk_buff *, unsigned int, char *, int);
