@@ -168,7 +168,7 @@ function create_card_db
 	done
 	
 	if [ -e ${LSUSB} ]; then 
-		for line in $(${LSUSB} | grep "0959:2bd0\|0675:1688\|07b0:0007\|0742:200\(7\|8\|9\|A\)\|08e3:0301\|07fa:084\(7\|8\)\|07ba:0006"); do
+		for line in $(${LSUSB} | grep "0959:2bd0\|0675:1688\|07b0:0006\|0742:200\(7\|8\|9\|A\)\|08e3:0301\|07fa:084\(7\|8\)\|07ba:0006"); do
 			addcard "1,hfcsusb"
 		done
 	fi

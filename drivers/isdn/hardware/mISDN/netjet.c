@@ -515,6 +515,8 @@ tiger_l2l1B(mISDNinstance_t *inst, struct sk_buff *skb)
 			spin_lock_irqsave(inst->hwlock, flags);
 			ret = mode_tiger(bch, bch->channel, bch->inst.pid.protocol[1]);
 			spin_unlock_irqrestore(inst->hwlock, flags);
+			if (bch->inst.pid.protocol[2] == ISDN_PID_L2_B_TRANS)
+				test_and_set_bit(FLG_L2DATA, &bch->Flags);
 		}
 		skb_trim(skb, 0);
 		return(mISDN_queueup_newhead(inst, 0, hh->prim | CONFIRM, ret, skb));
@@ -538,6 +540,7 @@ tiger_l2l1B(mISDNinstance_t *inst, struct sk_buff *skb)
 		test_and_clear_bit(FLG_TX_BUSY, &bch->Flags);
 		mode_tiger(bch, bch->channel, 0);
 		test_and_clear_bit(FLG_ACTIVE, &bch->Flags);
+		test_and_clear_bit(FLG_L2DATA, &bch->Flags);
 		spin_unlock_irqrestore(inst->hwlock, flags);
 		skb_trim(skb, 0);
 		if (hh->prim != (PH_CONTROL | REQUEST))
@@ -1100,6 +1103,9 @@ got_frame(channel_t *bch, int count)
 		bch->rx_skb = NULL;
 	}
 
+	if (bch->debug & L1_DEB_RECEIVE_FRAME)
+		printframe(&bch->inst, skb->data, skb->len, "got_frame");
+
 	queue_ch_frame(bch, INDICATION, MISDN_ID_ANY, skb);
 }
 
@@ -1171,15 +1177,8 @@ read_raw(channel_t *bch, u_int *buf, int cnt)
 			return;
 		}
 	}
-	if ((bch->rx_skb->len + cnt) > bch->maxlen) {
-		if (bch->debug & L1_DEB_WARN)
-			mISDN_debugprint(&bch->inst, "read_raw overrun %d",
-				bch->rx_skb->len + cnt);
-		return;
-	}
 
-	// XXX not sure about size of count!
-	skb_ptr = skb_put (bch->rx_skb, cnt);
+	skb_ptr = skb_put (bch->rx_skb, 0);
 
 	tiger = bch->hw;
 	pend = tiger->rec.dmabuf + NETJET_DMA_RXSIZE - 1;
@@ -1299,7 +1298,15 @@ read_raw(channel_t *bch, u_int *buf, int cnt)
 								mISDN_debugprint(&bch->inst,"tiger frame end(%d,%d): fcs(%x) i (N/A)",
 										 i,j,tiger->r_fcs/*, bcs->cs->hw.njet.irqstat0*/);
 							if (tiger->r_fcs == PPP_GOODFCS) {
+								skb_put (bch->rx_skb, (bitcnt>>3)-3);
 								got_frame(bch, (bitcnt>>3)-3);
+								if (!bch->rx_skb) {
+									if (!(bch->rx_skb = alloc_stack_skb(bch->maxlen, bch->up_headerlen))) {
+										printk(KERN_WARNING "mISDN: B receive out of memory\n");
+										return;
+									}
+								}
+								skb_ptr = skb_put (bch->rx_skb, 0);
 							} else {
 								if (bch->debug) {
 									mISDN_debugprint(&bch->inst, "tiger FCS error");
@@ -1325,7 +1332,7 @@ read_raw(channel_t *bch, u_int *buf, int cnt)
 				}
 				if ((state == HDLC_FRAME_FOUND) &&
 					!(bitcnt & 7)) {
-					if ((bitcnt>>3)>=MAX_DATA_MEM) {
+					if ((bitcnt>>3) >= bch->maxlen) {
 						mISDN_debugprint(&bch->inst, "tiger: frame too big");
 						r_val=0; 
 						state=HDLC_FLAG_SEARCH;
