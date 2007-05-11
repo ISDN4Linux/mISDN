@@ -1,4 +1,4 @@
-/* $Id: xhfc_su.h,v 1.6 2006/03/17 07:43:41 mbachem Exp $
+/* xhfc_su.h 1.7 2007/05/09 07:43:41
  *
  * mISDN driver for Colognechip xHFC chip
  *
@@ -209,6 +209,7 @@ typedef struct _xhfc_pi {
 	int		cardnum;
 	char		name[10];	/* 'XHFC_PI0' = ProcessorInterface no. 0 */
 	pi_params	driver_data;
+	spinlock_t	lock;
 #endif
 
 	xhfc_t		* xhfc;

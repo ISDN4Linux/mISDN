@@ -1,4 +1,4 @@
-/* $Id: xhfc_su.c,v 1.20 2007/02/13 10:43:45 crich Exp $
+/* xhfc_su.c 1.21 2007/05/09 10:43:45
  *
  * mISDN driver for CologneChip AG's XHFC
  *
@@ -65,7 +65,7 @@
 #include "xhfc_pci2pi.h"
 #endif
 
-static const char xhfc_rev[] = "$Revision: 1.20 $";
+static const char xhfc_rev[] = "1.21";
 
 #define MAX_CARDS	8
 static int card_cnt;
