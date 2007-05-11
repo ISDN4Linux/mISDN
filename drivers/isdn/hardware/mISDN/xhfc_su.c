@@ -1,5 +1,4 @@
-/* $Id: xhfc_su.c,v 1.20 2007/02/13 10:43:45 crich Exp $
- *
+/* xhfc_su.c
  * mISDN driver for CologneChip AG's XHFC
  *
  * Authors : Martin Bachem, Joerg Ciesielski
@@ -65,7 +64,7 @@
 #include "xhfc_pci2pi.h"
 #endif
 
-static const char xhfc_rev[] = "$Revision: 1.20 $";
+static const char xhfc_rev[] = "1.22 - 10.05.2007";
 
 #define MAX_CARDS	8
 static int card_cnt;
@@ -1983,8 +1982,8 @@ xhfc_pci_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 
 	/* alloc mem for ProcessorInterface xhfc_pi */
 	if (!(pi = kmalloc(sizeof(xhfc_pi), GFP_KERNEL))) {
-		printk(KERN_ERR "%s %s: No kmem for XHFC card\n",
-		       pi->name, __FUNCTION__);
+		printk(KERN_ERR "%s: No kmem for XHFC card\n",
+		       __FUNCTION__);
 		goto out;
 	}
 	memset(pi, 0, sizeof(xhfc_pi));
