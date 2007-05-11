@@ -584,8 +584,8 @@ xhfc_manager(void *data, u_int prim, void *arg)
 
 	if (!data) {
 		MGR_HASPROTOCOL_HANDLER(prim, arg, &hw_mISDNObj)
-		    printk(KERN_ERR "%s %s: no data prim %x arg %p\n",
-			   xhfc->name, __FUNCTION__, prim, arg);
+		    printk(KERN_ERR "%s: no data prim %x arg %p\n",
+			   __FUNCTION__, prim, arg);
 		return (-EINVAL);
 	}
 	
