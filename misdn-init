@@ -133,7 +133,7 @@ function create_card_db
 						addcard "1,0x1"
 						;;
 					*)
-						if [ $(${LSPCI} -n -s ${line:5:3} | ${WC} -l) -eq 2 ]; then
+						if [ $(${LSPCI} -n -s ${line:5:3} -d 0x1397:30b1 | ${WC} -l) -eq 2 ]; then
 							addcard "2,2E1"
 							skipnext=1
 						else
