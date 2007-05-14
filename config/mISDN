@@ -309,7 +309,7 @@ function scan_devices
 						addcard "BN1E1" "" 1 'mode="nt" link="ptp"'
 						;;
 					*)
-						if [ $(${LSPCI} -n -s "${line:5:3}" | ${WC} -l) -eq 2 ]; then
+						if [ $(${LSPCI} -n -s "${line:5:3}" -d 0x1397:30b1 | ${WC} -l) -eq 2 ]; then
 							addcard "BN2E1" "" 2 'mode="nt" link="ptp"'
 							skipnext=1
 						else
