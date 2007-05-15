@@ -7,6 +7,10 @@ typedef unsigned char BYTE;
 typedef unsigned short WORD;
 typedef unsigned long DWORD;
 
+
+/* If you want to use Memory Access instead of IO Access uncoment the following line*/
+//#define CONFIG_HFCMULTI_PCIMEM
+
 // IMPORTANT!!! use  CONFIG_PLX_PCI_BRIDGE only in conjunction with  CONFIG_HFCMULTI_PCIMEM
 //#define CONFIG_PLX_PCI_BRIDGE   // TODO should be defined in kernel config
 
@@ -1112,6 +1116,8 @@ struct hfc_register_names {
 
 #define HFC_outl(a,b,c) (*((volatile u_long *)((a->pci_membase)+((b)*ADDR_MULT))) = c)
 #define HFC_inl(a,b) (*((volatile u_long *)((a->pci_membase)+((b)*ADDR_MULT))))
+#define HFC_outl_(a,b,c) (*((volatile u_long *)((a->pci_membase)+((b)*ADDR_MULT))) = c)
+#define HFC_inl_(a,b) (*((volatile u_long *)((a->pci_membase)+((b)*ADDR_MULT))))
 #define HFC_outw_(a,b,c) (*((volatile u_short *)((a->pci_membase)+((b)*ADDR_MULT))) = c)
 #define HFC_inw_(a,b) (*((volatile u_short *)((a->pci_membase)+((b)*ADDR_MULT))))
 /*
