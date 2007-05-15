@@ -319,8 +319,9 @@ disable_hwirq(hfc_multi_t *hc)
 	HFC_outb(hc, R_IRQ_CTRL, hc->hw.r_irq_ctrl);
 }
 
-
+#ifndef CONFIG_HFCMULTI_PCIMEM
 #define B410P_CARD
+#endif
 
 #define NUM_EC 2
 #define MAX_TDM_CHAN 32
@@ -809,6 +810,7 @@ init_chip(hfc_multi_t *hc)
 		goto out;
 	}
 
+#ifdef B410P_CARD
 	if (test_bit(HFC_CHIP_DIGICARD,&hc->chip)) {
 		HFC_outb(hc, R_BRG_PCM_CFG, 0x2);
 		HFC_outb(hc, R_PCM_MD0, (0x9<<4) | 0x1);
@@ -824,7 +826,9 @@ init_chip(hfc_multi_t *hc)
 		
 		vpm_init(hc);
 
-	} else {
+	} else 
+#endif	
+	{
 		HFC_outb(hc, R_PCM_MD0, hc->hw.r_pcm_md0 | 0x90);
 		if (hc->slots == 32)
 			HFC_outb(hc, R_PCM_MD1, 0x00);
@@ -1074,7 +1078,7 @@ hfcmulti_leds(hfc_multi_t *hc)
 				} else
 					led[i] = 0; /* led off */
 			}
-
+#ifdef B410P_CARD
 			if (test_bit(HFC_CHIP_DIGICARD, &hc->chip)) {
 				leds = 0;
 				for (i=0; i<4; i++) {
@@ -1090,8 +1094,9 @@ hfcmulti_leds(hfc_multi_t *hc)
 					vpm_out(hc, 0, 0x1a8+3, leds);
 					hc->ledstate = leds;
 				}
-
-			} else {
+			} else 
+#endif
+			{
 				leds = ((led[3]>0)<<0) | ((led[1]>0)<<1) |
 				       ((led[0]>0)<<2) | ((led[2]>0)<<3) |
 				       ((led[3]&1)<<4) | ((led[1]&1)<<5) |
@@ -1162,6 +1167,7 @@ hfcmulti_leds(hfc_multi_t *hc)
 				} else
 					lled |= 1<<i;
 			}
+#ifndef CONFIG_HFCMULTI_PCIMEM
 			leddw = lled << 24 | lled << 16 | lled << 8 | lled;
 			if (leddw != hc->ledstate) {
 				//HFC_outb(hc, R_BRG_PCM_CFG, 1);
@@ -1172,6 +1178,7 @@ hfcmulti_leds(hfc_multi_t *hc)
 				HFC_outb(hc, R_BRG_PCM_CFG, V_PCM_CLK);
 				hc->ledstate = leddw;
 			}
+#endif
 			break;
 	}
 }
@@ -2240,6 +2247,8 @@ mode_hfcmulti(hfc_multi_t *hc, int ch, int protocol, int slot_tx, int bank_tx, i
 			}
 			break;
 		case (ISDN_PID_L1_B_64TRANS): /* B-channel */
+
+#ifdef B410P_CARD
 			if (test_bit(HFC_CHIP_DIGICARD, &hc->chip) && (hc->chan[ch].slot_rx < 0) && (hc->chan[ch].bank_rx == 0)
 					&& (hc->chan[ch].slot_tx < 0) && (hc->chan[ch].bank_tx == 0)) {
 
@@ -2285,7 +2294,9 @@ mode_hfcmulti(hfc_multi_t *hc, int ch, int protocol, int slot_tx, int bank_tx, i
 				HFC_outb_(hc, A_FIFO_DATA0_NOINC, silence); /* tx silence */
 				HFC_outb(hc, R_SLOT, (((ch/4)*8) + ((ch%4)*4)) << 1);
 				HFC_outb(hc, A_SL_CFG, 0x80 | 0x20 | (ch << 1));
-			} else {
+			} else 
+#endif	
+			{
 				/* enable TX fifo */
 				HFC_outb(hc, R_FIFO, ch<<1);
 				HFC_wait(hc);
@@ -2856,13 +2867,16 @@ handle_bmsg(channel_t *ch, struct sk_buff *skb)
 				}
 				
 				taps = ((u32 *)skb->data)[0];
-				
+#ifdef B410P_CARD		
 				vpm_echocan_on(hc, ch->channel, taps);
+#endif
 				ret=0;
 				break;
 
 			case HW_ECHOCAN_OFF:
+#ifdef B410P_CARD		
 				vpm_echocan_off(hc, ch->channel);
+#endif
 				ret=0;
 				break;
 
