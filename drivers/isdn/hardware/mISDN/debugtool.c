@@ -152,7 +152,6 @@ static void dt_run (void)
 		if (signal_pending(current))
 			break;
 		skb = skb_dequeue(&skb_q);
-		printk(KERN_INFO MODULE_NAME ": Sending skb of size %d.\n", skb->len);
 		dt_send_skb(sock, &addr, skb);
 		kfree_skb(skb);
 	}
