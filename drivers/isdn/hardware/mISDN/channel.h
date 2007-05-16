@@ -17,9 +17,7 @@
 #ifdef MISDN_MEMDEBUG
 #include "memdbg.h"
 #endif
-#ifdef CONFIG_MISDN_NETDEV
 #include "core.h"
-#endif
 
 #define MAX_DFRAME_LEN_L1	300
 #define MAX_MON_FRAME		32
@@ -110,6 +108,8 @@ queue_ch_frame(channel_t *ch, u_int pr, int dinfo, struct sk_buff *skb)
 #ifdef CONFIG_MISDN_NETDEV
 		misdn_log_frame(ch->inst.st, skb->data, skb->len, FLG_MSG_UP);
 #endif
+		if (ch->Flags & MSK_INIT_DCHANNEL)
+			mISDN_dt_new_frame(ch->inst.st, skb, 0);
 		err = mISDN_queueup_newhead(&ch->inst, 0, pr, dinfo, skb);
 	}
 	if (unlikely(err)) {
@@ -146,6 +146,8 @@ channel_senddata(channel_t *ch, int di, struct sk_buff *skb)
 #ifdef CONFIG_MISDN_NETDEV
 		misdn_log_frame(ch->inst.st, skb->data, skb->len, FLG_MSG_DOWN);
 #endif
+		if (ch->Flags & MSK_INIT_DCHANNEL)
+			mISDN_dt_new_frame(ch->inst.st, skb, 1);
 		ch->next_skb = skb;
 		return(0);
 	} else {
@@ -155,6 +157,8 @@ channel_senddata(channel_t *ch, int di, struct sk_buff *skb)
 #ifdef CONFIG_MISDN_NETDEV
 		misdn_log_frame(ch->inst.st, skb->data, skb->len, FLG_MSG_DOWN);
 #endif
+		if (ch->Flags & MSK_INIT_DCHANNEL)
+			mISDN_dt_new_frame(ch->inst.st, skb, 1);
 		queue_ch_frame(ch, CONFIRM, di, NULL);
 		return(skb->len);
 	}

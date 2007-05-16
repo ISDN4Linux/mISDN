@@ -90,6 +90,11 @@ extern void		mISDN_module_unregister(struct module *);
 extern void		mISDN_inc_usage(void);
 extern void		mISDN_dec_usage(void);
 
+/* debugtool helpers from core.c */
+extern void     mISDN_dt_set_callback(void (*new_frame) (mISDNstack_t *stack, struct sk_buff *skb, int tx));
+extern void     mISDN_dt_enable(void);
+extern void     mISDN_dt_disable(void);
+extern void     mISDN_dt_new_frame(mISDNstack_t *stack, struct sk_buff *skb, int rx);
 
 #ifdef CONFIG_MISDN_NETDEV
 /* from netdev_main.c */

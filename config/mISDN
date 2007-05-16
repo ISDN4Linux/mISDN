@@ -124,7 +124,7 @@ function parse_config
 			MODULE:hfcmulti*)
 				HFCMULTI_options=${line:16}
 				;;
-			MODULE:mISDN_dsp_*)
+			MODULE:mISDN_debugtool* | MODULE:mISDN_dsp_*)
 				extra_modules[${#extra_modules[@]}]=${line:7}
 				;;
 			MODULE:mISDN_dsp*)
@@ -266,17 +266,21 @@ function run_stop_commands
 			mISDN_capi | mISDN_dsp* | l3udss1 | mISDN_l2 | mISDN_l1 | mISDN_isac | hfcmulti | avmfritz | l1oip)
 				STOP_COMMANDS[0]="${STOP_COMMANDS[0]:-"${MODPROBE} -r --ignore-remove"} ${mod}"
 				;;
+			mISDN_debugtool)
+				STOP_COMMANDS[1]="${MODPROBE} -r --ignore-remove mISDN_debugtool"
+				;;
 			mISDN_core)
-				STOP_COMMANDS[1]="${MODPROBE} -r --ignore-remove mISDN_core"
+				STOP_COMMANDS[2]="${MODPROBE} -r --ignore-remove mISDN_core"
 				;;
 		esac
 	done
 
 	echo "-- Unloading mISDN modules --"
-	while [ ! -z "${STOP_COMMANDS[${i}]}" ]; do
-		echo ">> ${STOP_COMMANDS[${i}]}"
-		eval "${STOP_COMMANDS[${i}]}"
-		let "i = ${i} + 1"
+	for i in `seq 0 1 2`; do
+		if [ ! -z "${STOP_COMMANDS[${i}]}" ]; then
+			echo ">> ${STOP_COMMANDS[${i}]}"
+			eval "${STOP_COMMANDS[${i}]}"
+		fi
 	done
 }
 
