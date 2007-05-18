@@ -800,6 +800,10 @@ hdlc_down(mISDNinstance_t *inst, struct sk_buff *skb)
 		}
 		test_and_clear_bit(FLG_TX_BUSY, &bch->Flags);
 		modehdlc(bch, bch->channel, 0);
+		if (bch->rx_skb) {
+			dev_kfree_skb(bch->rx_skb);
+			bch->rx_skb = NULL;
+		}
 		test_and_clear_bit(FLG_ACTIVE, &bch->Flags);
 		spin_unlock_irqrestore(inst->hwlock, flags);
 		skb_trim(skb, 0);
