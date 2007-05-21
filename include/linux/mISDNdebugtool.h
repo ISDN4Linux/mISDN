@@ -28,6 +28,7 @@ typedef struct mISDN_dt_header {
 	unsigned char type;
 	unsigned short reserved;
 	unsigned int stack_id;
+	unsigned int stack_protocol;
 	struct timespec time;
 	unsigned int plength;
 } mISDN_dt_header_t;

@@ -66,6 +66,7 @@ static void dt_new_frame (mISDNstack_t *stack, struct sk_buff *skb, int tx)
 	hdr->version = DT_VERSION;
 	hdr->type = tx ? D_TX : D_RX;
 	hdr->stack_id = stack->id;
+	hdr->stack_protocol = stack->pid.modparm_protocol;
 	hdr->time = current_kernel_time();
 	hdr->plength = skb->len;
 
