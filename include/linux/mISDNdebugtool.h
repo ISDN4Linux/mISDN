@@ -17,10 +17,10 @@
  */
 
 enum mISDN_dt_type {
-	D_RX = 1<<0,
-	D_TX = 1<<1,
-	L1   = 1<<2,
-	L2   = 1<<3,
+	D_RX = 1,
+	D_TX,
+	L1_UP,
+	L1_DOWN,
 };
 
 typedef struct mISDN_dt_header {

@@ -51,24 +51,23 @@ static struct task_struct *thread;
 static struct sk_buff_head skb_q;
 static DECLARE_WAIT_QUEUE_HEAD(skb_q_wait);
 
-static void dt_new_frame (mISDNstack_t *stack, struct sk_buff *skb, int tx)
+static void dt_new_frame (mISDNstack_t *stack, enum mISDN_dt_type type, struct sk_buff *skb)
 {
 	struct sk_buff *dup;
 	mISDN_dt_header_t *hdr;
 
-	dup = skb_copy(skb, GFP_KERNEL);
+	dup = skb ? skb_copy(skb, GFP_KERNEL) : alloc_skb(0, GFP_KERNEL);
 	if (!dup)
 		return;
 
 	hdr = (mISDN_dt_header_t *)dup->cb;
 	memset(hdr, 0, sizeof(mISDN_dt_header_t));
-	hdr = (mISDN_dt_header_t *)dup->cb;
 	hdr->version = DT_VERSION;
-	hdr->type = tx ? D_TX : D_RX;
+	hdr->type = type;
 	hdr->stack_id = stack->id;
 	hdr->stack_protocol = stack->pid.modparm_protocol;
 	hdr->time = current_kernel_time();
-	hdr->plength = skb->len;
+	hdr->plength = skb ? skb->len : 0;
 
 	skb_queue_tail(&skb_q, dup);
 	wake_up_interruptible(&skb_q_wait);
@@ -106,12 +105,13 @@ static inline int dt_send_buf (struct socket *sock, struct sockaddr_in *addr, un
 
 static inline void dt_send_skb (struct socket *sock, struct sockaddr_in *addr, const struct sk_buff *skb)
 {
-	unsigned char buf[sizeof(mISDN_dt_header_t) + skb->len];
-
-	memcpy(buf, skb->cb, sizeof(mISDN_dt_header_t));
-	memcpy(buf + sizeof(mISDN_dt_header_t), skb->data, skb->len);
-
-	dt_send_buf(sock, addr, buf, sizeof(buf));
+	if (skb->len) {
+		unsigned char buf[sizeof(mISDN_dt_header_t) + skb->len];
+		memcpy(buf, skb->cb, sizeof(mISDN_dt_header_t));
+		memcpy(buf + sizeof(mISDN_dt_header_t), skb->data, skb->len);
+		dt_send_buf(sock, addr, buf, sizeof(buf));
+	} else
+		dt_send_buf(sock, addr, (unsigned char *)skb->cb, sizeof(mISDN_dt_header_t));
 }
 
 static void dt_run (void)

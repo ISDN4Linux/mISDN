@@ -391,6 +391,18 @@ mISDN_queue_message(mISDNinstance_t *inst, u_int aflag, struct sk_buff *skb)
 	}
 	hh->addr = id;
 	_queue_message(st, skb);
+
+	switch (hh->prim) {
+	case PH_ACTIVATE | INDICATION:
+		mISDN_dt_new_frame(st, L1_UP, NULL);
+		break;
+	case PH_DEACTIVATE | INDICATION:
+		mISDN_dt_new_frame(st, L1_DOWN, NULL);
+		break;
+	default:
+		break;
+	}
+
 	return(0);
 }
 

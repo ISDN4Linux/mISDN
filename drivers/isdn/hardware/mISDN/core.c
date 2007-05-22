@@ -20,7 +20,7 @@
 
 static char		*mISDN_core_revision = "$Revision: 1.40 $";
 static char		*mISDN_core_version = MISDNVERSION ;
-static void (*dt_new_frame) (mISDNstack_t *stack, struct sk_buff *skb, int tx) = NULL;
+static void (*dt_new_frame) (mISDNstack_t *stack, enum mISDN_dt_type type, struct sk_buff *skb) = NULL;
 
 LIST_HEAD(mISDN_objectlist);
 static rwlock_t		mISDN_objects_lock = RW_LOCK_UNLOCKED;
@@ -616,7 +616,7 @@ mISDN_ctrl(void *data, u_int prim, void *arg) {
 }
 
 void
-mISDN_dt_set_callback(void (*new_frame) (mISDNstack_t *stack, struct sk_buff *skb, int tx))
+mISDN_dt_set_callback(void (*new_frame) (mISDNstack_t *stack, enum mISDN_dt_type type, struct sk_buff *skb))
 {
 	dt_new_frame = new_frame;
 }
@@ -634,10 +634,10 @@ mISDN_dt_disable(void)
 }
 
 void
-mISDN_dt_new_frame(mISDNstack_t *stack, struct sk_buff *skb, int tx)
+mISDN_dt_new_frame(mISDNstack_t *stack, enum mISDN_dt_type type, struct sk_buff *skb)
 {
 	if (dt_enabled)
-		dt_new_frame(stack, skb, tx);
+		dt_new_frame(stack, type, skb);
 }
 
 void
