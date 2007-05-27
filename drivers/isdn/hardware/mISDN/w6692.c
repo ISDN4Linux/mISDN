@@ -1257,7 +1257,7 @@ w6692_l2l1(mISDNinstance_t *inst, struct sk_buff *skb)
 	return(ret);
 }
 
-int __init 
+int 
 setup_w6692(w6692pci *card)
 {
 	u_int	val;

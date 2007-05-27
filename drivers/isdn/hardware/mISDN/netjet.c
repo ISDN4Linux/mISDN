@@ -547,7 +547,7 @@ tiger_l2l1B(mISDNinstance_t *inst, struct sk_buff *skb)
 			if (!mISDN_queueup_newhead(inst, 0, hh->prim | CONFIRM, 0, skb))
 				return 0;
 	} else {
-		printk(KERN_WARNING "tiger_l2l1B unknown %x prim(%x)\n", (int)skb, hh->prim);
+		printk(KERN_WARNING "tiger_l2l1B prim(%x)\n", hh->prim);
 		ret = -EINVAL;
 	}
 	if (!ret) {
@@ -557,7 +557,7 @@ tiger_l2l1B(mISDNinstance_t *inst, struct sk_buff *skb)
 }
 
 
-void __init
+void
 inittiger(netjet_t *card)
 {
 	struct tiger_hw *tiger0, *tiger1;
