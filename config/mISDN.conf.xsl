@@ -4,6 +4,7 @@
 
 <xsl:include href='mISDN.conf.inc.xsl' />
 <xsl:include href='mISDN.conf.mISDN_dsp.xsl' />
+<xsl:include href='mISDN.conf.mISDN_debugtool.xsl' />
 <xsl:include href='mISDN.conf.hfcmulti.xsl' />
 <xsl:include href='mISDN.conf.bnx.xsl' />
 <xsl:include href='mISDN.conf.singlepci.xsl' />
@@ -33,6 +34,11 @@
  <xsl:when test=".='mISDN_dsp'">
   <xsl:value-of select="concat('MODULE:',.)" />
   <xsl:call-template name="MISDNDSPmodule" />
+ </xsl:when>
+
+ <xsl:when test=".='mISDN_debugtool'">
+  <xsl:value-of select="concat('MODULE:',.)" />
+  <xsl:call-template name="MISDNdebugtoolmodule" />
  </xsl:when>
 
  <xsl:otherwise>
