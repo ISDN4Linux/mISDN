@@ -246,6 +246,7 @@ socket process and create a new one.
 #include <linux/inet.h>
 #include <linux/workqueue.h>
 #include <net/sock.h>
+#include <linux/vmalloc.h>
 
 #include "l1oip.h"
 
@@ -1564,7 +1565,7 @@ next_card:
 	init_timer(&hc->keep_tl);
 	hc->keep_tl.expires = jiffies + 2*HZ; /* two seconds for the first time */
 	add_timer(&hc->keep_tl);
-	INIT_WORK(&hc->tqueue, (void *)l1oip_keepalive_bh, hc);
+	__INIT_WORK(&hc->tqueue, (void *)l1oip_keepalive_bh, hc); /* __INIT_WORK defined in isdn_compat.h */
 
 	/* set timeout timer */
 	hc->timeout_tl.function = (void *)l1oip_timeout;
