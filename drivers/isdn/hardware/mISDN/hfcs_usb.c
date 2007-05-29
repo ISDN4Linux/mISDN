@@ -1,5 +1,4 @@
-/* $Id: hfcs_usb.c,v 1.29 2007/02/13 10:43:45 crich Exp $
- *
+/* hfcs_usb.c
  * mISDN driver for Colognechip HFC-S USB chip
  *
  * Author : Martin Bachem   (info@colognechip.com)
@@ -20,9 +19,6 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
- * TODO
- *   - E channel features
- *
  */
 
 #include <linux/module.h>
@@ -36,7 +32,7 @@
 
 
 #define DRIVER_NAME "mISDN_hfcsusb"
-const char *hfcsusb_rev = "$Revision: 1.29 $";
+const char *hfcsusb_rev = "Revision: 1.30, 2007-05-29";
 
 #define MAX_CARDS	8
 static int hfcsusb_cnt;
@@ -994,7 +990,6 @@ collect_rx_frame(usb_fifo * fifo, __u8 * data, unsigned int len, int finish)
 	fifon = fifo->fifonum;
 
 	if (!ch->rx_skb) {
-		printk(KERN_INFO "alloc new skb for fifon(%d), len(%d+%d)\n", fifon, ch->maxlen + 3, ch->up_headerlen);
 		ch->rx_skb = alloc_stack_skb(ch->maxlen + 3, ch->up_headerlen);
 		if (!ch->rx_skb) {
 			printk(KERN_DEBUG "%s: No mem for rx_skb\n", __FUNCTION__);
@@ -1074,8 +1069,6 @@ collect_rx_frame(usb_fifo * fifo, __u8 * data, unsigned int len, int finish)
 		}
 	} else {
 		if (finish || ch->rx_skb->len >= poll) {
-			printk(KERN_DEBUG "%s: queueing transp data fifon(%i) (%i)\n", __FUNCTION__, fifon, ch->rx_skb->len);
-
 			/* deliver transparent data to layer2 */
 			queue_ch_frame(ch, INDICATION, MISDN_ID_ANY, ch->rx_skb);
 			ch->rx_skb = NULL;
@@ -1407,19 +1400,6 @@ tx_iso_complete(struct urb *urb
 				/* define packet delimeters within the URB buffer */
 				urb->iso_frame_desc[k].offset = tx_offset;
 				urb->iso_frame_desc[k].length = current_len + 1;
-				
-				
-				// USB data log for every ISO out
-				if (fifon == HFCUSB_D_TX) {
-					printk ("D ISO TX (%d/%d) offset(%d) len(%d) ", k, num_isoc_packets-1,
-					        urb->iso_frame_desc[k].offset,
-					        urb->iso_frame_desc[k].length);
-	
-					for (i=urb->iso_frame_desc[k].offset; i<(urb->iso_frame_desc[k].offset + urb->iso_frame_desc[k].length); i++) {
-						printk ("%x ", context_iso_urb->buffer[i]);
-					}
-					printk (" skb->len(%i) tx-idx(%d)\n", ch->tx_skb->len, ch->tx_idx);
-				}
 
 				tx_offset += (current_len + 1);
 			} else {
