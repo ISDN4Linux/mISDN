@@ -67,8 +67,6 @@ typedef void irqreturn_t;
 #else
 #undef  OLDCAPI_DRIVER_INTERFACE
 #define HAS_WORKQUEUE
-#undef  MINOR
-#define MINOR(inode)	minor(inode)
 #define NEED_JIFFIES_INCLUDE
 #define MAKEDAEMON(n)	daemonize(n)
 #define NEW_ISAPNP

@@ -1,4 +1,5 @@
-/* $Id: layer2.c,v 1.32 2006/12/21 15:25:06 nadi Exp $
+/*
+ * $Id: layer2.c,v 1.32 2006/12/21 15:25:06 nadi Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -102,14 +103,14 @@ static char *strL2Event[] =
 inline u_int
 l2headersize(layer2_t *l2, int ui)
 {
-	return (((test_bit(FLG_MOD128, &l2->flag) && (!ui)) ? 2 : 1) +
-		(test_bit(FLG_LAPD, &l2->flag) ? 2 : 1));
+	return ((test_bit(FLG_MOD128, &l2->flag) && (!ui)) ? 2 : 1) +
+		(test_bit(FLG_LAPD, &l2->flag) ? 2 : 1);
 }
 
 inline u_int
 l2addrsize(layer2_t *l2)
 {
-	return (test_bit(FLG_LAPD, &l2->flag) ? 2 : 1);
+	return test_bit(FLG_LAPD, &l2->flag) ? 2 : 1;
 }
 
 static int
@@ -121,19 +122,20 @@ l2_newid(layer2_t *l2)
 	if (id == 0x7fff)
 		l2->next_id = 1;
 	id |= (l2->entity << 16);
-	return(id);
+	return id;
 }
 
 static int
 l2up(layer2_t *l2, u_int prim, int dinfo, struct sk_buff *skb)
 {
-	return(mISDN_queueup_newhead(&l2->inst, 0, prim, dinfo, skb));
+	return mISDN_queueup_newhead(&l2->inst, 0, prim, dinfo, skb);
 }
 
 static int
 l2up_create(layer2_t *l2, u_int prim, int dinfo, int len, void *arg)
 {
-	return(mISDN_queue_data(&l2->inst, FLG_MSG_UP, prim, dinfo, len, arg, 0));
+	return mISDN_queue_data(&l2->inst,
+	    FLG_MSG_UP, prim, dinfo, len, arg, 0);
 }
 
 static int
@@ -143,7 +145,7 @@ l2down_skb(layer2_t *l2, struct sk_buff *skb) {
 	ret = mISDN_queue_down(&l2->inst, 0, skb);
 	if (ret && l2->debug)
 		printk(KERN_DEBUG "l2down_skb: ret(%d)\n", ret);
-	return(ret);
+	return ret;
 }
 
 static int
@@ -154,18 +156,18 @@ l2down_raw(layer2_t *l2, struct sk_buff *skb)
 	if (hh->prim == PH_DATA_REQ) {
 		if (test_and_set_bit(FLG_L1_BUSY, &l2->flag)) {
 			skb_queue_tail(&l2->down_queue, skb);
-			return(0);
+			return 0;
 		}
 		l2->down_id = mISDN_HEAD_DINFO(skb);
 	}
-	return(l2down_skb(l2, skb));
+	return l2down_skb(l2, skb);
 }
 
 static int
 l2down(layer2_t *l2, u_int prim, int dinfo, struct sk_buff *skb)
 {
 	mISDN_sethead(prim, dinfo, skb);
-	return(l2down_raw(l2, skb));
+	return l2down_raw(l2, skb);
 }
 
 static int
@@ -176,17 +178,17 @@ l2down_create(layer2_t *l2, u_int prim, int dinfo, int len, void *arg)
 
 	skb = create_link_skb(prim, dinfo, len, arg, 0);
 	if (!skb)
-		return(-ENOMEM);
+		return -ENOMEM;
 	err = l2down_raw(l2, skb);
 	if (err)
 		dev_kfree_skb(skb);
-	return(err);
+	return err;
 }
 
 #ifdef OBSOLETE
 static int
 l2_chain_down(mISDNinstance_t *inst, struct sk_buff *skb) {
-	return(l2down_raw(inst->privat, skb));
+	return l2down_raw(inst->privat, skb);
 }
 #endif
 
@@ -236,31 +238,32 @@ ph_data_confirm(mISDNinstance_t *inst, mISDN_head_t *hh, struct sk_buff *skb) {
 		} else
 			test_and_clear_bit(FLG_L1_BUSY, &l2->flag);
 	}
-	return(ret);
+	return ret;
 }
 
 static int
 l2mgr(layer2_t *l2, u_int prim, void *arg) {
 	long c = (long)arg;
 
-	printk(KERN_WARNING "l2mgr: addr:%x prim %x %c\n", l2->inst.id, prim, (char)c);
+	printk(KERN_WARNING
+	    "l2mgr: addr:%x prim %x %c\n", l2->inst.id, prim, (char)c);
 	if (test_bit(FLG_LAPD, &l2->flag) &&
 		!test_bit(FLG_FIXED_TEI, &l2->flag)) {
-		struct sk_buff  *skb;
-		switch(c) {
-			case 'C':
-			case 'D':
-			case 'G':
-			case 'H':
-				skb = create_link_skb(prim, 0, 0, NULL, 0);
-				if (!skb)
-					break;
-				if (l2_tei(l2->tm, skb))
-					dev_kfree_skb(skb);
+		struct sk_buff *skb;
+		switch (c) {
+		case 'C':
+		case 'D':
+		case 'G':
+		case 'H':
+			skb = create_link_skb(prim, 0, 0, NULL, 0);
+			if (!skb)
 				break;
+			if (l2_tei(l2->tm, skb))
+				dev_kfree_skb(skb);
+			break;
 		}
 	}
-	return(0);
+	return 0;
 }
 
 static void
@@ -305,8 +308,9 @@ ReleaseWin(layer2_t *l2)
 {
 	int cnt;
 
-	if((cnt = freewin(l2)))
-		printk(KERN_WARNING "isdnl2 freed %d skbuffs in release\n", cnt);
+	if ((cnt = freewin(l2)))
+		printk(KERN_WARNING
+		    "isdnl2 freed %d skbuffs in release\n", cnt);
 }
 
 inline unsigned int
@@ -314,7 +318,7 @@ cansend(layer2_t *l2)
 {
 	unsigned int p1;
 
-	if(test_bit(FLG_MOD128, &l2->flag))
+	if (test_bit(FLG_MOD128, &l2->flag))
 		p1 = (l2->vs - l2->va) % 128;
 	else
 		p1 = (l2->vs - l2->va) % 8;
@@ -341,7 +345,7 @@ sethdraddr(layer2_t *l2, u_char *header, int rsp)
 			crbit = !crbit;
 		*ptr++ = (l2->sapi << 2) | (crbit ? 2 : 0);
 		*ptr++ = (l2->tei << 1) | 1;
-		return (2);
+		return 2;
 	} else {
 		if (test_bit(FLG_ORIG, &l2->flag))
 			crbit = !crbit;
@@ -349,7 +353,7 @@ sethdraddr(layer2_t *l2, u_char *header, int rsp)
 			*ptr++ = l2->addr.B;
 		else
 			*ptr++ = l2->addr.A;
-		return (1);
+		return 1;
 	}
 }
 
@@ -407,7 +411,7 @@ IsSFrame(u_char * data, layer2_t *l2)
 
 	if (!test_bit(FLG_MOD128, &l2->flag))
 		d &= 0xf;
-	return(((d & 0xf3) == 1) && ((d & 0x0c) != 0x0c));
+	return (((d & 0xf3) == 1) && ((d & 0x0c) != 0x0c));
 }
 
 inline int
@@ -421,7 +425,8 @@ IsSABME(u_char * data, layer2_t *l2)
 inline int
 IsREJ(u_char * data, layer2_t *l2)
 {
-	return (test_bit(FLG_MOD128, &l2->flag) ? data[0] == REJ : (data[0] & 0xf) == REJ);
+	return (test_bit(FLG_MOD128, &l2->flag) ?
+	    data[0] == REJ : (data[0] & 0xf) == REJ);
 }
 
 inline int
@@ -433,13 +438,15 @@ IsFRMR(u_char * data)
 inline int
 IsRNR(u_char * data, layer2_t *l2)
 {
-	return (test_bit(FLG_MOD128, &l2->flag) ? data[0] == RNR : (data[0] & 0xf) == RNR);
+	return (test_bit(FLG_MOD128, &l2->flag) ?
+	    data[0] == RNR : (data[0] & 0xf) == RNR);
 }
 
 int
 iframe_error(layer2_t *l2, struct sk_buff *skb)
 {
-	u_int	i = l2addrsize(l2) + (test_bit(FLG_MOD128, &l2->flag) ? 2 : 1);
+	u_int	i = l2addrsize(l2) + (test_bit(FLG_MOD128, &l2->flag) ?
+	    2 : 1);
 	int	rsp = *skb->data & 0x2;
 
 	if (test_bit(FLG_ORIG, &l2->flag))
@@ -503,15 +510,16 @@ FRMR_error(layer2_t *l2, struct sk_buff *skb)
 		if (skb->len < headers + 5)
 			return 'N';
 		else if (l2->debug)
-			l2m_debug(&l2->l2m, "FRMR information %2x %2x %2x %2x %2x",
-				datap[0], datap[1], datap[2],
-				datap[3], datap[4]);
+			l2m_debug(&l2->l2m,
+			    "FRMR information %2x %2x %2x %2x %2x",
+			    datap[0], datap[1], datap[2], datap[3], datap[4]);
 	} else {
 		if (skb->len < headers + 3)
 			return 'N';
 		else if (l2->debug)
-			l2m_debug(&l2->l2m, "FRMR information %2x %2x %2x",
-				datap[0], datap[1], datap[2]);
+			l2m_debug(&l2->l2m,
+			    "FRMR information %2x %2x %2x",
+			    datap[0], datap[1], datap[2]);
 	}
 	return 0;
 }
@@ -519,7 +527,7 @@ FRMR_error(layer2_t *l2, struct sk_buff *skb)
 static unsigned int
 legalnr(layer2_t *l2, unsigned int nr)
 {
-	if(test_bit(FLG_MOD128, &l2->flag))
+	if (test_bit(FLG_MOD128, &l2->flag))
 		return ((nr - l2->va) % 128) <= ((l2->vs - l2->va) % 128);
 	else
 		return ((nr - l2->va) % 8) <= ((l2->vs - l2->va) % 8);
@@ -532,7 +540,7 @@ setva(layer2_t *l2, unsigned int nr)
 
 	while (l2->va != nr) {
 		l2->va++;
-		if(test_bit(FLG_MOD128, &l2->flag))
+		if (test_bit(FLG_MOD128, &l2->flag))
 			l2->va %= 128;
 		else
 			l2->va %= 8;
@@ -543,7 +551,7 @@ setva(layer2_t *l2, unsigned int nr)
 		}
 		l2->sow = (l2->sow + 1) % l2->window;
 	}
-	while((skb =skb_dequeue(&l2->tmp_queue))) {
+	while ((skb = skb_dequeue(&l2->tmp_queue))) {
 		if (l2up(l2, DL_DATA | CONFIRM, mISDN_HEAD_DINFO(skb), skb))
 			dev_kfree_skb(skb);
 	}
@@ -601,7 +609,7 @@ restart_t200(layer2_t *l2, int i)
 inline void
 stop_t200(layer2_t *l2, int i)
 {
-	if(test_and_clear_bit(FLG_T200_RUN, &l2->flag))
+	if (test_and_clear_bit(FLG_T200_RUN, &l2->flag))
 		mISDN_FsmDelTimer(&l2->t200, i);
 }
 
@@ -917,8 +925,8 @@ l2_restart_multi(struct FsmInst *fi, int event, void *arg)
 	if (est) {
 		l2up_create(l2, DL_ESTABLISH | INDICATION, 0, 0, NULL);
 		mISDN_queue_data(&l2->inst, l2->inst.id | MSG_BROADCAST,
-			MGR_SHORTSTATUS | INDICATION, SSTATUS_L2_ESTABLISHED,
-			0, NULL, 0);
+		    MGR_SHORTSTATUS | INDICATION, SSTATUS_L2_ESTABLISHED,
+		    0, NULL, 0);
 	}
 
 	if (skb_queue_len(&l2->i_queue) && cansend(l2))
@@ -941,8 +949,8 @@ l2_stop_multi(struct FsmInst *fi, int event, void *arg)
 	lapb_dl_release_l2l3(l2, INDICATION);
 
 	mISDN_queue_data(&l2->inst, l2->inst.id | MSG_BROADCAST,
-		MGR_SHORTSTATUS | INDICATION, SSTATUS_L2_RELEASED,
-		0, NULL, 0);
+	    MGR_SHORTSTATUS | INDICATION, SSTATUS_L2_RELEASED,
+	    0, NULL, 0);
 }
 
 static void
@@ -950,7 +958,7 @@ l2_connected(struct FsmInst *fi, int event, void *arg)
 {
 	layer2_t	*l2 = fi->userdata;
 	struct sk_buff	*skb = arg;
-	int		pr=-1;
+	int pr = -1;
 
 	if (!get_PollFlag(l2, skb)) {
 		l2_mdl_error_ua(fi, event, arg);
@@ -1023,7 +1031,7 @@ l2_st5_dm_release(struct FsmInst *fi, int event, void *arg)
 
 	if (get_PollFlagFree(l2, skb)) {
 		stop_t200(l2, 7);
-	 	if (!test_bit(FLG_L3_INIT, &l2->flag))
+		if (!test_bit(FLG_L3_INIT, &l2->flag))
 			discard_queue(&l2->i_queue);
 		if (test_bit(FLG_LAPB, &l2->flag))
 			l2down_create(l2, PH_DEACTIVATE | REQUEST, 0, 0, NULL);
@@ -1062,7 +1070,8 @@ enquiry_cr(layer2_t *l2, u_char typ, u_char cr, u_char pf)
 	} else
 		tmp[i++] = (l2->vr << 5) | typ | (pf ? 0x10 : 0);
 	if (!(skb = alloc_skb(i, GFP_ATOMIC))) {
-		printk(KERN_WARNING "isdnl2 can't alloc sbbuff for enquiry_cr\n");
+		printk(KERN_WARNING
+		    "isdnl2 can't alloc sbbuff for enquiry_cr\n");
 		return;
 	}
 	memcpy(skb_put(skb, i), tmp, i);
@@ -1109,7 +1118,7 @@ invoke_retransmission(layer2_t *l2, unsigned int nr)
 	if (l2->vs != nr) {
 		while (l2->vs != nr) {
 			(l2->vs)--;
-			if(test_bit(FLG_MOD128, &l2->flag)) {
+			if (test_bit(FLG_MOD128, &l2->flag)) {
 				l2->vs %= 128;
 				p1 = (l2->vs - l2->va) % 128;
 			} else {
@@ -1120,7 +1129,9 @@ invoke_retransmission(layer2_t *l2, unsigned int nr)
 			if (l2->windowar[p1])
 				skb_queue_head(&l2->i_queue, l2->windowar[p1]);
 			else
-				printk(KERN_WARNING "%s: windowar[%d] is NULL\n", __FUNCTION__, p1);
+				printk(KERN_WARNING
+				    "%s: windowar[%d] is NULL\n",
+				    __FUNCTION__, p1);
 			l2->windowar[p1] = NULL;
 		}
 		mISDN_FsmEvent(&l2->l2m, EV_L2_ACK_PULL, NULL);
@@ -1245,7 +1256,7 @@ l2_got_iframe(struct FsmInst *fi, int event, void *arg)
 	} else {
 		if (l2->vr == ns) {
 			l2->vr++;
-			if(test_bit(FLG_MOD128, &l2->flag))
+			if (test_bit(FLG_MOD128, &l2->flag))
 				l2->vr %= 128;
 			else
 				l2->vr %= 8;
@@ -1255,7 +1266,8 @@ l2_got_iframe(struct FsmInst *fi, int event, void *arg)
 			else
 				test_and_set_bit(FLG_ACK_PEND, &l2->flag);
 			skb_pull(skb, l2headersize(l2, 0));
-			if (l2up(l2, DL_DATA | INDICATION, mISDN_HEAD_DINFO(skb), skb))
+			if (l2up(l2, DL_DATA | INDICATION,
+			    mISDN_HEAD_DINFO(skb), skb))
 				dev_kfree_skb(skb);
 		} else {
 			/* n(s)!=v(r) */
@@ -1270,7 +1282,8 @@ l2_got_iframe(struct FsmInst *fi, int event, void *arg)
 		}
 	}
 	if (legalnr(l2, nr)) {
-		if (!test_bit(FLG_PEER_BUSY, &l2->flag) && (fi->state == ST_L2_7)) {
+		if (!test_bit(FLG_PEER_BUSY, &l2->flag) &&
+		    (fi->state == ST_L2_7)) {
 			if (nr == l2->vs) {
 				stop_t200(l2, 13);
 				mISDN_FsmRestartTimer(&l2->t203, l2->T203,
@@ -1420,14 +1433,14 @@ l2_pull_iqueue(struct FsmInst *fi, int event, void *arg)
 	if (!skb)
 		return;
 
-	if(test_bit(FLG_MOD128, &l2->flag))
+	if (test_bit(FLG_MOD128, &l2->flag))
 		p1 = (l2->vs - l2->va) % 128;
 	else
 		p1 = (l2->vs - l2->va) % 8;
 	p1 = (p1 + l2->sow) % l2->window;
 	if (l2->windowar[p1]) {
 		printk(KERN_WARNING "isdnl2 try overwrite ack queue entry %d\n",
-		       p1);
+		    p1);
 		dev_kfree_skb(l2->windowar[p1]);
 	}
 	l2->windowar[p1] = skb;
@@ -1447,7 +1460,7 @@ l2_pull_iqueue(struct FsmInst *fi, int event, void *arg)
 		memcpy(skb_push(nskb, i), header, i);
 	else {
 		printk(KERN_WARNING
-			"isdnl2 pull_iqueue skb header(%d/%d) too short\n", i, p1);
+		    "isdnl2 pull_iqueue skb header(%d/%d) too short\n", i, p1);
 		oskb = nskb;
 		nskb = alloc_skb(oskb->len + i, GFP_ATOMIC);
 		if (!nskb) {
@@ -1529,7 +1542,7 @@ l2_got_FRMR(struct FsmInst *fi, int event, void *arg)
 
 	skb_pull(skb, l2addrsize(l2) + 1);
 
-	if (!(skb->data[0] & 1) || ((skb->data[0] & 3) == 1) ||		/* I or S */
+	if (!(skb->data[0] & 1) || ((skb->data[0] & 3) == 1) || /* I or S */
 	    (IsUA(skb->data) && (fi->state == ST_L2_7))) {
 		l2mgr(l2, MDL_ERROR | INDICATION, (void *) 'K');
 		establishlink(fi);
@@ -1681,7 +1694,7 @@ l2_set_own_busy(struct FsmInst *fi, int event, void *arg)
 	layer2_t *l2 = fi->userdata;
 	struct sk_buff *skb = arg;
 
-	if(!test_and_set_bit(FLG_OWN_BUSY, &l2->flag)) {
+	if (!test_and_set_bit(FLG_OWN_BUSY, &l2->flag)) {
 		enquiry_cr(l2, RNR, RSP, 0);
 		test_and_clear_bit(FLG_ACK_PEND, &l2->flag);
 	}
@@ -1695,7 +1708,7 @@ l2_clear_own_busy(struct FsmInst *fi, int event, void *arg)
 	layer2_t *l2 = fi->userdata;
 	struct sk_buff *skb = arg;
 
-	if(!test_and_clear_bit(FLG_OWN_BUSY, &l2->flag)) {
+	if (!test_and_clear_bit(FLG_OWN_BUSY, &l2->flag)) {
 		enquiry_cr(l2, RR, RSP, 0);
 		test_and_clear_bit(FLG_ACK_PEND, &l2->flag);
 	}
@@ -1827,70 +1840,74 @@ ph_data_indication(layer2_t *l2, mISDN_head_t *hh, struct sk_buff *skb) {
 	l = l2addrsize(l2);
 	if (skb->len <= l) {
 		mISDN_FsmEvent(&l2->l2m, EV_L2_FRAME_ERROR, (void *) 'N');
-		return(ret);
+		return ret;
 	}
 	if (test_bit(FLG_LAPD, &l2->flag)) {
 		psapi = *datap++;
 		ptei = *datap++;
 		if ((psapi & 1) || !(ptei & 1)) {
-			printk(KERN_WARNING "l2 D-channel addr:%x frame wrong EA0/EA1\n", l2->inst.id);
-			return(ret);
+			printk(KERN_WARNING
+			    "l2 D-channel addr:%x frame wrong EA0/EA1\n",
+			    l2->inst.id);
+			return ret;
 		}
 		psapi >>= 2;
 		ptei >>= 1;
 		if ((psapi != l2->sapi) && (psapi != TEI_SAPI)) {
 			/* not our bussiness */
-			// printk(KERN_DEBUG "%s: sapi %d/%d sapi mismatch\n", __FUNCTION__,
+			// printk(KERN_DEBUG "%s: sapi %d/%d sapi mismatch\n",
+			//  __FUNCTION__,
 			//	psapi, l2->sapi);
 			dev_kfree_skb(skb);
-			return(0);
+			return 0;
 		}
 		if (ptei == GROUP_TEI) {
 			if (psapi == TEI_SAPI) {
 				hh->prim = MDL_UNITDATA | INDICATION;
-				return(l2_tei(l2->tm, skb));
+				return l2_tei(l2->tm, skb);
 			}
 		} else if ((ptei != l2->tei) || (psapi == TEI_SAPI)) {
 			/* not our bussiness */
-			// printk(KERN_DEBUG "%s: tei %d/%d sapi %d mismatch\n", __FUNCTION__,
+			// printk(KERN_DEBUG "%s: tei %d/%d sapi %d mismatch\n",
+			//  __FUNCTION__,
 			//	ptei, l2->tei, psapi);
 			dev_kfree_skb(skb);
-			return(0);
+			return 0;
 		}
 	} else
 		datap += l;
 	if (!(*datap & 1)) {	/* I-Frame */
-		if(!(c = iframe_error(l2, skb)))
+		if (!(c = iframe_error(l2, skb)))
 			ret = mISDN_FsmEvent(&l2->l2m, EV_L2_I, skb);
 	} else if (IsSFrame(datap, l2)) {	/* S-Frame */
-		if(!(c = super_error(l2, skb)))
+		if (!(c = super_error(l2, skb)))
 			ret = mISDN_FsmEvent(&l2->l2m, EV_L2_SUPER, skb);
 	} else if (IsUI(datap)) {
-		if(!(c = UI_error(l2, skb)))
+		if (!(c = UI_error(l2, skb)))
 			ret = mISDN_FsmEvent(&l2->l2m, EV_L2_UI, skb);
 	} else if (IsSABME(datap, l2)) {
-		if(!(c = unnum_error(l2, skb, CMD)))
+		if (!(c = unnum_error(l2, skb, CMD)))
 			ret = mISDN_FsmEvent(&l2->l2m, EV_L2_SABME, skb);
 	} else if (IsUA(datap)) {
-		if(!(c = unnum_error(l2, skb, RSP)))
+		if (!(c = unnum_error(l2, skb, RSP)))
 			ret = mISDN_FsmEvent(&l2->l2m, EV_L2_UA, skb);
 	} else if (IsDISC(datap)) {
-		if(!(c = unnum_error(l2, skb, CMD)))
+		if (!(c = unnum_error(l2, skb, CMD)))
 			ret = mISDN_FsmEvent(&l2->l2m, EV_L2_DISC, skb);
 	} else if (IsDM(datap)) {
-		if(!(c = unnum_error(l2, skb, RSP)))
+		if (!(c = unnum_error(l2, skb, RSP)))
 			ret = mISDN_FsmEvent(&l2->l2m, EV_L2_DM, skb);
 	} else if (IsFRMR(datap)) {
-		if(!(c = FRMR_error(l2, skb)))
+		if (!(c = FRMR_error(l2, skb)))
 			ret = mISDN_FsmEvent(&l2->l2m, EV_L2_FRMR, skb);
 	} else {
 		c = 'L';
 	}
 	if (c) {
-		printk(KERN_WARNING "l2 D-channel frame error %c\n",c);
+		printk(KERN_WARNING "l2 D-channel frame error %c\n", c);
 		mISDN_FsmEvent(&l2->l2m, EV_L2_FRAME_ERROR, (void *)(long)c);
 	}
-	return(ret);
+	return ret;
 }
 
 static int
@@ -1901,7 +1918,7 @@ l2from_down(layer2_t *l2, struct sk_buff *askb, mISDN_head_t *hh)
 
 //	printk(KERN_DEBUG "%s: prim(%x)\n", __FUNCTION__, hh->prim);
 	if (hh->prim == (PH_DATA | CONFIRM))
-		return(ph_data_confirm(&l2->inst, hh, askb));
+		return ph_data_confirm(&l2->inst, hh, askb);
 	if (hh->prim == (MDL_FINDTEI | REQUEST)) {
 		ret = -ESRCH;
 		if (test_bit(FLG_LAPD, &l2->flag)) {
@@ -1911,7 +1928,7 @@ l2from_down(layer2_t *l2, struct sk_buff *askb, mISDN_head_t *hh)
 				if (tp) {
 					*tp = l2->tm;
 					dev_kfree_skb(askb);
-					return(0);
+					return 0;
 				}
 			}
 		}
@@ -1919,13 +1936,13 @@ l2from_down(layer2_t *l2, struct sk_buff *askb, mISDN_head_t *hh)
 		if (next && next->func)
 			ret = next->func(next, askb);
 #endif
-		return(ret);
+		return ret;
 	}
 #ifdef FIXME
 	if (next) {
 		if (next->func) {
 			if (!(cskb = skb_clone(askb, GFP_ATOMIC)))
-				return(next->func(next, askb));
+				return next->func(next, askb);
 			else
 				sh = *hh;
 		}
@@ -1946,8 +1963,9 @@ l2from_down(layer2_t *l2, struct sk_buff *askb, mISDN_head_t *hh)
 		case (PH_ACTIVATE | CONFIRM):
 		case (PH_ACTIVATE | INDICATION):
 			test_and_set_bit(FLG_L1_ACTIV, &l2->flag);
-			if (test_and_clear_bit(FLG_ESTAB_PEND, &l2->flag)) 
-				ret = mISDN_FsmEvent(&l2->l2m, EV_L2_DL_ESTABLISH_REQ, cskb);
+			if (test_and_clear_bit(FLG_ESTAB_PEND, &l2->flag))
+				ret = mISDN_FsmEvent(&l2->l2m,
+				    EV_L2_DL_ESTABLISH_REQ, cskb);
 			break;
 		case (PH_DEACTIVATE | INDICATION):
 		case (PH_DEACTIVATE | CONFIRM):
@@ -1959,7 +1977,8 @@ l2from_down(layer2_t *l2, struct sk_buff *askb, mISDN_head_t *hh)
 			break;
 		default:
 			if (l2->debug)
-				l2m_debug(&l2->l2m, "l2 unknown pr %x", hh->prim);
+				l2m_debug(&l2->l2m, "l2 unknown pr %x",
+				    hh->prim);
 			ret = -EINVAL;
 			break;
 	}
@@ -1973,7 +1992,7 @@ l2from_down(layer2_t *l2, struct sk_buff *askb, mISDN_head_t *hh)
 		ret = next->func(next, askb);
 	}
 #endif
-	return(ret);
+	return ret;
 }
 
 static int
@@ -1981,7 +2000,7 @@ l2from_up(layer2_t *l2, struct sk_buff *skb, mISDN_head_t *hh) {
 	int		ret = -EINVAL;
 
 	if (hh->addr & FLG_MSG_CLONED)
-		return(l2down_raw(l2, skb));
+		return l2down_raw(l2, skb);
 	switch (hh->prim) {
 		case (DL_DATA | REQUEST):
 			ret = mISDN_FsmEvent(&l2->l2m, EV_L2_DL_DATA, skb);
@@ -2009,7 +2028,8 @@ l2from_up(layer2_t *l2, struct sk_buff *skb, mISDN_head_t *hh) {
 			if (test_bit(FLG_LAPB, &l2->flag))
 				l2down_create(l2, PH_DEACTIVATE | REQUEST,
 					0, 0, NULL);
-			ret = mISDN_FsmEvent(&l2->l2m, EV_L2_DL_RELEASE_REQ, skb);
+			ret = mISDN_FsmEvent(&l2->l2m, EV_L2_DL_RELEASE_REQ,
+			    skb);
 			break;
 		case (MDL_ASSIGN | REQUEST):
 			ret = mISDN_FsmEvent(&l2->l2m, EV_L2_MDL_ASSIGN, skb);
@@ -2025,9 +2045,10 @@ l2from_up(layer2_t *l2, struct sk_buff *skb, mISDN_head_t *hh) {
 			break;
 		default:
 			if (l2->debug)
-				l2m_debug(&l2->l2m, "l2 unknown pr %04x", hh->prim);
+				l2m_debug(&l2->l2m, "l2 unknown pr %04x",
+				    hh->prim);
 	}
-	return(ret);
+	return ret;
 }
 
 static int
@@ -2043,19 +2064,19 @@ l2_shortstatus(layer2_t *l2, struct sk_buff *skb, mISDN_head_t *hh)
 				temp = l2->inst.id | MSG_BROADCAST;
 			else
 				temp = hh->addr | FLG_MSG_TARGET;
-			switch(l2->l2m.state) {
-				case ST_L2_7:
-				case ST_L2_8:
-					hh->dinfo = SSTATUS_L2_ESTABLISHED;
-					break;
-				default:
-					hh->dinfo = SSTATUS_L2_RELEASED;
+			switch (l2->l2m.state) {
+			case ST_L2_7:
+			case ST_L2_8:
+				hh->dinfo = SSTATUS_L2_ESTABLISHED;
+				break;
+			default:
+				hh->dinfo = SSTATUS_L2_RELEASED;
 			}
 			hh->prim = MGR_SHORTSTATUS | CONFIRM;
-			return(mISDN_queue_message(&l2->inst, temp, skb));
+			return mISDN_queue_message(&l2->inst, temp, skb);
 		}
 	}
-	return(-EOPNOTSUPP);
+	return -EOPNOTSUPP;
 }
 
 static int
@@ -2066,30 +2087,31 @@ l2_function(mISDNinstance_t *inst, struct sk_buff *skb)
 	int		ret = -EINVAL;
 
 	if (debug)
-		printk(KERN_DEBUG  "%s: addr(%08x) prim(%x)\n", __FUNCTION__,  hh->addr, hh->prim);
+		printk(KERN_DEBUG  "%s: addr(%08x) prim(%x)\n",
+		    __FUNCTION__,  hh->addr, hh->prim);
 	if (!l2)
-		return(ret);
+		return ret;
 
 	if (unlikely((hh->prim & MISDN_CMD_MASK) == MGR_SHORTSTATUS))
-		return(l2_shortstatus(l2, skb, hh));
+		return l2_shortstatus(l2, skb, hh);
 
-	switch(hh->addr & MSG_DIR_MASK) {
-		case FLG_MSG_DOWN:
-			ret = l2from_up(l2, skb, hh);
-			break;
-		case FLG_MSG_UP:
-			ret = l2from_down(l2, skb, hh);
-			break;
-		case MSG_TO_OWNER:
-			/* FIXME: must be handled depending on type */
-			int_errtxt("not implemented yet");
-			break;
-		default:
-			/* FIXME: broadcast must be handled depending on type */
-			int_errtxt("not implemented yet");
-			break;
+	switch (hh->addr & MSG_DIR_MASK) {
+	case FLG_MSG_DOWN:
+		ret = l2from_up(l2, skb, hh);
+		break;
+	case FLG_MSG_UP:
+		ret = l2from_down(l2, skb, hh);
+		break;
+	case MSG_TO_OWNER:
+		/* FIXME: must be handled depending on type */
+		int_errtxt("not implemented yet");
+		break;
+	default:
+		/* FIXME: broadcast must be handled depending on type */
+		int_errtxt("not implemented yet");
+		break;
 	}
-	return(ret);
+	return ret;
 }
 
 int
@@ -2099,33 +2121,33 @@ tei_l2(layer2_t *l2, struct sk_buff *skb)
 	int		ret = -EINVAL;
 
 	if (!l2 || !skb)
-		return(ret);
+		return ret;
 	hh = mISDN_HEAD_P(skb);
 	if (l2->debug)
 		printk(KERN_DEBUG "%s: prim(%x)\n", __FUNCTION__, hh->prim);
-	switch(hh->prim) {
-	    case (MDL_UNITDATA | REQUEST):
+	switch (hh->prim) {
+	case (MDL_UNITDATA | REQUEST):
 		ret = l2down(l2, PH_DATA_REQ, l2_newid(l2), skb);
 		break;
-	    case (MDL_ASSIGN | REQUEST):
+	case (MDL_ASSIGN | REQUEST):
 		ret = mISDN_FsmEvent(&l2->l2m, EV_L2_MDL_ASSIGN, skb);
 		break;
-	    case (MDL_REMOVE | REQUEST):
+	case (MDL_REMOVE | REQUEST):
 		ret = mISDN_FsmEvent(&l2->l2m, EV_L2_MDL_REMOVE, skb);
 		break;
-	    case (MDL_ERROR | RESPONSE):
+	case (MDL_ERROR | RESPONSE):
 		ret = mISDN_FsmEvent(&l2->l2m, EV_L2_MDL_ERROR, skb);
 		break;
 	case (MDL_ERROR | REQUEST):
-		/* ETS 300-125 5.3.2.1 Test: TC13010*/
+		/* ETS 300-125 5.3.2.1 Test: TC13010 */
 		printk(KERN_NOTICE "MDL_ERROR|REQ (tei_l2)\n");
 		ret = mISDN_FsmEvent(&l2->l2m, EV_L2_MDL_ERROR, skb);
 		break;
-	    case (MDL_FINDTEI | REQUEST):
-	    	ret = l2down_skb(l2, skb);
+	case (MDL_FINDTEI | REQUEST):
+		ret = l2down_skb(l2, skb);
 		break;
 	}
-	return(ret);
+	return ret;
 }
 
 static void
@@ -2165,14 +2187,16 @@ release_l2(layer2_t *l2)
 			MGR_DISCONNECT | REQUEST, &inst->down);
 	}
 	if (l2->cloneif) {
-		printk(KERN_DEBUG "%s: cloneif(%p) owner(%p) peer(%p)\n",
-			__FUNCTION__, l2->cloneif, l2->cloneif->owner, l2->cloneif->peer);
+		printk(KERN_DEBUG "%s: cloneif (%p) owner(%p) peer(%p)\n",
+		    __FUNCTION__, l2->cloneif,
+		    l2->cloneif->owner, l2->cloneif->peer);
 		if (l2->cloneif->predecessor)
 			l2->cloneif->predecessor->clone = l2->cloneif->clone;
 		if (l2->cloneif->clone)
-			l2->cloneif->clone->predecessor = l2->cloneif->predecessor;
+			l2->cloneif->clone->predecessor =
+			    l2->cloneif->predecessor;
 		if (l2->cloneif->owner &&
-			(l2->cloneif->owner->up.clone == l2->cloneif))
+		    (l2->cloneif->owner->up.clone == l2->cloneif))
 			l2->cloneif->owner->up.clone = l2->cloneif->clone;
 		kfree(l2->cloneif);
 		l2->cloneif = NULL;
@@ -2183,7 +2207,8 @@ release_l2(layer2_t *l2)
 	spin_unlock_irqrestore(&isdnl2.lock, flags);
 	mISDN_ctrl(inst, MGR_UNREGLAYER | REQUEST, NULL);
 	if (l2->entity != MISDN_ENTITY_NONE)
-		mISDN_ctrl(inst, MGR_DELENTITY | REQUEST, (void *)((u_long)l2->entity));
+		mISDN_ctrl(inst, MGR_DELENTITY | REQUEST,
+		    (void *)((u_long)l2->entity));
 	kfree(l2);
 }
 
@@ -2195,10 +2220,10 @@ new_l2(mISDNstack_t *st, mISDN_pid_t *pid) {
 	u_long		flags;
 
 	if (!st || !pid)
-		return(-EINVAL);
+		return -EINVAL;
 	if (!(nl2 = kzalloc(sizeof(layer2_t), GFP_ATOMIC))) {
 		printk(KERN_ERR "kmalloc layer2 failed\n");
-		return(-ENOMEM);
+		return -ENOMEM;
 	}
 	nl2->debug = debug;
 	nl2->next_id = 1;
@@ -2208,11 +2233,11 @@ new_l2(mISDNstack_t *st, mISDN_pid_t *pid) {
 	memcpy(&nl2->inst.pid, pid, sizeof(mISDN_pid_t));
 	if (!mISDN_SetHandledPID(&isdnl2, &nl2->inst.pid)) {
 		int_error();
-		return(-ENOPROTOOPT);
+		return -ENOPROTOOPT;
 	}
-	switch(pid->protocol[2] & ~ISDN_PID_FEATURE_MASK) {
-	    case ISDN_PID_L2_LAPD_NET:
-	    	sprintf(nl2->inst.name, "lapdn %x", st->id>>8);
+	switch (pid->protocol[2] & ~ISDN_PID_FEATURE_MASK) {
+	case ISDN_PID_L2_LAPD_NET:
+		sprintf(nl2->inst.name, "lapdn %x", st->id>>8);
 		test_and_set_bit(FLG_LAPD, &nl2->flag);
 		test_and_set_bit(FLG_LAPD_NET, &nl2->flag);
 		test_and_set_bit(FLG_FIXED_TEI, &nl2->flag);
@@ -2226,11 +2251,11 @@ new_l2(mISDNstack_t *st, mISDN_pid_t *pid) {
 		nl2->T203 = 10000;
 		if (create_teimgr(nl2)) {
 			kfree(nl2);
-			return(-EINVAL);
+			return -EINVAL;
 		}
 		break;
-	    case ISDN_PID_L2_LAPD:
-	    	sprintf(nl2->inst.name, "lapd %x", st->id>>8);
+	case ISDN_PID_L2_LAPD:
+		sprintf(nl2->inst.name, "lapd %x", st->id>>8);
 		test_and_set_bit(FLG_LAPD, &nl2->flag);
 		test_and_set_bit(FLG_MOD128, &nl2->flag);
 		test_and_set_bit(FLG_ORIG, &nl2->flag);
@@ -2241,28 +2266,28 @@ new_l2(mISDNstack_t *st, mISDN_pid_t *pid) {
 			test_and_set_bit(FLG_FIXED_TEI, &nl2->flag);
 			nl2->tei = 0;
 		}
-		
+
 		nl2->maxlen = MAX_DFRAME_LEN;
 
 		if (pid->protocol[3] & ISDN_PID_L3_DF_CRLEN2) {
-			if (debug) 
+			if (debug)
 				printk("layer2: Windowsize 7\n");
 			nl2->window = 7;
 		} else {
-			if (debug) 
+			if (debug)
 				printk("layer2: Windowsize 1\n");
 			nl2->window = 1;
 		}
-		
+
 		nl2->T200 = 1000;
 		nl2->N200 = 3;
 		nl2->T203 = 10000;
 		if (create_teimgr(nl2)) {
 			kfree(nl2);
-			return(-EINVAL);
+			return -EINVAL;
 		}
 		break;
-	    case ISDN_PID_L2_B_X75SLP:
+	case ISDN_PID_L2_B_X75SLP:
 		test_and_set_bit(FLG_LAPB, &nl2->flag);
 		sprintf(nl2->inst.name, "lapb %x", st->id >> 8);
 		nl2->window = 7;
@@ -2276,23 +2301,24 @@ new_l2(mISDNstack_t *st, mISDN_pid_t *pid) {
 			test_and_set_bit(FLG_ORIG, &nl2->flag);
 		if (pid->param[2] && pid->pbuf) {
 			p = pid->pbuf + pid->param[2];
-			if (*p>=4) {
+			if (*p >= 4) {
 				p++;
 				nl2->addr.A = *p++;
 				nl2->addr.B = *p++;
 				if (*p++ == 128)
-					test_and_set_bit(FLG_MOD128, &nl2->flag);
+					test_and_set_bit(FLG_MOD128,
+					    &nl2->flag);
 				nl2->window = *p++;
 				if (nl2->window > 7)
 					nl2->window = 7;
 			}
 		}
 		break;
-	    default:
+	default:
 		printk(KERN_ERR "layer2 create failed prt %x\n",
 			pid->protocol[2]);
 		kfree(nl2);
-		return(-ENOPROTOOPT);
+		return -ENOPROTOOPT;
 	}
 	skb_queue_head_init(&nl2->i_queue);
 	skb_queue_head_init(&nl2->ui_queue);
@@ -2318,8 +2344,9 @@ new_l2(mISDNstack_t *st, mISDN_pid_t *pid) {
 	spin_unlock_irqrestore(&isdnl2.lock, flags);
 	err = mISDN_ctrl(&nl2->inst, MGR_NEWENTITY | REQUEST, NULL);
 	if (err) {
-		printk(KERN_WARNING "mISDN %s: MGR_NEWENTITY REQUEST failed err(%d)\n",
-			__FUNCTION__, err);
+		printk(KERN_WARNING
+		    "mISDN %s: MGR_NEWENTITY REQUEST failed err(%d)\n",
+		    __FUNCTION__, err);
 	}
 	err = mISDN_ctrl(st, MGR_REGLAYER | INDICATION, &nl2->inst);
 	if (err) {
@@ -2331,14 +2358,14 @@ new_l2(mISDNstack_t *st, mISDN_pid_t *pid) {
 	} else {
 		mISDN_stPara_t	stp;
 
-	    	if (st->para.maxdatalen)
-		    	nl2->maxlen = st->para.maxdatalen;
+		if (st->para.maxdatalen)
+			nl2->maxlen = st->para.maxdatalen;
 		stp.maxdatalen = 0;
 		stp.up_headerlen = 0;
 		stp.down_headerlen = l2headersize(nl2, 0);
 		mISDN_ctrl(st, MGR_ADDSTPARA | REQUEST, &stp);
 	}
-	return(err);
+	return err;
 }
 
 #ifdef OBSOLETE
@@ -2349,16 +2376,16 @@ clone_l2(layer2_t *l2, mISDNinstance_t **new_ip) {
 	mISDNstack_t	*st;
 
 	if (!l2)
-		return(-EINVAL);
+		return -EINVAL;
 	if (!new_ip)
-		return(-EINVAL);
+		return -EINVAL;
 	st = (mISDNstack_t *)*new_ip;
 	if (!st)
-		return(-EINVAL);
+		return -EINVAL;
 	err = new_l2(st, &l2->inst.pid, &nl2);
 	if (err) {
 		printk(KERN_ERR "clone l2 failed err(%d)\n", err);
-		return(err);
+		return err;
 	}
 	nl2->cloneif = nif;
 	nif->func = l2from_down;
@@ -2367,7 +2394,7 @@ clone_l2(layer2_t *l2, mISDNinstance_t **new_ip) {
 	nif->peer = &nl2->inst;
 	nif->stat = IF_DOWN;
 	nif->predecessor = &nif->owner->up;
-	while(nif->predecessor->clone)
+	while (nif->predecessor->clone)
 		nif->predecessor = nif->predecessor->clone;
 	nif->predecessor->clone = nif;
 	nl2->inst.down.owner = &nl2->inst;
@@ -2376,7 +2403,7 @@ clone_l2(layer2_t *l2, mISDNinstance_t **new_ip) {
 	nl2->inst.down.fdata = l2;
 	nl2->inst.down.stat = IF_UP;
 	*new_ip = &nl2->inst;
-	return(err);
+	return err;
 }
 #endif
 
@@ -2385,7 +2412,7 @@ l2_status(layer2_t *l2, status_info_l2_t *si)
 {
 
 	if (!si)
-		return(-EINVAL);
+		return -EINVAL;
 	memset(si, 0, sizeof(status_info_l2_t));
 	si->len = sizeof(status_info_l2_t) - 2*sizeof(int);
 	si->typ = STATUS_INFO_L2;
@@ -2416,7 +2443,7 @@ l2_status(layer2_t *l2, status_info_l2_t *si)
 		si->N202 = l2->tm->N202;
 		si->tei_debug = l2->tm->debug;
 	}
-	return(0);
+	return 0;
 }
 
 static char MName[] = "ISDNL2";
@@ -2444,7 +2471,7 @@ l2_manager(void *data, u_int prim, void *arg) {
 		printk(KERN_DEBUG "%s: data:%p prim:%x arg:%p\n", __FUNCTION__,
 			data, prim, arg);
 	if (!data)
-		return(err);
+		return err;
 	spin_lock_irqsave(&isdnl2.lock, flags);
 	list_for_each_entry(l2l, &isdnl2.ilist, list) {
 		if (&l2l->inst == inst) {
@@ -2454,30 +2481,32 @@ l2_manager(void *data, u_int prim, void *arg) {
 	}
 	spin_unlock_irqrestore(&isdnl2.lock, flags);
 	if (prim == (MGR_NEWLAYER | REQUEST))
-		return(new_l2(data, arg));
+		return new_l2(data, arg);
 	if (err) {
 		if (debug & 0x1)
-			printk(KERN_WARNING "l2_manager prim(%x) l2 no instance\n", prim);
-		return(err);
+			printk(KERN_WARNING
+			    "l2_manager prim(%x) l2 no instance\n", prim);
+		return err;
 	}
-	switch(prim) {
-	    case MGR_NEWENTITY | CONFIRM:
+	switch (prim) {
+	case MGR_NEWENTITY | CONFIRM:
 		l2l->entity = (u_long)arg & 0xffffffff;
 		break;
-	    case MGR_ADDSTPARA | INDICATION:
-	    	if (((mISDN_stPara_t *)arg)->maxdatalen)
-		    	l2l->maxlen = ((mISDN_stPara_t *)arg)->maxdatalen;
-	    case MGR_CLRSTPARA | INDICATION:
+	case MGR_ADDSTPARA | INDICATION:
+		if (((mISDN_stPara_t *)arg)->maxdatalen)
+			l2l->maxlen = ((mISDN_stPara_t *)arg)->maxdatalen;
+	case MGR_CLRSTPARA | INDICATION:
 		break;
 #ifdef OBSOLETE
-	    case MGR_CLONELAYER | REQUEST:
-		return(clone_l2(l2l, arg));
-	    case MGR_CONNECT | REQUEST:
-		return(mISDN_ConnectIF(inst, arg));
-	    case MGR_SETIF | REQUEST:
-	    case MGR_SETIF | INDICATION:
-		return(mISDN_SetIF(inst, arg, prim, l2from_up, l2from_down, l2l));
-	    case MGR_ADDIF | REQUEST:
+	case MGR_CLONELAYER | REQUEST:
+		return clone_l2(l2l, arg);
+	case MGR_CONNECT | REQUEST:
+		return mISDN_ConnectIF(inst, arg);
+	case MGR_SETIF | REQUEST:
+	case MGR_SETIF | INDICATION:
+		return mISDN_SetIF(inst, arg, prim,
+		    l2from_up, l2from_down, l2l);
+	case MGR_ADDIF | REQUEST:
 		if (arg) {
 			mISDNif_t *hif = arg;
 			if (hif->stat & IF_UP) {
@@ -2486,36 +2515,38 @@ l2_manager(void *data, u_int prim, void *arg) {
 			}
 		}
 		break;
-	    case MGR_DISCONNECT | REQUEST:
-	    case MGR_DISCONNECT | INDICATION:
-		return(mISDN_DisConnectIF(inst, arg));
+	case MGR_DISCONNECT | REQUEST:
+	case MGR_DISCONNECT | INDICATION:
+		return mISDN_DisConnectIF(inst, arg);
 #endif
-	    case MGR_RELEASE | INDICATION:
-	    case MGR_UNREGLAYER | REQUEST:
+	case MGR_RELEASE | INDICATION:
+	case MGR_UNREGLAYER | REQUEST:
 		release_l2(l2l);
 		break;
-	    case MGR_STATUS | REQUEST:
-		return(l2_status(l2l, arg));
-	    default:
+	case MGR_STATUS | REQUEST:
+		return l2_status(l2l, arg);
+	default:
 		if (debug & 0x1)
-			printk(KERN_WARNING "l2_manager prim %x not handled\n", prim);
-		return(-EINVAL);
+			printk(KERN_WARNING
+			    "l2_manager prim %x not handled\n", prim);
+		return -EINVAL;
 	}
-	return(0);
+	return 0;
 }
 
-int Isdnl2_Init(void)
+int
+Isdnl2_Init(void)
 {
 	int err;
 
-	printk(KERN_INFO "ISDN L2 driver version %s\n", mISDN_getrev(l2_revision));
+	printk(KERN_INFO
+	    "ISDN L2 driver version %s\n", mISDN_getrev(l2_revision));
 #ifdef MODULE
 	isdnl2.owner = THIS_MODULE;
 #endif
 	isdnl2.name = MName;
 	isdnl2.DPROTO.protocol[2] = ISDN_PID_L2_LAPD |
-		ISDN_PID_L2_LAPD_NET |
-		ISDN_PID_L2_DF_PTP;
+	    ISDN_PID_L2_LAPD_NET | ISDN_PID_L2_DF_PTP;
 	isdnl2.BPROTO.protocol[2] = ISDN_PID_L2_B_X75SLP;
 	isdnl2.own_ctrl = l2_manager;
 	spin_lock_init(&isdnl2.lock);
@@ -2531,10 +2562,11 @@ int Isdnl2_Init(void)
 		mISDN_FsmFree(&l2fsm);
 	} else
 		mISDN_module_register(THIS_MODULE);
-	return(err);
+	return err;
 }
 
-void Isdnl2_cleanup(void)
+void
+Isdnl2_cleanup(void)
 {
 	int		err;
 	layer2_t	*l2, *nl2;
@@ -2542,9 +2574,10 @@ void Isdnl2_cleanup(void)
 	mISDN_module_unregister(THIS_MODULE);
 
 	if ((err = mISDN_unregister(&isdnl2))) {
-		printk(KERN_ERR "Can't unregister ISDN layer 2 error(%d)\n", err);
+		printk(KERN_ERR
+		    "Can't unregister ISDN layer 2 error(%d)\n", err);
 	}
-	if(!list_empty(&isdnl2.ilist)) {
+	if (!list_empty(&isdnl2.ilist)) {
 		printk(KERN_WARNING "mISDNl2 l2 list not empty\n");
 		list_for_each_entry_safe(l2, nl2, &isdnl2.ilist, list)
 			release_l2(l2);

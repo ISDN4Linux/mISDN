@@ -1,4 +1,5 @@
-/* $Id: layer3.c,v 1.20 2006/05/29 16:46:10 crich Exp $
+/*
+ * $Id: layer3.c,v 1.20 2006/05/29 16:46:10 crich Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
@@ -22,12 +23,12 @@ struct Fsm l3fsm = {NULL, 0, 0, NULL, NULL};
 enum {
 	ST_L3_LC_REL,
 	ST_L3_LC_ESTAB_WAIT,
-	ST_L3_LC_REL_DELAY, 
+	ST_L3_LC_REL_DELAY,
 	ST_L3_LC_REL_WAIT,
 	ST_L3_LC_ESTAB,
 };
 
-#define L3_STATE_COUNT (ST_L3_LC_ESTAB+1)
+#define L3_STATE_COUNT (ST_L3_LC_ESTAB + 1)
 
 static char *strL3State[] =
 {
@@ -95,7 +96,7 @@ l3_newid(layer3_t *l3)
 	if (id == 0x7fff)
 		l3->next_id = 1;
 	id |= (l3->entity << 16);
-	return(id);
+	return (id);
 }
 
 u_char *
@@ -123,9 +124,9 @@ findie(u_char * p, int size, u_char ie, int wanted_set)
 				/* improved length check (Werner Cornelius) */
 				if (!(*p & 0x80)) {
 					if ((pend - p) < 2)
-						return(NULL);
+						return (NULL);
 					if (*(p+1) > (pend - (p+2)))
-						return(NULL);
+						return (NULL);
 					p++; /* points to len */
 				}
 				return (p);
@@ -149,11 +150,11 @@ getcallref(u_char * p)
 	int l, cr = 0;
 
 	p++;			/* prot discr */
-	if (*p & 0xfe)		/* wrong callref BRI only 1 octet*/
-		return(-2);
+	if (*p & 0xfe)		/* wrong callref BRI only 1 octet */
+		return (-2);
 	l = 0xf & *p++;		/* callref length */
 	if (!l)			/* dummy CallRef */
-		return(-1);
+		return (-1);
 	cr = *p++;
 	return (cr);
 }
@@ -177,7 +178,7 @@ void
 newl3state(l3_process_t *pc, int state)
 {
 	if (pc->l3->debug & L3_DEB_STATE)
-		l3m_debug(&pc->l3->l3m, "newstate cr %d %d --> %d", 
+		l3m_debug(&pc->l3->l3m, "newstate cr %d %d --> %d",
 			 pc->callref & 0x7F,
 			 pc->state, state);
 	pc->state = state;
@@ -229,7 +230,7 @@ StopAllL3Timer(l3_process_t *pc)
 	}
 }
 
-/*
+#if 0
 static void
 no_l3_proto(struct PStack *st, int pr, void *arg)
 {
@@ -244,16 +245,17 @@ no_l3_proto(struct PStack *st, int pr, void *arg)
 static int
 no_l3_proto_spec(struct PStack *st, isdn_ctrl *ic)
 {
-	printk(KERN_WARNING "mISDN: no specific protocol handler for proto %lu\n",ic->arg & 0xFF);
-	return(-1);
+	printk(KERN_WARNING
+	"mISDN: no specific protocol handler for proto %lu\n", ic->arg & 0xFF);
+	return (-1);
 }
-*/
+#endif
 
 l3_process_t
 *getl3proc(layer3_t *l3, int cr)
 {
 	l3_process_t *p;
-	
+
 	list_for_each_entry(p, &l3->plist, list)
 		if (p->callref == cr)
 			return (p);
@@ -278,13 +280,14 @@ l3_process_t
 
 	if (id == MISDN_ID_ANY) {
 		if (l3->entity == MISDN_ENTITY_NONE) {
-			printk(KERN_WARNING "%s: no entity allocated for l3(%x)\n",
-				__FUNCTION__, l3->id);
+			printk(KERN_WARNING
+			    "%s: no entity allocated for l3(%x)\n",
+			    __FUNCTION__, l3->id);
 			return (NULL);
 		}
 		if (l3->pid_cnt == 0x7FFF)
 			l3->pid_cnt = 0;
-		while(l3->pid_cnt <= 0x7FFF) {
+		while (l3->pid_cnt <= 0x7FFF) {
 			l3->pid_cnt++;
 			id = l3->pid_cnt | (l3->entity << 16);
 			p = getl3proc4id(l3, id);
@@ -292,16 +295,18 @@ l3_process_t
 				break;
 		}
 		if (p) {
-			printk(KERN_WARNING "%s: no free process_id for l3(%x) entity(%x)\n",
-				__FUNCTION__, l3->id, l3->entity);
+			printk(KERN_WARNING
+			    "%s: no free process_id for l3(%x) entity(%x)\n",
+			    __FUNCTION__, l3->id, l3->entity);
 			return (NULL);
 		}
 	} else {
 		/* id from other entity */
 		p = getl3proc4id(l3, id);
 		if (p) {
-			printk(KERN_WARNING "%s: process_id(%x) allready in use in l3(%x)\n",
-				__FUNCTION__, id, l3->id);
+			printk(KERN_WARNING
+			    "%s: process_id(%x) allready in use in l3(%x)\n",
+			    __FUNCTION__, id, l3->id);
 			return (NULL);
 		}
 	}
@@ -310,8 +315,8 @@ l3_process_t
 		return (NULL);
 	}
 
-	p->cause=NO_CAUSE;
-	
+	p->cause = NO_CAUSE;
+
 	p->l3 = l3;
 	p->id = id;
 	p->callref = cr;
@@ -339,21 +344,23 @@ release_l3_process(l3_process_t *p)
 			l3_debug(l3, "release_l3_process: last process");
 		if (!skb_queue_len(&l3->squeue)) {
 			if (l3->debug)
-				l3_debug(l3, "release_l3_process: release link");
+				l3_debug(l3,
+				    "release_l3_process: release link");
 			mISDN_FsmEvent(&l3->l3m, EV_RELEASE_REQ, NULL);
 		} else {
 			if (l3->debug)
-				l3_debug(l3, "release_l3_process: not release link");
+				l3_debug(l3,
+				    "release_l3_process: not release link");
 		}
 	}
-};
+}
 
 static void
 l3ml3p(layer3_t *l3, int pr)
 {
 	l3_process_t *p, *np;
 
-	list_for_each_entry_safe(p, np, &l3->plist, list) 
+	list_for_each_entry_safe(p, np, &l3->plist, list)
 		l3->p_mgr(p, pr, NULL);
 }
 
@@ -364,13 +371,14 @@ mISDN_l3up(l3_process_t *l3p, u_int prim, struct sk_buff *skb)
 	int err = -EINVAL;
 
 	if (!l3p)
-		return(-EINVAL);
+		return (-EINVAL);
 	l3 = l3p->l3;
 	if (!skb)
-		err = mISDN_queue_data(&l3->inst, FLG_MSG_UP, prim, l3p->id, 0, NULL, 0);
+		err = mISDN_queue_data(&l3->inst, FLG_MSG_UP, prim,
+		    l3p->id, 0, NULL, 0);
 	else
 		err = mISDN_queueup_newhead(&l3->inst, 0, prim, l3p->id, skb);
-	return(err);
+	return (err);
 }
 
 static int
@@ -378,10 +386,11 @@ l3down(layer3_t *l3, u_int prim, int dinfo, struct sk_buff *skb) {
 	int err = -EINVAL;
 
 	if (!skb)
-		err = mISDN_queue_data(&l3->inst, FLG_MSG_DOWN, prim, dinfo, 0, NULL, 0);
+		err = mISDN_queue_data(&l3->inst, FLG_MSG_DOWN, prim, dinfo,
+		    0, NULL, 0);
 	else
 		err = mISDN_queuedown_newhead(&l3->inst, 0, prim, dinfo, skb);
-	return(err);
+	return (err);
 }
 
 #define DREL_TIMER_VALUE 40000
@@ -408,7 +417,7 @@ lc_connect(struct FsmInst *fi, int event, void *arg)
 			dev_kfree_skb(skb);
 		dequeued++;
 	}
-	if (list_empty(&l3->plist) &&  dequeued) {
+	if (list_empty(&l3->plist) && dequeued) {
 		if (l3->debug)
 			l3m_debug(fi, "lc_connect: release link");
 		mISDN_FsmEvent(&l3->l3m, EV_RELEASE_REQ, NULL);
@@ -430,7 +439,7 @@ lc_connected(struct FsmInst *fi, int event, void *arg)
 			dev_kfree_skb(skb);
 		dequeued++;
 	}
-	if (list_empty(&l3->plist) &&  dequeued) {
+	if (list_empty(&l3->plist) && dequeued) {
 		if (l3->debug)
 			l3m_debug(fi, "lc_connected: release link");
 		mISDN_FsmEvent(&l3->l3m, EV_RELEASE_REQ, NULL);
@@ -444,7 +453,8 @@ lc_start_delay(struct FsmInst *fi, int event, void *arg)
 	layer3_t *l3 = fi->userdata;
 
 	mISDN_FsmChangeState(fi, ST_L3_LC_REL_DELAY);
-	mISDN_FsmAddTimer(&l3->l3m_timer, DREL_TIMER_VALUE, EV_TIMEOUT, NULL, 50);
+	mISDN_FsmAddTimer(&l3->l3m_timer, DREL_TIMER_VALUE,
+	    EV_TIMEOUT, NULL, 50);
 }
 
 static void
@@ -456,7 +466,8 @@ lc_release_req(struct FsmInst *fi, int event, void *arg)
 		if (l3->debug)
 			l3m_debug(fi, "lc_release_req: l2 blocked");
 		/* restart release timer */
-		mISDN_FsmAddTimer(&l3->l3m_timer, DREL_TIMER_VALUE, EV_TIMEOUT, NULL, 51);
+		mISDN_FsmAddTimer(&l3->l3m_timer, DREL_TIMER_VALUE,
+		    EV_TIMEOUT, NULL, 51);
 	} else {
 		mISDN_FsmChangeState(fi, ST_L3_LC_REL_WAIT);
 		l3down(l3, DL_RELEASE | REQUEST, 0, NULL);
@@ -496,9 +507,9 @@ static struct FsmNode L3FnList[] =
 	{ST_L3_LC_ESTAB_WAIT,	EV_RELEASE_IND,		lc_release_ind},
 	{ST_L3_LC_ESTAB,	EV_RELEASE_IND,		lc_release_ind},
 	{ST_L3_LC_ESTAB,	EV_RELEASE_REQ,		lc_start_delay},
-        {ST_L3_LC_REL_DELAY,    EV_RELEASE_IND,         lc_release_ind},
-        {ST_L3_LC_REL_DELAY,    EV_ESTABLISH_REQ,       lc_connected},
-        {ST_L3_LC_REL_DELAY,    EV_TIMEOUT,             lc_release_req},
+	{ST_L3_LC_REL_DELAY,	EV_RELEASE_IND,		lc_release_ind},
+	{ST_L3_LC_REL_DELAY,	EV_ESTABLISH_REQ,	lc_connected},
+	{ST_L3_LC_REL_DELAY,	EV_TIMEOUT,		lc_release_req},
 	{ST_L3_LC_REL_WAIT,	EV_RELEASE_CNF,		lc_release_cnf},
 	{ST_L3_LC_REL_WAIT,	EV_ESTABLISH_REQ,	lc_activate},
 };
@@ -512,14 +523,15 @@ l3_msg(layer3_t *l3, u_int pr, int dinfo, int len, void *arg)
 	switch (pr) {
 		case (DL_DATA | REQUEST):
 			if (l3->l3m.state == ST_L3_LC_ESTAB) {
-				return(l3down(l3, pr, l3_newid(l3), arg));
+				return (l3down(l3, pr, l3_newid(l3), arg));
 			} else {
 				struct sk_buff *skb = arg;
 
 //				printk(KERN_DEBUG "%s: queue skb %p len(%d)\n",
 //					__FUNCTION__, skb, skb->len);
 				skb_queue_tail(&l3->squeue, skb);
-				mISDN_FsmEvent(&l3->l3m, EV_ESTABLISH_REQ, NULL); 
+				mISDN_FsmEvent(&l3->l3m, EV_ESTABLISH_REQ,
+				    NULL);
 			}
 			break;
 		case (DL_ESTABLISH | REQUEST):
@@ -541,7 +553,7 @@ l3_msg(layer3_t *l3, u_int pr, int dinfo, int len, void *arg)
 			mISDN_FsmEvent(&l3->l3m, EV_RELEASE_REQ, NULL);
 			break;
 	}
-	return(0);
+	return (0);
 }
 
 void
@@ -559,7 +571,7 @@ init_l3(layer3_t *l3)
 	l3->l3m.userdata = l3;
 	l3->l3m.userint = 0;
 	l3->l3m.printdebug = l3m_debug;
-        mISDN_FsmInitTimer(&l3->l3m, &l3->l3m_timer);
+	mISDN_FsmInitTimer(&l3->l3m, &l3->l3m_timer);
 }
 
 
@@ -569,8 +581,10 @@ release_l3(layer3_t *l3)
 	l3_process_t *p, *np;
 
 	if (l3->l3m.debug)
-		printk(KERN_DEBUG "release_l3(%p) plist(%s) global(%p) dummy(%p)\n",
-			l3, list_empty(&l3->plist) ? "no" : "yes", l3->global, l3->dummy);
+		printk(KERN_DEBUG
+		    "release_l3(%p) plist(%s) global(%p) dummy(%p)\n",
+		    l3, list_empty(&l3->plist) ? "no" : "yes",
+		    l3->global, l3->dummy);
 	list_for_each_entry_safe(p, np, &l3->plist, list)
 		release_l3_process(p);
 	if (l3->global) {

@@ -1,4 +1,5 @@
-/* $Id: capi.c,v 1.21 2006/12/21 15:25:06 nadi Exp $
+/*
+ * $Id: capi.c,v 1.21 2006/12/21 15:25:06 nadi Exp $
  *
  */
 
@@ -29,7 +30,8 @@ module_param(debug, uint, S_IRUGO | S_IWUSR);
 
 static char deb_buf[256];
 
-void capidebug(int level, char *fmt, ...)
+void
+capidebug(int level, char *fmt, ...)
 {
 	va_list args;
 
@@ -59,13 +61,13 @@ _kd_cmsg_alloc(char *fn, int line)
 	_kd_cmsg_t	*ki = kmem_cache_zalloc(mISDN_cmsg_cp, GFP_ATOMIC);
 
 	if (!ki)
-		return(NULL);
+		return (NULL);
 	ki->kdi.typ = KM_DBG_TYP_CM;
 	INIT_LIST_HEAD(&ki->kdi.head);
 	ki->kdi.line = line;
 	ki->kdi.file = fn;
 	list_add_tail(&ki->kdi.head, &mISDN_kmem_garbage);
-	return(&ki->cm);
+	return (&ki->cm);
 }
 
 void
@@ -74,7 +76,8 @@ cmsg_free(_cmsg *cm)
 	km_dbg_item_t	*kdi;
 
 	if (!cm) {
-		int_errtxt("zero pointer free at %p", __builtin_return_address(0));
+		int_errtxt("zero pointer free at %p",
+		    __builtin_return_address(0));
 		return;
 	}
 	kdi = KDB_GET_KDI(cm);
@@ -88,13 +91,13 @@ _kd_AppPlci_alloc(char *fn, int line)
 	_kd_AppPlci_t	*ki = kmem_cache_zalloc(mISDN_AppPlci_cp, GFP_ATOMIC);
 
 	if (!ki)
-		return(NULL);
+		return (NULL);
 	ki->kdi.typ = KM_DBG_TYP_AP;
 	INIT_LIST_HEAD(&ki->kdi.head);
 	ki->kdi.line = line;
 	ki->kdi.file = fn;
 	list_add_tail(&ki->kdi.head, &mISDN_kmem_garbage);
-	return(&ki->ap);
+	return (&ki->ap);
 }
 
 void
@@ -103,7 +106,8 @@ AppPlci_free(AppPlci_t *ap)
 	km_dbg_item_t	*kdi;
 
 	if (!ap) {
-		int_errtxt("zero pointer free at %p", __builtin_return_address(0));
+		int_errtxt("zero pointer free at %p",
+		    __builtin_return_address(0));
 		return;
 	}
 	kdi = KDB_GET_KDI(ap);
@@ -117,13 +121,13 @@ _kd_ncci_alloc(char *fn, int line)
 	_kd_Ncci_t	*ki = kmem_cache_zalloc(mISDN_ncci_cp, GFP_ATOMIC);
 
 	if (!ki)
-		return(NULL);
+		return (NULL);
 	ki->kdi.typ = KM_DBG_TYP_NI;
 	INIT_LIST_HEAD(&ki->kdi.head);
 	ki->kdi.line = line;
 	ki->kdi.file = fn;
 	list_add_tail(&ki->kdi.head, &mISDN_kmem_garbage);
-	return(&ki->ni);
+	return (&ki->ni);
 }
 
 void
@@ -132,7 +136,8 @@ ncci_free(Ncci_t *ni)
 	km_dbg_item_t	*kdi;
 
 	if (!ni) {
-		int_errtxt("zero pointer free at %p", __builtin_return_address(0));
+		int_errtxt("zero pointer free at %p",
+		    __builtin_return_address(0));
 		return;
 	}
 	kdi = KDB_GET_KDI(ni);
@@ -146,13 +151,13 @@ _kd_SSProcess_alloc(char *fn, int line)
 	_kd_SSProcess_t	*ki = kmem_cache_zalloc(mISDN_sspc_cp, GFP_ATOMIC);
 
 	if (!ki)
-		return(NULL);
+		return (NULL);
 	ki->kdi.typ = KM_DBG_TYP_SP;
 	INIT_LIST_HEAD(&ki->kdi.head);
 	ki->kdi.line = line;
 	ki->kdi.file = fn;
 	list_add_tail(&ki->kdi.head, &mISDN_kmem_garbage);
-	return(&ki->sp);
+	return (&ki->sp);
 }
 
 void
@@ -161,7 +166,8 @@ SSProcess_free(SSProcess_t *sp)
 	km_dbg_item_t	*kdi;
 
 	if (!sp) {
-		int_errtxt("zero pointer free at %p", __builtin_return_address(0));
+		int_errtxt("zero pointer free at %p",
+		    __builtin_return_address(0));
 		return;
 	}
 	kdi = KDB_GET_KDI(sp);
@@ -177,46 +183,53 @@ free_garbage(void)
 
 	list_for_each_safe(item, next, &mISDN_kmem_garbage) {
 		kda = (_kd_all_t *)item;
-		printk(KERN_DEBUG "garbage item found (%p <- %p -> %p) type%ld allocated at %s:%d\n",
-			kda->kdi.head.prev, item, kda->kdi.head.next, kda->kdi.typ, kda->kdi.file, kda->kdi.line);
+		printk(KERN_DEBUG "garbage item found (%p <- %p -> %p) "
+		    "type%ld allocated at %s:%d\n",
+		    kda->kdi.head.prev, item, kda->kdi.head.next,
+		    kda->kdi.typ, kda->kdi.file, kda->kdi.line);
 		list_del(item);
-		switch(kda->kdi.typ) {
-			case KM_DBG_TYP_CM:
-				printk(KERN_DEBUG "cmsg cmd(%x,%x) appl(%x) addr(%x) nr(%d)\n",
-					kda->a.cm.Command,
-					kda->a.cm.Subcommand,
-					kda->a.cm.ApplId,
-					kda->a.cm.adr.adrController,
-					kda->a.cm.Messagenumber);
-				kmem_cache_free(mISDN_cmsg_cp, item);
-				break;
-			case KM_DBG_TYP_AP:
-				printk(KERN_DEBUG "AppPlci: PLCI(%x) m.state(%x) appl(%p)\n",
-					kda->a.ap.addr,
-					kda->a.ap.plci_m.state,
-					kda->a.ap.appl);
-				kmem_cache_free(mISDN_AppPlci_cp, item);
-				break;
-			case KM_DBG_TYP_NI:
-				printk(KERN_DEBUG "Ncci: NCCI(%x) state(%lx) m.state(%x) aplci(%p)\n",
-					kda->a.ni.addr,
-					kda->a.ni.state,
-					kda->a.ni.ncci_m.state,
-					kda->a.ni.AppPlci);
-				kmem_cache_free(mISDN_ncci_cp, item);
-				break;
-			case KM_DBG_TYP_SP:
-				printk(KERN_DEBUG "SSPc: addr(%x) id(%x) apid(%x) func(%x)\n",
-					kda->a.sp.addr,
-					kda->a.sp.invokeId,
-					kda->a.sp.ApplId,
-					kda->a.sp.Function);
-				kmem_cache_free(mISDN_sspc_cp, item);
-				break;
-			default:
-				printk(KERN_DEBUG "unknown garbage item(%p) type %ld\n",
-					item, kda->kdi.typ);
-				break; 
+		switch (kda->kdi.typ) {
+		case KM_DBG_TYP_CM:
+			printk(KERN_DEBUG
+			    "cmsg cmd(%x,%x) appl(%x) addr(%x) nr(%d)\n",
+			    kda->a.cm.Command,
+			    kda->a.cm.Subcommand,
+			    kda->a.cm.ApplId,
+			    kda->a.cm.adr.adrController,
+			    kda->a.cm.Messagenumber);
+			kmem_cache_free(mISDN_cmsg_cp, item);
+			break;
+		case KM_DBG_TYP_AP:
+			printk(KERN_DEBUG
+			    "AppPlci: PLCI(%x) m.state(%x) appl(%p)\n",
+			    kda->a.ap.addr,
+			    kda->a.ap.plci_m.state,
+			    kda->a.ap.appl);
+			kmem_cache_free(mISDN_AppPlci_cp, item);
+			break;
+		case KM_DBG_TYP_NI:
+			printk(KERN_DEBUG
+			    "Ncci: NCCI(%x) state(%lx) m.state(%x) aplci(%p)\n",
+			    kda->a.ni.addr,
+			    kda->a.ni.state,
+			    kda->a.ni.ncci_m.state,
+			    kda->a.ni.AppPlci);
+			kmem_cache_free(mISDN_ncci_cp, item);
+			break;
+		case KM_DBG_TYP_SP:
+			printk(KERN_DEBUG
+			    "SSPc: addr(%x) id(%x) apid(%x) func(%x)\n",
+			    kda->a.sp.addr,
+			    kda->a.sp.invokeId,
+			    kda->a.sp.ApplId,
+			    kda->a.sp.Function);
+			kmem_cache_free(mISDN_sspc_cp, item);
+			break;
+		default:
+			printk(KERN_DEBUG
+			    "unknown garbage item(%p) type %ld\n",
+			    item, kda->kdi.typ);
+			break;
 		}
 	}
 }
@@ -261,7 +274,7 @@ static int CapiNew(void)
 				0, 0, NULL, NULL);
 	if (!mISDN_cmsg_cp) {
 		CapiCachesFree();
-		return(-ENOMEM);
+		return (-ENOMEM);
 	}
 	mISDN_AppPlci_cp = kmem_cache_create("mISDN_AppPlci",
 #ifdef MISDN_KMEM_DEBUG
@@ -272,7 +285,7 @@ static int CapiNew(void)
 				0, 0, NULL, NULL);
 	if (!mISDN_AppPlci_cp) {
 		CapiCachesFree();
-		return(-ENOMEM);
+		return (-ENOMEM);
 	}
 	mISDN_ncci_cp = kmem_cache_create("mISDN_Ncci",
 #ifdef MISDN_KMEM_DEBUG
@@ -283,7 +296,7 @@ static int CapiNew(void)
 				0, 0, NULL, NULL);
 	if (!mISDN_ncci_cp) {
 		CapiCachesFree();
-		return(-ENOMEM);
+		return (-ENOMEM);
 	}
 	mISDN_sspc_cp = kmem_cache_create("mISDN_SSProc",
 #ifdef MISDN_KMEM_DEBUG
@@ -294,7 +307,7 @@ static int CapiNew(void)
 				0, 0, NULL, NULL);
 	if (!mISDN_sspc_cp) {
 		CapiCachesFree();
-		return(-ENOMEM);
+		return (-ENOMEM);
 	}
 #ifdef OLDCAPI_DRIVER_INTERFACE
 	cdrv_if = attach_capi_driver(&mISDN_driver);
@@ -313,15 +326,16 @@ static int CapiNew(void)
 static int
 capi20_manager(void *data, u_int prim, void *arg) {
 	mISDNinstance_t	*inst = data;
-	int		found=0;
+	int		found = 0;
 	PLInst_t	*plink = NULL;
 	Controller_t	*ctrl;
 	u_long		flags;
 
 	if (CAPI_DBG_INFO & debug)
-		printk(KERN_DEBUG "capi20_manager data:%p prim:%x arg:%p\n", data, prim, arg);
+		printk(KERN_DEBUG "capi20_manager data:%p prim:%x arg:%p\n",
+		    data, prim, arg);
 	if (!data)
-		return(-EINVAL);
+		return (-EINVAL);
 	spin_lock_irqsave(&capi_obj.lock, flags);
 	list_for_each_entry(ctrl, &capi_obj.ilist, list) {
 		if (&ctrl->inst == inst) {
@@ -345,63 +359,71 @@ capi20_manager(void *data, u_int prim, void *arg) {
 		int ret = ControllerConstr(&ctrl, data, arg, &capi_obj);
 		if (!ret)
 			ctrl->debug = debug;
-		return(ret);
+		return (ret);
 	}
 	if (!ctrl) {
 		if (CAPI_DBG_WARN & debug)
-			printk(KERN_WARNING "capi20_manager setif no instance\n");
-		return(-EINVAL);
+			printk(KERN_WARNING
+			    "capi20_manager setif no instance\n");
+		return (-EINVAL);
 	}
-	switch(prim) {
-	    case MGR_NEWENTITY | CONFIRM:
+	switch (prim) {
+	case MGR_NEWENTITY | CONFIRM:
 		ctrl->entity = (u_long)arg & 0xffffffff;
 		break;
 #ifdef FIXME
-	    case MGR_CONNECT | REQUEST:
-		return(mISDN_ConnectIF(inst, arg));
-	    case MGR_SETIF | INDICATION:
-	    case MGR_SETIF | REQUEST:
+	case MGR_CONNECT | REQUEST:
+		return (mISDN_ConnectIF(inst, arg));
+
+	case MGR_SETIF | INDICATION:
+	case MGR_SETIF | REQUEST:
 		if (&ctrl->inst == inst)
-			return(mISDN_SetIF(inst, arg, prim, NULL, ControllerL3L4, ctrl));
+			return (mISDN_SetIF(inst, arg, prim, NULL,
+			    ControllerL3L4, ctrl));
 		else
-			return(AppPlcimISDN_SetIF(inst->data, prim, arg));
-	    case MGR_DISCONNECT | REQUEST:
-	    case MGR_DISCONNECT | INDICATION:
-		return(mISDN_DisConnectIF(inst, arg));
+			return (AppPlcimISDN_SetIF(inst->data, prim, arg));
+	case MGR_DISCONNECT | REQUEST:
+	case MGR_DISCONNECT | INDICATION:
+		return (mISDN_DisConnectIF(inst, arg));
 #endif
-	    case MGR_SETSTACK | INDICATION:
+	case MGR_SETSTACK | INDICATION:
 		if (!(&ctrl->inst == inst))
-			return(AppPlcimISDN_Active(inst->privat));
-		return(0);
-	    case MGR_RELEASE | INDICATION:
+			return (AppPlcimISDN_Active(inst->privat));
+		return (0);
+	case MGR_RELEASE | INDICATION:
 		if (CAPI_DBG_INFO & debug)
-			printk(KERN_DEBUG "release_capi20 id %x\n", ctrl->inst.st->id);
+			printk(KERN_DEBUG "release_capi20 id %x\n",
+			    ctrl->inst.st->id);
 		ControllerDestr(ctrl);
-	    	break;
-	    case MGR_UNREGLAYER | REQUEST:
+		break;
+	case MGR_UNREGLAYER | REQUEST:
 		if (plink) {
 			plink->inst.function = NULL;
-			mISDN_ctrl(&plink->inst, MGR_UNREGLAYER | REQUEST, NULL);
+			mISDN_ctrl(&plink->inst,
+			    MGR_UNREGLAYER | REQUEST, NULL);
 		}
 		break;
-	    case MGR_CTRLREADY | INDICATION:
+	case MGR_CTRLREADY | INDICATION:
 		if (CAPI_DBG_INFO & debug)
 			printk(KERN_DEBUG "ctrl %x ready\n", ctrl->inst.st->id);
 		ControllerRun(ctrl);
 		break;
-	    default:
+	default:
 		if (CAPI_DBG_WARN & debug)
-			printk(KERN_WARNING "capi20_manager prim %x not handled\n", prim);
-		return(-EINVAL);
+			printk(KERN_WARNING
+			    "capi20_manager prim %x not handled\n", prim);
+		return (-EINVAL);
 	}
-	return(0);
+	return (0);
 }
 
-int Capi20Init(void)
+int
+Capi20Init(void)
 {
 	int err;
 
-	printk(KERN_INFO "%s driver file version %s\n", MName, mISDN_getrev(capi_revision));
+	printk(KERN_INFO "%s driver file version %s\n",
+	    MName, mISDN_getrev(capi_revision));
 #ifdef MODULE
 	capi_obj.owner = THIS_MODULE;
 #endif
@@ -413,7 +435,7 @@ int Capi20Init(void)
 	spin_lock_init(&capi_obj.lock);
 	INIT_LIST_HEAD(&capi_obj.ilist);
 	if ((err = CapiNew()))
-		return(err);
+		return (err);
 	if ((err = mISDN_register(&capi_obj))) {
 		printk(KERN_ERR "Can't register %s error(%d)\n", MName, err);
 #ifdef OLDCAPI_DRIVER_INTERFACE
@@ -426,7 +448,7 @@ int Capi20Init(void)
 		free_Application();
 	} else
 		mISDN_module_register(THIS_MODULE);
-	return(err);
+	return (err);
 }
 
 #ifdef MODULE
