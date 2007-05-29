@@ -366,6 +366,57 @@ handle_led(hfcsusb_t * card, int event)
 }
 
 
+/********************/
+/* debugtool helper */
+/********************/
+#define HFC_MAX_TE_LAYER1_STATE 8
+#define HFC_MAX_NT_LAYER1_STATE 4
+
+const char *HFC_TE_LAYER1_STATES[HFC_MAX_TE_LAYER1_STATE + 1] = {
+	"TE F0 - Reset",
+	"TE F1 - Reset",
+	"TE F2 - Sensing",
+	"TE F3 - Deactivated",
+	"TE F4 - Awaiting signal",
+	"TE F5 - Identifying input",
+	"TE F6 - Synchronized",
+	"TE F7 - Activated"
+	"TE F8 - Lost framing",
+};
+const char *HFC_NT_LAYER1_STATES[HFC_MAX_NT_LAYER1_STATE + 1] = {
+	"NT G0 - Reset",
+	"NT G1 - Deactive",
+	"NT G2 - Pending activation",
+	"NT G3 - Active",
+	"NT G4 - Pending deactivation",
+};
+
+static void hfc_dt_state(mISDNstack_t *stack, u_int state, u_int te)
+{
+	int mlen;
+	char * message = NULL;
+	struct sk_buff *skb;
+
+	if ((te) && (state <= HFC_MAX_TE_LAYER1_STATE))
+		message = (char *)HFC_TE_LAYER1_STATES[state];
+	else
+		if ((!te) && (state <= HFC_MAX_NT_LAYER1_STATE))
+			message = (char *)HFC_NT_LAYER1_STATES[state];
+
+	mlen = message ? strlen(message) + 1 : 0;
+	skb = alloc_skb(mlen + 4, GFP_ATOMIC);
+	if (!skb)
+		return;
+
+	*(unsigned int *)skb_put(skb, 4) = state;
+	if (message)
+		memcpy(skb_put(skb, mlen), message, mlen);
+
+	mISDN_dt_new_frame(stack, NEWSTATE, skb, 0);
+}
+
+
+
 /*********************************/
 /* S0 state change event handler */
 /*********************************/
@@ -381,7 +432,7 @@ S0_new_state(channel_t * dch)
 			mISDN_debugprint(&card->chan[D].inst,
 				 "%s: TE %d",
 				 __FUNCTION__, dch->state);
-		
+
 		switch (dch->state) {
 			case (0):
 				prim = PH_CONTROL | INDICATION;
@@ -460,6 +511,8 @@ S0_new_state(channel_t * dch)
 			0, NULL, 0);		
 	}		
 	mISDN_queue_data(&dch->inst, FLG_MSG_UP, prim, para, 0, NULL, 0);
+
+	hfc_dt_state(dch->inst.st, dch->state, card->portmode & PORT_MODE_TE);
 }
 
 /******************************/
@@ -1331,7 +1384,6 @@ tx_iso_complete(struct urb *urb
 	int k, tx_offset, num_isoc_packets, sink, remain, current_len,
 	    errcode;
 	int frame_complete, fifon, status;
-	int i;
 	__u8 threshbit;
 	__u8 threshtable[8] = { 1, 2, 4, 8, 0x10, 0x20, 0x40, 0x80 };
 
