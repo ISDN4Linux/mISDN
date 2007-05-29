@@ -51,12 +51,12 @@ static struct task_struct *thread;
 static struct sk_buff_head skb_q;
 static DECLARE_WAIT_QUEUE_HEAD(skb_q_wait);
 
-static void dt_new_frame (mISDNstack_t *stack, enum mISDN_dt_type type, struct sk_buff *skb)
+static void dt_new_frame (mISDNstack_t *stack, enum mISDN_dt_type type, struct sk_buff *skb, int duplicate_skb)
 {
 	struct sk_buff *dup;
 	mISDN_dt_header_t *hdr;
 
-	dup = skb ? skb_copy(skb, GFP_KERNEL) : alloc_skb(0, GFP_KERNEL);
+	dup = skb ? (duplicate_skb ? skb_copy(skb, GFP_ATOMIC) : skb) : alloc_skb(0, GFP_ATOMIC);
 	if (!dup)
 		return;
 

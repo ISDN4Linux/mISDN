@@ -92,10 +92,10 @@ extern void		mISDN_inc_usage(void);
 extern void		mISDN_dec_usage(void);
 
 /* debugtool helpers from core.c */
-extern void     mISDN_dt_set_callback(void (*new_frame) (mISDNstack_t *stack, enum mISDN_dt_type type, struct sk_buff *skb));
+extern void     mISDN_dt_set_callback(void (*new_frame) (mISDNstack_t *stack, enum mISDN_dt_type type, struct sk_buff *skb, int duplicate_skb));
 extern void     mISDN_dt_enable(void);
 extern void     mISDN_dt_disable(void);
-extern void     mISDN_dt_new_frame(mISDNstack_t *stack, enum mISDN_dt_type type, struct sk_buff *skb);
+extern void     mISDN_dt_new_frame(mISDNstack_t *stack, enum mISDN_dt_type type, struct sk_buff *skb, int duplicate_skb);
 
 #ifdef CONFIG_MISDN_NETDEV
 /* from netdev_main.c */

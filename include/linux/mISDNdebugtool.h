@@ -17,10 +17,17 @@
  */
 
 enum mISDN_dt_type {
-	D_RX = 1,
-	D_TX,
-	L1_UP,
-	L1_DOWN,
+
+	D_RX = 1,  /* payload: copy of dchannel payload */
+	D_TX,      /* payload: copy of dchannel payload */
+
+	L1_UP,     /* no payload */
+	L1_DOWN,   /* no payload */
+
+	CRC_ERR,   /* no payload */
+
+	NEWSTATE,  /* payload: state-id (uint) :: message (NULL-terminated charstring)
+	              thrown by: hfcmulti */
 };
 
 typedef struct mISDN_dt_header {

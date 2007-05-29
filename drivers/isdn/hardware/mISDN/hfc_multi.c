@@ -251,6 +251,22 @@ static const PCI_ENTRY id_list[] =
 	{0, 0, 0, 0, NULL, NULL, 0, 0, 0, 0, 0},
 };
 
+/********************/
+/* debugtool helper */
+/********************/
+static void dt_newstate(mISDNstack_t *stack, u_int state, char *message)
+{
+	int mlen = message ? strlen(message) + 1 : 0;
+	struct sk_buff *skb = alloc_skb(mlen + 4, GFP_ATOMIC);
+	if (!skb)
+		return;
+
+	*(unsigned int *)skb_put(skb, 4) = state;
+	if (message)
+		memcpy(skb_put(skb, mlen), message, mlen);
+
+	mISDN_dt_new_frame(stack, NEWSTATE, skb, 0);
+}
 
 /****************/
 /* module stuff */
@@ -1699,6 +1715,7 @@ next_frame:
 			if (chan->rx_skb->data[chan->rx_skb->len - 1]) {
 				if (debug & DEBUG_HFCMULTI_CRC)
 					printk(KERN_DEBUG "%s: CRC-error\n", __FUNCTION__);
+				mISDN_dt_new_frame(chan->inst.st, CRC_ERR, NULL, 0);
 				skb_trim(chan->rx_skb, 0);
 				goto next_frame;
 			}
@@ -2000,6 +2017,7 @@ hfcmulti_interrupt(int intno, void *dev_id
 						if (debug & DEBUG_HFCMULTI_STATE)
 							printk(KERN_DEBUG "%s: S/T newstate %x port %d\n",
 								__FUNCTION__, chan->state, hc->chan[ch].port);
+						dt_newstate(chan->inst.st, chan->state, "S/T");
 					}
 					r_irq_statech >>= 1;
 				}
@@ -2025,6 +2043,7 @@ hfcmulti_interrupt(int intno, void *dev_id
 				if (debug & DEBUG_HFCMULTI_STATE)
 					printk(KERN_DEBUG "%s: E1 (id=%d) newstate %x\n",
 						__FUNCTION__, hc->id ,chan->state);
+				dt_newstate(chan->inst.st, chan->state, "E1");
 			}
 		}
 		if (r_irq_misc & V_TI_IRQ)
@@ -2959,9 +2978,11 @@ static void ph_state_change(channel_t *dch)
 		if (!test_bit(HFC_CFG_NTMODE, &hc->chan[ch].cfg)) {
 			if (debug & DEBUG_HFCMULTI_STATE)
 				printk(KERN_DEBUG "%s: E1 TE (id=%d) newstate %x\n", __FUNCTION__, hc->id, dch->state);
+			dt_newstate(dch->inst.st, dch->state, "E1 TE");
 		} else {
 			if (debug & DEBUG_HFCMULTI_STATE)
 				printk(KERN_DEBUG "%s: E1 NT (id=%d) newstate %x\n", __FUNCTION__, hc->id, dch->state);
+			dt_newstate(dch->inst.st, dch->state, "E1 NT");
 		}
 		switch (dch->state) {
 			case (1):
@@ -2982,6 +3003,7 @@ static void ph_state_change(channel_t *dch)
 		if (!test_bit(HFC_CFG_NTMODE, &hc->chan[ch].cfg)) {
 			if (debug & DEBUG_HFCMULTI_STATE)
 				printk(KERN_DEBUG "%s: S/T TE newstate %x\n", __FUNCTION__, dch->state);
+			dt_newstate(dch->inst.st, dch->state, "S/T TE");
 			switch (dch->state) {
 				case (0):
 					prim = PH_CONTROL | INDICATION;
@@ -3012,6 +3034,7 @@ static void ph_state_change(channel_t *dch)
 		} else {
 			if (debug & DEBUG_HFCMULTI_STATE)
 				printk(KERN_DEBUG "%s: S/T NT newstate %x\n", __FUNCTION__, dch->state);
+			dt_newstate(dch->inst.st, dch->state, "S/T NT");
 			switch (dch->state) {
 				case (2):
 					if (hc->chan[ch].nt_timer == 0) {

@@ -394,10 +394,10 @@ mISDN_queue_message(mISDNinstance_t *inst, u_int aflag, struct sk_buff *skb)
 
 	switch (hh->prim) {
 	case PH_ACTIVATE | INDICATION:
-		mISDN_dt_new_frame(st, L1_UP, NULL);
+		mISDN_dt_new_frame(st, L1_UP, NULL, 0);
 		break;
 	case PH_DEACTIVATE | INDICATION:
-		mISDN_dt_new_frame(st, L1_DOWN, NULL);
+		mISDN_dt_new_frame(st, L1_DOWN, NULL, 0);
 		break;
 	default:
 		break;
