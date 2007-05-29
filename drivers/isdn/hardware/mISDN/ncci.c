@@ -941,7 +941,8 @@ ncciDataInd(Ncci_t *ncci, int pr, struct sk_buff *skb)
 		*((__u64*)(nskb->data+22)) = cpu_to_le64(0);
 	} else {
 		capimsg_setu32(nskb->data, 12, 0);
-		*((__u64*)(nskb->data+22)) = cpu_to_le64((__u64)nskb->data + CAPI_B3_DATA_IND_HEADER_SIZE);
+		*((__u64*)(nskb->data+22)) = 
+			cpu_to_le64((__u64)((ulong)nskb->data + CAPI_B3_DATA_IND_HEADER_SIZE));
 	}
 	CAPIMSG_SETDATALEN(nskb->data, nskb->len - CAPI_B3_DATA_IND_HEADER_SIZE);
 	capimsg_setu16(nskb->data, 18, i);
@@ -981,7 +982,7 @@ ncciDataReq(Ncci_t *ncci, struct sk_buff *skb)
 		}
 #else
  		if (cmpxchg(&ncci->xmit_skb_handles[i].PktId, 0, MISDN_ID_DUMMY) == 0)
-		 			break;
+			break;
 #endif
 	}
 	if (i == CAPI_MAXDATAWINDOW) {

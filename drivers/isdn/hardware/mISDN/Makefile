@@ -64,6 +64,7 @@ endif
 
 ifdef CONFIG_MISDN_DSP
 obj-$(CONFIG_MISDN_DRV) += mISDN_dsp.o mISDN_dsp_mec2.o mISDN_dsp_kb1ec.o mISDN_dsp_mg2ec.o mISDN_dsp_octwareec.o
+obj-$(CONFIG_MISDN_DSP) += octvqe/
 endif
 
 ifdef CONFIG_MISDN_L1OIP

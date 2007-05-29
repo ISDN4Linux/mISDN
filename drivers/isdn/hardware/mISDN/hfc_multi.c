@@ -3622,20 +3622,16 @@ static void release_ports_hw(hfc_multi_t *hc)
 	if (debug & DEBUG_HFCMULTI_INIT)
 		printk(KERN_WARNING "%s: remove instance from list\n", __FUNCTION__);
 
-#if 1
-	u_long flags2;
-	spin_lock_irqsave(&HFCM_obj.lock,flags2);
+	spin_lock_irqsave(&HFCM_obj.lock,flags);
 	list_del(&hc->list);
-	spin_unlock_irqrestore(&HFCM_obj.lock,flags2);
-#endif
+	spin_unlock_irqrestore(&HFCM_obj.lock,flags);
 
 	if (debug & DEBUG_HFCMULTI_INIT)
 		printk(KERN_WARNING "%s: delete instance\n", __FUNCTION__);
 	
 
-	kfree(hc);
-	hc=NULL;
 	HFC_cnt--;
+	kfree(hc);
 	if (debug & DEBUG_HFCMULTI_INIT)
 		printk(KERN_WARNING "%s: card successfully removed\n", __FUNCTION__);
 

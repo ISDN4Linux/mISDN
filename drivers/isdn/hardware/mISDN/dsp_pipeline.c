@@ -255,10 +255,12 @@ int dsp_pipeline_build (dsp_pipeline_t *pipeline, const char *cfg)
 		return 0;
 	}
 
-	char _dup[len + 1];
-	strcpy(_dup, cfg);
-	dup = _dup;
-
+	dup = kmalloc(len + 1, GFP_KERNEL);
+	if (!dup) {
+		write_unlock_irqrestore(&pipeline->lock, pipeline_flags);
+		return 0;
+	}
+	strcpy(dup, cfg);
 	while ((tok = strsep(&dup, "|"))) {
 		if (!strlen(tok))
 			continue;
@@ -317,7 +319,7 @@ _out:
 
 	write_unlock_irqrestore(&pipeline->lock, pipeline_flags);
 	printk(KERN_DEBUG "%s: dsp pipeline built%s: %s\n", __FUNCTION__, incomplete ? " incomplete" : "", cfg);
-
+	kfree(dup);
 	return 0;
 }
 
