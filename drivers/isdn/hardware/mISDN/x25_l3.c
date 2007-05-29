@@ -607,12 +607,11 @@ new_x25_channel(x25_l3_t *l3, x25_channel_t **ch_p, __u16 ch, int dlen, u_char *
 {
 	x25_channel_t	*l3c;
 
-	l3c = kmalloc(sizeof(x25_channel_t), GFP_ATOMIC);
+	l3c = kzalloc(sizeof(x25_channel_t), GFP_ATOMIC);
 	if (!l3c) {
 		printk(KERN_ERR "kmalloc x25_channel_t failed\n");
 		return(-ENOMEM);
 	}
-	memset(l3c, 0, sizeof(x25_channel_t));
 	if (X25_realloc_ncpi_data(l3c, dlen, data)) {
 		printk(KERN_ERR "kmalloc ncpi_data (%d) failed\n", dlen);
 		kfree(l3c);
@@ -623,14 +622,13 @@ new_x25_channel(x25_l3_t *l3, x25_channel_t **ch_p, __u16 ch, int dlen, u_char *
 	l3c->datasize = l3->maxdatalen;
 	l3c->lchan = ch;
 	l3c->ncci = ch << 16;
-	l3c->confq = kmalloc(l3c->lwin * sizeof(x25_ConfQueue_t), GFP_ATOMIC);
+	l3c->confq = kzalloc(l3c->lwin * sizeof(x25_ConfQueue_t), GFP_ATOMIC);
 	if (!l3c->confq) {
 		printk(KERN_ERR "kmalloc confq %d entries failed\n", l3c->lwin);
 		kfree(l3c->ncpi_data);
 		kfree(l3c);
 		return(-ENOMEM);
 	}
-	memset(l3c->confq, 0, l3c->lwin * sizeof(x25_ConfQueue_t));
 	l3c->l3 = l3;
 	l3c->debug = l3->debug;
 	l3c->state = l3->state;
@@ -661,11 +659,10 @@ new_x25_l3(x25_l3_t **l3_p, mISDNstack_t *st, mISDN_pid_t *pid, mISDNobject_t *o
 
 	if (!st || !pid)
 		return(-EINVAL);
-	if (!(n_l3 = kmalloc(sizeof(x25_l3_t), GFP_ATOMIC))) {
+	if (!(n_l3 = kzalloc(sizeof(x25_l3_t), GFP_ATOMIC))) {
 		printk(KERN_ERR "kmalloc x25_l3_t failed\n");
 		return(-ENOMEM);
 	}
-	memset(n_l3, 0, sizeof(x25_l3_t));
 	INIT_LIST_HEAD(&n_l3->channellist);
 	n_l3->entity = MISDN_ENTITY_NONE;
 	n_l3->next_id = 1;

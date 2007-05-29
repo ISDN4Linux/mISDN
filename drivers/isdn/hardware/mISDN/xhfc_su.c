@@ -1881,14 +1881,12 @@ setup_instance(xhfc_t * xhfc)
 
 	/* alloc mem for all ports and channels */
 	err = -ENOMEM;
-	port = kmalloc(sizeof(xhfc_port_t) * xhfc->num_ports, GFP_KERNEL);
+	port = kzalloc(sizeof(xhfc_port_t) * xhfc->num_ports, GFP_KERNEL);
 	if (port) {
 		xhfc->port = port;
-		memset(xhfc->port, 0, sizeof(xhfc_port_t) * xhfc->num_ports);
-		chan = kmalloc(sizeof(xhfc_chan_t) * xhfc->num_ports * CHAN_PER_PORT, GFP_KERNEL);
+		chan = kzalloc(sizeof(xhfc_chan_t) * xhfc->num_ports * CHAN_PER_PORT, GFP_KERNEL);
 		if (chan) {
 			xhfc->chan = chan;
-			memset(xhfc->chan, 0, sizeof(xhfc_chan_t) * xhfc->num_ports * CHAN_PER_PORT);
 			err = 0;
 		} else {
 			printk(KERN_ERR "%s %s: No kmem for xhfc_chan_t*%i \n",
@@ -1987,12 +1985,11 @@ xhfc_pci_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	int err = -ENOMEM;
 
 	/* alloc mem for ProcessorInterface xhfc_pi */
-	if (!(pi = kmalloc(sizeof(xhfc_pi), GFP_KERNEL))) {
+	if (!(pi = kzalloc(sizeof(xhfc_pi), GFP_KERNEL))) {
 		printk(KERN_ERR "%s: No kmem for XHFC card\n",
 		       __FUNCTION__);
 		goto out;
 	}
-	memset(pi, 0, sizeof(xhfc_pi));
 
 	pi->cardnum = card_cnt;
 
@@ -2002,12 +1999,11 @@ xhfc_pci_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	       pdev->bus->number, pdev->devfn, driver_data->num_xhfcs);
 
 	/* alloc mem for all XHFCs (xhfc_t) */
-	if (!(pi->xhfc = kmalloc(sizeof(xhfc_t) * driver_data->num_xhfcs, GFP_KERNEL))) {
+	if (!(pi->xhfc = kzalloc(sizeof(xhfc_t) * driver_data->num_xhfcs, GFP_KERNEL))) {
 		printk(KERN_ERR "%s %s: No kmem for sizeof(xhfc_t)*%i \n",
 		       pi->name, __FUNCTION__, driver_data->num_xhfcs);
 		goto out;
 	}
-	memset(pi->xhfc, 0, sizeof(xhfc_t) * driver_data->num_xhfcs);
 
 	pi->pdev = pdev;
 	err = pci_enable_device(pdev);

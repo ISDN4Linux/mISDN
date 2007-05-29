@@ -234,13 +234,11 @@ int misdn_netdev_addstack(mISDNstack_t *st)
 		return -ENOMEM;
 	}
 	
-	ndev = kmalloc(sizeof(struct mISDN_netdev), GFP_KERNEL);
+	ndev = kzalloc(sizeof(struct mISDN_netdev), GFP_KERNEL);
 	if(!ndev) {
 		printk(KERN_ERR "mISDN_netdevice alloc failed, abort.\n");
 		return -ENOMEM;
 	}
-
-	memset(&ndev->stats,0,sizeof(ndev->stats));
 
 	skb_queue_head_init(&ndev->workq);
 

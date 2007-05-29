@@ -325,12 +325,11 @@ new_devstack(mISDNdevice_t *dev, stack_info_t *si)
 		int_error();
 		return(err);
 	}
-	if (!(nds = kmalloc(sizeof(devicestack_t), GFP_ATOMIC))) {
+	if (!(nds = kzalloc(sizeof(devicestack_t), GFP_ATOMIC))) {
 		printk(KERN_ERR "kmalloc devicestack failed\n");
 		mISDN_ctrl(inst.st, MGR_DELSTACK | REQUEST, NULL);
 		return(-ENOMEM);
 	}
-	memset(nds, 0, sizeof(devicestack_t));
 	nds->dev = dev;
 	if (si->extentions & EXT_STACK_CLONE) {
 //		memcpy(&inst.st->pid, &st->pid, sizeof(mISDN_pid_t));
@@ -438,12 +437,11 @@ create_layer(mISDNdevice_t *dev, struct sk_buff *skb)
 				__FUNCTION__, st->id);
 			return(-EBUSY);
 		}
-		pid = kmalloc(sizeof(mISDN_pid_t), GFP_ATOMIC);
+		pid = kzalloc(sizeof(mISDN_pid_t), GFP_ATOMIC);
 		if (!pid) {
 			printk(KERN_ERR "kmalloc pid failed\n");
 			return(-ENOMEM);
 		}
-		memset(pid, 0, sizeof(mISDN_pid_t));
 		if (inst->pid.pbuf && inst->pid.maxplen) {
 			pid->pbuf = kmalloc(inst->pid.maxplen, GFP_ATOMIC);
 			if (!pid->pbuf) {
@@ -482,11 +480,10 @@ create_layer(mISDNdevice_t *dev, struct sk_buff *skb)
 		}
 	}
 #endif
-	if (!(nl = kmalloc(sizeof(devicelayer_t), GFP_ATOMIC))) {
+	if (!(nl = kzalloc(sizeof(devicelayer_t), GFP_ATOMIC))) {
 		printk(KERN_ERR "kmalloc devicelayer failed\n");
 		return(-ENOMEM);
 	}
-	memset(nl, 0, sizeof(devicelayer_t));
 	if (inst)
 		nl->id = get_new_devicelayer_id(dev, inst->id);
 	else if (st)
@@ -1445,12 +1442,11 @@ init_device(u_int minor) {
 	mISDNdevice_t	*dev;
 	u_long		flags;
 
-	dev = kmalloc(sizeof(mISDNdevice_t), GFP_KERNEL);
+	dev = kzalloc(sizeof(mISDNdevice_t), GFP_KERNEL);
 	if (device_debug & DEBUG_MGR_FUNC)
 		printk(KERN_DEBUG "%s: dev(%d) %p\n",
 			__FUNCTION__, minor, dev); 
 	if (dev) {
-		memset(dev, 0, sizeof(mISDNdevice_t));
 		dev->minor = minor;
 		init_waitqueue_head(&dev->rport.procq);
 		init_waitqueue_head(&dev->wport.procq);

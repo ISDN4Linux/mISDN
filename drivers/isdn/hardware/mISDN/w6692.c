@@ -127,9 +127,7 @@ disable_hwirq(w6692pci *card)
 	WriteW6692(card, W_IMASK, 0xff);
 }
 
-static char *W6692Ver[] __initdata =
-{"W6692 V00", "W6692 V01", "W6692 V10",
- "W6692 V11"};
+static char *W6692Ver[] = {"W6692 V00", "W6692 V01", "W6692 V10", "W6692 V11"};
 
 static void
 W6692Version(w6692pci *card, char *s)
@@ -1257,7 +1255,7 @@ w6692_l2l1(mISDNinstance_t *inst, struct sk_buff *skb)
 	return(ret);
 }
 
-int 
+int
 setup_w6692(w6692pci *card)
 {
 	u_int	val;
@@ -1507,11 +1505,10 @@ static int __devinit w6692_probe(struct pci_dev *pdev, const struct pci_device_i
 	w6692pci	*card;
 	w6692_map_t	*m = (w6692_map_t *)ent->driver_data;	
 
-	if (!(card = kmalloc(sizeof(w6692pci), GFP_ATOMIC))) {
+	if (!(card = kzalloc(sizeof(w6692pci), GFP_ATOMIC))) {
 		printk(KERN_ERR "No kmem for w6692 card\n");
 		return(err);
 	}
-	memset(card, 0, sizeof(w6692pci));
 	card->pdev = pdev;
 	card->subtype = m->subtype;
 	err = pci_enable_device(pdev);

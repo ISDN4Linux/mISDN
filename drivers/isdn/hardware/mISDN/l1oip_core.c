@@ -1245,7 +1245,6 @@ l1oip_init(void)
 	strcpy(tmpstr, l1oip_revision);
 	printk(KERN_INFO "mISDN: Layer-1-over-IP driver Rev. %s\n", mISDN_getrev(tmpstr));
 
-	memset(&l1oip_obj, 0, sizeof(l1oip_obj));
 #ifdef MODULE
 	l1oip_obj.owner = THIS_MODULE;
 #endif
@@ -1316,12 +1315,11 @@ next_card:
 
 
 	/* allocate card+fifo structure */
-	if (!(hc = kmalloc(sizeof(l1oip_t), GFP_ATOMIC))) {
+	if (!(hc = kzalloc(sizeof(l1oip_t), GFP_ATOMIC))) {
 		printk(KERN_ERR "No kmem for L1-over-IP driver.\n");
 		ret_err = -ENOMEM;
 		goto free_object;
 	}
-	memset(hc, 0, sizeof(l1oip_t));
 	hc->socket_lock = SPIN_LOCK_UNLOCKED;
 	hc->idx = l1oip_cnt;
 	hc->pri = pri;
@@ -1419,12 +1417,11 @@ next_card:
 	
 	if (debug & DEBUG_L1OIP_INIT)
 		printk(KERN_DEBUG "%s: Registering D-channel, card(%d) protocol(%x)\n", __FUNCTION__, l1oip_cnt+1, protocol[l1oip_cnt]);
-	dch = kmalloc(sizeof(channel_t), GFP_ATOMIC);
+	dch = kzalloc(sizeof(channel_t), GFP_ATOMIC);
 	if (!dch) {
 		ret_err = -ENOMEM;
 		goto free_channels;
 	}
-	memset(dch, 0, sizeof(channel_t));
 	dch->channel = hc->dch;
 	//dch->debug = debug;
 	dch->inst.obj = &l1oip_obj;
@@ -1447,12 +1444,11 @@ next_card:
 		ch = i + 1 + (i>=(hc->dch-1)); /* skip dchannel number */
 		if (debug & DEBUG_L1OIP_INIT)
 			printk(KERN_DEBUG "%s: Registering B-channel, card(%d) channel(%d)\n", __FUNCTION__, l1oip_cnt+1, ch);
-		bch = kmalloc(sizeof(channel_t), GFP_ATOMIC);
+		bch = kzalloc(sizeof(channel_t), GFP_ATOMIC);
 		if (!bch) {
 			ret_err = -ENOMEM;
 			goto free_channels;
 		}
-		memset(bch, 0, sizeof(channel_t));
 		bch->channel = ch;
 		mISDN_init_instance(&bch->inst, &l1oip_obj, hc, l1oip_channel);
 		bch->inst.pid.layermask = ISDN_LAYER(0);

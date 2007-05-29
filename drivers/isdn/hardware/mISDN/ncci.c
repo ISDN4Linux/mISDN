@@ -823,7 +823,6 @@ ncciConstr(AppPlci_t *aplci)
 	if (!ncci)
 		return(NULL);
 
-	memset(ncci, 0, sizeof(Ncci_t));
 	ncci->ncci_m.state      = ST_NCCI_N_0;
 	ncci->ncci_m.debug      = aplci->plci->contr->debug & CAPI_DBG_NCCI_STATE;
 	ncci->ncci_m.userdata   = ncci;

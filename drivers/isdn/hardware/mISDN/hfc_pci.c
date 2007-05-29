@@ -1,4 +1,4 @@
-/* $Id: hfc_pci.c,v 1.49 2006/12/21 15:25:06 nadi Exp $
+/* $Id: hfc_pci.c,v 1.50 2007/05/29 11:25:06 kkeil Exp $
 
  * hfc_pci.c     low level driver for CCD's hfc-pci based cards
  *

@@ -508,11 +508,10 @@ new_dtmf(mISDNstack_t *st, mISDN_pid_t *pid) {
 
 	if (!st || !pid)
 		return(-EINVAL);
-	if (!(n_dtmf = kmalloc(sizeof(dtmf_t), GFP_ATOMIC))) {
+	if (!(n_dtmf = kzalloc(sizeof(dtmf_t), GFP_ATOMIC))) {
 		printk(KERN_ERR "kmalloc dtmf_t failed\n");
 		return(-ENOMEM);
 	}
-	memset(n_dtmf, 0, sizeof(dtmf_t));
 	memcpy(&n_dtmf->inst.pid, pid, sizeof(mISDN_pid_t));
 	mISDN_init_instance(&n_dtmf->inst, &dtmf_obj, n_dtmf, dtmf_function);
 	if (!mISDN_SetHandledPID(&dtmf_obj, &n_dtmf->inst.pid)) {

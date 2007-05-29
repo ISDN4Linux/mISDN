@@ -744,11 +744,10 @@ static int __devinit sedlpci_probe(struct pci_dev *pdev, const struct pci_device
 	int		err = -ENOMEM;
 	sedl_fax	*card;
 
-	if (!(card = kmalloc(sizeof(sedl_fax), GFP_ATOMIC))) {
+	if (!(card = kzalloc(sizeof(sedl_fax), GFP_ATOMIC))) {
 		printk(KERN_ERR "No kmem for Speedfax + PCI\n");
 		return(err);
 	}
-	memset(card, 0, sizeof(sedl_fax));
 	card->dev.pci = pdev;
 	if (PCI_SUBVENDOR_SPEEDFAX_PYRAMID == pdev->subsystem_vendor)
 		card->subtyp = SEDL_SPEEDFAX_PYRAMID;
@@ -785,11 +784,10 @@ static int __devinit sedlpnp_probe(struct pci_dev *pdev, const struct isapnp_dev
 	if (!pdev)
 		return(-ENODEV);
 
-	if (!(card = kmalloc(sizeof(sedl_fax), GFP_ATOMIC))) {
+	if (!(card = kzalloc(sizeof(sedl_fax), GFP_ATOMIC))) {
 		printk(KERN_ERR "No kmem for Speedfax + PnP\n");
 		return(-ENOMEM);
 	}
-	memset(card, 0, sizeof(sedl_fax));
 	card->subtyp = SEDL_SPEEDFAX_ISA;
 	card->dev.pnp = pdev;
 	pnp_disable_dev(pdev);

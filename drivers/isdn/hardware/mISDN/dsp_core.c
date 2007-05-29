@@ -928,7 +928,6 @@ static int dsp_init(void)
 	}
 
 	/* fill mISDN object (dsp_obj) */
-	memset(&dsp_obj, 0, sizeof(dsp_obj));
 #ifdef MODULE
 	SET_MODULE_OWNER(&dsp_obj);
 #endif

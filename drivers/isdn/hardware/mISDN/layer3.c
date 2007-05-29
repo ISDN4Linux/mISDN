@@ -305,11 +305,10 @@ l3_process_t
 			return (NULL);
 		}
 	}
-	if (!(p = kmalloc(sizeof(l3_process_t), GFP_ATOMIC))) {
+	if (!(p = kzalloc(sizeof(l3_process_t), GFP_ATOMIC))) {
 		printk(KERN_ERR "mISDN can't get memory for cr %d\n", cr);
 		return (NULL);
 	}
-	memset(p, 0, sizeof(l3_process_t));
 
 	p->cause=NO_CAUSE;
 	

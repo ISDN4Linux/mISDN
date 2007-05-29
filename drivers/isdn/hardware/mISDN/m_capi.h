@@ -624,7 +624,7 @@ static __inline__ void cmsg_free(_cmsg *cm)
 
 static __inline__ AppPlci_t *AppPlci_alloc(void)
 {
-	return(kmem_cache_alloc(mISDN_AppPlci_cp, GFP_ATOMIC));
+	return(kmem_cache_zalloc(mISDN_AppPlci_cp, GFP_ATOMIC));
 }
 
 static __inline__ void AppPlci_free(AppPlci_t *ap)
@@ -634,7 +634,7 @@ static __inline__ void AppPlci_free(AppPlci_t *ap)
 
 static __inline__ Ncci_t *ncci_alloc(void)
 {
-	return(kmem_cache_alloc(mISDN_ncci_cp, GFP_ATOMIC));
+	return(kmem_cache_zalloc(mISDN_ncci_cp, GFP_ATOMIC));
 }
 
 static __inline__ void ncci_free(Ncci_t *ni)
@@ -644,7 +644,7 @@ static __inline__ void ncci_free(Ncci_t *ni)
 
 static __inline__ SSProcess_t *SSProcess_alloc(void)
 {
-	return(kmem_cache_alloc(mISDN_sspc_cp, GFP_ATOMIC));
+	return(kmem_cache_zalloc(mISDN_sspc_cp, GFP_ATOMIC));
 }
 
 static __inline__ void SSProcess_free(SSProcess_t *sp)

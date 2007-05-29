@@ -500,7 +500,6 @@ SSProcessConstr(Application_t *appl, __u16 Function, __u32 Handle)
 	sspc = SSProcess_alloc();
 	if (!sspc)
 		return(NULL);
-	memset(sspc, 0, sizeof(SSProcess_t));
 	sspc->ApplId = appl->ApplId;
 	sspc->Function = Function;
 	sspc->Handle = Handle;

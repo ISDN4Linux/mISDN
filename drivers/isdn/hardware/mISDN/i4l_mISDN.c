@@ -200,12 +200,10 @@ init_channel(i4l_capi_t *ic, int nr)
 	i4l_channel_t	*ch;
 
 	ch = ic->ch + nr;
-	memset(ch, 0, sizeof(i4l_channel_t));
 	ch->nr = nr;
 	ch->drv = ic;
 	ch->i4lm.debug = debug & 0x8;
 	ch->i4lm.userdata = ch;
-	ch->i4lm.userint = 0;
 	ch->i4lm.printdebug = i4lm_debug;
 	ch->i4lm.fsm = &i4lfsm_s;
 	ch->i4lm.state = ST_NULL;
@@ -1411,13 +1409,12 @@ I4Lcapi_register(isdn_if *iif)
 		printk(KERN_ERR "I4Lcapi_register: no driver slot this card\n");
 		return(0);
 	}
-	drvmap[drvidx] = kmalloc(sizeof(i4l_capi_t), GFP_KERNEL);
+	drvmap[drvidx] = kzalloc(sizeof(i4l_capi_t), GFP_KERNEL);
 	if (!drvmap[drvidx]) {
 		printk(KERN_ERR "I4Lcapi_register: no memory for i4l_capi_t\n");
 		return(0);
 	}
-	memset(drvmap[drvidx], 0, sizeof(i4l_capi_t));
-	drvmap[drvidx]->ch = kmalloc(iif->channels * sizeof(i4l_channel_t), GFP_KERNEL);
+	drvmap[drvidx]->ch = kzalloc(iif->channels * sizeof(i4l_channel_t), GFP_KERNEL);
 	if (!drvmap[drvidx]->ch) {
 		printk(KERN_ERR "I4Lcapi_register: no memory for i4l_channel_t\n");
 		kfree(drvmap[drvidx]);

@@ -547,7 +547,7 @@ tiger_l2l1B(mISDNinstance_t *inst, struct sk_buff *skb)
 			if (!mISDN_queueup_newhead(inst, 0, hh->prim | CONFIRM, 0, skb))
 				return 0;
 	} else {
-		printk(KERN_WARNING "tiger_l2l1B prim(%x)\n", hh->prim);
+		printk(KERN_WARNING "tiger_l2l1B unknown prim(%x)\n", hh->prim);
 		ret = -EINVAL;
 	}
 	if (!ret) {
@@ -1724,11 +1724,10 @@ nj_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	if (pdev->subsystem_vendor == PCI_VENDOR_ID_INTEL && pdev->subsystem_device == 0x0003) 
 		return -ENODEV;
 
-	if (!(card = kmalloc(sizeof(netjet_t), GFP_ATOMIC))) {
+	if (!(card = kzalloc(sizeof(netjet_t), GFP_ATOMIC))) {
 		printk(KERN_ERR "No kmem for netjet\n");
 		return(err);
 	}
-	memset(card, 0, sizeof(netjet_t));
 
 	card->pdev = pdev;
 

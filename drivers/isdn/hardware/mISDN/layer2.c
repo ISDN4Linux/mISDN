@@ -2196,11 +2196,10 @@ new_l2(mISDNstack_t *st, mISDN_pid_t *pid) {
 
 	if (!st || !pid)
 		return(-EINVAL);
-	if (!(nl2 = kmalloc(sizeof(layer2_t), GFP_ATOMIC))) {
+	if (!(nl2 = kzalloc(sizeof(layer2_t), GFP_ATOMIC))) {
 		printk(KERN_ERR "kmalloc layer2 failed\n");
 		return(-ENOMEM);
 	}
-	memset(nl2, 0, sizeof(layer2_t));
 	nl2->debug = debug;
 	nl2->next_id = 1;
 	nl2->down_id = MISDN_ID_NONE;

@@ -56,7 +56,7 @@ static struct list_head mISDN_kmem_garbage = LIST_HEAD_INIT(mISDN_kmem_garbage);
 _cmsg *
 _kd_cmsg_alloc(char *fn, int line)
 {
-	_kd_cmsg_t	*ki = kmem_cache_alloc(mISDN_cmsg_cp, GFP_ATOMIC);
+	_kd_cmsg_t	*ki = kmem_cache_zalloc(mISDN_cmsg_cp, GFP_ATOMIC);
 
 	if (!ki)
 		return(NULL);
@@ -85,7 +85,7 @@ cmsg_free(_cmsg *cm)
 AppPlci_t *
 _kd_AppPlci_alloc(char *fn, int line)
 {
-	_kd_AppPlci_t	*ki = kmem_cache_alloc(mISDN_AppPlci_cp, GFP_ATOMIC);
+	_kd_AppPlci_t	*ki = kmem_cache_zalloc(mISDN_AppPlci_cp, GFP_ATOMIC);
 
 	if (!ki)
 		return(NULL);
@@ -114,7 +114,7 @@ AppPlci_free(AppPlci_t *ap)
 Ncci_t *
 _kd_ncci_alloc(char *fn, int line)
 {
-	_kd_Ncci_t	*ki = kmem_cache_alloc(mISDN_ncci_cp, GFP_ATOMIC);
+	_kd_Ncci_t	*ki = kmem_cache_zalloc(mISDN_ncci_cp, GFP_ATOMIC);
 
 	if (!ki)
 		return(NULL);
@@ -143,7 +143,7 @@ ncci_free(Ncci_t *ni)
 SSProcess_t *
 _kd_SSProcess_alloc(char *fn, int line)
 {
-	_kd_SSProcess_t	*ki = kmem_cache_alloc(mISDN_sspc_cp, GFP_ATOMIC);
+	_kd_SSProcess_t	*ki = kmem_cache_zalloc(mISDN_sspc_cp, GFP_ATOMIC);
 
 	if (!ki)
 		return(NULL);

@@ -626,10 +626,9 @@ ControllerConstr(Controller_t **contr_p, mISDNstack_t *st, mISDN_pid_t *pid, mIS
 		head = &st->childlist;
 	if (!pid)
 		return(-EINVAL);
-	contr = kmalloc(sizeof(Controller_t), GFP_KERNEL);
+	contr = kzalloc(sizeof(Controller_t), GFP_KERNEL);
 	if (!contr)
 		return(-ENOMEM);
-	memset(contr, 0, sizeof(Controller_t));
 	INIT_LIST_HEAD(&contr->Applications);
 	INIT_LIST_HEAD(&contr->SSProcesse);
 	INIT_LIST_HEAD(&contr->linklist);
@@ -637,13 +636,12 @@ ControllerConstr(Controller_t **contr_p, mISDNstack_t *st, mISDN_pid_t *pid, mIS
 	contr->next_id = 1;
 	memcpy(&contr->inst.pid, pid, sizeof(mISDN_pid_t));
 #ifndef OLDCAPI_DRIVER_INTERFACE
-	if (!(contr->ctrl = kmalloc(sizeof(struct capi_ctr), GFP_KERNEL))) {
+	if (!(contr->ctrl = kzalloc(sizeof(struct capi_ctr), GFP_KERNEL))) {
 		printk(KERN_ERR "no mem for contr->ctrl\n");
 		int_error();
 		ControllerDestr(contr);
 		return -ENOMEM;
 	}
-	memset(contr->ctrl, 0, sizeof(struct capi_ctr));
 #endif
 	list_for_each_entry(cst, head, list)
 		contr->nr_bc++;
@@ -675,13 +673,12 @@ ControllerConstr(Controller_t **contr_p, mISDNstack_t *st, mISDN_pid_t *pid, mIS
 		return(-ENOPROTOOPT);
 	}
 	list_for_each_entry(cst, head, list) {
-		if (!(plink = kmalloc(sizeof(PLInst_t), GFP_KERNEL))) {
+		if (!(plink = kzalloc(sizeof(PLInst_t), GFP_KERNEL))) {
 			printk(KERN_ERR "no mem for PLinst\n");
 			int_error();
 			ControllerDestr(contr);
 			return -ENOMEM;
 		}
-		memset(plink, 0, sizeof(PLInst_t));
 		plink->st = cst;
 		plink->inst.st = cst;
 		mISDN_init_instance(&plink->inst, ocapi, plink, NULL);

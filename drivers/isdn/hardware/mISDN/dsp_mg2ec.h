@@ -32,8 +32,9 @@
 #ifdef __KERNEL__
 #include <linux/kernel.h>
 #include <linux/slab.h>
-#define MALLOC(a) kmalloc((a), GFP_ATOMIC)
-#define FREE(a) kfree(a)
+#define MALLOC(a)	kmalloc((a), GFP_ATOMIC)
+#define ZMALLOC(a)	kzalloc((a), GFP_ATOMIC)
+#define FREE(a)		kfree(a)
 #else
 #include <stdlib.h>
 #include <unistd.h>
@@ -651,7 +652,7 @@ static inline struct echo_can_state *echo_can_create(int len, int adaption_mode)
 		maxy = (1 << DEFAULT_SIGMA_LY_I);
 	if (maxu < (1 << DEFAULT_SIGMA_LU_I))
 		maxu = (1 << DEFAULT_SIGMA_LU_I);
-	ec = (struct echo_can_state *)MALLOC(sizeof(struct echo_can_state) +
+	ec = (struct echo_can_state *)ZMALLOC(sizeof(struct echo_can_state) +
 									4 + 						/* align */
 									sizeof(int) * len +			/* a_i */
 									sizeof(short) * len + 		/* a_s */
@@ -661,19 +662,8 @@ static inline struct echo_can_state *echo_can_create(int len, int adaption_mode)
 									2 * sizeof(short) * (1 << DEFAULT_ALPHA_ST_I) + /* s_s */
 									2 * sizeof(short) * (maxu) +		/* u_s */
 									2 * sizeof(short) * len);			/* y_tilde_s */
-	if (ec) {
-		memset(ec, 0, sizeof(struct echo_can_state) +
-									4 + 						/* align */
-									sizeof(int) * len +			/* a_i */
-									sizeof(short) * len + 		/* a_s */
-									sizeof(int) * len +		/* b_i */
-									sizeof(int) * len +		/* c_i */
-									2 * sizeof(short) * (maxy) +	/* y_s */
-									2 * sizeof(short) * (1 << DEFAULT_ALPHA_ST_I) + /* s_s */
-									2 * sizeof(short) * (maxu) +		/* u_s */
-									2 * sizeof(short) * len);			/* y_tilde_s */
-	  init_cc(ec, len, maxy, maxu);
-	}
+	if (ec)
+		init_cc(ec, len, maxy, maxu);
 	return ec;
 }
 

@@ -671,11 +671,10 @@ new_l1(mISDNstack_t *st, mISDN_pid_t *pid) {
 
 	if (!st || !pid)
 		return(-EINVAL);
-	if (!(nl1 = kmalloc(sizeof(layer1_t), GFP_ATOMIC))) {
+	if (!(nl1 = kzalloc(sizeof(layer1_t), GFP_ATOMIC))) {
 		printk(KERN_ERR "kmalloc layer1_t failed\n");
 		return(-ENOMEM);
 	}
-	memset(nl1, 0, sizeof(layer1_t));
 	memcpy(&nl1->inst.pid, pid, sizeof(mISDN_pid_t));
 	mISDN_init_instance(&nl1->inst, &isdnl1, nl1, l1_function);
 	if (!mISDN_SetHandledPID(&isdnl1, &nl1->inst.pid)) {

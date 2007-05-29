@@ -3948,17 +3948,11 @@ static int __devinit hfcpci_init(struct pci_dev *pdev, const struct pci_device_i
 			__FUNCTION__, type & 0xff, type);
 
 	/* allocate card+fifo structure */
-//#warning
-//void *davor=kmalloc(8, GFP_ATOMIC);
-	if (!(hc = kmalloc(sizeof(hfc_multi_t), GFP_ATOMIC))) {
+	if (!(hc = kzalloc(sizeof(hfc_multi_t), GFP_ATOMIC))) {
 		printk(KERN_ERR "No kmem for HFC-Multi card\n");
 		ret_err = -ENOMEM;
 		goto free_object;
 	}
-//void *danach=kmalloc(8, GFP_ATOMIC);
-	memset(hc, 0, sizeof(hfc_multi_t));
-//hc->davor=davor;
-//hc->danach=danach;
 	hc->idx = HFC_idx;
 	hc->id = HFC_idx + 1;
 	hc->pcm = pcm[HFC_idx];
@@ -4044,12 +4038,11 @@ static int __devinit hfcpci_init(struct pci_dev *pdev, const struct pci_device_i
 			printk(KERN_DEBUG "%s: Registering D-channel, card(%d) ch(%d) port(%d) protocol(%x)\n", __FUNCTION__, HFC_idx+1, ch, pt+1, protocol[port_idx]);
 		hc->chan[ch].port = pt;
 		hc->chan[ch].nt_timer = -1;
-		chan = kmalloc(sizeof(channel_t), GFP_ATOMIC);
+		chan = kzalloc(sizeof(channel_t), GFP_ATOMIC);
 		if (!chan) {
 			ret_err = -ENOMEM;
 			goto free_channels;
 		}
-		memset(chan, 0, sizeof(channel_t));
 		chan->channel = ch;
 		//chan->debug = debug;
 		chan->inst.obj = &HFCM_obj;
@@ -4071,12 +4064,11 @@ static int __devinit hfcpci_init(struct pci_dev *pdev, const struct pci_device_i
 			if (debug & DEBUG_HFCMULTI_INIT)
 				printk(KERN_DEBUG "%s: Registering B-channel, card(%d) ch(%d) port(%d) channel(%d)\n", __FUNCTION__, HFC_idx+1, ch2, pt+1, i);
 			hc->chan[ch2].port = pt;
-			chan = kmalloc(sizeof(channel_t), GFP_ATOMIC);
+			chan = kzalloc(sizeof(channel_t), GFP_ATOMIC);
 			if (!chan) {
 				ret_err = -ENOMEM;
 				goto free_channels;
 			}
-			memset(chan, 0, sizeof(channel_t));
 			chan->channel = ch2;
 			mISDN_init_instance(&chan->inst, &HFCM_obj, hc, hfcmulti_l2l1);
 			chan->inst.pid.layermask = ISDN_LAYER(0);
@@ -4617,8 +4609,6 @@ HFCmulti_init(void)
 		return(err);
 
 	}
-
-	memset(&HFCM_obj, 0, sizeof(HFCM_obj));
 #ifdef MODULE
 	HFCM_obj.owner = THIS_MODULE;
 #endif

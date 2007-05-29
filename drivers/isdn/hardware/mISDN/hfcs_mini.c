@@ -1710,12 +1710,11 @@ hfcsmini_pci_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 
 	int err = -ENOMEM;
 
-	if (!(hw = kmalloc(sizeof(hfcsmini_hw), GFP_ATOMIC))) {
+	if (!(hw = kzalloc(sizeof(hfcsmini_hw), GFP_ATOMIC))) {
 		printk(KERN_ERR "%s %s: No kmem for HFC-S mini card\n",
 		       hw->card_name, __FUNCTION__);
 		return (err);
 	}
-	memset(hw, 0, sizeof(hfcsmini_hw));
 
 	hw->pdev = pdev;
 	err = pci_enable_device(pdev);

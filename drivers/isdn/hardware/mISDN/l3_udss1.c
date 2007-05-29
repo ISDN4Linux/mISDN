@@ -2964,11 +2964,10 @@ new_udss1(mISDNstack_t *st, mISDN_pid_t *pid)
 
 	if (!st || !pid)
 		return(-EINVAL);
-	if (!(nl3 = kmalloc(sizeof(layer3_t), GFP_ATOMIC))) {
+	if (!(nl3 = kzalloc(sizeof(layer3_t), GFP_ATOMIC))) {
 		printk(KERN_ERR "kmalloc layer3 failed\n");
 		return(-ENOMEM);
 	}
-	memset(nl3, 0, sizeof(layer3_t));
 	memcpy(&nl3->inst.pid, pid, sizeof(mISDN_pid_t));
 	nl3->debug = debug;
 	mISDN_init_instance(&nl3->inst, &u_dss1, nl3, dss1_function);

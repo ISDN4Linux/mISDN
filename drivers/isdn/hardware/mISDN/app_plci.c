@@ -1391,7 +1391,6 @@ AppPlciConstr(AppPlci_t **aplci, Application_t *appl, Plci_t *plci)
 
 	if (!apl)
 		return(-ENOMEM);
-	memset(apl, 0, sizeof(AppPlci_t));
 	INIT_LIST_HEAD(&apl->head);
 	INIT_LIST_HEAD(&apl->Nccis);
 	apl->addr = plci->addr;

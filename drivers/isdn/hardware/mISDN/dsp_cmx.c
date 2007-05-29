@@ -213,11 +213,10 @@ dsp_cmx_add_conf_member(dsp_t *dsp, conference_t *conf)
 		return(-EINVAL);
 	}
 
-	if (!(member = kmalloc(sizeof(conf_member_t), GFP_ATOMIC))) {
+	if (!(member = kzalloc(sizeof(conf_member_t), GFP_ATOMIC))) {
 		printk(KERN_ERR "kmalloc conf_member_t failed\n");
 		return(-ENOMEM);
 	}
-	memset(member, 0, sizeof(conf_member_t));
 	member->dsp = dsp;
 	/* clear rx buffer */
 	memset(dsp->rx_buff, dsp_silence, sizeof(dsp->rx_buff));
@@ -289,11 +288,10 @@ static conference_t
 		return(NULL);
 	}
 
-	if (!(conf = kmalloc(sizeof(conference_t), GFP_ATOMIC))) {
+	if (!(conf = kzalloc(sizeof(conference_t), GFP_ATOMIC))) {
 		printk(KERN_ERR "kmalloc conference_t failed\n");
 		return(NULL);
 	}
-	memset(conf, 0, sizeof(conference_t));
 	INIT_LIST_HEAD(&conf->mlist);
 	conf->id = id;
 

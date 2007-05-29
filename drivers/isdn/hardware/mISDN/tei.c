@@ -481,11 +481,10 @@ create_teimgr(layer2_t *l2) {
 		printk(KERN_ERR "create_tei no layer2\n");
 		return(-EINVAL);
 	}
-	if (!(ntei = kmalloc(sizeof(teimgr_t), GFP_ATOMIC))) {
+	if (!(ntei = kzalloc(sizeof(teimgr_t), GFP_ATOMIC))) {
 		printk(KERN_ERR "kmalloc teimgr failed\n");
 		return(-ENOMEM);
 	}
-	memset(ntei, 0, sizeof(teimgr_t));
 	ntei->l2 = l2;
 	ntei->T202 = 2000;	/* T202  2000 milliseconds */
 	ntei->debug = l2->debug;

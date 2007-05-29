@@ -21,21 +21,18 @@ static struct list_head	garbage_applications = LIST_HEAD_INIT(garbage_applicatio
 int
 ApplicationConstr(Controller_t *contr, __u16 ApplId, capi_register_params *rp)
 {
-	Application_t	*appl = kmalloc(sizeof(Application_t), GFP_ATOMIC);
+	Application_t	*appl = kzalloc(sizeof(Application_t), GFP_ATOMIC);
 
-	if (!appl) {
+	if (!appl)
 		return(-ENOMEM);
-	}
-	memset(appl, 0, sizeof(Application_t));
 	INIT_LIST_HEAD(&appl->head);
 	appl->contr = contr;
 	appl->maxplci = contr->maxplci;
-	appl->AppPlcis  = kmalloc(appl->maxplci * sizeof(AppPlci_t *), GFP_ATOMIC);
+	appl->AppPlcis  = kzalloc(appl->maxplci * sizeof(AppPlci_t *), GFP_ATOMIC);
 	if (!appl->AppPlcis) {
 		kfree(appl);
 		return(-ENOMEM);
 	}
-	memset(appl->AppPlcis, 0, appl->maxplci * sizeof(AppPlci_t *));
 	appl->ApplId = ApplId;
 	appl->MsgId = 1;
 	appl->NotificationMask = 0;

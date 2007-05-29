@@ -2022,10 +2022,9 @@ hfcsusb_probe(struct usb_interface *intf, const struct usb_device_id *id)
 		return (-EIO);
 	}
 	iface = iface_used;
-	card = kmalloc(sizeof(hfcsusb_t), GFP_KERNEL);
+	card = kzalloc(sizeof(hfcsusb_t), GFP_KERNEL);
 	if (!card)
 		return (-ENOMEM);	/* got no mem */
-	memset(card, 0, sizeof(hfcsusb_t));
 
 	ep = iface->endpoint;
 	vcf = validconf[small_match];

@@ -672,11 +672,10 @@ new_stack(mISDNstack_t *master, mISDNinstance_t *inst)
 	if (core_debug & DEBUG_CORE_FUNC)
 		printk(KERN_DEBUG "create %s stack inst(%p)\n",
 			master ? "child" : "master", inst);
-	if (!(newst = kmalloc(sizeof(mISDNstack_t), GFP_ATOMIC))) {
+	if (!(newst = kzalloc(sizeof(mISDNstack_t), GFP_ATOMIC))) {
 		printk(KERN_ERR "kmalloc mISDN_stack failed\n");
 		return(NULL);
 	}
-	memset(newst, 0, sizeof(mISDNstack_t));
 	INIT_LIST_HEAD(&newst->list);
 	INIT_LIST_HEAD(&newst->childlist);
 	INIT_LIST_HEAD(&newst->prereg);

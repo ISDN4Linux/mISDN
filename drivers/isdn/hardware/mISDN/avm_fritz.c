@@ -1268,11 +1268,10 @@ static int __devinit fritzpci_probe(struct pci_dev *pdev, const struct pci_devic
 	int		err = -ENOMEM;
 	fritzpnppci	*card;
 
-	if (!(card = kmalloc(sizeof(fritzpnppci), GFP_ATOMIC))) {
+	if (!(card = kzalloc(sizeof(fritzpnppci), GFP_ATOMIC))) {
 		printk(KERN_ERR "No kmem for fritzcard\n");
 		return(err);
 	}
-	memset(card, 0, sizeof(fritzpnppci));
 	if (pdev->device == PCI_DEVICE_ID_AVM_A1_V2)
 		card->type = AVM_FRITZ_PCIV2;
 	else
@@ -1309,11 +1308,10 @@ static int __devinit fritzpnp_probe(struct pci_dev *pdev, const struct isapnp_de
 	if (!pdev)
 		return(-ENODEV);
 
-	if (!(card = kmalloc(sizeof(fritzpnppci), GFP_ATOMIC))) {
+	if (!(card = kzalloc(sizeof(fritzpnppci), GFP_ATOMIC))) {
 		printk(KERN_ERR "No kmem for fritzcard\n");
 		return(-ENOMEM);
 	}
-	memset(card, 0, sizeof(fritzpnppci));
 	card->type = AVM_FRITZ_PNP;
 	card->dev.pnp = pdev;
 	pnp_disable_dev(pdev);

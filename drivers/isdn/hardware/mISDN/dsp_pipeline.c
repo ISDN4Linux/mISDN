@@ -97,10 +97,9 @@ int mISDN_dsp_element_register (mISDN_dsp_element_t *elem)
 	if (!elem)
 		return -EINVAL;
 
-	entry = kmalloc(sizeof(dsp_element_entry_t), GFP_KERNEL);
+	entry = kzalloc(sizeof(dsp_element_entry_t), GFP_KERNEL);
 	if (!entry)
 		return -ENOMEM;
-	memset(entry, 0, sizeof(dsp_element_entry_t));
 
 	entry->elem = elem;
 

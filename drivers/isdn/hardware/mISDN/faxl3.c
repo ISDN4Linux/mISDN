@@ -1971,11 +1971,10 @@ new_faxl3(mISDNstack_t *st, mISDN_pid_t *pid) {
 
 	if (!st || !pid)
 		return(-EINVAL);
-	if (!(n_faxl3 = kmalloc(sizeof(faxl3_t), GFP_ATOMIC))) {
+	if (!(n_faxl3 = kzalloc(sizeof(faxl3_t), GFP_ATOMIC))) {
 		printk(KERN_ERR "kmalloc faxl3_t failed\n");
 		return(-ENOMEM);
 	}
-	memset(n_faxl3, 0, sizeof(faxl3_t));
 	n_faxl3->entity = MISDN_ENTITY_NONE;
 	n_faxl3->next_id = 1;
 	spin_lock_init(&n_faxl3->lock);
