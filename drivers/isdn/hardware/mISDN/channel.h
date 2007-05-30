@@ -26,20 +26,20 @@
 #define MISDN_COPY_SIZE		32
 
 /* channel->Flags bit field */
-#define FLG_TX_BUSY		0	// tx_buf in use
-#define FLG_TX_NEXT		1	// next_skb in use
-#define FLG_L1_BUSY		2	// L1 is permanent busy
-#define FLG_USED		5	// channel is in use		
-#define FLG_ACTIVE		6	// channel is activated
+#define FLG_TX_BUSY		0	/* tx_buf in use */
+#define FLG_TX_NEXT		1	/* next_skb in use */
+#define FLG_L1_BUSY		2	/* L1 is permanent busy */
+#define FLG_USED		5	/* channel is in use */
+#define FLG_ACTIVE		6	/* channel is activated */
 #define FLG_BUSY_TIMER		7
 /* channel type */
-#define FLG_DCHANNEL		8	// channel is D-channel
-#define	FLG_BCHANNEL		9	// channel is B-channel
-#define FLG_ECHANNEL		10	// channel is E-channel
-#define FLG_TRANSPARENT		12	// channel use transparent data
-#define FLG_HDLC		13	// channel use hdlc data
-#define FLG_L2DATA		14	// channel use L2 DATA primitivs
-#define FLG_ORIGIN		15	// channel is on origin site 
+#define FLG_DCHANNEL		8	/* channel is D-channel */
+#define	FLG_BCHANNEL		9	/* channel is B-channel */
+#define FLG_ECHANNEL		10	/* channel is E-channel */
+#define FLG_TRANSPARENT		12	/* channel use transparent data */
+#define FLG_HDLC		13	/* channel use hdlc data */
+#define FLG_L2DATA		14	/* channel use L2 DATA primitivs */
+#define FLG_ORIGIN		15	/* channel is on origin site */
 /* channel specific stuff */
 /* arcofi specific */
 #define FLG_ARCOFI_TIMER	16
@@ -104,7 +104,8 @@ queue_ch_frame(channel_t *ch, u_int pr, int dinfo, struct sk_buff *skb)
 
 	pr |= test_bit(FLG_L2DATA, &ch->Flags) ? DL_DATA : PH_DATA;
 	if (!skb) {
-		err = mISDN_queue_data(&ch->inst, FLG_MSG_UP, pr, dinfo, 0, NULL, ch->up_headerlen);
+		err = mISDN_queue_data(&ch->inst, FLG_MSG_UP, pr, dinfo,
+		    0, NULL, ch->up_headerlen);
 	} else {
 #ifdef CONFIG_MISDN_NETDEV
 		misdn_log_frame(ch->inst.st, skb->data, skb->len, FLG_MSG_UP);
@@ -127,20 +128,21 @@ channel_senddata(channel_t *ch, int di, struct sk_buff *skb)
 	/* check oversize */
 	if (skb->len <= 0) {
 		printk(KERN_WARNING "%s: skb too small\n", __FUNCTION__);
-		return(-EINVAL);
+		return (-EINVAL);
 	}
 	if (skb->len > ch->maxlen) {
 		printk(KERN_WARNING "%s: skb too large(%d/%d)\n",
 			__FUNCTION__, skb->len, ch->maxlen);
-		return(-EINVAL);
+		return (-EINVAL);
 	}
 	/* check for pending next_skb */
 	if (ch->next_skb) {
 #ifdef DEBUG_NEXT_SKB_EXISTS
-		printk(KERN_WARNING "%s: next_skb exist ERROR (skb->len=%d next_skb->len=%d)\n",
-			__FUNCTION__, skb->len, ch->next_skb->len);
+		printk(KERN_WARNING
+		    "%s: next_skb exist ERROR (skb->len=%d next_skb->len=%d)\n",
+		    __FUNCTION__, skb->len, ch->next_skb->len);
 #endif
-		return(-EBUSY);
+		return (-EBUSY);
 	}
 	if (test_and_set_bit(FLG_TX_BUSY, &ch->Flags)) {
 		test_and_set_bit(FLG_TX_NEXT, &ch->Flags);
@@ -150,7 +152,7 @@ channel_senddata(channel_t *ch, int di, struct sk_buff *skb)
 		if (ch->Flags & MSK_INIT_DCHANNEL)
 			mISDN_dt_new_frame(ch->inst.st, D_TX, skb, 1);
 		ch->next_skb = skb;
-		return(0);
+		return (0);
 	} else {
 		/* write to fifo */
 		ch->tx_skb = skb;
@@ -161,7 +163,7 @@ channel_senddata(channel_t *ch, int di, struct sk_buff *skb)
 		if (ch->Flags & MSK_INIT_DCHANNEL)
 			mISDN_dt_new_frame(ch->inst.st, D_TX, skb, 1);
 		queue_ch_frame(ch, CONFIRM, di, NULL);
-		return(skb->len);
+		return (skb->len);
 	}
 }
 

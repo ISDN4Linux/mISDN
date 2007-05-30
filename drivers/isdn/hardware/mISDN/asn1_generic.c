@@ -1,12 +1,15 @@
-/* $Id: asn1_generic.c,v 1.1 2003/11/09 09:12:28 keil Exp $
+/*
+ * $Id: asn1_generic.c,v 1.1 2003/11/09 09:12:28 keil Exp $
  *
  */
 
 #include "asn1.h"
 #include "asn1_generic.h"
 
-// ======================================================================
-// general ASN.1
+/*
+ * ======================================================================
+ * general ASN.1
+ */
 
 int
 ParseBoolean(struct asn1_parm *pc, u_char *p, u_char *end, int *i)

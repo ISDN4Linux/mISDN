@@ -55,8 +55,9 @@ static inline struct echo_can_state *echo_can_create(int len, int adaption_mode)
     }
     else
     {
-        printk( KERN_ERR "echo_can_create error: kmalloc failed (requested %u bytes)\n", 
-                sizeof(struct echo_can_state) );
+        printk( KERN_ERR
+            "echo_can_create error: kmalloc failed (requested %ld bytes)\n", 
+            sizeof(struct echo_can_state));
     }
 	
 	return pEchoCanceller;

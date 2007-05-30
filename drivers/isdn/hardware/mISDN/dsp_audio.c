@@ -306,9 +306,9 @@ u8 dsp_audio_ulaw_to_alaw[256] =
 u8 dsp_silence;
 
 
-/*****************************************************
- * generate table for conversion of s16 to alaw/ulaw *
- *****************************************************/
+/*
+ * generate table for conversion of s16 to alaw/ulaw
+ */
 
 void
 dsp_audio_generate_s2law_table(void)
@@ -318,14 +318,14 @@ dsp_audio_generate_s2law_table(void)
 	if (dsp_options & DSP_OPT_ULAW) {
 		/* generating ulaw-table */
 		i = j = 0;
-		while(i < 32768) {
+		while (i < 32768) {
 			if (i-32768 > dsp_audio_law_to_s32[j])
 				j++;
 			dsp_audio_s16_to_law[(i-32768) & 0xffff] = j;
 			i++;
 		}
 		j = 255;
-		while(i < 65536) {
+		while (i < 65536) {
 			if (i-32768 > dsp_audio_law_to_s32[j])
 				j--;
 			dsp_audio_s16_to_law[(i-32768) & 0xffff] = j;
@@ -334,13 +334,13 @@ dsp_audio_generate_s2law_table(void)
 	} else {
 		/* generating alaw-table */
 		i = j = 0;
-		while(i < 65536) {
+		while (i < 65536) {
 			if (i-32768 > dsp_audio_alaw_relations[j<<1])
 				j++;
-			if (j>255)
-				j=255;
+			if (j > 255)
+				j = 255;
 			dsp_audio_s16_to_law[(i-32768) & 0xffff]
-				 = dsp_audio_alaw_relations[(j<<1)|1];
+			    = dsp_audio_alaw_relations[(j<<1)|1];
 			i++;
 		}
 	}
@@ -351,12 +351,13 @@ dsp_audio_generate_s2law_table(void)
  * the seven bit sample is the number of every second alaw-sample ordered by
  * aplitude. 0x00 is negative, 0x7f is positive amplitude.
  */
+
 u8 dsp_audio_seven2law[128];
 u8 dsp_audio_law2seven[256];
 
-/********************************************************************
- * generate table for conversion law from/to 7-bit alaw-like sample *
- ********************************************************************/
+/*
+ * generate table for conversion law from/to 7-bit alaw-like sample
+ */
 
 void
 dsp_audio_generate_seven(void)
@@ -366,20 +367,22 @@ dsp_audio_generate_seven(void)
 
 	/* conversion from law to seven bit audio */
 	i = 0;
-	while(i < 256) {
+	while (i < 256) {
 		/* spl is the source: the law-sample (converted to alaw) */
 		spl = i;
 		if (dsp_options & DSP_OPT_ULAW)
 			spl = dsp_audio_ulaw_to_alaw[i];
 		/* find the 7-bit-sample */
 		j = 0;
-		while(j < 256) {
+		while (j < 256) {
 			if (dsp_audio_alaw_relations[(j<<1)|1] == spl)
 				break;
 			j++;
 		}
 		if (j == 256) {
-			printk(KERN_WARNING "fatal error in %s: alaw-sample '0x%2x' not found in relations-table.\n", __FUNCTION__, spl);
+			printk(KERN_WARNING
+			    "fatal error in %s: alaw-sample '0x%2x' not found "
+			    "in relations-table.\n", __FUNCTION__, spl);
 		}
 		/* write 7-bit audio value */
 		dsp_audio_law2seven[i] = j >> 1;
@@ -388,7 +391,7 @@ dsp_audio_generate_seven(void)
 
 	/* conversion from seven bit audio to law */
 	i = 0;
-	while(i < 128) {
+	while (i < 128) {
 		/* find alaw-spl */
 		spl = dsp_audio_alaw_relations[(i<<2)|1];
 		/* convert to ulaw, if required */
@@ -404,9 +407,9 @@ dsp_audio_generate_seven(void)
 /* mix 2*law -> law */
 u8 dsp_audio_mix_law[65536];
 
-/******************************************************
- * generate mix table to mix two law samples into one *
- ******************************************************/
+/*
+ * generate mix table to mix two law samples into one
+ */
 
 void
 dsp_audio_generate_mix_table(void)
@@ -415,16 +418,17 @@ dsp_audio_generate_mix_table(void)
 	s32 sample;
 
 	i = 0;
-	while(i < 256) {
+	while (i < 256) {
 		j = 0;
-		while(j < 256) {
+		while (j < 256) {
 			sample = dsp_audio_law_to_s32[i];
 			sample += dsp_audio_law_to_s32[j];
 			if (sample > 32767)
 				sample = 32767;
 			if (sample < -32768)
 				sample = -32768;
-			dsp_audio_mix_law[(i<<8)|j] = dsp_audio_s16_to_law[sample & 0xffff];
+			dsp_audio_mix_law[(i<<8)|j] =
+			    dsp_audio_s16_to_law[sample & 0xffff];
 			j++;
 		}
 		i++;
@@ -432,9 +436,9 @@ dsp_audio_generate_mix_table(void)
 }
 
 
-/*************************************
- * generate different volume changes *
- *************************************/
+/*
+ * generate different volume changes
+ */
 
 static u8 dsp_audio_reduce8[256];
 static u8 dsp_audio_reduce7[256];
@@ -479,58 +483,83 @@ dsp_audio_generate_volume_changes(void)
 	int i;
 
 	i = 0;
-	while(i < 256) {
-		dsp_audio_reduce8[i] = dsp_audio_s16_to_law[(dsp_audio_law_to_s32[i]>>8) & 0xffff];
-		dsp_audio_reduce7[i] = dsp_audio_s16_to_law[(dsp_audio_law_to_s32[i]>>7) & 0xffff];
-		dsp_audio_reduce6[i] = dsp_audio_s16_to_law[(dsp_audio_law_to_s32[i]>>6) & 0xffff];
-		dsp_audio_reduce5[i] = dsp_audio_s16_to_law[(dsp_audio_law_to_s32[i]>>5) & 0xffff];
-		dsp_audio_reduce4[i] = dsp_audio_s16_to_law[(dsp_audio_law_to_s32[i]>>4) & 0xffff];
-		dsp_audio_reduce3[i] = dsp_audio_s16_to_law[(dsp_audio_law_to_s32[i]>>3) & 0xffff];
-		dsp_audio_reduce2[i] = dsp_audio_s16_to_law[(dsp_audio_law_to_s32[i]>>2) & 0xffff];
-		dsp_audio_reduce1[i] = dsp_audio_s16_to_law[(dsp_audio_law_to_s32[i]>>1) & 0xffff];
+	while (i < 256) {
+
+		dsp_audio_reduce8[i] = dsp_audio_s16_to_law[
+		    (dsp_audio_law_to_s32[i]>>8) & 0xffff];
+		dsp_audio_reduce7[i] = dsp_audio_s16_to_law[
+		    (dsp_audio_law_to_s32[i]>>7) & 0xffff];
+		dsp_audio_reduce6[i] = dsp_audio_s16_to_law[
+		    (dsp_audio_law_to_s32[i]>>6) & 0xffff];
+		dsp_audio_reduce5[i] = dsp_audio_s16_to_law[
+		    (dsp_audio_law_to_s32[i]>>5) & 0xffff];
+		dsp_audio_reduce4[i] = dsp_audio_s16_to_law[
+		    (dsp_audio_law_to_s32[i]>>4) & 0xffff];
+		dsp_audio_reduce3[i] = dsp_audio_s16_to_law[
+		    (dsp_audio_law_to_s32[i]>>3) & 0xffff];
+		dsp_audio_reduce2[i] = dsp_audio_s16_to_law[
+		    (dsp_audio_law_to_s32[i]>>2) & 0xffff];
+		dsp_audio_reduce1[i] = dsp_audio_s16_to_law[
+		    (dsp_audio_law_to_s32[i]>>1) & 0xffff];
+
 		sample = dsp_audio_law_to_s32[i] << 1;
+
 		if (sample < -32768)
 			sample = -32768;
 		else if (sample > 32767)
 			sample = 32767;
+
 		dsp_audio_increase1[i] = dsp_audio_s16_to_law[sample & 0xffff];
 		sample = dsp_audio_law_to_s32[i] << 2;
+
 		if (sample < -32768)
 			sample = -32768;
 		else if (sample > 32767)
 			sample = 32767;
+
 		dsp_audio_increase2[i] = dsp_audio_s16_to_law[sample & 0xffff];
 		sample = dsp_audio_law_to_s32[i] << 3;
+
 		if (sample < -32768)
 			sample = -32768;
 		else if (sample > 32767)
 			sample = 32767;
+
 		dsp_audio_increase3[i] = dsp_audio_s16_to_law[sample & 0xffff];
 		sample = dsp_audio_law_to_s32[i] << 4;
+
 		if (sample < -32768)
 			sample = -32768;
 		else if (sample > 32767)
 			sample = 32767;
+
 		dsp_audio_increase4[i] = dsp_audio_s16_to_law[sample & 0xffff];
 		sample = dsp_audio_law_to_s32[i] << 5;
+
 		if (sample < -32768)
 			sample = -32768;
 		else if (sample > 32767)
 			sample = 32767;
+
 		dsp_audio_increase5[i] = dsp_audio_s16_to_law[sample & 0xffff];
 		sample = dsp_audio_law_to_s32[i] << 6;
+
 		if (sample < -32768)
 			sample = -32768;
 		else if (sample > 32767)
 			sample = 32767;
+
 		dsp_audio_increase6[i] = dsp_audio_s16_to_law[sample & 0xffff];
 		sample = dsp_audio_law_to_s32[i] << 7;
+
 		if (sample < -32768)
 			sample = -32768;
 		else if (sample > 32767)
 			sample = 32767;
+
 		dsp_audio_increase7[i] = dsp_audio_s16_to_law[sample & 0xffff];
 		sample = dsp_audio_law_to_s32[i] << 8;
+
 		if (sample < -32768)
 			sample = -32768;
 		else if (sample > 32767)
@@ -542,11 +571,10 @@ dsp_audio_generate_volume_changes(void)
 }
 
 
-/**************************************
+/*
  * change the volume of the given skb *
- **************************************/
-
-/* this is a helper function for changing volume of skb. the range may be
+ *
+ * this is a helper function for changing volume of skb. the range may be
  * -8 to 8, which is a shift to the power of 2. 0 == no volume, 3 == volume*8
  */
 void
@@ -575,11 +603,9 @@ dsp_change_volume(struct sk_buff *skb, int volume)
 	ii = skb->len;
 	p = skb->data;
 	/* change volume */
-	while(i < ii) {
+	while (i < ii) {
 		*p = volume_change[*p];
 		p++;
 		i++;
 	}
 }
-
-

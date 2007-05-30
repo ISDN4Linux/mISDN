@@ -22,12 +22,12 @@ vmISDN_debug(int id, char *head, char *fmt, va_list args)
 /* if head == NULL the fmt contains the full info */
 	char *p = tmpbuf;
 
-	p += sprintf(p,"%d ", id);
+	p += sprintf(p, "%d ", id);
 	if (head)
 		p += sprintf(p, "%s ", head);
 	p += vsprintf(p, fmt, args);
 	printk(KERN_DEBUG "%s\n", tmpbuf);
-} 
+}
 
 void
 mISDN_debug(int id, char *head, char *fmt, ...)

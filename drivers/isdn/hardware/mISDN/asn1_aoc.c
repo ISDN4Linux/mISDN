@@ -1,4 +1,5 @@
-/* $Id: asn1_aoc.c,v 1.0 2001/11/02 23:42:26 kkeil Exp $
+/*
+ * $Id: asn1_aoc.c,v 1.0 2001/11/02 23:42:26 kkeil Exp $
  *
  */
 
@@ -67,14 +68,16 @@ ParseAOCEChargingUnit(struct asn1_parm *pc, u_char *p, u_char *end, int dummy)
 // AOCDCurrencyInfo
 
 int
-ParseAOCDSpecificCurrency(struct asn1_parm *pc, u_char *p, u_char *end, int dummy)
+ParseAOCDSpecificCurrency(struct asn1_parm *pc, u_char *p, u_char *end,
+    int dummy)
 {
 	int typeOfChargingInfo;
 	int billingId;
 	INIT;
 
 	XSEQUENCE(ParseRecordedCurrency, ASN1_TAG_SEQUENCE, 1);
-	XSEQUENCE_1(ParseTypeOfChargingInfo, ASN1_TAG_ENUM, 2, &typeOfChargingInfo);
+	XSEQUENCE_1(ParseTypeOfChargingInfo, ASN1_TAG_ENUM, 2,
+	    &typeOfChargingInfo);
 	XSEQUENCE_OPT_1(ParseAOCDBillingId, ASN1_TAG_ENUM, 3, &billingId);
 
 	return p - beg;
@@ -94,16 +97,20 @@ ParseAOCDCurrencyInfo(struct asn1_parm *pc, u_char *p, u_char *end, int dummy)
 // AOCDChargingUnitInfo
 
 int
-ParseAOCDSpecificChargingUnits(struct asn1_parm *pc, u_char *p, u_char *end, int dummy)
+ParseAOCDSpecificChargingUnits(struct asn1_parm *pc, u_char *p, u_char *end,
+    int dummy)
 {
 	int recordedUnits;
 	int typeOfChargingInfo;
 	int billingId;
 	INIT;
 
-	XSEQUENCE_1(ParseRecordedUnitsList, ASN1_TAG_SEQUENCE, 1, &recordedUnits);
-	XSEQUENCE_1(ParseTypeOfChargingInfo, ASN1_TAG_ENUM, 2, &typeOfChargingInfo);
-	XSEQUENCE_OPT_1(ParseAOCDBillingId, ASN1_TAG_ENUM, 3, &billingId);
+	XSEQUENCE_1(ParseRecordedUnitsList, ASN1_TAG_SEQUENCE, 1,
+	    &recordedUnits);
+	XSEQUENCE_1(ParseTypeOfChargingInfo, ASN1_TAG_ENUM, 2,
+	    &typeOfChargingInfo);
+	XSEQUENCE_OPT_1(ParseAOCDBillingId, ASN1_TAG_ENUM, 3,
+	    &billingId);
 
 //	p_L3L4(pc, CC_CHARGE | INDICATION, &recordedUnits);
 
@@ -111,11 +118,13 @@ ParseAOCDSpecificChargingUnits(struct asn1_parm *pc, u_char *p, u_char *end, int
 }
 
 int
-ParseAOCDChargingUnitInfo(struct asn1_parm *pc, u_char *p, u_char *end, int dummy)
+ParseAOCDChargingUnitInfo(struct asn1_parm *pc, u_char *p, u_char *end,
+    int dummy)
 {
 	INIT;
 
-	XCHOICE(ParseAOCDSpecificChargingUnits, ASN1_TAG_SEQUENCE, ASN1_NOT_TAGGED);
+	XCHOICE(ParseAOCDSpecificChargingUnits, ASN1_TAG_SEQUENCE,
+	    ASN1_NOT_TAGGED);
 	XCHOICE(ParseNull, ASN1_TAG_NULL, 1); // freeOfCharge
 	XCHOICE_DEFAULT;
 }
@@ -139,14 +148,17 @@ ParseRecordedCurrency(struct asn1_parm *pc, u_char *p, u_char *end, int dummy)
 // RecordedUnitsList
 
 int
-ParseRecordedUnitsList(struct asn1_parm *pc, u_char *p, u_char *end, int *recordedUnits)
+ParseRecordedUnitsList(struct asn1_parm *pc, u_char *p, u_char *end,
+    int *recordedUnits)
 {
 	int i;
 	INIT;
 
-	XSEQUENCE_1(ParseRecordedUnits, ASN1_TAG_SEQUENCE, ASN1_NOT_TAGGED, recordedUnits);
-	for (i = 0; i < 31; i++) 
-		XSEQUENCE_OPT_1(ParseRecordedUnits, ASN1_TAG_SEQUENCE, ASN1_NOT_TAGGED, recordedUnits);
+	XSEQUENCE_1(ParseRecordedUnits, ASN1_TAG_SEQUENCE,
+	    ASN1_NOT_TAGGED, recordedUnits);
+	for (i = 0; i < 31; i++)
+		XSEQUENCE_OPT_1(ParseRecordedUnits, ASN1_TAG_SEQUENCE,
+		    ASN1_NOT_TAGGED, recordedUnits);
 
 	return p - beg;
 }
@@ -154,7 +166,8 @@ ParseRecordedUnitsList(struct asn1_parm *pc, u_char *p, u_char *end, int *record
 // TypeOfChargingInfo
 
 int
-ParseTypeOfChargingInfo(struct asn1_parm *pc, u_char *p, u_char *end, int *typeOfChargingInfo)
+ParseTypeOfChargingInfo(struct asn1_parm *pc, u_char *p, u_char *end,
+    int *typeOfChargingInfo)
 {
 	return ParseEnum(pc, p, end, typeOfChargingInfo);
 }
@@ -162,23 +175,28 @@ ParseTypeOfChargingInfo(struct asn1_parm *pc, u_char *p, u_char *end, int *typeO
 // RecordedUnits
 
 int
-ParseRecordedUnitsChoice(struct asn1_parm *pc, u_char *p, u_char *end, int *recordedUnits)
+ParseRecordedUnitsChoice(struct asn1_parm *pc, u_char *p, u_char *end,
+    int *recordedUnits)
 {
 	INIT;
 
-	XCHOICE_1(ParseNumberOfUnits, ASN1_TAG_INTEGER, ASN1_NOT_TAGGED, recordedUnits);
+	XCHOICE_1(ParseNumberOfUnits, ASN1_TAG_INTEGER, ASN1_NOT_TAGGED,
+	    recordedUnits);
 	XCHOICE(ParseNull, ASN1_TAG_NULL, ASN1_NOT_TAGGED); // not available
 	XCHOICE_DEFAULT;
 }
 
 int
-ParseRecordedUnits(struct asn1_parm *pc, u_char *p, u_char *end, int *recordedUnits)
+ParseRecordedUnits(struct asn1_parm *pc, u_char *p, u_char *end,
+    int *recordedUnits)
 {
 	int typeOfUnit;
 	INIT;
 
-	XSEQUENCE_1(ParseRecordedUnitsChoice, ASN1_NOT_TAGGED, ASN1_NOT_TAGGED, recordedUnits);
-	XSEQUENCE_OPT_1(ParseTypeOfUnit, ASN1_TAG_INTEGER, ASN1_NOT_TAGGED, &typeOfUnit);
+	XSEQUENCE_1(ParseRecordedUnitsChoice, ASN1_NOT_TAGGED,
+	    ASN1_NOT_TAGGED, recordedUnits);
+	XSEQUENCE_OPT_1(ParseTypeOfUnit, ASN1_TAG_INTEGER,
+	    ASN1_NOT_TAGGED, &typeOfUnit);
 
 	return p - beg;
 }
@@ -195,7 +213,8 @@ ParseAOCDBillingId(struct asn1_parm *pc, u_char *p, u_char *end, int *billingId)
 // AOCECurrencyInfo
 
 int
-ParseAOCESpecificCurrency(struct asn1_parm *pc, u_char *p, u_char *end, int dummy)
+ParseAOCESpecificCurrency(struct asn1_parm *pc, u_char *p, u_char *end,
+    int dummy)
 {
 	int billingId;
 	INIT;
@@ -207,7 +226,8 @@ ParseAOCESpecificCurrency(struct asn1_parm *pc, u_char *p, u_char *end, int dumm
 }
 
 int
-ParseAOCECurrencyInfoChoice(struct asn1_parm *pc, u_char *p, u_char *end, int dummy)
+ParseAOCECurrencyInfoChoice(struct asn1_parm *pc, u_char *p, u_char *end,
+    int dummy)
 {
 	INIT;
 
@@ -221,8 +241,10 @@ ParseAOCECurrencyInfo(struct asn1_parm *pc, u_char *p, u_char *end, int dummy)
 {
 	INIT;
 
-	XSEQUENCE(ParseAOCECurrencyInfoChoice, ASN1_NOT_TAGGED, ASN1_NOT_TAGGED);
-	XSEQUENCE_OPT(ParseChargingAssociation, ASN1_NOT_TAGGED, ASN1_NOT_TAGGED);
+	XSEQUENCE(ParseAOCECurrencyInfoChoice, ASN1_NOT_TAGGED,
+	    ASN1_NOT_TAGGED);
+	XSEQUENCE_OPT(ParseChargingAssociation, ASN1_NOT_TAGGED,
+	    ASN1_NOT_TAGGED);
 	XCHOICE_DEFAULT;
 }
 #endif
@@ -230,13 +252,15 @@ ParseAOCECurrencyInfo(struct asn1_parm *pc, u_char *p, u_char *end, int dummy)
 // AOCEChargingUnitInfo
 
 int
-ParseAOCESpecificChargingUnits(struct asn1_parm *pc, u_char *p, u_char *end, int dummy)
+ParseAOCESpecificChargingUnits(struct asn1_parm *pc, u_char *p, u_char *end,
+    int dummy)
 {
 	int recordedUnits;
 	int billingId;
 	INIT;
 
-	XSEQUENCE_1(ParseRecordedUnitsList, ASN1_TAG_SEQUENCE, 1, &recordedUnits);
+	XSEQUENCE_1(ParseRecordedUnitsList, ASN1_TAG_SEQUENCE, 1,
+	    &recordedUnits);
 	XSEQUENCE_OPT_1(ParseAOCEBillingId, ASN1_TAG_ENUM, 2, &billingId);
 
 //	p_L3L4(pc, CC_CHARGE | INDICATION, &recordedUnits);
@@ -245,22 +269,27 @@ ParseAOCESpecificChargingUnits(struct asn1_parm *pc, u_char *p, u_char *end, int
 }
 
 int
-ParseAOCEChargingUnitInfoChoice(struct asn1_parm *pc, u_char *p, u_char *end, int dummy)
+ParseAOCEChargingUnitInfoChoice(struct asn1_parm *pc, u_char *p, u_char *end,
+    int dummy)
 {
 	INIT;
 
-	XCHOICE(ParseAOCESpecificChargingUnits, ASN1_TAG_SEQUENCE, ASN1_NOT_TAGGED);
+	XCHOICE(ParseAOCESpecificChargingUnits, ASN1_TAG_SEQUENCE,
+	    ASN1_NOT_TAGGED);
 	XCHOICE(ParseNull, ASN1_TAG_NULL, 1); // freeOfCharge
 	XCHOICE_DEFAULT;
 }
 
 int
-ParseAOCEChargingUnitInfo(struct asn1_parm *pc, u_char *p, u_char *end, int dummy)
+ParseAOCEChargingUnitInfo(struct asn1_parm *pc, u_char *p, u_char *end,
+    int dummy)
 {
 	INIT;
 
-	XSEQUENCE(ParseAOCEChargingUnitInfoChoice, ASN1_NOT_TAGGED, ASN1_NOT_TAGGED);
-	XSEQUENCE_OPT(ParseChargingAssociation, ASN1_NOT_TAGGED, ASN1_NOT_TAGGED);
+	XSEQUENCE(ParseAOCEChargingUnitInfoChoice, ASN1_NOT_TAGGED,
+	    ASN1_NOT_TAGGED);
+	XSEQUENCE_OPT(ParseChargingAssociation, ASN1_NOT_TAGGED,
+	    ASN1_NOT_TAGGED);
 
 	return p - beg;
 }
@@ -268,7 +297,8 @@ ParseAOCEChargingUnitInfo(struct asn1_parm *pc, u_char *p, u_char *end, int dumm
 // AOCEBillingId
 
 int
-ParseAOCEBillingId(struct asn1_parm *pc, u_char *p, u_char *end, int *billingId)
+ParseAOCEBillingId(struct asn1_parm *pc, u_char *p, u_char *end,
+    int *billingId)
 {
 	return ParseEnum(pc, p, end, billingId);
 }
@@ -300,7 +330,8 @@ ParseAmount(struct asn1_parm *pc, u_char *p, u_char *end, int dummy)
 // CurrencyAmount
 
 int
-ParseCurrencyAmount(struct asn1_parm *pc, u_char *p, u_char *end, int *currencyAmount)
+ParseCurrencyAmount(struct asn1_parm *pc, u_char *p, u_char *end,
+    int *currencyAmount)
 {
 	return ParseInteger(chanp, p, end, currencyAmount);
 }
@@ -325,7 +356,8 @@ ParseTypeOfUnit(struct asn1_parm *pc, u_char *p, u_char *end, int *typeOfUnit)
 // NumberOfUnits
 
 int
-ParseNumberOfUnits(struct asn1_parm *pc, u_char *p, u_char *end, int *numberOfUnits)
+ParseNumberOfUnits(struct asn1_parm *pc, u_char *p, u_char *end,
+    int *numberOfUnits)
 {
 	return ParseInteger(pc, p, end, numberOfUnits);
 }
@@ -333,7 +365,8 @@ ParseNumberOfUnits(struct asn1_parm *pc, u_char *p, u_char *end, int *numberOfUn
 // Charging Association
 
 int
-ParseChargingAssociation(struct asn1_parm *pc, u_char *p, u_char *end, int dummy)
+ParseChargingAssociation(struct asn1_parm *pc, u_char *p, u_char *end,
+    int dummy)
 {
 //	char partyNumber[30];
 	INIT;
@@ -352,4 +385,3 @@ ParseChargeIdentifier(struct asn1_parm *pc, u_char *p, u_char *end, int dummy)
 
 	return ParseInteger(pc, p, end, &chargeIdentifier);
 }
-

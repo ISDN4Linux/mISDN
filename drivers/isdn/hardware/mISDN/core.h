@@ -1,5 +1,5 @@
 /* $Id: core.h,v 1.19 2006/12/21 15:25:06 nadi Exp $
- * 
+ *
  * This file is (c) under GNU PUBLIC LICENSE
  *
  */
@@ -20,7 +20,7 @@
 
 /* debugging */
 #define DEBUG_CORE_FUNC		0x0001
-//#define DEBUG_DUMMY_FUNC	0x0002
+// #define DEBUG_DUMMY_FUNC	0x0002
 #define DEBUG_MSG_THREAD_ERR	0x0010
 #define DEBUG_MSG_THREAD_INFO	0x0020
 #define DEBUG_QUEUE_FUNC	0x0040
@@ -50,7 +50,8 @@ extern mISDNstack_t	*new_stack(mISDNstack_t *, mISDNinstance_t *);
 extern int		mISDN_start_stop(mISDNstack_t *, int);
 extern int		release_stack(mISDNstack_t *);
 extern int		do_for_all_layers(void *, u_int, void *);
-extern int		change_stack_para(mISDNstack_t *, u_int, mISDN_stPara_t *);
+extern int		change_stack_para(mISDNstack_t *, u_int,
+			    mISDN_stPara_t *);
 extern void		release_stacks(mISDNobject_t *);
 extern int		copy_pid(mISDN_pid_t *, mISDN_pid_t *, u_char *);
 extern int		set_stack(mISDNstack_t *, mISDN_pid_t *);
@@ -102,12 +103,11 @@ extern void     mISDN_dt_new_frame(mISDNstack_t *stack, enum mISDN_dt_type type,
 void misdn_log_frame(mISDNstack_t *, 		/* Stack for which to log */
 		unsigned char *,		/* frame to log */
 		int, 				/* frame len */
-		int );				/* direction (0=rx,1=tx) */
+		int);				/* direction (0=rx,1=tx) */
 
-int misdn_netdev_addstack(mISDNstack_t *); 	/* create new netdevice by 
-						   stack */
+int misdn_netdev_addstack(mISDNstack_t *);	/* create new netdevice by */
+						/*   stack */
 
-int              misdn_netdev_init(void); 	/* initialize netdevices */
-void             misdn_netdev_exit(void);	/* exit netdeivces */
+int		misdn_netdev_init(void);	/* initialize netdevices */
+void		misdn_netdev_exit(void);	/* exit netdeivces */
 #endif
-

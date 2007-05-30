@@ -17,7 +17,7 @@ mISDN_initchannel(channel_t *ch, ulong prop, int maxlen)
 	if (!ch->log) {
 		printk(KERN_WARNING
 			"mISDN: No memory for channel log\n");
-		return(-ENOMEM);
+		return (-ENOMEM);
 	}
 	ch->Flags = prop;
 	ch->maxlen = maxlen;
@@ -26,7 +26,7 @@ mISDN_initchannel(channel_t *ch, ulong prop, int maxlen)
 	ch->tx_skb = NULL;
 	ch->tx_idx = 0;
 	ch->next_skb = NULL;
-	return(0);
+	return (0);
 }
 
 int
@@ -46,7 +46,7 @@ mISDN_freechannel(channel_t *ch)
 	}
 	kfree(ch->log);
 	ch->log = NULL;
-	return(0);
+	return (0);
 }
 
 /* need called with HW lock */
@@ -56,7 +56,7 @@ mISDN_setpara(channel_t *ch, mISDN_stPara_t *stp)
 	if (!stp) { // clear parameters
 		ch->maxlen = 0;
 		ch->up_headerlen = 0;
-		return(0);
+		return (0);
 	}
 	if (stp->up_headerlen)
 		ch->up_headerlen = stp->up_headerlen;
@@ -68,8 +68,9 @@ mISDN_setpara(channel_t *ch, mISDN_stPara_t *stp)
 				skb = alloc_skb(stp->maxdatalen +
 					ch->up_headerlen, GFP_ATOMIC);
 				if (!skb) {
-					int_errtxt("no skb for %d+%d", stp->maxdatalen, ch->up_headerlen);
-					return(-ENOMEM);
+					int_errtxt("no skb for %d+%d",
+					    stp->maxdatalen, ch->up_headerlen);
+					return (-ENOMEM);
 				}
 				skb_reserve(skb, ch->up_headerlen);
 				memcpy(skb_put(skb, ch->rx_skb->len),
@@ -80,7 +81,7 @@ mISDN_setpara(channel_t *ch, mISDN_stPara_t *stp)
 		}
 		ch->maxlen = stp->maxdatalen;
 	}
-	return(0);
+	return (0);
 }
 
 EXPORT_SYMBOL(mISDN_initchannel);

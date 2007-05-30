@@ -1,4 +1,5 @@
-/* $Id: asn1_enc.c,v 1.4 2006/03/06 12:52:07 keil Exp $
+/*
+ * $Id: asn1_enc.c,v 1.4 2006/03/06 12:52:07 keil Exp $
  *
  */
 
@@ -6,27 +7,30 @@
 #include "helper.h"
 #include "asn1_enc.h"
 
-int encodeNull(__u8 *dest)
+int
+encodeNull(__u8 *dest)
 {
-	dest[0] = 0x05;  // null
-	dest[1] = 0;     // length
+	dest[0] = 0x05;	// null
+	dest[1] = 0;	// length
 	return 2;
 }
 
-int encodeBoolean(__u8 *dest, __u32 i)
+int
+encodeBoolean(__u8 *dest, __u32 i)
 {
-	dest[0] = 0x01;  // BOOLEAN
-	dest[1] = 1;     // length 1
-	dest[3] = i ? 1:0;  // Value
+	dest[0] = 0x01;	// BOOLEAN
+	dest[1] = 1;	// length 1
+	dest[3] = i ? 1:0;	// Value
 	return 3;
 }
 
-int encodeInt(__u8 *dest, __u32 i)
+int
+encodeInt(__u8 *dest, __u32 i)
 {
 	__u8 *p;
 
-	dest[0] = 0x02;  // integer
-	dest[1] = 0;     // length
+	dest[0] = 0x02;	// integer
+	dest[1] = 0;	// length
 	p = &dest[2];
 	do {
 		*p++ = i;
@@ -37,12 +41,13 @@ int encodeInt(__u8 *dest, __u32 i)
 	return p - dest;
 }
 
-int encodeEnum(__u8 *dest, __u32 i)
+int
+encodeEnum(__u8 *dest, __u32 i)
 {
 	__u8 *p;
 
-	dest[0] = 0x0a;  // integer
-	dest[1] = 0;     // length
+	dest[0] = 0x0a;	// integer
+	dest[1] = 0;	// length
 	p = &dest[2];
 	do {
 		*p++ = i;
@@ -53,13 +58,14 @@ int encodeEnum(__u8 *dest, __u32 i)
 	return p - dest;
 }
 
-int encodeNumberDigits(__u8 *dest, __u8 *nd, __u8 len)
+int
+encodeNumberDigits(__u8 *dest, __u8 *nd, __u8 len)
 {
 	__u8 *p;
 	int i;
 
-	dest[0] = 0x12;    // numeric string
-	dest[1] = 0x0;     // length
+	dest[0] = 0x12;	// numeric string
+	dest[1] = 0x0;	// length
 	p = &dest[2];
 	for (i = 0; i < len; i++)
 		*p++ = *nd++;
@@ -68,28 +74,32 @@ int encodeNumberDigits(__u8 *dest, __u8 *nd, __u8 len)
 	return p - dest;
 }
 
-int encodePublicPartyNumber(__u8 *dest, __u8 *facilityPartyNumber)
+int
+encodePublicPartyNumber(__u8 *dest, __u8 *facilityPartyNumber)
 {
 	__u8 *p;
 
-	dest[0] = 0x20;  // sequence
-	dest[1] = 0;     // length
+	dest[0] = 0x20;	// sequence
+	dest[1] = 0;	// length
 	p = &dest[2];
 	p += encodeEnum(p, (facilityPartyNumber[2] & 0x70) >> 4);
-	p += encodeNumberDigits(p, &facilityPartyNumber[4], facilityPartyNumber[0] - 3);
+	p += encodeNumberDigits(p, &facilityPartyNumber[4],
+	    facilityPartyNumber[0] - 3);
 
 	dest[1] = p - &dest[2];
 	return p - dest;
 }
 
-int encodePartyNumber(__u8 *dest, __u8 *facilityPartyNumber)
+int
+encodePartyNumber(__u8 *dest, __u8 *facilityPartyNumber)
 {
 	__u8 *p = dest;
 
 	p = dest;
 	switch (facilityPartyNumber[1]) {
 	case 0: // unknown
-		p += encodeNumberDigits(p, &facilityPartyNumber[4], facilityPartyNumber[0] - 3);
+		p += encodeNumberDigits(p, &facilityPartyNumber[4],
+		    facilityPartyNumber[0] - 3);
 		dest[0] &= 0x20;
 		dest[0] |= 0x81;
 		break;
@@ -105,20 +115,23 @@ int encodePartyNumber(__u8 *dest, __u8 *facilityPartyNumber)
 	return p - dest;
 }
 
-int encodeServedUserNumber(__u8 *dest, __u8 *servedUserNumber)
+int
+encodeServedUserNumber(__u8 *dest, __u8 *servedUserNumber)
 {
 	if (servedUserNumber[0])
 		return encodePartyNumber(dest, servedUserNumber);
-        else
+	else
 		return encodeNull(dest);
 }
 
-int encodeAddress(__u8 *dest, __u8 *facilityPartyNumber, __u8 *calledPartySubaddress)
+int
+encodeAddress(__u8 *dest, __u8 *facilityPartyNumber,
+    __u8 *calledPartySubaddress)
 {
 	__u8 *p = dest;
 
-	dest[0] = 0x30;  // invoke id tag, integer
-	dest[1] = 0;     // length
+	dest[0] = 0x30;	// invoke id tag, integer
+	dest[1] = 0;	// length
 	p = &dest[2];
 
 	p += encodePartyNumber(p, facilityPartyNumber);
@@ -130,29 +143,32 @@ int encodeAddress(__u8 *dest, __u8 *facilityPartyNumber, __u8 *calledPartySubadd
 	return p - dest;
 }
 
-int encodeActivationDiversion(__u8 *dest, struct FacReqCFActivate *CFActivate)
+int
+encodeActivationDiversion(__u8 *dest, struct FacReqCFActivate *CFActivate)
 {
 	__u8 *p;
 
-	dest[0] = 0x30;  // sequence
-	dest[1] = 0;     // length
+	dest[0] = 0x30;	// sequence
+	dest[1] = 0;	// length
 	p = &dest[2];
 
 	p += encodeEnum(p, CFActivate->Procedure);
 	p += encodeEnum(p, CFActivate->BasicService);
-	p += encodeAddress(p, CFActivate->ForwardedToNumber, CFActivate->ForwardedToSubaddress);
+	p += encodeAddress(p, CFActivate->ForwardedToNumber,
+	    CFActivate->ForwardedToSubaddress);
 	p += encodeServedUserNumber(p, CFActivate->ServedUserNumber);
 
 	dest[1] = p - &dest[2];
 	return p - dest;
 }
 
-int encodeDeactivationDiversion(__u8 *dest, struct FacReqCFDeactivate *CFDeactivate)
+int encodeDeactivationDiversion(__u8 *dest,
+    struct FacReqCFDeactivate *CFDeactivate)
 {
 	__u8 *p;
 
-	dest[0] = 0x30;  // sequence
-	dest[1] = 0;     // length
+	dest[0] = 0x30;	// sequence
+	dest[1] = 0;	// length
 	p = &dest[2];
 
 	p += encodeEnum(p, CFDeactivate->Procedure);
@@ -163,12 +179,13 @@ int encodeDeactivationDiversion(__u8 *dest, struct FacReqCFDeactivate *CFDeactiv
 	return p - dest;
 }
 
-int encodeInterrogationDiversion(__u8 *dest, struct FacReqCFInterrogateParameters *params)
+int encodeInterrogationDiversion(__u8 *dest,
+    struct FacReqCFInterrogateParameters *params)
 {
 	__u8 *p;
 
-	dest[0] = 0x30;  // sequence
-	dest[1] = 0;     // length
+	dest[0] = 0x30;	// sequence
+	dest[1] = 0;	// length
 	p = &dest[2];
 
 	p += encodeEnum(p, params->Procedure);
@@ -184,12 +201,13 @@ int encodeInterrogationDiversion(__u8 *dest, struct FacReqCFInterrogateParameter
 	return p - dest;
 }
 
-int encodeInvokeDeflection(__u8 *dest, struct FacReqCDeflection *CD)
+int
+encodeInvokeDeflection(__u8 *dest, struct FacReqCDeflection *CD)
 {
 	__u8 *p;
 
-	dest[0] = 0x30;  // sequence
-	dest[1] = 0;     // length
+	dest[0] = 0x30;	// sequence
+	dest[1] = 0;	// length
 	p = &dest[2];
 
 	p += encodeAddress(p, CD->DeflectedToNumber, CD->DeflectedToSubaddress);
@@ -198,4 +216,3 @@ int encodeInvokeDeflection(__u8 *dest, struct FacReqCDeflection *CD)
 	dest[1] = p - &dest[2];
 	return p - dest;
 }
-

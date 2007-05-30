@@ -50,9 +50,9 @@
  * 0    0(0) 1(7) 1(6) 1(5) 1(4) 1(3) 1(2)
  * 0    1(1) 1(0) 2(7) 2(6) 2(5) 2(4) 2(3)
  * 0    2(2) 2(1) 2(0) 3(7) 3(6) 3(5) 3(4)
- * 0    3(3) 3(2) 3(1) 3(0) 4(7) 4(6) 4(5) 
+ * 0    3(3) 3(2) 3(1) 3(0) 4(7) 4(6) 4(5)
  * CS   4(4) 4(3) 4(2) 4(1) 4(0) 5(7) 5(6)
- * CS   5(5) 5(4) 5(3) 5(2) 5(1) 5(0) 6(7) 
+ * CS   5(5) 5(4) 5(3) 5(2) 5(1) 5(0) 6(7)
  * CS   6(6) 6(5) 6(4) 6(3) 6(2) 6(1) 6(0)
  * 7(0) 7(6) 7(5) 7(4) 7(3) 7(2) 7(1) 7(0)
  *
@@ -66,11 +66,13 @@
  * this will avoid loud noise due to corrupt encrypted data.
  *
  * if the last block is corrupt, the current decoded block is repeated
- * until a valid block has been received. 
+ * until a valid block has been received.
  */
 
-/* some blowfish parts are taken from the crypto-api for faster implementation
-*/
+/*
+ *  some blowfish parts are taken from the
+ * crypto-api for faster implementation
+ */
 
 struct bf_ctx {
 	u32 p[18];
@@ -344,7 +346,7 @@ static const u32 bf_sbox[256 * 4] = {
 	0xb74e6132, 0xce77e25b, 0x578fdfe3, 0x3ac372e6,
 };
 
-/* 
+/*
  * Round loop unrolling macros, S is a pointer to a S-Box array
  * organized in 4 unsigned longs at a row.
  */
@@ -354,10 +356,10 @@ static const u32 bf_sbox[256 * 4] = {
 #define GET32_0(x) (((x) >> (24)) & (0xff))
 
 #define bf_F(x) (((S[GET32_0(x)] + S[256 + GET32_1(x)]) ^ \
-          S[512 + GET32_2(x)]) + S[768 + GET32_3(x)])
+    S[512 + GET32_2(x)]) + S[768 + GET32_3(x)])
 
-#define EROUND(a, b, n)  b ^= P[n]; a ^= bf_F (b)
-#define DROUND(a, b, n)  a ^= bf_F (b); b ^= P[n]
+#define EROUND(a, b, n)  b ^= P[n]; a ^= bf_F(b)
+#define DROUND(a, b, n)  a ^= bf_F(b); b ^= P[n]
 
 
 /*
@@ -376,7 +378,7 @@ dsp_bf_encrypt(dsp_t *dsp, u8 *data, int len)
 	u32 cs;
 	u8 nibble;
 
-	while(i < len) {
+	while (i < len) {
 		/* collect a block of 9 samples */
 		if (j < 9) {
 			bf_data_in[j] = *data;
@@ -396,8 +398,11 @@ dsp_bf_encrypt(dsp_t *dsp, u8 *data, int len)
 		yr = (yr<<7) | dsp_audio_law2seven[bf_data_in[6]];
 		yr = (yr<<7) | dsp_audio_law2seven[bf_data_in[7]];
 		yr = (yr<<7) | dsp_audio_law2seven[bf_data_in[8]];
-		yr = (yr<<1) | (bf_data_in[0] & 1); /* fill unused bit with random noise of audio input */
+		yr = (yr<<1) | (bf_data_in[0] & 1);
+
+		/* fill unused bit with random noise of audio input */
 		/* encrypt */
+
 		EROUND(yr, yl, 0);
 		EROUND(yl, yr, 1);
 		EROUND(yr, yl, 2);
@@ -416,13 +421,16 @@ dsp_bf_encrypt(dsp_t *dsp, u8 *data, int len)
 		EROUND(yl, yr, 15);
 		yl ^= P[16];
 		yr ^= P[17];
+
 		/* calculate 3-bit checksumme */
 		cs = yl ^ (yl>>3) ^ (yl>>6) ^ (yl>>9) ^ (yl>>12) ^ (yl>>15)
 			^ (yl>>18) ^ (yl>>21) ^ (yl>>24) ^ (yl>>27) ^ (yl>>30)
 			^ (yr<<2) ^ (yr>>1) ^ (yr>>4) ^ (yr>>7) ^ (yr>>10)
 			^ (yr>>13) ^ (yr>>16) ^ (yr>>19) ^ (yr>>22) ^ (yr>>25)
 			^ (yr>>28) ^ (yr>>31);
-		/* transcode 8 crypted bytes to 9 data bytes with sync
+
+		/*
+		 * transcode 8 crypted bytes to 9 data bytes with sync
 		 * and checksum information
 		 */
 		bf_crypt_out[0] = (yl>>25) | 0x80;
@@ -438,7 +446,7 @@ dsp_bf_encrypt(dsp_t *dsp, u8 *data, int len)
 
 	/* write current count */
 	dsp->bf_crypt_pos = j;
-			
+
 }
 
 
@@ -459,10 +467,11 @@ dsp_bf_decrypt(dsp_t *dsp, u8 *data, int len)
 	u32 *S = dsp->bf_s;
 	u32 yl, yr;
 	u8 nibble;
-	u8 cs, cs0,cs1,cs2;
+	u8 cs, cs0, cs1, cs2;
 
-	while(i < len) {
-		/* shift upper bit and rotate data to buffer ring
+	while (i < len) {
+		/*
+		 * shift upper bit and rotate data to buffer ring
 		 * send current decrypted data
 		 */
 		sync = (sync<<1) | ((*data)>>7);
@@ -483,25 +492,29 @@ dsp_bf_decrypt(dsp_t *dsp, u8 *data, int len)
 		yr = nibble = bf_crypt_inring[j++ & 15]; /* bit7 = 0 */
 		yl = (yl<<4) | (nibble>>3);
 		cs2 = bf_crypt_inring[j++ & 15];
-		yr = (yr<<7) | (cs2 & 0x7f); 
+		yr = (yr<<7) | (cs2 & 0x7f);
 		cs1 = bf_crypt_inring[j++ & 15];
-		yr = (yr<<7) | (cs1 & 0x7f); 
+		yr = (yr<<7) | (cs1 & 0x7f);
 		cs0 = bf_crypt_inring[j++ & 15];
-		yr = (yr<<7) | (cs0 & 0x7f); 
+		yr = (yr<<7) | (cs0 & 0x7f);
 		yr = (yr<<8) | bf_crypt_inring[j++ & 15];
+
 		/* calculate 3-bit checksumme */
 		cs = yl ^ (yl>>3) ^ (yl>>6) ^ (yl>>9) ^ (yl>>12) ^ (yl>>15)
 			^ (yl>>18) ^ (yl>>21) ^ (yl>>24) ^ (yl>>27) ^ (yl>>30)
 			^ (yr<<2) ^ (yr>>1) ^ (yr>>4) ^ (yr>>7) ^ (yr>>10)
 			^ (yr>>13) ^ (yr>>16) ^ (yr>>19) ^ (yr>>22) ^ (yr>>25)
 			^ (yr>>28) ^ (yr>>31);
+
 		/* check if frame is valid */
-		if ((cs&0x7) != (((cs2>>5)&4) | ((cs1>>6)&2) | (cs0 >> 7)))
-		{
+		if ((cs&0x7) != (((cs2>>5)&4) | ((cs1>>6)&2) | (cs0 >> 7))) {
 			if (dsp_debug & DEBUG_DSP_BLOWFISH)
-				printk(KERN_DEBUG "DSP BLOWFISH: received corrupt frame, checksumme is not correct\n");
+				printk(KERN_DEBUG
+				    "DSP BLOWFISH: received corrupt frame, "
+				    "checksumme is not correct\n");
 			continue;
-		} 
+		}
+
 		/* decrypt */
 		yr ^= P[17];
 		yl ^= P[16];
@@ -521,12 +534,15 @@ dsp_bf_decrypt(dsp_t *dsp, u8 *data, int len)
 		DROUND(yr, yl, 2);
 		DROUND(yl, yr, 1);
 		DROUND(yr, yl, 0);
+
 		/* transcode 8 crypted bytes to 9 sample bytes */
 		bf_data_out[0] = dsp_audio_seven2law[(yl>>25) & 0x7f];
 		bf_data_out[1] = dsp_audio_seven2law[(yl>>18) & 0x7f];
 		bf_data_out[2] = dsp_audio_seven2law[(yl>>11) & 0x7f];
 		bf_data_out[3] = dsp_audio_seven2law[(yl>>4) & 0x7f];
-		bf_data_out[4] = dsp_audio_seven2law[((yl<<3) & 0x78) | ((yr>>29) & 0x07)];
+		bf_data_out[4] = dsp_audio_seven2law[((yl<<3) & 0x78) |
+		    ((yr>>29) & 0x07)];
+
 		bf_data_out[5] = dsp_audio_seven2law[(yr>>22) & 0x7f];
 		bf_data_out[6] = dsp_audio_seven2law[(yr>>15) & 0x7f];
 		bf_data_out[7] = dsp_audio_seven2law[(yr>>8) & 0x7f];
@@ -545,34 +561,34 @@ dsp_bf_decrypt(dsp_t *dsp, u8 *data, int len)
 static inline void
 encrypt_block(const u32 *P, const u32 *S, u32 *dst, u32 *src)
 {
-        u32 yl = src[0];
-        u32 yr = src[1];
-                                                                                                                                   
-        EROUND(yr, yl, 0);
-        EROUND(yl, yr, 1);
-        EROUND(yr, yl, 2);
-        EROUND(yl, yr, 3);
-        EROUND(yr, yl, 4);
-        EROUND(yl, yr, 5);
-        EROUND(yr, yl, 6);
-        EROUND(yl, yr, 7);
-        EROUND(yr, yl, 8);
-        EROUND(yl, yr, 9);
-        EROUND(yr, yl, 10);
-        EROUND(yl, yr, 11);
-        EROUND(yr, yl, 12);
-        EROUND(yl, yr, 13);
-        EROUND(yr, yl, 14);
-        EROUND(yl, yr, 15);
-                                                                                                                                   
-        yl ^= P[16];
-        yr ^= P[17];
-                                                                                                                                   
-        dst[0] = yr;
-        dst[1] = yl;
+	u32 yl = src[0];
+	u32 yr = src[1];
+
+	EROUND(yr, yl, 0);
+	EROUND(yl, yr, 1);
+	EROUND(yr, yl, 2);
+	EROUND(yl, yr, 3);
+	EROUND(yr, yl, 4);
+	EROUND(yl, yr, 5);
+	EROUND(yr, yl, 6);
+	EROUND(yl, yr, 7);
+	EROUND(yr, yl, 8);
+	EROUND(yl, yr, 9);
+	EROUND(yr, yl, 10);
+	EROUND(yl, yr, 11);
+	EROUND(yr, yl, 12);
+	EROUND(yl, yr, 13);
+	EROUND(yr, yl, 14);
+	EROUND(yl, yr, 15);
+
+	yl ^= P[16];
+	yr ^= P[17];
+
+	dst[0] = yr;
+	dst[1] = yl;
 }
 
-/* 
+/*
  * initialize the dsp for encryption and decryption using the same key
  * Calculates the blowfish S and P boxes for encryption and decryption.
  * The margin of keylen must be 4-56 bytes.
@@ -586,13 +602,12 @@ dsp_bf_init(dsp_t *dsp, const u8 *key, uint keylen)
 	u32 *P = (u32 *)dsp->bf_p;
 	u32 *S = (u32 *)dsp->bf_s;
 
-	if (keylen<4 || keylen>56)
-		return(1);
+	if (keylen < 4 || keylen > 56)
+		return (1);
 
 	/* Set dsp states */
 	i = 0;
-	while(i < 9)
-	{
+	while (i < 9) {
 		dsp->bf_crypt_out[i] = 0xff;
 		dsp->bf_data_out[i] = dsp_silence;
 		i++;
@@ -614,10 +629,10 @@ dsp_bf_init(dsp_t *dsp, const u8 *key, uint keylen)
 
 	/* Actual subkey generation */
 	for (j = 0, i = 0; i < 16 + 2; i++) {
-		temp = (((u32 )key[j] << 24) |
-			((u32 )key[(j + 1) % keylen] << 16) |
-			((u32 )key[(j + 2) % keylen] << 8) |
-			((u32 )key[(j + 3) % keylen]));
+		temp = (((u32)key[j] << 24) |
+		    ((u32)key[(j + 1) % keylen] << 16) |
+		    ((u32)key[(j + 2) % keylen] << 8) |
+		    ((u32)key[(j + 3) % keylen]));
 
 		P[i] = P[i] ^ temp;
 		j = (j + 4) % keylen;
@@ -642,17 +657,15 @@ dsp_bf_init(dsp_t *dsp, const u8 *key, uint keylen)
 		}
 	}
 
-	return(0);
+	return (0);
 }
 
 
-/* turn encryption off
+/*
+ * turn encryption off
  */
 void
 dsp_bf_cleanup(dsp_t *dsp)
 {
 	dsp->bf_enable = 0;
 }
-
-
-

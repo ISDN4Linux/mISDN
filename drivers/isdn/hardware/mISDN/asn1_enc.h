@@ -12,8 +12,11 @@ int encodeNumberDigits(__u8 *dest, __u8 *nd, __u8 len);
 int encodePublicPartyNumber(__u8 *dest, __u8 *facilityPartyNumber);
 int encodePartyNumber(__u8 *dest, __u8 *facilityPartyNumber);
 int encodeServedUserNumber(__u8 *dest, __u8 *servedUserNumber);
-int encodeAddress(__u8 *dest, __u8 *facilityPartyNumber, __u8 *calledPartySubaddress);
+int encodeAddress(__u8 *dest, __u8 *facilityPartyNumber,
+    __u8 *calledPartySubaddress);
 int encodeActivationDiversion(__u8 *dest, struct FacReqCFActivate *CFActivate);
-int encodeDeactivationDiversion(__u8 *dest,struct FacReqCFDeactivate *CFDeactivate);
-int encodeInterrogationDiversion(__u8 *dest, struct FacReqCFInterrogateParameters *params);
+int encodeDeactivationDiversion(__u8 *dest,
+    struct FacReqCFDeactivate *CFDeactivate);
+int encodeInterrogationDiversion(__u8 *dest,
+    struct FacReqCFInterrogateParameters *params);
 int encodeInvokeDeflection(__u8 *dest, struct FacReqCDeflection *CD);
