@@ -1561,7 +1561,7 @@ next_card:
 
 	/* set keepalive timer */
 	hc->keep_tl.function = (void *)l1oip_keepalive;
-	hc->keep_tl.data = (u32)hc;
+	hc->keep_tl.data = (ulong)hc;
 	init_timer(&hc->keep_tl);
 	hc->keep_tl.expires = jiffies + 2*HZ; /* two seconds for the first time */
 	add_timer(&hc->keep_tl);
@@ -1569,7 +1569,7 @@ next_card:
 
 	/* set timeout timer */
 	hc->timeout_tl.function = (void *)l1oip_timeout;
-	hc->timeout_tl.data = (u32)hc;
+	hc->timeout_tl.data = (ulong)hc;
 	init_timer(&hc->timeout_tl);
 	hc->timeout_on = 0; /* state that we have time off */
 
