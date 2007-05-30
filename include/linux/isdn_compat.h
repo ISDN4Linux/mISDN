@@ -118,13 +118,17 @@ typedef struct wait_queue *wait_queue_head_t;
 #define kzalloc(s,f) kcalloc(1,s,f)
 #endif
 
-#define __INIT_WORK(a,b,c) INIT_WORK(a,b)
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,19)
 #include <linux/config.h>
-#undef __INIT_WORK
 #define __INIT_WORK(a,b,c) INIT_WORK(a,b,c)
+#else
+#define __INIT_WORK(a,b,c) INIT_WORK(a,b)
 #endif
 
-
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,20)
+#define	OLD_IRQ_CALL
+#else
+#undef	OLD_IRQ_CALL
+#endif
 #endif /* __KERNEL__ */
 #endif /* _LINUX_ISDN_COMPAT_H */

@@ -1463,11 +1463,11 @@ write_tiger_bch(channel_t *bch, u_int *buf, int cnt) {
 }
 
 static irqreturn_t
-nj_interrupt(int intno, void *dev_id
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,20)
-, struct pt_regs *regs
+#ifdef	OLD_IRQ_CALL
+nj_interrupt(int intno, void *dev_id, struct pt_regs *regs)
+#else
+nj_interrupt(int intno, void *dev_id)
 #endif
-)
 {
 	netjet_t *card = dev_id;
 	u_int8_t val, s1val, s0val;

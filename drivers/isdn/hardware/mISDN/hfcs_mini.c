@@ -1004,11 +1004,11 @@ hfcsmini_bh_handler(unsigned long ul_hw)
  * Interrupt handler
  */
 static irqreturn_t
-hfcsmini_interrupt(int intno, void *dev_id
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,20)
-, struct pt_regs *regs
+#ifdef	OLD_IRQ_CALL
+hfcsmini_interrupt(int intno, void *dev_id, struct pt_regs *regs)
+#else
+hfcsmini_interrupt(int intno, void *dev_id)
 #endif
-)
 {
 	__u8 fifo_irq, misc_irq;
 	hfcsmini_hw *hw = dev_id;
