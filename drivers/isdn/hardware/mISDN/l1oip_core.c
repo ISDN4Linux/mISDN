@@ -1238,7 +1238,7 @@ l1oip_init(void)
 	mISDNstack_t    *dst = NULL; /* make gcc happy */
 
 #if !defined(MODULE)
-#error	"CONFIG_MODULE is not defined."
+#error	"CONFIG_MODULES is not defined."
 #endif
 	if (debug & DEBUG_L1OIP_INIT)
 		printk(KERN_DEBUG "%s: init entered\n", __FUNCTION__);
@@ -1565,7 +1565,7 @@ next_card:
 	init_timer(&hc->keep_tl);
 	hc->keep_tl.expires = jiffies + 2*HZ; /* two seconds for the first time */
 	add_timer(&hc->keep_tl);
-	__INIT_WORK(&hc->tqueue, (void *)l1oip_keepalive_bh, hc); /* __INIT_WORK defined in isdn_compat.h */
+	__INIT_WORK(&hc->tqueue, (void *)l1oip_keepalive_bh, hc);
 
 	/* set timeout timer */
 	hc->timeout_tl.function = (void *)l1oip_timeout;
