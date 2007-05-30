@@ -46,6 +46,7 @@ NOTE: The bytes are handled as they are law-encoded.
 
 */
 
+#include <linux/vmalloc.h>
 #include "core.h"
 
 /* definitions of codec. don't use calculations, code may run slower. */
