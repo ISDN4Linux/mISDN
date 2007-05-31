@@ -1,4 +1,4 @@
-/* xhfc_pci2pi.c v1.8 2007/05/30 
+/* $Id: xhfc_pci2pi.c,v 1.9 2007/05/31 16:44:49 martinb1 Exp $
  * PCI2PI Pci Bridge support for xhfc_su.c
  *
  * (C) 2007 Copyright Cologne Chip AG
