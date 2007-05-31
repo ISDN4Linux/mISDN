@@ -339,6 +339,9 @@ function scan_devices
 	for line in $(${LSPCI} -n | ${GREP} "1397:\(2bd\(0\|6\|7\|8\|9\|a\|b\|c\)\|b100\)\|1043:0675\|0871:ffa\(1\|2\)\|1051:0100\|15b0:2bd0\|114f:007\(0\|1\|2\|3\)\|13d1:2bd1\|182d:3069"); do
 		addcard "hfcpci" "" 1 'mode="te" link="ptmp"'
 	done
+	for line in $(${LSPCI} -n -d 0x1397:a003); do
+		addcard "xhfc" "" 4 'mode="te" link="ptmp"'
+	done
 	for line in $(${LSPCI} -n | ${GREP} "1244:\(0a00\|0e00\)"); do
 		addcard "avmfritz" "" 1 'mode="te" link="ptmp"'
 	done
