@@ -761,9 +761,15 @@ l1oip_socket_open(l1oip_t *hc)
  * keepalife timer expires
  */
 static void
+#ifdef OLD_WORKQUEUE_CALL
 l1oip_keepalive_bh(void *data)
 {
 	l1oip_t *hc = (l1oip_t *)data;
+#else
+l1oip_keepalive_bh(struct work_struct *work)
+{
+	l1oip_t *hc = container_of(work, l1oip_t, tqueue);
+#endif
 
 	if (debug & (DEBUG_L1OIP_MSG|DEBUG_L1OIP_SOCKET))
 		printk(KERN_DEBUG "%s: keepalive bh called, sending empty frame on dchannel\n", __FUNCTION__);

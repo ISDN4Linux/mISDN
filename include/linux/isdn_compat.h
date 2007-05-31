@@ -121,8 +121,10 @@ typedef struct wait_queue *wait_queue_head_t;
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,19)
 #include <linux/config.h>
 #define __INIT_WORK(a,b,c) INIT_WORK(a,b,c)
+#define OLD_WORKQUEUE_CALL
 #else
 #define __INIT_WORK(a,b,c) INIT_WORK(a,b)
+#undef OLD_WORKQUEUE_CALL
 #endif
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,20)
