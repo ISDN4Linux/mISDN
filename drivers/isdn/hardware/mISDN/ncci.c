@@ -555,6 +555,7 @@ static struct FsmNode fn_ncci_list[] =
   {ST_NCCI_N_1,		EV_AP_CONNECT_B3_RESP,		ncci_connect_b3_resp},
   {ST_NCCI_N_1,		EV_AP_DISCONNECT_B3_REQ,	ncci_disconnect_b3_req},
   {ST_NCCI_N_1,		EV_NC_DISCONNECT_B3_IND,	ncci_disconnect_b3_ind},
+  {ST_NCCI_N_1,		EV_NC_DISCONNECT_B3_CONF,	ncci_disconnect_b3_conf},
   {ST_NCCI_N_1,		EV_AP_MANUFACTURER_REQ,		ncci_manufacturer_req},
   {ST_NCCI_N_1,		EV_AP_RELEASE,			ncci_appl_release_disc},
   {ST_NCCI_N_1,		EV_NC_LINKDOWN,			ncci_linkdown},
@@ -562,6 +563,7 @@ static struct FsmNode fn_ncci_list[] =
   {ST_NCCI_N_2,		EV_NC_CONNECT_B3_ACTIVE_IND,	ncci_connect_b3_active_ind},
   {ST_NCCI_N_2,		EV_AP_DISCONNECT_B3_REQ,	ncci_disconnect_b3_req},
   {ST_NCCI_N_2,		EV_NC_DISCONNECT_B3_IND,	ncci_disconnect_b3_ind},
+  {ST_NCCI_N_2,		EV_NC_DISCONNECT_B3_CONF,	ncci_disconnect_b3_conf},
   {ST_NCCI_N_2,		EV_DL_ESTABLISH_CONF,		ncci_dl_establish_conf},
   {ST_NCCI_N_2,		EV_DL_RELEASE_IND,		ncci_dl_release_ind_conf},
   {ST_NCCI_N_2,		EV_AP_MANUFACTURER_REQ,		ncci_manufacturer_req},
@@ -580,6 +582,7 @@ static struct FsmNode fn_ncci_list[] =
   {ST_NCCI_N_ACT,	EV_AP_CONNECT_B3_ACTIVE_RESP,	ncci_connect_b3_active_resp},
   {ST_NCCI_N_ACT,	EV_AP_DISCONNECT_B3_REQ,	ncci_disconnect_b3_req},
   {ST_NCCI_N_ACT,	EV_NC_DISCONNECT_B3_IND,	ncci_disconnect_b3_ind},
+  {ST_NCCI_N_ACT,	EV_NC_DISCONNECT_B3_CONF,	ncci_disconnect_b3_conf},
   {ST_NCCI_N_ACT,	EV_DL_RELEASE_IND,		ncci_dl_release_ind_conf},
   {ST_NCCI_N_ACT,	EV_DL_RELEASE_CONF,		ncci_dl_release_ind_conf},
   {ST_NCCI_N_ACT,	EV_DL_DOWN_IND,			ncci_dl_down_ind},
@@ -593,7 +596,6 @@ static struct FsmNode fn_ncci_list[] =
   {ST_NCCI_N_ACT,	EV_NC_CONNECT_B3_T90_ACTIVE_IND,ncci_connect_b3_t90_active_ind},
 #endif
 
-  {ST_NCCI_N_4,		EV_NC_DISCONNECT_B3_CONF,	ncci_disconnect_b3_conf},
   {ST_NCCI_N_4,		EV_NC_DISCONNECT_B3_IND,	ncci_disconnect_b3_ind},
   {ST_NCCI_N_4,		EV_DL_RELEASE_CONF,		ncci_dl_release_ind_conf},
   {ST_NCCI_N_4,		EV_DL_DOWN_IND,			ncci_dl_down_ind},
@@ -864,13 +866,13 @@ ncciDestr(Ncci_t *ncci)
 	if (!test_bit(NCCI_STATE_APPLRELEASED, &ncci->state))
 		ncci->contr->ctrl->free_ncci(ncci->contr->ctrl, ncci->appl->ApplId, ncci->addr);
 #endif
+	AppPlciDelNCCI(ncci);
 	/* cleanup data queues */
 	discard_queue(&ncci->squeue);
 	for (i = 0; i < CAPI_MAXDATAWINDOW; i++) {
 		if (ncci->xmit_skb_handles[i].PktId)
 			ncci->xmit_skb_handles[i].PktId = 0;
 	}
-	AppPlciDelNCCI(ncci);
 	ncci_free(ncci);
 }
 
@@ -884,10 +886,16 @@ ncciApplRelease(Ncci_t *ncci)
 void
 ncciDelAppPlci(Ncci_t *ncci)
 {
-	printk(KERN_DEBUG "%s: ncci(%p) NCCI(%x)\n",
-		__FUNCTION__, ncci, ncci->addr); 
-	ncci->AppPlci = NULL;
-	/* maybe we should release the NCCI here */
+	printk(KERN_DEBUG "%s: ncci(%p) NCCI(%x) state %s\n",
+		__FUNCTION__, ncci, ncci->addr,
+		str_st_ncci[ncci->ncci_m.state]); 
+	/* remove it from the aplci Nccis list */
+	AppPlciDelNCCI(ncci);
+	/* release the NCCI here */
+	if (ncci->ncci_m.state != ST_NCCI_N_0)
+		ncciL4L3(ncci, DL_RELEASE | REQUEST, 0, 0, NULL, NULL);
+	else
+		ncciDestr(ncci);
 }
 
 void
