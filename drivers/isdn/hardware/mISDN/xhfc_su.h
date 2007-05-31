@@ -1,7 +1,7 @@
-/* xhfc_su.h 1.7 2007/05/09 07:43:41
+/* xhfc_su.h v1.8 2007/05/30
+ * mISDN driver for Cologne Chip' XHFC
  *
- * mISDN driver for Colognechip xHFC chip
- *
+ * (C) 2007 Copyright Cologne Chip AG
  * Authors : Martin Bachem, Joerg Ciesielski
  * Contact : info@colognechip.com
  *
@@ -26,7 +26,7 @@
 
 #include <linux/timer.h>
 #include "channel.h"
-#include "xhfc24succ.h"
+#include "xhfc24sucd.h"
 
 #define DRIVER_NAME "XHFC"
 
@@ -137,10 +137,10 @@ typedef struct {
 	struct timer_list t4_timer;	/* timer 4 for activation/deactivation */
 
 	/* chip registers */
-	reg_a_su_ctrl0 su_ctrl0;
-	reg_a_su_ctrl1 su_ctrl1;
-	reg_a_su_ctrl2 su_ctrl2;
-	reg_a_st_ctrl3 st_ctrl3;
+	__u8 su_ctrl0;
+	__u8 su_ctrl1;
+	__u8 su_ctrl2;
+	__u8 st_ctrl3;
 } xhfc_port_t;
 
 
@@ -160,11 +160,11 @@ typedef struct _xhfc_t {
 	__u8		chipidx;	/* index in pi->xhfcs[NUM_XHFCS] */
 	struct _xhfc_pi	* pi;		/* backpointer to xhfc_pi */
 	__u8		param_idx;	/* used to access module param arrays */
-	
+
 	struct list_head list;
 	spinlock_t lock;
 	struct tasklet_struct tasklet;	/* interrupt bottom half */
-	
+
 	__u8 testirq;
 
 	int num_ports;		/* number of S and U interfaces */
@@ -179,16 +179,15 @@ typedef struct _xhfc_t {
 	__u32 f0_akku;	/* akkumulated f0 counter deltas */
 
 	/* chip registers */
-	reg_r_irq_ctrl 		irq_ctrl;
-	reg_r_misc_irqmsk	misc_irqmsk;	/* mask of enabled interrupt sources */
-	reg_r_misc_irq		misc_irq;	/* collect interrupt status bits */
+	__u8 irq_ctrl;
+	__u8 misc_irqmsk;	/* mask of enabled interrupt sources */
+	__u8 misc_irq;		/* collect interrupt status bits */
 
-	reg_r_su_irqmsk		su_irqmsk;	/* mask of line interface state change interrupts */
-	reg_r_su_irq		su_irq;		/* collect interrupt status bits */
-	reg_r_ti_wd		ti_wd;		/* timer interval */
-
-	reg_r_pcm_md0		pcm_md0;
-	reg_r_pcm_md1		pcm_md1;
+	__u8 su_irqmsk;		/* mask of line interface state change interrupts */
+	__u8 su_irq;		/* collect interrupt status bits */
+	__u8 ti_wd;		/* timer interval */
+	__u8 pcm_md0;
+	__u8 pcm_md1;
 
 	__u32 fifo_irq;		/* fifo bl irq */
 	__u32 fifo_irqmsk;	/* fifo bl irq */
@@ -216,4 +215,4 @@ typedef struct _xhfc_pi {
 } xhfc_pi;
 
 
-#endif				/* _XHFC_SU_H_ */
+#endif /* _XHFC_SU_H_ */

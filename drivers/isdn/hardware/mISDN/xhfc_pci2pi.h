@@ -1,7 +1,7 @@
-/* $Id: xhfc_pci2pi.h,v 1.7 2007/05/09 14:05:10 martinb1 Exp $
- *
+/* xhfc_pci2pi.h v1.8 2007/05/30 
  * PCI2PI Pci Bridge support for xhfc_su.c
  *
+ * (C) 2007 Copyright Cologne Chip AG
  * Authors : Martin Bachem, Joerg Ciesielski
  * Contact : info@colognechip.com
  *
@@ -23,8 +23,6 @@
 
 #ifndef _XHFC_PCI2PI_H_
 #define _XHFC_PCI2PI_H_
-
-#include "xhfc24succ.h"
 
 /* differnt PCI modes supported by PCI2PI */
 #define PI_INTELNOMX	0

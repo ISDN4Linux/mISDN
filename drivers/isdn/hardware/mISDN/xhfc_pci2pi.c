@@ -1,7 +1,7 @@
-/* $Id: xhfc_pci2pi.c,v 1.7 2007/05/09 14:04:51 martinb1 Exp $
- *
+/* xhfc_pci2pi.c v1.8 2007/05/30 
  * PCI2PI Pci Bridge support for xhfc_su.c
  *
+ * (C) 2007 Copyright Cologne Chip AG
  * Authors : Martin Bachem, Joerg Ciesielski
  * Contact : info@colognechip.com
  *
@@ -62,10 +62,10 @@ static PCI2PI_cfg PCI2PI_config = {
 __u32 PCI2PI_XHFC_OFFSETS[PCI2PI_MAX_XHFC] = {0, 0x400};
 
 
-/***********************************/
-/* initialise the XHFC PCI Bridge  */
-/* return 0 on success.            */
-/***********************************/
+/*
+ * initialise the XHFC PCI Bridge
+ * return 0 on success.
+ */
 int
 init_pci_bridge(xhfc_pi * pi)
 {
