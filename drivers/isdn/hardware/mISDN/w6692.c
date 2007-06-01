@@ -1083,6 +1083,8 @@ w6692_bmsg(channel_t *bch, struct sk_buff *skb)
 		if (!test_and_set_bit(FLG_ACTIVE, &bch->Flags)) {
 			spin_lock_irqsave(bch->inst.hwlock, flags);
 			ret = mode_w6692(bch, bch->channel, bch->inst.pid.protocol[1]);
+			if (bch->inst.pid.protocol[2] == ISDN_PID_L2_B_TRANS)
+				test_and_set_bit(FLG_L2DATA, &bch->Flags);
 			spin_unlock_irqrestore(bch->inst.hwlock, flags);
 		}
 #ifdef FIXME
