@@ -59,20 +59,16 @@ install: all modules-install
 	$(MODULES_UPDATE)
 	make -C config install
 
+uninstall:
+	export MISDNDIR=$(MISDNDIR); ./makelib.sh uninstall
+
 modules-install:
 	cd $(LINUX) ; make INSTALL_MOD_PATH=$(INSTALL_PREFIX) SUBDIRS=$(MISDN_SRC) modules_install 
 	mkdir -p $(INSTALL_PREFIX)/usr/include/linux/
 	cp $(MISDNDIR)/include/linux/*.h $(INSTALL_PREFIX)/usr/include/linux/
 
 test_old_misdn:
-	@if echo -ne "#include <linux/mISDNif.h>" | gcc -C -E - 2>/dev/null 1>/dev/null  ; then \
-		if ! echo -ne "#include <linux/mISDNif.h>\n#if MISDN_MAJOR_VERSION < 4\n#error old mISDNif.h\n#endif\n" | gcc -C -E - 2>/dev/null 1>/dev/null ; then \
-			echo -ne "\n!!You should remove the following files:\n\n$(LINUX)/include/linux/mISDNif.h\n$(LINUX)/include/linux/isdn_compat.h\n/usr/include/linux/mISDNif.h\n/usr/include/linux/isdn_compat.h\n\nIn order to upgrade to the mqueue branch\n\n"; \
-			echo -ne "I can do that for you, just type: make force\n\n" ; \
-			exit 1; \
-		fi ;\
-	fi
-
+	export LINUX=$(LINUX); ./makelib.sh test_old_misdn
 
 
 .PHONY: modules-install install all clean VERSION
