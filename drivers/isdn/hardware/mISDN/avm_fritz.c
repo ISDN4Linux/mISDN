@@ -789,6 +789,8 @@ hdlc_down(mISDNinstance_t *inst, struct sk_buff *skb)
 			spin_lock_irqsave(inst->hwlock, flags);
 			ret = modehdlc(bch, bch->channel,
 				bch->inst.pid.protocol[1]);
+			if (bch->inst.pid.protocol[2] == ISDN_PID_L2_B_TRANS)
+				test_and_set_bit(FLG_L2DATA, &bch->Flags);
 			spin_unlock_irqrestore(inst->hwlock, flags);
 		}
 		skb_trim(skb, 0);
