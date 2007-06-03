@@ -653,8 +653,8 @@ mISDN_module_register(struct module *module)
 	write_lock(&mISDN_modules_lock);
 	list_add(&ml->list, &mISDN_modulelist);
 	write_unlock(&mISDN_modules_lock);
-
-	printk(KERN_DEBUG "mISDN_register_module(%p)\n", module);
+	if (debug)
+                printk(KERN_DEBUG "mISDN_register_module(%s)\n", module->name);
 }
 
 void
@@ -668,7 +668,9 @@ mISDN_module_unregister(struct module *module)
 			list_del(&ml->list);
 			kfree(ml);
 			write_unlock(&mISDN_modules_lock);
-			printk(KERN_DEBUG "mISDN_unregister_module(%p)\n", module);
+			if (debug)
+			  printk(KERN_DEBUG "mISDN_unregister_module(%s)\n",
+			      module->name);
 			return;
 		}
 	write_unlock(&mISDN_modules_lock);
@@ -730,9 +732,12 @@ int mISDN_unregister(mISDNobject_t *obj) {
 	if (debug)
 		printk(KERN_DEBUG "mISDN_unregister %s %d refs\n",
 			obj->name, obj->refcnt);
-	if (obj->DPROTO.protocol[0])
+	if (obj->DPROTO.protocol[0]) {
+		if (debug)
+			printk(KERN_DEBUG "mISDN_unregister stacks(%s)\n",
+				obj->name);
 		release_stacks(obj);
-	else
+	} else
 		cleanup_object(obj);
 	write_lock_irqsave(&mISDN_objects_lock, flags);
 	list_del(&obj->list);
@@ -797,6 +802,8 @@ void mISDN_cleanup(void) {
 		printk(KERN_WARNING "mISDNcore mISDN_objects not empty\n");
 	}
 	check_stacklist();
+	if (!list_empty(&mISDN_modulelist))
+		printk(KERN_WARNING "mISDNcore mISDN_modulelist not empty\n");
 	if (mISDN_thread.thread) {
 		/* abort mISDNd kernel thread */
 		mISDN_thread.notify = &sem;

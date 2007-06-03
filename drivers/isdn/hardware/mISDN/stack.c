@@ -828,6 +828,8 @@ delete_stack(mISDNstack_t *st)
 			down(&sem);
 	}
 	release_layers(st, MGR_RELEASE | INDICATION);
+	// FIXME dirty
+	test_and_set_bit(mISDN_STACK_DELETED, &st->status);
 	write_lock_irqsave(&stacklist_lock, flags);
 	list_del(&st->list);
 	write_unlock_irqrestore(&stacklist_lock, flags);
@@ -843,6 +845,11 @@ release_stack(mISDNstack_t *st) {
 	if (core_debug & DEBUG_CORE_FUNC)
 		printk(KERN_DEBUG "%s: st(%p)\n", __FUNCTION__, st);
 
+	// FIXME dirty
+	if (test_bit(mISDN_STACK_DELETED, &st->status)) {
+		WARN_ON(1);
+		return -EINVAL;
+	}
 	list_for_each_entry_safe(cst, nst, &st->childlist, list) {
 		if ((err = delete_stack(cst))) {
 			return(err);
