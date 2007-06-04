@@ -38,18 +38,34 @@
 
 #define HFC_INFO(txt)	printk(KERN_DEBUG txt)
 
-extern const char *CardType[];
+static const char *hfcpci_revision = "$Revision: 1.50 $";
 
-static const char *hfcpci_revision = "$Revision: 1.49 $";
-
-/* table entry in the PCI devices list */
-typedef struct {
-	int vendor_id;
-	int device_id;
-	char *vendor_name;
-	char *card_name;
-} PCI_ENTRY;
-
+enum {
+	HFC_CCD_2BD0,
+	HFC_CCD_B000,
+	HFC_CCD_B006,
+	HFC_CCD_B007,
+	HFC_CCD_B008,
+	HFC_CCD_B009,
+	HFC_CCD_B00A,
+	HFC_CCD_B00B,
+	HFC_CCD_B00C,
+	HFC_CCD_B100,
+	HFC_CCD_B700,
+	HFC_CCD_B701,
+	HFC_ASUS_0675,
+	HFC_BERKOM_A1T,
+	HFC_BERKOM_TCONCEPT,
+	HFC_ANIGMA_MC145575,
+	HFC_ZOLTRIX_2BD0,
+	HFC_DIGI_DF_M_IOM2_E,
+	HFC_DIGI_DF_M_E,
+	HFC_DIGI_DF_M_IOM2_A,
+	HFC_DIGI_DF_M_A,
+	HFC_ABOCOM_2BD1,
+	HFC_SITECOM_DC105V2,
+};
+	
 #define NT_T1_COUNT	20	/* number of 3.125ms interrupts for G2 timeout */
 #define CLKDEL_TE	0x0e	/* CLKDEL in TE mode */
 #define CLKDEL_NT	0x6c	/* CLKDEL in NT mode */
@@ -103,34 +119,6 @@ typedef struct {
 #endif
 
  
-static const PCI_ENTRY id_list[] =
-{
-	{PCI_VENDOR_ID_CCD, PCI_DEVICE_ID_CCD_2BD0, "CCD/Billion/Asuscom", "2BD0"},
-	{PCI_VENDOR_ID_CCD, PCI_DEVICE_ID_CCD_B000, "Billion", "B000"},
-	{PCI_VENDOR_ID_CCD, PCI_DEVICE_ID_CCD_B006, "Billion", "B006"},
-	{PCI_VENDOR_ID_CCD, PCI_DEVICE_ID_CCD_B007, "Billion", "B007"},
-	{PCI_VENDOR_ID_CCD, PCI_DEVICE_ID_CCD_B008, "Billion", "B008"},
-	{PCI_VENDOR_ID_CCD, PCI_DEVICE_ID_CCD_B009, "Billion", "B009"},
-	{PCI_VENDOR_ID_CCD, PCI_DEVICE_ID_CCD_B00A, "Billion", "B00A"},
-	{PCI_VENDOR_ID_CCD, PCI_DEVICE_ID_CCD_B00B, "Billion", "B00B"},
-	{PCI_VENDOR_ID_CCD, PCI_DEVICE_ID_CCD_B00C, "Billion", "B00C"},
-	{PCI_VENDOR_ID_CCD, PCI_DEVICE_ID_CCD_B100, "Seyeon", "B100"},
-	{PCI_VENDOR_ID_CCD, PCI_DEVICE_ID_CCD_B700, "Primux II S0", "B700"},
-	{PCI_VENDOR_ID_CCD, PCI_DEVICE_ID_CCD_B701, "Primux II S0 NT", "B701"},
-	{PCI_VENDOR_ID_ABOCOM, PCI_DEVICE_ID_ABOCOM_2BD1, "Abocom/Magitek", "2BD1"},
-	{PCI_VENDOR_ID_ASUSTEK, PCI_DEVICE_ID_ASUSTEK_0675, "Asuscom/Askey", "675"},
-	{PCI_VENDOR_ID_BERKOM, PCI_DEVICE_ID_BERKOM_T_CONCEPT, "German telekom", "T-Concept"},
-	{PCI_VENDOR_ID_BERKOM, PCI_DEVICE_ID_BERKOM_A1T, "German telekom", "A1T"},
-	{PCI_VENDOR_ID_ANIGMA, PCI_DEVICE_ID_ANIGMA_MC145575, "Motorola MC145575", "MC145575"},
-	{PCI_VENDOR_ID_ZOLTRIX, PCI_DEVICE_ID_ZOLTRIX_2BD0, "Zoltrix", "2BD0"},
-	{PCI_VENDOR_ID_DIGI, PCI_DEVICE_ID_DIGI_DF_M_IOM2_E,"Digi International", "Digi DataFire Micro V IOM2 (Europe)"},
-	{PCI_VENDOR_ID_DIGI, PCI_DEVICE_ID_DIGI_DF_M_E,"Digi International", "Digi DataFire Micro V (Europe)"},
-	{PCI_VENDOR_ID_DIGI, PCI_DEVICE_ID_DIGI_DF_M_IOM2_A,"Digi International", "Digi DataFire Micro V IOM2 (North America)"},
-	{PCI_VENDOR_ID_DIGI, PCI_DEVICE_ID_DIGI_DF_M_A,"Digi International", "Digi DataFire Micro V (North America)"},
-	{PCI_VENDOR_ID_SITECOM, PCI_DEVICE_ID_SITECOM_DC105V2,"Sitecom Connectivity", "DC-105 ISDN TA"},
-	{0, 0, NULL, NULL},
-};
-
 
 struct hfcPCI_hw {
 	unsigned char		cirm;
@@ -149,7 +137,6 @@ struct hfcPCI_hw {
 	unsigned char		bswapped;
 	unsigned char		nt_mode;
 	int			nt_timer;
-	struct pci_dev		*dev;
 	unsigned char		*pci_io; /* start of PCI IO memory */
 	dma_addr_t		dmahandle;
 	void			*fifos; /* FIFO memory */ 
@@ -170,11 +157,12 @@ typedef struct hfcPCI_hw	hfcPCI_hw_t;
 
 typedef struct _hfc_pci {
 	struct list_head	list;
-	u_char			subtyp;
+	u_char			subtype;
 	u_char			chanlimit;
 	u_long			cfg;
 	u_int			irq;
 	u_int			irqcnt;
+	struct pci_dev		*pdev;
 	hfcPCI_hw_t		hw;
 	spinlock_t		lock;
 	channel_t		dch;
@@ -208,9 +196,9 @@ release_io_hfcpci(hfc_pci_t *hc)
 	mdelay(10);						/* Timeout 10ms */
 	hc->hw.cirm = 0; /* Reset Off */
 	Write_hfc(hc, HFCPCI_CIRM, hc->hw.cirm);
-	pci_write_config_word(hc->hw.dev, PCI_COMMAND, 0);	/* disable memory mapped ports + busmaster */
+	pci_write_config_word(hc->pdev, PCI_COMMAND, 0);	/* disable memory mapped ports + busmaster */
 	del_timer(&hc->hw.timer);
-	pci_free_consistent(hc->hw.dev, 0x8000, hc->hw.fifos, hc->hw.dmahandle);
+	pci_free_consistent(hc->pdev, 0x8000, hc->hw.fifos, hc->hw.dmahandle);
 	iounmap((void *)hc->hw.pci_io);
 }
 
@@ -228,9 +216,9 @@ reset_hfcpci(hfc_pci_t *hc)
 	HFC_INFO("reset_hfcpci: entered\n");
 	val = Read_hfc(hc, HFCPCI_CHIP_ID);
 	printk(KERN_INFO "HFC_PCI: resetting HFC ChipId(%x)\n", val);
-	pci_write_config_word(hc->hw.dev, PCI_COMMAND, PCI_ENA_MEMIO);	/* enable memory mapped ports, disable busmaster */
+	pci_write_config_word(hc->pdev, PCI_COMMAND, PCI_ENA_MEMIO);	/* enable memory mapped ports, disable busmaster */
 	disable_hwirq(hc);
-	pci_write_config_word(hc->hw.dev, PCI_COMMAND, PCI_ENA_MEMIO + PCI_ENA_MASTER);	/* enable memory ports + busmaster */
+	pci_write_config_word(hc->pdev, PCI_COMMAND, PCI_ENA_MEMIO + PCI_ENA_MASTER);	/* enable memory ports + busmaster */
 	val = Read_hfc(hc, HFCPCI_STATUS);
 	printk(KERN_DEBUG "HFC-PCI status(%x) before reset\n", val);
 	hc->hw.cirm = HFCPCI_RESET;	/* Reset On */
@@ -1863,70 +1851,47 @@ MODULE_PARM_DESC(layermask, "hfcpci layer mask");
 
 static char HFCName[] = "HFC_PCI";
 
-/* this variable is used as card index when more than one cards are present */
-static struct pci_dev *dev_hfcpci = NULL;
-
 
 static int
 setup_hfcpci(hfc_pci_t *hc)
 {
 	char tmp[64];
-	int i=0;
-	struct pci_dev *tmp_hfcpci = NULL;
 	void *buffer;
 
 	strcpy(tmp, hfcpci_revision);
 	printk(KERN_INFO "mISDN: HFC-PCI driver Rev. %s\n", mISDN_getrev(tmp));
 	hc->hw.cirm = 0;
 	hc->dch.state = 0;
-	while (id_list[i].vendor_id) {
-		tmp_hfcpci = pci_find_device(id_list[i].vendor_id,
-				id_list[i].device_id, dev_hfcpci);
-		i++;
-		if (tmp_hfcpci) {
-			if (pci_enable_device(tmp_hfcpci))
-				continue;
-			pci_set_master(tmp_hfcpci);
-			break;
-		}
-	}
-	if (tmp_hfcpci) {
-		i--;
-		dev_hfcpci = tmp_hfcpci;	/* old device */
-		hc->hw.dev = dev_hfcpci;
-		hc->irq = dev_hfcpci->irq;
-		if (!hc->irq) {
-			printk(KERN_WARNING "HFC-PCI: No IRQ for PCI card found\n");
-			return (1);
-		}
-		hc->hw.pci_io = (char *) get_pcibase(dev_hfcpci, 1);
-		printk(KERN_INFO "mISDN: HFC-PCI card manufacturer: %s card name: %s\n", id_list[i].vendor_name, id_list[i].card_name);
-	} else {
-		printk(KERN_WARNING "HFC-PCI: No more PCI cards found\n");
+
+	pci_set_master(hc->pdev);
+	if (!hc->irq) {
+		printk(KERN_WARNING "HFC-PCI: No IRQ for PCI card found\n");
 		return (1);
 	}
+	hc->hw.pci_io = (char *) get_pcibase(hc->pdev, 1);
+	
 	if (!hc->hw.pci_io) {
 		printk(KERN_WARNING "HFC-PCI: No IO-Mem for PCI card found\n");
 		return (1);
 	}
 	/* Allocate memory for FIFOS */
 	/* the memory needs to be on a 32k boundary within the first 4G */
-	pci_set_dma_mask(dev_hfcpci, 0xFFFF8000);
-	buffer = pci_alloc_consistent(dev_hfcpci, 0x8000, &hc->hw.dmahandle);
+	pci_set_dma_mask(hc->pdev, 0xFFFF8000);
+	buffer = pci_alloc_consistent(hc->pdev, 0x8000, &hc->hw.dmahandle);
 	/* We silently assume the address is okay if nonzero */
-	if(!buffer) {
+	if (!buffer) {
 		printk(KERN_WARNING "HFC-PCI: Error allocating memory for FIFO!\n");
 		return 1;
 	}
 	hc->hw.fifos = buffer;
-	pci_write_config_dword(hc->hw.dev, 0x80, hc->hw.dmahandle);
+	pci_write_config_dword(hc->pdev, 0x80, hc->hw.dmahandle);
 	hc->hw.pci_io = ioremap((ulong) hc->hw.pci_io, 256);
 	printk(KERN_INFO
 		"HFC-PCI: defined at mem %#lx fifo %#lx(%#lx) IRQ %d HZ %d\n",
 		(u_long) hc->hw.pci_io, (u_long) hc->hw.fifos,
 		(u_long) virt_to_bus(hc->hw.fifos),
 		hc->irq, HZ);
-	pci_write_config_word(hc->hw.dev, PCI_COMMAND, PCI_ENA_MEMIO);	/* enable memory mapped ports, disable busmaster */
+	pci_write_config_word(hc->pdev, PCI_COMMAND, PCI_ENA_MEMIO);	/* enable memory mapped ports, disable busmaster */
 	hc->hw.int_m2 = 0;
 	disable_hwirq(hc);
 	hc->hw.int_m1 = 0;
@@ -2077,13 +2042,292 @@ HFC_manager(void *data, u_int prim, void *arg) {
 	return(0);
 }
 
-static int __init HFC_init(void)
+static int setup_instance(hfc_pci_t *card)
 {
-	int		err,i;
-	hfc_pci_t	*card, *prev;
+	int		err;
+	u_int		i;
+	u_long		flags;
+	hfc_pci_t	*prev;
 	mISDN_pid_t	pid;
 	mISDNstack_t	*dst;
-	u_long		flags;
+
+	if (HFC_cnt >= MAX_CARDS)
+		return(-EINVAL); /* maybe better value */
+
+	spin_lock_irqsave(&HFC_obj.lock, flags);
+	list_add_tail(&card->list, &HFC_obj.ilist);
+	spin_unlock_irqrestore(&HFC_obj.lock, flags);
+	card->dch.debug = debug;
+	spin_lock_init(&card->lock);
+	card->dch.inst.hwlock = &card->lock;
+	card->dch.inst.class_dev.dev = &card->pdev->dev;
+	mISDN_init_instance(&card->dch.inst, &HFC_obj, card, hfcpci_l2l1);
+	card->dch.inst.pid.layermask = ISDN_LAYER(0);
+	sprintf(card->dch.inst.name, "HFC%d", HFC_cnt+1);
+	err = mISDN_initchannel(&card->dch, MSK_INIT_DCHANNEL, MAX_DFRAME_LEN_L1);
+	card->dch.hw = card;
+	if (err) {
+		spin_lock_irqsave(&HFC_obj.lock, flags);
+		list_del(&card->list);
+		spin_unlock_irqrestore(&HFC_obj.lock, flags);
+		kfree(card);
+		return(err);
+	}
+	for (i=0; i<2; i++) {
+		card->bch[i].channel = i + 1;
+		mISDN_init_instance(&card->bch[i].inst, &HFC_obj, card, hfcpci_l2l1);
+		card->bch[i].inst.pid.layermask = ISDN_LAYER(0);
+		card->bch[i].inst.hwlock = &card->lock;
+		card->bch[i].debug = debug;
+		sprintf(card->bch[i].inst.name, "%s B%d",
+			card->dch.inst.name, i+1);
+		mISDN_initchannel(&card->bch[i], MSK_INIT_BCHANNEL, MAX_DATA_MEM);
+		card->bch[i].hw = card;
+#ifdef FIXME
+		if (card->bch[i].dev) {
+			card->bch[i].dev->wport.pif.func = hfcpci_l2l1;
+			card->bch[i].dev->wport.pif.fdata = &card->bch[i];
+		}
+#endif
+	}
+	if (protocol[HFC_cnt] == 0x100) {
+		if (card->list.prev == &HFC_obj.ilist)
+			prev = NULL;
+		else
+			prev = list_entry(card->list.prev, hfc_pci_t, list);
+
+		if (!prev) {
+			int_errtxt("card(%d) no previous HFC", HFC_cnt);
+			spin_lock_irqsave(&HFC_obj.lock, flags);
+			list_del(&card->list);
+			spin_unlock_irqrestore(&HFC_obj.lock, flags);
+			kfree(card);
+			return(-EINVAL);
+		}
+		i = HFC_cnt - 1;
+		test_and_set_bit(HFC_CFG_2HFC, &prev->cfg);
+		test_and_set_bit(HFC_CFG_2HFC, &card->cfg);
+		test_and_set_bit(HFC_CFG_SLAVEHFC, &card->cfg);
+	} else {
+		prev = NULL;
+		i = HFC_cnt;
+	}
+	mISDN_set_dchannel_pid(&pid, protocol[i], layermask[i]);
+	test_and_set_bit(HFC_CFG_MASTER, &card->cfg);
+	if (protocol[i] & 0x10) {
+		card->dch.inst.pid.protocol[0] = ISDN_PID_L0_NT_S0;
+		card->dch.inst.pid.protocol[1] = ISDN_PID_L1_NT_S0;
+		pid.protocol[0] = ISDN_PID_L0_NT_S0;
+		pid.protocol[1] = ISDN_PID_L1_NT_S0;
+		card->dch.inst.pid.layermask |= ISDN_LAYER(1);
+		pid.layermask |= ISDN_LAYER(1);
+		if (layermask[i] & ISDN_LAYER(2))
+			pid.protocol[2] = ISDN_PID_L2_LAPD_NET;
+		card->hw.nt_mode = 1;
+	} else {
+		card->dch.inst.pid.protocol[0] = ISDN_PID_L0_TE_S0;
+		card->hw.nt_mode = 0;
+	}
+	if (protocol[i] & 0x40) {
+		if (pid.layermask & ISDN_LAYER(3))
+			pid.protocol[3] |= ISDN_PID_L3_DF_EXTCID;
+		test_and_set_bit(HFC_CFG_PCM, &card->cfg);
+		test_and_set_bit(HFC_CFG_SLAVE, &card->cfg);
+		test_and_clear_bit(HFC_CFG_MASTER, &card->cfg);
+	}
+	if (protocol[i] & 0x80) {
+		test_and_set_bit(HFC_CFG_NEG_F0, &card->cfg);
+	}
+	if (protocol[i] & 0x200) {
+		test_and_set_bit(HFC_CFG_SW_DD_DU, &card->cfg);
+	}
+	printk(KERN_DEBUG "HFC card %p dch %p bch1 %p bch2 %p\n",
+		card, &card->dch, &card->bch[0], &card->bch[1]);
+	if (setup_hfcpci(card)) {
+			mISDN_freechannel(&card->dch);
+			mISDN_freechannel(&card->bch[1]);
+			mISDN_freechannel(&card->bch[0]);
+			spin_lock_irqsave(&HFC_obj.lock, flags);
+			list_del(&card->list);
+			spin_unlock_irqrestore(&HFC_obj.lock, flags);
+			kfree(card);
+			return(-EINVAL);
+	}
+	HFC_cnt++;
+	if (prev) {
+		dst = prev->dch.inst.st;
+	} else {
+		if ((err = mISDN_ctrl(NULL, MGR_NEWSTACK | REQUEST, &card->dch.inst))) {
+			printk(KERN_ERR  "MGR_ADDSTACK REQUEST dch err(%d)\n", err);
+			release_card(card);
+			return(err);
+		}
+		dst = card->dch.inst.st;
+	}
+	mISDN_ctrl(dst, MGR_STOPSTACK | REQUEST, NULL);
+	for (i = 0; i < 2; i++) {
+		card->bch[i].inst.class_dev.dev = &card->pdev->dev;
+		if ((err = mISDN_ctrl(dst, MGR_NEWSTACK | REQUEST, &card->bch[i].inst))) {
+			printk(KERN_ERR "MGR_ADDSTACK bchan error %d\n", err);
+			mISDN_ctrl(card->dch.inst.st, MGR_DELSTACK | REQUEST, NULL);
+			return(err);
+		}
+	}
+	if (protocol[HFC_cnt] != 0x100) { /* next not second HFC */
+		if ((err = mISDN_ctrl(dst, MGR_SETSTACK | REQUEST, &pid))) {
+			printk(KERN_ERR "MGR_SETSTACK REQUEST dch err(%d)\n", err);
+			mISDN_ctrl(dst, MGR_DELSTACK | REQUEST, NULL);
+			return(err);
+		}
+	}
+	if ((err = init_card(card))) {
+		mISDN_ctrl(dst, MGR_DELSTACK | REQUEST, NULL);
+		return(err);
+	}
+	mISDN_ctrl(dst, MGR_STARTSTACK | REQUEST, NULL);
+	mISDN_ctrl(dst, MGR_CTRLREADY | INDICATION, NULL);
+	mISDN_module_register(THIS_MODULE);
+	printk(KERN_INFO "HFC %d cards installed\n", HFC_cnt);
+	return(0);
+}
+
+/* private data in the PCI devices list */
+struct _hfc_map {
+	u_int	subtype;
+	u_int	flag;
+	char	*name;
+};
+
+static const struct _hfc_map hfc_map[] =
+{
+	{HFC_CCD_2BD0, 0, "CCD/Billion/Asuscom 2BD0"},
+	{HFC_CCD_B000, 0, "Billion B000"},
+	{HFC_CCD_B006, 0, "Billion B006"},
+	{HFC_CCD_B007, 0, "Billion B007"},
+	{HFC_CCD_B008, 0, "Billion B008"},
+	{HFC_CCD_B009, 0, "Billion B009"},
+	{HFC_CCD_B00A, 0, "Billion B00A"},
+	{HFC_CCD_B00B, 0, "Billion B00B"},
+	{HFC_CCD_B00C, 0, "Billion B00C"},
+	{HFC_CCD_B100, 0, "Seyeon B100"},
+	{HFC_CCD_B700, 0, "Primux II S0 B700"},
+	{HFC_CCD_B701, 0, "Primux II S0 NT B701"},
+	{HFC_ABOCOM_2BD1, 0, "Abocom/Magitek 2BD1"},
+	{HFC_ASUS_0675, 0, "Asuscom/Askey 675"},
+	{HFC_BERKOM_TCONCEPT, 0, "German telekom T-Concept"},
+	{HFC_BERKOM_A1T, 0, "German telekom A1T"},
+	{HFC_ANIGMA_MC145575, 0, "Motorola MC145575"},
+	{HFC_ZOLTRIX_2BD0, 0, "Zoltrix 2BD0"},
+	{HFC_DIGI_DF_M_IOM2_E, 0, "Digi International DataFire Micro V IOM2 (Europe)"},
+	{HFC_DIGI_DF_M_E, 0, "Digi International DataFire Micro V (Europe)"},
+	{HFC_DIGI_DF_M_IOM2_A, 0, "Digi International DataFire Micro V IOM2 (North America)"},
+	{HFC_DIGI_DF_M_A, 0, "Digi International DataFire Micro V (North America)"},
+	{HFC_SITECOM_DC105V2, 0, "Sitecom Connectivity DC-105 ISDN TA"},
+	{},
+};
+
+static struct pci_device_id hfc_ids[] =
+{
+	{PCI_VENDOR_ID_CCD, PCI_DEVICE_ID_CCD_2BD0,
+		PCI_ANY_ID, PCI_ANY_ID, 0, 0, (unsigned long) &hfc_map[0]},
+	{PCI_VENDOR_ID_CCD, PCI_DEVICE_ID_CCD_B000,
+		PCI_ANY_ID, PCI_ANY_ID, 0, 0, (unsigned long) &hfc_map[1]},
+	{PCI_VENDOR_ID_CCD, PCI_DEVICE_ID_CCD_B006,
+		PCI_ANY_ID, PCI_ANY_ID, 0, 0, (unsigned long) &hfc_map[2]},
+	{PCI_VENDOR_ID_CCD, PCI_DEVICE_ID_CCD_B007,
+		PCI_ANY_ID, PCI_ANY_ID, 0, 0, (unsigned long) &hfc_map[3]},
+	{PCI_VENDOR_ID_CCD, PCI_DEVICE_ID_CCD_B008,
+		PCI_ANY_ID, PCI_ANY_ID, 0, 0, (unsigned long) &hfc_map[4]},
+	{PCI_VENDOR_ID_CCD, PCI_DEVICE_ID_CCD_B009,
+		PCI_ANY_ID, PCI_ANY_ID, 0, 0, (unsigned long) &hfc_map[5]},
+	{PCI_VENDOR_ID_CCD, PCI_DEVICE_ID_CCD_B00A,
+		PCI_ANY_ID, PCI_ANY_ID, 0, 0, (unsigned long) &hfc_map[6]},
+	{PCI_VENDOR_ID_CCD, PCI_DEVICE_ID_CCD_B00B,
+		PCI_ANY_ID, PCI_ANY_ID, 0, 0, (unsigned long) &hfc_map[7]},
+	{PCI_VENDOR_ID_CCD, PCI_DEVICE_ID_CCD_B00C,
+		PCI_ANY_ID, PCI_ANY_ID, 0, 0, (unsigned long) &hfc_map[8]},
+	{PCI_VENDOR_ID_CCD, PCI_DEVICE_ID_CCD_B100,
+		PCI_ANY_ID, PCI_ANY_ID, 0, 0, (unsigned long) &hfc_map[9]},
+	{PCI_VENDOR_ID_CCD, PCI_DEVICE_ID_CCD_B700,
+		PCI_ANY_ID, PCI_ANY_ID, 0, 0, (unsigned long) &hfc_map[10]},
+	{PCI_VENDOR_ID_CCD, PCI_DEVICE_ID_CCD_B701,
+		PCI_ANY_ID, PCI_ANY_ID, 0, 0, (unsigned long) &hfc_map[11]},
+	{PCI_VENDOR_ID_ABOCOM, PCI_DEVICE_ID_ABOCOM_2BD1,
+		PCI_ANY_ID, PCI_ANY_ID, 0, 0, (unsigned long) &hfc_map[12]},
+	{PCI_VENDOR_ID_ASUSTEK, PCI_DEVICE_ID_ASUSTEK_0675,
+		PCI_ANY_ID, PCI_ANY_ID, 0, 0, (unsigned long) &hfc_map[13]},
+	{PCI_VENDOR_ID_BERKOM, PCI_DEVICE_ID_BERKOM_T_CONCEPT,
+		PCI_ANY_ID, PCI_ANY_ID, 0, 0, (unsigned long) &hfc_map[14]},
+	{PCI_VENDOR_ID_BERKOM, PCI_DEVICE_ID_BERKOM_A1T,
+		PCI_ANY_ID, PCI_ANY_ID, 0, 0, (unsigned long) &hfc_map[15]},
+	{PCI_VENDOR_ID_ANIGMA, PCI_DEVICE_ID_ANIGMA_MC145575,
+		PCI_ANY_ID, PCI_ANY_ID, 0, 0, (unsigned long) &hfc_map[16]},
+	{PCI_VENDOR_ID_ZOLTRIX, PCI_DEVICE_ID_ZOLTRIX_2BD0,
+		PCI_ANY_ID, PCI_ANY_ID, 0, 0, (unsigned long) &hfc_map[17]},
+	{PCI_VENDOR_ID_DIGI, PCI_DEVICE_ID_DIGI_DF_M_IOM2_E,
+		PCI_ANY_ID, PCI_ANY_ID, 0, 0, (unsigned long) &hfc_map[18]},
+	{PCI_VENDOR_ID_DIGI, PCI_DEVICE_ID_DIGI_DF_M_E,
+		PCI_ANY_ID, PCI_ANY_ID, 0, 0, (unsigned long) &hfc_map[19]},
+	{PCI_VENDOR_ID_DIGI, PCI_DEVICE_ID_DIGI_DF_M_IOM2_A,
+		PCI_ANY_ID, PCI_ANY_ID, 0, 0, (unsigned long) &hfc_map[20]},
+	{PCI_VENDOR_ID_DIGI, PCI_DEVICE_ID_DIGI_DF_M_A,
+		PCI_ANY_ID, PCI_ANY_ID, 0, 0, (unsigned long) &hfc_map[21]},
+	{PCI_VENDOR_ID_SITECOM, PCI_DEVICE_ID_SITECOM_DC105V2,
+		PCI_ANY_ID, PCI_ANY_ID, 0, 0, (unsigned long) &hfc_map[22]},
+	{},
+};
+
+static int __devinit hfc_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
+{
+	int		err = -ENOMEM;
+	hfc_pci_t	*card;
+	struct _hfc_map	*m = (struct _hfc_map *)ent->driver_data;	
+
+	if (!(card = kzalloc(sizeof(hfc_pci_t), GFP_ATOMIC))) {
+		printk(KERN_ERR "No kmem for HFC card\n");
+		return(err);
+	}
+	card->pdev = pdev;
+	card->subtype = m->subtype;
+	err = pci_enable_device(pdev);
+	if (err) {
+		kfree(card);
+		return(err);
+	}
+
+	printk(KERN_INFO "mISDN_hfcpci: found adapter %s at %s\n",
+	       m->name, pci_name(pdev));
+
+	card->irq = pdev->irq;
+	pci_set_drvdata(pdev, card);
+	err = setup_instance(card);
+	if (err)
+		pci_set_drvdata(pdev, NULL);
+	return(err);
+}
+
+static void __devexit hfc_remove_pci(struct pci_dev *pdev)
+{
+	hfc_pci_t	*card = pci_get_drvdata(pdev);
+
+	if (card)
+		mISDN_ctrl(card->dch.inst.st, MGR_DELSTACK | REQUEST, NULL);
+	else
+		if (debug)
+			printk(KERN_WARNING "%s: drvdata allready removed\n", __FUNCTION__);
+}
+
+
+static struct pci_driver hfc_driver = {
+	name:     "hfcpci",
+	probe:    hfc_probe,
+	remove:   __devexit_p(hfc_remove_pci),
+	id_table: hfc_ids,
+};
+
+static int __init HFC_init(void)
+{
+	int		err;
 
 #ifdef MODULE
 	HFC_obj.owner = THIS_MODULE;
@@ -2103,174 +2347,26 @@ static int __init HFC_init(void)
 		printk(KERN_ERR "Can't register HFC PCI error(%d)\n", err);
 		return(err);
 	}
-	while (HFC_cnt < MAX_CARDS) {
-		if (!(card = kmalloc(sizeof(hfc_pci_t), GFP_ATOMIC))) {
-			printk(KERN_ERR "No kmem for HFCcard\n");
-			mISDN_unregister(&HFC_obj);
-			return(-ENOMEM);
-		}
-		memset(card, 0, sizeof(hfc_pci_t));
-		spin_lock_irqsave(&HFC_obj.lock, flags);
-		list_add_tail(&card->list, &HFC_obj.ilist);
-		spin_unlock_irqrestore(&HFC_obj.lock, flags);
-		card->dch.debug = debug;
-		spin_lock_init(&card->lock);
-		card->dch.inst.hwlock = &card->lock;
-		mISDN_init_instance(&card->dch.inst, &HFC_obj, card, hfcpci_l2l1);
-		card->dch.inst.pid.layermask = ISDN_LAYER(0);
-		sprintf(card->dch.inst.name, "HFC%d", HFC_cnt+1);
-		err = mISDN_initchannel(&card->dch, MSK_INIT_DCHANNEL, MAX_DFRAME_LEN_L1);
-		card->dch.hw = card;
-		if (err) {
-			mISDN_unregister(&HFC_obj);
-			return(err);
-		}
-		for (i=0; i<2; i++) {
-			card->bch[i].channel = i + 1;
-			mISDN_init_instance(&card->bch[i].inst, &HFC_obj, card, hfcpci_l2l1);
-			card->bch[i].inst.pid.layermask = ISDN_LAYER(0);
-			card->bch[i].inst.hwlock = &card->lock;
-			card->bch[i].debug = debug;
-			sprintf(card->bch[i].inst.name, "%s B%d",
-				card->dch.inst.name, i+1);
-			mISDN_initchannel(&card->bch[i], MSK_INIT_BCHANNEL, MAX_DATA_MEM);
-			card->bch[i].hw = card;
-#ifdef FIXME
-			if (card->bch[i].dev) {
-				card->bch[i].dev->wport.pif.func =
-					hfcpci_l2l1;
-				card->bch[i].dev->wport.pif.fdata =
-					&card->bch[i];
-			}
-#endif
-		}
-		if (protocol[HFC_cnt] == 0x100) {
-			if (card->list.prev == &HFC_obj.ilist)
-				prev = NULL;
-			else
-				prev = list_entry(card->list.prev, hfc_pci_t, list);
+	err = pci_register_driver(&hfc_driver);
 
-			if (!prev) {
-				int_errtxt("card(%d) no previous HFC",
-					HFC_cnt);
-				if (!HFC_cnt)
-					mISDN_unregister(&HFC_obj);
-				else
-					err = 0;
-				return(err);
-			}
-			i = HFC_cnt - 1;
-			test_and_set_bit(HFC_CFG_2HFC, &prev->cfg);
-			test_and_set_bit(HFC_CFG_2HFC, &card->cfg);
-			test_and_set_bit(HFC_CFG_SLAVEHFC, &card->cfg);
-		} else {
-			prev = NULL;
-			i = HFC_cnt;
-		}
-		mISDN_set_dchannel_pid(&pid, protocol[i], layermask[i]);
-		test_and_set_bit(HFC_CFG_MASTER, &card->cfg);
-		if (protocol[i] & 0x10) {
-			card->dch.inst.pid.protocol[0] = ISDN_PID_L0_NT_S0;
-			card->dch.inst.pid.protocol[1] = ISDN_PID_L1_NT_S0;
-			pid.protocol[0] = ISDN_PID_L0_NT_S0;
-			pid.protocol[1] = ISDN_PID_L1_NT_S0;
-			card->dch.inst.pid.layermask |= ISDN_LAYER(1);
-			pid.layermask |= ISDN_LAYER(1);
-			if (layermask[i] & ISDN_LAYER(2))
-				pid.protocol[2] = ISDN_PID_L2_LAPD_NET;
-			card->hw.nt_mode = 1;
-		} else {
-			card->dch.inst.pid.protocol[0] = ISDN_PID_L0_TE_S0;
-			card->hw.nt_mode = 0;
-		}
-		if (protocol[i] & 0x40) {
-			if (pid.layermask & ISDN_LAYER(3))
-				pid.protocol[3] |= ISDN_PID_L3_DF_EXTCID;
-			test_and_set_bit(HFC_CFG_PCM, &card->cfg);
-			test_and_set_bit(HFC_CFG_SLAVE, &card->cfg);
-			test_and_clear_bit(HFC_CFG_MASTER, &card->cfg);
-		}
-		if (protocol[i] & 0x80) {
-			test_and_set_bit(HFC_CFG_NEG_F0, &card->cfg);
-		}
-		if (protocol[i] & 0x200) {
-			test_and_set_bit(HFC_CFG_SW_DD_DU, &card->cfg);
-		}
-		printk(KERN_DEBUG "HFC card %p dch %p bch1 %p bch2 %p\n",
-			card, &card->dch, &card->bch[0], &card->bch[1]);
-		if (setup_hfcpci(card)) {
-			err = 0;
-			mISDN_freechannel(&card->dch);
-			mISDN_freechannel(&card->bch[1]);
-			mISDN_freechannel(&card->bch[0]);
-			spin_lock_irqsave(&HFC_obj.lock, flags);
-			list_del(&card->list);
-			spin_unlock_irqrestore(&HFC_obj.lock, flags);
-			kfree(card);
-			if (!HFC_cnt) {
-				mISDN_unregister(&HFC_obj);
-				err = -ENODEV;
-			} else
-				printk(KERN_INFO "HFC %d cards installed\n",
-					HFC_cnt);
-			return(err);
-		}
-		card->dch.inst.class_dev.dev = &card->hw.dev->dev;
-		HFC_cnt++;
-		if (prev) {
-			dst = prev->dch.inst.st;
-		} else {
-			if ((err = mISDN_ctrl(NULL, MGR_NEWSTACK | REQUEST,
-				&card->dch.inst))) {
-				printk(KERN_ERR  "MGR_ADDSTACK REQUEST dch err(%d)\n", err);
-				release_card(card);
-				if (!HFC_cnt)
-					mISDN_unregister(&HFC_obj);
-				else
-					err = 0;
-				return(err);
-			}
-			dst = card->dch.inst.st;
-		}
-		mISDN_ctrl(dst, MGR_STOPSTACK | REQUEST, NULL);
-		for (i = 0; i < 2; i++) {
-			card->bch[i].inst.class_dev.dev = &card->hw.dev->dev;
-			if ((err = mISDN_ctrl(dst, MGR_NEWSTACK | REQUEST, &card->bch[i].inst))) {
-				printk(KERN_ERR "MGR_ADDSTACK bchan error %d\n", err);
-				mISDN_ctrl(card->dch.inst.st, MGR_DELSTACK | REQUEST, NULL);
-				if (!HFC_cnt)
-					mISDN_unregister(&HFC_obj);
-				else
-					err = 0;
-				return(err);
-			}
-		}
-		if (protocol[HFC_cnt] != 0x100) { /* next not second HFC */
-			if ((err = mISDN_ctrl(dst, MGR_SETSTACK | REQUEST, &pid))) {
-				printk(KERN_ERR "MGR_SETSTACK REQUEST dch err(%d)\n",
-					err);
-				mISDN_ctrl(dst, MGR_DELSTACK | REQUEST, NULL);
-				if (!HFC_cnt)
-					mISDN_unregister(&HFC_obj);
-				else
-					err = 0;
-				return(err);
-			}
-		}
-		if ((err = init_card(card))) {
-			mISDN_ctrl(dst, MGR_DELSTACK | REQUEST, NULL);
-			if (!HFC_cnt)
-				mISDN_unregister(&HFC_obj);
-			else
-				err = 0;
-			return(err);
-		}
-		mISDN_ctrl(dst, MGR_STARTSTACK | REQUEST, NULL);
-		mISDN_ctrl(dst, MGR_CTRLREADY | INDICATION, NULL);
+	if (err < 0)
+		goto out;
+
+#ifdef OLD_PCI_REGISTER_DRIVER
+	if (err == 0) {
+		err = -ENODEV;
+		pci_unregister_driver(&hfc_driver);
+		goto out;
 	}
+#endif
+
 	mISDN_module_register(THIS_MODULE);
-	printk(KERN_INFO "HFC %d cards installed\n", HFC_cnt);
-	return(0);
+
+	return 0;
+
+ out:
+ 	mISDN_unregister(&HFC_obj);
+ 	return err;
 }
 
 #ifdef MODULE
