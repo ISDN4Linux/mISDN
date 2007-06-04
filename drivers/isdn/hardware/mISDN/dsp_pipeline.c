@@ -33,6 +33,9 @@
 #include "layer1.h"
 #include "dsp.h"
 
+/* uncomment for debugging */
+/*#define PIPELINE_DEBUG*/
+
 extern mISDN_dsp_element_t *dsp_hwec;
 extern void dsp_hwec_enable          (dsp_t *dsp, const char *arg);
 extern void dsp_hwec_disable         (dsp_t *dsp);
@@ -195,7 +198,9 @@ int dsp_pipeline_init (dsp_pipeline_t *pipeline)
 	INIT_LIST_HEAD(&pipeline->list);
 	rwlock_init(&pipeline->lock);
 
+#ifdef PIPELINE_DEBUG
 	printk(KERN_DEBUG "%s: dsp pipeline ready\n", __FUNCTION__);
+#endif
 
 	return 0;
 }
@@ -225,7 +230,9 @@ void dsp_pipeline_destroy (dsp_pipeline_t *pipeline)
 	_dsp_pipeline_destroy(pipeline);
 	write_unlock_irqrestore(&pipeline->lock, flags);
 
+#ifdef PIPELINE_DEBUG
 	printk(KERN_DEBUG "%s: dsp pipeline destroyed\n", __FUNCTION__);
+#endif
 }
 
 int dsp_pipeline_build (dsp_pipeline_t *pipeline, const char *cfg)
@@ -291,7 +298,9 @@ int dsp_pipeline_build (dsp_pipeline_t *pipeline, const char *cfg)
 					pipeline_entry->p = elem->new(args);
 					if (pipeline_entry->p) {
 						list_add_tail(&pipeline_entry->list, &pipeline->list);
+#ifdef PIPELINE_DEBUG
 						printk(KERN_DEBUG "%s: created instance of %s%s%s\n", __FUNCTION__, name, args ? " with args " : "", args ? args : "");
+#endif
 					} else {
 						printk(KERN_DEBUG "%s: failed to add entry to pipeline: %s (new() returned NULL)\n", __FUNCTION__, elem->name);
 						kfree(pipeline_entry);
@@ -318,7 +327,9 @@ _out:
 		pipeline->inuse=0;
 
 	write_unlock_irqrestore(&pipeline->lock, pipeline_flags);
+#ifdef PIPELINE_DEBUG
 	printk(KERN_DEBUG "%s: dsp pipeline built%s: %s\n", __FUNCTION__, incomplete ? " incomplete" : "", cfg);
+#endif
 	kfree(dup);
 	return 0;
 }
