@@ -8,6 +8,6 @@ if [ "$1" = "" ] ; then
 	exit
 fi
 
-git-checkout -b origin/$1
+git-checkout -b $1
 git-config branch.$1.remote origin
 git-config branch.$1.merge refs/heads/$1
