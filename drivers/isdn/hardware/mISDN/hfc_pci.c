@@ -2385,7 +2385,7 @@ static void __exit HFC_cleanup(void)
 			HFC_obj.refcnt);
 		release_card(card);
 	}
-	return;
+	pci_unregister_driver(&hfc_driver);
 }
 
 module_init(HFC_init);
