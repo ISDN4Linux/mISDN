@@ -2,7 +2,7 @@ BASEDIR=$(shell pwd)
 
 MAJOR=1
 MINOR=1
-SUBMINOR=4-pre
+SUBMINOR=4-pre2
 
 INSTALL_PREFIX := /
 export INSTALL_PREFIX
