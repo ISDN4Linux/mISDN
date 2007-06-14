@@ -942,9 +942,11 @@ l3dss1_facility_req(l3_process_t *pc, u_char pr, void *arg)
 static void
 l3dss1_restart_req(l3_process_t *pc, u_char pr, void *arg)
 {
+	pc->callref=0;
 	if (arg) {
 		SendMsg(pc, arg, -1);
 	}
+	pc->callref=-1;
 }
 
 static void
