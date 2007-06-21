@@ -278,10 +278,10 @@ else
     for i in drivers/isdn/hardware/Makefile \
 	drivers/isdn/hardware/Kconfig \
 	drivers/isdn/hardware/mISDN/Makefile \
-	drivers/isdn/hardware/mISDN/octvqe/Makefile \
-	drivers/isdn/hardware/mISDN/Rules.mISDN \
 	drivers/isdn/hardware/mISDN/Kconfig \
-	drivers/isdn/Config.in \
+	drivers/isdn/mISDN/Makefile \
+	drivers/isdn/mISDN/Kconfig \
+	drivers/isdn/Kconfig \
 	drivers/isdn/Makefile; do
 	calc_version_file $i 
 	if [ -n "$VERSION_NAME" ] ; then
@@ -295,32 +295,6 @@ else
 	    fi
 	fi
     done
-#    for i in `find Documentation -type f | grep -v CVS`; do
-#	docp $i $KERNELDIR/$i
-#    done
 fi
 exit 0
 
-  if [ -f $KERNELDIR/Documentation/Configure.help ] ; then
-    grep -q CONFIG_ISDN_DIVERSION $KERNELDIR/Documentation/Configure.help
-    if [ $? != 0 ] ; then
-      patch -d $KERNELDIR/Documentation < Documentation/Configure.help.divert.diff
-    fi
-  fi
-  if [ -f $KERNELDIR/Documentation/Configure.help ] ; then
-    grep -q CONFIG_ISDN_DRV_EICON $KERNELDIR/Documentation/Configure.help
-    if [ $? != 0 ] ; then
-      patch -d $KERNELDIR/Documentation < Documentation/Configure.help.eicon.diff
-    fi
-  fi
-  if $NOTEST ; then
-    if [ -f $KERNELDIR/Documentation/Configure.help ] ; then
-      grep -q CONFIG_ISDN_WITH_ABC $KERNELDIR/Documentation/Configure.help
-      if [ $? != 0 ] ; then
-	  if [ -f  Documentation/Configure.help.dwabc.diff ] ; then
-            patch -d $KERNELDIR/Documentation < Documentation/Configure.help.dwabc.diff
-	  fi
-      fi
-    fi
-  fi
-fi
