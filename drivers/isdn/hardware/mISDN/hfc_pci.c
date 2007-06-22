@@ -1509,6 +1509,7 @@ hfc_bctrl(struct mISDNchannel *ch, u_int cmd, void *arg)
 		test_and_clear_bit(FLG_OPEN, &bch->Flags);
 		if (test_bit(FLG_ACTIVE, &bch->Flags))
 			deactivate_bchannel(bch);
+		ch->protocol = ISDN_P_NONE;
 		break;
 	default:
 		printk(KERN_WARNING "%s: unknown prim(%x)\n",
@@ -1627,9 +1628,12 @@ hfcpci_l2l1B(struct mISDNchannel *ch, struct sk_buff *skb)
 		} else
 			ret = 0;
 		spin_unlock_irqrestore(&hc->lock, flags);
+		if (!ret)
+			_queue_data(ch, PH_ACTIVATE_IND, MISDN_ID_ANY, 0, NULL, GFP_KERNEL);
 		break;
 	case PH_DEACTIVATE_REQ:
 		deactivate_bchannel(bch);
+		_queue_data(ch, PH_DEACTIVATE_IND, MISDN_ID_ANY, 0, NULL, GFP_KERNEL);
 		ret = 0;
 		break;
 	}
@@ -1753,7 +1757,10 @@ open_bchannel(struct hfc_pci *hc, struct channel_req *rq)
 
 	if (rq->adr.channel > 2)
 		return -EINVAL;
+	if (rq->protocol == ISDN_P_NONE)
+		return -EINVAL;
 	bch = &hc->bch[rq->adr.channel -1];
+	bch->ch.protocol = rq->protocol;
 	if (test_and_set_bit(FLG_OPEN, &bch->Flags))
 		return -EBUSY; /* b-channel can be only open once */
 	rq->ch = &bch->ch; /* TODO: E-channel */

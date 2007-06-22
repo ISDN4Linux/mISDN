@@ -359,7 +359,9 @@ setup_dstack(struct mISDNstack *st, u_int protocol, struct sockaddr_mISDN *adr)
 	}
 	if (err)
 		return err;
-	add_rmux(ch, st);
+	err = register_stack(st, st->dev);
+	if (!err)
+		add_rmux(ch, st);
 	return err;
 }
 
@@ -380,6 +382,7 @@ setup_bstack(struct mISDNstack *st, u_int protocol, struct sockaddr_mISDN *adr)
 	st->layer[0] = rq.ch;
 	rq.ch->rst = st;
 	rq.ch->recv = mISDN_queue_message;
+	sprintf(st->name, "%s B%d", st->dev->name, adr->channel);
 	return 0;
 }
 
@@ -545,11 +548,6 @@ create_data_stack(struct mISDNchannel *ch, u_int protocol,
 	if (!err) {
 		DECLARE_MUTEX_LOCKED(sem);
 
-		err = register_stack(newst, dev);
-		if (err) {
-			kfree(newst);
-			return err;
-		}
 		if (*debug & DEBUG_CORE_FUNC)
 			printk(KERN_DEBUG "%s: st(%s)\n",
 			    __FUNCTION__, newst->name);
