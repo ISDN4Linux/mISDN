@@ -1722,7 +1722,7 @@ l3dss1_global_restart(l3_process_t *pc, u_char pr, void *arg)
 		p += L3_EXTRA_SIZE + qi->restart_ind.off;
 		p++;
 		ri = p[1];
-		l3_debug(pc->l3, "Restart %x", ri);
+		if (pc->l3->debug) l3_debug(pc->l3, "Restart %x", ri);
 	} else {
 		l3_debug(pc->l3, "Restart without restart IE");
 		ri = 0x86;
@@ -2817,7 +2817,8 @@ dss1_fromup(layer3_t *l3, struct sk_buff *skb, mISDN_head_t *hh)
 
 	if (!proc && hh->dinfo == MISDN_ID_GLOBAL) {
 		if (hh->prim == (CC_RESTART | REQUEST)) {
-			printk(KERN_NOTICE "Global Restart Req\n");
+			if (l3->debug)
+				printk(KERN_NOTICE "Global Restart Req\n");
 			l3dss1_restart_req(l3->dummy, hh->prim, skb->len ? skb : NULL);
 			ret = 0;
 		}
