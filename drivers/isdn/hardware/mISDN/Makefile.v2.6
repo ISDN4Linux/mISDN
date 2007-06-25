@@ -97,6 +97,11 @@ endif
 ifdef CONFIG_MISDN_MEMDEBUG
 mISDN_core-objs += memdbg.o
 endif
+
+ifdef CONFIG_MISDN_DEBUGTOOL
+obj-$(CONFIG_MISDN_DEBUGTOOL) += mISDN_debugtool.o
+endif
+
 mISDN_l1-objs := layer1.o
 mISDN_l2-objs := layer2.o tei.o
 l3udss1-objs := layer3.o l3_udss1.o
@@ -109,5 +114,6 @@ mISDN_dsp-objs := dsp_core.o dsp_cmx.o dsp_tones.o dsp_dtmf.o dsp_audio.o dsp_bl
 mISDN_loop-objs := loop.o
 mISDN_x25dte-objs := x25_dte.o x25_l3.o
 I4LmISDN-objs := i4l_mISDN.o
+mISDN_debugtool-objs := debugtool.o
 
 
