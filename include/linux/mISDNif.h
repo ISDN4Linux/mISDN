@@ -616,6 +616,7 @@ typedef struct _mISDN_pid {
 	u16	param[MAX_LAYER_NR +1];
 	u16	global;
 	u16	pidx;
+	u_int modparm_protocol;
 	u_char	*pbuf;
 } mISDN_pid_t;
 

@@ -95,7 +95,7 @@ declare -a SCAN_port_opts
 function parse_config
 {
 	local CONFIG=$(${XSLTPROC} ${MISDN_CONF_XSL} ${MISDN_CONF})
-	local t p l line i tmpcmd curr tmpstr val
+	local t p l line i tmpcmd curr tmpstr extra_modules val
 	local IFS=$'\n'
 	
 	START_COMMANDS[${#START_COMMANDS[@]}]="${MODPROBE} --ignore-install capi"
@@ -123,6 +123,9 @@ function parse_config
 				;;
 			MODULE:hfcmulti*)
 				HFCMULTI_options=${line:16}
+				;;
+			MODULE:mISDN_debugtool*)
+				extra_modules[${#extra_modules[@]}]=${line:7}
 				;;
 			MODULE:mISDN_dsp*)
 				MISDNDSP_options=${line:17}
@@ -234,6 +237,12 @@ function parse_config
 	fi
 
 	START_COMMANDS[${#START_COMMANDS[@]}]="${MODPROBE} --ignore-install mISDN_dsp ${MISDNDSP_options}"
+
+	i=1
+	while [ ! -z "${extra_modules[${i}]}" ]; do
+		START_COMMANDS[${#START_COMMANDS[@]}]="${MODPROBE} --ignore-install ${extra_modules[${i}]}"
+		let "i = ${i} + 1"
+	done
 }
 
 function run_start_commands
@@ -257,17 +266,21 @@ function run_stop_commands
 			mISDN_capi | mISDN_dsp | l3udss1 | mISDN_l2 | mISDN_l1 | mISDN_isac | hfcmulti | hfcpci | avmfritz | l1oip)
 				STOP_COMMANDS[0]="${STOP_COMMANDS[0]:-"${MODPROBE} -r --ignore-remove"} ${mod}"
 				;;
+			mISDN_debugtool)
+				STOP_COMMANDS[1]="${MODPROBE} -r --ignore-remove mISDN_debugtool"
+				;;
 			mISDN_core)
-				STOP_COMMANDS[1]="${MODPROBE} -r --ignore-remove mISDN_core"
+				STOP_COMMANDS[2]="${MODPROBE} -r --ignore-remove mISDN_core"
 				;;
 		esac
 	done
 
 	echo "-- Unloading mISDN modules --"
-	while [ ! -z "${STOP_COMMANDS[${i}]}" ]; do
-		echo ">> ${STOP_COMMANDS[${i}]}"
-		eval "${STOP_COMMANDS[${i}]}"
-		let "i = ${i} + 1"
+	for i in `seq 0 1 2`; do
+		if [ ! -z "${STOP_COMMANDS[${i}]}" ]; then
+			echo ">> ${STOP_COMMANDS[${i}]}"
+			eval "${STOP_COMMANDS[${i}]}"
+		fi
 	done
 }
 

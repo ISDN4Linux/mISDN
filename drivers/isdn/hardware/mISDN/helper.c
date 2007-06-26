@@ -22,6 +22,7 @@ mISDN_set_dchannel_pid(mISDN_pid_t *pid, int protocol, int layermask)
 	
 	memset(pid, 0, sizeof(mISDN_pid_t));
 	pid->layermask = layermask;
+	pid->modparm_protocol = protocol;
 	if (layermask & ISDN_LAYER(0))
 		pid->protocol[0] = ISDN_PID_L0_TE_S0;
 	if (layermask & ISDN_LAYER(1))

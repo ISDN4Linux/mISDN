@@ -20,6 +20,7 @@
 
 static char		*mISDN_core_revision = "$Revision: 1.40 $";
 static char		*mISDN_core_version = MISDNVERSION ;
+static void (*dt_new_frame) (mISDNstack_t *stack, enum mISDN_dt_type type, struct sk_buff *skb, int duplicate_skb) = NULL;
 
 LIST_HEAD(mISDN_objectlist);
 static rwlock_t		mISDN_objects_lock = RW_LOCK_UNLOCKED;
@@ -38,6 +39,8 @@ static spinlock_t	entity_lock = SPIN_LOCK_UNLOCKED;
 
 static uint debug;
 static int obj_id;
+
+static int dt_enabled = 0;
 
 #ifdef MODULE
 MODULE_AUTHOR("Karsten Keil");
@@ -613,6 +616,31 @@ mISDN_ctrl(void *data, u_int prim, void *arg) {
 }
 
 void
+mISDN_dt_set_callback(void (*new_frame) (mISDNstack_t *stack, enum mISDN_dt_type type, struct sk_buff *skb, int duplicate_skb))
+{
+	dt_new_frame = new_frame;
+}
+
+void
+mISDN_dt_enable(void)
+{
+	dt_enabled = dt_new_frame ? 1 : 0;
+}
+
+void
+mISDN_dt_disable(void)
+{
+	dt_enabled = 0;
+}
+
+void
+mISDN_dt_new_frame(mISDNstack_t *stack, enum mISDN_dt_type type, struct sk_buff *skb, int duplicate_skb)
+{
+	if (dt_enabled)
+		dt_new_frame(stack, type, skb, duplicate_skb);
+}
+
+void
 mISDN_module_register(struct module *module)
 {
 	struct modulelist *ml = kmalloc(sizeof(struct modulelist), GFP_KERNEL);
@@ -807,6 +835,10 @@ EXPORT_SYMBOL(mISDN_dec_usage);
 EXPORT_SYMBOL(mISDN_ctrl);
 EXPORT_SYMBOL(mISDN_register);
 EXPORT_SYMBOL(mISDN_unregister);
+EXPORT_SYMBOL(mISDN_dt_set_callback);
+EXPORT_SYMBOL(mISDN_dt_enable);
+EXPORT_SYMBOL(mISDN_dt_disable);
+EXPORT_SYMBOL(mISDN_dt_new_frame);
 #ifdef CONFIG_MISDN_NETDEV
 EXPORT_SYMBOL(misdn_log_frame);
 #endif
