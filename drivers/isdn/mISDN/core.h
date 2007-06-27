@@ -36,15 +36,28 @@ extern int			get_mdevice_count(void);
 #define MGR_OPT_USER		24
 #define MGR_OPT_NETWORK		25
 
-extern int	create_data_stack(struct mISDNchannel *, u_int,
-			struct sockaddr_mISDN *);
-extern int	connect_data_stack(struct mISDNchannel *, u_int,
-			struct sockaddr_mISDN *);
-extern int	create_mgr_stack(struct mISDNdevice *);
-extern void 	set_mgr_channel(struct mISDNchannel *, struct mISDNstack *);
-extern int	open_mgr_channel(struct mISDNstack *, u_int);
-extern void	close_mgr_channel(struct mISDNstack *);
-extern int	delete_stack(struct mISDNstack *);
-extern int	register_stack(struct mISDNstack *, struct mISDNdevice *);
+static inline void
+set_address(struct mISDNchannel *ch, u_int sapi, u_int tei)
+{
+	ch->addr = sapi | (tei <<8);
+}
+
+extern int	connect_Bstack(struct mISDNdevice *, struct mISDNchannel *,
+                    u_int, struct sockaddr_mISDN *);
+extern int	connect_layer1(struct mISDNdevice *, struct mISDNchannel *,
+                    u_int, struct sockaddr_mISDN *);
+extern int	create_l2entity(struct mISDNdevice *, struct mISDNchannel *,
+                    u_int, struct sockaddr_mISDN *);
+
+extern int	create_stack(struct mISDNdevice *);
+extern int	create_teimanager(struct mISDNdevice *);
+extern void	delete_channel(struct mISDNchannel *);
+extern void	delete_stack(struct mISDNdevice *);
 extern void	mISDN_initstack(u_int *);
+extern int      misdn_sock_init(u_int *);
+extern void     misdn_sock_cleanup(void);
+
+extern u_int		get_all_Bprotocols(void);
+struct Bprotocol	*get_Bprotocol4mask(u_int);
+struct Bprotocol	*get_Bprotocol4id(u_int);
 #endif

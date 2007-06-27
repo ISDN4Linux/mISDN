@@ -16,7 +16,6 @@
  */
 #include "layer2.h"
 #include <linux/random.h>
-#include <linux/mISDNhw.h>
 #include "core.h"
 
 const char *tei_revision = "$Revision: 2.0 $";
@@ -78,8 +77,32 @@ static char *strTeiEvent[] =
 	"EV_TIMER",
 };
 
+static int
+get_free_id(struct manager *mgr)
+{
+	u64		ids = 0;
+	int		i;
+	struct layer2	*l2;
+
+	list_for_each_entry(l2, &mgr->layer2, list) {
+		if (l2->ch.nr > 63) {
+			printk(KERN_WARNING
+			    "%s: more as 63 layer2 for one device\n",
+			    __FUNCTION__);
+			return -EBUSY;
+		}
+		test_and_set_bit(l2->ch.nr, &ids);
+	}
+	for (i = 1; i < 64; i++)
+		if (!test_bit(i, &ids))
+			return i;
+	printk(KERN_WARNING "%s: more as 63 layer2 for one device\n",
+	    __FUNCTION__);
+	return -EBUSY;
+}
+
 static u_int
-new_id(struct mISDNmanager *mgr)
+new_id(struct manager *mgr)
 {
 	u_int	id;
 
@@ -93,7 +116,7 @@ new_id(struct mISDNmanager *mgr)
 }
 
 static void
-do_send(struct mISDNmanager *mgr)
+do_send(struct manager *mgr)
 {
 	if (!test_bit(MGR_PH_ACTIVE, &mgr->options))
 		return;
@@ -106,7 +129,7 @@ do_send(struct mISDNmanager *mgr)
 			return;
 		}
 		mgr->lastid = mISDN_HEAD_ID(skb);
-		if (mgr->ch.recv(mgr->ch.rst, skb)) {
+		if (mgr->ch.recv(mgr->ch.peer, skb)) {
 			dev_kfree_skb(skb);
 			test_and_clear_bit(MGR_PH_NOTREADY, &mgr->options);
 			mgr->lastid = MISDN_ID_NONE;
@@ -115,7 +138,7 @@ do_send(struct mISDNmanager *mgr)
 }
 
 static void
-do_ack(struct mISDNmanager *mgr, u_int id)
+do_ack(struct manager *mgr, u_int id)
 {
 	if (test_bit(MGR_PH_NOTREADY, &mgr->options)) {
 		if (id == mgr->lastid) {
@@ -125,7 +148,7 @@ do_ack(struct mISDNmanager *mgr, u_int id)
 				skb = skb_dequeue(&mgr->sendq);
 				if (skb) {
 					mgr->lastid = mISDN_HEAD_ID(skb);
-					if (!mgr->ch.recv(mgr->ch.rst, skb))
+					if (!mgr->ch.recv(mgr->ch.peer, skb))
 						return;
 					dev_kfree_skb(skb);
 				}
@@ -137,7 +160,7 @@ do_ack(struct mISDNmanager *mgr, u_int id)
 }
 
 static void
-mgr_send_down(struct mISDNmanager *mgr, struct sk_buff *skb)
+mgr_send_down(struct manager *mgr, struct sk_buff *skb)
 {
 	skb_queue_tail(&mgr->sendq, skb);
 	if (!test_bit(MGR_PH_ACTIVE, &mgr->options)) {
@@ -149,7 +172,7 @@ mgr_send_down(struct mISDNmanager *mgr, struct sk_buff *skb)
 }
 
 static int
-dl_unit_data(struct mISDNmanager *mgr, struct sk_buff *skb)
+dl_unit_data(struct manager *mgr, struct sk_buff *skb)
 {
 	if (!test_bit(MGR_OPT_NETWORK, &mgr->options)) /* only net side send UI */
 		return -EINVAL;
@@ -177,7 +200,7 @@ random_ri(void)
 }
 
 static struct layer2 *
-findtei(struct mISDNmanager *mgr, int tei)
+findtei(struct manager *mgr, int tei)
 {
 	struct layer2	*l2;
 	u_long		flags;
@@ -440,12 +463,12 @@ tei_ph_data_ind(struct teimgr *tm, u_int mt, u_char *dp, int len)
 }
 
 static void
-new_tei_req(struct mISDNmanager *mgr, u_char *dp)
+new_tei_req(struct manager *mgr, u_char *dp)
 {
 }
 
 static int
-ph_data_ind(struct mISDNmanager *mgr, struct sk_buff *skb)
+ph_data_ind(struct manager *mgr, struct sk_buff *skb)
 {
 	int		ret = -EINVAL;
 	struct layer2	*l2;
@@ -574,17 +597,18 @@ release_tei(struct layer2 *l2)
 }
 
 static int
-create_teimgr(struct mISDNmanager *mgr, struct channel_req *crq)
+create_teimgr(struct manager *mgr, struct channel_req *crq)
 {
 	struct layer2	*l2;
 	u_int 		opt = 0;
 	u_long		flags;
+	int		id;
 
 	if (*debug & DEBUG_L2_TEI)
-		printk(KERN_DEBUG "%s: %s proto(%x) adr(%d %d %d %d %d)\n",
-			__FUNCTION__, mgr->ch.dev->name, crq->protocol,
-			crq->adr.dev, crq->adr.channel, crq->adr.id,
-			crq->adr.sapi, crq->adr.tei);
+		printk(KERN_DEBUG "%s: %s proto(%x) adr(%d %d %d %d)\n",
+			__FUNCTION__, mgr->ch.st->dev->name, crq->protocol,
+			crq->adr.dev, crq->adr.channel,crq->adr.sapi,
+			crq->adr.tei);
 	if (crq->adr.sapi != 0) /* not supported yet */
 		return -EINVAL;
 	if (crq->adr.tei > GROUP_TEI)
@@ -603,7 +627,7 @@ create_teimgr(struct mISDNmanager *mgr, struct channel_req *crq)
 		if ((crq->adr.tei >= 64) && (crq->adr.tei < GROUP_TEI))
 			return -EINVAL; /* dyn tei */
 	}
-	if (mgr->ch.dev->nrbchan > 2)
+	if (mgr->ch.st->dev->nrbchan > 2)
 		test_and_set_bit(OPTION_L2_PMX, &opt);
 	l2 = create_l2(crq->protocol, opt, (u_long)crq->adr.tei);
 	if (!l2)
@@ -614,6 +638,7 @@ create_teimgr(struct mISDNmanager *mgr, struct channel_req *crq)
 		printk(KERN_ERR "kmalloc teimgr failed\n");
 		return -ENOMEM;
 	}
+	l2->up = crq->ch;
 	l2->tm->mgr = mgr;
 	l2->tm->l2 = l2;
 	l2->tm->tei_m.debug = *debug & DEBUG_L2_TEIFSM;
@@ -630,17 +655,25 @@ create_teimgr(struct mISDNmanager *mgr, struct channel_req *crq)
 	}
 	mISDN_FsmInitTimer(&l2->tm->tei_m, &l2->tm->timer);
 	write_lock_irqsave(&mgr->lock, flags);
+	id = get_free_id(mgr);
 	list_add_tail(&l2->list, &mgr->layer2);
 	write_unlock_irqrestore(&mgr->lock, flags);
-	crq->ch = &l2->ch;
-	return 0;
+	if (id < 0) {
+		l2->ch.ctrl(&l2->ch, CLOSE_CHANNEL, NULL);
+	} else {
+		l2->ch.nr = id;
+		l2->up->nr = id;
+		crq->ch = &l2->ch;
+		id = 0;
+	}
+	return id;
 }
 
 static int
 mgr_send(struct mISDNchannel *ch, struct sk_buff *skb)
 {
-	struct mISDNmanager	*mgr = container_of(ch,
-	    struct mISDNmanager, ch);
+	struct manager	*mgr = container_of(ch,
+	    struct manager, ch);
 	struct mISDNhead	*hh =  mISDN_HEAD_P(skb);
 	int			ret = -EINVAL;
 
@@ -670,27 +703,43 @@ mgr_send(struct mISDNchannel *ch, struct sk_buff *skb)
 }
 
 static int
+free_teimanager(struct manager *mgr)
+{
+	struct layer2	*l2, *nl2;
+
+	/* not locked lock is taken in release tei */
+	list_for_each_entry_safe(l2, nl2, &mgr->layer2, list) {
+		l2->ch.ctrl(&l2->ch, CLOSE_CHANNEL, NULL);
+	}
+	skb_queue_purge(&mgr->sendq);
+	return 0;
+}
+
+static int
 mgr_ctrl(struct mISDNchannel *ch, u_int cmd, void *arg)
 {
-	struct mISDNmanager	*mgr = container_of(ch,
-	    struct mISDNmanager, ch);
+	struct manager	*mgr = container_of(ch,
+	    struct manager, ch);
 	int			ret = -EINVAL;
 	switch(cmd) {
 	case CREATE_CHANNEL:
 		ret = create_teimgr(mgr, arg);
 		break;
+	case CLOSE_CHANNEL:
+		ret = free_teimanager(mgr);
+		break;
 	}
 	return ret;
 }
 
-struct mISDNmanager *
-mISDN_create_manager(void)
+int
+create_teimanager(struct mISDNdevice *dev)
 {
-	struct mISDNmanager *mgr;
+	struct manager *mgr;
 
-	mgr = kzalloc(sizeof(struct mISDNmanager), GFP_KERNEL);
+	mgr = kzalloc(sizeof(struct manager), GFP_KERNEL);
 	if (!mgr)
-		return NULL;
+		return -ENOMEM;
 	INIT_LIST_HEAD(&mgr->layer2);
 	mgr->lock = RW_LOCK_UNLOCKED;
 	skb_queue_head_init(&mgr->sendq);
@@ -698,7 +747,9 @@ mISDN_create_manager(void)
 	mgr->lastid = MISDN_ID_NONE;
 	mgr->ch.send = mgr_send;
 	mgr->ch.ctrl = mgr_ctrl;
-	return mgr;
+	set_channel_address(&mgr->ch, TEI_SAPI, GROUP_TEI);
+	dev->teimgr = &mgr->ch;
+	return 0;
 }
 
 int TEIInit(u_int *deb)

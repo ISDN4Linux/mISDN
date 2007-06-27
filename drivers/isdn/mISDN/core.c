@@ -21,7 +21,6 @@
 #include <linux/spinlock.h>
 #include <linux/mISDNif.h>
 #include "core.h"
-#include "socket.h"
 
 static char		*core_revision = "$Revision: 2.0 $";
 static char		*core_version = MISDNVERSION ;
@@ -38,6 +37,9 @@ static LIST_HEAD(devices);
 static rwlock_t		device_lock = RW_LOCK_UNLOCKED;
 static u64		device_ids;
 #define MAX_DEVICE_ID	63
+
+static LIST_HEAD(Bprotocols);
+static rwlock_t		bp_lock = RW_LOCK_UNLOCKED;
 
 struct mISDNdevice
 *get_mdevice(u_int id)
@@ -78,51 +80,6 @@ get_free_devid(void)
 	return -1;
 }
 
-static int
-get_free_stack_id(struct mISDNdevice *dev)
-{
-	u64	ids = 0;
-	int	i;
-	struct mISDNstack *st;
-
-	list_for_each_entry(st, &dev->stacks, list) {
-		if (st->id > 63) {
-			printk(KERN_WARNING 
-			    "%s: more as 63 stacks for one device %s\n",
-			    __FUNCTION__, dev->name);
-			return -1;
-		}
-		test_and_set_bit(st->id, &ids);
-	}
-	for (i = 0; i < 64; i++)
-		if (!test_bit(i, &ids))
-			return i;
-	printk(KERN_WARNING "%s: more as 63 stacks for one device %s\n",
-	    __FUNCTION__, dev->name);
-	return -1;
-}
-
-int
-register_stack(struct mISDNstack *st, struct mISDNdevice *dev)
-{
-	u_long	flags;
-	int	id, ret = 0;
-
-	write_lock_irqsave(&dev->slock, flags);
-	id = get_free_stack_id(dev);
-	if (id < 0) {
-		ret = -EBUSY;
-		goto done;
-	}
-	st->id = id;
-	st->dev = dev;
-	list_add_tail(&st->list, &dev->stacks);
-	sprintf(st->name, "%s %d", dev->name, id);
-done:
-	write_unlock_irqrestore(&dev->slock, flags);
-	return ret;
-}
-
 int
 mISDN_register_device(struct mISDNdevice *dev)
 {
@@ -136,9 +93,7 @@ mISDN_register_device(struct mISDNdevice *dev)
 	if (debug & DEBUG_CORE)
 		printk(KERN_DEBUG "mISDN_register %s %d\n",
 			dev->name, dev->id);
-	dev->slock = RW_LOCK_UNLOCKED;
-	INIT_LIST_HEAD(&dev->stacks);
-	err = create_mgr_stack(dev);
+	err = create_stack(dev);
 	if (err)
 		return err;
 	write_lock_irqsave(&device_lock, flags);
@@ -147,10 +102,11 @@ mISDN_register_device(struct mISDNdevice *dev)
 	return 0;
 }
 
+EXPORT_SYMBOL(mISDN_register_device);
+
 void
 mISDN_unregister_device(struct mISDNdevice *dev) {
 	u_long	flags;
-	struct mISDNstack *st, *nst;
 
 	if (debug & DEBUG_CORE)
 		printk(KERN_DEBUG "mISDN_unregister %s %d\n",
@@ -159,12 +115,91 @@ mISDN_unregister_device(struct mISDNdevice *dev) {
 	list_del(&dev->D.list);
 	write_unlock_irqrestore(&device_lock, flags);
 	test_and_clear_bit(dev->id, &device_ids);
-	write_lock_irqsave(&dev->slock, flags);
-	list_for_each_entry_safe(st, nst, &dev->stacks, list) {
-		delete_stack(st);
-	}
-	write_unlock_irqrestore(&dev->slock, flags);
+	delete_stack(dev);
 }
+
+EXPORT_SYMBOL(mISDN_unregister_device);
+
+u_int
+get_all_Bprotocols(void)
+{
+	struct Bprotocol	*bp;
+	u_int	m = 0;
+
+	read_lock(&bp_lock);
+	list_for_each_entry(bp, &Bprotocols, list)
+		m |= bp->Bprotocols;
+	read_unlock(&bp_lock);
+	return m;
+}
+
+struct Bprotocol *
+get_Bprotocol4mask(u_int m)
+{
+	struct Bprotocol	*bp;
+
+	read_lock(&bp_lock);
+	list_for_each_entry(bp, &Bprotocols, list)
+		if (bp->Bprotocols & m) {
+			read_unlock(&bp_lock);
+			return bp;
+		}
+	read_unlock(&bp_lock);
+	return NULL;
+}
+
+struct Bprotocol *
+get_Bprotocol4id(u_int id)
+{
+	u_int	m;
+
+	if (id < ISDN_P_B_START || id > 63) {
+		printk(KERN_WARNING "%s id not in range  %d\n",
+		    __FUNCTION__, id);
+		return NULL;
+	}
+	m = 1 << (id & ISDN_P_B_MASK);
+	return get_Bprotocol4mask(m);
+}
+
+int
+mISDN_register_Bprotocol(struct Bprotocol *bp)
+{
+	u_long			flags;
+	struct Bprotocol	*old;
+
+	if (debug & DEBUG_CORE)
+		printk(KERN_DEBUG "%s: %s/%x\n", __FUNCTION__,
+		    bp->name, bp->Bprotocols);
+	old = get_Bprotocol4mask(bp->Bprotocols);
+	if (old) {
+		printk(KERN_WARNING
+		    "register duplicate protocol old %s/%x new %s/%x\n",
+		    old->name, old->Bprotocols, bp->name, bp->Bprotocols);
+		return -EBUSY;
+	}
+	write_lock_irqsave(&bp_lock, flags);
+	list_add_tail(&bp->list, &Bprotocols);
+	write_unlock_irqrestore(&bp_lock, flags);
+	return 0;
+}
+
+EXPORT_SYMBOL(mISDN_register_Bprotocol);
+
+void
+mISDN_unregister_Bprotocol(struct Bprotocol *bp)
+{
+	u_long	flags;
+
+	if (debug & DEBUG_CORE)
+		printk(KERN_DEBUG "%s: %s/%x\n", __FUNCTION__,
+		    bp->name, bp->Bprotocols);
+	write_lock_irqsave(&bp_lock, flags);
+	list_del(&bp->list);
+	write_unlock_irqrestore(&bp_lock, flags);
+}
+
+EXPORT_SYMBOL(mISDN_unregister_Bprotocol);
 
 extern int	l1_init(u_int *);
 extern void	l1_cleanup(void);
@@ -201,11 +236,16 @@ void mISDN_cleanup(void) {
 	misdn_sock_cleanup();
 	l1_cleanup();
 	Isdnl2_cleanup();
+	
+	if (!list_empty(&devices)) {
+		printk(KERN_ERR "%s devices still registered\n", __FUNCTION__);
+	}
+	if (!list_empty(&Bprotocols)) {
+		printk(KERN_ERR "%s Bprotocols still registered\n", __FUNCTION__);
+	}
 	printk(KERN_DEBUG "mISDNcore unloaded\n");
 }
 
 module_init(mISDNInit);
 module_exit(mISDN_cleanup);
 
-EXPORT_SYMBOL(mISDN_register_device);
-EXPORT_SYMBOL(mISDN_unregister_device);

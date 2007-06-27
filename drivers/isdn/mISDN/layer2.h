@@ -12,13 +12,23 @@
 
 #define MAX_WINDOW	8
 
+struct manager {
+	struct mISDNchannel	ch;
+	u_long			options;
+	struct list_head	layer2;
+	rwlock_t		lock;
+	struct sk_buff_head	sendq;
+	u_int			nextid;
+	u_int			lastid;
+}; 
+
 struct teimgr {
 	int			ri;
 	struct FsmInst		tei_m;
 	struct FsmTimer		timer;
 	int			tval, nval;
 	struct layer2		*l2;
-	struct mISDNmanager	*mgr;
+	struct manager		*mgr;
 };
 
 typedef struct _laddr {
@@ -29,13 +39,14 @@ typedef struct _laddr {
 struct layer2 {
 	struct list_head	list;
 	struct mISDNchannel	ch;
+	u_long			flag;
 	int			id;
+	struct mISDNchannel	*up;
 	signed char		sapi;
 	signed char		tei;
 	laddr_t			addr;
 	u_int			maxlen;
 	struct teimgr		*tm;
-	u_long			flag;
 	u_int			vs, va, vr;
 	int			rc;
 	u_int			window;

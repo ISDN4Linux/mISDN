@@ -15,7 +15,6 @@
  * GNU General Public License for more details.
  *
  */
-#include <linux/mISDNhw.h>
 #include "fsm.h"
 #include "layer2.h"
 
@@ -149,20 +148,45 @@ l2_newid(struct layer2 *l2)
 static void
 l2up(struct layer2 *l2, u_int prim, u_int id, struct sk_buff *skb)
 {
-	mI_recv_newhead(&l2->ch, prim, id, skb);
+	int	err;
+	mISDN_HEAD_PRIM(skb) = prim;
+	mISDN_HEAD_ID(skb) = id;
+	mISDN_HEAD_LEN(skb) = skb->len;
+	err = l2->up->send(l2->up, skb);
+	if (err) {
+		printk(KERN_WARNING "%s: err=%d\n", __FUNCTION__, err);
+		dev_kfree_skb(skb);
+	}
 }
 
 static void
 l2up_create(struct layer2 *l2, u_int prim, u_int id, int len, void *arg)
 {
-	_queue_data(&l2->ch, prim, id, len, arg, GFP_ATOMIC);
+	struct sk_buff	*skb;
+	struct mISDNhead *hh;
+	int		err;
+
+	skb = mI_alloc_skb(len, GFP_ATOMIC);
+	if (!skb)
+		return;
+	hh = mISDN_HEAD_P(skb);
+	hh->prim = prim;
+	hh->id = id;
+	hh->len = len;
+	if (len)
+		memcpy(skb_put(skb, len), arg, len);
+	err = l2->up->send(l2->up, skb);
+	if (err) {
+		printk(KERN_WARNING "%s: err=%d\n", __FUNCTION__, err);
+		dev_kfree_skb(skb);
+	}
 }
 
 static int
 l2down_skb(struct layer2 *l2, struct sk_buff *skb) {
 	int ret;
 
-	ret = l2->ch.recv(l2->ch.rst, skb);
+	ret = l2->ch.recv(l2->ch.peer, skb);
 	if (ret && (*debug & DEBUG_L2_RECV))
 		printk(KERN_DEBUG "l2down_skb: ret(%d)\n", ret);
 	return ret;
@@ -1302,9 +1326,14 @@ static void
 l2_got_tei(struct FsmInst *fi, int event, void *arg)
 {
 	struct layer2	*l2 = fi->userdata;
+	u_int		info;
 
 	l2->tei = (signed char)(long)arg;
-	set_stack_address(l2->ch.rst, l2->sapi, l2->tei);
+	set_channel_address(&l2->ch, l2->sapi, l2->tei);
+	set_channel_address(l2->up, l2->sapi, l2->tei);
+	info = DL_INFO_L2_CONNECT;
+	l2up_create(l2, DL_INFORMATION_IND, l2->ch.addr,
+	    sizeof(info), &info);
 	if (fi->state == ST_L2_3) {
 		establishlink(fi);
 		test_and_set_bit(FLG_L3_INIT, &l2->flag);
@@ -1918,13 +1947,15 @@ l2_send(struct mISDNchannel *ch, struct sk_buff *skb)
 			test_and_clear_bit(FLG_L1_ACTIV, &l2->flag);
 			ret = mISDN_FsmEvent(&l2->l2m, EV_L1_DEACTIVATE, skb);
 			break;
-		case (DL_DATA_REQ):
+		case DL_DATA_REQ:
 			ret = mISDN_FsmEvent(&l2->l2m, EV_L2_DL_DATA, skb);
 			break;
-		case (DL_UNITDATA_REQ):
+		case DL_UNITDATA_REQ:
 			ret = mISDN_FsmEvent(&l2->l2m, EV_L2_DL_UNITDATA, skb);
 			break;
-		case (DL_ESTABLISH_REQ):
+		case DL_ESTABLISH_REQ:
+			if (test_bit(FLG_LAPB, &l2->flag))
+				test_and_set_bit(FLG_ORIG, &l2->flag);
 			if (test_bit(FLG_L1_ACTIV, &l2->flag)) {
 				if (test_bit(FLG_LAPD, &l2->flag) ||
 					test_bit(FLG_ORIG, &l2->flag)) {
@@ -1941,7 +1972,7 @@ l2_send(struct mISDNchannel *ch, struct sk_buff *skb)
 				    skb);
 			}
 			break;
-		case (DL_RELEASE_REQ):
+		case DL_RELEASE_REQ:
 			if (test_bit(FLG_LAPB, &l2->flag))
 				l2down_create(l2, PH_DEACTIVATE_REQ,
 					l2_newid(l2), 0, NULL);
@@ -2004,15 +2035,24 @@ static int
 l2_ctrl(struct mISDNchannel *ch, u_int cmd, void *arg)
 {
 	struct layer2		*l2 = container_of(ch, struct layer2, ch);
+	u_int			info;
 
 	if (*debug & DEBUG_L2_CTRL)
 		printk(KERN_DEBUG "%s:(%x)\n", __FUNCTION__, cmd);
 	
 	switch(cmd) {
 	case OPEN_CHANNEL:
-		set_stack_address(l2->ch.rst, l2->sapi, l2->tei);
+		if (test_bit(FLG_LAPD, &l2->flag)) {
+			set_channel_address(&l2->ch, l2->sapi, l2->tei);
+			set_channel_address(l2->up, l2->sapi, l2->tei);
+			info = DL_INFO_L2_CONNECT;
+			l2up_create(l2, DL_INFORMATION_IND, l2->ch.addr,
+			    sizeof(info), &info);
+		}
 		break;
 	case CLOSE_CHANNEL:
+		if (test_bit(FLG_LAPB, &l2->flag) && l2->ch.peer)
+			l2->ch.peer->ctrl(l2->ch.peer, CLOSE_CHANNEL, NULL);
 		release_l2(l2);
 		break;
 	}
@@ -2071,10 +2111,8 @@ create_l2(u_int protocol, u_int options, u_long arg)
 		l2->N200 = 3;
 		l2->T203 = 10000;
 		break;
-#if 0 // FIXME if LAPB supported
-	case ISDN_PID_L2_B_X75SLP:
+	case ISDN_P_B_X75SLP:
 		test_and_set_bit(FLG_LAPB, &l2->flag);
-		sprintf(l2->inst.name, "lapb %x", st->id >> 8);
 		l2->window = 7;
 		l2->maxlen = MAX_DATA_SIZE;
 		l2->T200 = 1000;
@@ -2082,24 +2120,7 @@ create_l2(u_int protocol, u_int options, u_long arg)
 		l2->T203 = 5000;
 		l2->addr.A = 3;
 		l2->addr.B = 1;
-		if (l2->inst.pid.global == 1)
-			test_and_set_bit(FLG_ORIG, &l2->flag);
-		if (pid->param[2] && pid->pbuf) {
-			p = pid->pbuf + pid->param[2];
-			if (*p >= 4) {
-				p++;
-				l2->addr.A = *p++;
-				l2->addr.B = *p++;
-				if (*p++ == 128)
-					test_and_set_bit(FLG_MOD128,
-					    &l2->flag);
-				l2->window = *p++;
-				if (l2->window > 7)
-					l2->window = 7;
-			}
-		}
 		break;
-#endif
 	default:
 		printk(KERN_ERR "layer2 create failed prt %x\n",
 			protocol);
@@ -2131,12 +2152,35 @@ create_l2(u_int protocol, u_int options, u_long arg)
 	return l2;
 }
 
+static int
+x75create(struct channel_req *crq)
+{
+	struct layer2	*l2;
+
+	if (crq->protocol != ISDN_P_B_X75SLP)
+		return -EPROTONOSUPPORT;
+	l2 = create_l2(crq->protocol, 0, 0);
+	if (!l2)
+		return -ENOMEM;
+	l2->up = crq->ch;
+	crq->ch = &l2->ch;
+	crq->protocol = ISDN_P_B_HDLC;
+	return 0;
+}
+
+static struct Bprotocol X75SLP = {
+	.Bprotocols = (1 << (ISDN_P_B_X75SLP & ISDN_P_B_MASK)),
+	.name = "X75SLP",
+	.create = x75create
+};
+
 int
 Isdnl2_Init(u_int *deb)
 {
 	printk(KERN_INFO
 	    "ISDN L2 driver %s\n", l2_revision);
 	debug = deb;
+	mISDN_register_Bprotocol(&X75SLP);
 	l2fsm.state_count = L2_STATE_COUNT;
 	l2fsm.event_count = L2_EVENT_COUNT;
 	l2fsm.strEvent = strL2Event;
@@ -2149,6 +2193,7 @@ Isdnl2_Init(u_int *deb)
 void
 Isdnl2_cleanup(void)
 {
+	mISDN_unregister_Bprotocol(&X75SLP);
 	TEIFree();
 	mISDN_FsmFree(&l2fsm);
 }

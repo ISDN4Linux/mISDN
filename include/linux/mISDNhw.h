@@ -70,6 +70,14 @@
 #define FLG_LL_CONN		24
 #define FLG_DTMFSEND		25
 
+/* workq events */ 
+#define FLG_RECVQUEUE		30
+#define	FLG_PHCHANGE		31
+
+#define schedule_event(s, ev)	do { \
+					test_and_set_bit(ev, &((s)->Flags)); \
+					schedule_work(&((s)->workq)); \
+				} while(0)
 
 #define MSK_INIT_DCHANNEL	((1<<FLG_DCHANNEL)|(1<<FLG_HDLC))
 #define MSK_INIT_BCHANNEL	(1<<FLG_BCHANNEL)
@@ -79,6 +87,8 @@
 struct dchannel {
 	struct mISDNdevice	dev;
 	u_long			Flags;
+	struct work_struct	workq;
+	void			(*phfunc) (struct dchannel *);
 	u_int			state;
 	void			*l1;
 	/* HW access */
@@ -93,6 +103,7 @@ struct dchannel {
 	int			maxlen;
 	/* send data */
 	struct sk_buff_head	squeue;
+	struct sk_buff_head	rqueue;
 	struct sk_buff		*tx_skb;
 	int			tx_idx;
 	int			debug;
@@ -139,6 +150,7 @@ struct bchannel {
 	struct mISDNchannel	ch;
 	int			nr;
 	u_long			Flags;
+	struct work_struct	workq;
 	u_int			state;
 	/* HW access */
 	u_char			(*read_reg) (void *, u_char);
@@ -153,6 +165,7 @@ struct bchannel {
 	/* send data */
 	struct sk_buff		*next_skb;
 	struct sk_buff		*tx_skb;
+	struct sk_buff_head	rqueue;
 	int			tx_idx;
 	int			debug;
 	/* statistics */
@@ -161,157 +174,15 @@ struct bchannel {
 	int			err_rx;
 };
 
-extern int	mISDN_initdchannel(struct dchannel *, ulong, int);
+extern int	mISDN_initdchannel(struct dchannel *, ulong, int, void *);
 extern int	mISDN_initbchannel(struct bchannel *, ulong, int);
 extern int	mISDN_freedchannel(struct dchannel *);
 extern int	mISDN_freebchannel(struct bchannel *);
 extern int	dchannel_senddata(struct dchannel *, struct sk_buff *);
 extern int	bchannel_senddata(struct bchannel *, struct sk_buff *);
-
-static inline struct sk_buff *
-mI_alloc_skb(unsigned int len, gfp_t gfp_mask)
-{
-	struct sk_buff	*skb;
-
-	skb = alloc_skb(len + MISDN_HEADER_LEN, gfp_mask);
-	if (likely(skb))
-		skb_reserve(skb, MISDN_HEADER_LEN);
-	return skb;
-}
-
-static inline struct sk_buff *
-_alloc_mISDN_skb(u_int prim, u_int id, u_int len, void *dp, gfp_t gfp_mask)
-{
-	struct sk_buff	*skb = mI_alloc_skb(len, gfp_mask);
-	struct mISDNhead *hh;
-
-	if (!skb)
-		return NULL;
-	if (len)
-		memcpy(skb_put(skb, len), dp, len);
-	hh = mISDN_HEAD_P(skb);
-	hh->prim = prim;
-	hh->id = id;
-	hh->len = len;
-	return skb;
-}	
-
-static inline void
-mI_recv_newhead(struct mISDNchannel *ch, u_int prim,
-    u_int id, struct sk_buff *skb)
-{
-	struct mISDNhead *hh;
-
-	if (!ch->rst) {
-		dev_kfree_skb(skb);
-		return;
-	}
-	hh = mISDN_HEAD_P(skb);
-	hh->prim = prim;
-	hh->id = id;
-	hh->len = skb->len;
-	if (ch->recv(ch->rst, skb))
-		dev_kfree_skb(skb);
-}
-		
-static inline void
-_queue_data(struct mISDNchannel *ch, u_int prim,
-    u_int id, u_int len, void *dp, gfp_t gfp_mask)
-{
-	struct sk_buff		*skb;
-
-	if (!ch->rst)
-		return;
-	skb = _alloc_mISDN_skb(prim, id, len, dp, gfp_mask);
-	if (!skb)
-		return;
-	if (ch->recv(ch->rst, skb))
-		dev_kfree_skb(skb);
-}
-
-static inline void
-queue_ch_frame(struct mISDNchannel *ch, u_int pr, int id, struct sk_buff *skb)
-{
-	struct mISDNhead *hh;
-
-	if (!skb) {
-		_queue_data(ch, pr, id, 0, NULL, GFP_ATOMIC);
-	} else {
-		if (ch->rst) {
-			hh = mISDN_HEAD_P(skb);
-			hh->prim = pr;
-			hh->id = id;
-			hh->len = skb->len;
-			if (!ch->recv(ch->rst, skb))
-				return;
-		}
-		dev_kfree_skb(skb);
-	}
-}
-
-static inline int
-get_next_bframe(struct bchannel *bch)
-{
-	bch->tx_idx = 0;
-	if (test_bit(FLG_TX_NEXT, &bch->Flags)) {
-		bch->tx_skb = bch->next_skb;
-		if (bch->tx_skb) {
-			struct mISDNhead *hh = mISDN_HEAD_P(bch->tx_skb);
-
-			bch->next_skb = NULL;
-			test_and_clear_bit(FLG_TX_NEXT, &bch->Flags);
-			queue_ch_frame(&bch->ch, PH_DATA_CNF, hh->id, NULL);
-			return 1;
-		} else {
-			test_and_clear_bit(FLG_TX_NEXT, &bch->Flags);
-			printk(KERN_WARNING "B TX_NEXT without skb\n");
-		}
-	}
-	bch->tx_skb = NULL;
-	test_and_clear_bit(FLG_TX_BUSY, &bch->Flags);
-	return 0;
-}
-
-static inline int
-get_next_dframe(struct dchannel *dch)
-{
-	dch->tx_idx = 0;
-	dch->tx_skb = skb_dequeue(&dch->squeue);
-	if (dch->tx_skb) {
-		struct mISDNhead *hh = mISDN_HEAD_P(dch->tx_skb);
-
-		queue_ch_frame(&dch->dev.D, PH_DATA_CNF, hh->id, NULL);
-		return 1;
-	}
-	dch->tx_skb = NULL;
-	test_and_clear_bit(FLG_TX_BUSY, &dch->Flags);
-	return 0;
-}
-
-static inline void
-reflect_packets(struct mISDNstack *st, struct sk_buff *skb)
-{
-	struct sk_buff	*cskb;
-
-	while (st) {
-		cskb = skb_copy(skb, GFP_KERNEL);
-		if (!cskb) {
-			printk(KERN_WARNING "%s: no skb\n", __FUNCTION__);
-			break;
-		}
-		mISDN_queue_message(st, cskb);
-		st = st->smux.next;
-	}
-}
-
-static inline u_int
-get_sapi_tei(u_char *p)
-{
-	u_int	sapi, tei;
-
-	sapi = *p >> 2;
-	tei = p[1] >> 1;
-	return sapi | (tei << 8);
-}
+extern void	recv_Dchannel(struct dchannel *);
+extern void	recv_Bchannel(struct bchannel *);
+extern int	get_next_bframe(struct bchannel *);
+extern int	get_next_dframe(struct dchannel *);
 
 #endif

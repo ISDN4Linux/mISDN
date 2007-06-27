@@ -56,6 +56,10 @@
  * <8  bit target layer mask>
  *
  * Layer = 00 is reserved for general commands
+   Layer = 01  L2 -> HW
+   Layer = 02  HW -> L2
+   Layer = 04  L3 -> L2
+   Layer = 08  L2 -> L3
  * Layer = FF is reserved for broadcast commands
  */
 
@@ -70,28 +74,28 @@
 #define CREATE_CHANNEL		0x0500
 
 /* layer 2 -> layer 1 */
-#define PH_ACTIVATE_REQ		0x0102
-#define PH_DEACTIVATE_REQ	0x0202
-#define PH_DATA_REQ		0x2002
-#define MPH_DEACTIVATE_REQ	0x0502
-#define MPH_ACTIVATE_REQ	0x0602
-#define MPH_INFORMATION_REQ	0x0702
+#define PH_ACTIVATE_REQ		0x0101
+#define PH_DEACTIVATE_REQ	0x0201
+#define PH_DATA_REQ		0x2001
+#define MPH_ACTIVATE_REQ	0x0501
+#define MPH_DEACTIVATE_REQ	0x0601
+#define MPH_INFORMATION_REQ	0x0701
 
 /* layer 1 -> layer 2 */
-#define PH_ACTIVATE_IND		0x0104
-#define PH_DEACTIVATE_IND	0x0204
-#define PH_DATA_IND		0x2004
-#define MPH_DEACTIVATE_IND	0x0504
-#define MPH_ACTIVATE_IND	0x0604
-#define MPH_INFORMATION_IND	0x0704
-#define PH_DATA_CNF		0x6004
+#define PH_ACTIVATE_IND		0x0102
+#define PH_DEACTIVATE_IND	0x0202
+#define PH_DATA_IND		0x2002
+#define MPH_ACTIVATE_IND	0x0502
+#define MPH_DEACTIVATE_IND	0x0602
+#define MPH_INFORMATION_IND	0x0702
+#define PH_DATA_CNF		0x6002
 
 /* layer 3 -> layer 2 */
 #define DL_ESTABLISH_REQ	0x1004
 #define DL_RELEASE_REQ		0x1104
 #define DL_DATA_REQ		0x3004
 #define DL_UNITDATA_REQ		0x3104
-#define MDL_UNITDATA_REQ	0x3204
+#define DL_INFORMATION_REQ	0x0004
 
 /* layer 2 -> layer 3 */
 #define DL_ESTABLISH_IND	0x1008
@@ -100,17 +104,20 @@
 #define DL_RELEASE_CNF		0x5108
 #define DL_DATA_IND		0x3008
 #define DL_UNITDATA_IND		0x3108
-#define MDL_UNITDATA_IND	0x3208
+#define DL_INFORMATION_IND	0x0008
 
 /* intern layer 2 managment */
 #define MDL_ASSIGN_REQ		0x1804
 #define MDL_ASSIGN_IND		0x1904
 #define MDL_REMOVE_REQ		0x1A04
 #define MDL_REMOVE_IND		0x1B04
-#define MDL_INFORMATION_IND	0x1C04
-#define MDL_STATUS_IND		0x1D04
-#define MDL_ERROR_IND		0x1E04
-#define MDL_ERROR_RSP		0x5E04
+#define MDL_STATUS_IND		0x1C04
+#define MDL_ERROR_IND		0x1D04
+#define MDL_ERROR_RSP		0x5D04
+
+/* DL_INFORMATION_IND types */
+#define DL_INFO_L2_CONNECT	0x0001
+#define DL_INFO_TONE		0x0002
 
 /* 
  * protocol ids
@@ -122,17 +129,16 @@
 #define ISDN_P_BASE		0
 #define ISDN_P_TE_S0		0x01
 #define ISDN_P_NT_S0  		0x02
-#define ISDN_PH_PACKET		0x03
 #define ISDN_P_LAPD_TE		0x10
 #define	ISDN_P_LAPD_NT		0x11	
-#define ISDN_P_MGR_TE		0x12
-#define	ISDN_P_MGR_NT		0x13
 
 #define ISDN_P_B_MASK		0x1f
 #define ISDN_P_B_START		0x20
 
 #define ISDN_P_B_RAW		0x21
 #define ISDN_P_B_HDLC		0x22
+#define ISDN_P_B_L2DSP		0x23
+#define ISDN_P_B_X75SLP		0x24
 
 #define OPTION_L2_PMX		1
 #define OPTION_L2_PTP		2
@@ -174,7 +180,6 @@ struct sockaddr_mISDN {
 	sa_family_t    family;
 	unsigned char	dev;
 	unsigned char	channel;
-	unsigned char	id;
 	unsigned char	sapi;
 	unsigned char	tei;
 };
@@ -185,7 +190,8 @@ struct sockaddr_mISDN {
 
 struct mISDN_devinfo {
 	u_int		id;
-	u_int		protocols;
+	u_int		Dprotocols;
+	u_int		Bprotocols;
 	u_int		protocol;
 	u_int		nrbchan;
 	char		name[MISDN_MAX_IDLEN];
@@ -199,6 +205,8 @@ struct mISDN_devinfo {
 #include <linux/isdn_compat.h>
 #include <linux/list.h>
 #include <linux/skbuff.h>
+#include <linux/net.h>
+#include <net/sock.h>
 
 #define DEBUG_CORE		0x000000ff
 #define DEBUG_CORE_FUNC		0x00000002
@@ -218,12 +226,16 @@ struct mISDN_devinfo {
 #define mISDN_HEAD_P(s)		((struct mISDNhead *)&s->cb[0])
 #define mISDN_HEAD_PRIM(s)	((struct mISDNhead *)&s->cb[0])->prim
 #define mISDN_HEAD_ID(s)	((struct mISDNhead *)&s->cb[0])->id
+#define mISDN_HEAD_LEN(s)	((struct mISDNhead *)&s->cb[0])->len
+
+/* socket states */
+#define MISDN_OPEN	1
+#define MISDN_BOUND	2
+#define MISDN_CLOSED	3
 
 struct mISDNchannel;
 struct mISDNdevice;
-struct mISDNdmux;
 struct mISDNstack;
-struct mISDNmanager;
 
 struct channel_req {
 	u_int			protocol;
@@ -231,22 +243,38 @@ struct channel_req {
 	struct mISDNchannel	*ch;
 };
 
-
-
 typedef	int	(ctrl_func_t)(struct mISDNchannel *, u_int, void *);
 typedef	int	(send_func_t)(struct mISDNchannel *, struct sk_buff *);
-typedef int	(recv_func_t)(struct mISDNstack  *, struct sk_buff *);
+typedef int	(create_func_t)(struct channel_req *);
+
+struct Bprotocol {
+	struct list_head	list;
+	char			*name;
+	u_int			Bprotocols;
+	create_func_t		*create;
+};
 
 struct mISDNchannel {
 	struct list_head	list;
-	u_int			protocols;
 	u_int			protocol;
 	u_int			nr;
-	struct mISDNstack	*rst;
+	u_long			opt;
+	u_int			addr;
+	struct mISDNstack	*st;
+	struct mISDNchannel	*peer;
 	send_func_t		*send;
-	recv_func_t		*recv;
+	send_func_t		*recv;
 	ctrl_func_t		*ctrl;
-	struct mISDNstack	*sst;
+};
+
+struct mISDN_sock_list {
+	struct hlist_head	head;
+	rwlock_t		lock;
+};
+
+struct mISDN_sock {
+	struct sock		sk;
+	struct mISDNchannel	ch;
 	struct mISDNdevice	*dev;
 };
 
@@ -254,35 +282,26 @@ struct mISDNdevice {
 	struct mISDNchannel	D;
 	u_int			id;
 	char			name[MISDN_MAX_IDLEN];
+	u_int			Dprotocols;
+	u_int			Bprotocols;
 	u_int			nrbchan;
 	struct list_head	bchannels;
-	struct list_head	stacks;
-	rwlock_t		slock;
-	struct mISDNmanager	*mgr;
+	struct mISDNchannel	*teimgr;
 	struct class_device	class_dev;
 };
 
-struct mISDNdmux {
-	struct mISDNstack	*next;
-	u_long			prop;
-	u_int			addr;
-};
-
 struct mISDNstack {
-	struct list_head	list;
-	u_int			id;
-	u_int			protocol;
 	u_long			status;
-	char			name[MISDN_MAX_IDLEN];
+	struct mISDNdevice	*dev;
 	struct task_struct	*thread;
 	struct semaphore	*notify;
 	wait_queue_head_t	workq;
 	struct sk_buff_head	msgq;
-	struct mISDNchannel	*layer[3];
-	spinlock_t		llock;
-	struct mISDNdmux	rmux;
-	struct mISDNdmux	smux;
-	struct mISDNdevice	*dev;
+	struct list_head	layer2;
+	struct mISDNchannel	*layer1;
+	struct mISDNchannel	own;
+	struct semaphore	lsem;
+	struct mISDN_sock_list	l1sock;
 #ifdef MISDN_MSG_STATS
 	u_int			msg_cnt;
 	u_int			sleep_cnt;
@@ -290,23 +309,59 @@ struct mISDNstack {
 #endif
 };
 
-struct mISDNmanager {
-	struct mISDNchannel     ch;
-	u_long			options;
-	struct list_head        layer2;
-	rwlock_t		lock;
-	struct sk_buff_head	sendq;
-	u_int			lastid;
-	u_int			nextid;
-};
-                
+/* global alloc/queue dunctions */
+
+static inline struct sk_buff *
+mI_alloc_skb(unsigned int len, gfp_t gfp_mask)
+{
+	struct sk_buff	*skb;
+
+	skb = alloc_skb(len + MISDN_HEADER_LEN, gfp_mask);
+	if (likely(skb))
+		skb_reserve(skb, MISDN_HEADER_LEN);
+	return skb;
+}
+
+static inline struct sk_buff *
+_alloc_mISDN_skb(u_int prim, u_int id, u_int len, void *dp, gfp_t gfp_mask)
+{
+	struct sk_buff	*skb = mI_alloc_skb(len, gfp_mask);
+	struct mISDNhead *hh;
+
+	if (!skb)
+		return NULL;
+	if (len)
+		memcpy(skb_put(skb, len), dp, len);
+	hh = mISDN_HEAD_P(skb);
+	hh->prim = prim;
+	hh->id = id;
+	hh->len = len;
+	return skb;
+}	
+
+static inline void
+_queue_data(struct mISDNchannel *ch, u_int prim,
+    u_int id, u_int len, void *dp, gfp_t gfp_mask)
+{
+	struct sk_buff		*skb;
+
+	if (!ch->peer)
+		return;
+	skb = _alloc_mISDN_skb(prim, id, len, dp, gfp_mask);
+	if (!skb)
+		return;
+	if (ch->recv(ch->peer, skb))
+		dev_kfree_skb(skb);
+}
+
 /* global register/unregister functions */
 
-extern int			mISDN_register_device(struct mISDNdevice *);
-extern void			mISDN_unregister_device(struct mISDNdevice *);
-extern struct mISDNmanager	*mISDN_create_manager(void);
-extern void			set_stack_address(struct mISDNstack *, u_int, u_int);
-extern int			mISDN_queue_message(struct mISDNstack *, struct sk_buff *);
+extern int	mISDN_register_device(struct mISDNdevice *);
+extern void	mISDN_unregister_device(struct mISDNdevice *);
+extern int	mISDN_register_Bprotocol(struct Bprotocol *);
+extern void	mISDN_unregister_Bprotocol(struct Bprotocol *);
+
+extern void	set_channel_address(struct mISDNchannel *, u_int, u_int);
 
 #endif /* __KERNEL__ */
 #endif /* mISDNIF_H */

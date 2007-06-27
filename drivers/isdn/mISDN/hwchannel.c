@@ -18,8 +18,50 @@
 #include <linux/module.h>
 #include <linux/mISDNhw.h>
 
+static void
+dchannel_bh(struct work_struct *ws)
+{
+	struct dchannel	*dch  = container_of(ws, struct dchannel, workq);
+	struct sk_buff	*skb;
+	int		err;
+
+	if (test_and_clear_bit(FLG_RECVQUEUE, &dch->Flags)) {
+		while ((skb = skb_dequeue(&dch->rqueue))) {
+			if (likely(dch->dev.D.peer)) {
+				err = dch->dev.D.recv(dch->dev.D.peer, skb);
+				if (err)
+					dev_kfree_skb(skb);
+			} else
+				dev_kfree_skb(skb);
+		}
+	}
+	if (test_and_clear_bit(FLG_PHCHANGE, &dch->Flags)) {
+		if (dch->phfunc)
+			dch->phfunc(dch);
+	}
+}
+
+static void
+bchannel_bh(struct work_struct *ws)
+{
+	struct bchannel	*bch  = container_of(ws, struct bchannel, workq);
+	struct sk_buff	*skb;
+	int		err;
+
+	if (test_and_clear_bit(FLG_RECVQUEUE, &bch->Flags)) {
+		while ((skb = skb_dequeue(&bch->rqueue))) {
+			if (likely(bch->ch.peer)) {
+				err = bch->ch.recv(bch->ch.peer, skb);
+				if (err)
+					dev_kfree_skb(skb);
+			} else
+				dev_kfree_skb(skb);
+		}
+	}
+}
+
 int
-mISDN_initdchannel(struct dchannel *ch, ulong prop, int maxlen)
+mISDN_initdchannel(struct dchannel *ch, ulong prop, int maxlen, void *phf)
 {
 	ch->Flags = prop;
 	ch->maxlen = maxlen;
@@ -27,8 +69,11 @@ mISDN_initdchannel(struct dchannel *ch, ulong prop, int maxlen)
 	ch->rx_skb = NULL;
 	ch->tx_skb = NULL;
 	ch->tx_idx = 0;
+	ch->phfunc = phf;
 	skb_queue_head_init(&ch->squeue);
+	skb_queue_head_init(&ch->rqueue);
 	INIT_LIST_HEAD(&ch->dev.bchannels);
+	INIT_WORK(&ch->workq, dchannel_bh);
 	return 0;
 }
 EXPORT_SYMBOL(mISDN_initdchannel);
@@ -42,7 +87,9 @@ mISDN_initbchannel(struct bchannel *ch, ulong prop, int maxlen)
 	ch->rx_skb = NULL;
 	ch->tx_skb = NULL;
 	ch->tx_idx = 0;
+	skb_queue_head_init(&ch->rqueue);
 	ch->next_skb = NULL;
+	INIT_WORK(&ch->workq, bchannel_bh);
 	return 0;
 }
 EXPORT_SYMBOL(mISDN_initbchannel);
@@ -59,6 +106,8 @@ mISDN_freedchannel(struct dchannel *ch)
 		ch->rx_skb = NULL;
 	}
 	skb_queue_purge(&ch->squeue);
+	skb_queue_purge(&ch->rqueue);
+	flush_scheduled_work();
 	return (0);
 }
 EXPORT_SYMBOL(mISDN_freedchannel);
@@ -78,9 +127,144 @@ mISDN_freebchannel(struct bchannel *ch)
 		dev_kfree_skb(ch->next_skb);
 		ch->next_skb = NULL;
 	}
+	skb_queue_purge(&ch->rqueue);
+	flush_scheduled_work();
 	return 0;
 }
 EXPORT_SYMBOL(mISDN_freebchannel);
+
+static inline u_int
+get_sapi_tei(u_char *p)
+{
+	u_int	sapi, tei;
+
+	sapi = *p >> 2;
+	tei = p[1] >> 1;
+	return sapi | (tei << 8);
+}
+
+void
+recv_Dchannel(struct dchannel *dch)
+{
+	struct mISDNhead *hh;
+
+	hh = mISDN_HEAD_P(dch->rx_skb);
+	hh->prim = PH_DATA_IND;
+	hh->id = get_sapi_tei(dch->rx_skb->data);
+	hh->len = dch->rx_skb->len;
+	skb_queue_tail(&dch->rqueue, dch->rx_skb);
+	dch->rx_skb = NULL;
+	schedule_event(dch, FLG_RECVQUEUE);
+}
+
+EXPORT_SYMBOL(recv_Dchannel);
+
+void
+recv_Bchannel(struct bchannel *bch)
+{
+	struct mISDNhead *hh;
+
+	hh = mISDN_HEAD_P(bch->rx_skb);
+	hh->prim = PH_DATA_IND;
+	hh->id = MISDN_ID_ANY;
+	hh->len = bch->rx_skb->len;
+	skb_queue_tail(&bch->rqueue, bch->rx_skb);
+	bch->rx_skb = NULL;
+	schedule_event(bch, FLG_RECVQUEUE);
+}
+
+EXPORT_SYMBOL(recv_Bchannel);
+
+static void
+confirm_Dsend(struct dchannel *dch)
+{
+	struct sk_buff	*skb;
+
+	skb = _alloc_mISDN_skb(PH_DATA_CNF, mISDN_HEAD_ID(dch->tx_skb),
+	    0, NULL, GFP_ATOMIC);
+	if (!skb) {
+		printk(KERN_ERR "%s: no skb id %x\n", __FUNCTION__,
+		    mISDN_HEAD_ID(dch->tx_skb));
+		return;
+	}
+	skb_queue_tail(&dch->rqueue, skb);
+	schedule_event(dch, FLG_RECVQUEUE);
+}
+
+int
+get_next_dframe(struct dchannel *dch)
+{
+	dch->tx_idx = 0;
+	dch->tx_skb = skb_dequeue(&dch->squeue);
+	if (dch->tx_skb) {
+		confirm_Dsend(dch);
+		return 1;
+	}
+	dch->tx_skb = NULL;
+	test_and_clear_bit(FLG_TX_BUSY, &dch->Flags);
+	return 0;
+}
+
+EXPORT_SYMBOL(get_next_dframe);
+
+static void
+confirm_Bsend(struct bchannel *bch)
+{
+	struct sk_buff	*skb;
+
+	skb = _alloc_mISDN_skb(PH_DATA_CNF, mISDN_HEAD_ID(bch->tx_skb),
+	    0, NULL, GFP_ATOMIC);
+	if (!skb) {
+		printk(KERN_ERR "%s: no skb id %x\n", __FUNCTION__,
+		    mISDN_HEAD_ID(bch->tx_skb));
+		return;
+	}
+	skb_queue_tail(&bch->rqueue, skb);
+	schedule_event(bch, FLG_RECVQUEUE);
+}
+
+int
+get_next_bframe(struct bchannel *bch)
+{
+	bch->tx_idx = 0;
+	if (test_bit(FLG_TX_NEXT, &bch->Flags)) {
+		bch->tx_skb = bch->next_skb;
+		if (bch->tx_skb) {
+			bch->next_skb = NULL;
+			test_and_clear_bit(FLG_TX_NEXT, &bch->Flags);
+			confirm_Bsend(bch);
+			return 1;
+		} else {
+			test_and_clear_bit(FLG_TX_NEXT, &bch->Flags);
+			printk(KERN_WARNING "B TX_NEXT without skb\n");
+		}
+	}
+	bch->tx_skb = NULL;
+	test_and_clear_bit(FLG_TX_BUSY, &bch->Flags);
+	return 0;
+}
+
+EXPORT_SYMBOL(get_next_bframe);
+
+static void
+queue_ch_frame(struct mISDNchannel *ch, u_int pr, int id, struct sk_buff *skb)
+{
+	struct mISDNhead *hh;
+
+	if (!skb) {
+		_queue_data(ch, pr, id, 0, NULL, GFP_ATOMIC);
+	} else {
+		if (ch->peer) {
+			hh = mISDN_HEAD_P(skb);
+			hh->prim = pr;
+			hh->id = id;
+			hh->len = skb->len;
+			if (!ch->recv(ch->peer, skb))
+				return;
+		}
+		dev_kfree_skb(skb);
+	}
+}
 
 int
 dchannel_senddata(struct dchannel *ch, struct sk_buff *skb)
