@@ -1790,6 +1790,16 @@ l3dss1_global_restart(l3_process_t *pc, u_char pr, void *arg)
 
 
 static void
+l3dss1_restart_ack_up(l3_process_t *pc, u_char pr, void *arg)
+{
+	struct sk_buff	*skb = arg;
+	printk(KERN_NOTICE "Restart Acknowledge to upper layer\n");
+		
+	if (mISDN_l3up(pc, CC_RESTART | CONFIRM, skb))
+		dev_kfree_skb(skb);
+}
+
+static void
 l3dss1_restart_ack(l3_process_t *pc, u_char pr, void *arg)
 {
 	printk(KERN_NOTICE "Restart Acknowledge\n");
@@ -2509,6 +2519,8 @@ static struct stateentry globalmes_list[] =
 	 MT_STATUS, l3dss1_status},
 	{SBIT(0),
 	 MT_RESTART, l3dss1_global_restart},
+	{SBIT(0),
+	 MT_RESTART_ACKNOWLEDGE, l3dss1_restart_ack_up},
 	{SBIT(1),
 	 MT_RESTART_ACKNOWLEDGE, l3dss1_restart_ack},
 };
