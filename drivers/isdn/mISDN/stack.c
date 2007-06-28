@@ -342,10 +342,12 @@ add_layer2(struct mISDNchannel *ch, struct mISDNstack *st)
 	up(&st->lsem);
 }
 
-void
-close_mgr_channel(struct mISDNstack *st)
+static int
+st_own_ctrl(struct mISDNchannel *ch, u_int cmd, void *arg)
 {
-	st->dev->D.ctrl(&st->dev->D, PUT_CHANNEL, NULL);
+	if (!ch->st || ch->st->layer1)
+		return -EINVAL;
+	return ch->st->layer1->ctrl(ch->st->layer1, cmd, arg);
 }
 
 int
@@ -381,6 +383,9 @@ create_stack(struct mISDNdevice *dev)
 	dev->D.peer = &newst->own;
 	dev->D.st = newst;
 	newst->own.st = newst;
+	newst->own.ctrl = st_own_ctrl;
+	newst->own.send = mISDN_queue_message;
+	newst->own.recv = mISDN_queue_message;
 	if (*debug & DEBUG_CORE_FUNC)
 		printk(KERN_DEBUG "%s: st(%s)\n", __FUNCTION__, newst->dev->name);
 	newst->notify = &sem;
@@ -512,7 +517,7 @@ create_l2entity(struct mISDNdevice *dev, struct mISDNchannel *ch,
 		rq.protocol = protocol;
 		rq.adr = *adr;
 		rq.ch = ch;
-		err = dev->teimgr->ctrl(dev->teimgr, CREATE_CHANNEL, &rq);
+		err = dev->teimgr->ctrl(dev->teimgr, OPEN_CHANNEL, &rq);
 		printk(KERN_DEBUG "%s: ret 2 %d\n", __FUNCTION__, err); 
 		if (err) {
 			dev->D.ctrl(&dev->D, CLOSE_CHANNEL, NULL);
@@ -566,6 +571,8 @@ delete_channel(struct mISDNchannel *ch)
 			list_del(&pch->list);
 			up(&ch->st->lsem);
 			pch->ctrl(pch, CLOSE_CHANNEL, NULL);
+			ch->st->dev->D.ctrl(&ch->st->dev->D,
+			    CLOSE_CHANNEL, NULL);
 		} else
 			printk(KERN_WARNING "%s: no l2 channel\n",
 			    __FUNCTION__);
@@ -585,6 +592,12 @@ delete_stack(struct mISDNdevice *dev)
 	if (*debug & DEBUG_CORE_FUNC)
 		printk(KERN_DEBUG "%s: st(%s)\n", __FUNCTION__,
 		    st->dev->name);
+	if (dev->teimgr) {
+		down(&st->lsem);
+		list_del(&dev->teimgr->list);	
+		up(&st->lsem);
+		dev->teimgr->ctrl(dev->teimgr, CLOSE_CHANNEL, NULL);
+	}
 	if (st->thread) {
 		if (st->notify) {
 			printk(KERN_WARNING "%s: notifier in use\n",
@@ -597,6 +610,12 @@ delete_stack(struct mISDNdevice *dev)
 		wake_up_interruptible(&st->workq);
 		down(&sem);
 	}
+	if (!list_empty(&st->layer2))
+		printk(KERN_WARNING "%s: layer2 list not empty\n",
+		    __FUNCTION__);
+	if (!hlist_empty(&st->l1sock.head))
+		printk(KERN_WARNING "%s: layer2 list not empty\n",
+		    __FUNCTION__);
 	kfree(st);
 }
 

@@ -245,6 +245,8 @@ data_sock_release(struct socket *sock)
 	case ISDN_P_B_RAW:
 	case ISDN_P_B_HDLC:
 	case ISDN_P_B_X75SLP:
+	case ISDN_P_B_L2DTMF:
+	case ISDN_P_B_L2DSP:
 		delete_channel(&_pms(sk)->ch);
 		mISDN_sock_unlink(&data_sockets, sk);
 		break;
@@ -256,9 +258,39 @@ data_sock_release(struct socket *sock)
 }
 
 static int
+data_sock_ioctl_bound(struct sock *sk, unsigned int cmd, void __user *p)
+{
+	struct mISDN_ctrl_req	cq;
+	int			err;
+
+	if (cmd != IMCTRLREQ)
+		return -EINVAL;
+	lock_sock(sk);
+	if (!_pms(sk)->dev) {
+		err = -ENODEV;
+		goto done;
+	}
+	if (copy_from_user(&cq, p, sizeof(cq))) {
+		err = -EFAULT;
+		goto done;
+	}
+	err = _pms(sk)->dev->D.ctrl(&_pms(sk)->dev->D, CONTROL_CHANNEL, &cq);
+	if (err)
+		goto done;
+	if (copy_to_user(p, &cq, sizeof(cq))) {
+		err = -EFAULT;
+		goto done;
+	}
+done:
+	release_sock(sk);
+	return err;
+}
+
+static int
 data_sock_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 {
 	int 			err = 0, id;
+	struct sock		*sk = sock->sk;
 	struct mISDNdevice	*dev;
 
 	switch (cmd) {
@@ -288,7 +320,10 @@ data_sock_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 			err = -ENODEV;
 		break;
 	default:
-		err = -EINVAL;
+		if (sk->sk_state == MISDN_BOUND) {
+			err = data_sock_ioctl_bound(sk, cmd, (void __user *)arg);
+		} else
+			err = -ENOTCONN;
 	}
 	return err;
 }
@@ -338,6 +373,8 @@ data_sock_bind(struct socket *sock, struct sockaddr *addr, int addr_len)
 	case ISDN_P_B_RAW:
 	case ISDN_P_B_HDLC:
 	case ISDN_P_B_X75SLP:
+	case ISDN_P_B_L2DTMF:
+	case ISDN_P_B_L2DSP:
 		err = connect_Bstack(_pms(sk)->dev, &_pms(sk)->ch,
 		    sk->sk_protocol, maddr);
 		break;
@@ -563,6 +600,8 @@ mISDN_sock_create(struct socket *sock, int proto)
 	case ISDN_P_B_RAW:
 	case ISDN_P_B_HDLC:
 	case ISDN_P_B_X75SLP:
+	case ISDN_P_B_L2DTMF:
+	case ISDN_P_B_L2DSP:
 		err = data_sock_create(sock, proto);
 		break;
 	default:

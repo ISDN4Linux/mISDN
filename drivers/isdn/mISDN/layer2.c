@@ -2051,7 +2051,7 @@ l2_ctrl(struct mISDNchannel *ch, u_int cmd, void *arg)
 		}
 		break;
 	case CLOSE_CHANNEL:
-		if (test_bit(FLG_LAPB, &l2->flag) && l2->ch.peer)
+		if (l2->ch.peer)
 			l2->ch.peer->ctrl(l2->ch.peer, CLOSE_CHANNEL, NULL);
 		release_l2(l2);
 		break;

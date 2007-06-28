@@ -69,9 +69,7 @@
 /* generell commands */
 #define OPEN_CHANNEL		0x0100
 #define CLOSE_CHANNEL		0x0200
-#define GET_CHANNEL		0x0300
-#define PUT_CHANNEL		0x0400
-#define CREATE_CHANNEL		0x0500
+#define CONTROL_CHANNEL		0x0300
 
 /* layer 2 -> layer 1 */
 #define PH_ACTIVATE_REQ		0x0101
@@ -80,6 +78,7 @@
 #define MPH_ACTIVATE_REQ	0x0501
 #define MPH_DEACTIVATE_REQ	0x0601
 #define MPH_INFORMATION_REQ	0x0701
+#define PH_CONTROL_REQ		0x0801
 
 /* layer 1 -> layer 2 */
 #define PH_ACTIVATE_IND		0x0102
@@ -89,6 +88,7 @@
 #define MPH_DEACTIVATE_IND	0x0602
 #define MPH_INFORMATION_IND	0x0702
 #define PH_DATA_CNF		0x6002
+#define PH_CONTROL_IND		0x0802
 
 /* layer 3 -> layer 2 */
 #define DL_ESTABLISH_REQ	0x1004
@@ -117,7 +117,13 @@
 
 /* DL_INFORMATION_IND types */
 #define DL_INFO_L2_CONNECT	0x0001
-#define DL_INFO_TONE		0x0002
+
+/* PH_CONTROL types */
+/* TOUCH TONE IS 0x20XX  XX "0"..."9", "A","B","C","D","*","#" */
+#define DTMF_TONE_VAL		0x2000
+#define DTMF_TONE_MASK		0x007F
+#define DTMF_TONE_START		0x2100
+#define DTMF_TONE_STOP		0x2200
 
 /* 
  * protocol ids
@@ -137,8 +143,9 @@
 
 #define ISDN_P_B_RAW		0x21
 #define ISDN_P_B_HDLC		0x22
-#define ISDN_P_B_L2DSP		0x23
-#define ISDN_P_B_X75SLP		0x24
+#define ISDN_P_B_X75SLP		0x23
+#define ISDN_P_B_L2DTMF		0x24
+#define ISDN_P_B_L2DSP		0x25
 
 #define OPTION_L2_PMX		1
 #define OPTION_L2_PTP		2
@@ -187,6 +194,7 @@ struct sockaddr_mISDN {
 /* socket ioctls */
 #define	IMGETCOUNT	_IOR('I', 64, int)
 #define IMGETDEVINFO	_IOR('I', 65, int)
+#define IMCTRLREQ	_IOR('I', 66, int)
 
 struct mISDN_devinfo {
 	u_int		id;
@@ -195,6 +203,20 @@ struct mISDN_devinfo {
 	u_int		protocol;
 	u_int		nrbchan;
 	char		name[MISDN_MAX_IDLEN];
+};
+
+#define MISDN_CTRL_GETOP		0x0000
+#define MISDN_CTRL_LOOP			0x0001
+#define MISDN_CTRL_CONNECT		0x0002
+#define MISDN_CTRL_DISCONNECT		0x0004
+#define MISDN_CTRL_PCMCONNECT		0x0010
+#define MISDN_CTRL_PCMDISCONNECT	0x0020
+
+struct mISDN_ctrl_req {
+	int		op;
+	int		channel;
+	int		p1;
+	int		p2;
 };
 
 /* muxer options */

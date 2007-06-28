@@ -722,7 +722,7 @@ mgr_ctrl(struct mISDNchannel *ch, u_int cmd, void *arg)
 	    struct manager, ch);
 	int			ret = -EINVAL;
 	switch(cmd) {
-	case CREATE_CHANNEL:
+	case OPEN_CHANNEL:
 		ret = create_teimgr(mgr, arg);
 		break;
 	case CLOSE_CHANNEL:

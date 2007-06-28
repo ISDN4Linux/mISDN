@@ -1497,6 +1497,9 @@ hfc_bctrl(struct mISDNchannel *ch, u_int cmd, void *arg)
 	struct bchannel	*bch = container_of(ch, struct bchannel, ch);
 	int		ret = -EINVAL;
 
+	if (bch->debug & DEBUG_HW)
+		printk(KERN_DEBUG "%s: cmd:%x %p\n",
+		    __FUNCTION__, cmd, arg);
 	switch(cmd) {
 	case HW_TESTRX_RAW:
 		ret = set_hfcpci_rxtest(bch, ISDN_P_B_RAW, (int)(long)arg);
@@ -1514,6 +1517,7 @@ hfc_bctrl(struct mISDNchannel *ch, u_int cmd, void *arg)
 			deactivate_bchannel(bch);
 		ch->protocol = ISDN_P_NONE;
 		ch->peer = NULL;
+		module_put(THIS_MODULE);
 		break;
 	default:
 		printk(KERN_WARNING "%s: unknown prim(%x)\n",
@@ -1722,6 +1726,101 @@ init_card(struct hfc_pci *hc)
 }
 
 static int
+channel_ctrl(struct hfc_pci *hc, struct mISDN_ctrl_req *cq)
+{
+	int	ret = 0;
+	u_char	slot;
+
+	switch(cq->op) {
+	case MISDN_CTRL_GETOP:
+		cq->op = MISDN_CTRL_LOOP | MISDN_CTRL_CONNECT |
+		    MISDN_CTRL_DISCONNECT;
+		break;
+	case MISDN_CTRL_LOOP:
+		/* channel 0 disabled loop */
+		if (cq->channel < 0 || cq->channel > 2) {
+			ret = -EINVAL;
+			break;
+		}
+		if (cq->channel & 1) {
+			if (test_bit(HFC_CFG_SW_DD_DU, &hc->cfg))
+				slot = 0xC0;
+			else
+				slot = 0x80;
+			printk(KERN_DEBUG "%s: Write_hfc: B1_SSL/RSL 0x%x\n",
+			    __FUNCTION__, slot);
+			Write_hfc(hc, HFCPCI_B1_SSL, slot);
+			Write_hfc(hc, HFCPCI_B1_RSL, slot);
+			hc->hw.conn = (hc->hw.conn & ~7) | 6;
+			Write_hfc(hc, HFCPCI_CONNECT, hc->hw.conn);
+		}
+		if (cq->channel & 2) {
+			if (test_bit(HFC_CFG_SW_DD_DU, &hc->cfg))
+				slot = 0xC1;
+			else
+				slot = 0x81;
+			printk(KERN_DEBUG "%s: Write_hfc: B2_SSL/RSL 0x%x\n",
+			    __FUNCTION__, slot);
+			Write_hfc(hc, HFCPCI_B2_SSL, slot);
+			Write_hfc(hc, HFCPCI_B2_RSL, slot);
+			hc->hw.conn = (hc->hw.conn & ~0x38) | 0x30;
+			Write_hfc(hc, HFCPCI_CONNECT, hc->hw.conn);
+		}
+		if (cq->channel & 3)
+			hc->hw.trm |= 0x80;	/* enable IOM-loop */
+		else {
+			hc->hw.conn = (hc->hw.conn & ~0x3f) | 0x09;
+			Write_hfc(hc, HFCPCI_CONNECT, hc->hw.conn);
+			hc->hw.trm &= 0x7f;	/* disable IOM-loop */
+		}
+		Write_hfc(hc, HFCPCI_TRM, hc->hw.trm);
+		break;
+	case MISDN_CTRL_CONNECT:
+		if (cq->channel == cq->p1) {
+			ret = -EINVAL;
+			break;
+		}
+		if (cq->channel < 1 || cq->channel > 2 ||
+		    cq->p1 < 1 || cq->p1 > 2) {
+			ret = -EINVAL;
+			break;
+		}
+		if (test_bit(HFC_CFG_SW_DD_DU, &hc->cfg))
+			slot = 0xC0;
+		else
+			slot = 0x80;
+		printk(KERN_DEBUG "%s: Write_hfc: B1_SSL/RSL 0x%x\n",
+		    __FUNCTION__, slot);
+		Write_hfc(hc, HFCPCI_B1_SSL, slot);
+		Write_hfc(hc, HFCPCI_B2_RSL, slot);
+		if (test_bit(HFC_CFG_SW_DD_DU, &hc->cfg))
+			slot = 0xC1;
+		else
+			slot = 0x81;
+		printk(KERN_DEBUG "%s: Write_hfc: B2_SSL/RSL 0x%x\n",
+		    __FUNCTION__, slot);
+		Write_hfc(hc, HFCPCI_B2_SSL, slot);
+		Write_hfc(hc, HFCPCI_B1_RSL, slot);
+		hc->hw.conn = (hc->hw.conn & ~0x3f) | 0x36;
+		Write_hfc(hc, HFCPCI_CONNECT, hc->hw.conn);
+		hc->hw.trm |= 0x80;
+		Write_hfc(hc, HFCPCI_TRM, hc->hw.trm);
+		break;
+	case MISDN_CTRL_DISCONNECT:
+		hc->hw.conn = (hc->hw.conn & ~0x3f) | 0x09;
+		Write_hfc(hc, HFCPCI_CONNECT, hc->hw.conn);
+		hc->hw.trm &= 0x7f;	/* disable IOM-loop */
+		break;
+	default:
+		printk(KERN_WARNING "%s: unknown Op %x\n",
+		    __FUNCTION__, cq->op);
+		ret= -EINVAL;
+		break;
+	}
+	return ret;
+}
+
+static int
 open_dchannel(struct hfc_pci *hc, struct mISDNchannel *ch,
     struct channel_req *rq)
 {
@@ -1747,7 +1846,9 @@ open_dchannel(struct hfc_pci *hc, struct mISDNchannel *ch,
 		_queue_data(ch, PH_ACTIVATE_IND, MISDN_ID_ANY, 0, NULL, GFP_KERNEL);
 	}
 	rq->ch = ch;
-	return err;
+	if (!try_module_get(THIS_MODULE))
+		printk(KERN_WARNING "%s:cannot get module\n", __FUNCTION__);
+	return 0;
 }
 
 static int
@@ -1764,6 +1865,8 @@ open_bchannel(struct hfc_pci *hc, struct channel_req *rq)
 	if (test_and_set_bit(FLG_OPEN, &bch->Flags))
 		return -EBUSY; /* b-channel can be only open once */
 	rq->ch = &bch->ch; /* TODO: E-channel */
+	if (!try_module_get(THIS_MODULE))
+		printk(KERN_WARNING "%s:cannot get module\n", __FUNCTION__);
 	return 0;
 }
 
@@ -1776,11 +1879,12 @@ hfc_dctrl(struct mISDNchannel *ch, u_int cmd, void *arg)
 	struct mISDNdevice	*dev = container_of(ch, struct mISDNdevice, D);
 	struct dchannel		*dch = container_of(dev, struct dchannel, dev);
 	struct hfc_pci		*hc = dch->hw;
-	u_int			tmp;
-	u_char			slot;
 	struct channel_req	*rq;
 	int			err = 0;
 
+	if (dch->debug & DEBUG_HW)
+		printk(KERN_DEBUG "%s: cmd:%x %p\n",
+		    __FUNCTION__, cmd, arg);
 	switch (cmd) {
 	case OPEN_CHANNEL:
 		rq = arg;
@@ -1790,46 +1894,10 @@ hfc_dctrl(struct mISDNchannel *ch, u_int cmd, void *arg)
 			err = open_bchannel(hc, rq); 
 		break;
 	case CLOSE_CHANNEL:
-		break;
-	case GET_CHANNEL:
-		if (!try_module_get(THIS_MODULE))
-			printk(KERN_WARNING "%s:cannot get module\n",
-			    __FUNCTION__);
-		break;
-	case PUT_CHANNEL:
 		module_put(THIS_MODULE);
 		break;
-	case HW_TESTLOOP:
-		tmp = (u_int)(u_long)arg;
-		if (tmp & 1) {
-			if (test_bit(HFC_CFG_SW_DD_DU, &hc->cfg))
-				slot = 0xC0;
-			else
-				slot = 0x80;
-			printk(KERN_DEBUG "%s: Write_hfc: B1_SSL/RSL 0x%x\n",
-			    __FUNCTION__, slot);
-			Write_hfc(hc, HFCPCI_B1_SSL, slot);
-			Write_hfc(hc, HFCPCI_B1_RSL, slot);
-			hc->hw.conn = (hc->hw.conn & ~7) | 1;
-			Write_hfc(hc, HFCPCI_CONNECT, hc->hw.conn);
-		}
-		if (tmp & 2) {
-			if (test_bit(HFC_CFG_SW_DD_DU, &hc->cfg))
-				slot = 0xC1;
-			else
-				slot = 0x81;
-			printk(KERN_DEBUG "%s: Write_hfc: B2_SSL/RSL 0x%x\n",
-			    __FUNCTION__, slot);
-			Write_hfc(hc, HFCPCI_B2_SSL, slot);
-			Write_hfc(hc, HFCPCI_B2_RSL, slot);
-			hc->hw.conn = (hc->hw.conn & ~0x38) | 0x08;
-			Write_hfc(hc, HFCPCI_CONNECT, hc->hw.conn);
-		}
-		if (tmp & 3)
-			hc->hw.trm |= 0x80;	/* enable IOM-loop */
-		else
-			hc->hw.trm &= 0x7f;	/* disable IOM-loop */
-		Write_hfc(hc, HFCPCI_TRM, hc->hw.trm);
+	case CONTROL_CHANNEL:
+		err = channel_ctrl(hc, arg);
 		break;
 	default:
 		if (dch->debug & DEBUG_HW)
