@@ -214,17 +214,24 @@ mISDNInit(void)
 	printk(KERN_INFO "Modular ISDN core version (%s) revision (%s)\n",
 		core_version, core_revision);
 	mISDN_initstack(&debug);
+	err = mISDN_inittimer(&debug);
+	if (err) {
+		goto error;
+	}
 	err = l1_init(&debug);
 	if (err) {
+		mISDN_timer_cleanup();
 		goto error;
 	}
 	err = Isdnl2_Init(&debug);
 	if (err) {
+		mISDN_timer_cleanup();
 		l1_cleanup();
 		goto error;
 	}
 	err = misdn_sock_init(&debug);
 	if (err) {
+		mISDN_timer_cleanup();
 		l1_cleanup();
 		Isdnl2_cleanup();
 	}
@@ -234,6 +241,7 @@ error:
 
 void mISDN_cleanup(void) {
 	misdn_sock_cleanup();
+	mISDN_timer_cleanup();
 	l1_cleanup();
 	Isdnl2_cleanup();
 	

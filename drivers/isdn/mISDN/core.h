@@ -60,4 +60,8 @@ extern void     misdn_sock_cleanup(void);
 extern u_int		get_all_Bprotocols(void);
 struct Bprotocol	*get_Bprotocol4mask(u_int);
 struct Bprotocol	*get_Bprotocol4id(u_int);
+
+extern int	mISDN_inittimer(u_int *);
+extern void	mISDN_timer_cleanup(void);
+
 #endif

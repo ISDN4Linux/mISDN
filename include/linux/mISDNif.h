@@ -191,10 +191,13 @@ struct sockaddr_mISDN {
 	unsigned char	tei;
 };
 
+/* timer device ioctl */
+#define IMADDTIMER	_IOR('I', 64, int)
+#define IMDELTIMER	_IOR('I', 65, int)
 /* socket ioctls */
-#define	IMGETCOUNT	_IOR('I', 64, int)
-#define IMGETDEVINFO	_IOR('I', 65, int)
-#define IMCTRLREQ	_IOR('I', 66, int)
+#define	IMGETCOUNT	_IOR('I', 66, int)
+#define IMGETDEVINFO	_IOR('I', 67, int)
+#define IMCTRLREQ	_IOR('I', 68, int)
 
 struct mISDN_devinfo {
 	u_int		id;
@@ -244,6 +247,7 @@ struct mISDN_ctrl_req {
 #define DEBUG_L2_RECV		0x00080000
 #define DEBUG_L2_TEI		0x00100000
 #define DEBUG_L2_TEIFSM		0x00200000
+#define DEBUG_TIMER		0x01000000
  
 #define mISDN_HEAD_P(s)		((struct mISDNhead *)&s->cb[0])
 #define mISDN_HEAD_PRIM(s)	((struct mISDNhead *)&s->cb[0])->prim
