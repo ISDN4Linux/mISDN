@@ -1036,6 +1036,7 @@ delete_teimanager(struct mISDNchannel *ch)
 		l2->ch.ctrl(&l2->ch, CLOSE_CHANNEL, NULL);
 	}
 	list_del(&mgr->ch.list);
+	list_del(&mgr->bcast.list);
 	skb_queue_purge(&mgr->sendq);
 	kfree(mgr);
 }
