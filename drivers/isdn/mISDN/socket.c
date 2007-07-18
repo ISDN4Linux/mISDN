@@ -129,9 +129,16 @@ mISDN_sock_recvmsg(struct kiocb *iocb, struct socket *sock,
 		maddr = (struct sockaddr_mISDN *)msg->msg_name;
 		maddr->family = AF_ISDN;
 		maddr->dev = _pms(sk)->dev->id;
-		maddr->channel = _pms(sk)->ch.nr;
-		maddr->sapi = _pms(sk)->ch.addr & 0xFF;
-		maddr->tei =  (_pms(sk)->ch.addr >> 8) & 0xFF;
+		if ((sk->sk_protocol == ISDN_P_LAPD_TE) ||
+		    (sk->sk_protocol == ISDN_P_LAPD_NT)) {
+			maddr->channel = (mISDN_HEAD_ID(skb) >> 16) & 0xff;
+			maddr->tei =  (mISDN_HEAD_ID(skb) >> 8) & 0xff;
+			maddr->sapi = mISDN_HEAD_ID(skb) & 0xff;
+		} else {
+			maddr->channel = _pms(sk)->ch.nr;
+			maddr->sapi = _pms(sk)->ch.addr & 0xFF;
+			maddr->tei =  (_pms(sk)->ch.addr >> 8) & 0xFF;
+		}
 	} else {
 		if (msg->msg_namelen)
 			printk(KERN_WARNING "%s: too small namelen %d\n",
@@ -164,9 +171,10 @@ static int
 mISDN_sock_sendmsg(struct kiocb *iocb, struct socket *sock,
     struct msghdr *msg, size_t len)
 {
-	struct sock *sk = sock->sk;
-	struct sk_buff *skb;
-	int err = -ENOMEM;
+	struct sock		*sk = sock->sk;
+	struct sk_buff		*skb;
+	int			err = -ENOMEM;
+	struct sockaddr_mISDN	*maddr;
 
 	if (*debug & DEBUG_SOCKET)
 		printk(KERN_DEBUG "%s: len %ld flags %x ch %d proto %x\n",
@@ -200,12 +208,17 @@ mISDN_sock_sendmsg(struct kiocb *iocb, struct socket *sock,
 	
 	if (msg->msg_namelen >= sizeof(struct sockaddr_mISDN)) {
 		/* if we have a address, we use it */
-		mISDN_HEAD_ID(skb) = _pms(sk)->ch.nr;
+		maddr = (struct sockaddr_mISDN *)msg->msg_name;
+		mISDN_HEAD_ID(skb) = maddr->channel;
 	} else { /* use default for L2 messages */
 		if ((sk->sk_protocol == ISDN_P_LAPD_TE) ||
 		    (sk->sk_protocol == ISDN_P_LAPD_NT))
 		    mISDN_HEAD_ID(skb) = _pms(sk)->ch.nr;
 	}
+
+	if (*debug & DEBUG_SOCKET)
+		printk(KERN_DEBUG "%s: ID:%x\n",
+		     __FUNCTION__, mISDN_HEAD_ID(skb));
 
 	err = -ENODEV;
 	if (!_pms(sk)->ch.peer ||
@@ -261,25 +274,41 @@ static int
 data_sock_ioctl_bound(struct sock *sk, unsigned int cmd, void __user *p)
 {
 	struct mISDN_ctrl_req	cq;
-	int			err;
+	int			err, val;
 
-	if (cmd != IMCTRLREQ)
-		return -EINVAL;
 	lock_sock(sk);
 	if (!_pms(sk)->dev) {
 		err = -ENODEV;
 		goto done;
 	}
-	if (copy_from_user(&cq, p, sizeof(cq))) {
-		err = -EFAULT;
-		goto done;
-	}
-	err = _pms(sk)->dev->D.ctrl(&_pms(sk)->dev->D, CONTROL_CHANNEL, &cq);
-	if (err)
-		goto done;
-	if (copy_to_user(p, &cq, sizeof(cq))) {
-		err = -EFAULT;
-		goto done;
+	switch (cmd) {
+	case IMCTRLREQ:
+		if (copy_from_user(&cq, p, sizeof(cq))) {
+			err = -EFAULT;
+			break;
+		}
+		err = _pms(sk)->dev->D.ctrl(&_pms(sk)->dev->D, CONTROL_CHANNEL, &cq);
+		if (err)
+			break;
+		if (copy_to_user(p, &cq, sizeof(cq))) {
+			err = -EFAULT;
+		}
+		break;
+	case IMCLEAR_L2:
+		if (sk->sk_protocol != ISDN_P_LAPD_NT) {
+			err = -EINVAL;
+			break;
+		}
+		if (get_user(val, (int __user *)p)) {
+			err = -EFAULT;
+			break;
+		}
+		err = _pms(sk)->dev->teimgr->ctrl(_pms(sk)->dev->teimgr,
+		    CONTROL_CHANNEL, &val);
+		break;
+	default:
+		err = -EINVAL;
+		break;
 	}
 done:
 	release_sock(sk);

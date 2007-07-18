@@ -1826,6 +1826,9 @@ open_dchannel(struct hfc_pci *hc, struct mISDNchannel *ch,
 {
 	int err = 0;
 
+	if (debug & DEBUG_HW_OPEN)
+		printk(KERN_DEBUG "%s: dev(%d) open from %p\n", __FUNCTION__,
+		    hc->dch.dev.id, __builtin_return_address(0));
 	if (rq->protocol == ISDN_P_NONE)
 		return -EINVAL;
 	if (!hc->initdone) {
@@ -1894,6 +1897,10 @@ hfc_dctrl(struct mISDNchannel *ch, u_int cmd, void *arg)
 			err = open_bchannel(hc, rq); 
 		break;
 	case CLOSE_CHANNEL:
+		if (debug & DEBUG_HW_OPEN)
+			printk(KERN_DEBUG "%s: dev(%d) close from %p\n",
+			    __FUNCTION__, hc->dch.dev.id,
+			    __builtin_return_address(0));
 		module_put(THIS_MODULE);
 		break;
 	case CONTROL_CHANNEL:

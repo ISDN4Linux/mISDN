@@ -51,11 +51,14 @@ extern int	create_l2entity(struct mISDNdevice *, struct mISDNchannel *,
 
 extern int	create_stack(struct mISDNdevice *);
 extern int	create_teimanager(struct mISDNdevice *);
+extern void	delete_teimanager(struct mISDNchannel *);
 extern void	delete_channel(struct mISDNchannel *);
 extern void	delete_stack(struct mISDNdevice *);
 extern void	mISDN_initstack(u_int *);
 extern int      misdn_sock_init(u_int *);
 extern void     misdn_sock_cleanup(void);
+extern void	add_layer2(struct mISDNchannel *, struct mISDNstack *);
+extern void	__add_layer2(struct mISDNchannel *, struct mISDNstack *);
 
 extern u_int		get_all_Bprotocols(void);
 struct Bprotocol	*get_Bprotocol4mask(u_int);

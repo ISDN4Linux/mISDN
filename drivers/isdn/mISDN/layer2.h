@@ -14,16 +14,19 @@
 
 struct manager {
 	struct mISDNchannel	ch;
+	struct mISDNchannel	bcast;
 	u_long			options;
 	struct list_head	layer2;
 	rwlock_t		lock;
 	struct sk_buff_head	sendq;
+	struct mISDNchannel	*up;
 	u_int			nextid;
 	u_int			lastid;
 }; 
 
 struct teimgr {
 	int			ri;
+	int			rcnt;
 	struct FsmInst		tei_m;
 	struct FsmTimer		timer;
 	int			tval, nval;
@@ -63,7 +66,7 @@ struct layer2 {
 	struct sk_buff_head	tmp_queue;
 };
 
-extern struct layer2	*create_l2(u_int, u_int, u_long arg);
+extern struct layer2	*create_l2(struct mISDNchannel *, u_int, u_int, u_long arg);
 extern int		tei_l2(struct layer2 *, u_int, u_long arg);
 
 

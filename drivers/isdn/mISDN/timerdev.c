@@ -93,7 +93,7 @@ mISDN_read(struct file *filep, char *buf, size_t count, loff_t * off)
 	int	ret = 0;
 
 	if (*debug & DEBUG_TIMER)
-	        printk(KERN_DEBUG "%s(%p, %p, %ld, %ld)\n", __FUNCTION__, filep, buf, count, *off);
+	        printk(KERN_DEBUG "%s(%p, %p, %ld, %p)\n", __FUNCTION__, filep, buf, count, off);
 	if (*off != filep->f_pos)
 		return -ESPIPE;
 

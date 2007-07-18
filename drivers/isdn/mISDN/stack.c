@@ -83,52 +83,61 @@ send_socklist(struct mISDN_sock_list *sl, struct sk_buff *skb, gfp_t gfp_mask)
 		dev_kfree_skb(cskb);
 }
 
-static inline int
-check_send(struct mISDNchannel *ch, struct mISDNhead *hh)
-{
-	if (test_bit(MISDN_OPT_ALL, &ch->opt))
-		return 1;
-	if ((hh->id & MISDN_ID_ADDR_MASK) == ch->addr)
-		return 1;
-	if ((hh->id & MISDN_ID_SAPI_MASK) == (ch->addr & MISDN_ID_SAPI_MASK))
-		if ((hh->id & MISDN_ID_TEI_MASK) == MISDN_ID_TEI_ANY)
-			return 1;
-	if ((hh->id & MISDN_ID_ADDR_MASK) == MISDN_ID_ANY)
-		return 1;
-	return 0;
-}
-
 static void
 send_layer2(struct mISDNstack *st, struct sk_buff *skb)
 {
-	struct sk_buff		*cskb = NULL;
+	struct sk_buff		*cskb;
 	struct mISDNhead	*hh = mISDN_HEAD_P(skb);
 	struct mISDNchannel	*ch;
-	int			send, ret;
+	int			ret;
 
 	if (!st)
 		return;
 	down(&st->lsem);
-	list_for_each_entry(ch, &st->layer2, list) {
-		printk(KERN_DEBUG "%s ch %d addr %x\n", __FUNCTION__, ch->nr, ch->addr);
-		send = check_send(ch, hh);
-		if (send && list_is_last(&ch->list, &st->layer2)) {
-			ret = ch->send(ch, skb);
-			if (!ret)
+	if ((hh->id & MISDN_ID_ADDR_MASK) == MISDN_ID_ANY) { /* L2 for all */
+		list_for_each_entry(ch, &st->layer2, list) {
+			if (list_is_last(&ch->list, &st->layer2)) {
+				cskb = skb;
 				skb = NULL;
-		} else if (send) {
-			if (!cskb)
+			} else {
 				cskb = skb_copy(skb, GFP_KERNEL);
+			}
 			if (cskb) {
 				ret = ch->send(ch, cskb);
-				if (!ret)
-					cskb = NULL;
+				if (ret) {
+					if (*debug & DEBUG_SEND_ERR)
+						printk(KERN_DEBUG 
+						    "%s ch%d prim(%x) addr(%x)"
+						    " err %d\n",
+						    __FUNCTION__, ch->nr,
+						    hh->prim, ch->addr, ret);
+					dev_kfree_skb(cskb);
+				}
+			} else {
+				printk(KERN_WARNING "%s ch%d addr %x no mem\n",
+				    __FUNCTION__, ch->nr, ch->addr);
+				goto out;
 			}
-		} 
+		}
+	} else {
+		list_for_each_entry(ch, &st->layer2, list) {
+			if ((hh->id & MISDN_ID_ADDR_MASK) == ch->addr) {
+				ret = ch->send(ch, skb);
+				if (!ret)
+					skb = NULL;
+				goto out;
+			}
+		}
+		ret = st->dev->teimgr->ctrl(st->dev->teimgr, CHECK_DATA, skb);
+		if (!ret)
+			skb = NULL;
+		else if (*debug & DEBUG_SEND_ERR)
+			printk(KERN_DEBUG
+			    "%s ch%d mgr prim(%x) addr(%x) err %d\n",
+			    __FUNCTION__, ch->nr, hh->prim, ch->addr, ret);
 	}
+out:
 	up(&st->lsem);
-	if (cskb)
-		dev_kfree_skb(cskb);
 	if (skb)
 		dev_kfree_skb(skb);
 }
@@ -331,14 +340,20 @@ l1_receive(struct mISDNchannel *ch, struct sk_buff *skb)
 void
 set_channel_address(struct mISDNchannel *ch, u_int sapi, u_int tei)
 {
-        ch->addr = sapi | (tei <<8);
+        ch->addr = sapi | (tei << 8);
 }
         
-static void
+void
+__add_layer2(struct mISDNchannel *ch, struct mISDNstack *st)
+{
+	list_add_tail(&ch->list, &st->layer2);
+}
+
+void
 add_layer2(struct mISDNchannel *ch, struct mISDNstack *st)
 {
 	down(&st->lsem);
-	list_add_tail(&ch->list, &st->layer2);
+	__add_layer2(ch, st);
 	up(&st->lsem);
 }
 
@@ -361,12 +376,6 @@ create_stack(struct mISDNdevice *dev)
 		printk(KERN_ERR "kmalloc mISDN_stack failed\n");
 		return -ENOMEM;
 	}
-	err = create_teimanager(dev);
-	if (err) {
-		printk(KERN_ERR "kmalloc teimanager failed\n");
-		kfree(newst);
-		return err;
-	}
 	newst->dev = dev;
 	INIT_LIST_HEAD(&newst->layer2);
 	INIT_HLIST_HEAD(&newst->l1sock.head);
@@ -374,14 +383,19 @@ create_stack(struct mISDNdevice *dev)
 	init_waitqueue_head(&newst->workq);
 	skb_queue_head_init(&newst->msgq);
 	init_MUTEX(&newst->lsem);
+	dev->D.st = newst;
+	err = create_teimanager(dev);
+	if (err) {
+		printk(KERN_ERR "kmalloc teimanager failed\n");
+		kfree(newst);
+		return err;
+	}
 	dev->teimgr->peer = &newst->own;
 	dev->teimgr->recv = mISDN_queue_message;
 	dev->teimgr->st = newst;
-	add_layer2(dev->teimgr, newst);
 	newst->layer1 = &dev->D;
 	dev->D.recv = l1_receive;
 	dev->D.peer = &newst->own;
-	dev->D.st = newst;
 	newst->own.st = newst;
 	newst->own.ctrl = st_own_ctrl;
 	newst->own.send = mISDN_queue_message;
@@ -445,6 +459,7 @@ connect_Bstack(struct mISDNdevice *dev, struct mISDNchannel *ch,
 			__FUNCTION__, dev->name, protocol,
 			adr->dev, adr->channel, adr->sapi,
 			adr->tei);
+	ch->st = dev->D.st;
 	pmask = 1 << (protocol & ISDN_P_B_MASK );
 	if (pmask & dev->Bprotocols) {
 		rq.protocol = protocol;
@@ -483,7 +498,6 @@ connect_Bstack(struct mISDNdevice *dev, struct mISDNchannel *ch,
 		rq.ch->peer = rq2.ch;
 		rq.ch->st = dev->D.st;
 	}
-	ch->st = dev->D.st;
 	ch->protocol = protocol;
 	ch->nr = rq.ch->nr;
 	return 0;
@@ -519,14 +533,13 @@ create_l2entity(struct mISDNdevice *dev, struct mISDNchannel *ch,
 		rq.ch = ch;
 		err = dev->teimgr->ctrl(dev->teimgr, OPEN_CHANNEL, &rq);
 		printk(KERN_DEBUG "%s: ret 2 %d\n", __FUNCTION__, err); 
-		if (err) {
-			dev->D.ctrl(&dev->D, CLOSE_CHANNEL, NULL);
-		} else {
+		if (!err) {
+			if ((protocol == ISDN_P_LAPD_NT) && !rq.ch)
+				break;
 			add_layer2(rq.ch, dev->D.st);
 			rq.ch->recv = mISDN_queue_message;
 			rq.ch->peer = &dev->D.st->own;
 			rq.ch->ctrl(rq.ch, OPEN_CHANNEL, NULL); /* cannot fail */
-			rq.ch->st = dev->D.st;
 		}
 		break;
 	default:
@@ -564,15 +577,22 @@ delete_channel(struct mISDNchannel *ch)
 		ch->st->dev->D.ctrl(&ch->st->dev->D, CLOSE_CHANNEL, NULL);
 		break;
 	case ISDN_P_LAPD_TE:
-	case ISDN_P_LAPD_NT:
 		pch = get_channel4id(ch->st, ch->nr);
 		if (pch) {
 			down(&ch->st->lsem);
 			list_del(&pch->list);
 			up(&ch->st->lsem);
 			pch->ctrl(pch, CLOSE_CHANNEL, NULL);
-			ch->st->dev->D.ctrl(&ch->st->dev->D,
-			    CLOSE_CHANNEL, NULL);
+			pch = ch->st->dev->teimgr;
+			pch->ctrl(pch, CLOSE_CHANNEL, NULL);
+		} else
+			printk(KERN_WARNING "%s: no l2 channel\n",
+			    __FUNCTION__);
+		break;
+	case ISDN_P_LAPD_NT:
+		pch = ch->st->dev->teimgr;
+		if (pch) {
+			pch->ctrl(pch, CLOSE_CHANNEL, NULL);
 		} else
 			printk(KERN_WARNING "%s: no l2 channel\n",
 			    __FUNCTION__);
@@ -593,10 +613,7 @@ delete_stack(struct mISDNdevice *dev)
 		printk(KERN_DEBUG "%s: st(%s)\n", __FUNCTION__,
 		    st->dev->name);
 	if (dev->teimgr) {
-		down(&st->lsem);
-		list_del(&dev->teimgr->list);	
-		up(&st->lsem);
-		dev->teimgr->ctrl(dev->teimgr, CLOSE_CHANNEL, NULL);
+		delete_teimanager(dev->teimgr);
 	}
 	if (st->thread) {
 		if (st->notify) {

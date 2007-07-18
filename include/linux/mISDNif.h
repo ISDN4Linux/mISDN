@@ -70,6 +70,7 @@
 #define OPEN_CHANNEL		0x0100
 #define CLOSE_CHANNEL		0x0200
 #define CONTROL_CHANNEL		0x0300
+#define CHECK_DATA		0x0400
 
 /* layer 2 -> layer 1 */
 #define PH_ACTIVATE_REQ		0x0101
@@ -150,6 +151,7 @@
 #define OPTION_L2_PMX		1
 #define OPTION_L2_PTP		2
 #define OPTION_L2_FIXEDTEI	3
+#define OPTION_L2_CLEANUP	4
 
 /* should be in sync with linux/kobject.h:KOBJ_NAME_LEN */
 #define MISDN_MAX_IDLEN		20
@@ -198,6 +200,7 @@ struct sockaddr_mISDN {
 #define	IMGETCOUNT	_IOR('I', 66, int)
 #define IMGETDEVINFO	_IOR('I', 67, int)
 #define IMCTRLREQ	_IOR('I', 68, int)
+#define IMCLEAR_L2	_IOR('I', 69, int)
 
 struct mISDN_devinfo {
 	u_int		id;
