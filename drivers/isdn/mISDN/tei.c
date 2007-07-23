@@ -33,8 +33,145 @@ const char *tei_revision = "$Revision: 2.0 $";
 #define MGR_PH_ACTIVE	16
 #define MGR_PH_NOTREADY	17
 
+#define DATIMER_VAL	10000
+
+static 	u_int	*debug;
+
+static struct Fsm deactfsm = {NULL, 0, 0, NULL, NULL};
 static struct Fsm teifsmu = {NULL, 0, 0, NULL, NULL};
 static struct Fsm teifsmn = {NULL, 0, 0, NULL, NULL};
+
+enum {
+	ST_L1_DEACT,
+	ST_L1_DEACT_PENDING,
+	ST_L1_ACTIV,
+};
+#define DEACT_STATE_COUNT (ST_L1_ACTIV+1)
+
+static char *strDeactState[] =
+{
+	"ST_L1_DEACT",
+	"ST_L1_DEACT_PENDING",
+	"ST_L1_ACTIV",
+};
+
+enum {
+	EV_ACTIVATE,
+	EV_ACTIVATE_IND,
+	EV_DEACTIVATE,
+	EV_DEACTIVATE_IND,
+	EV_UI,
+	EV_DATIMER,
+};
+
+#define DEACT_EVENT_COUNT (EV_DATIMER+1)
+
+static char *strDeactEvent[] =
+{
+	"EV_ACTIVATE",
+	"EV_ACTIVATE_IND",
+	"EV_DEACTIVATE",
+	"EV_DEACTIVATE_IND",
+	"EV_UI",
+	"EV_DATIMER",
+};
+
+static void
+da_debug(struct FsmInst *fi, char *fmt, ...)
+{
+	struct manager	*mgr = fi->userdata;
+	va_list va;
+
+	if (!(*debug & DEBUG_L2_TEIFSM))
+		return;
+	va_start(va, fmt);
+	printk(KERN_DEBUG "mgr(%d): ", mgr->ch.st->dev->id);
+	vprintk(fmt, va);
+	printk("\n");
+	va_end(va);
+}
+
+static void
+da_activate(struct FsmInst *fi, int event, void *arg)
+{
+	struct manager	*mgr = fi->userdata;
+
+	if (fi->state == ST_L1_DEACT_PENDING)
+		mISDN_FsmDelTimer(&mgr->datimer, 1);
+	mISDN_FsmChangeState(fi, ST_L1_ACTIV);
+}
+
+static void
+da_deactivate_ind(struct FsmInst *fi, int event, void *arg)
+{
+	mISDN_FsmChangeState(fi, ST_L1_DEACT);
+}
+
+static void
+da_deactivate(struct FsmInst *fi, int event, void *arg)
+{
+	struct manager	*mgr = fi->userdata;
+	struct layer2	*l2;
+	u_long		flags;
+
+	read_lock_irqsave(&mgr->lock, flags);
+	list_for_each_entry(l2, &mgr->layer2, list) {
+		if (l2->l2m.state > ST_L2_4) {
+			/* have still activ TEI */
+			read_unlock_irqrestore(&mgr->lock, flags);
+			return;
+		}
+	}
+	read_unlock_irqrestore(&mgr->lock, flags);
+	/* All TEI are inactiv */
+	mISDN_FsmAddTimer(&mgr->datimer, DATIMER_VAL, EV_DATIMER, NULL, 1);
+	mISDN_FsmChangeState(fi, ST_L1_DEACT_PENDING);
+}
+
+static void
+da_ui(struct FsmInst *fi, int event, void *arg)
+{
+	struct manager	*mgr = fi->userdata;
+
+	/* restart da timer */
+	mISDN_FsmDelTimer(&mgr->datimer, 2);
+	mISDN_FsmAddTimer(&mgr->datimer, DATIMER_VAL, EV_DATIMER, NULL, 2);
+	
+}
+
+static void
+da_timer(struct FsmInst *fi, int event, void *arg)
+{
+	struct manager	*mgr = fi->userdata;
+	struct layer2	*l2;
+	u_long		flags;
+
+	/* check again */
+	read_lock_irqsave(&mgr->lock, flags);
+	list_for_each_entry(l2, &mgr->layer2, list) {
+		if (l2->l2m.state > ST_L2_4) {
+			/* have still activ TEI */
+			read_unlock_irqrestore(&mgr->lock, flags);
+			mISDN_FsmChangeState(fi, ST_L1_ACTIV);
+			return;
+		}
+	}
+	read_unlock_irqrestore(&mgr->lock, flags);
+	/* All TEI are inactiv */
+	mISDN_FsmChangeState(fi, ST_L1_DEACT);
+	_queue_data(&mgr->ch, PH_DEACTIVATE_REQ, MISDN_ID_ANY, 0, NULL,
+	    GFP_ATOMIC);
+}
+
+static struct FsmNode DeactFnList[] =
+{
+	{ST_L1_DEACT, EV_ACTIVATE_IND, da_activate},
+	{ST_L1_ACTIV, EV_DEACTIVATE_IND, da_deactivate_ind},
+	{ST_L1_ACTIV, EV_DEACTIVATE, da_deactivate},
+	{ST_L1_DEACT_PENDING, EV_ACTIVATE, da_activate},
+	{ST_L1_DEACT_PENDING, EV_UI, da_ui},
+	{ST_L1_DEACT_PENDING, EV_DATIMER, da_timer},
+};
 
 enum {
 	ST_TEI_NOP,
@@ -43,8 +180,6 @@ enum {
 };
 
 #define TEI_STATE_COUNT (ST_TEI_IDVERIFY+1)
-
-static 	u_int	*debug;
 
 static char *strTeiState[] =
 {
@@ -94,6 +229,8 @@ tei_debug(struct FsmInst *fi, char *fmt, ...)
 	printk("\n");
 	va_end(va);
 }
+
+
 
 static int
 get_free_id(struct manager *mgr)
@@ -197,6 +334,7 @@ do_send(struct manager *mgr)
 			return;
 		}
 		mgr->lastid = mISDN_HEAD_ID(skb);
+		mISDN_FsmEvent(&mgr->deact, EV_UI, NULL);
 		if (mgr->ch.recv(mgr->ch.peer, skb)) {
 			dev_kfree_skb(skb);
 			test_and_clear_bit(MGR_PH_NOTREADY, &mgr->options);
@@ -782,15 +920,30 @@ l2_tei(struct layer2 *l2, u_int cmd, u_long arg)
 	if (*debug & DEBUG_L2_TEI)
 		printk(KERN_DEBUG "%s: cmd(%x)\n", __FUNCTION__, cmd);
 	switch(cmd) {
-	    case MDL_ASSIGN_IND:
+	case MDL_ASSIGN_IND:
 		mISDN_FsmEvent(&tm->tei_m, EV_IDREQ, NULL);
 		break;
-	    case MDL_ERROR_IND:
+	case MDL_ERROR_IND:
 		if (test_bit(MGR_OPT_NETWORK, &tm->mgr->options)) {
 			mISDN_FsmEvent(&tm->tei_m, EV_CHKREQ, &l2->tei);
 		}
 		if (test_bit(MGR_OPT_USER, &tm->mgr->options)) {
 			mISDN_FsmEvent(&tm->tei_m, EV_VERIFY, NULL);
+		}
+		break;
+	case MDL_STATUS_UP_IND:
+		if (test_bit(MGR_OPT_NETWORK, &tm->mgr->options)) {
+			mISDN_FsmEvent(&tm->mgr->deact, EV_ACTIVATE, NULL);
+		}
+		break;
+	case MDL_STATUS_DOWN_IND:
+		if (test_bit(MGR_OPT_NETWORK, &tm->mgr->options)) {
+			mISDN_FsmEvent(&tm->mgr->deact, EV_DEACTIVATE, NULL);
+		}
+		break;
+	case MDL_STATUS_UI_IND:
+		if (test_bit(MGR_OPT_NETWORK, &tm->mgr->options)) {
+			mISDN_FsmEvent(&tm->mgr->deact, EV_UI, NULL);
 		}
 		break;
 	}
@@ -919,6 +1072,7 @@ mgr_send(struct mISDNchannel *ch, struct sk_buff *skb)
 		    __FUNCTION__, hh->prim, hh->id);
 	switch (hh->prim) {
 	case PH_DATA_IND:
+		mISDN_FsmEvent(&mgr->deact, EV_UI, NULL);
 		ret = ph_data_ind(mgr, skb);
 		break;
 	case PH_DATA_CNF:
@@ -927,11 +1081,13 @@ mgr_send(struct mISDNchannel *ch, struct sk_buff *skb)
 		break;
 	case PH_ACTIVATE_IND:
 		test_and_set_bit(MGR_PH_ACTIVE, &mgr->options);
+		mISDN_FsmEvent(&mgr->deact, EV_ACTIVATE_IND, NULL);
 		do_send(mgr);
 		ret = 0;
 		break;
 	case PH_DEACTIVATE_IND:
 		test_and_clear_bit(MGR_PH_ACTIVE, &mgr->options);
+		mISDN_FsmEvent(&mgr->deact, EV_DEACTIVATE_IND, NULL);
 		ret = 0;
 		break;
 	case DL_UNITDATA_REQ:
@@ -1145,6 +1301,12 @@ create_teimanager(struct mISDNdevice *dev)
 	mgr->bcast.st = dev->D.st;
 	set_channel_address(&mgr->bcast, 0, GROUP_TEI);
 	add_layer2(&mgr->bcast, dev->D.st);
+	mgr->deact.debug = *debug & DEBUG_MANAGER;
+	mgr->deact.userdata = mgr;
+	mgr->deact.printdebug = da_debug;
+	mgr->deact.fsm = &deactfsm;
+	mgr->deact.state = ST_L1_DEACT;
+	mISDN_FsmInitTimer(&mgr->deact, &mgr->datimer);
 	dev->teimgr = &mgr->ch;
 	return 0;
 }
@@ -1162,6 +1324,11 @@ int TEIInit(u_int *deb)
 	teifsmn.strEvent = strTeiEvent;
 	teifsmn.strState = strTeiState;
 	mISDN_FsmNew(&teifsmn, TeiFnListNet, ARRAY_SIZE(TeiFnListNet));
+	deactfsm.state_count =  DEACT_STATE_COUNT;
+	deactfsm.event_count = DEACT_EVENT_COUNT;
+	deactfsm.strEvent = strDeactEvent;
+	deactfsm.strState = strDeactState;
+	mISDN_FsmNew(&deactfsm, DeactFnList, ARRAY_SIZE(DeactFnList));
 	return(0);
 }
 
@@ -1169,4 +1336,5 @@ void TEIFree(void)
 {
 	mISDN_FsmFree(&teifsmu);
 	mISDN_FsmFree(&teifsmn);
+	mISDN_FsmFree(&deactfsm);
 }

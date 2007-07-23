@@ -25,19 +25,6 @@ static int *debug;
 static
 struct Fsm l2fsm = {NULL, 0, 0, NULL, NULL};
 
-enum {
-	ST_L2_1,
-	ST_L2_2,
-	ST_L2_3,
-	ST_L2_4,
-	ST_L2_5,
-	ST_L2_6,
-	ST_L2_7,
-	ST_L2_8,
-};
-
-#define L2_STATE_COUNT (ST_L2_8+1)
-
 static char *strL2State[] =
 {
 	"ST_L2_1",
@@ -405,6 +392,8 @@ enqueue_super(struct layer2 *l2, struct sk_buff *skb)
 inline static void
 enqueue_ui(struct layer2 *l2, struct sk_buff *skb)
 {
+	if (l2->tm)
+		l2_tei(l2, MDL_STATUS_UI_IND, 0);
 	if (l2down(l2, PH_DATA_REQ, l2_newid(l2), skb))
 		dev_kfree_skb(skb);
 }
@@ -806,6 +795,9 @@ l2_got_ui(struct FsmInst *fi, int event, void *arg)
 /*
  *		in states 1-3 for broadcast
  */
+
+	if (l2->tm)
+		l2_tei(l2, MDL_STATUS_UI_IND, 0);
 	l2up(l2, DL_UNITDATA_IND, skb);
 }
 
@@ -899,10 +891,8 @@ l2_start_multi(struct FsmInst *fi, int event, void *arg)
 	mISDN_FsmAddTimer(&l2->t203, l2->T203, EV_L2_T203, NULL, 3);
 	skb_trim(skb, 0);
 	l2up(l2, DL_ESTABLISH_IND, skb);
-
-//	mISDN_queue_data(&l2->inst, l2->inst.id | MSG_BROADCAST,
-//		MGR_SHORTSTATUS | INDICATION, SSTATUS_L2_ESTABLISHED,
-//		0, NULL, 0);
+	if (l2->tm)
+		l2_tei(l2, MDL_STATUS_UP_IND, 0);
 }
 
 static void
@@ -973,10 +963,8 @@ l2_stop_multi(struct FsmInst *fi, int event, void *arg)
 	skb_queue_purge(&l2->i_queue);
 	freewin(l2);
 	lapb_dl_release_l2l3(l2, DL_RELEASE_IND);
-
-//	mISDN_queue_data(&l2->inst, l2->inst.id | MSG_BROADCAST,
-//	    MGR_SHORTSTATUS | INDICATION, SSTATUS_L2_RELEASED,
-//	    0, NULL, 0);
+	if (l2->tm)
+		l2_tei(l2, MDL_STATUS_DOWN_IND, 0);
 }
 
 static void
@@ -1012,9 +1000,8 @@ l2_connected(struct FsmInst *fi, int event, void *arg)
 	if (skb_queue_len(&l2->i_queue) && cansend(l2))
 		mISDN_FsmEvent(fi, EV_L2_ACK_PULL, NULL);
 
-//	mISDN_queue_data(&l2->inst, l2->inst.id | MSG_BROADCAST,
-//		MGR_SHORTSTATUS_IND, SSTATUS_L2_ESTABLISHED,
-//		0, NULL, 0);
+	if (l2->tm)
+		l2_tei(l2, MDL_STATUS_UP_IND, 0);
 }
 
 static void
@@ -1031,10 +1018,8 @@ l2_released(struct FsmInst *fi, int event, void *arg)
 	stop_t200(l2, 6);
 	lapb_dl_release_l2l3(l2, DL_RELEASE_CNF);
 	mISDN_FsmChangeState(fi, ST_L2_4);
-
-//	mISDN_queue_data(&l2->inst, l2->inst.id | MSG_BROADCAST,
-//		MGR_SHORTSTATUS_IND, SSTATUS_L2_RELEASED,
-//		0, NULL, 0);
+	if (l2->tm)
+		l2_tei(l2, MDL_STATUS_DOWN_IND, 0);
 }
 
 static void
@@ -1063,6 +1048,8 @@ l2_st5_dm_release(struct FsmInst *fi, int event, void *arg)
 			l2down_create(l2, PH_DEACTIVATE_REQ, l2_newid(l2), 0, NULL);
 		st5_dl_release_l2l3(l2);
 		mISDN_FsmChangeState(fi, ST_L2_4);
+		if (l2->tm)
+			l2_tei(l2, MDL_STATUS_DOWN_IND, 0);
 	}
 }
 
@@ -1076,9 +1063,8 @@ l2_st6_dm_release(struct FsmInst *fi, int event, void *arg)
 		stop_t200(l2, 8);
 		lapb_dl_release_l2l3(l2, DL_RELEASE_CNF);
 		mISDN_FsmChangeState(fi, ST_L2_4);
-//		mISDN_queue_data(&l2->inst, l2->inst.id | MSG_BROADCAST,
-//			MGR_SHORTSTATUS_IND, SSTATUS_L2_RELEASED,
-//			0, NULL, 0);
+		if (l2->tm)
+			l2_tei(l2, MDL_STATUS_DOWN_IND, 0);
 	}
 }
 
@@ -1361,6 +1347,8 @@ l2_st5_tout_200(struct FsmInst *fi, int event, void *arg)
 		if (test_bit(FLG_LAPB, &l2->flag))
 			l2down_create(l2, PH_DEACTIVATE_REQ, l2_newid(l2), 0, NULL);
 		st5_dl_release_l2l3(l2);
+		if (l2->tm)
+			l2_tei(l2, MDL_STATUS_DOWN_IND, 0);
 	} else {
 		l2->rc++;
 		mISDN_FsmAddTimer(&l2->t200, l2->T200, EV_L2_T200, NULL, 9);
@@ -1382,6 +1370,8 @@ l2_st6_tout_200(struct FsmInst *fi, int event, void *arg)
 		test_and_clear_bit(FLG_T200_RUN, &l2->flag);
 		l2mgr(l2, MDL_ERROR_IND, (void *) 'H');
 		lapb_dl_release_l2l3(l2, DL_RELEASE_CNF);
+		if (l2->tm)
+			l2_tei(l2, MDL_STATUS_DOWN_IND, 0);
 	} else {
 		l2->rc++;
 		mISDN_FsmAddTimer(&l2->t200, l2->T200, EV_L2_T200,
@@ -1667,6 +1657,8 @@ l2_st5_persistant_da(struct FsmInst *fi, int event, void *arg)
 	stop_t200(l2, 19);
 	st5_dl_release_l2l3(l2);
 	mISDN_FsmChangeState(fi, ST_L2_4);
+	if (l2->tm)
+		l2_tei(l2, MDL_STATUS_DOWN_IND, 0);
 	dev_kfree_skb(skb);
 }
 
@@ -1680,6 +1672,8 @@ l2_st6_persistant_da(struct FsmInst *fi, int event, void *arg)
 	stop_t200(l2, 20);
 	l2up(l2, DL_RELEASE_CNF, skb);
 	mISDN_FsmChangeState(fi, ST_L2_4);
+	if (l2->tm)
+		l2_tei(l2, MDL_STATUS_DOWN_IND, 0);
 }
 
 static void
@@ -1694,10 +1688,9 @@ l2_persistant_da(struct FsmInst *fi, int event, void *arg)
 	stop_t200(l2, 19);
 	mISDN_FsmDelTimer(&l2->t203, 19);
 	l2up(l2, DL_RELEASE_IND, skb);
-//	mISDN_queue_data(&l2->inst, l2->inst.id | MSG_BROADCAST,
-//		MGR_SHORTSTATUS_IND, SSTATUS_L2_RELEASED,
-//		0, NULL, 0);
 	mISDN_FsmChangeState(fi, ST_L2_4);
+	if (l2->tm)
+		l2_tei(l2, MDL_STATUS_DOWN_IND, 0);
 }
 
 static void

@@ -82,10 +82,6 @@ enum {
 	HFC_SITECOM_DC105V2,
 };
 	
-#define NT_T1_COUNT	20 /* number of 3.125ms interrupts for G2 timeout */
-#define CLKDEL_TE	0x0e	/* CLKDEL in TE mode */
-#define CLKDEL_NT	0x6c	/* CLKDEL in NT mode */
-
 #ifndef PCI_VENDOR_ID_CCD
 #define PCI_VENDOR_ID_CCD		0x1397
 #define PCI_DEVICE_ID_CCD_2BD0		0x2BD0
@@ -168,6 +164,15 @@ struct hfcPCI_hw {
 #define HFC_CFG_SLAVEHFC	5
 #define HFC_CFG_NEG_F0		6
 #define HFC_CFG_SW_DD_DU	7
+
+#define FLG_HFC_TIMER_T1	16
+#define FLG_HFC_TIMER_T3	17
+
+#define NT_T1_COUNT	1120	/* number of 3.125ms interrupts (3.5s) */
+#define NT_T3_COUNT	31	/* number of 3.125ms interrupts (97 ms) */
+#define CLKDEL_TE	0x0e	/* CLKDEL in TE mode */
+#define CLKDEL_NT	0x6c	/* CLKDEL in NT mode */
+
 
 struct hfc_pci {
 	struct list_head	list;
@@ -293,7 +298,7 @@ reset_hfcpci(struct hfc_pci *hc)
 
 	Write_hfc(hc, HFCPCI_STATES, HFCPCI_LOAD_STATE | hc->hw.states);
 	udelay(10);
-	Write_hfc(hc, HFCPCI_STATES, hc->hw.states);
+	Write_hfc(hc, HFCPCI_STATES, hc->hw.states | 0x40); /* Deactivate */
 
 	Write_hfc(hc, HFCPCI_MST_MODE, hc->hw.mst_m);
 	Write_hfc(hc, HFCPCI_SCTRL, hc->hw.sctrl);
@@ -931,6 +936,22 @@ ph_state_te(struct dchannel *dch)
  */
 
 static void
+handle_nt_timer3(struct dchannel *dch) {
+	struct hfc_pci	*hc = dch->hw;
+
+	test_and_clear_bit(FLG_HFC_TIMER_T3, &dch->Flags);
+	hc->hw.int_m1 &= ~HFCPCI_INTS_TIMER;
+	Write_hfc(hc, HFCPCI_INT_M1, hc->hw.int_m1);
+	hc->hw.nt_timer = 0;
+	test_and_set_bit(FLG_ACTIVE, &dch->Flags);
+	if (test_bit(HFC_CFG_MASTER, &hc->cfg))
+		hc->hw.mst_m |= HFCPCI_MASTER;
+	Write_hfc(hc, HFCPCI_MST_MODE, hc->hw.mst_m);
+	_queue_data(&dch->dev.D, PH_ACTIVATE_IND,
+	    MISDN_ID_ANY, 0, NULL, GFP_ATOMIC);
+}
+
+static void
 ph_state_nt(struct dchannel *dch)
 {
 	struct hfc_pci	*hc = dch->hw;
@@ -942,6 +963,8 @@ ph_state_nt(struct dchannel *dch)
 	case 2:
 		if (hc->hw.nt_timer < 0) {
 			hc->hw.nt_timer = 0;
+			test_and_clear_bit(FLG_HFC_TIMER_T3, &dch->Flags);
+			test_and_clear_bit(FLG_HFC_TIMER_T1, &dch->Flags);
 			hc->hw.int_m1 &= ~HFCPCI_INTS_TIMER;
 			Write_hfc(hc, HFCPCI_INT_M1, hc->hw.int_m1);
 			/* Clear already pending ints */
@@ -950,41 +973,58 @@ ph_state_nt(struct dchannel *dch)
 			udelay(10);
 			Write_hfc(hc, HFCPCI_STATES, 4);
 			dch->state = 4;
-		} else {
+		} else if (hc->hw.nt_timer == 0) {
 			hc->hw.int_m1 |= HFCPCI_INTS_TIMER;
 			Write_hfc(hc, HFCPCI_INT_M1, hc->hw.int_m1);
+			hc->hw.nt_timer = NT_T1_COUNT;
 			hc->hw.ctmt &= ~HFCPCI_AUTO_TIMER;
 			hc->hw.ctmt |= HFCPCI_TIM3_125;
 			Write_hfc(hc, HFCPCI_CTMT, hc->hw.ctmt |
 				HFCPCI_CLTIMER);
-			Write_hfc(hc, HFCPCI_CTMT, hc->hw.ctmt |
-				HFCPCI_CLTIMER);
-			hc->hw.nt_timer = NT_T1_COUNT;
+			test_and_clear_bit(FLG_HFC_TIMER_T3, &dch->Flags);
+			test_and_set_bit(FLG_HFC_TIMER_T1, &dch->Flags);
 			/* allow G2 -> G3 transition */
-			Write_hfc(hc, HFCPCI_STATES, 2 |
-				HFCPCI_NT_G2_G3);
+			Write_hfc(hc, HFCPCI_STATES, 2 | HFCPCI_NT_G2_G3);
+		} else {
+			Write_hfc(hc, HFCPCI_STATES, 2 | HFCPCI_NT_G2_G3);
 		}
 		break;
 	case 1:
 		hc->hw.nt_timer = 0;
+		test_and_clear_bit(FLG_HFC_TIMER_T3, &dch->Flags);
+		test_and_clear_bit(FLG_HFC_TIMER_T1, &dch->Flags);
 		hc->hw.int_m1 &= ~HFCPCI_INTS_TIMER;
 		Write_hfc(hc, HFCPCI_INT_M1, hc->hw.int_m1);
 		test_and_clear_bit(FLG_ACTIVE, &dch->Flags);
+		hc->hw.mst_m &= ~HFCPCI_MASTER;
+		Write_hfc(hc, HFCPCI_MST_MODE, hc->hw.mst_m);
+		test_and_clear_bit(FLG_L2_ACTIVATED, &dch->Flags);
 		_queue_data(&dch->dev.D, PH_DEACTIVATE_IND,
 		    MISDN_ID_ANY, 0, NULL, GFP_ATOMIC);
 		break;
 	case 4:
 		hc->hw.nt_timer = 0;
+		test_and_clear_bit(FLG_HFC_TIMER_T3, &dch->Flags);
+		test_and_clear_bit(FLG_HFC_TIMER_T1, &dch->Flags);
 		hc->hw.int_m1 &= ~HFCPCI_INTS_TIMER;
 		Write_hfc(hc, HFCPCI_INT_M1, hc->hw.int_m1);
 		break;
 	case 3:
-		hc->hw.nt_timer = 0;
-		hc->hw.int_m1 &= ~HFCPCI_INTS_TIMER;
-		Write_hfc(hc, HFCPCI_INT_M1, hc->hw.int_m1);
-		test_and_set_bit(FLG_ACTIVE, &dch->Flags);
-		_queue_data(&dch->dev.D, PH_ACTIVATE_IND,
-		    MISDN_ID_ANY, 0, NULL, GFP_ATOMIC);
+		if (!test_and_set_bit(FLG_HFC_TIMER_T3, &dch->Flags)) {
+			if (!test_and_clear_bit(FLG_L2_ACTIVATED,
+			    &dch->Flags)) {
+				handle_nt_timer3(dch);
+				break;
+			}
+			test_and_clear_bit(FLG_HFC_TIMER_T1, &dch->Flags);
+			hc->hw.int_m1 |= HFCPCI_INTS_TIMER;
+			Write_hfc(hc, HFCPCI_INT_M1, hc->hw.int_m1);
+			hc->hw.nt_timer = NT_T3_COUNT;
+			hc->hw.ctmt &= ~HFCPCI_AUTO_TIMER;
+			hc->hw.ctmt |= HFCPCI_TIM3_125;
+			Write_hfc(hc, HFCPCI_CTMT, hc->hw.ctmt |
+				HFCPCI_CLTIMER);
+		}	
 		break;
 	}
 }
@@ -994,9 +1034,12 @@ ph_state(struct dchannel *dch)
 {
 	struct hfc_pci	*hc = dch->hw;
 
-	if (hc->hw.nt_mode)
-		ph_state_nt(dch);
-	else
+	if (hc->hw.nt_mode) {
+		if (test_bit(FLG_HFC_TIMER_T3, &dch->Flags) && hc->hw.nt_timer < 0)
+			handle_nt_timer3(dch);
+		else
+			ph_state_nt(dch);
+	} else
 		ph_state_te(dch);
 }
 
@@ -1138,7 +1181,7 @@ hfcpci_interrupt(int intno, void *dev_id)
 	if (val & 0x80) {	/* timer irq */
 		if (hc->hw.nt_mode) {
 			if ((--hc->hw.nt_timer) < 0)
-				ph_state_nt(&hc->dch);
+				schedule_event(&hc->dch, FLG_PHCHANGE);
 		}
 		val &= ~0x80;
 		Write_hfc(hc, HFCPCI_CTMT, hc->hw.ctmt | HFCPCI_CLTIMER);
@@ -1552,29 +1595,37 @@ hfcpci_l2l1D(struct mISDNchannel *ch, struct sk_buff *skb)
 	case PH_ACTIVATE_REQ:
 		spin_lock_irqsave(&hc->lock, flags);
 		if (hc->hw.nt_mode) {
-			Write_hfc(hc, HFCPCI_STATES, HFCPCI_LOAD_STATE | 0);
-			    /* G0 */
-			udelay(6);
-			Write_hfc(hc, HFCPCI_STATES, HFCPCI_LOAD_STATE | 1);
-			    /* G1 */
-			udelay(6);
+			ret = 0;
 			if (test_bit(HFC_CFG_MASTER, &hc->cfg))
 				hc->hw.mst_m |= HFCPCI_MASTER;
 			Write_hfc(hc, HFCPCI_MST_MODE, hc->hw.mst_m);
-			udelay(6);
+			if (test_bit(FLG_ACTIVE, &dch->Flags)) {
+				spin_unlock_irqrestore(&hc->lock, flags);
+				_queue_data(&dch->dev.D, PH_ACTIVATE_IND,
+				    MISDN_ID_ANY, 0, NULL, GFP_ATOMIC);
+				break;
+			}
+			test_and_set_bit(FLG_L2_ACTIVATED, &dch->Flags);
+//			Write_hfc(hc, HFCPCI_STATES, HFCPCI_LOAD_STATE | 0);
+			    /* G0 */
+//			udelay(6);
+//			Write_hfc(hc, HFCPCI_STATES, HFCPCI_LOAD_STATE | 1);
+			    /* G1 */
+//			udelay(6);
+//			udelay(6);
 			Write_hfc(hc, HFCPCI_STATES, HFCPCI_ACTIVATE |
 			    HFCPCI_DO_ACTION | 1);
-			ret = 0;
 		} else {
 			ret = l1_event(dch->l1, hh->prim);
 		}
 		spin_unlock_irqrestore(&hc->lock, flags);
 		break;
 	case PH_DEACTIVATE_REQ:
+		test_and_clear_bit(FLG_L2_ACTIVATED, &dch->Flags);
 		spin_lock_irqsave(&hc->lock, flags);
 		if (hc->hw.nt_mode) {
-			hc->hw.mst_m &= ~HFCPCI_MASTER;
-			Write_hfc(hc, HFCPCI_MST_MODE, hc->hw.mst_m);
+			/* prepare deactivation */
+			Write_hfc(hc, HFCPCI_STATES, 0x40);
 			skb_queue_purge(&dch->squeue);
 			if (dch->tx_skb) {
 				dev_kfree_skb(dch->tx_skb);
@@ -1592,6 +1643,9 @@ hfcpci_l2l1D(struct mISDNchannel *ch, struct sk_buff *skb)
 			if (test_and_clear_bit(FLG_L1_BUSY, &dch->Flags))
 				dchannel_sched_event(&hc->dch, D_CLEARBUSY);
 #endif
+			hc->hw.mst_m &= ~HFCPCI_MASTER;
+			Write_hfc(hc, HFCPCI_MST_MODE, hc->hw.mst_m);
+			ret = 0;
 		} else {
 			l1_event(dch->l1, hh->prim);
 		}

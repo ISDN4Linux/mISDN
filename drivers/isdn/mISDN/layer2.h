@@ -18,6 +18,8 @@ struct manager {
 	u_long			options;
 	struct list_head	layer2;
 	rwlock_t		lock;
+	struct FsmInst		deact;
+	struct FsmTimer		datimer;
 	struct sk_buff_head	sendq;
 	struct mISDNchannel	*up;
 	u_int			nextid;
@@ -65,6 +67,19 @@ struct layer2 {
 	struct sk_buff_head	down_queue;
 	struct sk_buff_head	tmp_queue;
 };
+
+enum {
+	ST_L2_1,
+	ST_L2_2,
+	ST_L2_3,
+	ST_L2_4,
+	ST_L2_5,
+	ST_L2_6,
+	ST_L2_7,
+	ST_L2_8,
+};
+
+#define L2_STATE_COUNT (ST_L2_8+1)
 
 extern struct layer2	*create_l2(struct mISDNchannel *, u_int, u_int, u_long arg);
 extern int		tei_l2(struct layer2 *, u_int, u_long arg);

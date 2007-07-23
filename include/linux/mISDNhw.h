@@ -44,6 +44,7 @@
 #define FLG_TX_BUSY		0	/* tx_buf in use */
 #define FLG_TX_NEXT		1	/* next_skb in use */
 #define FLG_L1_BUSY		2	/* L1 is permanent busy */
+#define FLG_L2_ACTIVATED	3	/* activated from L2 */
 #define FLG_OPEN		5	/* channel is in use */
 #define FLG_ACTIVE		6	/* channel is activated */
 #define FLG_BUSY_TIMER		7
