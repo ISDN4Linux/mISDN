@@ -52,7 +52,7 @@ module_param(debug, uint, 0);
 #endif
 #endif
 
-LIST_HEAD(HFClist);
+static LIST_HEAD(HFClist);
 static rwlock_t HFClock = RW_LOCK_UNLOCKED;
 
 
@@ -1561,6 +1561,7 @@ hfc_bctrl(struct mISDNchannel *ch, u_int cmd, void *arg)
 		ch->protocol = ISDN_P_NONE;
 		ch->peer = NULL;
 		module_put(THIS_MODULE);
+		ret = 0;
 		break;
 	default:
 		printk(KERN_WARNING "%s: unknown prim(%x)\n",
@@ -1647,7 +1648,7 @@ hfcpci_l2l1D(struct mISDNchannel *ch, struct sk_buff *skb)
 			Write_hfc(hc, HFCPCI_MST_MODE, hc->hw.mst_m);
 			ret = 0;
 		} else {
-			l1_event(dch->l1, hh->prim);
+			ret = l1_event(dch->l1, hh->prim);
 		}
 		spin_unlock_irqrestore(&hc->lock, flags);
 		break;
@@ -1900,7 +1901,8 @@ open_dchannel(struct hfc_pci *hc, struct mISDNchannel *ch,
 	
 	if (((ch->protocol == ISDN_P_NT_S0) && (hc->dch.state == 3)) ||
 	    ((ch->protocol == ISDN_P_TE_S0) && (hc->dch.state == 7))) {
-		_queue_data(ch, PH_ACTIVATE_IND, MISDN_ID_ANY, 0, NULL, GFP_KERNEL);
+		_queue_data(ch, PH_ACTIVATE_IND, MISDN_ID_ANY,
+		    0, NULL, GFP_KERNEL);
 	}
 	rq->ch = ch;
 	if (!try_module_get(THIS_MODULE))
@@ -1918,9 +1920,9 @@ open_bchannel(struct hfc_pci *hc, struct channel_req *rq)
 	if (rq->protocol == ISDN_P_NONE)
 		return -EINVAL;
 	bch = &hc->bch[rq->adr.channel -1];
-	bch->ch.protocol = rq->protocol;
 	if (test_and_set_bit(FLG_OPEN, &bch->Flags))
 		return -EBUSY; /* b-channel can be only open once */
+	bch->ch.protocol = rq->protocol;
 	rq->ch = &bch->ch; /* TODO: E-channel */
 	if (!try_module_get(THIS_MODULE))
 		printk(KERN_WARNING "%s:cannot get module\n", __FUNCTION__);
@@ -2062,8 +2064,7 @@ setup_card(struct hfc_pci *card)
 
 	card->dch.debug = debug;
 	spin_lock_init(&card->lock);
-	mISDN_initdchannel(&card->dch, MSK_INIT_DCHANNEL, MAX_DFRAME_LEN_L1,
-	    ph_state);
+	mISDN_initdchannel(&card->dch, MAX_DFRAME_LEN_L1, ph_state);
 	card->dch.hw = card;
 	card->dch.dev.Dprotocols = (1 << ISDN_P_TE_S0) | (1 << ISDN_P_NT_S0);
 	card->dch.dev.Bprotocols = (1 << (ISDN_P_B_RAW & ISDN_P_B_MASK)) |
@@ -2073,9 +2074,9 @@ setup_card(struct hfc_pci *card)
 	card->dch.dev.nrbchan = 2;
 	for (i=0; i<2; i++) {
 		card->bch[i].nr = i + 1;
+		test_and_set_bit(i + 1, &card->dch.dev.channelmap);
 		card->bch[i].debug = debug;
-		mISDN_initbchannel(&card->bch[i], MSK_INIT_BCHANNEL, 
-		    MAX_DATA_MEM);
+		mISDN_initbchannel(&card->bch[i], MAX_DATA_MEM);
 		card->bch[i].hw = card;
 		card->bch[i].ch.send = hfcpci_l2l1B;
 		card->bch[i].ch.ctrl = hfc_bctrl;

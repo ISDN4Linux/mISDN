@@ -128,6 +128,15 @@
 #define DTMF_TONE_MASK		0x007F
 #define DTMF_TONE_START		0x2100
 #define DTMF_TONE_STOP		0x2200
+#define DTMF_COEF		0x4000
+
+/* MPH_INFORMATION_IND */
+#define L1_SIGNAL_LOS_OFF	0x0010
+#define L1_SIGNAL_LOS_ON	0x0011
+#define L1_SIGNAL_AIS_OFF	0x0012
+#define L1_SIGNAL_AIS_ON	0x0013
+#define L1_SIGNAL_SLIP_RX	0x0020
+#define L1_SIGNAL_SLIP_TX	0x0021
 
 /* 
  * protocol ids
@@ -206,12 +215,13 @@ struct sockaddr_mISDN {
 #define IMCLEAR_L2	_IOR('I', 69, int)
 
 struct mISDN_devinfo {
-	u_int		id;
-	u_int		Dprotocols;
-	u_int		Bprotocols;
-	u_int		protocol;
-	u_int		nrbchan;
-	char		name[MISDN_MAX_IDLEN];
+	u_int			id;
+	u_int			Dprotocols;
+	u_int			Bprotocols;
+	u_int			protocol;
+	unsigned long long	channelmap;
+	u_int			nrbchan;
+	char			name[MISDN_MAX_IDLEN];
 };
 
 #define MISDN_CTRL_GETOP		0x0000
@@ -318,6 +328,7 @@ struct mISDNdevice {
 	u_int			Dprotocols;
 	u_int			Bprotocols;
 	u_int			nrbchan;
+	u64			channelmap;
 	struct list_head	bchannels;
 	struct mISDNchannel	*teimgr;
 	struct class_device	class_dev;

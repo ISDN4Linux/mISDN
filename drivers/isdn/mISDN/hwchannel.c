@@ -61,9 +61,9 @@ bchannel_bh(struct work_struct *ws)
 }
 
 int
-mISDN_initdchannel(struct dchannel *ch, ulong prop, int maxlen, void *phf)
+mISDN_initdchannel(struct dchannel *ch, int maxlen, void *phf)
 {
-	ch->Flags = prop;
+	test_and_set_bit(FLG_HDLC, &ch->Flags);
 	ch->maxlen = maxlen;
 	ch->hw = NULL;
 	ch->rx_skb = NULL;
@@ -79,9 +79,9 @@ mISDN_initdchannel(struct dchannel *ch, ulong prop, int maxlen, void *phf)
 EXPORT_SYMBOL(mISDN_initdchannel);
 
 int
-mISDN_initbchannel(struct bchannel *ch, ulong prop, int maxlen)
+mISDN_initbchannel(struct bchannel *ch, int maxlen)
 {
-	ch->Flags = prop;
+	ch->Flags = 0;
 	ch->maxlen = maxlen;
 	ch->hw = NULL;
 	ch->rx_skb = NULL;

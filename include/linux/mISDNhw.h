@@ -49,8 +49,8 @@
 #define FLG_ACTIVE		6	/* channel is activated */
 #define FLG_BUSY_TIMER		7
 /* channel type */
-#define FLG_DCHANNEL		8	/* channel is D-channel */
-#define	FLG_BCHANNEL		9	/* channel is B-channel */
+//#define FLG_DCHANNEL		8	/* channel is D-channel */
+//#define FLG_BCHANNEL		9	/* channel is B-channel */
 #define FLG_ECHANNEL		10	/* channel is E-channel */
 #define FLG_TRANSPARENT		12	/* channel use transparent data */
 #define FLG_HDLC		13	/* channel use hdlc data */
@@ -81,11 +81,6 @@
 					schedule_work(&((s)->workq)); \
 				} while(0)
 
-#define MSK_INIT_DCHANNEL	((1<<FLG_DCHANNEL)|(1<<FLG_HDLC))
-#define MSK_INIT_BCHANNEL	(1<<FLG_BCHANNEL)
-#define MSK_INIT_ECHANNEL	(1<<FLG_ECHANNEL)
-
-
 struct dchannel {
 	struct mISDNdevice	dev;
 	u_long			Flags;
@@ -99,6 +94,7 @@ struct dchannel {
 	void			(*read_fifo) (void *, u_char *, int);
 	void			(*write_fifo) (void *, u_char *, int);
 	void			*hw;
+	int			slot;	/* multiport card channel slot */
 	struct timer_list	timer;
 	/* receive data */
 	struct sk_buff		*rx_skb;
@@ -160,6 +156,7 @@ struct bchannel {
 	void			(*read_fifo) (void *, u_char *, int);
 	void			(*write_fifo) (void *, u_char *, int);
 	void			*hw;
+	int			slot;	/* multiport card channel slot */
 	struct timer_list	timer;
 	/* receive data */
 	struct sk_buff		*rx_skb;
@@ -176,8 +173,8 @@ struct bchannel {
 	int			err_rx;
 };
 
-extern int	mISDN_initdchannel(struct dchannel *, ulong, int, void *);
-extern int	mISDN_initbchannel(struct bchannel *, ulong, int);
+extern int	mISDN_initdchannel(struct dchannel *, int, void *);
+extern int	mISDN_initbchannel(struct bchannel *, int);
 extern int	mISDN_freedchannel(struct dchannel *);
 extern int	mISDN_freebchannel(struct bchannel *);
 extern int	dchannel_senddata(struct dchannel *, struct sk_buff *);

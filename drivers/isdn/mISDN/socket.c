@@ -341,6 +341,7 @@ data_sock_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 			di.Dprotocols = dev->Dprotocols;
 			di.Bprotocols = dev->Bprotocols | get_all_Bprotocols();
 			di.protocol = dev->D.protocol;
+			di.channelmap = dev->channelmap;
 			di.nrbchan = dev->nrbchan;
 			strcpy(di.name, dev->name);
 			if (copy_to_user((void __user *)arg, &di, sizeof(di)))
@@ -527,6 +528,7 @@ base_sock_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 			di.Dprotocols = dev->Dprotocols;
 			di.Bprotocols = dev->Bprotocols | get_all_Bprotocols();
 			di.protocol = dev->D.protocol;
+			di.channelmap = dev->channelmap;
 			di.nrbchan = dev->nrbchan;
 			strcpy(di.name, dev->name);
 			if (copy_to_user((void __user *)arg, &di, sizeof(di)))
