@@ -246,7 +246,7 @@ get_next_bframe(struct bchannel *bch)
 
 EXPORT_SYMBOL(get_next_bframe);
 
-static void
+void
 queue_ch_frame(struct mISDNchannel *ch, u_int pr, int id, struct sk_buff *skb)
 {
 	struct mISDNhead *hh;
@@ -266,11 +266,11 @@ queue_ch_frame(struct mISDNchannel *ch, u_int pr, int id, struct sk_buff *skb)
 	}
 }
 
+EXPORT_SYMBOL(queue_ch_frame);
+
 int
 dchannel_senddata(struct dchannel *ch, struct sk_buff *skb)
 {
-	struct mISDNhead *hh;
-	/* HW lock must be obtained */
 	/* check oversize */
 	if (skb->len <= 0) {
 		printk(KERN_WARNING "%s: skb too small\n", __FUNCTION__);
@@ -281,6 +281,7 @@ dchannel_senddata(struct dchannel *ch, struct sk_buff *skb)
 			__FUNCTION__, skb->len, ch->maxlen);
 		return -EINVAL;
 	}
+	/* HW lock must be obtained */
 	if (test_and_set_bit(FLG_TX_BUSY, &ch->Flags)) {
 		skb_queue_tail(&ch->squeue, skb);
 		return 0;
@@ -288,8 +289,6 @@ dchannel_senddata(struct dchannel *ch, struct sk_buff *skb)
 		/* write to fifo */
 		ch->tx_skb = skb;
 		ch->tx_idx = 0;
-		hh = mISDN_HEAD_P(skb);
-		queue_ch_frame(&ch->dev.D, PH_DATA_CNF, hh->id, NULL);
 		return 1;
 	}
 }
@@ -298,8 +297,7 @@ EXPORT_SYMBOL(dchannel_senddata);
 int
 bchannel_senddata(struct bchannel *ch, struct sk_buff *skb)
 {
-	struct mISDNhead *hh;
-	/* HW lock must be obtained */
+
 	/* check oversize */
 	if (skb->len <= 0) {
 		printk(KERN_WARNING "%s: skb too small\n", __FUNCTION__);
@@ -310,6 +308,7 @@ bchannel_senddata(struct bchannel *ch, struct sk_buff *skb)
 			__FUNCTION__, skb->len, ch->maxlen);
 		return -EINVAL;
 	}
+	/* HW lock must be obtained */
 	/* check for pending next_skb */
 	if (ch->next_skb) {
 		printk(KERN_WARNING
@@ -325,8 +324,6 @@ bchannel_senddata(struct bchannel *ch, struct sk_buff *skb)
 		/* write to fifo */
 		ch->tx_skb = skb;
 		ch->tx_idx = 0;
-		hh = mISDN_HEAD_P(skb);
-		queue_ch_frame(&ch->ch, PH_DATA_CNF, hh->id, NULL);
 		return 1;
 	}
 }

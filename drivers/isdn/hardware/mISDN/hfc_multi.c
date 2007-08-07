@@ -2718,9 +2718,11 @@ handle_dmsg(struct mISDNchannel *ch, struct sk_buff *skb)
 			/* start fifo */
 			HFC_outb(hc, R_FIFO, 0);
 			HFC_wait(hc);
+			spin_unlock_irqrestore(&hc->lock, flags);
+			queue_ch_frame(ch, PH_DATA_CNF, hh->id, NULL);
 			ret = 0;
-		}
-		spin_unlock_irqrestore(&hc->lock, flags);
+		} else
+			spin_unlock_irqrestore(&hc->lock, flags);
 		return ret;
 	case PH_ACTIVATE_REQ:
 		spin_lock_irqsave(&hc->lock, flags);
@@ -2858,9 +2860,11 @@ handle_bmsg(struct mISDNchannel *ch, struct sk_buff *skb)
 			/* start fifo */
 			HFC_outb(hc, R_FIFO, 0);
 			HFC_wait(hc);
+			spin_unlock_irqrestore(&hc->lock, flags);
+			queue_ch_frame(ch, PH_DATA_CNF, hh->id, NULL);
 			ret = 0;
-		}
-		spin_unlock_irqrestore(&hc->lock, flags);
+		} else
+			spin_unlock_irqrestore(&hc->lock, flags);
 		return ret;
 	case PH_ACTIVATE_REQ:
 		if (debug & DEBUG_HFCMULTI_MSG)

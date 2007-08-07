@@ -47,14 +47,14 @@ get_channel4id(struct mISDNstack *st, u_int id)
 {
 	struct mISDNchannel	*ch;
 
-	down(&st->lsem);
+	mutex_lock(&st->lmutex);
 	list_for_each_entry(ch, &st->layer2, list) {
 		if (id == ch->nr)
 			goto unlock;
 	}
 	ch = NULL;
 unlock:
-	up(&st->lsem);
+	mutex_unlock(&st->lmutex);
 	return ch;
 }
 
@@ -93,7 +93,7 @@ send_layer2(struct mISDNstack *st, struct sk_buff *skb)
 
 	if (!st)
 		return;
-	down(&st->lsem);
+	mutex_lock(&st->lmutex);
 	if ((hh->id & MISDN_ID_ADDR_MASK) == MISDN_ID_ANY) { /* L2 for all */
 		list_for_each_entry(ch, &st->layer2, list) {
 			if (list_is_last(&ch->list, &st->layer2)) {
@@ -137,7 +137,7 @@ send_layer2(struct mISDNstack *st, struct sk_buff *skb)
 			    __FUNCTION__, ch->nr, hh->prim, ch->addr, ret);
 	}
 out:
-	up(&st->lsem);
+	mutex_unlock(&st->lmutex);
 	if (skb)
 		dev_kfree_skb(skb);
 }
@@ -209,7 +209,7 @@ mISDNStackd(void *data)
 		printk(KERN_DEBUG "mISDNStackd %s started\n", st->dev->name);
 
 	if (st->notify != NULL) {
-		up(st->notify);
+		complete(st->notify);
 		st->notify = NULL;
 	}
 	
@@ -274,7 +274,7 @@ mISDNStackd(void *data)
 		if (test_bit(mISDN_STACK_ABORT, &st->status))
 			break;
 		if (st->notify != NULL) {
-			up(st->notify);
+			complete(st->notify);
 			st->notify = NULL;
 		}
 #ifdef MISDN_MSG_STATS
@@ -317,7 +317,7 @@ mISDNStackd(void *data)
 	skb_queue_purge(&st->msgq);
 	st->thread = NULL;
 	if (st->notify != NULL) {
-		up(st->notify);
+		complete(st->notify);
 		st->notify = NULL;
 	}
 	return(0);
@@ -352,9 +352,9 @@ __add_layer2(struct mISDNchannel *ch, struct mISDNstack *st)
 void
 add_layer2(struct mISDNchannel *ch, struct mISDNstack *st)
 {
-	down(&st->lsem);
+	mutex_lock(&st->lmutex);
 	__add_layer2(ch, st);
-	up(&st->lsem);
+	mutex_unlock(&st->lmutex);
 }
 
 static int
@@ -370,7 +370,7 @@ create_stack(struct mISDNdevice *dev)
 {
 	struct mISDNstack	*newst;
 	int			err;
-	DECLARE_MUTEX_LOCKED(sem);
+	DECLARE_COMPLETION(done);
 
 	if (!(newst = kzalloc(sizeof(struct mISDNstack), GFP_KERNEL))) {
 		printk(KERN_ERR "kmalloc mISDN_stack failed\n");
@@ -382,7 +382,7 @@ create_stack(struct mISDNdevice *dev)
 	rwlock_init(&newst->l1sock.lock);
 	init_waitqueue_head(&newst->workq);
 	skb_queue_head_init(&newst->msgq);
-	init_MUTEX(&newst->lsem);
+	mutex_init(&newst->lmutex);
 	dev->D.st = newst;
 	err = create_teimanager(dev);
 	if (err) {
@@ -402,9 +402,9 @@ create_stack(struct mISDNdevice *dev)
 	newst->own.recv = mISDN_queue_message;
 	if (*debug & DEBUG_CORE_FUNC)
 		printk(KERN_DEBUG "%s: st(%s)\n", __FUNCTION__, newst->dev->name);
-	newst->notify = &sem;
+	newst->notify = &done;
 	kernel_thread(mISDNStackd, (void *)newst, 0);
-	down(&sem);
+	wait_for_completion(&done);
 	return 0;
 }
 
@@ -579,9 +579,9 @@ delete_channel(struct mISDNchannel *ch)
 	case ISDN_P_LAPD_TE:
 		pch = get_channel4id(ch->st, ch->nr);
 		if (pch) {
-			down(&ch->st->lsem);
+			mutex_lock(&ch->st->lmutex);
 			list_del(&pch->list);
-			up(&ch->st->lsem);
+			mutex_unlock(&ch->st->lmutex);
 			pch->ctrl(pch, CLOSE_CHANNEL, NULL);
 			pch = ch->st->dev->teimgr;
 			pch->ctrl(pch, CLOSE_CHANNEL, NULL);
@@ -607,7 +607,7 @@ void
 delete_stack(struct mISDNdevice *dev)
 {
 	struct mISDNstack	*st = dev->D.st;
-	DECLARE_MUTEX_LOCKED(sem);
+	DECLARE_COMPLETION(done);
 
 	if (*debug & DEBUG_CORE_FUNC)
 		printk(KERN_DEBUG "%s: st(%s)\n", __FUNCTION__,
@@ -619,13 +619,13 @@ delete_stack(struct mISDNdevice *dev)
 		if (st->notify) {
 			printk(KERN_WARNING "%s: notifier in use\n",
 			    __FUNCTION__);
-				up(st->notify);
+				complete(st->notify);
 		}
-		st->notify = &sem;
+		st->notify = &done;
 		test_and_set_bit(mISDN_STACK_ABORT, &st->status);
 		test_and_set_bit(mISDN_STACK_WAKEUP, &st->status);
 		wake_up_interruptible(&st->workq);
-		down(&sem);
+		wait_for_completion(&done);
 	}
 	if (!list_empty(&st->layer2))
 		printk(KERN_WARNING "%s: layer2 list not empty\n",

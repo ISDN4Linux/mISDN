@@ -248,6 +248,7 @@ struct mISDN_ctrl_req {
 #include <linux/skbuff.h>
 #include <linux/net.h>
 #include <net/sock.h>
+#include <linux/completion.h>
 
 #define DEBUG_CORE		0x000000ff
 #define DEBUG_CORE_FUNC		0x00000002
@@ -338,13 +339,13 @@ struct mISDNstack {
 	u_long			status;
 	struct mISDNdevice	*dev;
 	struct task_struct	*thread;
-	struct semaphore	*notify;
+	struct completion	*notify;
 	wait_queue_head_t	workq;
 	struct sk_buff_head	msgq;
 	struct list_head	layer2;
 	struct mISDNchannel	*layer1;
 	struct mISDNchannel	own;
-	struct semaphore	lsem;
+	struct mutex		lmutex;
 	struct mISDN_sock_list	l1sock;
 #ifdef MISDN_MSG_STATS
 	u_int			msg_cnt;

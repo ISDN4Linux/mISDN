@@ -1109,9 +1109,9 @@ free_teimanager(struct manager *mgr)
 		if (test_bit(OPTION_L2_CLEANUP, &mgr->options)) {
 			list_for_each_entry_safe(l2, nl2, &mgr->layer2, list) {
 				put_tei_msg(mgr, ID_REMOVE, 0, l2->tei);
-				down(&mgr->ch.st->lsem);
+				mutex_lock(&mgr->ch.st->lmutex);
 				list_del(&l2->ch.list);
-				up(&mgr->ch.st->lsem);
+				mutex_unlock(&mgr->ch.st->lmutex);
 				l2->ch.ctrl(&l2->ch, CLOSE_CHANNEL, NULL);
 			}
 			test_and_clear_bit(MGR_OPT_NETWORK, &mgr->options);
@@ -1186,9 +1186,9 @@ delete_teimanager(struct mISDNchannel *ch)
 
 	/* not locked lock is taken in release tei */
 	list_for_each_entry_safe(l2, nl2, &mgr->layer2, list) {
-		down(&mgr->ch.st->lsem);
+		mutex_lock(&mgr->ch.st->lmutex);
 		list_del(&l2->ch.list);
-		up(&mgr->ch.st->lsem);
+		mutex_unlock(&mgr->ch.st->lmutex);
 		l2->ch.ctrl(&l2->ch, CLOSE_CHANNEL, NULL);
 	}
 	list_del(&mgr->ch.list);

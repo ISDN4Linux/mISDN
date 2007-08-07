@@ -210,12 +210,6 @@ disable_hwirq(struct hfc_pci *hc)
 static void
 release_io_hfcpci(struct hfc_pci *hc)
 {
-	hc->hw.int_m2 = 0; /* interrupt output off ! */
-	disable_hwirq(hc);
-	Write_hfc(hc, HFCPCI_CIRM, HFCPCI_RESET);	/* Reset On */
-	mdelay(10);					/* Timeout 10ms */
-	hc->hw.cirm = 0; /* Reset Off */
-	Write_hfc(hc, HFCPCI_CIRM, hc->hw.cirm);
 	/* disable memory mapped ports + busmaster */
 	pci_write_config_word(hc->pdev, PCI_COMMAND, 0);
 	del_timer(&hc->hw.timer);
@@ -1589,9 +1583,11 @@ hfcpci_l2l1D(struct mISDNchannel *ch, struct sk_buff *skb)
 		ret = dchannel_senddata(dch, skb);
 		if (ret > 0) { /* direct TX */
 			hfcpci_fill_dfifo(dch->hw);
+			spin_unlock_irqrestore(&hc->lock, flags);
+			queue_ch_frame(ch, PH_DATA_CNF, hh->id, NULL);
 			ret = 0;
-		}
-		spin_unlock_irqrestore(&hc->lock, flags);
+		} else
+			spin_unlock_irqrestore(&hc->lock, flags);
 		return ret;
 	case PH_ACTIVATE_REQ:
 		spin_lock_irqsave(&hc->lock, flags);
@@ -1676,9 +1672,11 @@ hfcpci_l2l1B(struct mISDNchannel *ch, struct sk_buff *skb)
 		ret = bchannel_senddata(bch, skb);
 		if (ret > 0) { /* direct TX */
 			hfcpci_fill_fifo(bch);
+			spin_unlock_irqrestore(&hc->lock, flags);
+			queue_ch_frame(ch, PH_DATA_CNF, hh->id, NULL);
 			ret = 0;
-		}
-		spin_unlock_irqrestore(&hc->lock, flags);
+		} else
+			spin_unlock_irqrestore(&hc->lock, flags);
 		return ret;
 	case PH_ACTIVATE_REQ:
 		spin_lock_irqsave(&hc->lock, flags);
@@ -1730,7 +1728,7 @@ init_card(struct hfc_pci *hc)
 	spin_lock_irqsave(&hc->lock, flags);
 	disable_hwirq(hc);
 	spin_unlock_irqrestore(&hc->lock, flags);
-	if (request_irq(hc->irq, hfcpci_interrupt, SA_SHIRQ, "HFC PCI", hc)) {
+	if (request_irq(hc->irq, hfcpci_interrupt, IRQF_SHARED, "HFC PCI", hc)) {
 		printk(KERN_WARNING
 		    "mISDN: couldn't get interrupt %d\n", hc->irq);
 		return -EIO;
@@ -2030,6 +2028,7 @@ release_card(struct hfc_pci *hc) {
 	u_long	flags;
 
 	spin_lock_irqsave(&hc->lock, flags);
+	hc->hw.int_m2 = 0; /* interrupt output off ! */
 	disable_hwirq(hc);
 	mode_hfcpci(&hc->bch[0], 1, ISDN_P_NONE);
 	mode_hfcpci(&hc->bch[1], 2, ISDN_P_NONE);
@@ -2037,8 +2036,8 @@ release_card(struct hfc_pci *hc) {
 		del_timer(&hc->dch.timer);
 		hc->dch.timer.function = NULL;
 	}
-	release_io_hfcpci(hc);
 	spin_unlock_irqrestore(&hc->lock, flags);
+	release_io_hfcpci(hc);
 	if (hc->hw.nt_mode == 0) /* TE */
 		l1_event(hc->dch.l1, CLOSE_CHANNEL);
 	if (hc->initdone)
