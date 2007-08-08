@@ -1048,6 +1048,10 @@ create_teimgr(struct manager *mgr, struct channel_req *crq)
 		l2->tm->tval = 2000; /* T202  2 sec */
 	}
 	mISDN_FsmInitTimer(&l2->tm->tei_m, &l2->tm->timer);
+	write_lock_irqsave(&mgr->lock, flags);
+	id = get_free_id(mgr);
+	list_add_tail(&l2->list, &mgr->layer2);
+	write_unlock_irqrestore(&mgr->lock, flags);
 	if (id < 0) {
 		l2->ch.ctrl(&l2->ch, CLOSE_CHANNEL, NULL);
 	} else {
