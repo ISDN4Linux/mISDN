@@ -3415,7 +3415,7 @@ open_bchannel(struct hfc_multi *hc, struct dchannel *dch,
 	struct bchannel	*bch;
 	int		ch;	
 
-	if (!test_bit(rq->adr.channel, &dch->dev.channelmap))
+	if (!test_bit(rq->adr.channel, (u_long *)dch->dev.channelmap))
 		return -EINVAL;
 	if (rq->protocol == ISDN_P_NONE)
 		return -EINVAL;
@@ -3510,7 +3510,7 @@ init_card(struct hfc_multi *hc)
 	disable_hwirq(hc);
 	spin_unlock_irqrestore(&hc->lock, flags);
 
-	if (request_irq(hc->pci_dev->irq, hfcmulti_interrupt, SA_SHIRQ,
+	if (request_irq(hc->pci_dev->irq, hfcmulti_interrupt, IRQF_SHARED,
 	    "HFC-multi", hc)) {
 		printk(KERN_WARNING "mISDN: Could not get interrupt %d.\n",
 		    hc->pci_dev->irq);
@@ -3622,7 +3622,7 @@ setup_pci(struct hfc_multi *hc, struct pci_dev *pdev, const struct pci_device_id
 	hc->plx_membase = NULL;
 
 #ifdef CONFIG_PLX_PCI_BRIDGE
-	hc->plx_origmembase =  get_pcibase(hc->pci_dev, 0);
+	hc->plx_origmembase =  hc->pci_dev->resource[0].start;
 	/* MEMBASE 1 is PLX PCI Bridge */
 
 	if (!hc->plx_origmembase) {
@@ -3643,7 +3643,7 @@ setup_pci(struct hfc_multi *hc, struct pci_dev *pdev, const struct pci_device_id
 	printk(KERN_WARNING "HFC-multi: plx_membase:%#x plx_origmembase:%#x\n",
 	    (u_int) hc->plx_membase, (u_int)hc->plx_origmembase);
 
-	hc->pci_origmembase =  get_pcibase(hc->pci_dev, 2);
+	hc->pci_origmembase =  hc->pci_dev->resource[2].start;
 	    /* MEMBASE 1 is PLX PCI Bridge */
 	if (!hc->pci_origmembase) {
 		printk(KERN_WARNING
@@ -3666,7 +3666,7 @@ setup_pci(struct hfc_multi *hc, struct pci_dev *pdev, const struct pci_device_id
 	    hc->pci_dev->irq, HZ, hc->leds);
 	pci_write_config_word(hc->pci_dev, PCI_COMMAND, PCI_ENA_MEMIO);
 #else /* CONFIG_PLX_PCI_BRIDGE */
-	hc->pci_origmembase = get_pcibase(hc->pci_dev, 1);
+	hc->pci_origmembase = hc->pci_dev->resource[1].start;
 	if (!hc->pci_origmembase) {
 		printk(KERN_WARNING
 		    "HFC-multi: No IO-Memory for PCI card found\n");
@@ -3688,7 +3688,7 @@ setup_pci(struct hfc_multi *hc, struct pci_dev *pdev, const struct pci_device_id
 	pci_write_config_word(hc->pci_dev, PCI_COMMAND, PCI_ENA_MEMIO);
 #endif /* CONFIG_PLX_PCI_BRIDGE */
 #else
-	hc->pci_iobase = (u_int) get_pcibase(hc->pci_dev, 0);
+	hc->pci_iobase = (u_int) hc->pci_dev->resource[0].start;
 	if (!hc->pci_iobase) {
 		printk(KERN_WARNING "HFC-multi: No IO for PCI card found\n");
 		pci_disable_device(hc->pci_dev);
@@ -3898,7 +3898,7 @@ init_e1_port(struct hfc_multi *hc)
 		list_add(&bch->ch.list, &dch->dev.bchannels);
 		hc->chan[i + ch].bch = bch;
 		hc->chan[i + ch].port = 0;
-		test_and_set_bit(bch->nr, &dch->dev.channelmap);
+		test_and_set_bit(bch->nr, (u_long *)dch->dev.channelmap);
 	}
 	ret = mISDN_register_device(&dch->dev);
 	if (ret)
@@ -3953,7 +3953,7 @@ init_multi_port(struct hfc_multi *hc, int port)
 		list_add(&bch->ch.list, &dch->dev.bchannels);
 		hc->chan[i + ch + 1].bch = bch;
 		hc->chan[i + ch + 1].port = port;
-		test_and_set_bit(bch->nr, &dch->dev.channelmap);
+		test_and_set_bit(bch->nr, (u_long *)dch->dev.channelmap);
 	}
 	ret = mISDN_register_device(&dch->dev);
 	if (ret)

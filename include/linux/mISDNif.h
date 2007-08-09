@@ -191,6 +191,8 @@ struct mISDNhead {
 #define TEI_SAPI		63
 #define CTRL_SAPI		0
 
+#define MISDN_CHMAP_SIZE	16
+
 /* socket */
 #ifndef	AF_ISDN
 #define AF_ISDN		27
@@ -219,7 +221,7 @@ struct mISDN_devinfo {
 	u_int			Dprotocols;
 	u_int			Bprotocols;
 	u_int			protocol;
-	unsigned long long	channelmap;
+	u_char			channelmap[MISDN_CHMAP_SIZE];
 	u_int			nrbchan;
 	char			name[MISDN_MAX_IDLEN];
 };
@@ -329,7 +331,7 @@ struct mISDNdevice {
 	u_int			Dprotocols;
 	u_int			Bprotocols;
 	u_int			nrbchan;
-	u64			channelmap;
+	u_char			channelmap[MISDN_CHMAP_SIZE];
 	struct list_head	bchannels;
 	struct mISDNchannel	*teimgr;
 	struct class_device	class_dev;

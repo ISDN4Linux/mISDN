@@ -1982,7 +1982,7 @@ setup_hw(struct hfc_pci *hc)
 		printk(KERN_WARNING "HFC-PCI: No IRQ for PCI card found\n");
 		return 1;
 	}
-	hc->hw.pci_io = (char *) get_pcibase(hc->pdev, 1);
+	hc->hw.pci_io = (char *)hc->pdev->resource[1].start;
 	
 	if (!hc->hw.pci_io) {
 		printk(KERN_WARNING "HFC-PCI: No IO-Mem for PCI card found\n");
@@ -2073,7 +2073,7 @@ setup_card(struct hfc_pci *card)
 	card->dch.dev.nrbchan = 2;
 	for (i=0; i<2; i++) {
 		card->bch[i].nr = i + 1;
-		test_and_set_bit(i + 1, &card->dch.dev.channelmap);
+		test_and_set_bit(i + 1, (u_long *)card->dch.dev.channelmap);
 		card->bch[i].debug = debug;
 		mISDN_initbchannel(&card->bch[i], MAX_DATA_MEM);
 		card->bch[i].hw = card;

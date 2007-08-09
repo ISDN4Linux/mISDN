@@ -246,10 +246,10 @@ get_free_id(struct manager *mgr)
 			    __FUNCTION__);
 			return -EBUSY;
 		}
-		test_and_set_bit(l2->ch.nr, &ids);
+		test_and_set_bit(l2->ch.nr, (u_long *)&ids);
 	}
 	for (i = 1; i < 64; i++)
-		if (!test_bit(i, &ids))
+		if (!test_bit(i, (u_long *)&ids))
 			return i;
 	printk(KERN_WARNING "%s: more as 63 layer2 for one device\n",
 	    __FUNCTION__);
@@ -273,10 +273,10 @@ get_free_tei(struct manager *mgr)
 			continue;
 		i -= 64;
 		
-		test_and_set_bit(i, &ids);
+		test_and_set_bit(i, (u_long *)&ids);
 	}
 	for (i = 0; i < 64; i++)
-		if (!test_bit(i, &ids))
+		if (!test_bit(i, (u_long *)&ids))
 			return i + 64;
 	printk(KERN_WARNING "%s: more as 63 dynamic tei for one device\n",
 	    __FUNCTION__);

@@ -93,14 +93,16 @@ mISDN_read(struct file *filep, char *buf, size_t count, loff_t * off)
 	int	ret = 0;
 
 	if (*debug & DEBUG_TIMER)
-	        printk(KERN_DEBUG "%s(%p, %p, %ld, %p)\n", __FUNCTION__, filep, buf, count, off);
+	        printk(KERN_DEBUG "%s(%p, %p, %d, %p)\n", __FUNCTION__,
+	            filep, buf, (int)count, off);
 	if (*off != filep->f_pos)
 		return -ESPIPE;
 
 	if (list_empty(&dev->expired) && (dev->work == 0)) {
 		if (filep->f_flags & O_NONBLOCK)
 			return -EAGAIN;
-		wait_event_interruptible(dev->wait, (dev->work || !list_empty(&dev->expired)));
+		wait_event_interruptible(dev->wait, (dev->work ||
+		    !list_empty(&dev->expired)));
 		if (signal_pending(current))
 			return -ERESTARTSYS;
 	}
@@ -148,7 +150,9 @@ mISDN_poll(struct file *filep, poll_table * wait)
 		if (dev->work || !list_empty(&dev->expired))
 			mask |= (POLLIN | POLLRDNORM);
 		if (*debug & DEBUG_TIMER)
-		        printk(KERN_DEBUG "%s work(%d) empty(%d)\n", __FUNCTION__, dev->work, list_empty(&dev->expired));
+		        printk(KERN_DEBUG "%s work(%d) empty(%d)\n",
+		            __FUNCTION__, dev->work,
+		            list_empty(&dev->expired));
 	}
 	return mask;
 }
@@ -220,14 +224,16 @@ unlock:
 }
 
 static int
-mISDN_ioctl(struct inode *inode, struct file *filep, unsigned int cmd, unsigned long arg)
+mISDN_ioctl(struct inode *inode, struct file *filep, unsigned int cmd,
+    unsigned long arg)
 {
 	struct mISDNtimerdev	*dev = filep->private_data;
 	int			id, tout, ret = 0;
 
 
 	if (*debug & DEBUG_TIMER)
-		printk(KERN_DEBUG "%s(%p, %x, %lx)\n", __FUNCTION__, filep, cmd, arg);
+		printk(KERN_DEBUG "%s(%p, %x, %lx)\n", __FUNCTION__,
+		    filep, cmd, arg);
 	switch (cmd) {
 	case IMADDTIMER:
 		if (get_user(tout, (int __user *)arg)) {
@@ -236,7 +242,8 @@ mISDN_ioctl(struct inode *inode, struct file *filep, unsigned int cmd, unsigned 
 		}
 		id = misdn_add_timer(dev, tout);
 		if (*debug & DEBUG_TIMER)
-			printk(KERN_DEBUG "%s add %d id %d\n", __FUNCTION__, tout, id);
+			printk(KERN_DEBUG "%s add %d id %d\n", __FUNCTION__,
+			    tout, id);
 		if (id < 0) {
 			ret = id;
 			break;

@@ -199,7 +199,7 @@ mISDNStackd(void *data)
 #ifdef CONFIG_SMP
 	lock_kernel();
 #endif
-	MAKEDAEMON(st->dev->name);
+	daemonize(st->dev->name);
 	sigfillset(&current->blocked);
 	st->thread = current;
 #ifdef CONFIG_SMP

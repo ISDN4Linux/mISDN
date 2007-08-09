@@ -75,7 +75,7 @@ get_free_devid(void)
 	u_int	i;
 
 	for (i = 0; i <= MAX_DEVICE_ID; i++)
-		if (!test_and_set_bit(i, &device_ids))
+		if (!test_and_set_bit(i, (u_long *)&device_ids))
 			return i;
 	return -1;
 }
@@ -114,7 +114,7 @@ mISDN_unregister_device(struct mISDNdevice *dev) {
 	write_lock_irqsave(&device_lock, flags);
 	list_del(&dev->D.list);
 	write_unlock_irqrestore(&device_lock, flags);
-	test_and_clear_bit(dev->id, &device_ids);
+	test_and_clear_bit(dev->id, (u_long *)&device_ids);
 	delete_stack(dev);
 }
 

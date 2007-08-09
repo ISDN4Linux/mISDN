@@ -112,8 +112,8 @@ mISDN_sock_recvmsg(struct kiocb *iocb, struct socket *sock,
 	int		copied, err;
 
 	if (*debug & DEBUG_SOCKET)
-		printk(KERN_DEBUG "%s: len %ld, flags %x ch.nr %d, proto %x\n",
-			__FUNCTION__, len, flags, _pms(sk)->ch.nr,
+		printk(KERN_DEBUG "%s: len %d, flags %x ch.nr %d, proto %x\n",
+			__FUNCTION__, (int)len, flags, _pms(sk)->ch.nr,
 			sk->sk_protocol);
 	if (flags & (MSG_OOB))
 		return -EOPNOTSUPP;
@@ -177,8 +177,8 @@ mISDN_sock_sendmsg(struct kiocb *iocb, struct socket *sock,
 	struct sockaddr_mISDN	*maddr;
 
 	if (*debug & DEBUG_SOCKET)
-		printk(KERN_DEBUG "%s: len %ld flags %x ch %d proto %x\n",
-		     __FUNCTION__, len, msg->msg_flags, _pms(sk)->ch.nr,
+		printk(KERN_DEBUG "%s: len %d flags %x ch %d proto %x\n",
+		     __FUNCTION__, (int)len, msg->msg_flags, _pms(sk)->ch.nr,
 		     sk->sk_protocol);
 
 	if (msg->msg_flags & MSG_OOB)
@@ -341,7 +341,8 @@ data_sock_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 			di.Dprotocols = dev->Dprotocols;
 			di.Bprotocols = dev->Bprotocols | get_all_Bprotocols();
 			di.protocol = dev->D.protocol;
-			di.channelmap = dev->channelmap;
+			memcpy(di.channelmap, dev->channelmap,
+				MISDN_CHMAP_SIZE);
 			di.nrbchan = dev->nrbchan;
 			strcpy(di.name, dev->name);
 			if (copy_to_user((void __user *)arg, &di, sizeof(di)))
@@ -528,7 +529,8 @@ base_sock_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 			di.Dprotocols = dev->Dprotocols;
 			di.Bprotocols = dev->Bprotocols | get_all_Bprotocols();
 			di.protocol = dev->D.protocol;
-			di.channelmap = dev->channelmap;
+			memcpy(di.channelmap, dev->channelmap,
+				MISDN_CHMAP_SIZE);
 			di.nrbchan = dev->nrbchan;
 			strcpy(di.name, dev->name);
 			if (copy_to_user((void __user *)arg, &di, sizeof(di)))
