@@ -151,7 +151,6 @@ recv_Dchannel(struct dchannel *dch)
 	hh = mISDN_HEAD_P(dch->rx_skb);
 	hh->prim = PH_DATA_IND;
 	hh->id = get_sapi_tei(dch->rx_skb->data);
-	hh->len = dch->rx_skb->len;
 	skb_queue_tail(&dch->rqueue, dch->rx_skb);
 	dch->rx_skb = NULL;
 	schedule_event(dch, FLG_RECVQUEUE);
@@ -167,7 +166,6 @@ recv_Bchannel(struct bchannel *bch)
 	hh = mISDN_HEAD_P(bch->rx_skb);
 	hh->prim = PH_DATA_IND;
 	hh->id = MISDN_ID_ANY;
-	hh->len = bch->rx_skb->len;
 	skb_queue_tail(&bch->rqueue, bch->rx_skb);
 	bch->rx_skb = NULL;
 	schedule_event(bch, FLG_RECVQUEUE);
@@ -258,7 +256,6 @@ queue_ch_frame(struct mISDNchannel *ch, u_int pr, int id, struct sk_buff *skb)
 			hh = mISDN_HEAD_P(skb);
 			hh->prim = pr;
 			hh->id = id;
-			hh->len = skb->len;
 			if (!ch->recv(ch->peer, skb))
 				return;
 		}

@@ -171,7 +171,6 @@
 struct mISDNhead {
 	unsigned int	prim;
 	unsigned int	id;
-	unsigned int	len;
 }  __attribute__((packed));
 
 #define MISDN_HEADER_LEN	sizeof(struct mISDNhead)
@@ -276,7 +275,6 @@ struct mISDN_ctrl_req {
 #define mISDN_HEAD_P(s)		((struct mISDNhead *)&s->cb[0])
 #define mISDN_HEAD_PRIM(s)	((struct mISDNhead *)&s->cb[0])->prim
 #define mISDN_HEAD_ID(s)	((struct mISDNhead *)&s->cb[0])->id
-#define mISDN_HEAD_LEN(s)	((struct mISDNhead *)&s->cb[0])->len
 
 /* socket states */
 #define MISDN_OPEN	1
@@ -391,7 +389,6 @@ _alloc_mISDN_skb(u_int prim, u_int id, u_int len, void *dp, gfp_t gfp_mask)
 	hh = mISDN_HEAD_P(skb);
 	hh->prim = prim;
 	hh->id = id;
-	hh->len = len;
 	return skb;
 }	
 

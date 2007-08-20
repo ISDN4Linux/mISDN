@@ -296,7 +296,6 @@ teiup_create(struct manager *mgr, u_int prim, int len, void *arg)
 	hh = mISDN_HEAD_P(skb);
 	hh->prim = prim;
 	hh->id = (mgr->ch.nr << 16) | mgr->ch.addr;
-	hh->len = len;
 	if (len)
 		memcpy(skb_put(skb, len), arg, len);
 	err = mgr->up->send(mgr->up, skb);

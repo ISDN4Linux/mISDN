@@ -141,7 +141,6 @@ l2up(struct layer2 *l2, u_int prim, struct sk_buff *skb)
 		return;
 	mISDN_HEAD_PRIM(skb) = prim;
 	mISDN_HEAD_ID(skb) = (l2->ch.nr << 16) | l2->ch.addr;
-	mISDN_HEAD_LEN(skb) = skb->len;
 	err = l2->up->send(l2->up, skb);
 	if (err) {
 		printk(KERN_WARNING "%s: err=%d\n", __FUNCTION__, err);
@@ -164,7 +163,6 @@ l2up_create(struct layer2 *l2, u_int prim, int len, void *arg)
 	hh = mISDN_HEAD_P(skb);
 	hh->prim = prim;
 	hh->id = (l2->ch.nr << 16) | l2->ch.addr;
-	hh->len = len;
 	if (len)
 		memcpy(skb_put(skb, len), arg, len);
 	err = l2->up->send(l2->up, skb);
@@ -206,7 +204,6 @@ l2down(struct layer2 *l2, u_int prim, u_int id, struct sk_buff *skb)
 
 	hh->prim = prim;
 	hh->id = id;
-	hh->len = skb->len;
 	return l2down_raw(l2, skb);
 }
 
@@ -223,7 +220,6 @@ l2down_create(struct layer2 *l2, u_int prim, u_int id, int len, void *arg)
 	hh = mISDN_HEAD_P(skb);
 	hh->prim = prim;
 	hh->id = id;
-	hh->len = len;
 	if (len)
 		memcpy(skb_put(skb, len), arg, len);
 	err = l2down_raw(l2, skb);
