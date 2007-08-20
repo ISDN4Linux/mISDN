@@ -77,6 +77,7 @@ mISDN_send(struct mISDNchannel *ch, struct sk_buff *skb)
         printk(KERN_DEBUG "%s len %d %p\n", __FUNCTION__, skb->len, skb);
 	if (msk->sk.sk_state == MISDN_CLOSED)
 		return -EUNATCH;
+	__net_timestamp(skb);
 	err = sock_queue_rcv_skb(&msk->sk, skb);
 	if (err) {
 		printk(KERN_WARNING "%s: error %d\n", __FUNCTION__, err);
@@ -99,6 +100,17 @@ mISDN_ctrl(struct mISDNchannel *ch, u_int cmd, void *arg)
 		break;
 	}
 	return 0;
+}
+
+static inline void
+mISDN_sock_cmsg(struct sock *sk, struct msghdr *msg, struct sk_buff *skb)
+{
+	struct timeval	tv;
+
+	if (_pms(sk)->cmask & MISDN_CMSG_TSTAMP) {
+		skb_get_timestamp(skb, &tv);
+		put_cmsg(msg, SOL_SOCKET, MISDN_CMSG_TSTAMP, sizeof(tv), &tv);
+	}
 }
 
 static int
@@ -160,7 +172,7 @@ mISDN_sock_recvmsg(struct kiocb *iocb, struct socket *sock,
 
 	err = skb_copy_datagram_iovec(skb, 0, msg->msg_iov, copied);
 
-//	mISDN_sock_cmsg(sk, msg, skb);
+	mISDN_sock_cmsg(sk, msg, skb);
 
 	skb_free_datagram(sk, skb);
 
@@ -359,6 +371,62 @@ data_sock_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 	return err;
 }
 
+static int data_sock_setsockopt(struct socket *sock, int level, int optname, char __user *optval, int len)
+{
+	struct sock *sk = sock->sk;
+	int err = 0, opt = 0;
+
+	if (*debug & DEBUG_SOCKET)
+		printk(KERN_DEBUG "%s(%p, %d, %x, %p, %d)\n", __FUNCTION__, sock,
+		    level, optname, optval, len);
+
+	lock_sock(sk);
+
+	switch (optname) {
+	case MISDN_TIME_STAMP:
+		if (get_user(opt, (int __user *)optval)) {
+			err = -EFAULT;
+			break;
+		}
+
+		if (opt)
+			_pms(sk)->cmask |= MISDN_CMSG_TSTAMP;
+		else
+			_pms(sk)->cmask &= ~MISDN_CMSG_TSTAMP;
+		break;
+	default:
+		err = -ENOPROTOOPT;
+		break;
+	}
+	release_sock(sk);
+	return err;
+}
+
+static int data_sock_getsockopt(struct socket *sock, int level, int optname, char __user *optval, int __user *optlen)
+{
+	struct sock *sk = sock->sk;
+	int len, opt;
+
+	if (get_user(len, optlen))
+		return -EFAULT;
+
+	switch (optname) {
+	case MISDN_TIME_STAMP:
+		if (_pms(sk)->cmask & MISDN_CMSG_TSTAMP)
+			opt = 1;
+		else 
+			opt = 0;
+
+		if (put_user(opt, optval))
+			return -EFAULT;
+		break;
+	default:
+		return -ENOPROTOOPT;
+	}
+
+	return 0;
+}
+
 static int
 data_sock_bind(struct socket *sock, struct sockaddr *addr, int addr_len)
 {
@@ -455,8 +523,8 @@ static const struct proto_ops data_sock_ops = {
 	.poll		= datagram_poll,
 	.listen		= sock_no_listen,
 	.shutdown	= sock_no_shutdown,
-	.setsockopt	= sock_no_setsockopt,
-	.getsockopt	= sock_no_getsockopt,
+	.setsockopt	= data_sock_setsockopt,
+	.getsockopt	= data_sock_getsockopt,
 	.connect	= sock_no_connect,
 	.socketpair	= sock_no_socketpair,
 	.accept		= sock_no_accept,

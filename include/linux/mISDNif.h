@@ -233,6 +233,10 @@ struct mISDN_devinfo {
 #define MISDN_CTRL_PCMCONNECT		0x0010
 #define MISDN_CTRL_PCMDISCONNECT	0x0020
 
+
+/* socket options */
+#define MISDN_TIME_STAMP		0x0001
+
 struct mISDN_ctrl_req {
 	int		op;
 	int		channel;
@@ -321,8 +325,13 @@ struct mISDN_sock_list {
 struct mISDN_sock {
 	struct sock		sk;
 	struct mISDNchannel	ch;
+	u_int			cmask;
 	struct mISDNdevice	*dev;
 };
+
+/* mISDN_sock cmask values */
+#define MISDN_CMSG_TSTAMP		0x0001
+
 
 struct mISDNdevice {
 	struct mISDNchannel	D;
