@@ -154,8 +154,10 @@ send_msg_to_layer(struct mISDNstack *st, struct sk_buff *skb)
 		printk(KERN_DEBUG "%s prim(%x) id(%x) %p\n",
 		    __FUNCTION__, hh->prim, hh->id, skb);
 	if (lm == 0x1) {
-		if (!hlist_empty(&st->l1sock.head))
+		if (!hlist_empty(&st->l1sock.head)) {
+			__net_timestamp(skb);
 			send_socklist(&st->l1sock, skb, GFP_KERNEL);
+		}
 		return st->layer1->send(st->layer1, skb);
 	} else if (lm == 0x2) {
 		send_layer2(st, skb);
@@ -329,10 +331,9 @@ l1_receive(struct mISDNchannel *ch, struct sk_buff *skb)
 	if (!ch->st)
 		return -ENODEV;
 	if (!hlist_empty(&ch->st->l1sock.head)) {
-		printk(KERN_ERR "%s: not yet\n", __FUNCTION__);
+		__net_timestamp(skb);
 		send_socklist(&ch->st->l1sock, skb, GFP_ATOMIC);
 	}
-
 	_queue_message(ch->st, skb);
 	return 0;
 }

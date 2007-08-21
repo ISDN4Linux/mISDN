@@ -198,6 +198,8 @@ struct mISDNhead {
 #define PF_ISDN		AF_ISDN
 #endif
 
+#define SOL_MISDN	0
+
 struct sockaddr_mISDN {
 	sa_family_t    family;
 	unsigned char	dev;
@@ -327,8 +329,6 @@ struct mISDN_sock {
 	struct mISDNdevice	*dev;
 };
 
-/* mISDN_sock cmask values */
-#define MISDN_CMSG_TSTAMP		0x0001
 
 
 struct mISDNdevice {

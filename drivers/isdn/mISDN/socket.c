@@ -74,7 +74,9 @@ mISDN_send(struct mISDNchannel *ch, struct sk_buff *skb)
 	    struct mISDN_sock, ch);
 	int	err;
 
-        printk(KERN_DEBUG "%s len %d %p\n", __FUNCTION__, skb->len, skb);
+	if (*debug & DEBUG_SOCKET)
+        	printk(KERN_DEBUG "%s len %d %p\n", __FUNCTION__,
+        	    skb->len, skb);
 	if (msk->sk.sk_state == MISDN_CLOSED)
 		return -EUNATCH;
 	__net_timestamp(skb);
@@ -107,9 +109,9 @@ mISDN_sock_cmsg(struct sock *sk, struct msghdr *msg, struct sk_buff *skb)
 {
 	struct timeval	tv;
 
-	if (_pms(sk)->cmask & MISDN_CMSG_TSTAMP) {
+	if (_pms(sk)->cmask & MISDN_TIME_STAMP) {
 		skb_get_timestamp(skb, &tv);
-		put_cmsg(msg, SOL_SOCKET, MISDN_CMSG_TSTAMP, sizeof(tv), &tv);
+		put_cmsg(msg, SOL_MISDN, MISDN_TIME_STAMP, sizeof(tv), &tv);
 	}
 }
 
@@ -390,9 +392,9 @@ static int data_sock_setsockopt(struct socket *sock, int level, int optname, cha
 		}
 
 		if (opt)
-			_pms(sk)->cmask |= MISDN_CMSG_TSTAMP;
+			_pms(sk)->cmask |= MISDN_TIME_STAMP;
 		else
-			_pms(sk)->cmask &= ~MISDN_CMSG_TSTAMP;
+			_pms(sk)->cmask &= ~MISDN_TIME_STAMP;
 		break;
 	default:
 		err = -ENOPROTOOPT;
@@ -412,7 +414,7 @@ static int data_sock_getsockopt(struct socket *sock, int level, int optname, cha
 
 	switch (optname) {
 	case MISDN_TIME_STAMP:
-		if (_pms(sk)->cmask & MISDN_CMSG_TSTAMP)
+		if (_pms(sk)->cmask & MISDN_TIME_STAMP)
 			opt = 1;
 		else 
 			opt = 0;
