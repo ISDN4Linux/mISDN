@@ -26,16 +26,18 @@
 /*
  * ABI Version 32 bit
  *
- * <16 bit> Major version
+ * <8 bit> Major version
  *		- changed if any interface become backwards incompatible
  *
- * <16 bit> Minor version
+ * <8 bit> Minor version
  *              - changed if any interface is extended but backwards compatible
  *
+ * <16 bit> Release number
+ *              - should be incremented on every checkin
  */
 #define	MISDN_MAJOR_VERSION	1
 #define	MISDN_MINOR_VERSION	0
-#define	MISDN_VERSION		((MISDN_MAJOR_VERSION<<16) | MISDN_MINOR_VERSION)
+#define MISDN_RELEASE		15
 
 #define MISDN_REVISION		"$Revision: 2.0 $"
 #define MISDN_DATE		"$Date: 2007/06/05 15:39:31 $"
@@ -212,10 +214,17 @@ struct sockaddr_mISDN {
 #define IMADDTIMER	_IOR('I', 64, int)
 #define IMDELTIMER	_IOR('I', 65, int)
 /* socket ioctls */
-#define	IMGETCOUNT	_IOR('I', 66, int)
-#define IMGETDEVINFO	_IOR('I', 67, int)
-#define IMCTRLREQ	_IOR('I', 68, int)
-#define IMCLEAR_L2	_IOR('I', 69, int)
+#define	IMGETVERSION	_IOR('I', 66, int)
+#define	IMGETCOUNT	_IOR('I', 67, int)
+#define IMGETDEVINFO	_IOR('I', 68, int)
+#define IMCTRLREQ	_IOR('I', 69, int)
+#define IMCLEAR_L2	_IOR('I', 70, int)
+
+struct mISDNversion {
+	unsigned char	major;
+	unsigned char	minor;
+	unsigned short	release;
+};
 
 struct mISDN_devinfo {
 	u_int			id;

@@ -70,8 +70,6 @@ uninstall:
 modules-install:
 	cd $(LINUX) ; make INSTALL_MOD_PATH=$(INSTALL_PREFIX) SUBDIRS=$(MISDN_CORE_SRC) modules_install 
 	cd $(LINUX) ; make INSTALL_MOD_PATH=$(INSTALL_PREFIX) SUBDIRS=$(MISDN_SRC) modules_install 
-	mkdir -p $(INSTALL_PREFIX)/usr/include/linux/
-	cp $(MISDNDIR)/include/linux/*.h $(INSTALL_PREFIX)/usr/include/linux/
 
 test_old_misdn:
 	export LINUX=$(LINUX); ./makelib.sh test_old_misdn
