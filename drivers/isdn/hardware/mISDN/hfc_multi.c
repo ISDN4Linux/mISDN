@@ -34,7 +34,7 @@
  *	Value 4	= HFC-4S (4 ports) 0x04
  *	Value 8	= HFC-8S (8 ports) 0x08
  *	Bit 8	= uLaw (instead of aLaw)
- *	Bit 9	= Enable DTMF detection on all B-channels
+ *	Bit 9	= Enable DTMF detection on all B-channels via hardware
  *	Bit 10	= spare
  *	Bit 11	= Set PCM bus into slave mode.
  *	Bit 12	= Ignore missing frame clock on PCM bus.
@@ -101,7 +101,15 @@
 #include <linux/isdn_compat.h>
 
 // #define IRQCOUNT_DEBUG
-#define	SINGLE_INTERRUPT
+
+///////////////////////////////////
+// #define	SINGLE_INTERRUPT //
+///////////////////////////////////
+//Never define single interrupt, since it will crash. interrupts come
+//simultanious sometimes, so processing all chip's fifos with one interrupt
+//will conflict during their individual interrupt.
+//the golden rule: your interrupt - only touch your registers!!!!
+
 
 #include "hfc_multi.h"
 #ifdef ECHOPREP
@@ -128,6 +136,9 @@ static void (* register_interrupt)(void);
 extern int ztdummy_unregister_interrupt(void);
 static int (* unregister_interrupt)(void);
 static int interrupt_registered = 0;
+#ifdef SINGLE_INTERRUPT
+static int t_int = 0; dont use single interrupt, read the warning above it!!!
+#endif
 
 #define	VENDOR_CCD	"Cologne Chip AG"
 #define	VENDOR_BN	"beroNet GmbH"
@@ -602,9 +613,6 @@ release_io_hfcmulti(struct hfc_multi *hc)
 static int
 init_chip(struct hfc_multi *hc)
 {
-#ifdef SINGLE_INTERRUPT
-	static int t_int = 0;
-#endif
 	u_long 	flags, val, val2 = 0, rev;
 	int	cnt = 0;
 	int	i, err = 0;
@@ -819,7 +827,7 @@ init_chip(struct hfc_multi *hc)
 	if (!t_int) {
 		HFC_outb(hc, R_TI_WD, poll_timer);
 		hc->hw.r_irqmsk_misc |= V_TI_IRQMSK;
-		t_int++;
+		t_int = 1;
 	}
 #else
 	/* set up timer */
@@ -1994,19 +2002,13 @@ fifo_irq(struct hfc_multi *hc, int s0)
 	j = 0;
 	while (j < 8) {
 		ch = (s0 << 2) + (j >> 1);
-		if (ch >= 16) {
-			if (ch == 16)
-				printk(KERN_DEBUG
-				    "Shouldn't be servicing high FIFOs. "
-				    "Continuing.\n");
-			continue;
-		}
 		dch = hc->chan[ch].dch;
 		bch = hc->chan[ch].bch;
 		if (((!dch) && (!bch)) || (!hc->created[hc->chan[ch].port])) {
 			j += 2;
 			continue;
 		}
+//if (r_irq_fifo_bl & (1<<j)) printk(KERN_DEBUG "tx-fifo %d ready\n", ch);
 		if (dch && (r_irq_fifo_bl & (1 << j)) &&
 		    test_bit(FLG_ACTIVE, &dch->Flags)) {
 			hfcmulti_tx(hc, ch);
@@ -2020,6 +2022,7 @@ fifo_irq(struct hfc_multi *hc, int s0)
 			HFC_wait_(hc);
 		}
 		j++;
+//if (r_irq_fifo_bl & (1<<j)) printk(KERN_DEBUG "rx-fifo %d ready\n", ch);
 		if (dch && (r_irq_fifo_bl & (1 << j)) &&
 		    test_bit(FLG_ACTIVE, &dch->Flags)) {
 			hfcmulti_rx(hc, ch);
@@ -2032,6 +2035,7 @@ fifo_irq(struct hfc_multi *hc, int s0)
 	}
 }
 
+//int irqsem=0;
 static irqreturn_t
 hfcmulti_interrupt(int intno, void *dev_id)
 {
@@ -2062,6 +2066,8 @@ hfcmulti_interrupt(int intno, void *dev_id)
 #endif
 
 	spin_lock(&hc->lock);
+//	if (irqsem) printk(KERN_DEBUG "oops... irq for card %d during irq from card %d", hc->id, irqsem);
+//	irqsem = hc->id;
 
 	if (!hc) {
 		printk(KERN_WARNING "HFC-multi: Spurious interrupt!\n");
@@ -2072,6 +2078,7 @@ hfcmulti_interrupt(int intno, void *dev_id)
 	// *plx_acc=0xc00;  // clear LINTI1 & LINTI2
 	// *plx_acc=0xc41;
 #endif
+//		irqsem = 0;
 		spin_unlock(&hc->lock);
 		return IRQ_NONE;
 	}
@@ -2170,6 +2177,7 @@ hfcmulti_interrupt(int intno, void *dev_id)
 	// *plx_acc=0xc00;  // clear LINTI1 & LINTI2
 	// *plx_acc=0xc41;
 #endif
+//	irqsem = 0;
 	spin_unlock(&hc->lock);
 	return IRQ_HANDLED;
 }
@@ -2880,7 +2888,8 @@ handle_bmsg(struct mISDNchannel *ch, struct sk_buff *skb)
 				hc->chan[bch->slot].slot_rx,
 				hc->chan[bch->slot].bank_rx);
 			if (!ret) {
-				if (ch->protocol == ISDN_P_B_RAW && !hc->dtmf) {
+				if (ch->protocol == ISDN_P_B_RAW && !hc->dtmf
+ 				  && test_bit(HFC_CHIP_DTMF, &hc->chip)) {
 					/* start decoder */
 					hc->dtmf = 1;
 					if (debug & DEBUG_HFCMULTI_DTMF)
@@ -2945,7 +2954,7 @@ hfcm_bctrl(struct mISDNchannel *ch, u_int cmd, void *arg)
 			features.pcm_slots = hc->slots;
 			features.pcm_banks = 2;
 			if (test_bit(HFC_CHIP_DIGICARD, &hc->chip))
-				features.hfc_echocanhw=1;
+				features.hfc_echocanhw = 1;
 			nskb = create_link_skb(PH_CONTROL | CONFIRM,
 			    HW_FEATURES, sizeof(features), &features, 0);
 			if (!nskb)
@@ -4015,8 +4024,9 @@ hfcpci_init(struct pci_dev *pdev, const struct pci_device_id *ent)
 	/*
 	 * only first device gets timer interrupt, so the
 	 * others don't have to wait for it
+	 * anyway framing must be ignored if we start with a slave device
 	 */
-	if (HFC_cnt > 0)
+	if ((type[HFC_cnt] & 0x1000) && HFC_cnt > 0)
 		test_and_set_bit(HFC_CHIP_CLOCK_IGNORE, &hc->chip);
 #else
 	if (type[HFC_cnt] & 0x1000)
