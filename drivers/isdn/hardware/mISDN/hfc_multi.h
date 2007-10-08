@@ -143,7 +143,6 @@ struct hfc_multi {
 	u_int		pci_iobase; /* PCI IO (MUST BE BYTE POINTER) */
 #endif
 	struct hfcm_hw	hw;	/* remember data of write-only-registers */
-	u_char		e1_switch; /* last state of the switches */
 
 	u_long		chip;	/* chip configuration */
 	int		masterclk; /* port that provides master clock -1=off */

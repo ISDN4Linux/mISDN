@@ -144,12 +144,17 @@ static int t_int = 0; dont use single interrupt, read the warning above it!!!
 #define	VENDOR_BN	"beroNet GmbH"
 #define	VENDOR_DIG	"Digium Inc."
 #define VENDOR_JH	"Junghanns.NET GmbH"
+#define VENDOR_PRIM	"PrimuX"
 
 #ifndef CCAG_VID
 #define	CCAG_VID	0x1397	/* Cologne Chip Vendor ID */
 #define	HFC4S_ID	0x08B4
 #define	HFC8S_ID	0x16B8
 #define	HFCE1_ID	0x30B1
+#endif
+
+#ifndef PRIM_VID
+#define PRIM_VID	0x0301  /* PrimuX Vendor ID */
 #endif
 
 
@@ -963,12 +968,6 @@ hfcmulti_leds(struct hfc_multi *hc)
 		 * left red:       frame sync, but no L1
 		 * right green:    L2 active
 		 */
-		i = HFC_inb(hc, R_GPI_IN0) & 0xF0;
-		if (hc->e1_switch != i) {
-			hc->e1_switch = i;
-			hc->hw.r_tx0 &= ~V_OUT_EN;
-			HFC_outb(hc, R_TX0, hc->hw.r_tx0);
-		}
 		if (hc->chan[16].sync != 2) { /* no frame sync */
 			if (!test_bit(HFC_CFG_NTMODE, &hc->chan[16].cfg)) {
 				led[0] = led[1] = 1;
@@ -2213,10 +2212,10 @@ mode_hfcmulti(struct hfc_multi *hc, int ch, int protocol, int slot_tx,
 
 	if (debug & DEBUG_HFCMULTI_MODE)
 		printk(KERN_DEBUG
-		    "%s: channel %d protocol %x slot %d bank %d (TX) "
-		    "slot %d bank %d (RX)\n",
-		    __FUNCTION__, ch, protocol, slot_tx, bank_tx,
-		    slot_rx, bank_rx);
+		    "%s: card %d channel %d protocol %x slot old=%d new=%d bank new=%d (TX) "
+		    "slot old=%d new=%d bank new=%d (RX)\n",
+		    __FUNCTION__, hc->id, ch, protocol, oslot_tx, slot_tx, bank_tx,
+		    oslot_rx, slot_rx, bank_rx);
 
 	if (oslot_tx >= 0 && slot_tx != oslot_tx) {
 		/* remove from slot */
@@ -2231,7 +2230,7 @@ mode_hfcmulti(struct hfc_multi *hc, int ch, int protocol, int slot_tx,
 		} else {
 			if (debug & DEBUG_HFCMULTI_MODE)
 				printk(KERN_DEBUG
-				    "%s: we are not owner of this slot "
+				    "%s: we are not owner of this tx slot "
 				    "anymore, channel %d is.\n",
 				    __FUNCTION__, hc->slot_owner[oslot_tx<<1]);
 		}
@@ -2250,7 +2249,7 @@ mode_hfcmulti(struct hfc_multi *hc, int ch, int protocol, int slot_tx,
 		} else {
 			if (debug & DEBUG_HFCMULTI_MODE)
 				printk(KERN_DEBUG
-				    "%s: we are not owner of this slot "
+				    "%s: we are not owner of this rx slot "
 				    "anymore, channel %d is.\n",
 				    __FUNCTION__,
 				    hc->slot_owner[(oslot_rx << 1) | 1]);
@@ -2261,7 +2260,7 @@ mode_hfcmulti(struct hfc_multi *hc, int ch, int protocol, int slot_tx,
 		flow_tx = 0x80; /* FIFO->ST */
 		/* disable pcm slot */
 		hc->chan[ch].slot_tx = -1;
-		hc->chan[ch].bank_tx = 0;
+		hc->chan[ch].bank_tx = -1;
 	} else {
 		/* set pcm slot */
 		if (hc->chan[ch].txpending)
@@ -2273,9 +2272,9 @@ mode_hfcmulti(struct hfc_multi *hc, int ch, int protocol, int slot_tx,
 		if (conf >= 0 || bank_tx > 1)
 			routing = 0x40; /* loop */
 		if (debug & DEBUG_HFCMULTI_MODE)
-			printk(KERN_DEBUG "%s: put to slot %d bank %d flow "
-			    "%02x routing %02x conf %d (TX)\n",
-			    __FUNCTION__, slot_tx, bank_tx,
+			printk(KERN_DEBUG "%s: put channel %d to slot %d bank"
+			    "%d flow %02x routing %02x conf %d (TX)\n",
+			    __FUNCTION__, ch, slot_tx, bank_tx,
 			    flow_tx, routing, conf);
 		HFC_outb(hc, R_SLOT, slot_tx << 1);
 		HFC_outb(hc, A_SL_CFG, (ch<<1) | routing);
@@ -2288,7 +2287,7 @@ mode_hfcmulti(struct hfc_multi *hc, int ch, int protocol, int slot_tx,
 		/* disable pcm slot */
 		flow_rx = 0x80; /* ST->FIFO */
 		hc->chan[ch].slot_rx = -1;
-		hc->chan[ch].bank_rx = 0;
+		hc->chan[ch].bank_rx = -1;
 	} else {
 		/* set pcm slot */
 		if (hc->chan[ch].txpending)
@@ -2300,9 +2299,9 @@ mode_hfcmulti(struct hfc_multi *hc, int ch, int protocol, int slot_tx,
 		if (conf >= 0 || bank_rx > 1)
 			routing = 0x40; /* loop */
 		if (debug & DEBUG_HFCMULTI_MODE)
-			printk(KERN_DEBUG "%s: put to slot %d bank %d "
-			    "flow %02x routing %02x conf %d (RX)\n",
-			    __FUNCTION__, slot_rx, bank_rx,
+			printk(KERN_DEBUG "%s: put channel %d to slot %d bank"
+			    "%d flow %02x routing %02x conf %d (RX)\n",
+			    __FUNCTION__, ch, slot_rx, bank_rx,
 			    flow_rx, routing, conf);
 		HFC_outb(hc, R_SLOT, (slot_rx<<1) | V_SL_DIR);
 		HFC_outb(hc, A_SL_CFG, (ch<<1) | V_CH_DIR | routing);
@@ -2509,7 +2508,7 @@ hfcmulti_pcm(struct hfc_multi *hc, int ch, int slot_tx, int bank_tx,
 {
 	if (slot_rx < 0 || slot_rx < 0 || bank_tx < 0 || bank_rx < 0) {
 		/* disable PCM */
-		mode_hfcmulti(hc, ch, hc->chan[ch].protocol, -1, 0, -1, 0);
+		mode_hfcmulti(hc, ch, hc->chan[ch].protocol, -1, -1, -1, -1);
 		return;
 	}
 
@@ -2839,14 +2838,8 @@ deactivate_bchannel(struct bchannel *bch)
 	}
 	test_and_clear_bit(FLG_ACTIVE, &bch->Flags);
 	test_and_clear_bit(FLG_TX_BUSY, &bch->Flags);
-	hc->chan[bch->slot].slot_tx = -1;
-	hc->chan[bch->slot].slot_rx = -1;
 	hc->chan[bch->slot].conf = -1;
-	mode_hfcmulti(hc, bch->slot, ISDN_P_NONE,
-			hc->chan[bch->slot].slot_tx,
-			hc->chan[bch->slot].bank_tx,
-			hc->chan[bch->slot].slot_rx,
-			hc->chan[bch->slot].bank_rx);
+	mode_hfcmulti(hc, bch->slot, ISDN_P_NONE, -1, -1, -1, -1);
 	spin_unlock_irqrestore(&hc->lock, flags);
 }
 
@@ -3205,7 +3198,7 @@ hfcmulti_initmode(struct dchannel *dch)
 		hc->chan[16].slot_tx = -1;
 		hc->chan[16].slot_rx = -1;
 		hc->chan[16].conf = -1;
-		mode_hfcmulti(hc, 16, dch->dev.D.protocol, -1, 0, -1, 0);
+		mode_hfcmulti(hc, 16, dch->dev.D.protocol, -1, -1, -1, -1);
 		dch->timer.function = (void *) hfcmulti_dbusy_timer;
 		dch->timer.data = (long) dch;
 		init_timer(&dch->timer);
@@ -3216,7 +3209,7 @@ hfcmulti_initmode(struct dchannel *dch)
 			hc->chan[i + j].slot_tx = -1;
 			hc->chan[i + j].slot_rx = -1;
 			hc->chan[i + j].conf = -1;
-			mode_hfcmulti(hc, i + j, ISDN_P_NONE, -1, 0, -1, 0);
+			mode_hfcmulti(hc, i + j, ISDN_P_NONE, -1, -1, -1, -1);
 		}
 		/* E1 */
 		if (test_bit(HFC_CFG_REPORT_LOS, &hc->chan[16].cfg)) {
@@ -3303,18 +3296,18 @@ hfcmulti_initmode(struct dchannel *dch)
 		hc->chan[i].slot_tx = -1;
 		hc->chan[i].slot_rx = -1;
 		hc->chan[i].conf = -1;
-		mode_hfcmulti(hc, i, dch->dev.D.protocol, -1, 0, -1, 0);
+		mode_hfcmulti(hc, i, dch->dev.D.protocol, -1, -1, -1, -1);
 		dch->timer.function = (void *)hfcmulti_dbusy_timer;
 		dch->timer.data = (long) dch;
 		init_timer(&dch->timer);
 		hc->chan[i - 1].slot_tx = -1;
 		hc->chan[i - 1].slot_rx = -1;
 		hc->chan[i - 1].conf = -1;
-		mode_hfcmulti(hc, i - 1, ISDN_P_NONE, -1, 0, -1, 0);
+		mode_hfcmulti(hc, i - 1, ISDN_P_NONE, -1, -1, -1, -1);
 		hc->chan[i - 2].slot_tx = -1;
 		hc->chan[i - 2].slot_rx = -1;
 		hc->chan[i - 2].conf = -1;
-		mode_hfcmulti(hc, i - 2, ISDN_P_NONE, -1, 0, -1, 0);
+		mode_hfcmulti(hc, i - 2, ISDN_P_NONE, -1, -1, -1, -1);
 		/* ST */
 		port = hc->chan[i].port;
 		/* select interface */
@@ -4371,6 +4364,7 @@ static const struct hm_map hfcm_map[] =
 	{VENDOR_DIG, "HFC-4S Card", 4, 4, 2, 0, 2, 0, 0},
 	{VENDOR_CCD, "HFC-4S Swyx 4xS0 SX2 QuadBri", 4, 4, 2, 1, 2, 0, 0},
 	{VENDOR_JH, "HFC-4S (junghanns 2.0)", 4, 4, 2, 1, 2, 0, 0},
+	{VENDOR_PRIM, "HFC-2S Primux Card", 0, 2, 0, 0, 0, 0},
 
 	{VENDOR_BN, "HFC-8S Card", 8, 8, 2, 1, 0, 0, 0},
 	{VENDOR_BN, "HFC-8S Card (+)", 8, 8, 2, 1, 8, 0, DIP_8S},
@@ -4423,29 +4417,30 @@ static struct pci_device_id hfmultipci_ids[] __devinitdata = {
 	{ CCAG_VID, 0x08B4, CCAG_VID, 0xB540, 0, 0, H(9)}, /* 4S Swyx */
 	{ CCAG_VID, 0x08B4, CCAG_VID, 0xB550, 0, 0, H(10)},
 	    /* 4S junghanns 2.0 */
+	{ CCAG_VID, 0x08B4, CCAG_VID, 0x1234, 0, 0, H(11)}, /* Primux */
 
 	/* Cards with HFC-8S Chip */
-	{ CCAG_VID, 0x16B8, CCAG_VID, 0xB562, 0, 0, H(11)}, /* BN8S */
-	{ CCAG_VID, 0x16B8, CCAG_VID, 0xB56B, 0, 0, H(12)}, /* BN8S+ */
-	{ CCAG_VID, 0x16B8, CCAG_VID, 0x16B8, 0, 0, H(13)}, /* old Eval */
-	{ CCAG_VID, 0x16B8, CCAG_VID, 0xB521, 0, 0, H(14)},
+	{ CCAG_VID, 0x16B8, CCAG_VID, 0xB562, 0, 0, H(12)}, /* BN8S */
+	{ CCAG_VID, 0x16B8, CCAG_VID, 0xB56B, 0, 0, H(13)}, /* BN8S+ */
+	{ CCAG_VID, 0x16B8, CCAG_VID, 0x16B8, 0, 0, H(14)}, /* old Eval */
+	{ CCAG_VID, 0x16B8, CCAG_VID, 0xB521, 0, 0, H(15)},
 	    /* IOB8ST Recording */
-	{ CCAG_VID, 0x16B8, CCAG_VID, 0xB522, 0, 0, H(15)}, /* IOB8ST  */
-	{ CCAG_VID, 0x16B8, CCAG_VID, 0xB552, 0, 0, H(16)}, /* IOB8ST  */
-	{ CCAG_VID, 0x16B8, CCAG_VID, 0xB622, 0, 0, H(17)}, /* 8S */
+	{ CCAG_VID, 0x16B8, CCAG_VID, 0xB522, 0, 0, H(16)}, /* IOB8ST  */
+	{ CCAG_VID, 0x16B8, CCAG_VID, 0xB552, 0, 0, H(17)}, /* IOB8ST  */
+	{ CCAG_VID, 0x16B8, CCAG_VID, 0xB622, 0, 0, H(18)}, /* 8S */
 
 
 	/* Cards with HFC-E1 Chip */
-	{ CCAG_VID, 0x30B1, CCAG_VID, 0xB563, 0, 0, H(18)}, /* BNE1 */
-	{ CCAG_VID, 0x30B1, CCAG_VID, 0xB56A, 0, 0, H(19)}, /* BNE1 mini PCI */
-	{ CCAG_VID, 0x30B1, CCAG_VID, 0xB565, 0, 0, H(20)}, /* BNE1 + (Dual) */
-	{ CCAG_VID, 0x30B1, CCAG_VID, 0xB564, 0, 0, H(21)}, /* BNE1 (Dual) */
+	{ CCAG_VID, 0x30B1, CCAG_VID, 0xB563, 0, 0, H(19)}, /* BNE1 */
+	{ CCAG_VID, 0x30B1, CCAG_VID, 0xB56A, 0, 0, H(20)}, /* BNE1 mini PCI */
+	{ CCAG_VID, 0x30B1, CCAG_VID, 0xB565, 0, 0, H(21)}, /* BNE1 + (Dual) */
+	{ CCAG_VID, 0x30B1, CCAG_VID, 0xB564, 0, 0, H(22)}, /* BNE1 (Dual) */
 
-	{ CCAG_VID, 0x30B1, CCAG_VID, 0x30B1, 0, 0, H(22)}, /* Old Eval */
-	{ CCAG_VID, 0x30B1, CCAG_VID, 0xB523, 0, 0, H(23)}, /* IOB1E1 */
-	{ CCAG_VID, 0x30B1, CCAG_VID, 0xC523, 0, 0, H(24)}, /* E1 */
+	{ CCAG_VID, 0x30B1, CCAG_VID, 0x30B1, 0, 0, H(23)}, /* Old Eval */
+	{ CCAG_VID, 0x30B1, CCAG_VID, 0xB523, 0, 0, H(24)}, /* IOB1E1 */
+	{ CCAG_VID, 0x30B1, CCAG_VID, 0xC523, 0, 0, H(25)}, /* E1 */
 
-	{ 0x10B5, 0x9030, CCAG_VID, 0x3136, 0, 0, H(25)},
+	{ 0x10B5, 0x9030, CCAG_VID, 0x3136, 0, 0, H(26)},
 	    /* PLX PCI Bridge */
 	{ CCAG_VID, 0x08B4, PCI_ANY_ID, PCI_ANY_ID, 0, 0, 0},
 	{ CCAG_VID, 0x16B8, PCI_ANY_ID, PCI_ANY_ID, 0, 0, 0},
