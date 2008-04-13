@@ -1234,7 +1234,8 @@ hfcmulti_dtmf(struct hfc_multi *hc)
 		dp = (u_int *)skb_put(skb, sizeof(int));
 		*dp = DTMF_COEF;
 		memcpy(skb_put(skb, sizeof(coeff)), coeff, sizeof(coeff));
-		mISDN_HEAD_LEN(skb) = skb->len;
+#warning karsten: wozu ist das gut?
+//		mISDN_HEAD_LEN(skb) = skb->len;
 		if (debug & DEBUG_HFCMULTI_DTMF) {
 			printk("\n");
 			printk("%s: DTMF ready %08x %08x %08x %08x "

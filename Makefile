@@ -31,7 +31,7 @@ MISDN_CORE_SRC=$(MISDNDIR)/drivers/isdn/mISDN
 ########################################
 
 #CONFIGS+=CONFIG_MISDN_DRV=m 
-#CONFIGS+=CONFIG_MISDN_DSP=m 
+CONFIGS+=CONFIG_MISDN_DSP=m 
 CONFIGS+=CONFIG_MISDN_HFCMULTI=m 
 CONFIGS+=CONFIG_MISDN_HFCPCI=m
 #CONFIGS+=CONFIG_MISDN_HFCUSB=m
@@ -86,6 +86,8 @@ force:
 clean:
 	rm -rf drivers/isdn/hardware/mISDN/*.o
 	rm -rf drivers/isdn/hardware/mISDN/*.ko
+	rm -rf drivers/isdn/mISDN/*.o
+	rm -rf drivers/isdn/mISDN/*.ko
 	rm -rf *~
 	find . -iname ".*.cmd" -exec rm -rf {} \;
 	find . -iname ".*.d" -exec rm -rf {} \;
