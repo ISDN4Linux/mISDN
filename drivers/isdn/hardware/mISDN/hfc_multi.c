@@ -29,48 +29,42 @@
 
 /*
  * module parameters:
- * type:
- *	Value 1	= HFC-E1 (1 port) 0x01
- *	Value 4	= HFC-4S (4 ports) 0x04
- *	Value 8	= HFC-8S (8 ports) 0x08
- *	Bit 8	= uLaw (instead of aLaw)
- *	Bit 9	= Enable DTMF detection on all B-channels via hardware
- *	Bit 10	= spare
- *	Bit 11	= Set PCM bus into slave mode.
- *	Bit 12	= Ignore missing frame clock on PCM bus.
- *	Bit 13	= Use direct RX clock for PCM sync rather than PLL. (E1 only)
- *	Bit 14	= Use external ram (128K)
- *	Bit 15	= Use external ram (512K)
- *	Bit 16	= Use 64 timeslots instead of 32
- *	Bit 17	= Use 128 timeslots instead of anything else
- *	Bit 18	= Use crystal clock for PCM and E1, for autarc clocking.
- *	Bit 19	= Send the Watchdog a Signal (Dual E1 with Watchdog)
+ * type: (required for each card installed)
+ *	Bit 0-7   = 0x00001 = HFC-E1 (1 port)
+ * or	Bit 0-7   = 0x00004 = HFC-4S (4 ports)
+ * or	Bit 0-7   = 0x00008 = HFC-8S (8 ports)
+ *	Bit 8     = 0x00100 = uLaw (instead of aLaw)
+ *	Bit 9     = 0x00200 = Enable DTMF detection on all B-channels via hardware
+ *	Bit 10    = spare
+ *	Bit 11    = 0x00800 = Set PCM bus into slave mode.
+ *	Bit 12    = 0x01000 = Ignore missing frame clock on PCM bus.
+ *	Bit 13    = 0x02000 = Use direct RX clock for PCM sync rather than PLL. (E1 only)
+ *	Bit 14    = 0x04000 = Use external ram (128K)
+ *	Bit 15    = 0x08000 = Use external ram (512K)
+ *	Bit 16    = 0x10000 = Use 64 timeslots instead of 32
+ *	Bit 17    = 0x20000 = Use 128 timeslots instead of anything else
+ *	Bit 18    = 0x40000 = Use crystal clock for PCM and E1, for autarc clocking.
+ *	Bit 19    = 0x80000 = Send the Watchdog a Signal (Dual E1 with Watchdog)
+ * (all other bits are reserved and shall be 0)
+ *	example: 0x20204 one HFC-4S with dtmf detection and 128 timeslots on PCM bus (PCM master)
  *
- * protocol:
- *	NOTE: Must be given for all ports, not for the number of cards.
- *	HFC-4S/HFC-8S/HFC-E1 bits:
- * 	Bit 0-3 = protocol
- *	Bit 4	= NT-Mode
- *	Bit 5	= PTP (instead of multipoint)
- *
+ * port: (optional or required for all ports on all installed cards)
  *	HFC-4S/HFC-8S only bits:
- *	Bit 16	= Use master clock for this S/T interface (ony once per chip).
- *	Bit 17	= transmitter line setup (non capacitive mode) DONT CARE!
- *	Bit 18	= Disable E-channel. (No E-channel processing)
+ *	Bit 0	  = 0x001 = Use master clock for this S/T interface (ony once per chip).
+ *	Bit 1     = 0x002 = transmitter line setup (non capacitive mode) DONT CARE!
+ *	Bit 2     = 0x004 = Disable E-channel. (No E-channel processing)
+ *	example: 0x0001,0x0000,0x0000,0x0000 one HFC-4S with master clock received from port 1
  *
  *	HFC-E1 only bits:
- *	Bit 16	= interface: 0=copper, 1=optical
- *	Bit 17	= reserved (later for 32 B-channels transparent mode)
- *	Bit 18	= Report LOS
- *	Bit 19	= Report AIS
- *	Bit 20	= Report SLIP
- *	Bit 21-22 = elastic jitter buffer (1-3), Use 0 for default.
- *	Bit 23  = Turn off CRC-4 Multiframe Mode, use double frame mode instead.
+ *	Bit 0     = 0x001 = interface: 0=copper, 1=optical
+ *	Bit 1     = 0x002 = reserved (later for 32 B-channels transparent mode)
+ *	Bit 2     = 0x004 = Report LOS
+ *	Bit 3     = 0x008 = Report AIS
+ *	Bit 4     = 0x010 = Report SLIP
+ *	Bit 5     = 0x020 = Report RDI (not yet supported)
+ *	Bit 6-7   = 0x0X0 = elastic jitter buffer (1-3), Set both bits to 0 for default.
+ *	Bit 8     = 0x100 = Turn off CRC-4 Multiframe Mode, use double frame mode instead.
  * (all other bits are reserved and shall be 0)
- *
- * layermask:
- *	NOTE: Must be given for all ports, not for the number of cards.
- *	mask of layers to be used for D-channel stack
  *
  * debug:
  *	NOTE: only one debug value must be given for all cards
@@ -180,7 +174,8 @@ static u_char silence =	0xff;	/* silence by LAW */
  */
 
 static u_int	type[MAX_CARDS];
-static int	pcm[MAX_PORTS];
+static int	pcm[MAX_CARDS];
+static int	port[MAX_PORTS];
 static int	debug;
 static int	poll;
 static int	timer;
@@ -196,6 +191,7 @@ module_param(debug, uint, S_IRUGO | S_IWUSR);
 module_param(poll, uint, S_IRUGO | S_IWUSR);
 module_param(timer, uint, S_IRUGO | S_IWUSR);
 module_param_array(type, uint, NULL, S_IRUGO | S_IWUSR);
+module_param_array(port, uint, NULL, S_IRUGO | S_IWUSR);
 module_param_array(pcm, uint, NULL, S_IRUGO | S_IWUSR);
 #endif
 
@@ -3188,7 +3184,7 @@ hfcmulti_initmode(struct dchannel *dch)
 {
 	struct hfc_multi *hc = dch->hw;
 	BYTE		a_st_wr_state, r_e1_wr_sta;
-	int		i, j, port;
+	int		i, j, pt;
 
 	if (debug & DEBUG_HFCMULTI_INIT)
 		printk("%s: entered\n", __FUNCTION__);
@@ -3310,33 +3306,33 @@ hfcmulti_initmode(struct dchannel *dch)
 		hc->chan[i - 2].conf = -1;
 		mode_hfcmulti(hc, i - 2, ISDN_P_NONE, -1, -1, -1, -1);
 		/* ST */
-		port = hc->chan[i].port;
+		pt = hc->chan[i].port;
 		/* select interface */
-		HFC_outb(hc, R_ST_SEL, port);
+		HFC_outb(hc, R_ST_SEL, pt);
 		if (dch->dev.D.protocol == ISDN_P_NT_S0) {
 			if (debug & DEBUG_HFCMULTI_INIT)
 				printk(KERN_DEBUG 
 				    "%s: ST port %d is NT-mode\n",
-				    __FUNCTION__, port);
+				    __FUNCTION__, pt);
 			/* clock delay */
 			HFC_outb(hc, A_ST_CLK_DLY, CLKDEL_NT | 0x60);
 			a_st_wr_state = 1; /* G1 */
-			hc->hw.a_st_ctrl0[port] = V_ST_MD;
+			hc->hw.a_st_ctrl0[pt] = V_ST_MD;
 		} else {
 			if (debug & DEBUG_HFCMULTI_INIT)
 				printk(KERN_DEBUG
 				    "%s: ST port %d is TE-mode\n",
-				    __FUNCTION__, port);
+				    __FUNCTION__, pt);
 			/* clock delay */
 			HFC_outb(hc, A_ST_CLK_DLY, CLKDEL_TE);
 			a_st_wr_state = 2; /* F2 */
-			hc->hw.a_st_ctrl0[port] = 0;
+			hc->hw.a_st_ctrl0[pt] = 0;
 		}
 		if (!test_bit(HFC_CFG_NONCAP_TX, &hc->chan[i].cfg)) {
-			hc->hw.a_st_ctrl0[port] |= V_TX_LI;
+			hc->hw.a_st_ctrl0[pt] |= V_TX_LI;
 		}
 		/* line setup */
-		HFC_outb(hc, A_ST_CTRL0,  hc->hw.a_st_ctrl0[port]);
+		HFC_outb(hc, A_ST_CTRL0,  hc->hw.a_st_ctrl0[pt]);
 		/* disable E-channel */
 		if ((dch->dev.D.protocol == ISDN_P_NT_S0) ||
 		    test_bit(HFC_CFG_DIS_ECHANNEL, &hc->chan[i].cfg))
@@ -3347,7 +3343,7 @@ hfcmulti_initmode(struct dchannel *dch)
 		HFC_outb(hc, A_ST_WR_STATE, a_st_wr_state | V_ST_LD_STA);
 		udelay(6); /* wait at least 5,21us */
 		HFC_outb(hc, A_ST_WR_STATE, a_st_wr_state);
-		hc->hw.r_sci_msk |= 1 << port;
+		hc->hw.r_sci_msk |= 1 << pt;
 		/* state machine interrupts */
 		HFC_outb(hc, R_SCI_MSK, hc->hw.r_sci_msk);
 	}
@@ -3728,18 +3724,18 @@ setup_pci(struct hfc_multi *hc, struct pci_dev *pdev, const struct pci_device_id
 static void
 release_port(struct hfc_multi *hc, struct dchannel *dch)
 {
-	int	port, ci, i = 0;
+	int	pt, ci, i = 0;
 	u_long	flags;
 
 	if (debug & DEBUG_HFCMULTI_INIT)
 		printk(KERN_DEBUG "%s: entered\n", __FUNCTION__);
 
 	ci = dch->slot;
-	port= hc->chan[ci].port;
+	pt = hc->chan[ci].port;
 
-	if (port >= hc->ports) {
+	if (pt >= hc->ports) {
 		printk(KERN_WARNING "%s: ERROR port out of range (%d).\n",
-		     __FUNCTION__, port);
+		     __FUNCTION__, pt + 1);
 		return;
 	}
 
@@ -3747,11 +3743,11 @@ release_port(struct hfc_multi *hc, struct dchannel *dch)
 
 	if (debug & DEBUG_HFCMULTI_INIT)
 		printk(KERN_DEBUG "%s: releasing port=%d\n",
-		    __FUNCTION__, port);
+		    __FUNCTION__, pt + 1);
 
-	if (!hc->created[port]) {
+	if (!hc->created[pt]) {
 		printk(KERN_WARNING "%s: ERROR given stack is not"
-		    " used by card (port=%d).\n", __FUNCTION__, port);
+		    " used by card (port=%d).\n", __FUNCTION__, pt + 1);
 		spin_unlock_irqrestore(&hc->lock, flags);
 		return;
 	}
@@ -3799,7 +3795,7 @@ release_port(struct hfc_multi *hc, struct dchannel *dch)
 	mISDN_freedchannel(dch);
 	hc->chan[ci].dch = NULL;
 	kfree(dch);
-	hc->created[port] = 0;
+	hc->created[pt] = 0;
 
 	spin_unlock_irqrestore(&hc->lock, flags);
 }
@@ -3856,7 +3852,7 @@ release_card(struct hfc_multi *hc)
 }
 
 static int
-init_e1_port(struct hfc_multi *hc)
+init_e1_port(struct hfc_multi *hc, struct hm_map *m)
 {
 	struct	dchannel	*dch;
 	struct	bchannel	*bch;
@@ -3903,6 +3899,93 @@ init_e1_port(struct hfc_multi *hc)
 		hc->chan[i + ch].port = 0;
 		test_and_set_bit(bch->nr, (u_long *)dch->dev.channelmap);
 	}
+	/* set optical line type */
+	if (port[Port_cnt] & 0x001) {
+		if (!m->opticalsupport)  {
+			printk(KERN_INFO
+			    "This board has no optical "
+			    "support\n");
+		} else {
+			if (debug & DEBUG_HFCMULTI_INIT)
+				printk(KERN_DEBUG
+				    "%s: PROTOCOL set optical "
+				    "interfacs: card(%d) "
+				    "port(%d)\n",
+				    __FUNCTION__,
+				    HFC_cnt + 1, 1);
+			test_and_set_bit(HFC_CFG_OPTICAL,
+			    &hc->chan[16].cfg);
+		}
+	}
+	/* set LOS report */
+	if (port[Port_cnt] & 0x004) {
+		if (debug & DEBUG_HFCMULTI_INIT)
+			printk(KERN_DEBUG "%s: PROTOCOL set "
+			    "LOS report: card(%d) port(%d)\n",
+			    __FUNCTION__, HFC_cnt + 1, 1);
+		test_and_set_bit(HFC_CFG_REPORT_LOS,
+		    &hc->chan[16].cfg);
+	}
+	/* set AIS report */
+	if (port[Port_cnt] & 0x008) {
+		if (debug & DEBUG_HFCMULTI_INIT)
+			printk(KERN_DEBUG "%s: PROTOCOL set "
+			    "AIS report: card(%d) port(%d)\n",
+			    __FUNCTION__, HFC_cnt + 1, 1);
+		test_and_set_bit(HFC_CFG_REPORT_AIS,
+		    &hc->chan[16].cfg);
+	}
+	/* set SLIP report */
+	if (port[Port_cnt] & 0x010) {
+		if (debug & DEBUG_HFCMULTI_INIT)
+			printk(KERN_DEBUG
+			    "%s: PROTOCOL set SLIP report: "
+			    "card(%d) port(%d)\n",
+			    __FUNCTION__, HFC_cnt + 1, 1);
+		test_and_set_bit(HFC_CFG_REPORT_SLIP,
+		    &hc->chan[16].cfg);
+	}
+#if 0
+	/* set RDI report */
+	if (port[Port_cnt] & 0x020) {
+		if (debug & DEBUG_HFCMULTI_INIT)
+			printk(KERN_DEBUG
+			    "%s: PROTOCOL set RDI report: "
+			    "card(%d) port(%d)\n",
+			    __FUNCTION__, HFC_cnt + 1, 1);
+		test_and_set_bit(HFC_CFG_REPORT_RDI,
+		    &hc->chan[16].cfg);
+	}
+#endif
+	/* set elastic jitter buffer */
+	if (port[Port_cnt] & 0x0c0) {
+		if (debug & DEBUG_HFCMULTI_INIT)
+			printk(KERN_DEBUG
+			    "%s: PROTOCOL set elastic "
+			    "buffer to %d: card(%d) port(%d)\n",
+			    __FUNCTION__, hc->chan[ch].jitter,
+			    HFC_cnt + 1, 1);
+		hc->chan[16].jitter =
+		    (port[Port_cnt]>>6) & 0x3;
+	} else
+		hc->chan[ch].jitter = 2; /* default */
+	/* set CRC-4 Mode */
+	if (! (port[Port_cnt] & 0x100)) {
+		if (debug & DEBUG_HFCMULTI_INIT)
+			printk(KERN_DEBUG
+			    "%s: PROTOCOL turn on CRC4 report:"
+			    " card(%d) port(%d)\n",
+			    __FUNCTION__, HFC_cnt + 1, 1);
+		test_and_set_bit(HFC_CFG_CRC4,
+		    &hc->chan[16].cfg);
+		printk(KERN_DEBUG "%s: PROTOCOL turn on "
+		    "CRC4 report: card(%d) port(%d)\n",
+		    __FUNCTION__, HFC_cnt + 1, 1);
+	} else {
+		printk(KERN_DEBUG "%s: PROTOCOL turn off CRC4"
+		    " report: card(%d) port(%d)\n",
+		    __FUNCTION__, HFC_cnt + 1, 1);
+	}
 	ret = mISDN_register_device(&dch->dev);
 	if (ret)
 		goto free_chan;
@@ -3913,7 +3996,7 @@ free_chan:
 }
 
 static int
-init_multi_port(struct hfc_multi *hc, int port)
+init_multi_port(struct hfc_multi *hc, int pt)
 {
 	struct	dchannel	*dch;
 	struct	bchannel	*bch;
@@ -3931,12 +4014,12 @@ init_multi_port(struct hfc_multi *hc, int port)
 	dch->dev.D.send = handle_dmsg;
 	dch->dev.D.ctrl = hfcm_dctrl;
 	dch->dev.nrbchan = hc->mtyp->bchan;
-	i = port << 2;
+	i = pt << 2;
 	dch->slot = i + 2;
 	hc->chan[i + 2].dch = dch;
-	hc->chan[i + 2].port = port;
+	hc->chan[i + 2].port = pt;
 	hc->chan[i + 2].nt_timer = -1;
-	hc->created[port] = 1;
+	hc->created[pt] = 1;
 	for (ch = 0; ch < dch->dev.nrbchan; ch++) {
 		bch = kzalloc(sizeof(struct bchannel), GFP_KERNEL);
 		if (!bch) {
@@ -3955,9 +4038,67 @@ init_multi_port(struct hfc_multi *hc, int port)
 		bch->ch.nr = ch + 1;
 		list_add(&bch->ch.list, &dch->dev.bchannels);
 		hc->chan[i + ch + 1].bch = bch;
-		hc->chan[i + ch + 1].port = port;
+		hc->chan[i + ch + 1].port = pt;
 		test_and_set_bit(bch->nr, (u_long *)dch->dev.channelmap);
 	}
+	/* set master clock */
+	if (port[Port_cnt] & 0x001) {
+		if (debug & DEBUG_HFCMULTI_INIT)
+			printk(KERN_DEBUG
+			    "%s: PROTOCOL set master clock: "
+			    "card(%d) port(%d)\n",
+			    __FUNCTION__, HFC_cnt + 1, pt + 1);
+		if (test_bit(HFC_CFG_NTMODE,
+		    &hc->chan[i + 2].cfg)) {
+			printk(KERN_ERR "Error: Master clock "
+			    "for port(%d) of card(%d) is only"
+			    " possible with TE-mode\n",
+			    pt + 1, HFC_cnt + 1);
+			ret = -EINVAL;
+			goto free_chan;
+		}
+		if (hc->masterclk >= 0) {
+			printk(KERN_ERR "Error: Master clock "
+			    "for port(%d) of card(%d) already "
+			    "defined for port(%d)\n",
+			    pt + 1, HFC_cnt + 1, hc->masterclk+1);
+			ret = -EINVAL;
+			goto free_chan;
+		}
+		hc->masterclk = pt;
+	}
+	/* set transmitter line to non capacitive */
+	if (port[Port_cnt] & 0x002) {
+		if (debug & DEBUG_HFCMULTI_INIT)
+			printk(KERN_DEBUG
+			    "%s: PROTOCOL set non capacitive "
+			    "transmitter: card(%d) port(%d)\n",
+			    __FUNCTION__, HFC_cnt + 1, pt + 1);
+		test_and_set_bit(HFC_CFG_NONCAP_TX,
+		    &hc->chan[i + 2].cfg);
+	}
+	/* disable E-channel */
+	if (port[Port_cnt] & 0x004) {
+	if (debug & DEBUG_HFCMULTI_INIT)
+			printk(KERN_DEBUG
+			    "%s: PROTOCOL disable E-channel: "
+			    "card(%d) port(%d)\n",
+			    __FUNCTION__, HFC_cnt + 1, pt + 1);
+		test_and_set_bit(HFC_CFG_DIS_ECHANNEL,
+		    &hc->chan[i + 2].cfg);
+	}
+#if 0
+	/* register E-channel */
+	if (protocol[Port_cnt] & 0x008) {
+		if (debug & DEBUG_HFCMULTI_INIT)
+			printk(KERN_DEBUG
+			    "%s: PROTOCOL register E-channel: "
+			    "card(%d) port(%d)\n",
+			    __FUNCTION__, HFC_cnt + 1, pt + 1);
+		test_and_set_bit(HFC_CFG_REG_ECHANNEL,
+		    &hc->chan[i + 2].cfg);
+	}
+#endif
 	ret = mISDN_register_device(&dch->dev);
 	if (ret)
 		goto free_chan;
@@ -3977,6 +4118,11 @@ hfcpci_init(struct pci_dev *pdev, const struct pci_device_id *ent)
 	u_long		flags;
 	u_char		dips = 0, pmj = 0; /* dip settings, port mode Jumpers */
 
+	if (HFC_cnt >= MAX_CARDS) {
+		printk(KERN_ERR "too many cards (max=%d).\n",
+			MAX_CARDS);
+		return -EINVAL;
+	}
 	if (type[HFC_cnt] && (type[HFC_cnt] & 0xff) != m->type) {
 		printk(KERN_ERR "HFC-MULTI: Card '%s:%s' type %d found but"
 		    "type[%d] %d was supplied as module parameter\n",
@@ -4053,19 +4199,20 @@ hfcpci_init(struct pci_dev *pdev, const struct pci_device_id *ent)
 	}
 	for (pt = 0; pt < hc->ports; pt++) {
 		if (Port_cnt >= MAX_PORTS) {
-			printk(KERN_ERR "too many ports %d.\n", Port_cnt);
+			printk(KERN_ERR "too many ports (max=%d).\n",
+				MAX_PORTS);
 			ret_err = -EINVAL;
 			goto free_card;
 		}
 		if (hc->type == 1)
-			ret_err = init_e1_port(hc);
+			ret_err = init_e1_port(hc, m);
 		else
 			ret_err = init_multi_port(hc, pt);
 		if (debug & DEBUG_HFCMULTI_INIT)
 			printk(KERN_DEBUG
 			    "%s: Registering D-channel, card(%d) port(%d)"
 			    "result %d\n",
-			    __FUNCTION__, HFC_cnt, pt, ret_err);
+			    __FUNCTION__, HFC_cnt + 1, pt, ret_err);
 
 		if (ret_err) {
 			while (pt) { /* release already registered ports */
@@ -4076,6 +4223,7 @@ hfcpci_init(struct pci_dev *pdev, const struct pci_device_id *ent)
 			}
 			goto free_card;
 		}
+		Port_cnt++;
 	}
 
 	switch (m->dip_type) {
@@ -4148,186 +4296,6 @@ free_card:
 	release_io_hfcmulti(hc);
 	kfree(hc);		
 	return ret_err;
-#ifdef TODO
-		/* set protocol type */
-		if (protocol[port_idx] & 0x10) {
-			/* NT-mode */
-			chan->inst.pid.protocol[0] = (hc->type == 1) ?
-			    ISDN_PID_L0_NT_E1 : ISDN_PID_L0_NT_S0;
-			chan->inst.pid.protocol[1] = (hc->type == 1) ?
-			    ISDN_PID_L1_NT_E1 : ISDN_PID_L1_NT_S0;
-			pid.protocol[0] = (hc->type == 1) ?
-			    ISDN_PID_L0_NT_E1 : ISDN_PID_L0_NT_S0;
-			pid.protocol[1] = (hc->type == 1) ?
-			    ISDN_PID_L1_NT_E1 : ISDN_PID_L1_NT_S0;
-			chan->inst.pid.layermask |= ISDN_LAYER(1);
-			pid.layermask |= ISDN_LAYER(1);
-			if (layermask[port_idx] & ISDN_LAYER(2))
-				pid.protocol[2] = ISDN_PID_L2_LAPD_NET;
-			test_and_set_bit(HFC_CFG_NTMODE, &hc->chan[ch].cfg);
-		} else {
-			/* TE-mode */
-			chan->inst.pid.protocol[0] = (hc->type == 1) ?
-			    ISDN_PID_L0_TE_E1 : ISDN_PID_L0_TE_S0;
-			pid.protocol[0] = (hc->type == 1) ?
-			    ISDN_PID_L0_TE_E1 : ISDN_PID_L0_TE_S0;
-			if (hc->type == 1) {
-				/* own E1 for E1 */
-				chan->inst.pid.protocol[1] = ISDN_PID_L1_TE_E1;
-				pid.protocol[1] = ISDN_PID_L1_TE_E1;
-				chan->inst.pid.layermask |= ISDN_LAYER(1);
-				pid.layermask |= ISDN_LAYER(1);
-			}
-		}
-
-
-		if (hc->type != 1) {
-			/* S/T */
-			/* set master clock */
-			if (protocol[port_idx] & 0x10000) {
-				if (debug & DEBUG_HFCMULTI_INIT)
-					printk(KERN_DEBUG
-					    "%s: PROTOCOL set master clock: "
-					    "card(%d) port(%d)\n",
-					    __FUNCTION__, HFC_idx+1, pt);
-				if (test_bit(HFC_CFG_NTMODE,
-				    &hc->chan[ch].cfg)) {
-					printk(KERN_ERR "Error: Master clock "
-					    "for port(%d) of card(%d) is only"
-					    " possible with TE-mode\n",
-					    pt+1, HFC_idx+1);
-					ret_err = -EINVAL;
-					goto free_channels;
-				}
-				if (hc->masterclk >= 0) {
-					printk(KERN_ERR "Error: Master clock "
-					    "for port(%d) of card(%d) already "
-					    "defined for port(%d)\n",
-					    pt+1, HFC_idx+1, hc->masterclk+1);
-					ret_err = -EINVAL;
-					goto free_channels;
-				}
-				hc->masterclk = pt;
-			}
-
-			/* set transmitter line to non capacitive */
-			if (protocol[port_idx] & 0x20000) {
-				if (debug & DEBUG_HFCMULTI_INIT)
-					printk(KERN_DEBUG
-					    "%s: PROTOCOL set non capacitive "
-					    "transmitter: card(%d) port(%d)\n",
-					    __FUNCTION__, HFC_idx+1, pt);
-				test_and_set_bit(HFC_CFG_NONCAP_TX,
-				    &hc->chan[ch].cfg);
-			}
-
-			/* disable E-channel */
-			if (protocol[port_idx] & 0x40000) {
-				if (debug & DEBUG_HFCMULTI_INIT)
-					printk(KERN_DEBUG
-					    "%s: PROTOCOL disable E-channel: "
-					    "card(%d) port(%d)\n",
-					    __FUNCTION__, HFC_idx+1, pt);
-				test_and_set_bit(HFC_CFG_DIS_ECHANNEL,
-				    &hc->chan[ch].cfg);
-			}
-			/* register E-channel */
-			if (protocol[port_idx] & 0x80000) {
-				if (debug & DEBUG_HFCMULTI_INIT)
-					printk(KERN_DEBUG
-					    "%s: PROTOCOL register E-channel: "
-					    "card(%d) port(%d)\n",
-					    __FUNCTION__, HFC_idx+1, pt);
-				test_and_set_bit(HFC_CFG_REG_ECHANNEL,
-				    &hc->chan[ch].cfg);
-			}
-		} else {
-			/* E1 */
-			/* set optical line type */
-			if (protocol[port_idx] & 0x10000) {
-				if (!id_list[id_idx].opticalsupport)  {
-					printk(KERN_INFO
-					    "This board has no optical "
-					    "support\n");
-				} else {
-
-					if (debug & DEBUG_HFCMULTI_INIT)
-						printk(KERN_DEBUG
-						    "%s: PROTOCOL set optical "
-						    "interfacs: card(%d) "
-						    "port(%d)\n",
-						    __FUNCTION__,
-						    HFC_idx+1, pt);
-					test_and_set_bit(HFC_CFG_OPTICAL,
-					    &hc->chan[ch].cfg);
-				}
-			}
-
-			/* set LOS report */
-			if (protocol[port_idx] & 0x40000) {
-				if (debug & DEBUG_HFCMULTI_INIT)
-					printk(KERN_DEBUG "%s: PROTOCOL set "
-					    "LOS report: card(%d) port(%d)\n",
-					    __FUNCTION__, HFC_idx+1, pt);
-				test_and_set_bit(HFC_CFG_REPORT_LOS,
-				    &hc->chan[ch].cfg);
-			}
-
-			/* set AIS report */
-			if (protocol[port_idx] & 0x80000) {
-				if (debug & DEBUG_HFCMULTI_INIT)
-					printk(KERN_DEBUG "%s: PROTOCOL set "
-					    "AIS report: card(%d) port(%d)\n",
-					    __FUNCTION__, HFC_idx+1, pt);
-				test_and_set_bit(HFC_CFG_REPORT_AIS,
-				    &hc->chan[ch].cfg);
-			}
-
-			/* set SLIP report */
-			if (protocol[port_idx] & 0x100000) {
-				if (debug & DEBUG_HFCMULTI_INIT)
-					printk(KERN_DEBUG
-					    "%s: PROTOCOL set SLIP report: "
-					    "card(%d) port(%d)\n",
-					    __FUNCTION__, HFC_idx+1, pt);
-				test_and_set_bit(HFC_CFG_REPORT_SLIP,
-				    &hc->chan[ch].cfg);
-			}
-
-			/* set elastic jitter buffer */
-			if (protocol[port_idx] & 0x600000) {
-				if (debug & DEBUG_HFCMULTI_INIT)
-					printk(KERN_DEBUG
-					    "%s: PROTOCOL set elastic "
-					    "buffer to %d: card(%d) port(%d)\n",
-					    __FUNCTION__, hc->chan[ch].jitter,
-					    HFC_idx+1, pt);
-				hc->chan[ch].jitter =
-				    (protocol[port_idx]>>21) & 0x3;
-			} else
-				hc->chan[ch].jitter = 2; /* default */
-
-			/* set CRC-4 Mode */
-			if (! (protocol[port_idx] & 0x800000)) {
-				if (debug & DEBUG_HFCMULTI_INIT)
-					printk(KERN_DEBUG
-					    "%s: PROTOCOL turn on CRC4 report:"
-					    " card(%d) port(%d)\n",
-					    __FUNCTION__, HFC_idx+1, pt);
-				test_and_set_bit(HFC_CFG_CRC4,
-				    &hc->chan[ch].cfg);
-
-				printk(KERN_DEBUG "%s: PROTOCOL turn on "
-				    "CRC4 report: card(%d) port(%d)\n",
-				    __FUNCTION__, HFC_idx+1, pt);
-			} else {
-				printk(KERN_DEBUG "%s: PROTOCOL turn off CRC4"
-				    " report: card(%d) port(%d)\n",
-				    __FUNCTION__, HFC_idx+1, pt);
-			}
-
-		}
-#endif
 }
 
 static void __devexit hfc_remove_pci(struct pci_dev *pdev)
