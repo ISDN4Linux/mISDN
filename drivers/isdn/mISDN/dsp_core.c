@@ -173,9 +173,9 @@ MODULE_LICENSE("GPL");
 spinlock_t dsp_lock;
 struct list_head dsp_ilist;
 struct list_head conf_ilist;
-int dsp_debug;
-int dsp_options;
-int dsp_poll, dsp_tics;
+int dsp_debug = 0;
+int dsp_options = 0;
+int dsp_poll = 0, dsp_tics = 0;
 
 static int
 dsp_control_req(dsp_t *dsp, struct mISDNhead *hh, struct sk_buff *skb)
@@ -790,36 +790,53 @@ static struct Bprotocol DSP = {
 static int dsp_init(void)
 {
 	int err;
+	int tics;
 
 	printk(KERN_INFO "DSP modul %s\n", mISDN_dsp_revision);
 
 	dsp_options = options;
 	dsp_debug = debug;
 
-	if (poll == 0) {
-		if (HZ == 100)
-			poll = 80;
-		else
-			poll = 64;
-	}
-	if (poll > MAX_POLL) {
-		printk(KERN_ERR "%s: Wrong poll value (%d), using %d.\n", __FUNCTION__, poll, MAX_POLL);
-		poll = MAX_POLL;
-	}
-	if (poll < 8) {
-		printk(KERN_ERR "%s: Wrong poll value (%d), using 8.\n", __FUNCTION__, poll);
-		poll = 8;
-	}
+	/* set packet size */
 	dsp_poll = poll;
-	dsp_tics = poll * HZ / 8000;
-	if (dsp_tics * 8000 == poll * HZ) 
-		printk(KERN_INFO "mISDN_dsp: DSP clocks every %d samples. This equals %d jiffies.\n", poll, dsp_tics);
-	else {
-		printk(KERN_INFO "mISDN_dsp: Cannot clock ever %d samples. Use a multiple of %d (samples)\n", poll, 8000 / HZ);
+	if (dsp_poll) {
+		if (dsp_poll > MAX_POLL) {
+			printk(KERN_ERR "%s: Wrong poll value (%d), use %d maximum.\n", __FUNCTION__, poll, MAX_POLL);
+			err = -EINVAL;
+			return(err);
+		}
+		if (dsp_poll < 8) {
+			printk(KERN_ERR "%s: Wrong poll value (%d), use 8 minimum.\n", __FUNCTION__, dsp_poll);
+			err = -EINVAL;
+			return(err);
+		}
+		dsp_tics = poll * HZ / 8000;
+		if (dsp_tics * 8000 != poll * HZ) {
+			printk(KERN_INFO "mISDN_dsp: Cannot clock every %d samples (0,125 ms). It is not a multiple of %d HZ.\n", poll, HZ);
+			err = -EINVAL;
+			return(err);
+		}
+	} else {
+		poll = 8;
+		while(poll <= MAX_POLL)
+		{
+			tics = poll * HZ / 8000;
+			if (tics * 8000 == poll * HZ) {
+				dsp_tics = tics;
+				dsp_poll = poll;
+				if (poll >= 64)
+					break;
+			}
+			poll++;
+		}
+	}
+	if (dsp_poll == 0)
+	{
+		printk(KERN_INFO "mISDN_dsp: There is no multiple of kernel clock that equals exactly the duration of 8-256 samples. (Choose kernel clock speed like 100, 250, 300, 1000)\n");
 		err = -EINVAL;
 		return(err);
 	}
-
+	printk(KERN_INFO "mISDN_dsp: DSP clocks every %d samples. This equals %d jiffies.\n", poll, dsp_tics);
 	spin_lock_init(&dsp_lock);
 	INIT_LIST_HEAD(&dsp_ilist);
 	INIT_LIST_HEAD(&conf_ilist);
