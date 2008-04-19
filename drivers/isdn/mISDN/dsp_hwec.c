@@ -48,9 +48,9 @@ mISDN_dsp_element_t *dsp_hwec = &dsp_hwec_p;
 
 void dsp_hwec_enable (dsp_t *dsp, const char *arg)
 {
-	struct sk_buff *skb;
 	int deftaps = 128,
 		len;
+	struct mISDN_ctrl_req	cq;
 
 	if (!dsp) {
 		printk(KERN_ERR "%s: failed to enable hwec: dsp is NULL\n", __FUNCTION__);
@@ -90,19 +90,19 @@ void dsp_hwec_enable (dsp_t *dsp, const char *arg)
 
 _do:
 	printk(KERN_DEBUG "%s: enabling hwec with deftaps=%d\n", __FUNCTION__, deftaps);
-	skb = _alloc_mISDN_skb(PH_CONTROL_REQ, HW_ECHOCAN_ON, sizeof(deftaps), &deftaps, GFP_ATOMIC);
-	if (skb) {
-		if (dsp->ch.peer) {
-			if (dsp->ch.recv(dsp->ch.peer, skb))
-				dev_kfree_skb(skb);
-		} else
-			dev_kfree_skb(skb);
+	memset(&cq, 0, sizeof(cq));
+	cq.op = MISDN_CTRL_HFC_ECHOCAN_ON;
+	cq.p1 = deftaps;
+	if (!dsp->ch.peer->ctrl(&dsp->ch, CONTROL_CHANNEL, &cq)) {
+		printk(KERN_DEBUG "%s: CONTROL_CHANNEL failed\n",
+			__FUNCTION__);
+		return;
 	}
 }
 
 void dsp_hwec_disable (dsp_t *dsp)
 {
-	struct sk_buff *skb;
+	struct mISDN_ctrl_req	cq;
 
 	if (!dsp) {
 		printk(KERN_ERR "%s: failed to disable hwec: dsp is NULL\n", __FUNCTION__);
@@ -110,13 +110,12 @@ void dsp_hwec_disable (dsp_t *dsp)
 	}
 
 	printk(KERN_DEBUG "%s: disabling hwec\n", __FUNCTION__);
-	skb = _alloc_mISDN_skb(PH_CONTROL_REQ, HW_ECHOCAN_OFF, 0, NULL, GFP_ATOMIC);
-	if (skb) {
-		if (dsp->ch.peer) {
-			if (dsp->ch.recv(dsp->ch.peer, skb))
-				dev_kfree_skb(skb);
-		} else
-			dev_kfree_skb(skb);
+	memset(&cq, 0, sizeof(cq));
+	cq.op = MISDN_CTRL_HFC_ECHOCAN_OFF;
+	if (!dsp->ch.peer->ctrl(&dsp->ch, CONTROL_CHANNEL, &cq)) {
+		printk(KERN_DEBUG "%s: CONTROL_CHANNEL failed\n",
+			__FUNCTION__);
+		return;
 	}
 }
 

@@ -127,6 +127,7 @@
 
 #include <linux/delay.h>
 #include <linux/mISDNif.h>
+#include <linux/mISDNdsp.h>
 #include "core.h"
 #include "dsp.h"
 /*
@@ -351,21 +352,14 @@ static void
 dsp_cmx_hw_message(dsp_t *dsp, u32 message, u32 param1, u32 param2,
     u32 param3, u32 param4)
 {
-	struct sk_buff *nskb;
-	u32 param[4];
+	struct mISDN_ctrl_req cq;
 
-	param[0] = param1;
-	param[1] = param2;
-	param[2] = param3;
-	param[3] = param4;
-	nskb = _alloc_mISDN_skb(PH_CONTROL_REQ, message, sizeof(param), param, GFP_ATOMIC);
-	if (nskb) {
-		if (dsp->ch.peer) {
-			if (dsp->ch.recv(dsp->ch.peer, nskb))
-				dev_kfree_skb(nskb);
-		} else
-			dev_kfree_skb(nskb);
-	}
+	memset(&cq, 0, sizeof(cq));
+	cq.op = message;
+	cq.p1 = param1 | (param2 << 8);
+	cq.p2 = param2 | (param3 << 8);
+	if (dsp->ch.peer)
+		dsp->ch.peer->ctrl(&dsp->ch, CONTROL_CHANNEL, &cq);
 }
 
 
@@ -407,7 +401,7 @@ dsp_cmx_hardware(conference_t *conf, dsp_t *dsp)
 				    "%s removing %s from HFC conf %d "
 				    "because dsp is split\n", __FUNCTION__,
 				    dsp->name, dsp->hfc_conf);
-			dsp_cmx_hw_message(dsp, HW_CONF_SPLIT, 0, 0, 0, 0);
+			dsp_cmx_hw_message(dsp, MISDN_CTRL_HFC_CONF_SPLIT, 0, 0, 0, 0);
 			dsp->hfc_conf = -1;
 		}
 		if (!dsp->echo) {
@@ -419,7 +413,7 @@ dsp_cmx_hardware(conference_t *conf, dsp_t *dsp)
 					    " dsp is split (no echo)\n",
 					    __FUNCTION__, dsp->name,
 					    dsp->pcm_slot_tx, dsp->pcm_slot_rx);
-				dsp_cmx_hw_message(dsp, HW_PCM_DISC,
+				dsp_cmx_hw_message(dsp, MISDN_CTRL_HFC_PCM_DISC,
 				    0, 0, 0, 0);
 				dsp->pcm_slot_tx = -1;
 				dsp->pcm_bank_tx = -1;
@@ -442,7 +436,7 @@ dsp_cmx_hardware(conference_t *conf, dsp_t *dsp)
 				    "%s refresh %s for echo using slot %d\n",
 				    __FUNCTION__, dsp->name,
 				    dsp->pcm_slot_tx);
-			dsp_cmx_hw_message(dsp, HW_PCM_CONN, dsp->pcm_slot_tx,
+			dsp_cmx_hw_message(dsp, MISDN_CTRL_HFC_PCM_CONN, dsp->pcm_slot_tx,
 			    2, dsp->pcm_slot_rx, 2);
 			return;
 		}
@@ -484,7 +478,7 @@ dsp_cmx_hardware(conference_t *conf, dsp_t *dsp)
 			printk(KERN_DEBUG
 			    "%s assign echo for %s using slot %d\n",
 			    __FUNCTION__, dsp->name, dsp->pcm_slot_tx);
-		dsp_cmx_hw_message(dsp, HW_PCM_CONN, dsp->pcm_slot_tx, 2,
+		dsp_cmx_hw_message(dsp, MISDN_CTRL_HFC_PCM_CONN, dsp->pcm_slot_tx, 2,
 		    dsp->pcm_slot_rx, 2);
 		return;
 	}
@@ -527,7 +521,7 @@ dsp_cmx_hardware(conference_t *conf, dsp_t *dsp)
 						    __FUNCTION__,
 						    dsp->name,
 						    dsp->hfc_conf);
-					dsp_cmx_hw_message(dsp, HW_CONF_SPLIT,
+					dsp_cmx_hw_message(dsp, MISDN_CTRL_HFC_CONF_SPLIT,
 					    0, 0, 0, 0);
 					dsp->hfc_conf = -1;
 				}
@@ -543,7 +537,7 @@ dsp_cmx_hardware(conference_t *conf, dsp_t *dsp)
 						    dsp->name,
 						    dsp->pcm_slot_tx,
 						    dsp->pcm_slot_rx);
-					dsp_cmx_hw_message(dsp, HW_PCM_DISC,
+					dsp_cmx_hw_message(dsp, MISDN_CTRL_HFC_PCM_DISC,
 					    0, 0, 0, 0);
 					dsp->pcm_slot_tx = -1;
 					dsp->pcm_bank_tx = -1;
@@ -683,7 +677,7 @@ dsp_cmx_hardware(conference_t *conf, dsp_t *dsp)
 				    "two parties require only a PCM slot\n",
 				    __FUNCTION__, member->dsp->name,
 				    member->dsp->hfc_conf);
-			dsp_cmx_hw_message(member->dsp, HW_CONF_SPLIT,
+			dsp_cmx_hw_message(member->dsp, MISDN_CTRL_HFC_CONF_SPLIT,
 			    0, 0, 0, 0);
 			member->dsp->hfc_conf = -1;
 		}
@@ -694,7 +688,7 @@ dsp_cmx_hardware(conference_t *conf, dsp_t *dsp)
 				    "two parties require only a PCM slot\n",
 				    __FUNCTION__, nextm->dsp->name,
 				    nextm->dsp->hfc_conf);
-			dsp_cmx_hw_message(nextm->dsp, HW_CONF_SPLIT,
+			dsp_cmx_hw_message(nextm->dsp, MISDN_CTRL_HFC_CONF_SPLIT,
 			    0, 0, 0, 0);
 			nextm->dsp->hfc_conf = -1;
 		}
@@ -786,10 +780,10 @@ dsp_cmx_hardware(conference_t *conf, dsp_t *dsp)
 				    member->dsp->name,
 				    nextm->dsp->name,
 				    member->dsp->pcm_slot_tx);
-			dsp_cmx_hw_message(member->dsp, HW_PCM_CONN,
+			dsp_cmx_hw_message(member->dsp, MISDN_CTRL_HFC_PCM_CONN,
 			    member->dsp->pcm_slot_tx, member->dsp->pcm_bank_tx,
 			    member->dsp->pcm_slot_rx, member->dsp->pcm_bank_rx);
-			dsp_cmx_hw_message(nextm->dsp, HW_PCM_CONN,
+			dsp_cmx_hw_message(nextm->dsp, MISDN_CTRL_HFC_PCM_CONN,
 			    nextm->dsp->pcm_slot_tx, nextm->dsp->pcm_bank_tx,
 			    nextm->dsp->pcm_slot_rx, nextm->dsp->pcm_bank_rx);
 			conf->hardware = 1;
@@ -896,10 +890,10 @@ dsp_cmx_hardware(conference_t *conf, dsp_t *dsp)
 				    nextm->dsp->name,
 				    member->dsp->pcm_slot_tx,
 				    member->dsp->pcm_slot_rx);
-			dsp_cmx_hw_message(member->dsp, HW_PCM_CONN,
+			dsp_cmx_hw_message(member->dsp, MISDN_CTRL_HFC_PCM_CONN,
 			    member->dsp->pcm_slot_tx, member->dsp->pcm_bank_tx,
 			    member->dsp->pcm_slot_rx, member->dsp->pcm_bank_rx);
-			dsp_cmx_hw_message(nextm->dsp, HW_PCM_CONN,
+			dsp_cmx_hw_message(nextm->dsp, MISDN_CTRL_HFC_PCM_CONN,
 			    nextm->dsp->pcm_slot_tx, nextm->dsp->pcm_bank_tx,
 			    nextm->dsp->pcm_slot_rx, nextm->dsp->pcm_bank_rx);
 			conf->hardware = 1;
@@ -988,9 +982,9 @@ dsp_cmx_hardware(conference_t *conf, dsp_t *dsp)
 			member->dsp->pcm_bank_tx = 2; /* loop */
 			member->dsp->pcm_bank_rx = 2;
 			member->dsp->hfc_conf = current_conf;
-			dsp_cmx_hw_message(member->dsp, HW_PCM_CONN,
+			dsp_cmx_hw_message(member->dsp, MISDN_CTRL_HFC_PCM_CONN,
 			    i, 2, i, 2);
-			dsp_cmx_hw_message(member->dsp, HW_CONF_JOIN,
+			dsp_cmx_hw_message(member->dsp, MISDN_CTRL_HFC_CONF_JOIN,
 			    current_conf, 0, 0, 0);
 		}
 		return;
@@ -1472,7 +1466,7 @@ send_packet:
 		} else {
 			thh = mISDN_HEAD_P(nskb);
 			thh->prim = PH_CONTROL_IND;
-			thh->id = CMX_TX_DATA;
+			thh->id = DSP_TX_DATA;
 			memcpy(skb_put(txskb, len), nskb->data+preload, len);
 			if (dsp->up) {
 				if (dsp->up->send(dsp->up, txskb))

@@ -92,6 +92,7 @@
 #include <linux/pci.h>
 #include <linux/delay.h>
 #include <linux/mISDNhw.h>
+#include "linux/mISDNdsp.h"
 #include <linux/isdn_compat.h>
 
 // #define IRQCOUNT_DEBUG
@@ -516,14 +517,10 @@ vpm_echocan_on(struct hfc_multi *hc, int ch, int taps)
 
 	if (!bch)
 		return;
-#ifdef TODO
-#ifdef TXADJ
-	skb = create_link_skb(PH_CONTROL | INDICATION, VOL_CHANGE_TX,
-	    sizeof(int), &txadj, 0);
 
-	if (mISDN_queue_up(&bch->inst, 0, skb))
-		dev_kfree_skb(skb);
-#endif
+#ifdef TXADJ
+	_queue_data(bch->ch, PH_CONTROL_IND, HFC_VOL_CHANGE_TX, sizeof(int),
+		&txadj, GFP_KERNEL);
 #endif
 
 	timeslot = ((ch/4)*8) + ((ch%4)*4) + 1;
@@ -541,8 +538,9 @@ vpm_echocan_off(struct hfc_multi *hc, int ch)
 	unsigned int timeslot;
 	unsigned int unit;
 	struct bchannel *bch = hc->chan[ch].bch;
-//	struct sk_buff *skb;
+#ifdef TXADJ
 	int txadj = 0;
+#endif
 
 	if (hc->chan[ch].protocol != ISDN_P_B_RAW)
 		return;
@@ -550,13 +548,11 @@ vpm_echocan_off(struct hfc_multi *hc, int ch)
 	if (!bch)
 		return;
 
-#ifdef TODO
-	skb = create_link_skb(PH_CONTROL | INDICATION, VOL_CHANGE_TX,
-	    sizeof(int), &txadj, 0);
-
-	if (mISDN_queue_up(&bch->inst, 0, skb))
-		dev_kfree_skb(skb);
+#ifdef TXADJ
+	_queue_data(bch->ch, PH_CONTROL_IND, HFC_VOL_CHANGE_TX, sizeof(int),
+		&txadj, GFP_KERNEL);
 #endif
+
 	timeslot = ((ch/4)*8) + ((ch%4)*4) + 1;
 	unit = ch % 4;
 
@@ -1228,7 +1224,7 @@ hfcmulti_dtmf(struct hfc_multi *hc)
 		mISDN_HEAD_PRIM(skb) = PH_CONTROL_IND;
 		mISDN_HEAD_ID(skb) = MISDN_ID_ANY;
 		dp = (u_int *)skb_put(skb, sizeof(int));
-		*dp = DTMF_COEF;
+		*dp = DTMF_HFC_COEF;
 		memcpy(skb_put(skb, sizeof(coeff)), coeff, sizeof(coeff));
 #warning karsten: wozu ist das gut?
 //		mISDN_HEAD_LEN(skb) = skb->len;
@@ -2543,14 +2539,8 @@ hfcmulti_splloop(struct hfc_multi *hc, int ch, u_char *data, int len)
 
 	if (!bch)
 		return;
-	/* flush pending TX data */
-#warning since this will not ack data to the upper layer it will block dataflow forever 
-	if (bch->next_skb) {
-		test_and_clear_bit(FLG_TX_NEXT, &bch->Flags);
-		dev_kfree_skb(bch->next_skb);
-		bch->next_skb = NULL;
-	}
-	bch->tx_idx = 0;
+	/* flush and confirm pending TX data, if any */
+	get_next_bframe(bch);
 
 	/* prevent overflow */
 	if (len > hc->Zlen-1)
@@ -2896,6 +2886,32 @@ handle_bmsg(struct mISDNchannel *ch, struct sk_buff *skb)
 		if (!ret)
 			_queue_data(ch, PH_ACTIVATE_IND, MISDN_ID_ANY, 0, NULL, GFP_KERNEL);
 		break;
+	case PH_CONTROL_REQ:
+		spin_lock_irqsave(&hc->lock, flags);
+		switch (hh->id) {
+		case HFC_SPL_LOOP_ON: /* set sample loop */
+			if (debug & DEBUG_HFCMULTI_MSG)
+			printk(KERN_DEBUG
+			    "%s: HFC_SPL_LOOP_ON (len = %d)\n",
+			    __FUNCTION__, skb->len);
+			hfcmulti_splloop(hc, bch->slot, skb->data, skb->len);
+			ret = 0;
+			break;
+		case HFC_SPL_LOOP_OFF: /* set silence */
+			if (debug & DEBUG_HFCMULTI_MSG)
+				printk(KERN_DEBUG "%s: HFC_SPL_LOOP_OFF\n",
+				    __FUNCTION__);
+			hfcmulti_splloop(hc, bch->slot, NULL, 0);
+			ret = 0;
+			break;
+		default:
+			printk(KERN_ERR
+			     "%s: unknown PH_CONTROL_REQ info %x\n",
+			     __FUNCTION__, hh->id);
+			ret = -EINVAL;
+		}
+		spin_unlock_irqrestore(&hc->lock, flags);
+		break;
 	case PH_DEACTIVATE_REQ:
 		deactivate_bchannel(bch);
 		_queue_data(ch, PH_DEACTIVATE_IND, MISDN_ID_ANY, 0, NULL, GFP_KERNEL);
@@ -2911,10 +2927,110 @@ handle_bmsg(struct mISDNchannel *ch, struct sk_buff *skb)
  * bchannel control function
  */
 static int
+channel_bctrl(struct bchannel *bch, struct mISDN_ctrl_req *cq)
+{
+	int			ret = 0;
+	struct dsp_features	*features = (struct dsp_features *)cq->p1;
+	struct hfc_multi	*hc = bch->hw;
+	int			slot_tx;
+	int			bank_tx;
+	int			slot_rx;
+	int			bank_rx;
+	int			num;
+
+	switch(cq->op) {
+	case MISDN_CTRL_GETOP:
+		cq->op = MISDN_CTRL_HFC_OP | MISDN_CTRL_HW_FEATURES_OP;
+		break;
+	case MISDN_CTRL_HW_FEATURES: /* fill features structure */
+		if (debug & DEBUG_HFCMULTI_MSG)
+			printk(KERN_DEBUG "%s: HW_FEATURE request\n",
+			    __FUNCTION__);
+		/* create confirm */
+		features->hfc_id = hc->id;
+		if (test_bit(HFC_CHIP_DTMF, &hc->chip))
+			features->hfc_dtmf = 1;
+		features->hfc_loops = 0;
+		features->pcm_id = hc->pcm;
+		features->pcm_slots = hc->slots;
+		features->pcm_banks = 2;
+		if (test_bit(HFC_CHIP_DIGICARD, &hc->chip))
+			features->hfc_echocanhw = 1;
+		break;
+	case MISDN_CTRL_HFC_PCM_CONN: /* connect interface to pcm timeslot (0..N) */
+		slot_tx = cq->p1 | 0xff;
+		bank_tx = cq->p1 >> 8;
+		slot_rx = cq->p2 | 0xff;
+		bank_rx = cq->p2 >> 8;
+		if (debug & DEBUG_HFCMULTI_MSG)
+			printk(KERN_DEBUG
+			    "%s: HFC_PCM_CONN slot %d bank %d (TX) "
+			    "slot %d bank %d (RX)\n",
+			    __FUNCTION__, slot_tx, bank_tx,
+			    slot_rx, bank_rx);
+		if (slot_tx <= hc->slots && bank_tx <= 2 &&
+		    slot_rx <= hc->slots && bank_rx <= 2)
+			hfcmulti_pcm(hc, bch->slot,
+			    slot_tx, bank_tx, slot_rx, bank_rx);
+		else {
+			printk(KERN_WARNING
+			    "%s: HFC_PCM_CONN slot %d bank %d (TX) "
+			    "slot %d bank %d (RX) out of range\n",
+			    __FUNCTION__, slot_tx, bank_tx,
+			    slot_rx, bank_rx);
+			ret = -EINVAL;
+		}
+		break;
+	case MISDN_CTRL_HFC_PCM_DISC: /* release interface from pcm timeslot */
+		if (debug & DEBUG_HFCMULTI_MSG)
+			printk(KERN_DEBUG "%s: HFC_PCM_DISC\n",
+			    __FUNCTION__);
+		hfcmulti_pcm(hc, bch->slot, -1, -1, -1, -1);
+		break;
+	case MISDN_CTRL_HFC_CONF_JOIN: /* join conference (0..7) */
+		num = cq->p1 | 0xff;
+		if (debug & DEBUG_HFCMULTI_MSG)
+			printk(KERN_DEBUG "%s: HFC_CONF_JOIN conf %d\n",
+			    __FUNCTION__, num);
+		if (num <= 7)
+			hfcmulti_conf(hc, bch->slot, num);
+		else {
+			printk(KERN_WARNING
+			    "%s: HW_CONF_JOIN conf %d out of range\n",
+			    __FUNCTION__, num);
+			ret = -EINVAL;
+		}
+		break;
+	case MISDN_CTRL_HFC_CONF_SPLIT: /* split conference */
+		if (debug & DEBUG_HFCMULTI_MSG)
+			printk(KERN_DEBUG "%s: HFC_CONF_SPLIT\n", __FUNCTION__);
+		hfcmulti_conf(hc, bch->slot, -1);
+		break;
+	case MISDN_CTRL_HFC_ECHOCAN_ON:
+#ifdef B410P_CARD		
+		vpm_echocan_on(hc, bch->slot, cq->p1);
+#endif
+		break;
+
+	case MISDN_CTRL_HFC_ECHOCAN_OFF:
+#ifdef B410P_CARD		
+		vpm_echocan_off(hc, bch->slot);
+#endif
+		break;
+	default:
+		printk(KERN_WARNING "%s: unknown Op %x\n",
+		    __FUNCTION__, cq->op);
+		ret= -EINVAL;
+		break;
+	}
+	return ret;
+}
+
+static int
 hfcm_bctrl(struct mISDNchannel *ch, u_int cmd, void *arg)
 {
 	struct bchannel	*bch = container_of(ch, struct bchannel, ch);
-	int		ret = -EINVAL;
+	int		err = -EINVAL;
 
 	if (bch->debug & DEBUG_HW)
 		printk(KERN_DEBUG "%s: cmd:%x %p\n",
@@ -2927,137 +3043,16 @@ hfcm_bctrl(struct mISDNchannel *ch, u_int cmd, void *arg)
 		ch->protocol = ISDN_P_NONE;
 		ch->peer = NULL;
 		module_put(THIS_MODULE);
-		ret = 0;
+		err = 0;
 		break;
-#ifdef TODO
-		case HW_FEATURES: /* fill features structure */
-			if (debug & DEBUG_HFCMULTI_MSG)
-				printk(KERN_DEBUG "%s: HW_FEATURE request\n",
-				    __FUNCTION__);
-			/* create confirm */
-			memset(&features, 0, sizeof(features));
-			features.hfc_id = hc->id;
-			if (test_bit(HFC_CHIP_DTMF, &hc->chip))
-				features.hfc_dtmf = 1;
-			features.hfc_loops = 0;
-			features.pcm_id = hc->pcm;
-			features.pcm_slots = hc->slots;
-			features.pcm_banks = 2;
-			if (test_bit(HFC_CHIP_DIGICARD, &hc->chip))
-				features.hfc_echocanhw = 1;
-			nskb = create_link_skb(PH_CONTROL | CONFIRM,
-			    HW_FEATURES, sizeof(features), &features, 0);
-			if (!nskb)
-				break;
-			ret = 0;
-			/* send confirm */
-			if (mISDN_queue_up(&ch->inst, 0, nskb))
-				dev_kfree_skb(nskb);
-			break;
-		case HW_PCM_CONN: /* connect interface to pcm timeslot (0..N) */
-			if (skb->len < 4*sizeof(s32)) {
-				printk(KERN_WARNING
-				    "%s: HW_PCM_CONN lacks parameters\n",
-				    __FUNCTION__);
-				break;
-			}
-			slot_tx = ((s32 *)skb->data)[0];
-			bank_tx = ((s32 *)skb->data)[1];
-			slot_rx = ((s32 *)skb->data)[2];
-			bank_rx = ((s32 *)skb->data)[3];
-			if (debug & DEBUG_HFCMULTI_MSG)
-				printk(KERN_DEBUG
-				    "%s: HW_PCM_CONN slot %d bank %d (TX) "
-				    "slot %d bank %d (RX)\n",
-				    __FUNCTION__, slot_tx, bank_tx,
-				    slot_rx, bank_rx);
-			if (slot_tx <= hc->slots && bank_tx <= 2 &&
-			    slot_rx <= hc->slots && bank_rx <= 2)
-				hfcmulti_pcm(hc, ch->channel,
-				    slot_tx, bank_tx, slot_rx, bank_rx);
-			else
-				printk(KERN_WARNING
-				    "%s: HW_PCM_CONN slot %d bank %d (TX) "
-				    "slot %d bank %d (RX) out of range\n",
-				    __FUNCTION__, slot_tx, bank_tx,
-				    slot_rx, bank_rx);
-			ret = 0;
-			break;
-		case HW_PCM_DISC: /* release interface from pcm timeslot */
-			if (debug & DEBUG_HFCMULTI_MSG)
-				printk(KERN_DEBUG "%s: HW_PCM_DISC\n",
-				    __FUNCTION__);
-			hfcmulti_pcm(hc, ch->channel, -1, -1, -1, -1);
-			ret = 0;
-			break;
-		case HW_CONF_JOIN: /* join conference (0..7) */
-			if (skb->len < sizeof(u32)) {
-				printk(KERN_WARNING
-				    "%s: HW_CONF_JOIN lacks parameters\n",
-				    __FUNCTION__);
-				break;
-			}
-			num = ((u32 *)skb->data)[0];
-			if (debug & DEBUG_HFCMULTI_MSG)
-				printk(KERN_DEBUG "%s: HW_CONF_JOIN conf %ld\n",
-				    __FUNCTION__, num);
-			if (num <= 7) {
-				hfcmulti_conf(hc, ch->channel, num);
-				ret = 0;
-			} else
-				printk(KERN_WARNING
-				    "%s: HW_CONF_JOIN conf %ld out of range\n",
-				    __FUNCTION__, num);
-			break;
-		case HW_CONF_SPLIT: /* split conference */
-			if (debug & DEBUG_HFCMULTI_MSG)
-				printk(KERN_DEBUG "%s: HW_CONF_SPLIT\n",
-				    __FUNCTION__);
-			hfcmulti_conf(hc, ch->channel, -1);
-			ret = 0;
-			break;
-		case HW_SPL_LOOP_ON: /* set sample loop */
-			if (debug & DEBUG_HFCMULTI_MSG)
-				printk(KERN_DEBUG
-				    "%s: HW_SPL_LOOP_ON (len = %d)\n",
-				    __FUNCTION__, skb->len);
-			hfcmulti_splloop(hc, ch->channel, skb->data, skb->len);
-			ret = 0;
-			break;
-		case HW_SPL_LOOP_OFF: /* set silence */
-			if (debug & DEBUG_HFCMULTI_MSG)
-				printk(KERN_DEBUG "%s: HW_SPL_LOOP_OFF\n",
-				    __FUNCTION__);
-			hfcmulti_splloop(hc, ch->channel, NULL, 0);
-			ret = 0;
-			break;
-
-		case HW_ECHOCAN_ON:
-			if (skb->len < sizeof(u32)) {
-				printk(KERN_WARNING
-				    "%s: HW_ECHOCAN_ON lacks parameters\n",
-				    __FUNCTION__);
-			}
-
-			taps = ((u32 *)skb->data)[0];
-#ifdef B410P_CARD		
-			vpm_echocan_on(hc, ch->channel, taps);
-#endif
-			ret = 0;
-			break;
-
-		case HW_ECHOCAN_OFF:
-#ifdef B410P_CARD		
-			vpm_echocan_off(hc, ch->channel);
-#endif
-			ret = 0;
-			break;
-#endif
+	case CONTROL_CHANNEL:
+		err = channel_bctrl(bch, arg);
+		break;
 	default:
 		printk(KERN_WARNING "%s: unknown prim(%x)\n",
 			__FUNCTION__, cmd);
 	}
-	return ret;
+	return err;
 }
 
 /*
@@ -3353,24 +3348,6 @@ hfcmulti_initmode(struct dchannel *dch)
 
 
 static int
-channel_ctrl(struct dchannel *dch, struct mISDN_ctrl_req *cq)
-{
-	int	ret = 0;
-
-	switch(cq->op) {
-	case MISDN_CTRL_GETOP:
-		cq->op = 0; // TODO
-		break;
-	default:
-		printk(KERN_WARNING "%s: unknown Op %x\n",
-		    __FUNCTION__, cq->op);
-		ret= -EINVAL;
-		break;
-	}
-	return ret;
-}
-
-static int
 open_dchannel(struct hfc_multi *hc, struct dchannel *dch,
     struct channel_req *rq)
 {
@@ -3443,6 +3420,24 @@ open_bchannel(struct hfc_multi *hc, struct dchannel *dch,
  * device control function
  */
 static int
+channel_dctrl(struct dchannel *dch, struct mISDN_ctrl_req *cq)
+{
+	int	ret = 0;
+
+	switch(cq->op) {
+	case MISDN_CTRL_GETOP:
+		cq->op = 0; // TODO
+		break;
+	default:
+		printk(KERN_WARNING "%s: unknown Op %x\n",
+		    __FUNCTION__, cq->op);
+		ret= -EINVAL;
+		break;
+	}
+	return ret;
+}
+
+static int
 hfcm_dctrl(struct mISDNchannel *ch, u_int cmd, void *arg)
 {
 	struct mISDNdevice	*dev = container_of(ch, struct mISDNdevice, D);
@@ -3471,7 +3466,7 @@ hfcm_dctrl(struct mISDNchannel *ch, u_int cmd, void *arg)
 		module_put(THIS_MODULE);
 		break;
 	case CONTROL_CHANNEL:
-		err = channel_ctrl(dch, arg);
+		err = channel_dctrl(dch, arg);
 		break;
 	default:
 		if (dch->debug & DEBUG_HW)

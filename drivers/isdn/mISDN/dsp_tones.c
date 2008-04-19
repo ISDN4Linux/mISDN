@@ -10,6 +10,7 @@
  */
 
 #include <linux/mISDNif.h>
+#include <linux/mISDNdsp.h>
 #include "core.h"
 #include "dsp.h"
 
@@ -432,7 +433,7 @@ dsp_tone_hw_message(dsp_t *dsp, u8 *sample, int len)
 	struct sk_buff *nskb;
 
 	/* unlocking is not required, because we don't expect a response */
-	nskb = _alloc_mISDN_skb(PH_CONTROL_REQ, (len)?HW_SPL_LOOP_ON:HW_SPL_LOOP_OFF,
+	nskb = _alloc_mISDN_skb(PH_CONTROL_REQ, (len)?HFC_SPL_LOOP_ON:HFC_SPL_LOOP_OFF,
 		len, sample, GFP_ATOMIC);
 	if (nskb) {
 		if (dsp->ch.peer) {
