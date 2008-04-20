@@ -2073,7 +2073,7 @@ setup_card(struct hfc_pci *card)
 	card->dch.dev.nrbchan = 2;
 	for (i=0; i<2; i++) {
 		card->bch[i].nr = i + 1;
-		test_and_set_bit(i + 1, (u_long *)card->dch.dev.channelmap);
+		test_and_set_bit(i + 1, &card->dch.dev.channelmap[0]);
 		card->bch[i].debug = debug;
 		mISDN_initbchannel(&card->bch[i], MAX_DATA_MEM);
 		card->bch[i].hw = card;

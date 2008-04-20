@@ -1138,7 +1138,7 @@ dsp_cmx_receive(dsp_t *dsp, struct sk_buff *skb)
 	 * also add delay if requested by PH_SIGNAL
 	 */
 	if (dsp->rx_W < 0) {
-		if (dsp->features.has_jitter) {
+		if (dsp->features.unordered) {
 			dsp->rx_R = (hh->id & CMX_BUFF_MASK);
 			dsp->rx_W = (dsp->rx_R+dsp->cmx_delay) & CMX_BUFF_MASK;
 		} else {
@@ -1147,9 +1147,9 @@ dsp_cmx_receive(dsp_t *dsp, struct sk_buff *skb)
 		}
 	}
 	/* if frame contains time code, write directly */
-	if (dsp->features.has_jitter) {
+	if (dsp->features.unordered) {
 		dsp->rx_W = (hh->id & CMX_BUFF_MASK);
-#warning remove me
+#warning remove me when reordering is debugged
 		printk(KERN_DEBUG "%s %08x\n", dsp->name, hh->id);
 	}
 	/*

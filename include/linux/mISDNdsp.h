@@ -28,7 +28,8 @@ struct dsp_features {
 	int		pcm_id; /* unique id to identify the pcm bus (or -1) */
 	int		pcm_slots; /* number of slots on the pcm bus */
 	int		pcm_banks; /* number of IO banks of pcm bus */
-	int		has_jitter; /* data is jittered and unsorted */
+	int		has_jitter; /* data is jittered */
+	int		unordered; /* data is unordered */
 };		
 
 #endif
