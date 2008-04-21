@@ -935,10 +935,65 @@ channel_dctrl(struct dchannel *dch, struct mISDN_ctrl_req *cq)
 }
 
 static int
+open_dchannel(l1oip_t *hc, struct dchannel *dch, struct channel_req *rq)
+{
+	if (debug & DEBUG_HW_OPEN)
+		printk(KERN_DEBUG "%s: dev(%d) open from %p\n", __FUNCTION__,
+		    dch->dev.id, __builtin_return_address(0));
+	if (rq->protocol == ISDN_P_NONE)
+		return -EINVAL;
+	if ((dch->dev.D.protocol != ISDN_P_NONE) &&
+	    (dch->dev.D.protocol != rq->protocol)) {
+		printk(KERN_WARNING "%s: change protocol %x to %x\n",
+		    __FUNCTION__, dch->dev.D.protocol, rq->protocol);
+	}
+	if (dch->dev.D.protocol != rq->protocol) { 
+		dch->dev.D.protocol = rq->protocol;
+	}
+	
+	if (test_bit(FLG_ACTIVE, &dch->Flags)) {
+		_queue_data(&dch->dev.D, PH_ACTIVATE_IND, MISDN_ID_ANY,
+		    0,NULL, GFP_KERNEL);
+	}
+	rq->ch = &dch->dev.D;
+	if (!try_module_get(THIS_MODULE))
+		printk(KERN_WARNING "%s:cannot get module\n", __FUNCTION__);
+	return 0;
+}
+
+static int
+open_bchannel(l1oip_t *hc, struct dchannel *dch, struct channel_req *rq)
+{
+	struct bchannel	*bch;
+	int		ch;	
+
+	if (!test_bit(rq->adr.channel & 0x1f,
+		&dch->dev.channelmap[rq->adr.channel >> 5]))
+		return -EINVAL;
+	if (rq->protocol == ISDN_P_NONE)
+		return -EINVAL;
+	ch = rq->adr.channel; /* BRI: 1=B1 2=B2 3=D */
+	bch = hc->chan[ch].bch;
+	if (!bch) {
+		printk(KERN_ERR "%s:internal error ch %d has no bch\n",
+		    __FUNCTION__, ch);
+		return -EINVAL;  
+	}
+	if (test_and_set_bit(FLG_OPEN, &bch->Flags))
+		return -EBUSY; /* b-channel can be only open once */
+	bch->ch.protocol = rq->protocol;
+	rq->ch = &bch->ch;
+	if (!try_module_get(THIS_MODULE))
+		printk(KERN_WARNING "%s:cannot get module\n", __FUNCTION__);
+	return 0;
+}
+
+static int
 l1oip_dctrl(struct mISDNchannel *ch, u_int cmd, void *arg)
 {
 	struct mISDNdevice	*dev = container_of(ch, struct mISDNdevice, D);
 	struct dchannel		*dch = container_of(dev, struct dchannel, dev);
+	l1oip_t			*hc = dch->hw;
 	struct channel_req	*rq;
 	int			err = 0;
 
@@ -948,17 +1003,13 @@ l1oip_dctrl(struct mISDNchannel *ch, u_int cmd, void *arg)
 	switch (cmd) {
 	case OPEN_CHANNEL:
 		rq = arg;
-		if (debug & DEBUG_HW_OPEN)
-			printk(KERN_DEBUG "%s: dev(%d) open from %p\n",
-				__FUNCTION__, dch->dev.id,
-				__builtin_return_address(0));
-		if (rq->protocol == ISDN_P_NONE)
-			return -EINVAL;
-		dch->dev.D.protocol = rq->protocol;
-		rq->ch = &dch->dev.D;
-		if (!try_module_get(THIS_MODULE))
-			printk(KERN_WARNING "%s:cannot get module\n",
-				__FUNCTION__);
+		if ((rq->protocol == ISDN_P_TE_S0) ||
+		    (rq->protocol == ISDN_P_NT_S0) ||
+		    (rq->protocol == ISDN_P_TE_E1) ||
+		    (rq->protocol == ISDN_P_NT_E1))
+			err = open_dchannel(hc, dch, rq);
+		else
+			err = open_bchannel(hc, dch, rq); 
 		break;
 	case CLOSE_CHANNEL:
 		if (debug & DEBUG_HW_OPEN)
@@ -1281,7 +1332,10 @@ init_card(l1oip_t *hc, int pri, int bundle)
 	dch->debug = debug;
 	mISDN_initdchannel(dch, MAX_DFRAME_LEN_L1, NULL);
 	dch->hw = hc;
-	dch->dev.Dprotocols = (1 << ISDN_P_TE_S0) | (1 << ISDN_P_NT_S0);
+	if (pri)
+		dch->dev.Dprotocols = (1 << ISDN_P_TE_E1) | (1 << ISDN_P_NT_E1);
+	else
+		dch->dev.Dprotocols = (1 << ISDN_P_TE_S0) | (1 << ISDN_P_NT_S0);
 	dch->dev.Bprotocols = (1 << (ISDN_P_B_RAW & ISDN_P_B_MASK)) |
 	    (1 << (ISDN_P_B_HDLC & ISDN_P_B_MASK)); 
 	dch->dev.D.send = handle_dmsg;
@@ -1413,5 +1467,4 @@ l1oip_init(void)
 module_init(l1oip_init);
 module_exit(l1oip_cleanup);
 #endif
-
 

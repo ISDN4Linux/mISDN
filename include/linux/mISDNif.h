@@ -213,6 +213,8 @@
 #define ISDN_P_BASE		0
 #define ISDN_P_TE_S0		0x01
 #define ISDN_P_NT_S0  		0x02
+#define ISDN_P_TE_E1		0x03
+#define ISDN_P_NT_E1  		0x04
 #define ISDN_P_LAPD_TE		0x10
 #define	ISDN_P_LAPD_NT		0x11	
 

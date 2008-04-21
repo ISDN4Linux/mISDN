@@ -3185,7 +3185,7 @@ hfcmulti_initmode(struct dchannel *dch)
 		printk("%s: entered\n", __FUNCTION__);
 
 	if (hc->type == 1) {
-		if (dch->dev.D.protocol == ISDN_P_NT_S0)
+		if (dch->dev.D.protocol == ISDN_P_NT_E1)
 			test_and_set_bit(HFC_CFG_NTMODE, &hc->chan[16].cfg);
 		hc->chan[16].slot_tx = -1;
 		hc->chan[16].slot_rx = -1;
@@ -3255,7 +3255,7 @@ hfcmulti_initmode(struct dchannel *dch)
 				HFC_outb(hc, R_SYNC_CTRL, V_SYNC_OFFS);
 			}
 		}
-		if (dch->dev.D.protocol == ISDN_P_NT_S0) {
+		if (dch->dev.D.protocol == ISDN_P_NT_E1) {
 			if (debug & DEBUG_HFCMULTI_INIT)
 				printk(KERN_DEBUG "%s: E1 port is NT-mode\n",
 				    __FUNCTION__);
@@ -3374,7 +3374,9 @@ open_dchannel(struct hfc_multi *hc, struct dchannel *dch,
 	}
 	
 	if (((rq->protocol == ISDN_P_NT_S0) && (dch->state == 3)) ||
-	    ((rq->protocol == ISDN_P_TE_S0) && (dch->state == 7))) {
+	    ((rq->protocol == ISDN_P_TE_S0) && (dch->state == 7)) ||
+	    ((rq->protocol == ISDN_P_NT_E1) && (dch->state == 1)) ||
+	    ((rq->protocol == ISDN_P_TE_E1) && (dch->state == 1))) {
 		_queue_data(&dch->dev.D, PH_ACTIVATE_IND, MISDN_ID_ANY,
 		    0,NULL, GFP_KERNEL);
 	}
@@ -3453,7 +3455,9 @@ hfcm_dctrl(struct mISDNchannel *ch, u_int cmd, void *arg)
 	case OPEN_CHANNEL:
 		rq = arg;
 		if ((rq->protocol == ISDN_P_TE_S0) ||
-		    (rq->protocol == ISDN_P_NT_S0))
+		    (rq->protocol == ISDN_P_NT_S0) ||
+		    (rq->protocol == ISDN_P_TE_E1) ||
+		    (rq->protocol == ISDN_P_NT_E1))
 			err = open_dchannel(hc, dch, rq);
 		else
 			err = open_bchannel(hc, dch, rq); 
@@ -3859,7 +3863,7 @@ init_e1_port(struct hfc_multi *hc, struct hm_map *m)
 	dch->debug = debug;
 	mISDN_initdchannel(dch, MAX_DFRAME_LEN_L1, ph_state_change);
 	dch->hw = hc;
-	dch->dev.Dprotocols = (1 << ISDN_P_TE_S0) | (1 << ISDN_P_NT_S0);
+	dch->dev.Dprotocols = (1 << ISDN_P_TE_E1) | (1 << ISDN_P_NT_E1);
 	dch->dev.Bprotocols = (1 << (ISDN_P_B_RAW & ISDN_P_B_MASK)) |
 	    (1 << (ISDN_P_B_HDLC & ISDN_P_B_MASK)); 
 	dch->dev.D.send = handle_dmsg;
