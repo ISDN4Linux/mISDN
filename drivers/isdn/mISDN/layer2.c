@@ -1930,13 +1930,20 @@ l2_send(struct mISDNchannel *ch, struct sk_buff *skb)
 //			break;
 		case PH_ACTIVATE_IND:
 			test_and_set_bit(FLG_L1_ACTIV, &l2->flag);
+			l2up_create(l2, MPH_ACTIVATE_IND, 0, NULL);
 			if (test_and_clear_bit(FLG_ESTAB_PEND, &l2->flag))
 				ret = mISDN_FsmEvent(&l2->l2m,
 				    EV_L2_DL_ESTABLISH_REQ, skb);
 			break;
 		case PH_DEACTIVATE_IND:
 			test_and_clear_bit(FLG_L1_ACTIV, &l2->flag);
+			l2up_create(l2, MPH_DEACTIVATE_IND, 0, NULL);
 			ret = mISDN_FsmEvent(&l2->l2m, EV_L1_DEACTIVATE, skb);
+			break;
+		case MPH_INFORMATION_IND:
+			if (!l2->up)
+				break;
+			ret = l2->up->send(l2->up, skb);
 			break;
 		case DL_DATA_REQ:
 			ret = mISDN_FsmEvent(&l2->l2m, EV_L2_DL_DATA, skb);
@@ -2089,7 +2096,10 @@ create_l2(struct mISDNchannel *ch, u_int protocol, u_int options, u_long arg)
 		l2->T200 = 1000;
 		l2->N200 = 3;
 		l2->T203 = 10000;
-		rq.protocol = ISDN_P_NT_S0;
+		if (options & OPTION_L2_PMX)
+			rq.protocol = ISDN_P_NT_E1;
+		else
+			rq.protocol = ISDN_P_NT_S0;
 		rq.adr.channel = 0;
 		l2->ch.st->dev->D.ctrl(&l2->ch.st->dev->D, OPEN_CHANNEL, &rq);
 		break;
@@ -2112,7 +2122,10 @@ create_l2(struct mISDNchannel *ch, u_int protocol, u_int options, u_long arg)
 		l2->T200 = 1000;
 		l2->N200 = 3;
 		l2->T203 = 10000;
-		rq.protocol = ISDN_P_TE_S0;
+		if (options & OPTION_L2_PMX)
+			rq.protocol = ISDN_P_TE_E1;
+		else
+			rq.protocol = ISDN_P_TE_S0;
 		rq.adr.channel = 0;
 		l2->ch.st->dev->D.ctrl(&l2->ch.st->dev->D, OPEN_CHANNEL, &rq);
 		break;

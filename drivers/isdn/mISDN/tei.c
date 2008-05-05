@@ -784,7 +784,8 @@ create_new_tei(struct manager *mgr, int tei)
 		return NULL;
 	if (tei < 64)
 		test_and_set_bit(OPTION_L2_FIXEDTEI, &opt);
-	if (mgr->ch.st->dev->nrbchan > 2)
+	if (mgr->ch.st->dev->Dprotocols
+	  & ((1 << ISDN_P_TE_E1) | (1 << ISDN_P_NT_E1)))
 		test_and_set_bit(OPTION_L2_PMX, &opt);
 	l2 = create_l2(mgr->up, ISDN_P_LAPD_NT, (u_int)opt, (u_long)tei);
 	if (!l2) {
@@ -1006,7 +1007,8 @@ create_teimgr(struct manager *mgr, struct channel_req *crq)
 		if (crq->protocol == ISDN_P_LAPD_TE)
 			test_and_set_bit(MGR_OPT_USER, &mgr->options);
 	}
-	if (mgr->ch.st->dev->nrbchan > 2)
+	if (mgr->ch.st->dev->Dprotocols
+	  & ((1 << ISDN_P_TE_E1) | (1 << ISDN_P_NT_E1)))
 		test_and_set_bit(OPTION_L2_PMX, &opt);
 	if ((crq->protocol == ISDN_P_LAPD_NT) && (crq->adr.tei == 127)) {
 		mgr->up = crq->ch;

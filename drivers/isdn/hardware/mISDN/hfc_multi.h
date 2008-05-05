@@ -7,7 +7,7 @@ typedef unsigned short WORD;
 typedef unsigned long DWORD;
 
 
-/* If you want to use Memory Access instead of IO Access uncoment the following line*/
+/* If you want to use Memory Access instead of IO Access uncoment the following line or by kernel option */
 //#define CONFIG_HFCMULTI_PCIMEM
 
 /*
@@ -99,15 +99,15 @@ struct hfcm_hw {
 #define	HFC_CHIP_EXRAM_512	1 /* external ram 256k */
 #define	HFC_CHIP_REVISION0	2 /* old fifo handling */
 #define	HFC_CHIP_PCM_SLAVE	3 /* PCM is slave */
-#define	HFC_CHIP_CLOCK_IGNORE	4 /* ignore missing PCM clock */
-#define	HFC_CHIP_RX_SYNC	5 /* ignore missing PCM clock */
+#define	HFC_CHIP_PCM_MASTER	4 /* PCM is master */
+#define	HFC_CHIP_RX_SYNC	5 /* disable pll sync for pcm */
 #define	HFC_CHIP_DTMF		6 /* DTMF decoding is enabled */
 #define	HFC_CHIP_ULAW		7 /* ULAW mode */
 #define	HFC_CHIP_CLOCK2		8 /* double clock mode */
 #define	HFC_CHIP_CRYSTAL_CLOCK	9 /* autarc clocking mode */
 #define	HFC_CHIP_WATCHDOG	10 /* whether we should send signals */
 					/* to the watchdog */
-#define	HFC_CHIP_DIGICARD	11 /* whether we have a b410p with echocan in */
+#define	HFC_CHIP_B410P		11 /* whether we have a b410p with echocan in */
 					/* hw */
 
 /* table entry in the PCI devices list */
@@ -116,7 +116,6 @@ struct hm_map {
 	char *card_name;
 	int type;
 	int ports;
-	int bchan;
 	int clock2;
 	int leds;
 	int opticalsupport;
@@ -1019,8 +1018,7 @@ struct hfc_register_names {
 	{"R_TX_FR2",		0x2E},
 	{"R_JATT_ATT",		0x2F},
 	{"A_ST_xx_STA/R_RX_OFF", 0x30},
-	{"A_ST_CTRL0",		0x31},
-	{"R_SYNC_OUT",		0x31},
+	{"A_ST_CTRL0/R_SYNC_OUT",0x31},
 	{"A_ST_CTRL1",		0x32},
 	{"A_ST_CTRL2",		0x33},
 	{"A_ST_SQ_WR",		0x34},
@@ -1193,7 +1191,7 @@ HFC_inw_(struct hfc_multi *a, int b)
 #else /* HFC_REGISTER_MAP */
 
 #define HFC_outb(a, b, c) _HFC_outb(a, b, c, __FUNCTION__, __LINE__)
-static BYTE _HFC_outb(struct hfc_multi *a, BYTE b, BYTE c, char *function, int line)
+static BYTE _HFC_outb(struct hfc_multi *a, BYTE b, BYTE c, const char *function, int line)
 {
 	char regname[256] = "", bits[9] = "xxxxxxxx";
 	int i;
@@ -1215,16 +1213,16 @@ static BYTE _HFC_outb(struct hfc_multi *a, BYTE b, BYTE c, char *function, int l
 	bits[1] = '0'+(!!(c&64));
 	bits[0] = '0'+(!!(c&128));
 	printk(KERN_DEBUG
-	    "HFC_outb(\"%s\", %02x=%s, 0x%02x=%s); in %s() line %d\n",
-	    a->name, b, regname, c, bits, function, line);
+	    "HFC_outb(chip %d, %02x=%s, 0x%02x=%s); in %s() line %d\n",
+	    a->id, b, regname, c, bits, function, line);
 	return (*(((volatile u_char *)a->pci_membase)+b) = c);
 }
 #define HFC_inb(a, b) _HFC_inb(a, b, __FUNCTION__, __LINE__)
 static BYTE
-_HFC_inb(struct hfc_multi *a, BYTE b, char *function, int line)
+_HFC_inb(struct hfc_multi *a, BYTE b, const char *function, int line)
 {
 	char regname[256] = "", bits[9] = "xxxxxxxx";
-	u_char c = (*(((volatile u_char *)a->pci_membase)+((b)*ADDR_MULT));
+	u_char c = (*(((volatile u_char *)a->pci_membase)+((b)*ADDR_MULT)));
 	int i;
 
 	i = 0;
@@ -1246,12 +1244,12 @@ _HFC_inb(struct hfc_multi *a, BYTE b, char *function, int line)
 	bits[1] = '0'+(!!(c&64));
 	bits[0] = '0'+(!!(c&128));
 	printk(KERN_DEBUG
-	    "HFC_inb(\"%s\", %02x=%s) = 0x%02x=%s; in %s() line %d\n",
-	    a->name, b, regname, c, bits, function, line);
+	    "HFC_inb(chip %d, %02x=%s) = 0x%02x=%s; in %s() line %d\n",
+	    a->id, b, regname, c, bits, function, line);
 	return (c);
 }
 #define HFC_inw(a, b) _HFC_inw(a, b, __FUNCTION__, __LINE__)
-static WORD _HFC_inw(struct hfc_multi *a, BYTE b, char *function, int line)
+static WORD _HFC_inw(struct hfc_multi *a, BYTE b, const char *function, int line)
 {
 	char regname[256] = "";
 	u_short c = (*(((volatile u_short *)a->pci_membase)+((b)*ADDR_MULT)));
@@ -1268,15 +1266,15 @@ static WORD _HFC_inw(struct hfc_multi *a, BYTE b, char *function, int line)
 		strcpy(regname, "register");
 
 	printk(KERN_DEBUG
-	    "HFC_inw(\"%s\", %02x=%s) = 0x%04x; in %s() line %d\n",
-	    a->name, b, regname, c, function, line);
+	    "HFC_inw(chip %d, %02x=%s) = 0x%04x; in %s() line %d\n",
+	    a->id, b, regname, c, function, line);
 	return (c);
 }
 #define HFC_wait(a) _HFC_wait(a, __FUNCTION__, __LINE__)
-static void _HFC_wait(struct hfc_multi *a, char *function, int line)
+static void _HFC_wait(struct hfc_multi *a, const char *function, int line)
 {
-	printk(KERN_DEBUG "HFC_wait(\"%s\"); in %s() line %d\n",
-	    a->name, function, line);
+	printk(KERN_DEBUG "HFC_wait(chip %d); in %s() line %d\n",
+	    a->id, function, line);
 	while ((*(((volatile u_char *)a->pci_membase)+R_STATUS)) & V_BUSY);
 }
 

@@ -438,7 +438,7 @@ get_features(struct mISDNchannel *ch)
 	}
 	memset(&cq, 0, sizeof(cq));
 	cq.op = MISDN_CTRL_GETOP;
-	if (!ch->peer->ctrl(ch, CONTROL_CHANNEL, &cq)) {
+	if (ch->peer->ctrl(ch->peer, CONTROL_CHANNEL, &cq) < 0) {
 		printk(KERN_DEBUG "%s: CONTROL_CHANNEL failed\n",
 			__FUNCTION__);
 		return;
@@ -451,7 +451,7 @@ get_features(struct mISDNchannel *ch)
 	}
 	cq.op = MISDN_CTRL_HW_FEATURES;
 	cq.p1 = (int)&dsp->features;
-	if (!ch->peer->ctrl(ch, CONTROL_CHANNEL, &cq)) {
+	if (!ch->peer->ctrl(ch->peer, CONTROL_CHANNEL, &cq)) {
 		printk(KERN_DEBUG "%s: 2nd CONTROL_CHANNEL failed\n",
 			__FUNCTION__);
 		return;
@@ -578,6 +578,7 @@ dsp_function(struct mISDNchannel *ch,  struct sk_buff *skb)
 			ret = -EINVAL;
 		}
 		break;
+	case (PH_ACTIVATE_IND):
 	case (PH_ACTIVATE_CNF):
 		if (dsp_debug & DEBUG_DSP_CORE)
 			printk(KERN_DEBUG "%s: b_channel is now active %s\n", __FUNCTION__, dsp->name);
@@ -599,6 +600,7 @@ dsp_function(struct mISDNchannel *ch,  struct sk_buff *skb)
 		else
 			dev_kfree_skb(skb);
 		break;
+	case (PH_DEACTIVATE_IND):
 	case (PH_DEACTIVATE_CNF):
 		if (dsp_debug & DEBUG_DSP_CORE)
 			printk(KERN_DEBUG "%s: b_channel is now inactive %s\n", __FUNCTION__, dsp->name);
@@ -743,6 +745,7 @@ dspcreate(struct channel_req *crq)
 		printk(KERN_ERR "%s: vmalloc dsp_t failed\n", __FUNCTION__);
 		return(-ENOMEM);
 	}
+	memset(ndsp, 0, sizeof(dsp_t));
 #endif
 	if (dsp_debug & DEBUG_DSP_CTRL)
 		printk(KERN_DEBUG "%s: creating new dsp instance\n", __FUNCTION__);
@@ -760,7 +763,7 @@ dspcreate(struct channel_req *crq)
 	dsp_pipeline_init(&ndsp->pipeline);
 
 	sprintf(ndsp->name, "DSP_S%x/C%x",
-		crq->ch->st->dev->id, crq->ch->nr);
+		ndsp->up->st->dev->id, ndsp->up->nr);
 	/* set frame size to start */
 	ndsp->features.hfc_id = -1; /* current PCM id */
 	ndsp->features.pcm_id = -1; /* current PCM id */

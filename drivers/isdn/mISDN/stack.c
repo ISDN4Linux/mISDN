@@ -426,6 +426,8 @@ connect_layer1(struct mISDNdevice *dev, struct mISDNchannel *ch,
 	switch(protocol) {
 	case ISDN_P_NT_S0:
 	case ISDN_P_TE_S0:
+	case ISDN_P_NT_E1:
+	case ISDN_P_TE_E1:
 		if (dev->D.protocol && dev->D.protocol != protocol)
 			return -EINVAL;
 	 	ch->recv = mISDN_queue_message;
@@ -517,9 +519,13 @@ create_l2entity(struct mISDNdevice *dev, struct mISDNchannel *ch,
 			adr->dev, adr->channel, adr->sapi,
 			adr->tei);
 	rq.protocol = ISDN_P_TE_S0;
+	if (dev->Dprotocols & (1 << ISDN_P_TE_E1))
+		rq.protocol = ISDN_P_TE_E1;
 	switch(protocol) {
 	case ISDN_P_LAPD_NT:
 		rq.protocol = ISDN_P_NT_S0;
+		if (dev->Dprotocols & (1 << ISDN_P_NT_E1))
+			rq.protocol = ISDN_P_NT_E1;
 	case ISDN_P_LAPD_TE:
 	 	ch->recv = mISDN_queue_message;
 	 	ch->peer = &dev->D.st->own;
@@ -572,6 +578,8 @@ delete_channel(struct mISDNchannel *ch)
 	switch(ch->protocol) {
 	case ISDN_P_NT_S0:
 	case ISDN_P_TE_S0:
+	case ISDN_P_NT_E1:
+	case ISDN_P_TE_E1:
 		write_lock_bh(&ch->st->l1sock.lock);
 		sk_del_node_init(&msk->sk);
 		write_unlock_bh(&ch->st->l1sock.lock);

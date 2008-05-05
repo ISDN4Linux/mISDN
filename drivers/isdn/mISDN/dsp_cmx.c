@@ -1212,7 +1212,6 @@ dsp_cmx_receive(dsp_t *dsp, struct sk_buff *skb)
 static void
 dsp_cmx_send_member(dsp_t *dsp, int len, s32 *c, int members)
 {
-	int dinfo = 0;
 	conference_t *conf = dsp->conf;
 	dsp_t *member, *other;
 	register s32 sample;
@@ -1257,14 +1256,14 @@ dsp_cmx_send_member(dsp_t *dsp, int len, s32 *c, int members)
 	}
 	hh = mISDN_HEAD_P(nskb);
 	hh->prim = PH_DATA_REQ;
-	hh->id = dinfo;
+	hh->id = 0;
 	dsp->last_tx = 1;
 
 	/* set pointers, indexes and stuff */
 	member = dsp;
 	p = dsp->tx_buff; /* transmit data */
 	q = dsp->rx_buff; /* received data */
-	d = skb_put(nskb, len + preload); /* result */
+	d = skb_put(nskb, preload + len); /* result */
 	t = dsp->tx_R; /* tx-pointers */
 	tt = dsp->tx_W;
 	r = dsp->rx_R; /* rx-pointers */
@@ -1273,7 +1272,7 @@ dsp_cmx_send_member(dsp_t *dsp, int len, s32 *c, int members)
 	/* preload with silence, if required */
 	if (preload) {
 		memset(d, dsp_silence, preload);
-		d += len;
+		d += preload;
 	}
 
 	/* PROCESS TONES/TX-DATA ONLY */
@@ -1740,3 +1739,4 @@ dsp_cmx_transmit(dsp_t *dsp, struct sk_buff *skb)
 	}
 
 }
+

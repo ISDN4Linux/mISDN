@@ -12,11 +12,11 @@
 #define DEBUG_DSP_CTRL		0x0001
 #define DEBUG_DSP_CORE		0x0002
 #define DEBUG_DSP_DTMF		0x0004
-#define DEBUG_DSP_DTMFCOEFF	0x0008
 #define DEBUG_DSP_CMX		0x0010
 #define DEBUG_DSP_TONE		0x0020
 #define DEBUG_DSP_BLOWFISH	0x0040
-#define DEBUG_DSP_DELAY		0x0080
+#define DEBUG_DSP_DELAY		0x0100
+#define DEBUG_DSP_DTMFCOEFF	0x8000 /* heavy output */
 
 /* options may be:
  *

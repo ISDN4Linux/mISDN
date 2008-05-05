@@ -1529,6 +1529,23 @@ deactivate_bchannel(struct bchannel *bch)
  * Layer 1 B-channel hardware access
  */
 static int
+channel_bctrl(struct bchannel *bch, struct mISDN_ctrl_req *cq)
+{
+	int			ret = 0;
+
+	switch(cq->op) {
+	case MISDN_CTRL_GETOP:
+		cq->op = 0;
+		break;
+	default:
+		printk(KERN_WARNING "%s: unknown Op %x\n",
+		    __FUNCTION__, cq->op);
+		ret= -EINVAL;
+		break;
+	}
+	return ret;
+}
+static int
 hfc_bctrl(struct mISDNchannel *ch, u_int cmd, void *arg)
 {
 	struct bchannel	*bch = container_of(ch, struct bchannel, ch);
@@ -1556,6 +1573,9 @@ hfc_bctrl(struct mISDNchannel *ch, u_int cmd, void *arg)
 		ch->peer = NULL;
 		module_put(THIS_MODULE);
 		ret = 0;
+		break;
+	case CONTROL_CHANNEL:
+		ret = channel_bctrl(bch, arg);
 		break;
 	default:
 		printk(KERN_WARNING "%s: unknown prim(%x)\n",
