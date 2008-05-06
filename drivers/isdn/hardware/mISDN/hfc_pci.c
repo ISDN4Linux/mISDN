@@ -1693,6 +1693,10 @@ hfcpci_l2l1B(struct mISDNchannel *ch, struct sk_buff *skb)
 		if (ret > 0) { /* direct TX */
 			hfcpci_fill_fifo(bch);
 			spin_unlock_irqrestore(&hc->lock, flags);
+#warning KARSTEN: in hfcpci_fill_fifo wird der tx_skb freigegeben.
+#warning 1. hh->id is dann nicht mehr valide, somal der confirm gerade allokierit wird
+#warning 2. sollte das freigeben nicht heir stattfinden, wie im tx_birq, wenn der fifo komplett gesendet wurde?
+#warning ich würde vorschlagen: freigabe erfolgt bevor get_next_Xframe() im jeweiligen *fill_fifo. dann muss man aber dies auch im dchannel machen. dann kann das freigeben auch aus dem tx_Xirq raus.
 			queue_ch_frame(ch, PH_DATA_CNF, hh->id, NULL);
 			ret = 0;
 		} else

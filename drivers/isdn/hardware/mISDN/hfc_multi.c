@@ -1334,9 +1334,11 @@ hfcmulti_tx(struct hfc_multi *hc, int ch)
 	int Zspace, z1, z2;
 	int Fspace, f1, f2;
 	BYTE *d;
-	int txpending, slot_tx;
+	int *txpending, slot_tx;
 	struct	bchannel *bch;
-	struct  dchannel *dch;	
+	struct  dchannel *dch;
+	struct  sk_buff **sp = NULL;
+	int *idxp;
 
 	bch = hc->chan[ch].bch;
 	dch = hc->chan[ch].dch;
@@ -1347,36 +1349,39 @@ hfcmulti_tx(struct hfc_multi *hc, int ch)
 	// printk(KERN_DEBUG "txf12:%x %x\n",f1,f2);
 	/* get skb, fifo & mode */
 
-	txpending = hc->chan[ch].txpending;
+	txpending = &hc->chan[ch].txpending;
 	slot_tx = hc->chan[ch].slot_tx;
-	if (dch)
-		len = dch->tx_skb ? dch->tx_skb->len : 0;
-	else
-		len = bch->tx_skb ? bch->tx_skb->len : 0;
+	if (dch) {
+		sp = &dch->tx_skb;
+		idxp = &dch->tx_idx;
+	} else {
+		sp = &bch->tx_skb;
+		idxp = &bch->tx_idx;
+	}
+	if (*sp)
+		len = (*sp)->len;
 
-	if ((!len) && txpending != 1)
+	if ((!len) && *txpending != 1)
 		return; /* no data */
 
-	// printk("debug: data: len = %d, txpending = %d!!!!\n",
-	// *len, txpending);
+	// printk("debug: data: len = %d, *txpending = %d!!!!\n",
+	// *len, *txpending);
 	/* lets see how much data we will have left in buffer */
 	if (test_bit(HFC_CHIP_B410P, &hc->chip) &&
 	    (hc->chan[ch].protocol == ISDN_P_B_RAW) &&
 	    (hc->chan[ch].slot_rx < 0) &&
-	    (hc->chan[ch].bank_rx == 0) &&
-	    (hc->chan[ch].slot_tx < 0) &&
-	    (hc->chan[ch].bank_tx == 0)) {
+	    (hc->chan[ch].slot_tx < 0))
 		HFC_outb_(hc, R_FIFO, 0x20 | (ch << 1));
-	} else
+	else
 		HFC_outb_(hc, R_FIFO, ch << 1);
-
 	HFC_wait_(hc);
-	if (txpending == 2) {
+
+	if (*txpending == 2) {
 		/* reset fifo */
 		HFC_outb_(hc, R_INC_RES_FIFO, V_RES_F);
 		HFC_wait_(hc);
 		HFC_outb(hc, A_SUBCH_CFG, 0);
-		txpending = 1;
+		*txpending = 1;
 	}
 next_frame:
 	if (dch || test_bit(FLG_HDLC, &bch->Flags)) {
@@ -1433,7 +1438,7 @@ next_frame:
 		if (z1 == z2) { /* empty */
 			/* if done with FIFO audio data during PCM connection */
 			if (bch && (!test_bit(FLG_HDLC, &bch->Flags)) &&
-			    txpending && slot_tx >= 0) {
+			    *txpending && slot_tx >= 0) {
 				if (debug & DEBUG_HFCMULTI_MODE)
 					printk(KERN_DEBUG
 					    "%s: reconnecting PCM due to no "
@@ -1450,13 +1455,13 @@ next_frame:
 				HFC_outb_(hc, R_FIFO, ch<<1);
 				HFC_wait_(hc);
 			}
-			txpending = hc->chan[ch].txpending = 0;
+			*txpending = 0;
 		}
 		return; /* no data */
 	}
 
-	/* if audio data */
-	if (bch && (!test_bit(FLG_HDLC, &bch->Flags)) && (!txpending) && slot_tx >= 0) {
+	/* if audio data and connected slot */
+	if (bch && (!test_bit(FLG_HDLC, &bch->Flags)) && (!*txpending) && slot_tx >= 0) {
 		if (debug & DEBUG_HFCMULTI_MODE)
 			printk(KERN_DEBUG "%s: disconnecting PCM due to "
 			    "FIFO data: channel %d slot_tx %d\n",
@@ -1469,22 +1474,19 @@ next_frame:
 		HFC_outb_(hc, R_FIFO, ch<<1);
 		HFC_wait_(hc);
 	}
-	txpending = hc->chan[ch].txpending = 1;
+	*txpending = 1;
 
 	/* show activity */
 	hc->activity[hc->chan[ch].port] = 1;
 
 	/* fill fifo to what we have left */
 	ii = len;
-	if (dch) {
-		i = dch->tx_idx;
-		d = dch->tx_skb->data + i;
+	if (dch || test_bit(FLG_HDLC, &bch->Flags))
 		temp = 1;
-	} else {
-		i = bch->tx_idx;
-		d = bch->tx_skb->data + i;
-		test_bit(FLG_HDLC, &bch->Flags);
-	}
+	else
+		temp = 0;
+	i = *idxp;
+	d = (*sp)->data + i;
 	if (ii - i > Zspace)
 		ii = Zspace + i;
 	if (debug & DEBUG_HFCMULTI_FIFO)
@@ -1495,10 +1497,7 @@ next_frame:
 
 	/* Have to prep the audio data */
 	write_fifo_data(hc, d, ii - i);
-	if (dch)
-		dch->tx_idx = ii;
-	if (bch)
-		bch->tx_idx = ii;
+	*idxp = ii;
 
 	/* if not all data has been written */
 	if (ii != len) {
@@ -1506,13 +1505,15 @@ next_frame:
 		return;
 	}
 
-	/* if all data has been written */
+	/* if all data has been written, terminate frame */
 	if (dch || test_bit(FLG_HDLC, &bch->Flags)) {
 		/* increment f-counter */
 		HFC_outb_(hc, R_INC_RES_FIFO, V_INC_F);
 		HFC_wait_(hc);
 	}
+
 	/* check for next frame */
+	dev_kfree_skb(*sp);
 	if (bch && get_next_bframe(bch))
 		goto next_frame;
 	if (dch && get_next_dframe(dch))
@@ -1610,11 +1611,9 @@ hfcmulti_rx(struct hfc_multi *hc, int ch)
 	if (test_bit(HFC_CHIP_B410P, &hc->chip) &&
 	    (hc->chan[ch].protocol == ISDN_P_B_RAW) &&
 	    (hc->chan[ch].slot_rx < 0) &&
-	    (hc->chan[ch].bank_rx == 0) &&
-	    (hc->chan[ch].slot_tx < 0) &&
-	    (hc->chan[ch].bank_tx == 0)) {
+	    (hc->chan[ch].slot_tx < 0))
 		HFC_outb_(hc, R_FIFO, 0x20 | (ch<<1) | 1);
-	} else
+	else
 		HFC_outb_(hc, R_FIFO, (ch<<1)|1);
 	HFC_wait_(hc);
 	bch = hc->chan[ch].bch;
@@ -2704,6 +2703,7 @@ handle_dmsg(struct mISDNchannel *ch, struct sk_buff *skb)
 	struct hfc_multi	*hc = dch->hw;
 	struct mISDNhead	*hh = mISDN_HEAD_P(skb);
 	int			ret = -EINVAL;
+	u_long			id;
 	u_long			flags;
 
 	switch (hh->prim) {
@@ -2711,12 +2711,13 @@ handle_dmsg(struct mISDNchannel *ch, struct sk_buff *skb)
 		spin_lock_irqsave(&hc->lock, flags);
 		ret = dchannel_senddata(dch, skb);
 		if (ret > 0) { /* direct TX */
+			id = hh->id; /* skb can be freed */
 			hfcmulti_tx(hc, dch->slot);
 			/* start fifo */
 			HFC_outb(hc, R_FIFO, 0);
 			HFC_wait(hc);
 			spin_unlock_irqrestore(&hc->lock, flags);
-			queue_ch_frame(ch, PH_DATA_CNF, hh->id, NULL);
+			queue_ch_frame(ch, PH_DATA_CNF, id, NULL);
 			ret = 0;
 		} else
 			spin_unlock_irqrestore(&hc->lock, flags);
@@ -2840,6 +2841,7 @@ handle_bmsg(struct mISDNchannel *ch, struct sk_buff *skb)
 	struct hfc_multi	*hc = bch->hw;
 	int			ret = -EINVAL;
 	struct mISDNhead	*hh = mISDN_HEAD_P(skb);
+	u_long			id;
 	u_long			flags;
 
 	switch (hh->prim) {
@@ -2847,12 +2849,13 @@ handle_bmsg(struct mISDNchannel *ch, struct sk_buff *skb)
 		spin_lock_irqsave(&hc->lock, flags);
 		ret = bchannel_senddata(bch, skb);
 		if (ret > 0) { /* direct TX */
+			id = hh->id; /* skb can be freed */
 			hfcmulti_tx(hc, bch->slot);
 			/* start fifo */
 			HFC_outb(hc, R_FIFO, 0);
 			HFC_wait(hc);
 			spin_unlock_irqrestore(&hc->lock, flags);
-			queue_ch_frame(ch, PH_DATA_CNF, hh->id, NULL);
+			queue_ch_frame(ch, PH_DATA_CNF, id, NULL);
 			ret = 0;
 		} else
 			spin_unlock_irqrestore(&hc->lock, flags);
