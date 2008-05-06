@@ -235,6 +235,13 @@ hfcusb_l2l1B(struct mISDNchannel *ch, struct sk_buff *skb)
 		if (ret > 0) {
 			// TODO mbachem
 			// hfcpci_fill_fifo(bch);
+jolly says:
+bitte denk auch dran, dass bei dem hfcpci_fill_fifo (hfcs_fill_fifo)
+eventuell der skb freigegeben wird, wenn er in den fifo passt.
+dann ist hh->id nicht mehr valid, da der skb nicht mehr existiert.
+also vorher sichern.
+in hfc_pci.c ist das problem noch nicht gefixt!!!
+bei fragen, fragen: andreas@eversberg.eu
 			spin_unlock_irqrestore(&hc->lock, flags);
 			queue_ch_frame(ch, PH_DATA_CNF, hh->id, NULL);
 			ret = 0;
