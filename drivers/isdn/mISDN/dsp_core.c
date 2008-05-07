@@ -451,7 +451,7 @@ get_features(struct mISDNchannel *ch)
 	}
 	cq.op = MISDN_CTRL_HW_FEATURES;
 	cq.p1 = (int)&dsp->features;
-	if (!ch->peer->ctrl(ch->peer, CONTROL_CHANNEL, &cq)) {
+	if (ch->peer->ctrl(ch->peer, CONTROL_CHANNEL, &cq)) {
 		printk(KERN_DEBUG "%s: 2nd CONTROL_CHANNEL failed\n",
 			__FUNCTION__);
 		return;
@@ -565,12 +565,14 @@ dsp_function(struct mISDNchannel *ch,  struct sk_buff *skb)
 				ret = -EINVAL;
 				break;
 			}
+			spin_lock_irqsave(&dsp_lock, flags);
 			dsp->tx_volume = *((int *)skb->data);
 			if (dsp_debug & DEBUG_DSP_CORE)
 				printk(KERN_DEBUG "%s: change tx volume to %d\n", __FUNCTION__, dsp->tx_volume);
-			printk(KERN_DEBUG "%s: change tx volume to %d\n", __FUNCTION__, dsp->tx_volume);
 			dsp_cmx_hardware(dsp->conf, dsp);
 			dsp_dtmf_hardware(dsp);
+			spin_unlock_irqrestore(&dsp_lock, flags);
+			dev_kfree_skb(skb);
 			break;
 		default:
 			if (dsp_debug & DEBUG_DSP_CORE)
@@ -631,7 +633,7 @@ dsp_function(struct mISDNchannel *ch,  struct sk_buff *skb)
 		break;
 	case (PH_CONTROL_REQ):
 		spin_lock_irqsave(&dsp_lock, flags);
-		ret = dsp_control_req(dsp, hh, skb);
+		ret = dsp_control_req(dsp, hh, skb); // dsp is freed here
 		spin_unlock_irqrestore(&dsp_lock, flags);
 		break;
 	case (DL_ESTABLISH_REQ):

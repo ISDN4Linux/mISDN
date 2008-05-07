@@ -137,7 +137,8 @@
 
 // #define CMX_CONF_DEBUG
 
-// #define CMX_DEBUG /* massive read/write pointer output */
+//#define CMX_DEBUG /* massive read/write pointer output */
+//#define CMX_TX_DEBUG /* massive read/write on tx-buffer with content */
 
 static inline int
 count_list_member(struct list_head *head)
@@ -1220,6 +1221,9 @@ dsp_cmx_send_member(dsp_t *dsp, int len, s32 *c, int members)
 	int r, rr, t, tt, o_r, o_rr;
 	int preload = 0;
 	struct mISDNhead *hh, *thh;
+#ifdef CMX_TX_DEBUG
+	char debugbuf[256] = "";
+#endif
 
 	/* don't process if: */
 	if (!dsp->b_active) { /* if not active */
@@ -1285,16 +1289,29 @@ dsp_cmx_send_member(dsp_t *dsp, int len, s32 *c, int members)
 	/* if we have tx-data but do not use mixing */
 	if (!dsp->tx_mix && t != tt) {
 		/* -> send tx-data and continue when not enough */
+#ifdef CMX_TX_DEBUG
+	sprintf(debugbuf, "TX sending (%04x-%04x)%p: ", t, tt, p);
+#endif
 		while (r != rr && t != tt) {
+#ifdef CMX_TX_DEBUG
+			if (strlen(debugbuf) < 48)
+			    sprintf(debugbuf+strlen(debugbuf), " %02x", p[t]);
+#endif
 			*d++ = p[t]; /* write tx_buff */
 			t = (t+1) & CMX_BUFF_MASK;
 			r = (r+1) & CMX_BUFF_MASK;
 		}
 		if (r == rr) {
 			dsp->tx_R = t;
+#ifdef CMX_TX_DEBUG
+	printk(KERN_DEBUG "%s\n", debugbuf);
+#endif
 			goto send_packet;
 		}
 	}
+#ifdef CMX_TX_DEBUG
+	printk(KERN_DEBUG "%s\n", debugbuf);
+#endif
 
 	/* PROCESS DATA (one member / no conf) */
 	if (!conf || members <= 1) {
@@ -1589,7 +1606,7 @@ dsp_cmx_send(void *data)
 		rr = (r + dsp_poll) & CMX_BUFF_MASK;
 		/* delete rx-data */
 		while (r != rr) {
-			q[r] = dsp_silence;
+			p[r] = dsp_silence;
 			r = (r+1) & CMX_BUFF_MASK;
 		}
 		/* increment rx-buffer pointer */
@@ -1707,6 +1724,9 @@ dsp_cmx_transmit(dsp_t *dsp, struct sk_buff *skb)
 	u_int w, ww;
 	u8 *d, *p;
 	int space; // todo: , l = skb->len;
+#ifdef CMX_TX_DEBUG
+	char debugbuf[256] = "";
+#endif
 
 	/* check if there is enough space, and then copy */
 	w = dsp->tx_W;
@@ -1733,10 +1753,20 @@ dsp_cmx_transmit(dsp_t *dsp, struct sk_buff *skb)
 #endif
 
 	/* copy transmit data to tx-buffer */
+#ifdef CMX_TX_DEBUG
+	sprintf(debugbuf, "TX getting (%04x-%04x)%p: ", w, ww, p);
+#endif
 	while (w != ww) {
+#ifdef CMX_TX_DEBUG
+		if (strlen(debugbuf) < 48)
+			sprintf(debugbuf+strlen(debugbuf), " %02x", *d);
+#endif
 		p[w] = *d++;
 		w = (w+1) & CMX_BUFF_MASK;
 	}
+#ifdef CMX_TX_DEBUG
+	printk(KERN_DEBUG "%s\n", debugbuf);
+#endif
 
 }
 

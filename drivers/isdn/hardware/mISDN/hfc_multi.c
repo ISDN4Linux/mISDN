@@ -3742,7 +3742,7 @@ release_port(struct hfc_multi *hc, struct dchannel *dch)
 
 	if (debug & DEBUG_HFCMULTI_INIT)
 		printk(KERN_DEBUG "%s: entered for port %d\n",
-			__FUNCTION__, pt);
+			__FUNCTION__, pt + 1);
 
 	if (pt >= hc->ports) {
 		printk(KERN_WARNING "%s: ERROR port out of range (%d).\n",
@@ -3756,7 +3756,7 @@ release_port(struct hfc_multi *hc, struct dchannel *dch)
 
 	hc->chan[ci].dch = NULL;
 
-	if (!hc->created[pt]) {
+	if (hc->created[pt]) {
 		hc->created[pt] = 0;
 		mISDN_unregister_device(&dch->dev);
 	}
@@ -3775,7 +3775,7 @@ release_port(struct hfc_multi *hc, struct dchannel *dch)
 				if (debug & DEBUG_HFCMULTI_INIT)
 					printk(KERN_DEBUG
 					    "%s: free port %d channel %d\n",
-					    __FUNCTION__, hc->chan[i].port, i);
+					    __FUNCTION__, hc->chan[i].port+1,i);
 				pb = hc->chan[i].bch;
 				hc->chan[i].bch = NULL;
 				spin_unlock_irqrestore(&hc->lock, flags);
@@ -3789,7 +3789,7 @@ release_port(struct hfc_multi *hc, struct dchannel *dch)
 			if (debug & DEBUG_HFCMULTI_INIT)
 				printk(KERN_DEBUG
 				    "%s: free port %d channel %d\n",
-				    __FUNCTION__, hc->chan[ci - 2].port,
+				    __FUNCTION__, hc->chan[ci - 2].port+1,
 				    ci - 2);
 			pb = hc->chan[ci - 2].bch;
 			hc->chan[ci - 2].bch = NULL;
@@ -3802,7 +3802,7 @@ release_port(struct hfc_multi *hc, struct dchannel *dch)
 			if (debug & DEBUG_HFCMULTI_INIT)
 				printk(KERN_DEBUG
 				    "%s: free port %d channel %d\n",
-				    __FUNCTION__, hc->chan[ci - 1].port,
+				    __FUNCTION__, hc->chan[ci - 1].port+1,
 				    ci - 1);
 			pb = hc->chan[ci - 1].bch;
 			hc->chan[ci - 1].bch = NULL;
