@@ -157,6 +157,7 @@ struct hfc_multi {
 	u_long		ledstate; /* save last state of leds */
 	int		opticalsupport; /* has the e1 board */
 					/* an optical Interface */
+	int		dslot;	/* channel # of d-channel (E1) default 16 */
 
 	u_long		wdcount; 	/* every 500 ms we need to */
 					/* send the watchdog a signal */

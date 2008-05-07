@@ -976,8 +976,9 @@ hfcmulti_leds(struct hfc_multi *hc)
 		 * left red:       frame sync, but no L1
 		 * right green:    L2 active
 		 */
-		if (hc->chan[16].sync != 2) { /* no frame sync */
-			if (!test_bit(HFC_CFG_NTMODE, &hc->chan[16].cfg)) {
+		if (hc->chan[hc->dslot].sync != 2) { /* no frame sync */
+			if (!test_bit(HFC_CFG_NTMODE,
+				&hc->chan[hc->dslot].cfg)) {
 				led[0] = led[1] = 1;
 			} else if (hc->ledcount>>11) {
 				led[0] = led[1] = 1;
@@ -1829,56 +1830,56 @@ handle_timer_irq(struct hfc_multi *hc)
 		}
 	}
 	if (hc->type == 1 && hc->created[0]) {
-		dch = hc->chan[16].dch;
-		if (test_bit(HFC_CFG_REPORT_LOS, &hc->chan[16].cfg)) {
+		dch = hc->chan[hc->dslot].dch;
+		if (test_bit(HFC_CFG_REPORT_LOS, &hc->chan[hc->dslot].cfg)) {
 			if (debug & DEBUG_HFCMULTI_SYNC)
 				printk(KERN_DEBUG
 				    "%s: (id=%d) E1 got LOS\n",
 				    __FUNCTION__, hc->id);
 			/* LOS */
 			temp = HFC_inb_(hc, R_RX_STA0) & V_SIG_LOS;
-			if (!temp && hc->chan[16].los)
+			if (!temp && hc->chan[hc->dslot].los)
 				signal_state_up(dch, L1_SIGNAL_LOS_ON,
 				    "LOS detected");
-			if (temp && !hc->chan[16].los)
+			if (temp && !hc->chan[hc->dslot].los)
 				signal_state_up(dch, L1_SIGNAL_LOS_OFF,
 				    "LOS gone");
-			hc->chan[16].los = temp;
+			hc->chan[hc->dslot].los = temp;
 		}
-		if (test_bit(HFC_CFG_REPORT_AIS, &hc->chan[16].cfg)) {
+		if (test_bit(HFC_CFG_REPORT_AIS, &hc->chan[hc->dslot].cfg)) {
 			if (debug & DEBUG_HFCMULTI_SYNC)
 				printk(KERN_DEBUG
 				    "%s: (id=%d) E1 got AIS\n",
 				    __FUNCTION__, hc->id);
 			/* AIS */
 			temp = HFC_inb_(hc, R_RX_STA0) & V_AIS;
-			if (!temp && hc->chan[16].ais)
+			if (!temp && hc->chan[hc->dslot].ais)
 				signal_state_up(dch, L1_SIGNAL_AIS_ON,
 				    "AIS detected");
-			if (temp && !hc->chan[16].ais)
+			if (temp && !hc->chan[hc->dslot].ais)
 				signal_state_up(dch, L1_SIGNAL_AIS_OFF,
 				    "AIS gone");
-			hc->chan[16].ais = temp;
+			hc->chan[hc->dslot].ais = temp;
 		}
-		if (test_bit(HFC_CFG_REPORT_SLIP, &hc->chan[16].cfg)) {
+		if (test_bit(HFC_CFG_REPORT_SLIP, &hc->chan[hc->dslot].cfg)) {
 			if (debug & DEBUG_HFCMULTI_SYNC)
 				printk(KERN_DEBUG
 				    "%s: (id=%d) E1 got SLIP (RX)\n",
 				    __FUNCTION__, hc->id);
 			/* SLIP */
 			temp = HFC_inb_(hc, R_SLIP) & V_FOSLIP_RX;
-			if (!temp && hc->chan[16].slip_rx)
+			if (!temp && hc->chan[hc->dslot].slip_rx)
 				signal_state_up(dch, L1_SIGNAL_SLIP_RX,
 				    " bit SLIP detected RX");
-			hc->chan[16].slip_rx = temp;
+			hc->chan[hc->dslot].slip_rx = temp;
 			temp = HFC_inb_(hc, R_SLIP) & V_FOSLIP_TX;
-			if (!temp && hc->chan[16].slip_tx)
+			if (!temp && hc->chan[hc->dslot].slip_tx)
 				signal_state_up(dch, L1_SIGNAL_SLIP_TX,
 				    " bit SLIP detected TX");
-			hc->chan[16].slip_tx = temp;
+			hc->chan[hc->dslot].slip_tx = temp;
 		}
 		temp = HFC_inb_(hc, R_JATT_DIR);
-		switch (hc->chan[16].sync) {
+		switch (hc->chan[hc->dslot].sync) {
 		case 0:
 			if ((temp & 0x60) == 0x60) {
 				if (debug & DEBUG_HFCMULTI_SYNC)
@@ -1887,10 +1888,10 @@ handle_timer_irq(struct hfc_multi *hc)
 					    "in clock sync\n",
 					    __FUNCTION__, hc->id);
 				HFC_outb(hc, R_RX_OFF,
-				    hc->chan[16].jitter | V_RX_INIT);
+				    hc->chan[hc->dslot].jitter | V_RX_INIT);
 				HFC_outb(hc, R_TX_OFF,
-				    hc->chan[16].jitter | V_RX_INIT);
-				hc->chan[16].sync = 1;
+				    hc->chan[hc->dslot].jitter | V_RX_INIT);
+				hc->chan[hc->dslot].sync = 1;
 				goto check_framesync;
 			}
 			break;
@@ -1901,7 +1902,7 @@ handle_timer_irq(struct hfc_multi *hc)
 					    "%s: (id=%d) E1 "
 					    "lost clock sync\n",
 					    __FUNCTION__, hc->id);
-				hc->chan[16].sync = 0;
+				hc->chan[hc->dslot].sync = 0;
 				break;
 			}
 check_framesync:
@@ -1912,7 +1913,7 @@ check_framesync:
 					    "%s: (id=%d) E1 "
 					    "now in frame sync\n",
 					    __FUNCTION__, hc->id);
-				hc->chan[16].sync = 2;
+				hc->chan[hc->dslot].sync = 2;
 			}
 			break;
 		case 2:
@@ -1922,7 +1923,7 @@ check_framesync:
 					    "%s: (id=%d) E1 lost "
 					    "clock & frame sync\n",
 					    __FUNCTION__, hc->id);
-				hc->chan[16].sync = 0;
+				hc->chan[hc->dslot].sync = 0;
 				break;
 			}
 			temp = HFC_inb_(hc, R_RX_STA0);
@@ -1932,7 +1933,7 @@ check_framesync:
 					    "%s: (id=%d) E1 "
 					    "lost frame sync\n",
 					    __FUNCTION__, hc->id);
-				hc->chan[16].sync = 1;
+				hc->chan[hc->dslot].sync = 1;
 			}
 			break;
 		}
@@ -2118,7 +2119,7 @@ hfcmulti_interrupt(int intno, void *dev_id)
 		if (r_irq_misc & V_STA_IRQ) {
 			if (hc->type == 1) {
 				/* state machine */
-				dch = hc->chan[16].dch;
+				dch = hc->chan[hc->dslot].dch;
 				dch->state = HFC_inb_(hc, R_E1_RD_STA) & 0x7;
 				schedule_event(dch, FLG_PHCHANGE);
 				if (debug & DEBUG_HFCMULTI_STATE)
@@ -2198,10 +2199,10 @@ mode_hfcmulti(struct hfc_multi *hc, int ch, int protocol, int slot_tx,
 
 	if (debug & DEBUG_HFCMULTI_MODE)
 		printk(KERN_DEBUG
-		    "%s: card %d channel %d protocol %x slot old=%d new=%d bank new=%d (TX) "
-		    "slot old=%d new=%d bank new=%d (RX)\n",
-		    __FUNCTION__, hc->id, ch, protocol, oslot_tx, slot_tx, bank_tx,
-		    oslot_rx, slot_rx, bank_rx);
+		    "%s: card %d channel %d protocol %x slot old=%d new=%d"
+		    "bank new=%d (TX) slot old=%d new=%d bank new=%d (RX)\n",
+		    __FUNCTION__, hc->id, ch, protocol, oslot_tx, slot_tx,
+		    bank_tx, oslot_rx, slot_rx, bank_rx);
 
 	if (oslot_tx >= 0 && slot_tx != oslot_tx) {
 		/* remove from slot */
@@ -3185,36 +3186,39 @@ hfcmulti_initmode(struct dchannel *dch)
 {
 	struct hfc_multi *hc = dch->hw;
 	BYTE		a_st_wr_state, r_e1_wr_sta;
-	int		i, j, pt;
+	int		i, pt;
 
 	if (debug & DEBUG_HFCMULTI_INIT)
 		printk("%s: entered\n", __FUNCTION__);
 
 	if (hc->type == 1) {
 		if (dch->dev.D.protocol == ISDN_P_NT_E1)
-			test_and_set_bit(HFC_CFG_NTMODE, &hc->chan[16].cfg);
-		hc->chan[16].slot_tx = -1;
-		hc->chan[16].slot_rx = -1;
-		hc->chan[16].conf = -1;
-		mode_hfcmulti(hc, 16, dch->dev.D.protocol, -1, -1, -1, -1);
-		dch->timer.function = (void *) hfcmulti_dbusy_timer;
-		dch->timer.data = (long) dch;
-		init_timer(&dch->timer);
-		j = 1;
-		for (i = 0; i < 30; i++) {
-			if (i == 15)
-				j++;
-			hc->chan[i + j].slot_tx = -1;
-			hc->chan[i + j].slot_rx = -1;
-			hc->chan[i + j].conf = -1;
-			mode_hfcmulti(hc, i + j, ISDN_P_NONE, -1, -1, -1, -1);
+			test_and_set_bit(HFC_CFG_NTMODE,
+				&hc->chan[hc->dslot].cfg);
+		hc->chan[hc->dslot].slot_tx = -1;
+		hc->chan[hc->dslot].slot_rx = -1;
+		hc->chan[hc->dslot].conf = -1;
+		if (hc->dslot) {
+			mode_hfcmulti(hc, hc->dslot, dch->dev.D.protocol,
+				-1, -1, -1, -1);
+			dch->timer.function = (void *) hfcmulti_dbusy_timer;
+			dch->timer.data = (long) dch;
+			init_timer(&dch->timer);
+		}
+		for (i = 1; i <= 31; i++) {
+			if (i == hc->dslot)
+				continue;
+			hc->chan[i].slot_tx = -1;
+			hc->chan[i].slot_rx = -1;
+			hc->chan[i].conf = -1;
+			mode_hfcmulti(hc, i, ISDN_P_NONE, -1, -1, -1, -1);
 		}
 		/* E1 */
-		if (test_bit(HFC_CFG_REPORT_LOS, &hc->chan[16].cfg)) {
+		if (test_bit(HFC_CFG_REPORT_LOS, &hc->chan[hc->dslot].cfg)) {
 			HFC_outb(hc, R_LOS0, 255); /* 2 ms */
 			HFC_outb(hc, R_LOS1, 255); /* 512 ms */
 		}
-		if (test_bit(HFC_CFG_OPTICAL, &hc->chan[16].cfg)) {
+		if (test_bit(HFC_CFG_OPTICAL, &hc->chan[hc->dslot].cfg)) {
 			HFC_outb(hc, R_RX0, 0);
 			hc->hw.r_tx0 = 0 | V_OUT_EN;
 		} else {
@@ -3227,12 +3231,12 @@ hfcmulti_initmode(struct dchannel *dch)
 		HFC_outb(hc, R_TX_FR0, 0x00);
 		HFC_outb(hc, R_TX_FR1, 0xf8);
 
-		if (test_bit(HFC_CFG_CRC4, &hc->chan[16].cfg))
+		if (test_bit(HFC_CFG_CRC4, &hc->chan[hc->dslot].cfg))
 			HFC_outb(hc, R_TX_FR2, V_TX_MF | V_TX_E | V_NEG_E);
 
 		HFC_outb(hc, R_RX_FR0, V_AUTO_RESYNC | V_AUTO_RECO | 0);
 
-		if (test_bit(HFC_CFG_CRC4, &hc->chan[16].cfg))
+		if (test_bit(HFC_CFG_CRC4, &hc->chan[hc->dslot].cfg))
 			HFC_outb(hc, R_RX_FR1, V_RX_MF | V_RX_MF_SYNC);
 
 		if (test_bit(HFC_CHIP_PCM_SLAVE, &hc->chip)) {
@@ -3876,7 +3880,7 @@ init_e1_port(struct hfc_multi *hc, struct hm_map *m)
 {
 	struct	dchannel	*dch;
 	struct	bchannel	*bch;
-	int	ch, i, ret = 0;
+	int	ch, ret = 0;
 
 	dch = kzalloc(sizeof(struct dchannel), GFP_KERNEL);
 	if (!dch)
@@ -3889,15 +3893,14 @@ init_e1_port(struct hfc_multi *hc, struct hm_map *m)
 	    (1 << (ISDN_P_B_HDLC & ISDN_P_B_MASK)); 
 	dch->dev.D.send = handle_dmsg;
 	dch->dev.D.ctrl = hfcm_dctrl;
-	dch->dev.nrbchan = 30;
-	dch->slot = 16;
-	hc->chan[16].dch = dch;
-	hc->chan[16].port = 0;
-	hc->chan[16].nt_timer = -1;
-	i = 1;
-	for (ch = 0; ch < dch->dev.nrbchan; ch++) {
-		if (ch == 15)
-			i++;
+	dch->dev.nrbchan = (hc->dslot)?30:31;
+	dch->slot = hc->dslot;
+	hc->chan[hc->dslot].dch = dch;
+	hc->chan[hc->dslot].port = 0;
+	hc->chan[hc->dslot].nt_timer = -1;
+	for (ch = 1; ch <= 31; ch++) {
+		if (ch == hc->dslot) // skip dchannel
+			continue;
 		bch = kzalloc(sizeof(struct bchannel), GFP_KERNEL);
 		if (!bch) {
 			printk(KERN_ERR "%s: no memory for bchannel\n",
@@ -3905,17 +3908,17 @@ init_e1_port(struct hfc_multi *hc, struct hm_map *m)
 			ret = -ENOMEM;
 			goto free_chan;
 		}
-		bch->nr = i + ch;
-		bch->slot = i + ch;
+		bch->nr = ch;
+		bch->slot = ch;
 		bch->debug = debug;
 		mISDN_initbchannel(bch, MAX_DATA_MEM);
 		bch->hw = hc;
 		bch->ch.send = handle_bmsg;
 		bch->ch.ctrl = hfcm_bctrl;
-		bch->ch.nr = i + ch;
+		bch->ch.nr = ch;
 		list_add(&bch->ch.list, &dch->dev.bchannels);
-		hc->chan[i + ch].bch = bch;
-		hc->chan[i + ch].port = 0;
+		hc->chan[ch].bch = bch;
+		hc->chan[ch].port = 0;
 		test_and_set_bit(bch->nr, &dch->dev.channelmap[0]);
 	}
 	/* set optical line type */
@@ -3933,7 +3936,7 @@ init_e1_port(struct hfc_multi *hc, struct hm_map *m)
 				    __FUNCTION__,
 				    HFC_cnt + 1, 1);
 			test_and_set_bit(HFC_CFG_OPTICAL,
-			    &hc->chan[16].cfg);
+			    &hc->chan[hc->dslot].cfg);
 		}
 	}
 	/* set LOS report */
@@ -3943,7 +3946,7 @@ init_e1_port(struct hfc_multi *hc, struct hm_map *m)
 			    "LOS report: card(%d) port(%d)\n",
 			    __FUNCTION__, HFC_cnt + 1, 1);
 		test_and_set_bit(HFC_CFG_REPORT_LOS,
-		    &hc->chan[16].cfg);
+		    &hc->chan[hc->dslot].cfg);
 	}
 	/* set AIS report */
 	if (port[Port_cnt] & 0x008) {
@@ -3952,7 +3955,7 @@ init_e1_port(struct hfc_multi *hc, struct hm_map *m)
 			    "AIS report: card(%d) port(%d)\n",
 			    __FUNCTION__, HFC_cnt + 1, 1);
 		test_and_set_bit(HFC_CFG_REPORT_AIS,
-		    &hc->chan[16].cfg);
+		    &hc->chan[hc->dslot].cfg);
 	}
 	/* set SLIP report */
 	if (port[Port_cnt] & 0x010) {
@@ -3962,7 +3965,7 @@ init_e1_port(struct hfc_multi *hc, struct hm_map *m)
 			    "card(%d) port(%d)\n",
 			    __FUNCTION__, HFC_cnt + 1, 1);
 		test_and_set_bit(HFC_CFG_REPORT_SLIP,
-		    &hc->chan[16].cfg);
+		    &hc->chan[hc->dslot].cfg);
 	}
 #if 0
 	/* set RDI report */
@@ -3973,7 +3976,7 @@ init_e1_port(struct hfc_multi *hc, struct hm_map *m)
 			    "card(%d) port(%d)\n",
 			    __FUNCTION__, HFC_cnt + 1, 1);
 		test_and_set_bit(HFC_CFG_REPORT_RDI,
-		    &hc->chan[16].cfg);
+		    &hc->chan[hc->dslot].cfg);
 	}
 #endif
 	/* set elastic jitter buffer */
@@ -3984,7 +3987,7 @@ init_e1_port(struct hfc_multi *hc, struct hm_map *m)
 			    "buffer to %d: card(%d) port(%d)\n",
 			    __FUNCTION__, hc->chan[ch].jitter,
 			    HFC_cnt + 1, 1);
-		hc->chan[16].jitter =
+		hc->chan[hc->dslot].jitter =
 		    (port[Port_cnt]>>6) & 0x3;
 	} else
 		hc->chan[ch].jitter = 2; /* default */
@@ -3996,7 +3999,7 @@ init_e1_port(struct hfc_multi *hc, struct hm_map *m)
 			    " card(%d) port(%d)\n",
 			    __FUNCTION__, HFC_cnt + 1, 1);
 		test_and_set_bit(HFC_CFG_CRC4,
-		    &hc->chan[16].cfg);
+		    &hc->chan[hc->dslot].cfg);
 		printk(KERN_DEBUG "%s: PROTOCOL turn on "
 		    "CRC4 report: card(%d) port(%d)\n",
 		    __FUNCTION__, HFC_cnt + 1, 1);
@@ -4168,6 +4171,7 @@ hfcpci_init(struct pci_dev *pdev, const struct pci_device_id *ent)
 	hc->ports = m->ports;
 	hc->id = HFC_cnt;
 	hc->pcm = pcm[HFC_cnt];
+	hc->dslot = 16;
 
 	/* set chip specific features */
 	hc->masterclk = -1;
