@@ -803,10 +803,11 @@ l2_establish(struct FsmInst *fi, int event, void *arg)
 	struct sk_buff *skb = arg;
 	struct layer2 *l2 = fi->userdata;
 
-	if (!test_bit(FLG_LAPD_NET, &l2->flag)) {
+// also in nt-mode, we can establish layer 2
+//	if (!test_bit(FLG_LAPD_NET, &l2->flag)) {
 		establishlink(fi);
 		test_and_set_bit(FLG_L3_INIT, &l2->flag);
-	}
+//	}
 	dev_kfree_skb(skb);
 }
 
