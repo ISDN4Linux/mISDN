@@ -26,7 +26,6 @@
  *
  * Thanks to Cologne Chip AG for this great controller!
  */
-#warning memory access mode
 
 /*
  * module parameters:
@@ -977,14 +976,13 @@ hfcmulti_leds(struct hfc_multi *hc)
 		 * right green:    L2 active
 		 */
 		if (hc->chan[hc->dslot].sync != 2) { /* no frame sync */
-			if (!test_bit(HFC_CFG_NTMODE,
-				&hc->chan[hc->dslot].cfg)) {
+			if (hc->chan[hc->dslot].dch->dev.D.protocol
+				!= ISDN_P_NT_E1)
 				led[0] = led[1] = 1;
-			} else if (hc->ledcount>>11) {
+			else if (hc->ledcount>>11)
 				led[0] = led[1] = 1;
-			} else {
+			else
 				led[0] = led[1] = 0;
-			}
 			led[2] = led[3] = 0;
 		} else { /* with frame sync */
 			/* TODO make it work */
@@ -1010,15 +1008,16 @@ hfcmulti_leds(struct hfc_multi *hc)
 			dch = hc->chan[(i << 2) | 2].dch;
 			if (dch) {
 				state = dch->state;
-				active = test_bit(HFC_CFG_NTMODE,
-				    &hc->chan[dch->slot].cfg) ? 3 : 7;
+				if (dch->dev.D.protocol == ISDN_P_NT_S0)
+					active = 3;
+				else
+					active = 7;
 			}
 			if (state) {
 				if (state == active) {
 					led[i] = 1; /* led green */
 				} else
-					if (!test_bit(HFC_CFG_NTMODE,
-					    &hc->chan[dch->slot].cfg))
+					if (dch->dev.D.protocol == ISDN_P_TE_S0)
 						/* TE mode: led red */
 						led[i] = 2;
 					else
@@ -1073,15 +1072,16 @@ hfcmulti_leds(struct hfc_multi *hc)
 			dch = hc->chan[(i << 2) | 2].dch;
 			if (dch) {
 				state = dch->state;
-				active = test_bit(HFC_CFG_NTMODE,
-				    &hc->chan[dch->slot].cfg) ? 3 : 7;
+				if (dch->dev.D.protocol == ISDN_P_NT_S0)
+					active = 3;
+				else
+					active = 7;
 			}
 			if (state) {
 				if (state == active) {
 					led[i] = 1; /* led green */
 				} else
-					if (!test_bit(HFC_CFG_NTMODE,
-					    &hc->chan[dch->slot].cfg)) 
+					if (dch->dev.D.protocol == ISDN_P_TE_S0)
 						/* TE mode: led red */
 						led[i] = 2;
 					else
@@ -1114,8 +1114,10 @@ hfcmulti_leds(struct hfc_multi *hc)
 			dch = hc->chan[(i << 2) | 2].dch;
 			if (dch) {
 				state = dch->state;
-				active = test_bit(HFC_CFG_NTMODE,
-				    &hc->chan[dch->slot].cfg) ? 3 : 7;
+				if (dch->dev.D.protocol == ISDN_P_NT_S0)
+					active = 3;
+				else
+					active = 7;
 			}
 			if (state) {
 				if (state==active) {
@@ -1951,6 +1953,7 @@ ph_state_irq(struct hfc_multi *hc, u_char r_irq_statech)
 {
 	struct dchannel	*dch;
 	int		ch;
+	int		active;
 
 	/* state machine */
 	for (ch = 0; ch < 32; ch++) {
@@ -1959,8 +1962,11 @@ ph_state_irq(struct hfc_multi *hc, u_char r_irq_statech)
 			if (r_irq_statech & 1) {
 				HFC_outb_(hc, R_ST_SEL, hc->chan[ch].port);
 				dch->state = HFC_inb(hc, A_ST_RD_STATE) & 0x0f;
-				if (dch->state == (test_bit(HFC_CFG_NTMODE,
-				    &hc->chan[dch->slot].cfg) ? 3: 7)) {
+				if (dch->dev.D.protocol == ISDN_P_NT_S0)
+					active = 3;
+				else
+					active = 7;
+				if (dch->state == active) {
 					HFC_outb_(hc, R_FIFO, (ch << 1) | 1);
 					HFC_wait_(hc);
 					HFC_outb_(hc, R_INC_RES_FIFO,V_RES_F);
@@ -2725,7 +2731,7 @@ handle_dmsg(struct mISDNchannel *ch, struct sk_buff *skb)
 		return ret;
 	case PH_ACTIVATE_REQ:
 		spin_lock_irqsave(&hc->lock, flags);
-		if (test_bit(HFC_CFG_NTMODE, &hc->chan[dch->slot].cfg)) {
+		if (dch->dev.D.protocol != ISDN_P_TE_S0) {
 			ret = 0;
 			if (debug & DEBUG_HFCMULTI_MSG)
 				printk(KERN_DEBUG
@@ -2758,7 +2764,7 @@ handle_dmsg(struct mISDNchannel *ch, struct sk_buff *skb)
 	case PH_DEACTIVATE_REQ:
 		test_and_clear_bit(FLG_L2_ACTIVATED, &dch->Flags);
 		spin_lock_irqsave(&hc->lock, flags);
-		if (test_bit(HFC_CFG_NTMODE, &hc->chan[dch->slot].cfg)) {
+		if (dch->dev.D.protocol != ISDN_P_TE_S0) {
 			if (debug & DEBUG_HFCMULTI_MSG)
 				printk(KERN_DEBUG
 				    "%s: PH_DEACTIVATE port %d (0..%d)\n",
@@ -3081,7 +3087,7 @@ ph_state_change(struct dchannel *dch)
 	ch = dch->slot;
 
 	if (hc->type == 1) {
-		if (!test_bit(HFC_CFG_NTMODE, &hc->chan[ch].cfg)) {
+		if (dch->dev.D.protocol == ISDN_P_TE_E1) {
 			if (debug & DEBUG_HFCMULTI_STATE)
 				printk(KERN_DEBUG
 				    "%s: E1 TE (id=%d) newstate %x\n",
@@ -3108,7 +3114,7 @@ ph_state_change(struct dchannel *dch)
 		}
 		hc->chan[ch].e1_state = dch->state;
 	} else {
-		if (!test_bit(HFC_CFG_NTMODE, &hc->chan[ch].cfg)) {
+		if (dch->dev.D.protocol == ISDN_P_TE_S0) {
 			if (debug & DEBUG_HFCMULTI_STATE)
 				printk(KERN_DEBUG
 				    "%s: S/T TE newstate %x\n",
@@ -3192,9 +3198,6 @@ hfcmulti_initmode(struct dchannel *dch)
 		printk("%s: entered\n", __FUNCTION__);
 
 	if (hc->type == 1) {
-		if (dch->dev.D.protocol == ISDN_P_NT_E1)
-			test_and_set_bit(HFC_CFG_NTMODE,
-				&hc->chan[hc->dslot].cfg);
 		hc->chan[hc->dslot].slot_tx = -1;
 		hc->chan[hc->dslot].slot_rx = -1;
 		hc->chan[hc->dslot].conf = -1;
@@ -3293,8 +3296,6 @@ hfcmulti_initmode(struct dchannel *dch)
 		HFC_outb(hc, R_E1_WR_STA, r_e1_wr_sta);
 	} else {
 		i = dch->slot;
-		if (dch->dev.D.protocol == ISDN_P_NT_S0)
-			test_and_set_bit(HFC_CFG_NTMODE, &hc->chan[i].cfg);
 		hc->chan[i].slot_tx = -1;
 		hc->chan[i].slot_rx = -1;
 		hc->chan[i].conf = -1;
@@ -3342,6 +3343,8 @@ hfcmulti_initmode(struct dchannel *dch)
 		if ((dch->dev.D.protocol == ISDN_P_NT_S0) ||
 		    test_bit(HFC_CFG_DIS_ECHANNEL, &hc->chan[i].cfg))
 			HFC_outb(hc, A_ST_CTRL1, V_E_IGNO);
+		else
+			HFC_outb(hc, A_ST_CTRL1, 0);
 		/* enable B-channel receive */
 		HFC_outb(hc, A_ST_CTRL2,  V_B1_RX_EN | V_B2_RX_EN);
 		/* state machine setup */
@@ -3370,9 +3373,13 @@ open_dchannel(struct hfc_multi *hc, struct dchannel *dch,
 		return -EINVAL;
 	if ((dch->dev.D.protocol != ISDN_P_NONE) &&
 	    (dch->dev.D.protocol != rq->protocol)) {
+	    if (debug & DEBUG_HFCMULTI_MODE)
 		printk(KERN_WARNING "%s: change protocol %x to %x\n",
 		    __FUNCTION__, dch->dev.D.protocol, rq->protocol);
 	}
+	if ((dch->dev.D.protocol == ISDN_P_TE_S0)
+	 && (rq->protocol != ISDN_P_TE_S0))
+		l1_event(dch->l1, CLOSE_CHANNEL);
 	if (dch->dev.D.protocol != rq->protocol) { 
 		if (rq->protocol == ISDN_P_TE_S0) {
 			err = create_l1(dch, hfcm_l1callback);
@@ -3754,6 +3761,9 @@ release_port(struct hfc_multi *hc, struct dchannel *dch)
 		printk(KERN_DEBUG "%s: releasing port=%d\n",
 		    __FUNCTION__, pt + 1);
 
+	if (dch->dev.D.protocol == ISDN_P_TE_S0)
+		l1_event(dch->l1, CLOSE_CHANNEL);
+
 	hc->chan[ci].dch = NULL;
 
 	if (hc->created[pt]) {
@@ -3994,19 +4004,16 @@ init_e1_port(struct hfc_multi *hc, struct hm_map *m)
 	/* set CRC-4 Mode */
 	if (! (port[Port_cnt] & 0x100)) {
 		if (debug & DEBUG_HFCMULTI_INIT)
-			printk(KERN_DEBUG
-			    "%s: PROTOCOL turn on CRC4 report:"
-			    " card(%d) port(%d)\n",
-			    __FUNCTION__, HFC_cnt + 1, 1);
+			printk(KERN_DEBUG "%s: PROTOCOL turn on CRC4 report:"
+				" card(%d) port(%d)\n",
+				__FUNCTION__, HFC_cnt + 1, 1);
 		test_and_set_bit(HFC_CFG_CRC4,
 		    &hc->chan[hc->dslot].cfg);
-		printk(KERN_DEBUG "%s: PROTOCOL turn on "
-		    "CRC4 report: card(%d) port(%d)\n",
-		    __FUNCTION__, HFC_cnt + 1, 1);
 	} else {
-		printk(KERN_DEBUG "%s: PROTOCOL turn off CRC4"
-		    " report: card(%d) port(%d)\n",
-		    __FUNCTION__, HFC_cnt + 1, 1);
+		if (debug & DEBUG_HFCMULTI_INIT)
+			printk(KERN_DEBUG "%s: PROTOCOL turn off CRC4"
+		   		" report: card(%d) port(%d)\n",
+		   		__FUNCTION__, HFC_cnt + 1, 1);
 	}
 	ret = mISDN_register_device(&dch->dev);
 	if (ret)
@@ -4070,8 +4077,7 @@ init_multi_port(struct hfc_multi *hc, int pt)
 			    "%s: PROTOCOL set master clock: "
 			    "card(%d) port(%d)\n",
 			    __FUNCTION__, HFC_cnt + 1, pt + 1);
-		if (test_bit(HFC_CFG_NTMODE,
-		    &hc->chan[i + 2].cfg)) {
+		if (dch->dev.D.protocol != ISDN_P_TE_S0) {
 			printk(KERN_ERR "Error: Master clock "
 			    "for port(%d) of card(%d) is only"
 			    " possible with TE-mode\n",

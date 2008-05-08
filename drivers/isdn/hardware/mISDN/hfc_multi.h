@@ -83,7 +83,6 @@ struct hfcm_hw {
 
 
 /* for each stack these flags are used (cfg) */
-#define	HFC_CFG_NTMODE		0 /* NT-mode */
 #define	HFC_CFG_NONCAP_TX	1 /* S/T TX interface has less capacity */
 #define	HFC_CFG_DIS_ECHANNEL	2 /* disable E-channel processing */
 #define	HFC_CFG_REG_ECHANNEL	3 /* register E-channel */
@@ -1125,25 +1124,29 @@ struct hfc_register_names {
 };
 #endif /* HFC_REGISTER_MAP */
 
-/* ACCESS TO PCI MEMORY MAPPED REGISTERS */
-
-#define	ADDR_MULT 1	// can be defined to other values if there
-			// is e.g. an offset in a bridge chip addressing
-
 #ifdef CONFIG_HFCMULTI_PCIMEM
 
+/* ACCESS TO PCI MEMORY MAPPED REGISTERS */
+
 #define HFC_outl(a,b,c) \
-	(*((volatile u_long *)((a->pci_membase)+((b)*ADDR_MULT))) = c)
+	(writel(c, (volatile u_long *)((a->pci_membase)+b)))
 #define HFC_inl(a,b) \
-	(*((volatile u_long *)((a->pci_membase)+((b)*ADDR_MULT))))
+	(readl((volatile u_long *)((a->pci_membase)+b)))
 #define HFC_outl_(a,b,c) \
-	(*((volatile u_long *)((a->pci_membase)+((b)*ADDR_MULT))) = c)
+	(writel(c, (volatile u_long *)((a->pci_membase)+b)))
 #define HFC_inl_(a,b) \
-	(*((volatile u_long *)((a->pci_membase)+((b)*ADDR_MULT))))
+	(readl((volatile u_long *)((a->pci_membase)+b)))
 #define HFC_outw_(a,b,c) \
-	(*((volatile u_short *)((a->pci_membase)+((b)*ADDR_MULT))) = c)
+	(writew(c, (volatile u_short *)((a->pci_membase)+b)))
 #define HFC_inw_(a,b) \
-	(*((volatile u_short *)((a->pci_membase)+((b)*ADDR_MULT))))
+	(readw((volatile u_short *)((a->pci_membase)+b)))
+#define HFC_outb_(a,b,c) \
+	(writeb(c, (volatile u_char *)((a->pci_membase)+b)))
+#define HFC_inb_(a,b) \
+	(readb((volatile u_char *)((a->pci_membase)+b)))
+#define HFC_wait_(a) \
+	while(readb((volatile u_char *)((a->pci_membase)+R_STATUS)) & V_BUSY)
+
 /*
  * version of HFC_inw_(a,b) that makes 8bit access instead of 16bit
  * only for test purposes
@@ -1161,33 +1164,22 @@ HFC_inw_(struct hfc_multi *a, int b)
 }
 #endif
 
-#define HFC_outb_(a,b,c) \
-	(*((volatile u_char *)((a->pci_membase)+((b)*ADDR_MULT))) = c)
-#define HFC_inb_(a,b) \
-	(*((volatile u_char *)((a->pci_membase)+((b)*ADDR_MULT))))
-#define HFC_wait_(a) \
-	while((*((volatile u_char *)((a->pci_membase)+ \
-	(R_STATUS*ADDR_MULT)))) & V_BUSY)
-
-
-
 /* macros */
 #ifndef HFC_REGISTER_MAP
 
 /* usage: HFC_outX(card,register,value); */
 #define HFC_outb(a, b, c) \
-	(*((volatile u_char *)((a->pci_membase)+((b)*ADDR_MULT))) = c)
+	(writeb(c, (volatile u_char *)((a->pci_membase)+b)))
 #define HFC_outw(a, b, c) \
-	(*((volatile u_short *)((a->pci_membase)+((b)*ADDR_MULT))) = c)
+	(writeb(c, (volatile u_char *)((a->pci_membase)+b)))
 /* usage: register=HFC_inX(card,register); */
 #define HFC_inb(a, b) \
-	(*((volatile u_char *)((a->pci_membase)+((b)*ADDR_MULT))))
+	(readb((volatile u_char *)((a->pci_membase)+b)))
 #define HFC_inw(a, b) \
-	(*((volatile u_short *)((a->pci_membase)+((b)*ADDR_MULT))))
+	(readw((volatile u_short *)((a->pci_membase)+b)))
 /* usage: HFC_wait(card); */
 #define HFC_wait(a) \
-	while ((*((volatile u_char *)((a->pci_membase)+(R_STATUS*ADDR_MULT)))) \
-	& V_BUSY)
+	while(readb((volatile u_char *)((a->pci_membase)+R_STATUS)) & V_BUSY)
 
 #else /* HFC_REGISTER_MAP */
 
@@ -1216,14 +1208,14 @@ static BYTE _HFC_outb(struct hfc_multi *a, BYTE b, BYTE c, const char *function,
 	printk(KERN_DEBUG
 	    "HFC_outb(chip %d, %02x=%s, 0x%02x=%s); in %s() line %d\n",
 	    a->id, b, regname, c, bits, function, line);
-	return (*(((volatile u_char *)a->pci_membase)+b) = c);
+	return (writeb(c, (volatile u_char *)((a->pci_membase)+b)));
 }
 #define HFC_inb(a, b) _HFC_inb(a, b, __FUNCTION__, __LINE__)
 static BYTE
 _HFC_inb(struct hfc_multi *a, BYTE b, const char *function, int line)
 {
 	char regname[256] = "", bits[9] = "xxxxxxxx";
-	u_char c = (*(((volatile u_char *)a->pci_membase)+((b)*ADDR_MULT)));
+	u_char c = (readb((volatile u_char *)((a->pci_membase)+b)));
 	int i;
 
 	i = 0;
@@ -1253,7 +1245,7 @@ _HFC_inb(struct hfc_multi *a, BYTE b, const char *function, int line)
 static WORD _HFC_inw(struct hfc_multi *a, BYTE b, const char *function, int line)
 {
 	char regname[256] = "";
-	u_short c = (*(((volatile u_short *)a->pci_membase)+((b)*ADDR_MULT)));
+	u_short c = (readw((volatile u_short *)((a->pci_membase)+b)));
 	int i;
 
 	i = 0;
@@ -1276,7 +1268,7 @@ static void _HFC_wait(struct hfc_multi *a, const char *function, int line)
 {
 	printk(KERN_DEBUG "HFC_wait(chip %d); in %s() line %d\n",
 	    a->id, function, line);
-	while ((*(((volatile u_char *)a->pci_membase)+R_STATUS)) & V_BUSY);
+	while(readb((volatile u_char *)((a->pci_membase)+R_STATUS)) & V_BUSY);
 }
 
 #endif /* else HFC_REGISTER_MAP */
@@ -1353,4 +1345,4 @@ static inline void HFC_wait(struct hfc_multi *a)
 #define HFC_inb_(a, b) HFC_inb(a, b)
 #define HFC_wait_(a) HFC_wait(a)
 
-#endif /* else CONFIG_HFCMULTI_PCIMEM */
+#endif /* CONFIG_HFCMULTI_PCIMEM */

@@ -146,7 +146,7 @@ struct hfcPCI_hw {
 	unsigned char		trm;
 	unsigned char		fifo_en;
 	unsigned char		bswapped;
-	unsigned char		nt_mode;
+	unsigned char		protocol;
 	int			nt_timer;
 	unsigned char		*pci_io; /* start of PCI IO memory */
 	dma_addr_t		dmahandle;
@@ -217,6 +217,27 @@ release_io_hfcpci(struct hfc_pci *hc)
 	iounmap((void *)hc->hw.pci_io);
 }
 
+/*
+ * set mode (NT or TE)
+ */
+static void
+hfcpci_setmode(struct hfc_pci *hc)
+{
+	if (hc->hw.protocol == ISDN_P_NT_S0) {
+		hc->hw.clkdel = CLKDEL_NT;	/* ST-Bit delay for NT-Mode */
+		hc->hw.sctrl |= SCTRL_MODE_NT;	/* NT-MODE */
+		hc->hw.states = 1;		/* G1 */
+	} else {
+		hc->hw.clkdel = CLKDEL_TE;	/* ST-Bit delay for TE-Mode */
+		hc->hw.sctrl &= ~SCTRL_MODE_NT;	/* TE-MODE */
+		hc->hw.states = 2;		/* F2 */
+	}
+	Write_hfc(hc, HFCPCI_CLKDEL, hc->hw.clkdel);
+	Write_hfc(hc, HFCPCI_STATES, HFCPCI_LOAD_STATE | hc->hw.states);
+	udelay(10);
+	Write_hfc(hc, HFCPCI_STATES, hc->hw.states | 0x40); /* Deactivate */
+	Write_hfc(hc, HFCPCI_SCTRL, hc->hw.sctrl);
+}
 
 /*
  * function called to reset the HFC PCI chip. A complete software reset of chip
@@ -269,17 +290,8 @@ reset_hfcpci(struct hfc_pci *hc)
 		hc->hw.mst_m |= HFCPCI_MASTER;	/* HFC Master Mode */
 	if (test_bit(HFC_CFG_NEG_F0, &hc->cfg))
 		hc->hw.mst_m |= HFCPCI_F0_NEGATIV;
-	if (hc->hw.nt_mode) {
-		hc->hw.clkdel = CLKDEL_NT;	/* ST-Bit delay for NT-Mode */
-		hc->hw.sctrl |= SCTRL_MODE_NT;	/* NT-MODE */
-		hc->hw.states = 1;		/* G1 */
-	} else {
-		hc->hw.clkdel = CLKDEL_TE;	/* ST-Bit delay for TE-Mode */
-		hc->hw.states = 2;		/* F2 */
-	}
 	Write_hfc(hc, HFCPCI_FIFO_EN, hc->hw.fifo_en);
 	Write_hfc(hc, HFCPCI_TRM, hc->hw.trm);
-	Write_hfc(hc, HFCPCI_CLKDEL, hc->hw.clkdel);
 	Write_hfc(hc, HFCPCI_SCTRL_E, hc->hw.sctrl_e);
 	Write_hfc(hc, HFCPCI_CTMT, hc->hw.ctmt);
 
@@ -290,12 +302,10 @@ reset_hfcpci(struct hfc_pci *hc)
 	/* Clear already pending ints */
 	if (Read_hfc(hc, HFCPCI_INT_S1));
 
-	Write_hfc(hc, HFCPCI_STATES, HFCPCI_LOAD_STATE | hc->hw.states);
-	udelay(10);
-	Write_hfc(hc, HFCPCI_STATES, hc->hw.states | 0x40); /* Deactivate */
-
+	/* set NT/TE mode */
+	hfcpci_setmode(hc);
+	
 	Write_hfc(hc, HFCPCI_MST_MODE, hc->hw.mst_m);
-	Write_hfc(hc, HFCPCI_SCTRL, hc->hw.sctrl);
 	Write_hfc(hc, HFCPCI_SCTRL_R, hc->hw.sctrl_r);
 
 	/*
@@ -1028,7 +1038,7 @@ ph_state(struct dchannel *dch)
 {
 	struct hfc_pci	*hc = dch->hw;
 
-	if (hc->hw.nt_mode) {
+	if (hc->hw.protocol == ISDN_P_NT_S0) {
 		if (test_bit(FLG_HFC_TIMER_T3, &dch->Flags) && hc->hw.nt_timer < 0)
 			handle_nt_timer3(dch);
 		else
@@ -1173,7 +1183,7 @@ hfcpci_interrupt(int intno, void *dev_id)
 		val &= ~0x40;
 	}
 	if (val & 0x80) {	/* timer irq */
-		if (hc->hw.nt_mode) {
+		if (hc->hw.protocol == ISDN_P_NT_S0) {
 			if ((--hc->hw.nt_timer) < 0)
 				schedule_event(&hc->dch, FLG_PHCHANGE);
 		}
@@ -1611,7 +1621,7 @@ hfcpci_l2l1D(struct mISDNchannel *ch, struct sk_buff *skb)
 		return ret;
 	case PH_ACTIVATE_REQ:
 		spin_lock_irqsave(&hc->lock, flags);
-		if (hc->hw.nt_mode) {
+		if (hc->hw.protocol == ISDN_P_NT_S0) {
 			ret = 0;
 			if (test_bit(HFC_CFG_MASTER, &hc->cfg))
 				hc->hw.mst_m |= HFCPCI_MASTER;
@@ -1640,7 +1650,7 @@ hfcpci_l2l1D(struct mISDNchannel *ch, struct sk_buff *skb)
 	case PH_DEACTIVATE_REQ:
 		test_and_clear_bit(FLG_L2_ACTIVATED, &dch->Flags);
 		spin_lock_irqsave(&hc->lock, flags);
-		if (hc->hw.nt_mode) {
+		if (hc->hw.protocol == ISDN_P_NT_S0) {
 			/* prepare deactivation */
 			Write_hfc(hc, HFCPCI_STATES, 0x40);
 			skb_queue_purge(&dch->squeue);
@@ -1909,17 +1919,23 @@ open_dchannel(struct hfc_pci *hc, struct mISDNchannel *ch,
 	if (rq->protocol == ISDN_P_NONE)
 		return -EINVAL;
 	if (!hc->initdone) {
-		if (rq->protocol == ISDN_P_NT_S0) {
-			hc->hw.nt_mode = 1;
-		} else {
+		if (rq->protocol == ISDN_P_TE_S0) {
 			err = create_l1(&hc->dch, hfc_l1callback);
 			if (err)
 				return err;
 		}
-		init_card(hc);
-		ch->protocol = rq->protocol;
-	} else if (rq->protocol != ch->protocol)
-		return -EPROTONOSUPPORT;
+		hc->hw.protocol = ch->protocol = rq->protocol;
+		err = init_card(hc);
+		if (err)
+			return err;
+	} else {
+	       	if (rq->protocol != ch->protocol) {
+			if (hc->hw.protocol == ISDN_P_TE_S0)
+				l1_event(hc->dch.l1, CLOSE_CHANNEL);
+			hc->hw.protocol = ch->protocol = rq->protocol;
+			hfcpci_setmode(hc);
+		}
+	}
 	
 	if (((ch->protocol == ISDN_P_NT_S0) && (hc->dch.state == 3)) ||
 	    ((ch->protocol == ISDN_P_TE_S0) && (hc->dch.state == 7))) {
@@ -2062,7 +2078,7 @@ release_card(struct hfc_pci *hc) {
 	}
 	spin_unlock_irqrestore(&hc->lock, flags);
 	release_io_hfcpci(hc);
-	if (hc->hw.nt_mode == 0) /* TE */
+	if (hc->hw.protocol == ISDN_P_TE_S0)
 		l1_event(hc->dch.l1, CLOSE_CHANNEL);
 	if (hc->initdone)
 		free_irq(hc->irq, hc);
