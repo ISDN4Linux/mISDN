@@ -2062,7 +2062,7 @@ l2_ctrl(struct mISDNchannel *ch, u_int cmd, void *arg)
 }
 
 struct layer2 *
-create_l2(struct mISDNchannel *ch, u_int protocol, u_int options, u_long arg)
+create_l2(struct mISDNchannel *ch, u_int protocol, u_long options, u_long arg)
 {
 	struct layer2		*l2;
 	struct channel_req	rq;
@@ -2084,20 +2084,20 @@ create_l2(struct mISDNchannel *ch, u_int protocol, u_int options, u_long arg)
 		test_and_set_bit(FLG_MOD128, &l2->flag);
 		l2->sapi = 0;
 		l2->maxlen = MAX_DFRAME_LEN;
-		if (options & OPTION_L2_PMX)
+		if (test_bit(OPTION_L2_PMX, &options))
 			l2->window = 7;
 		else
 			l2->window = 1;
-		if (options & OPTION_L2_PTP)
+		if (test_bit(OPTION_L2_PTP, &options))
 			test_and_set_bit(FLG_PTP, &l2->flag);
-		if (options & OPTION_L2_FIXEDTEI) {
+		if (test_bit(OPTION_L2_FIXEDTEI, &options)) {
 			test_and_set_bit(FLG_FIXED_TEI, &l2->flag);
 		}
 		l2->tei = (u_int)arg;
 		l2->T200 = 1000;
 		l2->N200 = 3;
 		l2->T203 = 10000;
-		if (options & OPTION_L2_PMX)
+		if (test_bit(OPTION_L2_PMX, &options))
 			rq.protocol = ISDN_P_NT_E1;
 		else
 			rq.protocol = ISDN_P_NT_S0;
@@ -2110,20 +2110,20 @@ create_l2(struct mISDNchannel *ch, u_int protocol, u_int options, u_long arg)
 		test_and_set_bit(FLG_ORIG, &l2->flag);
 		l2->sapi = 0;
 		l2->maxlen = MAX_DFRAME_LEN;
-		if (options & OPTION_L2_PMX)
+		if (test_bit(OPTION_L2_PMX, &options))
 			l2->window = 7;
 		else
 			l2->window = 1;
-		if (options & OPTION_L2_PTP)
+		if (test_bit(OPTION_L2_PTP, &options))
 			test_and_set_bit(FLG_PTP, &l2->flag);
-		if (options & OPTION_L2_FIXEDTEI) {
+		if (test_bit(OPTION_L2_FIXEDTEI, &options)) {
 			test_and_set_bit(FLG_FIXED_TEI, &l2->flag);
 		}
 		l2->tei = (u_int)arg;
 		l2->T200 = 1000;
 		l2->N200 = 3;
 		l2->T203 = 10000;
-		if (options & OPTION_L2_PMX)
+		if (test_bit(OPTION_L2_PMX, &options))
 			rq.protocol = ISDN_P_TE_E1;
 		else
 			rq.protocol = ISDN_P_TE_S0;

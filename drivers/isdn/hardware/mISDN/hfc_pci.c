@@ -2097,6 +2097,7 @@ setup_card(struct hfc_pci *card)
 	int		err = -EINVAL;
 	u_int		i;
 	u_long		flags;
+	char		name[MISDN_MAX_IDLEN];
 
 	if (HFC_cnt >= MAX_CARDS)
 		return -EINVAL; /* maybe better value */
@@ -2125,7 +2126,8 @@ setup_card(struct hfc_pci *card)
 	err = setup_hw(card);
 	if (err)
 		goto error;
-	err = mISDN_register_device(&card->dch.dev);
+	snprintf(name, MISDN_MAX_IDLEN - 1, "hfc-pci.%d", HFC_cnt + 1);
+	err = mISDN_register_device(&card->dch.dev, name);
 	if (err)
 		goto error;
 	HFC_cnt++;

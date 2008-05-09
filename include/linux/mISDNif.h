@@ -493,7 +493,7 @@ _queue_data(struct mISDNchannel *ch, u_int prim,
 
 /* global register/unregister functions */
 
-extern int	mISDN_register_device(struct mISDNdevice *);
+extern int	mISDN_register_device(struct mISDNdevice *, char *name);
 extern void	mISDN_unregister_device(struct mISDNdevice *);
 extern int	mISDN_register_Bprotocol(struct Bprotocol *);
 extern void	mISDN_unregister_Bprotocol(struct Bprotocol *);

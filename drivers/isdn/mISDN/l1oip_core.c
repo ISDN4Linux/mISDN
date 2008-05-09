@@ -236,7 +236,7 @@ socket process and create a new one.
 #include "core.h"
 #include "l1oip.h"
 
-static const char *l1oip_revision = "$Revision: 1.8 $";
+static const char *l1oip_revision = "$Revision: 2.00 $";
 
 static int l1oip_cnt = 0;
 static spinlock_t l1oip_lock;
@@ -1244,6 +1244,7 @@ init_card(l1oip_t *hc, int pri, int bundle)
 	struct bchannel	*bch;
 	int		ret;
 	int		i, ch;
+	char		name[MISDN_MAX_IDLEN];
 
 	spin_lock_init(&hc->dummylock);
 	spin_lock_init(&hc->socket_lock);
@@ -1366,13 +1367,15 @@ init_card(l1oip_t *hc, int pri, int bundle)
 		test_and_set_bit(bch->nr & 0x1f,
 			&dch->dev.channelmap[bch->nr >> 5]);
 	}
-	ret = mISDN_register_device(&dch->dev);
+	snprintf(name, MISDN_MAX_IDLEN - 1, "l1oip-%s.%d", 
+		pri?"pri":"bri", l1oip_cnt + 1);
+	ret = mISDN_register_device(&dch->dev, name);
 	if (ret)
 		return ret;
 
 	if (debug & DEBUG_L1OIP_INIT)
 		printk(KERN_DEBUG "%s: Setting up network card(%d)\n",
-			__FUNCTION__, l1oip_cnt+1);
+			__FUNCTION__, l1oip_cnt + 1);
 	if ((ret = l1oip_socket_open(hc)))
 		return ret;
 

@@ -1647,8 +1647,9 @@ hfc_bctrl(struct mISDNchannel *ch, u_int cmd, void *arg)
 static int
 setup_instance(hfcsusb_t * card)
 {
-	u_long flags;
-	int err, i;
+	u_long	flags;
+	int	err, i;
+	char	name[MISDN_MAX_IDLEN];
 
 	spin_lock_init(&card->ctrl_lock);
 	spin_lock_init(&card->lock);
@@ -1678,7 +1679,8 @@ setup_instance(hfcsusb_t * card)
 	err = setup_hfcsusb(card);
 	if (err)
 		goto out;
-	err = mISDN_register_device(&card->dch.dev);
+	snprintf(name, MISDN_MAX_IDLEN - 1, "hfcs-usb.%d", hfcsusb_cnt + 1);
+	err = mISDN_register_device(&card->dch.dev, name);
 	if (err)
 		goto out;
 

@@ -80,7 +80,7 @@
  *	Valid is 8, 16, 32, 64, 128, 256.
  *
  * pcm:
- *	NOTE: only one pcm value must be given for all cards.
+ *	NOTE: only one pcm value must be given for every card.
  *	The PCM bus id tells the mISDNdsp module about the connected PCM bus.
  * 	By default (0), the PCM bus id is 100 for the card that is PCM master.
  * 	If multiple cards are PCM master (because they are not interconnected),
@@ -91,6 +91,17 @@
  *	-1 means no support of PCM bus not even.
  *	Omit this value, if all cards are interconnected or none is connected.
  *	If unsure, don't give this parameter.
+ *
+ * dslot:
+ *	NOTE: only one poll value must be given for every card.
+ *	Also this value must be given for non-E1 cards. If omitted, the E1
+ *	card has D-channel on time slot 16, which is default.
+ *	If 1..15 or 17..31, an alternate time slot is used for D-channel.
+ *	In this case, the application must be able to handle this.
+ *	If -1 is given, the D-channel is disabled and all 31 slots can be used
+ *	for B-channel. (only for specific applications)
+ *	If you don't know how to use it, you don't need it!
+ * 	
  */
 
 /* debug using register map (never use this, it will flood your system log) */
@@ -100,8 +111,7 @@
 #include <linux/pci.h>
 #include <linux/delay.h>
 #include <linux/mISDNhw.h>
-#include "linux/mISDNdsp.h"
-#include <linux/isdn_compat.h>
+#include <linux/mISDNdsp.h>
 
 // #define IRQCOUNT_DEBUG
 
@@ -172,6 +182,7 @@ static u_char silence =	0xff;	/* silence by LAW */
 
 static uint	type[MAX_CARDS];
 static uint	pcm[MAX_CARDS];
+static uint	dslot[MAX_CARDS];
 static uint	port[MAX_PORTS];
 static uint	debug;
 static uint	poll;
@@ -188,8 +199,9 @@ module_param(debug, uint, S_IRUGO | S_IWUSR);
 module_param(poll, uint, S_IRUGO | S_IWUSR);
 module_param(timer, uint, S_IRUGO | S_IWUSR);
 module_param_array(type, uint, NULL, S_IRUGO | S_IWUSR);
-module_param_array(port, uint, NULL, S_IRUGO | S_IWUSR);
 module_param_array(pcm, uint, NULL, S_IRUGO | S_IWUSR);
+module_param_array(dslot, uint, NULL, S_IRUGO | S_IWUSR);
+module_param_array(port, uint, NULL, S_IRUGO | S_IWUSR);
 #endif
 
 
@@ -2629,9 +2641,6 @@ hfcm_l1callback(struct dchannel *dch, u_int cmd)
 				printk(KERN_DEBUG
 				    "%s: HW_RESET_REQ no BRI\n",
 				    __FUNCTION__);
-//			HFC_outb(hc, R_E1_WR_STA, V_E1_LD_STA | 0);
-//			udelay(6); /* wait at least 5,21us */
-//			HFC_outb(hc, R_E1_WR_STA, 0);
 		} else {
 			HFC_outb(hc, R_ST_SEL, hc->chan[dch->slot].port);
 			HFC_outb(hc, A_ST_WR_STATE, V_ST_LD_STA | 3); /* F3 */
@@ -2770,9 +2779,6 @@ handle_dmsg(struct mISDNchannel *ch, struct sk_buff *skb)
 				    "%s: PH_DEACTIVATE port %d (0..%d)\n",
 				    __FUNCTION__, hc->chan[dch->slot].port,
 				    hc->ports-1);
-			/* prepare deactivation */
-			dch->state = 1;
-
 			/* start deactivation */
 			if (hc->type == 1) {
 				if (debug & DEBUG_HFCMULTI_MSG)
@@ -2784,6 +2790,7 @@ handle_dmsg(struct mISDNchannel *ch, struct sk_buff *skb)
 				    hc->chan[dch->slot].port);
 				HFC_outb(hc, A_ST_WR_STATE, V_ST_ACT * 2);
 				    /* deactivate */
+				dch->state = 1;
 			}
 			skb_queue_purge(&dch->squeue);
 			if (dch->tx_skb) {
@@ -3888,9 +3895,10 @@ release_card(struct hfc_multi *hc)
 static int
 init_e1_port(struct hfc_multi *hc, struct hm_map *m)
 {
-	struct	dchannel	*dch;
-	struct	bchannel	*bch;
-	int	ch, ret = 0;
+	struct dchannel	*dch;
+	struct bchannel	*bch;
+	int		ch, ret = 0;
+	char		name[MISDN_MAX_IDLEN];
 
 	dch = kzalloc(sizeof(struct dchannel), GFP_KERNEL);
 	if (!dch)
@@ -4015,7 +4023,8 @@ init_e1_port(struct hfc_multi *hc, struct hm_map *m)
 		   		" report: card(%d) port(%d)\n",
 		   		__FUNCTION__, HFC_cnt + 1, 1);
 	}
-	ret = mISDN_register_device(&dch->dev);
+	snprintf(name, MISDN_MAX_IDLEN - 1, "hfc-e1.%d", HFC_cnt + 1);
+	ret = mISDN_register_device(&dch->dev, name);
 	if (ret)
 		goto free_chan;
 	hc->created[0] = 1;
@@ -4028,9 +4037,10 @@ free_chan:
 static int
 init_multi_port(struct hfc_multi *hc, int pt)
 {
-	struct	dchannel	*dch;
-	struct	bchannel	*bch;
-	int	ch, i, ret = 0;
+	struct dchannel	*dch;
+	struct bchannel	*bch;
+	int		ch, i, ret = 0;
+	char		name[MISDN_MAX_IDLEN];
 
 	dch = kzalloc(sizeof(struct dchannel), GFP_KERNEL);
 	if (!dch)
@@ -4127,7 +4137,9 @@ init_multi_port(struct hfc_multi *hc, int pt)
 		    &hc->chan[i + 2].cfg);
 	}
 #endif
-	ret = mISDN_register_device(&dch->dev);
+	snprintf(name, MISDN_MAX_IDLEN - 1, "hfc-%ds.%d/%d", 
+		hc->type, HFC_cnt + 1, pt + 1);
+	ret = mISDN_register_device(&dch->dev, name);
 	if (ret)
 		goto free_chan;
 	hc->created[pt] = 1;
@@ -4153,11 +4165,11 @@ hfcpci_init(struct pci_dev *pdev, const struct pci_device_id *ent)
 		return -EINVAL;
 	}
 	if (type[HFC_cnt] && (type[HFC_cnt] & 0xff) != m->type) {
-		printk(KERN_ERR "HFC-MULTI: Card '%s:%s' type %d found but "
+		printk(KERN_WARNING "HFC-MULTI: Card '%s:%s' type %d found but "
 		    "type[%d] %d was supplied as module parameter\n",
 		    m->vendor_name, m->card_name, m->type, HFC_cnt,
 		    type[HFC_cnt] & 0xff);
-		printk(KERN_ERR "HFC-MULTI: Load module without parameters "
+		printk(KERN_WARNING "HFC-MULTI: Load module without parameters "
 			"first, to see cards and their types.");
 		return -EINVAL;
 	}
@@ -4177,7 +4189,16 @@ hfcpci_init(struct pci_dev *pdev, const struct pci_device_id *ent)
 	hc->ports = m->ports;
 	hc->id = HFC_cnt;
 	hc->pcm = pcm[HFC_cnt];
-	hc->dslot = 16;
+	if (dslot[HFC_cnt] < 0) {
+		hc->dslot = 0;
+		printk(KERN_INFO "HFC-E1 card has disabled D-channel, but "
+			"31 B-channels\n");
+	} if (dslot[HFC_cnt] > 0 && dslot[HFC_cnt] < 32) {
+		hc->dslot = dslot[HFC_cnt];
+		printk(KERN_INFO "HFC-E1 card has alternating D-channel on "
+			"time slot %d\n", dslot[HFC_cnt]);
+	} else
+		hc->dslot = 16;
 
 	/* set chip specific features */
 	hc->masterclk = -1;

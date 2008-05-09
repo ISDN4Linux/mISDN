@@ -546,7 +546,7 @@ create_l2entity(struct mISDNdevice *dev, struct mISDNchannel *ch,
 			add_layer2(rq.ch, dev->D.st);
 			rq.ch->recv = mISDN_queue_message;
 			rq.ch->peer = &dev->D.st->own;
-			rq.ch->ctrl(rq.ch, OPEN_CHANNEL, NULL); /* cannot fail */
+			rq.ch->ctrl(rq.ch, OPEN_CHANNEL, NULL); /* can't fail */
 		}
 		break;
 	default:

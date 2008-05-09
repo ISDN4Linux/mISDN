@@ -81,7 +81,7 @@ get_free_devid(void)
 }
 
 int
-mISDN_register_device(struct mISDNdevice *dev)
+mISDN_register_device(struct mISDNdevice *dev, char *name)
 {
 	u_long	flags;
 	int	err;
@@ -89,7 +89,10 @@ mISDN_register_device(struct mISDNdevice *dev)
 	dev->id = get_free_devid();
 	if (dev->id < 0)
 		return -EBUSY;
-	sprintf(dev->name,"mISDN%d", dev->id);
+	if (name && name[0])
+		strcpy(dev->name, name);
+	else
+		sprintf(dev->name, "mISDN%d", dev->id);
 	if (debug & DEBUG_CORE)
 		printk(KERN_DEBUG "mISDN_register %s %d\n",
 			dev->name, dev->id);

@@ -81,7 +81,7 @@ enum {
 
 #define L2_STATE_COUNT (ST_L2_8+1)
 
-extern struct layer2	*create_l2(struct mISDNchannel *, u_int, u_int, u_long arg);
+extern struct layer2	*create_l2(struct mISDNchannel *, u_int, u_long, u_long arg);
 extern int		tei_l2(struct layer2 *, u_int, u_long arg);
 
 
