@@ -26,14 +26,14 @@
  * type:
 	Value 1	= BRI
 	Value 2	= PRI
-	Value 3 = BRI (multi channel frame)
-	Value 4 = PRI (multi channel frame)
+	Value 3 = BRI (multi channel frame, not supported yet)
+	Value 4 = PRI (multi channel frame, not supported yet)
 	A multi channel frame reduces overhead to a single frame for all
        	b-channels, but increases delay.
 	(NOTE: Multi channel frames are not implemented yet.)
 
  * codec:
-	Value 0 = transparent
+	Value 0 = transparent (default)
 	Value 1 = transfer ALAW
 	Value 2 = transfer ULAW
 	Value 3 = transfer generic 4 bit compression.
@@ -373,7 +373,8 @@ static void
 l1oip_socket_recv(l1oip_t *hc, u8 remotecodec, u8 channel, u16 timebase, u8 *buf, int len)
 {
 	struct sk_buff *nskb;
-	struct mISDNchannel *ch = NULL;
+	struct bchannel *bch;
+	struct dchannel *dch;
 	u8 *p;
 	u32 rx_counter;
 
@@ -393,11 +394,9 @@ l1oip_socket_recv(l1oip_t *hc, u8 remotecodec, u8 channel, u16 timebase, u8 *buf
 			"range\n", __FUNCTION__, channel);
 		return;
 	}
-	if (hc->chan[channel].dch)
-		ch = &hc->chan[channel].dch->dev.D;
-	if (hc->chan[channel].bch)
-		ch = &hc->chan[channel].bch->ch;
-	if (!ch) {
+	dch = hc->chan[channel].dch;
+	bch = hc->chan[channel].bch;
+	if (!dch && !bch) {
 		printk(KERN_WARNING "%s: packet error - channel %d not in "
 			"stack\n", __FUNCTION__, channel);
 		return;
@@ -428,21 +427,27 @@ l1oip_socket_recv(l1oip_t *hc, u8 remotecodec, u8 channel, u16 timebase, u8 *buf
 		if (timebase >= ((u16)rx_counter))
 			rx_counter = (rx_counter & 0xffff0000) | timebase;
 		else
-			rx_counter = ((rx_counter & 0xffff0000)+0x1000)
+			rx_counter = ((rx_counter & 0xffff0000)+0x10000)
 				| timebase;
 	} else
 	{
-		/* time has changed backwads */
+		/* time has changed backwards */
 		if (timebase < ((u16)rx_counter))
 			rx_counter = (rx_counter & 0xffff0000) | timebase;
 		else
-			rx_counter = ((rx_counter & 0xffff0000)-0x1000)
+			rx_counter = ((rx_counter & 0xffff0000)-0x10000)
 				| timebase;
 	}
 	hc->chan[channel].rx_counter = rx_counter;
 
 	/* send message up */
-	queue_ch_frame(ch, PH_DATA_IND, rx_counter, nskb);
+	if (dch && len >= 2)
+	{
+		dch->rx_skb = nskb;
+		recv_Dchannel(dch);
+	}
+	if (bch)
+		queue_ch_frame(&bch->ch, PH_DATA_IND, rx_counter, nskb);
 }
 
 
@@ -920,10 +925,29 @@ static int
 channel_dctrl(struct dchannel *dch, struct mISDN_ctrl_req *cq)
 {
 	int	ret = 0;
+	l1oip_t	*hc = dch->hw;
 
 	switch(cq->op) {
 	case MISDN_CTRL_GETOP:
-		cq->op = 0; // TODO
+		cq->op = MISDN_CTRL_SETPEER | MISDN_CTRL_UNSETPEER;
+		break;
+	case MISDN_CTRL_SETPEER:
+		hc->remoteip = (u_long)cq->p1;
+		hc->localport = cq->p2 | 0xffff;
+		hc->remoteport = cq->p2 >> 16;
+		if (!hc->remoteport)
+			hc->remoteport = hc->localport;
+		if (debug & DEBUG_L1OIP_SOCKET)
+			printk(KERN_DEBUG "%s: got new ip address from user "
+				"space.\n", __FUNCTION__);
+			l1oip_socket_open(hc);
+		break;
+	case MISDN_CTRL_UNSETPEER:
+		if (debug & DEBUG_L1OIP_SOCKET)
+			printk(KERN_DEBUG "%s: removing ip address.\n",
+				__FUNCTION__);
+		hc->remoteip = 0;
+		l1oip_socket_open(hc);
 		break;
 	default:
 		printk(KERN_WARNING "%s: unknown Op %x\n",
@@ -944,8 +968,9 @@ open_dchannel(l1oip_t *hc, struct dchannel *dch, struct channel_req *rq)
 		return -EINVAL;
 	if ((dch->dev.D.protocol != ISDN_P_NONE) &&
 	    (dch->dev.D.protocol != rq->protocol)) {
-		printk(KERN_WARNING "%s: change protocol %x to %x\n",
-		    __FUNCTION__, dch->dev.D.protocol, rq->protocol);
+		if (debug & DEBUG_HW_OPEN)
+			printk(KERN_WARNING "%s: change protocol %x to %x\n",
+			__FUNCTION__, dch->dev.D.protocol, rq->protocol);
 	}
 	if (dch->dev.D.protocol != rq->protocol) { 
 		dch->dev.D.protocol = rq->protocol;
@@ -972,7 +997,7 @@ open_bchannel(l1oip_t *hc, struct dchannel *dch, struct channel_req *rq)
 		return -EINVAL;
 	if (rq->protocol == ISDN_P_NONE)
 		return -EINVAL;
-	ch = rq->adr.channel; /* BRI: 1=B1 2=B2 3=D */
+	ch = rq->adr.channel; /* BRI: 1=B1 2=B2  PRI: 1..15,17.. */
 	bch = hc->chan[ch].bch;
 	if (!bch) {
 		printk(KERN_ERR "%s:internal error ch %d has no bch\n",
@@ -1003,13 +1028,26 @@ l1oip_dctrl(struct mISDNchannel *ch, u_int cmd, void *arg)
 	switch (cmd) {
 	case OPEN_CHANNEL:
 		rq = arg;
-		if ((rq->protocol == ISDN_P_TE_S0) ||
-		    (rq->protocol == ISDN_P_NT_S0) ||
-		    (rq->protocol == ISDN_P_TE_E1) ||
-		    (rq->protocol == ISDN_P_NT_E1))
+		switch (rq->protocol) {
+		case ISDN_P_TE_S0:
+		case ISDN_P_NT_S0:
+			if (hc->pri) {
+				err = -EINVAL;
+				break;
+			}
 			err = open_dchannel(hc, dch, rq);
-		else
-			err = open_bchannel(hc, dch, rq); 
+			break;
+		case ISDN_P_TE_E1:
+		case ISDN_P_NT_E1:
+			if (!hc->pri) {
+				err = -EINVAL;
+				break;
+			}
+			err = open_dchannel(hc, dch, rq);
+			break;
+		default:
+			err = open_bchannel(hc, dch, rq);
+		}
 		break;
 	case CLOSE_CHANNEL:
 		if (debug & DEBUG_HW_OPEN)
@@ -1112,12 +1150,10 @@ channel_bctrl(struct bchannel *bch, struct mISDN_ctrl_req *cq)
 {
 	int			ret = 0;
 	struct dsp_features	*features = (struct dsp_features *)cq->p1;
-	l1oip_t			*hc = bch->hw;
 
 	switch(cq->op) {
 	case MISDN_CTRL_GETOP:
-		cq->op = MISDN_CTRL_SETPEER | MISDN_CTRL_UNSETPEER
-			| MISDN_CTRL_HW_FEATURES_OP;
+		cq->op = MISDN_CTRL_HW_FEATURES_OP;
 		break;
 	case MISDN_CTRL_HW_FEATURES: /* fill features structure */
 		if (debug & DEBUG_L1OIP_MSG)
@@ -1127,24 +1163,6 @@ channel_bctrl(struct bchannel *bch, struct mISDN_ctrl_req *cq)
 		features->has_jitter = 1;
 #warning remove comment when dsp ordering is debugged
 //		features->unordered = 1;
-		break;
-	case MISDN_CTRL_SETPEER:
-		hc->remoteip = (u_long)cq->p1;
-		hc->localport = cq->p2 | 0xffff;
-		hc->remoteport = cq->p2 >> 16;
-		if (!hc->remoteport)
-			hc->remoteport = hc->localport;
-		if (debug & DEBUG_L1OIP_SOCKET)
-			printk(KERN_DEBUG "%s: got new ip address from user "
-				"space.\n", __FUNCTION__);
-			l1oip_socket_open(hc);
-		break;
-	case MISDN_CTRL_UNSETPEER:
-		if (debug & DEBUG_L1OIP_SOCKET)
-			printk(KERN_DEBUG "%s: removing ip address.\n",
-				__FUNCTION__);
-		hc->remoteip = 0;
-		l1oip_socket_open(hc);
 		break;
 	default:
 		printk(KERN_WARNING "%s: unknown Op %x\n",
@@ -1202,7 +1220,7 @@ release_card(l1oip_t *hc)
 	if (hc->socket_pid)
 		l1oip_socket_close(hc);
 	
-	if (hc->chan[hc->d_idx].dch)
+	if (hc->registered && hc->chan[hc->d_idx].dch)
 		mISDN_unregister_device(&hc->chan[hc->d_idx].dch->dev);
 	for (ch = 0; ch < 128; ch++) {
 		if (hc->chan[ch].dch) {
@@ -1244,9 +1262,7 @@ init_card(l1oip_t *hc, int pri, int bundle)
 	struct bchannel	*bch;
 	int		ret;
 	int		i, ch;
-	char		name[MISDN_MAX_IDLEN];
 
-	spin_lock_init(&hc->dummylock);
 	spin_lock_init(&hc->socket_lock);
 	hc->socket_lock = SPIN_LOCK_UNLOCKED;
 	hc->idx = l1oip_cnt;
@@ -1255,9 +1271,9 @@ init_card(l1oip_t *hc, int pri, int bundle)
 	hc->b_num = pri?30:2;
 	hc->bundle = bundle;
 	if (hc->pri)
-		sprintf(hc->name, "L1oIP-E1#%d", l1oip_cnt+1);
+		sprintf(hc->name, "l1oip-e1.%d", l1oip_cnt + 1);
 	else
-		sprintf(hc->name, "L1oIP-S0#%d", l1oip_cnt+1);
+		sprintf(hc->name, "l1oip-s0.%d", l1oip_cnt + 1);
 
 	switch (codec[l1oip_cnt]) {
 	case 0: /* as is */
@@ -1367,11 +1383,10 @@ init_card(l1oip_t *hc, int pri, int bundle)
 		test_and_set_bit(bch->nr & 0x1f,
 			&dch->dev.channelmap[bch->nr >> 5]);
 	}
-	snprintf(name, MISDN_MAX_IDLEN - 1, "l1oip-%s.%d", 
-		pri?"pri":"bri", l1oip_cnt + 1);
-	ret = mISDN_register_device(&dch->dev, name);
+	ret = mISDN_register_device(&dch->dev, hc->name);
 	if (ret)
 		return ret;
+	hc->registered = 1;
 
 	if (debug & DEBUG_L1OIP_INIT)
 		printk(KERN_DEBUG "%s: Setting up network card(%d)\n",

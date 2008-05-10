@@ -428,8 +428,9 @@ connect_layer1(struct mISDNdevice *dev, struct mISDNchannel *ch,
 	case ISDN_P_TE_S0:
 	case ISDN_P_NT_E1:
 	case ISDN_P_TE_E1:
-		if (dev->D.protocol && dev->D.protocol != protocol)
-			return -EINVAL;
+#warning temporarily removed
+//		if (dev->D.protocol && dev->D.protocol != protocol)
+//			return -EINVAL;
 	 	ch->recv = mISDN_queue_message;
 	 	ch->peer = &dev->D.st->own;
 		ch->st = dev->D.st;

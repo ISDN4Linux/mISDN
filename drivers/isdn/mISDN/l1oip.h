@@ -3,10 +3,10 @@
  */
 
 /* debugging */
-#define DEBUG_L1OIP_INIT	0x0001
-#define DEBUG_L1OIP_SOCKET	0x0002
-#define DEBUG_L1OIP_MGR		0x0004
-#define DEBUG_L1OIP_MSG		0x0008
+#define DEBUG_L1OIP_INIT	0x00010000
+#define DEBUG_L1OIP_SOCKET	0x00020000
+#define DEBUG_L1OIP_MGR		0x00040000
+#define DEBUG_L1OIP_MSG		0x00080000
 
 
 /* frames */
@@ -38,8 +38,8 @@ struct _l1oip_t {
 	struct list_head        list;
 
 	/* card */
-	char			name[32];
-	spinlock_t		dummylock;	/* for future use */
+	int			registered;	/* if registered with mISDN */
+	char			name[MISDN_MAX_IDLEN];
 	int			idx;		/* card index */
 	int			pri;		/* 1=pri, 0=bri */
 	int			d_idx;		/* current dchannel number */

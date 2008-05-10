@@ -2265,7 +2265,7 @@ mode_hfcmulti(struct hfc_multi *hc, int ch, int protocol, int slot_tx,
 		flow_tx = 0x80; /* FIFO->ST */
 		/* disable pcm slot */
 		hc->chan[ch].slot_tx = -1;
-		hc->chan[ch].bank_tx = -1;
+		hc->chan[ch].bank_tx = 0;
 	} else {
 		/* set pcm slot */
 		if (hc->chan[ch].txpending)
@@ -2292,7 +2292,7 @@ mode_hfcmulti(struct hfc_multi *hc, int ch, int protocol, int slot_tx,
 		/* disable pcm slot */
 		flow_rx = 0x80; /* ST->FIFO */
 		hc->chan[ch].slot_rx = -1;
-		hc->chan[ch].bank_rx = -1;
+		hc->chan[ch].bank_rx = 0;
 	} else {
 		/* set pcm slot */
 		if (hc->chan[ch].txpending)
@@ -2351,10 +2351,13 @@ mode_hfcmulti(struct hfc_multi *hc, int ch, int protocol, int slot_tx,
 
 #ifdef B410P_CARD
 			if (test_bit(HFC_CHIP_B410P, &hc->chip) &&
+#warning bitte ueberdenken und mir erklaeren, was das passiert
+#warning bank darf nur 0, 1 oder 2 haben (wo der slot geschaltet wird oder ob er geloopt werden soll)
 			    (hc->chan[ch].slot_rx < 0) &&
-			    (hc->chan[ch].bank_rx == 0) &&
-			    (hc->chan[ch].slot_tx < 0) &&
-			    (hc->chan[ch].bank_tx == 0)) {
+//			    (hc->chan[ch].bank_rx == 0) &&
+			    (hc->chan[ch].slot_tx < 0) //&&
+//			    (hc->chan[ch].bank_tx == 0)
+							) {
 
 				printk(KERN_DEBUG
 				    "Setting B-channel %d to echo cancelable "
@@ -2511,7 +2514,7 @@ hfcmulti_pcm(struct hfc_multi *hc, int ch, int slot_tx, int bank_tx,
 {
 	if (slot_rx < 0 || slot_rx < 0 || bank_tx < 0 || bank_rx < 0) {
 		/* disable PCM */
-		mode_hfcmulti(hc, ch, hc->chan[ch].protocol, -1, -1, -1, -1);
+		mode_hfcmulti(hc, ch, hc->chan[ch].protocol, -1, 0, -1, 0);
 		return;
 	}
 
@@ -2844,7 +2847,7 @@ deactivate_bchannel(struct bchannel *bch)
 	test_and_clear_bit(FLG_ACTIVE, &bch->Flags);
 	test_and_clear_bit(FLG_TX_BUSY, &bch->Flags);
 	hc->chan[bch->slot].conf = -1;
-	mode_hfcmulti(hc, bch->slot, ISDN_P_NONE, -1, -1, -1, -1);
+	mode_hfcmulti(hc, bch->slot, ISDN_P_NONE, -1, 0, -1, 0);
 	spin_unlock_irqrestore(&hc->lock, flags);
 }
 
@@ -3005,7 +3008,7 @@ channel_bctrl(struct bchannel *bch, struct mISDN_ctrl_req *cq)
 		if (debug & DEBUG_HFCMULTI_MSG)
 			printk(KERN_DEBUG "%s: HFC_PCM_DISC\n",
 			    __FUNCTION__);
-		hfcmulti_pcm(hc, bch->slot, -1, -1, -1, -1);
+		hfcmulti_pcm(hc, bch->slot, -1, 0, -1, 0);
 		break;
 	case MISDN_CTRL_HFC_CONF_JOIN: /* join conference (0..7) */
 		num = cq->p1 | 0xff;
@@ -3210,7 +3213,7 @@ hfcmulti_initmode(struct dchannel *dch)
 		hc->chan[hc->dslot].conf = -1;
 		if (hc->dslot) {
 			mode_hfcmulti(hc, hc->dslot, dch->dev.D.protocol,
-				-1, -1, -1, -1);
+				-1, 0, -1, 0);
 			dch->timer.function = (void *) hfcmulti_dbusy_timer;
 			dch->timer.data = (long) dch;
 			init_timer(&dch->timer);
@@ -3221,7 +3224,7 @@ hfcmulti_initmode(struct dchannel *dch)
 			hc->chan[i].slot_tx = -1;
 			hc->chan[i].slot_rx = -1;
 			hc->chan[i].conf = -1;
-			mode_hfcmulti(hc, i, ISDN_P_NONE, -1, -1, -1, -1);
+			mode_hfcmulti(hc, i, ISDN_P_NONE, -1, 0, -1, 0);
 		}
 		/* E1 */
 		if (test_bit(HFC_CFG_REPORT_LOS, &hc->chan[hc->dslot].cfg)) {
@@ -3306,18 +3309,18 @@ hfcmulti_initmode(struct dchannel *dch)
 		hc->chan[i].slot_tx = -1;
 		hc->chan[i].slot_rx = -1;
 		hc->chan[i].conf = -1;
-		mode_hfcmulti(hc, i, dch->dev.D.protocol, -1, -1, -1, -1);
+		mode_hfcmulti(hc, i, dch->dev.D.protocol, -1, 0, -1, 0);
 		dch->timer.function = (void *)hfcmulti_dbusy_timer;
 		dch->timer.data = (long) dch;
 		init_timer(&dch->timer);
-		hc->chan[i - 1].slot_tx = -1;
-		hc->chan[i - 1].slot_rx = -1;
-		hc->chan[i - 1].conf = -1;
-		mode_hfcmulti(hc, i - 1, ISDN_P_NONE, -1, -1, -1, -1);
 		hc->chan[i - 2].slot_tx = -1;
 		hc->chan[i - 2].slot_rx = -1;
 		hc->chan[i - 2].conf = -1;
-		mode_hfcmulti(hc, i - 2, ISDN_P_NONE, -1, -1, -1, -1);
+		mode_hfcmulti(hc, i - 2, ISDN_P_NONE, -1, 0, -1, 0);
+		hc->chan[i - 1].slot_tx = -1;
+		hc->chan[i - 1].slot_rx = -1;
+		hc->chan[i - 1].conf = -1;
+		mode_hfcmulti(hc, i - 1, ISDN_P_NONE, -1, 0, -1, 0);
 		/* ST */
 		pt = hc->chan[i].port;
 		/* select interface */
@@ -3424,8 +3427,7 @@ open_bchannel(struct hfc_multi *hc, struct dchannel *dch,
 	if (hc->type == 1) {
 		ch = rq->adr.channel;
 	} else {
-		ch = rq->adr.channel - 1;
-		ch += hc->chan[dch->slot].port << 2;
+		ch = (rq->adr.channel - 1) + (dch->slot - 2);
 	}
 	bch = hc->chan[ch].bch;
 	if (!bch) {
@@ -3478,13 +3480,26 @@ hfcm_dctrl(struct mISDNchannel *ch, u_int cmd, void *arg)
 	switch (cmd) {
 	case OPEN_CHANNEL:
 		rq = arg;
-		if ((rq->protocol == ISDN_P_TE_S0) ||
-		    (rq->protocol == ISDN_P_NT_S0) ||
-		    (rq->protocol == ISDN_P_TE_E1) ||
-		    (rq->protocol == ISDN_P_NT_E1))
+		switch (rq->protocol) {
+		case ISDN_P_TE_S0:
+		case ISDN_P_NT_S0:
+			if (hc->type == 1) {
+				err = -EINVAL;
+				break;
+			}
 			err = open_dchannel(hc, dch, rq);
-		else
-			err = open_bchannel(hc, dch, rq); 
+			break;
+		case ISDN_P_TE_E1:
+		case ISDN_P_NT_E1:
+			if (hc->type != 1) {
+				err = -EINVAL;
+				break;
+			}
+			err = open_dchannel(hc, dch, rq);
+			break;
+		default:
+			err = open_bchannel(hc, dch, rq);
+		}
 		break;
 	case CLOSE_CHANNEL:
 		if (debug & DEBUG_HW_OPEN)
@@ -3683,8 +3698,8 @@ setup_pci(struct hfc_multi *hc, struct pci_dev *pdev, const struct pci_device_id
 	}
 
 	printk(KERN_INFO
-	    "%s: defined at MEMBASE %#x (%#x) IRQ %d HZ %d leds-type %d\n",
-	    hc->name, (u_int) hc->pci_membase, (u_int) hc->pci_origmembase,
+	    "card %d: defined at MEMBASE %#x (%#x) IRQ %d HZ %d leds-type %d\n",
+	    hc->id, (u_int) hc->pci_membase, (u_int) hc->pci_origmembase,
 	    hc->pci_dev->irq, HZ, hc->leds);
 	pci_write_config_word(hc->pci_dev, PCI_COMMAND, PCI_ENA_MEMIO);
 #else /* CONFIG_PLX_PCI_BRIDGE */
@@ -4379,51 +4394,38 @@ static void __devexit hfc_remove_pci(struct pci_dev *pdev)
 
 static const struct hm_map hfcm_map[] =
 {
-	{VENDOR_BN, "HFC-1S Card (mini PCI)", 4, 1, 1, 3, 0, DIP_4S},
-	{VENDOR_BN, "HFC-2S Card", 4, 2, 1, 3, 0, DIP_4S},
-	{VENDOR_BN, "HFC-2S Card (mini PCI)", 4, 2, 1, 3, 0, DIP_4S},
-	{VENDOR_BN, "HFC-4S Card", 4, 4, 1, 2, 0, DIP_4S},
-	{VENDOR_BN, "HFC-4S Card (mini PCI)", 4, 4, 1, 2, 0, 0},
-	{VENDOR_CCD, "HFC-4S Eval (old)", 4, 4, 0, 0, 0, 0},
-	{VENDOR_CCD, "HFC-4S IOB4ST", 4, 4, 1, 2, 0, 0},
-	{VENDOR_CCD, "HFC-4S", 4, 4, 1, 2, 0, 0},
-	{VENDOR_DIG, "HFC-4S Card", 4, 4, 0, 2, 0, 0},
-	{VENDOR_CCD, "HFC-4S Swyx 4xS0 SX2 QuadBri", 4, 4, 1, 2, 0, 0},
-	{VENDOR_JH, "HFC-4S (junghanns 2.0)", 4, 4, 1, 2, 0, 0},
-	{VENDOR_PRIM, "HFC-2S Primux Card", 4, 2, 0, 0, 0, 0},
+/*0*/	{VENDOR_BN, "HFC-1S Card (mini PCI)", 4, 1, 1, 3, 0, DIP_4S},
+/*1*/	{VENDOR_BN, "HFC-2S Card", 4, 2, 1, 3, 0, DIP_4S},
+/*2*/	{VENDOR_BN, "HFC-2S Card (mini PCI)", 4, 2, 1, 3, 0, DIP_4S},
+/*3*/	{VENDOR_BN, "HFC-4S Card", 4, 4, 1, 2, 0, DIP_4S},
+/*4*/	{VENDOR_BN, "HFC-4S Card (mini PCI)", 4, 4, 1, 2, 0, 0},
+/*5*/	{VENDOR_CCD, "HFC-4S Eval (old)", 4, 4, 0, 0, 0, 0},
+/*6*/	{VENDOR_CCD, "HFC-4S IOB4ST", 4, 4, 1, 2, 0, 0},
+/*7*/	{VENDOR_CCD, "HFC-4S", 4, 4, 1, 2, 0, 0},
+/*8*/	{VENDOR_DIG, "HFC-4S Card", 4, 4, 0, 2, 0, 0},
+/*9*/	{VENDOR_CCD, "HFC-4S Swyx 4xS0 SX2 QuadBri", 4, 4, 1, 2, 0, 0},
+/*10*/	{VENDOR_JH, "HFC-4S (junghanns 2.0)", 4, 4, 1, 2, 0, 0},
+/*11*/	{VENDOR_PRIM, "HFC-2S Primux Card", 4, 2, 0, 0, 0, 0},
 
-	{VENDOR_BN, "HFC-8S Card", 8, 8, 1, 0, 0, 0},
-	{VENDOR_BN, "HFC-8S Card (+)", 8, 8, 1, 8, 0, DIP_8S},
-	{VENDOR_CCD, "HFC-8S Eval (old)", 8, 8, 0, 0, 0, 0},
-	{VENDOR_CCD, "HFC-8S IOB4ST Recording", 8, 8, 1, 0, 0, 0},
+/*12*/	{VENDOR_BN, "HFC-8S Card", 8, 8, 1, 0, 0, 0},
+/*13*/	{VENDOR_BN, "HFC-8S Card (+)", 8, 8, 1, 8, 0, DIP_8S},
+/*14*/	{VENDOR_CCD, "HFC-8S Eval (old)", 8, 8, 0, 0, 0, 0},
+/*15*/	{VENDOR_CCD, "HFC-8S IOB4ST Recording", 8, 8, 1, 0, 0, 0},
 
-	{VENDOR_CCD, "HFC-8S IOB8ST", 8, 8, 1, 0, 0, 0},
-	{VENDOR_CCD, "HFC-8S", 8, 8, 1, 0, 0, 0},
-	{VENDOR_CCD, "HFC-8S", 8, 8, 1, 0, 0, 0},
+/*16*/	{VENDOR_CCD, "HFC-8S IOB8ST", 8, 8, 1, 0, 0, 0},
+/*17*/	{VENDOR_CCD, "HFC-8S", 8, 8, 1, 0, 0, 0},
+/*18*/	{VENDOR_CCD, "HFC-8S", 8, 8, 1, 0, 0, 0},
 
-	/* E1 only supports single clock */
-	{VENDOR_BN, "HFC-E1 Card", 1, 1, 0, 1, 0, DIP_E1},
-	/* E1 only supports single clock */
-	{VENDOR_BN, "HFC-E1 Card (mini PCI)", 1, 1, 0, 1, 0, 0},
-	/* E1 only supports single clock */
-	{VENDOR_BN, "HFC-E1+ Card (Dual)", 1, 1, 0, 1, 0, DIP_E1},
-	/* E1 only supports single clock */
-	{VENDOR_BN, "HFC-E1 Card (Dual)", 1, 1, 0, 1, 0, DIP_E1},
+/*19*/	{VENDOR_BN, "HFC-E1 Card", 1, 1, 0, 1, 0, DIP_E1},
+/*20*/	{VENDOR_BN, "HFC-E1 Card (mini PCI)", 1, 1, 0, 1, 0, 0},
+/*21*/	{VENDOR_BN, "HFC-E1+ Card (Dual)", 1, 1, 0, 1, 0, DIP_E1},
+/*22*/	{VENDOR_BN, "HFC-E1 Card (Dual)", 1, 1, 0, 1, 0, DIP_E1},
 
-	{VENDOR_CCD, "HFC-E1 Eval (old)", 1, 1, 0, 0, 0, 0},
-	/* E1 only supports single clock */
-	{VENDOR_CCD, "HFC-E1 IOB1E1", 1, 1, 0, 1, 0, 0},
-	/* E1 only supports single clock */
-	{VENDOR_CCD, "HFC-E1", 1, 1, 0, 1, 0, 0},
+/*23*/	{VENDOR_CCD, "HFC-E1 Eval (old)", 1, 1, 0, 0, 0, 0},
+/*24*/	{VENDOR_CCD, "HFC-E1 IOB1E1", 1, 1, 0, 1, 0, 0},
+/*25*/	{VENDOR_CCD, "HFC-E1", 1, 1, 0, 1, 0, 0},
 
-	/* PLX PCI-Bridge */
-	{VENDOR_CCD, "HFC-4S PCIBridgeEval", 4, 4, 0, 0, 0, 0},
-#if 0
-	{VENDOR_CCD, "HFC-4S CCAG Eval", 4, 4, 0, 0, 0, 0},
-	{VENDOR_CCD, "HFC-8S CCAG Eval", 8, 8, 0, 0, 0, 0},
-	/* E1 only supports single clock */
-	{VENDOR_CCD, "HFC-E1 CCAG Eval", 1, 1, 0, 0, 0, 0},
-#endif
+/*26*/	{VENDOR_CCD, "HFC-4S PCIBridgeEval", 4, 4, 0, 0, 0, 0},
 };
 
 #undef H
