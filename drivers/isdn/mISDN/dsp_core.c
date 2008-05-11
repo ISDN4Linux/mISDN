@@ -138,11 +138,10 @@
  * LOCKING:
  *
  * When data is received from upper or lower layer (card), the complete dsp
- * module is locked by a global lock.  When data is ready to be transmitted
- * to a different layer, the module is unlocked. It is not allowed to hold a
- * lock outside own layer.
- * Reasons: Multiple threads must not process cmx at the same time, if threads
- * serve instances, that are connected in same conference.
+ * module is locked by a global lock.  This lock MUST lock irq, because it
+ * must lock timer events by DSP poll timer.
+ * When data is ready to be transmitted down, the data is queued and sent
+ * outside lock and timer event.
  * PH_CONTROL must not change any settings, join or split conference members
  * during process of data.
  * 
@@ -171,7 +170,10 @@ module_param(poll, uint, S_IRUGO | S_IWUSR);
 module_param(dtmfthreshold, uint, S_IRUGO | S_IWUSR);
 MODULE_LICENSE("GPL");
 
+//int spinnest = 0;
+
 spinlock_t dsp_lock;
+struct work_struct dsp_workq;
 struct list_head dsp_ilist;
 struct list_head conf_ilist;
 int dsp_debug = 0;
@@ -206,9 +208,12 @@ dsp_control_req(dsp_t *dsp, struct mISDNhead *hh, struct sk_buff *skb)
 #endif
 			/* init goertzel */
 			dsp_dtmf_goertzel_init(dsp);
+#warning testing
+printk(KERN_DEBUG "dtmf done\n");
 
 			/* check dtmf hardware */
 			dsp_dtmf_hardware(dsp);
+printk(KERN_DEBUG "dtmf hardware done\n");
 			break;
 		case DTMF_TONE_STOP: /* turn off DTMF */
 			if (dsp_debug & DEBUG_DSP_CORE)
@@ -417,8 +422,6 @@ dsp_control_req(dsp_t *dsp, struct mISDNhead *hh, struct sk_buff *skb)
 				printk(KERN_DEBUG "%s: ctrl req %x unhandled\n", __FUNCTION__, cont);
 			ret = -EINVAL;
 	}
-	if (!ret)
-		dev_kfree_skb(skb);
 	return(ret);
 }
 
@@ -474,7 +477,6 @@ dsp_function(struct mISDNchannel *ch,  struct sk_buff *skb)
 	/* FROM DOWN */
 	case (PH_DATA_CNF):
 		/* flush response, because no relation to upper layer */
-		dev_kfree_skb(skb);
 		break;
 	case (PH_DATA_IND):
 	case (DL_DATA_IND):
@@ -521,14 +523,11 @@ dsp_function(struct mISDNchannel *ch,  struct sk_buff *skb)
 
 		if (dsp->rx_disabled) {
 			/* if receive is not allowed */
-			dev_kfree_skb(skb);
 			break;
 		}
 		hh->prim = DL_DATA_IND;
 		if (dsp->up)
-			ret = dsp->up->send(dsp->up, skb);
-		else
-			dev_kfree_skb(skb);
+			return(dsp->up->send(dsp->up, skb));
 		break;
 	case (PH_CONTROL_IND):
 		if (dsp_debug & DEBUG_DSP_DTMFCOEFF)
@@ -538,7 +537,6 @@ dsp_function(struct mISDNchannel *ch,  struct sk_buff *skb)
 			if (!dsp->dtmf.hardware) {
 				if (dsp_debug & DEBUG_DSP_DTMFCOEFF)
 					printk(KERN_DEBUG "%s: ignoring DTMF coefficients from HFC\n", __FUNCTION__);
-				dev_kfree_skb(skb);
 				break;
 			}
 			digits = dsp_dtmf_goertzel_decode(dsp, skb->data, skb->len, 2);
@@ -558,7 +556,6 @@ dsp_function(struct mISDNchannel *ch,  struct sk_buff *skb)
 				}
 				digits++;
 			}
-			dev_kfree_skb(skb);
 			break;
 		case (HFC_VOL_CHANGE_TX): /* change volume */
 			if (skb->len != sizeof(int)) {
@@ -572,7 +569,6 @@ dsp_function(struct mISDNchannel *ch,  struct sk_buff *skb)
 			dsp_cmx_hardware(dsp->conf, dsp);
 			dsp_dtmf_hardware(dsp);
 			spin_unlock_irqrestore(&dsp_lock, flags);
-			dev_kfree_skb(skb);
 			break;
 		default:
 			if (dsp_debug & DEBUG_DSP_CORE)
@@ -591,16 +587,17 @@ dsp_function(struct mISDNchannel *ch,  struct sk_buff *skb)
 		dsp->rx_W = dsp->rx_R = -1; /* reset RX buffer */
 		memset(dsp->rx_buff, 0, sizeof(dsp->rx_buff));
 		dsp_cmx_hardware(dsp->conf, dsp);
+#warning testing
+printk(KERN_DEBUG "done with dsp_cmx_hardware\n");
 		dsp_dtmf_hardware(dsp);
+printk(KERN_DEBUG "done with dsp_dtmf_hardware\n");
 		spin_unlock_irqrestore(&dsp_lock, flags);
 		if (dsp_debug & DEBUG_DSP_CORE)
 			printk(KERN_DEBUG "%s: done with activation, sending confirm to user space. %s\n", __FUNCTION__, dsp->name);
 		/* send activation to upper layer */
 		hh->prim = DL_ESTABLISH_CNF;
 		if (dsp->up)
-			ret = dsp->up->send(dsp->up, skb);
-		else
-			dev_kfree_skb(skb);
+			return(dsp->up->send(dsp->up, skb));
 		break;
 	case (PH_DEACTIVATE_IND):
 	case (PH_DEACTIVATE_CNF):
@@ -613,9 +610,7 @@ dsp_function(struct mISDNchannel *ch,  struct sk_buff *skb)
 		spin_unlock_irqrestore(&dsp_lock, flags);
 		hh->prim = DL_RELEASE_CNF;
 		if (dsp->up)
-			ret = dsp->up->send(dsp->up, skb);
-		else
-			dev_kfree_skb(skb);
+			return(dsp->up->send(dsp->up, skb));
 		break;
 	/* FROM UP */
 	case (DL_DATA_REQ):
@@ -629,11 +624,10 @@ dsp_function(struct mISDNchannel *ch,  struct sk_buff *skb)
 		if (!dsp->tone.tone)
 			dsp_cmx_transmit(dsp, skb);
 		spin_unlock_irqrestore(&dsp_lock, flags);
-		dev_kfree_skb(skb);
 		break;
 	case (PH_CONTROL_REQ):
 		spin_lock_irqsave(&dsp_lock, flags);
-		ret = dsp_control_req(dsp, hh, skb); // dsp is freed here
+		ret = dsp_control_req(dsp, hh, skb);
 		spin_unlock_irqrestore(&dsp_lock, flags);
 		break;
 	case (DL_ESTABLISH_REQ):
@@ -646,9 +640,7 @@ dsp_function(struct mISDNchannel *ch,  struct sk_buff *skb)
 		/* send ph_activate */
 		hh->prim = PH_ACTIVATE_REQ;
 		if (ch->peer)
-			ret = ch->recv(ch->peer, skb);
-		else
-			dev_kfree_skb(skb);
+			return(ch->recv(ch->peer, skb));
 		break;
 	case (DL_RELEASE_REQ):
 	case (PH_DEACTIVATE_REQ):
@@ -659,15 +651,15 @@ dsp_function(struct mISDNchannel *ch,  struct sk_buff *skb)
 			del_timer(&dsp->tone.tl);
 		hh->prim = PH_DEACTIVATE_REQ;
 		if (ch->peer)
-			ret = ch->recv(ch->peer, skb);
-		else
-			dev_kfree_skb(skb);
+			return(ch->recv(ch->peer, skb));
 		break;
 	default:
 		if (dsp_debug & DEBUG_DSP_CORE)
 			printk(KERN_DEBUG "%s: msg %x unhandled %s\n", __FUNCTION__, hh->prim, dsp->name);
 		ret = -EINVAL;
 	}
+	if (!ret)
+		dev_kfree_skb(skb);
 	return ret;
 }
 
@@ -692,6 +684,7 @@ dsp_ctrl(struct mISDNchannel *ch, u_int cmd, void *arg)
 		spin_lock_irqsave(&dsp_lock, flags);
 		if (timer_pending(&dsp->tone.tl))
 			del_timer(&dsp->tone.tl);
+		skb_queue_purge(&dsp->sendq);
 		if (dsp_debug & DEBUG_DSP_CTRL)
 			printk(KERN_DEBUG "%s: releasing member %s\n", __FUNCTION__, dsp->name);
 		dsp->b_active = 0;
@@ -729,6 +722,26 @@ dsp_ctrl(struct mISDNchannel *ch, u_int cmd, void *arg)
 	return err;
 }
 
+static void
+dsp_send_bh(struct work_struct *work)
+{
+	dsp_t *dsp = container_of(work, dsp_t, workq);
+	struct sk_buff *skb;
+
+	/* send queued data */
+	while((skb = skb_dequeue(&dsp->sendq)))
+	{
+#warning debugging
+//printk("sending packet of %s\n", dsp->name);
+		/* send packet */
+		if (dsp->ch.peer) {
+			if (dsp->ch.recv(dsp->ch.peer, skb))
+				dev_kfree_skb(skb);
+		} else
+			dev_kfree_skb(skb);
+	}
+}
+
 static int
 dspcreate(struct channel_req *crq)
 {
@@ -753,6 +766,8 @@ dspcreate(struct channel_req *crq)
 		printk(KERN_DEBUG "%s: creating new dsp instance\n", __FUNCTION__);
 
 	/* default enabled */
+	INIT_WORK(&ndsp->workq, (void *)dsp_send_bh);
+	skb_queue_head_init(&ndsp->sendq);
 	ndsp->ch.send = dsp_function;
 	ndsp->ch.ctrl = dsp_ctrl;
 	ndsp->up = crq->ch;

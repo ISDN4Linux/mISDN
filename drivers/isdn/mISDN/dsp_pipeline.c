@@ -340,10 +340,11 @@ void dsp_pipeline_process_tx (dsp_pipeline_t *pipeline, u8 *data, int len)
 	if (!pipeline)
 		return;
 
-	if (!read_trylock(&pipeline->lock)) {
-		printk(KERN_DEBUG "%s: bypassing pipeline because it is locked (TX)\n", __FUNCTION__);
-		return;
-	}
+	read_lock(&pipeline->lock);
+//	if (!read_trylock(&pipeline->lock)) {
+//		printk(KERN_DEBUG "%s: bypassing pipeline because it is locked (TX)\n", __FUNCTION__);
+//		return;
+//	}
 	list_for_each_entry(entry, &pipeline->list, list)
 		if (entry->elem->process_tx)
 			entry->elem->process_tx(entry->p, data, len);
@@ -357,10 +358,11 @@ void dsp_pipeline_process_rx (dsp_pipeline_t *pipeline, u8 *data, int len)
 	if (!pipeline)
 		return;
 
-	if (!read_trylock(&pipeline->lock)) {
-		printk(KERN_DEBUG "%s: bypassing pipeline because it is locked (RX)\n", __FUNCTION__);
-		return;
-	}
+	read_lock(&pipeline->lock);
+//	if (!read_trylock(&pipeline->lock)) {
+//		printk(KERN_DEBUG "%s: bypassing pipeline because it is locked (RX)\n", __FUNCTION__);
+//		return;
+//	}
 	list_for_each_entry_reverse(entry, &pipeline->list, list)
 		if (entry->elem->process_rx)
 			entry->elem->process_rx(entry->p, data, len);

@@ -1047,26 +1047,34 @@ dsp_cmx_conf(dsp_t *dsp, u32 conf_id)
 				dsp->conf->id);
 		/* remove us from conf */
 		conf = dsp->conf;
+#warning testing
+printk(KERN_DEBUG "1\n");
 		err = dsp_cmx_del_conf_member(dsp);
+printk(KERN_DEBUG "2\n");
 		if (err)
 			return err;
 		dsp->conf_id = 0;
+printk(KERN_DEBUG "3\n");
 
 		/* update hardware */
 		dsp_cmx_hardware(NULL, dsp);
+printk(KERN_DEBUG "4\n");
 
 		/* conf now empty? */
 		if (list_empty(&conf->mlist)) {
 			if (dsp_debug & DEBUG_DSP_CMX)
 				printk(KERN_DEBUG
 				    "conference is empty, so we remove it.\n");
+printk(KERN_DEBUG "5\n");
 			err = dsp_cmx_del_conf(conf);
+printk(KERN_DEBUG "6\n");
 			if (err)
 				return err;
 		} else {
 			/* update members left on conf */
 			dsp_cmx_hardware(conf, NULL);
 		}
+printk(KERN_DEBUG "7\n");
 	}
 
 	/* if split */
@@ -1504,12 +1512,9 @@ send_packet:
 	if (dsp->bf_enable)
 		dsp_bf_encrypt(dsp, nskb->data, nskb->len);
 
-	/* send packet */
-	if (dsp->ch.peer) {
-		if (dsp->ch.recv(dsp->ch.peer, nskb))
-			dev_kfree_skb(nskb);
-	} else
-		dev_kfree_skb(nskb);
+	/* queue and trigget */
+	skb_queue_tail(&dsp->sendq, nskb);
+	schedule_work(&dsp->workq);
 }
 
 u32	samplecount;
@@ -1517,7 +1522,7 @@ struct timer_list dsp_spl_tl;
 u32	dsp_spl_jiffies;
 
 void
-dsp_cmx_send(void *data)
+dsp_cmx_send(void *arg)
 {
 	conference_t *conf;
 	conf_member_t *member;
@@ -1528,6 +1533,7 @@ dsp_cmx_send(void *data)
 	int r, rr;
 	int jittercheck = 0, delay, i;
 	u_long flags;
+
 
 	/* lock */
 	spin_lock_irqsave(&dsp_lock, flags);
@@ -1556,12 +1562,14 @@ dsp_cmx_send(void *data)
 		}
 
 		/* transmission required */
-		if (!mustmix)
+		if (!mustmix) {
 			dsp_cmx_send_member(dsp, dsp_poll, mixbuffer, members);
+				
 			/*
 			 * unused mixbuffer is given to prevent a
 			 * potential null-pointer-bug
 			 */
+		}
 	}
 
 	/* loop all members that require conference mixing */

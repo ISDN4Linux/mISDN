@@ -54,7 +54,8 @@ struct _l1oip_t {
 	struct timer_list 	keep_tl;
 	struct timer_list 	timeout_tl;
 	int			timeout_on;
-	struct work_struct	tqueue;
+	struct work_struct	workq;
+//	struct sk_buff_head	sendq;
 
 	/* socket */
 	struct socket 		*socket;	/* if set, socket is created */

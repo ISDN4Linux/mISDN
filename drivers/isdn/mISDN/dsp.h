@@ -28,6 +28,7 @@
 #define DSP_OPT_NOHARDWARE	(1<<1)
 
 #include <linux/timer.h>
+#include <linux/workqueue.h>
 
 #ifdef MISDN_MEMDEBUG
 #include "memdbg.h"
@@ -40,6 +41,30 @@ extern int dsp_debug;
 extern int dsp_poll;
 extern int dsp_tics;
 extern spinlock_t dsp_lock;
+extern struct work_struct dsp_workq;
+
+#if 0
+// spin debugging
+extern int spinnest;
+static void _dsp_spin_lock(spinlock_t *lk, const char *func, int line)
+{
+	int was;
+	printk(KERN_DEBUG "SPIN locking %d in %s line %d\n", ++spinnest, func, line);
+	was = spinnest;
+	spin_lock(lk);
+	printk(KERN_DEBUG "SPIN locked (was %d) in %s line %d\n", was, func, line);
+}
+static void _dsp_spin_unlock(spinlock_t *lk, const char *func, int line)
+{
+	printk(KERN_DEBUG "SPIN unlocking %d in %s line %d\n", spinnest, func, line);
+	spin_unlock(lk);
+	--spinnest;
+}
+#undef spin_lock
+#undef spin_unlock
+#define spin_lock(a) _dsp_spin_lock(a, __FUNCTION__, __LINE__)
+#define spin_unlock(a) _dsp_spin_unlock(a, __FUNCTION__, __LINE__)
+#endif
 
 /***************
  * audio stuff *
@@ -164,6 +189,10 @@ typedef struct _dsp {
 	dtmf_t		dtmf;
 	int		tx_volume, rx_volume;
 
+	/* queue for sending frames */
+	struct work_struct	workq;
+	struct sk_buff_head	sendq;
+
 	/* conference stuff */
 	u32		conf_id;
 	conference_t	*conf;
@@ -218,11 +247,7 @@ extern void dsp_cmx_debug(dsp_t *dsp);
 extern void dsp_cmx_hardware(conference_t *conf, dsp_t *dsp);
 extern int dsp_cmx_conf(dsp_t *dsp, u32 conf_id);
 extern void dsp_cmx_receive(dsp_t *dsp, struct sk_buff *skb);
-#ifdef OLDCMX
-extern struct sk_buff *dsp_cmx_send(dsp_t *dsp, int len, int dinfo);
-#else
-extern void dsp_cmx_send(void *data);
-#endif
+extern void dsp_cmx_send(void *arg);
 extern void dsp_cmx_transmit(dsp_t *dsp, struct sk_buff *skb);
 extern int dsp_cmx_del_conf_member(dsp_t *dsp);
 extern int dsp_cmx_del_conf(conference_t *conf);

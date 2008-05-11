@@ -148,6 +148,10 @@ recv_Dchannel(struct dchannel *dch)
 {
 	struct mISDNhead *hh;
 
+	if (dch->rx_skb->len < 2) { // at least 2 for sapi / tei
+		dev_kfree_skb(dch->rx_skb);
+		dch->rx_skb = NULL;
+	}
 	hh = mISDN_HEAD_P(dch->rx_skb);
 	hh->prim = PH_DATA_IND;
 	hh->id = get_sapi_tei(dch->rx_skb->data);

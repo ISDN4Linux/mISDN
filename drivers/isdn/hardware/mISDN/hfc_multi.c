@@ -1756,8 +1756,13 @@ next_frame:
 				printk("\n");
 			}
 			if (dch)
+#warning testing
+{
+printk(KERN_DEBUG "DCH pointer %p\n", dch->rx_skb);
+if (dch->rx_skb)
 				recv_Dchannel(dch);
-			if (bch)
+}
+			else
 				recv_Bchannel(bch);
 			*sp = skb;
 			goto next_frame;
@@ -2673,6 +2678,8 @@ hfcm_l1callback(struct dchannel *dch, u_int cmd)
 		}
 		dch->tx_idx = 0;
 		if (dch->rx_skb) {
+#warning debugging
+printk(KERN_DEBUG "hw_deac so we free skb\n");
 			dev_kfree_skb(dch->rx_skb);
 			dch->rx_skb = NULL;
 		}
@@ -2727,17 +2734,21 @@ handle_dmsg(struct mISDNchannel *ch, struct sk_buff *skb)
 
 	switch (hh->prim) {
 	case PH_DATA_REQ:
+		if (!skb->len)
+			break;
+//		if (!test_bit(FLG_ACTIVE, &dch->Flags))
+//			return -EBUSY;
 		spin_lock_irqsave(&hc->lock, flags);
 		ret = dchannel_senddata(dch, skb);
 		if (ret > 0) { /* direct TX */
 			id = hh->id; /* skb can be freed */
 			hfcmulti_tx(hc, dch->slot);
+			ret = 0;
 			/* start fifo */
 			HFC_outb(hc, R_FIFO, 0);
 			HFC_wait(hc);
 			spin_unlock_irqrestore(&hc->lock, flags);
 			queue_ch_frame(ch, PH_DATA_CNF, id, NULL);
-			ret = 0;
 		} else
 			spin_unlock_irqrestore(&hc->lock, flags);
 		return ret;
@@ -2802,6 +2813,8 @@ handle_dmsg(struct mISDNchannel *ch, struct sk_buff *skb)
 			}
 			dch->tx_idx = 0;
 			if (dch->rx_skb) {
+#warning debugging
+printk(KERN_DEBUG "ph_deac so we free skb\n");
 				dev_kfree_skb(dch->rx_skb);
 				dch->rx_skb = NULL;
 			}
@@ -2863,17 +2876,21 @@ handle_bmsg(struct mISDNchannel *ch, struct sk_buff *skb)
 
 	switch (hh->prim) {
 	case PH_DATA_REQ:
+		if (!skb->len)
+			break;
+#warning testing
+//printk(KERN_DEBUG "%s getting from up\n", __FUNCTION__);
 		spin_lock_irqsave(&hc->lock, flags);
 		ret = bchannel_senddata(bch, skb);
 		if (ret > 0) { /* direct TX */
 			id = hh->id; /* skb can be freed */
 			hfcmulti_tx(hc, bch->slot);
+			ret = 0;
 			/* start fifo */
 			HFC_outb(hc, R_FIFO, 0);
 			HFC_wait(hc);
 			spin_unlock_irqrestore(&hc->lock, flags);
 			queue_ch_frame(ch, PH_DATA_CNF, id, NULL);
-			ret = 0;
 		} else
 			spin_unlock_irqrestore(&hc->lock, flags);
 		return ret;

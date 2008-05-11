@@ -271,24 +271,35 @@ module_param(ulaw, uint, S_IRUGO | S_IWUSR);
 module_param(debug, uint, S_IRUGO | S_IWUSR);
 #endif
 
-
 /*
  * send a frame via socket, if open and restart timer
  */
 static int
 l1oip_socket_send(l1oip_t *hc, u8 localcodec, u8 channel, u32 chanmask, u16 timebase, u8 *buf, int len)
 {
-	mm_segment_t oldfs;
-	u_long		flags;
-	u8 frame[len+32]; /* add some space for the header */
-	u8 *p = frame;
-	struct socket *socket;
+	u8 *p;
 	int multi = 0;
+//	struct sk_buff *skb;
+	u8 frame[len+32];
+	struct socket *socket = NULL;
+	mm_segment_t oldfs;
 
 	if (debug & DEBUG_L1OIP_MSG)
 		printk(KERN_DEBUG "%s: sending data to socket (len = %d)\n",
 			__FUNCTION__, len);
 
+#if 0
+	/* alloc skb for bottom half */
+	skb = mI_alloc_skb(len+32, GFP_ATOMIC); /* add some space for header */
+	if (!skb) {
+		printk(KERN_ERR "%s: No mem for skb.\n", __FUNCTION__);
+		return(0);
+	}
+	p = skb_put(skb, len+32);
+#else
+	p = frame;
+#endif
+	
 	/* restart timer */
 	if ((int)(hc->keep_tl.expires-jiffies) < 5*HZ) {
 		del_timer(&hc->keep_tl);
@@ -336,31 +347,42 @@ l1oip_socket_send(l1oip_t *hc, u8 localcodec, u8 channel, u32 chanmask, u16 time
 		else
 			memcpy(p, buf, len);
 	}
-	len += p-frame; /* add header size to length */
+#if 0
+	len += p-skb->data; /* add header size to length */
+	skb_trim(skb, len);
+
+	/* queue l1oip frame for bottom half */
+	skb_queue_tail(&hc->sendq, skb);
+	schedule_work(&hc->workq);
+#else
+	len += p - frame;
 
 	/* check for socket in safe condition */
-	spin_lock_irqsave(&hc->socket_lock, flags);
-	if (hc->socket) {
-		/* seize socket */
-		socket = hc->socket;
-		hc->socket = NULL;
-		spin_unlock_irqrestore(&hc->socket_lock, flags);
-
-		/* send packet */
-		if (debug & DEBUG_L1OIP_MSG)
-			printk(KERN_DEBUG "%s: sending packet to socket (len "
-				"= %d)\n", __FUNCTION__, len);
-		hc->sendiov.iov_base = frame;
-		hc->sendiov.iov_len  = len;
-		oldfs = get_fs();
-		set_fs(KERNEL_DS);
-		len = sock_sendmsg(socket, &hc->sendmsg, len);
-		set_fs(oldfs);
-
-		/* give socket back */
-		hc->socket = socket; /* no locking required */
-	} else
-		spin_unlock_irqrestore(&hc->socket_lock, flags);
+//	spin_lock_irqsave(&hc->socket_lock, flags);
+	spin_lock(&hc->socket_lock);
+	if (!hc->socket) {
+//		spin_unlock_irqrestore(&hc->socket_lock, flags);
+		spin_unlock(&hc->socket_lock);
+		return(0);
+	}
+	/* seize socket */
+	socket = hc->socket;
+	hc->socket = NULL;
+//	spin_unlock_irqrestore(&hc->socket_lock, flags);
+	spin_unlock(&hc->socket_lock);
+	/* send packet */
+	if (debug & DEBUG_L1OIP_MSG)
+		printk(KERN_DEBUG "%s: sending packet to socket (len "
+			"= %d)\n", __FUNCTION__, len);
+	hc->sendiov.iov_base = frame;
+	hc->sendiov.iov_len  = len;
+	oldfs = get_fs();
+	set_fs(KERNEL_DS);
+	len = sock_sendmsg(socket, &hc->sendmsg, len);
+	set_fs(oldfs);
+	/* give socket back */
+	hc->socket = socket; /* no locking required */
+#endif
 
 	return(len);
 }
@@ -646,7 +668,7 @@ l1oip_socket_thread(void *data)
 	struct msghdr msg;
 	struct iovec iov;
 	mm_segment_t oldfs;
-	unsigned long flags;
+//	unsigned long flags;
 	struct sockaddr_in sin_rx;
 	unsigned char recvbuf[1500];
 	int recvlen;
@@ -706,9 +728,11 @@ l1oip_socket_thread(void *data)
 	hc->sendmsg.msg_iovlen = 1;
 
 	/* give away socket */
-	spin_lock_irqsave(&hc->socket_lock, flags);
+//	spin_lock_irqsave(&hc->socket_lock, flags);
+	spin_lock(&hc->socket_lock);
 	hc->socket = socket;
-	spin_unlock_irqrestore(&hc->socket_lock, flags);
+//	spin_unlock_irqrestore(&hc->socket_lock, flags);
+	spin_unlock(&hc->socket_lock);
 
 	/* read loop */
 	if (debug & DEBUG_L1OIP_SOCKET)
@@ -724,21 +748,26 @@ l1oip_socket_thread(void *data)
 		if (recvlen>0) {
 			l1oip_socket_parse(hc, &sin_rx, recvbuf, recvlen);
 		} else {
-			printk(KERN_WARNING "%s: broken pipe on socket\n",
+			if (debug & DEBUG_L1OIP_SOCKET)
+			    printk(KERN_WARNING "%s: broken pipe on socket\n",
 				__FUNCTION__);
 		}
 	}
 
 	/* get socket back, check first if in use, maybe by send function */
-	spin_lock_irqsave(&hc->socket_lock, flags);
+//	spin_lock_irqsave(&hc->socket_lock, flags);
+	spin_lock(&hc->socket_lock);
 	/* if hc->socket is NULL, it is in use until it is given back */
 	while (!hc->socket) {
-		spin_unlock_irqrestore(&hc->socket_lock, flags);
+//		spin_unlock_irqrestore(&hc->socket_lock, flags);
+		spin_unlock(&hc->socket_lock);
 		schedule_timeout(HZ/10);
-		spin_lock_irqsave(&hc->socket_lock, flags);
+//		spin_lock_irqsave(&hc->socket_lock, flags);
+		spin_lock(&hc->socket_lock);
 	}
 	hc->socket = NULL;
-	spin_unlock_irqrestore(&hc->socket_lock, flags);
+//	spin_unlock_irqrestore(&hc->socket_lock, flags);
+	spin_unlock(&hc->socket_lock);
 
 	if (debug & DEBUG_L1OIP_SOCKET)
 		printk(KERN_DEBUG "%s: socket thread terminating\n",
@@ -796,31 +825,76 @@ l1oip_socket_open(l1oip_t *hc)
 }
 
 
+#if 0
 /*
- * timer stuff
+ * socket send bottom half
  */
 static void
-l1oip_keepalive_bh(struct work_struct *work)
+l1oip_send_bh(struct work_struct *work)
 {
-	l1oip_t *hc = container_of(work, l1oip_t, tqueue);
+	l1oip_t *hc = container_of(work, l1oip_t, workq);
+	struct sk_buff *skb;
+//	u_long		flags;
+	mm_segment_t oldfs;
+	struct socket *socket;
+
+	/* check for socket in safe condition */
+//	spin_lock_irqsave(&hc->socket_lock, flags);
+	spin_lock(&hc->socket_lock);
+	if (!hc->socket) {
+//		spin_unlock_irqrestore(&hc->socket_lock, flags);
+		spin_unlock(&hc->socket_lock);
+		skb_queue_purge(&hc->sendq);
+		return;
+	}
+	/* seize socket */
+	socket = hc->socket;
+	hc->socket = NULL;
+//	spin_unlock_irqrestore(&hc->socket_lock, flags);
+	spin_unlock(&hc->socket_lock);
+	/* send queued messages */
+	while((skb = skb_dequeue(&hc->sendq)))
+	{
+		/* send packet */
+		if (debug & DEBUG_L1OIP_MSG)
+			printk(KERN_DEBUG "%s: sending packet to socket (len "
+				"= %d)\n", __FUNCTION__, skb->len);
+		hc->sendiov.iov_base = skb->data;
+		hc->sendiov.iov_len  = skb->len;
+		oldfs = get_fs();
+		set_fs(KERNEL_DS);
+		sock_sendmsg(socket, &hc->sendmsg, skb->len);
+		set_fs(oldfs);
+		dev_kfree_skb(skb);
+	}
+	/* give socket back */
+	hc->socket = socket; /* no locking required */
+}
+#else
+static void
+l1oip_send_bh(struct work_struct *work)
+{
+	l1oip_t *hc = container_of(work, l1oip_t, workq);
 
 	if (debug & (DEBUG_L1OIP_MSG|DEBUG_L1OIP_SOCKET))
-		printk(KERN_DEBUG "%s: keepalive bh called, sending empty "
+		printk(KERN_DEBUG "%s: keepalive timer expired, sending empty "
 			"frame on dchannel\n", __FUNCTION__);
 
 	/* send an empty l1oip frame at D-channel */
 	l1oip_socket_send(hc, 0, hc->d_idx, 0, 0, NULL, 0);
 }
+#endif
+
+
+/*
+ * timer stuff
+ */
 static void
 l1oip_keepalive(void *data)
 {
 	l1oip_t *hc = (l1oip_t *)data;
 
-	if (debug & (DEBUG_L1OIP_MSG|DEBUG_L1OIP_SOCKET))
-		printk(KERN_DEBUG "%s: keepalive timer expired, scheduling "
-			"keepalive transmission...\n", __FUNCTION__);
-
-	schedule_work(&hc->tqueue);
+	schedule_work(&hc->workq);
 }
 
 static void
@@ -1209,7 +1283,7 @@ static void
 release_card(l1oip_t *hc)
 {
 	int	ch;
-	u_long	flags;
+//	u_long	flags;
 
 	if (timer_pending(&hc->keep_tl))
 		del_timer(&hc->keep_tl);
@@ -1232,10 +1306,14 @@ release_card(l1oip_t *hc)
 			kfree(hc->chan[ch].bch);
 		}
 	}
+
+//	skb_queue_purge(&hc->sendq);
 	
-	spin_lock_irqsave(&l1oip_lock, flags);
+//	spin_lock_irqsave(&l1oip_lock, flags);
+	spin_lock(&l1oip_lock);
 	list_del(&hc->list);
-	spin_unlock_irqrestore(&l1oip_lock, flags);
+//	spin_unlock_irqrestore(&l1oip_lock, flags);
+	spin_unlock(&l1oip_lock);
 
 	kfree(hc);
 }
@@ -1399,7 +1477,6 @@ init_card(l1oip_t *hc, int pri, int bundle)
 	init_timer(&hc->keep_tl);
 	hc->keep_tl.expires = jiffies + 2*HZ; /* two seconds first time */
 	add_timer(&hc->keep_tl);
-	INIT_WORK(&hc->tqueue, (void *)l1oip_keepalive_bh);
 
 	hc->timeout_tl.function = (void *)l1oip_timeout;
 	hc->timeout_tl.data = (ulong)hc;
@@ -1415,7 +1492,7 @@ l1oip_init(void)
 	int		pri, bundle;
 	l1oip_t		*hc;
 	int		ret;
-	u_long		flags;
+//	u_long		flags;
 
 	printk(KERN_INFO "mISDN: Layer-1-over-IP driver Rev. %s\n",
 		l1oip_revision);
@@ -1463,9 +1540,14 @@ l1oip_init(void)
 			l1oip_cleanup();
 			return -ENOMEM;
 		}
-		spin_lock_irqsave(&l1oip_lock, flags);
+		INIT_WORK(&hc->workq, (void *)l1oip_send_bh);
+//		skb_queue_head_init(&hc->sendq);
+
+//		spin_lock_irqsave(&l1oip_lock, flags);
+		spin_lock(&l1oip_lock);
 		list_add_tail(&hc->list, &l1oip_ilist);
-		spin_unlock_irqrestore(&l1oip_lock, flags);
+//		spin_unlock_irqrestore(&l1oip_lock, flags);
+		spin_unlock(&l1oip_lock);
 
 		ret = init_card(hc, pri, bundle);
 		if (ret) {

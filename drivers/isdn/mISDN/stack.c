@@ -439,7 +439,7 @@ connect_layer1(struct mISDNdevice *dev, struct mISDNchannel *ch,
 		err = dev->D.ctrl(&dev->D, OPEN_CHANNEL, &rq);
 		printk(KERN_DEBUG "%s: ret 1 %d\n", __FUNCTION__, err);
 		if (err)
-			break;
+			return err;
 		write_lock_bh(&dev->D.st->l1sock.lock);
 		sk_add_node(&msk->sk, &dev->D.st->l1sock.head);
 		write_unlock_bh(&dev->D.st->l1sock.lock);
