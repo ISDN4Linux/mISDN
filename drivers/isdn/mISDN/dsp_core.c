@@ -867,7 +867,7 @@ dspcreate(struct channel_req *crq)
 	ndsp->ch.ctrl = dsp_ctrl;
 	ndsp->up = crq->ch;
 	crq->ch = &ndsp->ch;
-	if (crq->protocol != ISDN_P_B_L2DSP) {
+	if (crq->protocol == ISDN_P_B_L2DSP) {
 		crq->protocol = ISDN_P_B_RAW;
 		ndsp->hdlc = 0;
 	} else {
