@@ -182,7 +182,7 @@ typedef struct _dsp {
 	struct mISDNchannel	*up;
 	unsigned char	name[64];
 	int		b_active;
-	int		echo; /* echo is done by software */
+	int		echo; /* echo is enabled */
 	int		rx_disabled;
 	int		tx_mix;
 	tone_t		tone;
@@ -194,6 +194,8 @@ typedef struct _dsp {
 	struct sk_buff_head	sendq;
 
 	/* conference stuff */
+	int		hdlc;	/* if mode is hdlc */
+	int		hdlc_pending;	/* currently an unconfirmed frame */
 	u32		conf_id;
 	conference_t	*conf;
 	conf_member_t	*member;
@@ -247,6 +249,7 @@ extern void dsp_cmx_debug(dsp_t *dsp);
 extern void dsp_cmx_hardware(conference_t *conf, dsp_t *dsp);
 extern int dsp_cmx_conf(dsp_t *dsp, u32 conf_id);
 extern void dsp_cmx_receive(dsp_t *dsp, struct sk_buff *skb);
+extern void dsp_cmx_hdlc(dsp_t *dsp, struct sk_buff *skb);
 extern void dsp_cmx_send(void *arg);
 extern void dsp_cmx_transmit(dsp_t *dsp, struct sk_buff *skb);
 extern int dsp_cmx_del_conf_member(dsp_t *dsp);

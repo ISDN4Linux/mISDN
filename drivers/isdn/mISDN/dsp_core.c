@@ -144,6 +144,13 @@
  * outside lock and timer event.
  * PH_CONTROL must not change any settings, join or split conference members
  * during process of data.
+ *
+ * HDLC:
+ *
+ * It works quite the same as transparent, except that HDLC data is forwarded
+ * to all other conference members if no hardware bridging is possible.
+ * Send data will be writte to sendq. Sendq will be sent if confirm is received.
+ * Conference cannot join, if one member is not hdlc.
  * 
  
  */
@@ -198,6 +205,10 @@ dsp_control_req(dsp_t *dsp, struct mISDNhead *hh, struct sk_buff *skb)
 
 	switch (cont) {
 		case DTMF_TONE_START: /* turn on DTMF */
+			if (dsp->hdlc) {
+				ret = -EINVAL;
+				break;
+			}
 			if (dsp_debug & DEBUG_DSP_CORE)
 				printk(KERN_DEBUG "%s: start dtmf\n", __FUNCTION__);
 #if 0
@@ -243,6 +254,10 @@ printk(KERN_DEBUG "dtmf hardware done\n");
 				dsp_cmx_debug(dsp);
 			break;
 		case DSP_TONE_PATT_ON: /* play tone */
+			if (dsp->hdlc) {
+				ret = -EINVAL;
+				break;
+			}
 			if (len < sizeof(int)) {
 				ret = -EINVAL;
 				break;
@@ -256,6 +271,10 @@ printk(KERN_DEBUG "dtmf hardware done\n");
 				goto tone_off;
 			break;
 		case DSP_TONE_PATT_OFF: /* stop tone */
+			if (dsp->hdlc) {
+				ret = -EINVAL;
+				break;
+			}
 			if (dsp_debug & DEBUG_DSP_CORE)
 				printk(KERN_DEBUG "%s: turn tone off\n", __FUNCTION__);
 			dsp_tone(dsp, 0);
@@ -265,6 +284,10 @@ printk(KERN_DEBUG "dtmf hardware done\n");
 			dsp->tx_R = dsp->tx_W = 0;
 			break;
 		case DSP_VOL_CHANGE_TX: /* change volume */
+			if (dsp->hdlc) {
+				ret = -EINVAL;
+				break;
+			}
 			if (len < sizeof(int)) {
 				ret = -EINVAL;
 				break;
@@ -276,6 +299,10 @@ printk(KERN_DEBUG "dtmf hardware done\n");
 			dsp_dtmf_hardware(dsp);
 			break;
 		case DSP_VOL_CHANGE_RX: /* change volume */
+			if (dsp->hdlc) {
+				ret = -EINVAL;
+				break;
+			}
 			if (len < sizeof(int)) {
 				ret = -EINVAL;
 				break;
@@ -315,6 +342,10 @@ printk(KERN_DEBUG "dtmf hardware done\n");
 			dsp_cmx_hardware(dsp->conf, dsp);
 			break;
 		case DSP_MIX_ON: /* enable mixing of transmit data with conference members */
+			if (dsp->hdlc) {
+				ret = -EINVAL;
+				break;
+			}
 			if (dsp_debug & DEBUG_DSP_CORE)
 				printk(KERN_DEBUG "%s: enable mixing of tx-data with conf mebers\n", __FUNCTION__);
 			dsp->tx_mix = 1;
@@ -323,6 +354,10 @@ printk(KERN_DEBUG "dtmf hardware done\n");
 				dsp_cmx_debug(dsp);
 			break;
 		case DSP_MIX_OFF: /* disable mixing of transmit data with conference members */
+			if (dsp->hdlc) {
+				ret = -EINVAL;
+				break;
+			}
 			if (dsp_debug & DEBUG_DSP_CORE)
 				printk(KERN_DEBUG "%s: disable mixing of tx-data with conf mebers\n", __FUNCTION__);
 			dsp->tx_mix = 0;
@@ -347,6 +382,10 @@ printk(KERN_DEBUG "dtmf hardware done\n");
 				dsp_cmx_debug(dsp);
 			break;
 		case DSP_DELAY: /* use delay algorithm instead of dynamic jitter algorithm */
+			if (dsp->hdlc) {
+				ret = -EINVAL;
+				break;
+			}
 			if (len < sizeof(int)) {
 				ret = -EINVAL;
 				break;
@@ -358,21 +397,37 @@ printk(KERN_DEBUG "dtmf hardware done\n");
 				printk(KERN_DEBUG "%s: use delay algorithm to compensate jitter (%d samples)\n", __FUNCTION__, dsp->cmx_delay);
 			break;
 		case DSP_JITTER: /* use dynamic jitter algorithm instead of delay algorithm */
+			if (dsp->hdlc) {
+				ret = -EINVAL;
+				break;
+			}
 			dsp->cmx_delay = 0;
 			if (dsp_debug & DEBUG_DSP_CORE)
 				printk(KERN_DEBUG "%s: use jitter algorithm to compensate jitter\n", __FUNCTION__);
 			break;
 		case DSP_TX_DEJITTER: /* use dynamic jitter algorithm for tx-buffer */
+			if (dsp->hdlc) {
+				ret = -EINVAL;
+				break;
+			}
 			dsp->tx_dejitter = 1;
 			if (dsp_debug & DEBUG_DSP_CORE)
 				printk(KERN_DEBUG "%s: use dejitter on TX buffer\n", __FUNCTION__);
 			break;
 		case DSP_TX_DEJ_OFF: /* use tx-buffer without dejittering*/
+			if (dsp->hdlc) {
+				ret = -EINVAL;
+				break;
+			}
 			dsp->tx_dejitter = 0;
 			if (dsp_debug & DEBUG_DSP_CORE)
 				printk(KERN_DEBUG "%s: use TX buffer without dejittering\n", __FUNCTION__);
 			break;
 		case DSP_PIPELINE_CFG:
+			if (dsp->hdlc) {
+				ret = -EINVAL;
+				break;
+			}
 			if (len > 0 && ((char *)data)[len - 1]) {
 				printk(KERN_DEBUG "%s: pipeline config string is not NULL terminated!\n", __FUNCTION__);
 				ret = -EINVAL;
@@ -384,6 +439,10 @@ printk(KERN_DEBUG "dtmf hardware done\n");
 			}
 			break;
 		case DSP_BF_ENABLE_KEY: /* turn blowfish on */
+			if (dsp->hdlc) {
+				ret = -EINVAL;
+				break;
+			}
 			if (len<4 || len>56) {
 				ret = -EINVAL;
 				break;
@@ -411,6 +470,10 @@ printk(KERN_DEBUG "dtmf hardware done\n");
 			}
 			break;
 		case DSP_BF_DISABLE: /* turn blowfish off */
+			if (dsp->hdlc) {
+				ret = -EINVAL;
+				break;
+			}
 			if (dsp_debug & DEBUG_DSP_CORE)
 				printk(KERN_DEBUG "%s: turn blowfish off\n", __FUNCTION__);
 			dsp_bf_cleanup(dsp);
@@ -477,12 +540,29 @@ dsp_function(struct mISDNchannel *ch,  struct sk_buff *skb)
 	/* FROM DOWN */
 	case (PH_DATA_CNF):
 		/* flush response, because no relation to upper layer */
+		if (dsp->hdlc) {
+			dsp->hdlc_pending = 0;
+			schedule_work(&dsp->workq);
+		}
 		break;
 	case (PH_DATA_IND):
 	case (DL_DATA_IND):
 		if (skb->len < 1) {
 			ret = -EINVAL;
 			break;
+		}
+		if (dsp->hdlc) {
+			/* hdlc */
+			if (dsp->conf)
+				dsp_cmx_hdlc(dsp, skb);
+			if (dsp->rx_disabled) {
+				/* if receive is not allowed */
+				break;
+			}
+			hh->prim = DL_DATA_IND;
+			if (dsp->up)
+				return(dsp->up->send(dsp->up, skb));
+		break;
 		}
 			
 		/* decrypt if enabled */
@@ -583,6 +663,7 @@ dsp_function(struct mISDNchannel *ch,  struct sk_buff *skb)
 		/* bchannel now active */
 		spin_lock_irqsave(&dsp_lock, flags);
 		dsp->b_active = 1;
+		dsp->hdlc_pending = 0;
 		dsp->tx_W = dsp->tx_R = 0; /* clear TX buffer */
 		dsp->rx_W = dsp->rx_R = -1; /* reset RX buffer */
 		memset(dsp->rx_buff, 0, sizeof(dsp->rx_buff));
@@ -606,6 +687,7 @@ printk(KERN_DEBUG "done with dsp_dtmf_hardware\n");
 		/* bchannel now inactive */
 		spin_lock_irqsave(&dsp_lock, flags);
 		dsp->b_active = 0;
+		dsp->hdlc_pending = 0;
 		dsp_cmx_hardware(dsp->conf, dsp);
 		spin_unlock_irqrestore(&dsp_lock, flags);
 		hh->prim = DL_RELEASE_CNF;
@@ -618,6 +700,12 @@ printk(KERN_DEBUG "done with dsp_dtmf_hardware\n");
 		if (skb->len < 1) {
 			ret = -EINVAL;
 			break;
+		}
+		if (dsp->hdlc) {
+			/* hdlc */
+			skb_queue_tail(&dsp->sendq, skb);
+			schedule_work(&dsp->workq);
+			return(0);
 		}
 		/* send data to tx-buffer (if no tone is played) */
 		spin_lock_irqsave(&dsp_lock, flags);
@@ -731,12 +819,18 @@ dsp_send_bh(struct work_struct *work)
 	/* send queued data */
 	while((skb = skb_dequeue(&dsp->sendq)))
 	{
+		if (dsp->hdlc && dsp->hdlc_pending)
+			break;
 #warning debugging
 //printk("sending packet of %s\n", dsp->name);
 		/* send packet */
 		if (dsp->ch.peer) {
-			if (dsp->ch.recv(dsp->ch.peer, skb))
+			if (dsp->hdlc)
+				dsp->hdlc_pending = 1;
+			if (dsp->ch.recv(dsp->ch.peer, skb)) {
 				dev_kfree_skb(skb);
+				dsp->hdlc_pending = 0;
+			}
 		} else
 			dev_kfree_skb(skb);
 	}
@@ -748,7 +842,8 @@ dspcreate(struct channel_req *crq)
 	dsp_t		*ndsp;
 	u_long		flags;
 		
-	if (crq->protocol != ISDN_P_B_L2DSP)
+	if (crq->protocol != ISDN_P_B_L2DSP
+	 && crq->protocol != ISDN_P_B_L2DSPHDLC)
 		return -EPROTONOSUPPORT;
 #if 0
 	if (!(ndsp = kzalloc(sizeof(dsp_t), GFP_KERNEL))) {
@@ -772,7 +867,13 @@ dspcreate(struct channel_req *crq)
 	ndsp->ch.ctrl = dsp_ctrl;
 	ndsp->up = crq->ch;
 	crq->ch = &ndsp->ch;
-	crq->protocol = ISDN_P_B_RAW;
+	if (crq->protocol != ISDN_P_B_L2DSP) {
+		crq->protocol = ISDN_P_B_RAW;
+		ndsp->hdlc = 0;
+	} else {
+		crq->protocol = ISDN_P_B_HDLC;
+		ndsp->hdlc = 1;
+	}
 	if (!try_module_get(THIS_MODULE))
 		printk(KERN_WARNING "%s:cannot get module\n",
 			__FUNCTION__);
@@ -809,7 +910,8 @@ dspcreate(struct channel_req *crq)
 
 
 static struct Bprotocol DSP = {
-	.Bprotocols = (1 << (ISDN_P_B_L2DSP & ISDN_P_B_MASK)),
+	.Bprotocols = (1 << (ISDN_P_B_L2DSP & ISDN_P_B_MASK))
+		| (1 << (ISDN_P_B_L2DSPHDLC & ISDN_P_B_MASK)),
 	.name = "dsp",
 	.create = dspcreate
 };

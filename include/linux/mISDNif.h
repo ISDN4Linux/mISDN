@@ -222,6 +222,7 @@
 #define ISDN_P_B_X75SLP		0x23
 #define ISDN_P_B_L2DTMF		0x24
 #define ISDN_P_B_L2DSP		0x25
+#define ISDN_P_B_L2DSPHDLC	0x26
 
 #define OPTION_L2_PMX		1
 #define OPTION_L2_PTP		2

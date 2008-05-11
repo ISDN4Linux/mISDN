@@ -919,6 +919,12 @@ dsp_cmx_hardware(conference_t *conf, dsp_t *dsp)
 		goto conf_software;
 	}
 
+	/* for more than two members.. */
+
+	/* in case of hdlc, we change to software */
+	if (dsp->hdlc)
+		goto conf_software;
+
 	/* if all members already have the same conference */
 	if (all_conf)
 		return;
@@ -1035,6 +1041,7 @@ dsp_cmx_conf(dsp_t *dsp, u32 conf_id)
 {
 	int err;
 	conference_t *conf;
+	conf_member_t	*member;
 
 	/* if conference doesn't change */
 	if (dsp->conf_id == conf_id)
@@ -1094,6 +1101,22 @@ printk(KERN_DEBUG "7\n");
 		conf = dsp_cmx_new_conf(conf_id);
 		if (!conf)
 			return -EINVAL;
+	} else if (!list_empty(&conf->mlist)) {
+		member = list_entry(conf->mlist.next, conf_member_t, list);
+		if (dsp->hdlc && !member->dsp->hdlc)
+		{
+			if (dsp_debug & DEBUG_DSP_CMX)
+				printk(KERN_DEBUG
+			 	   "cannot join transparent conference.\n");
+			return -EINVAL;
+		}
+		if (!dsp->hdlc && member->dsp->hdlc)
+		{
+			if (dsp_debug & DEBUG_DSP_CMX)
+				printk(KERN_DEBUG
+			 	   "cannot join hdlc conference.\n");
+			return -EINVAL;
+		}
 	}
 	/* add conference member */
 	err = dsp_cmx_add_conf_member(dsp, conf);
@@ -1415,6 +1438,9 @@ dsp_cmx_send_member(dsp_t *dsp, int len, s32 *c, int members)
 		dsp->tx_R = t;
 		goto send_packet;
 	}
+#ifdef DSP_NEVER_DEFINED
+	}
+#endif
 	/* PROCESS DATA (three or more members) */
 	/* -> if echo is NOT enabled */
 	if (!dsp->echo) {
@@ -1513,8 +1539,12 @@ send_packet:
 		dsp_bf_encrypt(dsp, nskb->data, nskb->len);
 
 	/* queue and trigget */
-	skb_queue_tail(&dsp->sendq, nskb);
-	schedule_work(&dsp->workq);
+	if (!skb_queue_empty(&dsp->sendq))
+		printk(KERN_ERR "mISDN_dsp.o: send-que too slow\n");
+	else {
+		skb_queue_tail(&dsp->sendq, nskb);
+		schedule_work(&dsp->workq);
+	}
 }
 
 u32	samplecount;
@@ -1548,6 +1578,8 @@ dsp_cmx_send(void *arg)
 
 	/* loop all members that do not require conference mixing */
 	list_for_each_entry(dsp, &dsp_ilist, list) {
+		if (dsp->hdlc)
+			continue;
 		conf = dsp->conf;
 		mustmix = 0;
 		members = 0;
@@ -1581,6 +1613,10 @@ dsp_cmx_send(void *arg)
 #else
 		if (conf->software && members > 2) {
 #endif
+			/* check for hdlc conf */
+			member = list_entry(conf->mlist.next, conf_member_t, list);
+			if (member->dsp->hdlc)
+				continue;
 			/* mix all data */
 			memset(mixbuffer, 0, dsp_poll*sizeof(s32));
 			list_for_each_entry(member, &conf->mlist, list) {
@@ -1608,6 +1644,8 @@ dsp_cmx_send(void *arg)
 
 	/* delete rx-data, increment buffers, change pointers */
 	list_for_each_entry(dsp, &dsp_ilist, list) {
+		if (dsp->hdlc)
+			continue;
 		p = dsp->rx_buff;
 		q = dsp->tx_buff;
 		r = dsp->rx_R;
@@ -1777,4 +1815,43 @@ dsp_cmx_transmit(dsp_t *dsp, struct sk_buff *skb)
 #endif
 
 }
+
+/*
+ * hdlc data is received from card and sent to all members.
+ */
+void
+dsp_cmx_hdlc(dsp_t *dsp, struct sk_buff *skb)
+{
+	struct sk_buff *nskb;
+	conf_member_t *member;
+
+	/* check if we have sompen */
+	if (skb->len < 1)
+		return;
+
+	/* no conf */
+	if (dsp->conf) {
+		/* in case of hardware (echo) */
+		if (dsp->pcm_slot_tx >= 0)
+			return;
+		if (dsp->echo)
+			if ((nskb = skb_clone(skb, GFP_ATOMIC))) {
+				skb_queue_tail(&dsp->sendq, nskb);
+				schedule_work(&dsp->workq);
+			}
+		return;
+	}
+	/* in case of hardware conference */
+	if (dsp->conf->hardware)
+		return;
+	list_for_each_entry(member, &dsp->conf->mlist, list) {
+		if (dsp->echo || member->dsp != dsp) {
+			if ((nskb = skb_clone(skb, GFP_ATOMIC))) {
+				skb_queue_tail(&dsp->sendq, nskb);
+				schedule_work(&dsp->workq);
+			}
+		}
+	}
+}
+
 

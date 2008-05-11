@@ -276,6 +276,7 @@ data_sock_release(struct socket *sock)
 	case ISDN_P_B_X75SLP:
 	case ISDN_P_B_L2DTMF:
 	case ISDN_P_B_L2DSP:
+	case ISDN_P_B_L2DSPHDLC:
 		delete_channel(&_pms(sk)->ch);
 		mISDN_sock_unlink(&data_sockets, sk);
 		break;
@@ -488,6 +489,7 @@ data_sock_bind(struct socket *sock, struct sockaddr *addr, int addr_len)
 	case ISDN_P_B_X75SLP:
 	case ISDN_P_B_L2DTMF:
 	case ISDN_P_B_L2DSP:
+	case ISDN_P_B_L2DSPHDLC:
 		err = connect_Bstack(_pms(sk)->dev, &_pms(sk)->ch,
 		    sk->sk_protocol, maddr);
 		break;
@@ -727,6 +729,7 @@ mISDN_sock_create(struct socket *sock, int proto)
 	case ISDN_P_B_X75SLP:
 	case ISDN_P_B_L2DTMF:
 	case ISDN_P_B_L2DSP:
+	case ISDN_P_B_L2DSPHDLC:
 		err = data_sock_create(sock, proto);
 		break;
 	default:
