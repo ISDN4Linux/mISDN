@@ -1164,7 +1164,7 @@ handle_bmsg(struct mISDNchannel *ch, struct sk_buff *skb)
 				__FUNCTION__);
 			break;
 		}
-		/* check for AIS */
+		/* check for AIS / ulaw-silence */
 		p = skb->data;
 		l = skb->len;
 		for (i = 0; i < l; i++) {
@@ -1180,6 +1180,24 @@ handle_bmsg(struct mISDNchannel *ch, struct sk_buff *skb)
 			queue_ch_frame(ch, PH_DATA_CNF, hh->id, skb);
 			return 0;
 		}
+		/* check for silence */
+		p = skb->data;
+		l = skb->len;
+		for (i = 0; i < l; i++) {
+			if (*p++ != 0x2a)
+				break;
+		}
+		if (i == l) {
+			if (debug & DEBUG_L1OIP_MSG)
+				printk(KERN_DEBUG "%s: got silence, not sending"
+					", but counting\n", __FUNCTION__);
+			hc->chan[bch->slot].tx_counter += l;
+			skb_trim(skb, 0);
+			queue_ch_frame(ch, PH_DATA_CNF, hh->id, skb);
+			return 0;
+		}
+//#warning testing
+//else if (l>=4) printk(KERN_DEBUG "%s %02x %02x %02x %02x\n",hc->name, skb->data[0],skb->data[1],skb->data[2],skb->data[3]);
 
 		/* send frame */
 		p = skb->data;
