@@ -629,6 +629,12 @@ dsp_function(struct mISDNchannel *ch,  struct sk_buff *skb)
 			ret = -EINVAL;
 			break;
 		}
+		if (dsp->rx_is_off) {
+			if (dsp_debug & DEBUG_DSP_CORE)
+				printk(KERN_DEBUG "%s: rx-data during rx_off"
+					" for %s\n",
+				__FUNCTION__, dsp->name);
+		}
 		if (dsp->hdlc) {
 			/* hdlc */
 			if (dsp->conf)

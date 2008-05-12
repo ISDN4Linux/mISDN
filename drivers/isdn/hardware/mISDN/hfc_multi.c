@@ -2219,7 +2219,7 @@ mode_hfcmulti(struct hfc_multi *hc, int ch, int protocol, int slot_tx,
 
 	if (debug & DEBUG_HFCMULTI_MODE)
 		printk(KERN_DEBUG
-		    "%s: card %d channel %d protocol %x slot old=%d new=%d"
+		    "%s: card %d channel %d protocol %x slot old=%d new=%d "
 		    "bank new=%d (TX) slot old=%d new=%d bank new=%d (RX)\n",
 		    __FUNCTION__, hc->id, ch, protocol, oslot_tx, slot_tx,
 		    bank_tx, oslot_rx, slot_rx, bank_rx);
@@ -2280,7 +2280,7 @@ mode_hfcmulti(struct hfc_multi *hc, int ch, int protocol, int slot_tx,
 			routing = 0x40; /* loop */
 		if (debug & DEBUG_HFCMULTI_MODE)
 			printk(KERN_DEBUG "%s: put channel %d to slot %d bank"
-			    "%d flow %02x routing %02x conf %d (TX)\n",
+			    " %d flow %02x routing %02x conf %d (TX)\n",
 			    __FUNCTION__, ch, slot_tx, bank_tx,
 			    flow_tx, routing, conf);
 		HFC_outb(hc, R_SLOT, slot_tx << 1);
@@ -2307,7 +2307,7 @@ mode_hfcmulti(struct hfc_multi *hc, int ch, int protocol, int slot_tx,
 			routing = 0x40; /* loop */
 		if (debug & DEBUG_HFCMULTI_MODE)
 			printk(KERN_DEBUG "%s: put channel %d to slot %d bank"
-			    "%d flow %02x routing %02x conf %d (RX)\n",
+			    " %d flow %02x routing %02x conf %d (RX)\n",
 			    __FUNCTION__, ch, slot_rx, bank_rx,
 			    flow_rx, routing, conf);
 		HFC_outb(hc, R_SLOT, (slot_rx<<1) | V_SL_DIR);
@@ -3001,9 +3001,9 @@ channel_bctrl(struct bchannel *bch, struct mISDN_ctrl_req *cq)
 			features->hfc_echocanhw = 1;
 		break;
 	case MISDN_CTRL_HFC_PCM_CONN: /* connect interface to pcm timeslot (0..N) */
-		slot_tx = cq->p1 | 0xff;
+		slot_tx = cq->p1 & 0xff;
 		bank_tx = cq->p1 >> 8;
-		slot_rx = cq->p2 | 0xff;
+		slot_rx = cq->p2 & 0xff;
 		bank_rx = cq->p2 >> 8;
 		if (debug & DEBUG_HFCMULTI_MSG)
 			printk(KERN_DEBUG
@@ -3011,8 +3011,8 @@ channel_bctrl(struct bchannel *bch, struct mISDN_ctrl_req *cq)
 			    "slot %d bank %d (RX)\n",
 			    __FUNCTION__, slot_tx, bank_tx,
 			    slot_rx, bank_rx);
-		if (slot_tx <= hc->slots && bank_tx <= 2 &&
-		    slot_rx <= hc->slots && bank_rx <= 2)
+		if (slot_tx < hc->slots && bank_tx <= 2 &&
+		    slot_rx < hc->slots && bank_rx <= 2)
 			hfcmulti_pcm(hc, bch->slot,
 			    slot_tx, bank_tx, slot_rx, bank_rx);
 		else {
@@ -3031,7 +3031,7 @@ channel_bctrl(struct bchannel *bch, struct mISDN_ctrl_req *cq)
 		hfcmulti_pcm(hc, bch->slot, -1, 0, -1, 0);
 		break;
 	case MISDN_CTRL_HFC_CONF_JOIN: /* join conference (0..7) */
-		num = cq->p1 | 0xff;
+		num = cq->p1 & 0xff;
 		if (debug & DEBUG_HFCMULTI_MSG)
 			printk(KERN_DEBUG "%s: HFC_CONF_JOIN conf %d\n",
 			    __FUNCTION__, num);

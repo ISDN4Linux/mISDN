@@ -93,13 +93,13 @@ static char *strL2Event[] =
 static void
 l2m_debug(struct FsmInst *fi, char *fmt, ...)
 {
-//	struct layer2 *l2 = fi->userdata;
+	struct layer2 *l2 = fi->userdata;
 	va_list va;
 
 	if (!(*debug & DEBUG_L2_FSM))
 		return;
 	va_start(va, fmt);
-	printk(KERN_DEBUG "l2: ");
+	printk(KERN_DEBUG "l2 (tei %d): ", l2->tei);
 	vprintk(fmt, va);
 	printk("\n");
 	va_end(va);
@@ -1914,8 +1914,8 @@ l2_send(struct mISDNchannel *ch, struct sk_buff *skb)
 	int 			ret = -EINVAL;
 
 	if (*debug & DEBUG_L2_RECV)
-		printk(KERN_DEBUG "%s: prim(%x) id(%x)\n",
-		    __FUNCTION__, hh->prim, hh->id);
+		printk(KERN_DEBUG "%s: prim(%x) id(%x) tei(%d)\n",
+		    __FUNCTION__, hh->prim, hh->id, l2->tei);
 	switch (hh->prim) {
 		case PH_DATA_IND:
 			ret = ph_data_indication(l2, hh, skb);

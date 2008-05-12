@@ -358,9 +358,9 @@ dsp_cmx_hw_message(dsp_t *dsp, u32 message, u32 param1, u32 param2,
 	memset(&cq, 0, sizeof(cq));
 	cq.op = message;
 	cq.p1 = param1 | (param2 << 8);
-	cq.p2 = param2 | (param3 << 8);
+	cq.p2 = param3 | (param4 << 8);
 	if (dsp->ch.peer)
-		dsp->ch.peer->ctrl(&dsp->ch, CONTROL_CHANNEL, &cq);
+		dsp->ch.peer->ctrl(dsp->ch.peer, CONTROL_CHANNEL, &cq);
 }
 
 
