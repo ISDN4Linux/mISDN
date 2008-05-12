@@ -1559,20 +1559,28 @@ static int
 hfc_bctrl(struct mISDNchannel *ch, u_int cmd, void *arg)
 {
 	struct bchannel	*bch = container_of(ch, struct bchannel, ch);
+	struct hfc_pci	*hc = bch->hw;
 	int		ret = -EINVAL;
+	u_long		flags;
 
 	if (bch->debug & DEBUG_HW)
 		printk(KERN_DEBUG "%s: cmd:%x %p\n",
 		    __FUNCTION__, cmd, arg);
 	switch(cmd) {
 	case HW_TESTRX_RAW:
+		spin_lock_irqsave(&hc->lock, flags);
 		ret = set_hfcpci_rxtest(bch, ISDN_P_B_RAW, (int)(long)arg);
+		spin_unlock_irqrestore(&hc->lock, flags);
 		break;
 	case HW_TESTRX_HDLC:
+		spin_lock_irqsave(&hc->lock, flags);
 		ret = set_hfcpci_rxtest(bch, ISDN_P_B_HDLC, (int)(long)arg);
+		spin_unlock_irqrestore(&hc->lock, flags);
 		break;
 	case HW_TESTRX_OFF:
+		spin_lock_irqsave(&hc->lock, flags);
 		mode_hfcpci(bch, bch->nr, ISDN_P_NONE);
+		spin_unlock_irqrestore(&hc->lock, flags);
 		ret = 0;
 		break;
 	case CLOSE_CHANNEL:

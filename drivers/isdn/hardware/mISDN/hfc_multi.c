@@ -519,6 +519,7 @@ vpm_echocan_on(struct hfc_multi *hc, int ch, int taps)
 	struct bchannel *bch = hc->chan[ch].bch;
 #ifdef TXADJ
 	int txadj = -4;
+	struct sk_buff *skb;
 #endif
 	if (hc->chan[ch].protocol != ISDN_P_B_RAW)
 		return;
@@ -527,8 +528,11 @@ vpm_echocan_on(struct hfc_multi *hc, int ch, int taps)
 		return;
 
 #ifdef TXADJ
-	_queue_data(bch->ch, PH_CONTROL_IND, HFC_VOL_CHANGE_TX, sizeof(int),
-		&txadj, GFP_KERNEL);
+	skb = _alloc_mISDN_skb(PH_CONTROL_IND, HFC_VOL_CHANGE_TX, sizeof(int), &txadj, GFP_ATOMIC);
+	if (skb) {
+		skb_queue_tail(&bch->rqueue, skb);
+		schedule_event(bch, FLG_RECVQUEUE);
+	}
 #endif
 
 	timeslot = ((ch/4)*8) + ((ch%4)*4) + 1;
@@ -548,6 +552,7 @@ vpm_echocan_off(struct hfc_multi *hc, int ch)
 	struct bchannel *bch = hc->chan[ch].bch;
 #ifdef TXADJ
 	int txadj = 0;
+	struct sk_buff *skb;
 #endif
 
 	if (hc->chan[ch].protocol != ISDN_P_B_RAW)
@@ -557,8 +562,11 @@ vpm_echocan_off(struct hfc_multi *hc, int ch)
 		return;
 
 #ifdef TXADJ
-	_queue_data(bch->ch, PH_CONTROL_IND, HFC_VOL_CHANGE_TX, sizeof(int),
-		&txadj, GFP_KERNEL);
+	skb = _alloc_mISDN_skb(PH_CONTROL_IND, HFC_VOL_CHANGE_TX, sizeof(int), &txadj, GFP_ATOMIC);
+	if (skb) {
+		skb_queue_tail(&bch->rqueue, skb);
+		schedule_event(bch, FLG_RECVQUEUE);
+	}
 #endif
 
 	timeslot = ((ch/4)*8) + ((ch%4)*4) + 1;
@@ -2634,6 +2642,7 @@ static int
 hfcm_l1callback(struct dchannel *dch, u_int cmd)
 {
 	struct hfc_multi	*hc = dch->hw;
+	u_long	flags;
 
 	switch (cmd) {
 	case INFO3_P8:
@@ -2641,6 +2650,7 @@ hfcm_l1callback(struct dchannel *dch, u_int cmd)
 		break;
 	case HW_RESET_REQ:
 		/* start activation */
+		spin_lock_irqsave(&hc->lock, flags);
 		if (hc->type == 1) {
 			if (debug & DEBUG_HFCMULTI_MSG)
 				printk(KERN_DEBUG
@@ -2654,10 +2664,12 @@ hfcm_l1callback(struct dchannel *dch, u_int cmd)
 			/* activate */
 			HFC_outb(hc, A_ST_WR_STATE, 3 | (V_ST_ACT*3));
 		}
+			spin_unlock_irqrestore(&hc->lock, flags);
 		l1_event(dch->l1, HW_POWERUP_IND);
 		break;
 	case HW_DEACT_REQ:
 		/* start deactivation */
+		spin_lock_irqsave(&hc->lock, flags);
 		if (hc->type == 1) {
 			if (debug & DEBUG_HFCMULTI_MSG)
 				printk(KERN_DEBUG
@@ -2681,8 +2693,10 @@ hfcm_l1callback(struct dchannel *dch, u_int cmd)
 		test_and_clear_bit(FLG_TX_BUSY, &dch->Flags);
 		if (test_and_clear_bit(FLG_BUSY_TIMER, &dch->Flags))
 			del_timer(&dch->timer);
+		spin_unlock_irqrestore(&hc->lock, flags);
 		break;
 	case HW_POWERUP_REQ:
+		spin_lock_irqsave(&hc->lock, flags);
 		if (hc->type == 1) {
 			if (debug & DEBUG_HFCMULTI_MSG)
 				printk(KERN_DEBUG
@@ -2694,6 +2708,7 @@ hfcm_l1callback(struct dchannel *dch, u_int cmd)
 			udelay(6); /* wait at least 5,21us */
 			HFC_outb(hc, A_ST_WR_STATE, 3); /* activate */
 		}
+		spin_unlock_irqrestore(&hc->lock, flags);
 		break;
 	case PH_ACTIVATE_IND:
 		test_and_set_bit(FLG_ACTIVE, &dch->Flags);
@@ -2748,8 +2763,8 @@ handle_dmsg(struct mISDNchannel *ch, struct sk_buff *skb)
 			spin_unlock_irqrestore(&hc->lock, flags);
 		return ret;
 	case PH_ACTIVATE_REQ:
-		spin_lock_irqsave(&hc->lock, flags);
 		if (dch->dev.D.protocol != ISDN_P_TE_S0) {
+			spin_lock_irqsave(&hc->lock, flags);
 			ret = 0;
 			if (debug & DEBUG_HFCMULTI_MSG)
 				printk(KERN_DEBUG
@@ -2774,15 +2789,14 @@ handle_dmsg(struct mISDNchannel *ch, struct sk_buff *skb)
 				    (V_ST_ACT*3)); /* activate */
 				dch->state = 1;
 			}
-		} else {
+			spin_unlock_irqrestore(&hc->lock, flags);
+		} else
 			ret = l1_event(dch->l1, hh->prim);
-		}
-		spin_unlock_irqrestore(&hc->lock, flags);
 		break;
 	case PH_DEACTIVATE_REQ:
 		test_and_clear_bit(FLG_L2_ACTIVATED, &dch->Flags);
-		spin_lock_irqsave(&hc->lock, flags);
 		if (dch->dev.D.protocol != ISDN_P_TE_S0) {
+			spin_lock_irqsave(&hc->lock, flags);
 			if (debug & DEBUG_HFCMULTI_MSG)
 				printk(KERN_DEBUG
 				    "%s: PH_DEACTIVATE port %d (0..%d)\n",
@@ -2819,10 +2833,9 @@ handle_dmsg(struct mISDNchannel *ch, struct sk_buff *skb)
 				dchannel_sched_event(&hc->dch, D_CLEARBUSY);
 #endif
 			ret = 0;
-		} else {
+			spin_unlock_irqrestore(&hc->lock, flags);
+		} else
 			ret = l1_event(dch->l1, hh->prim);
-		}
-		spin_unlock_irqrestore(&hc->lock, flags);
 		break;
 	}
 	if (!ret)
@@ -2944,7 +2957,7 @@ handle_bmsg(struct mISDNchannel *ch, struct sk_buff *skb)
 		spin_unlock_irqrestore(&hc->lock, flags);
 		break;
 	case PH_DEACTIVATE_REQ:
-		deactivate_bchannel(bch);
+		deactivate_bchannel(bch); // locked there
 		_queue_data(ch, PH_DEACTIVATE_IND, MISDN_ID_ANY, 0, NULL, GFP_KERNEL);
 		ret = 0;
 		break;
@@ -3072,8 +3085,10 @@ channel_bctrl(struct bchannel *bch, struct mISDN_ctrl_req *cq)
 static int
 hfcm_bctrl(struct mISDNchannel *ch, u_int cmd, void *arg)
 {
-	struct bchannel	*bch = container_of(ch, struct bchannel, ch);
-	int		err = -EINVAL;
+	struct bchannel		*bch = container_of(ch, struct bchannel, ch);
+	struct hfc_multi	*hc = bch->hw;
+	int			err = -EINVAL;
+	u_long	flags;
 
 	if (bch->debug & DEBUG_HW)
 		printk(KERN_DEBUG "%s: cmd:%x %p\n",
@@ -3082,15 +3097,16 @@ hfcm_bctrl(struct mISDNchannel *ch, u_int cmd, void *arg)
 	case CLOSE_CHANNEL:
 		test_and_clear_bit(FLG_OPEN, &bch->Flags);
 		if (test_bit(FLG_ACTIVE, &bch->Flags))
-			deactivate_bchannel(bch);
+			deactivate_bchannel(bch); // locked there
 		ch->protocol = ISDN_P_NONE;
-		mode_hfcmulti(bch->hw, bch->slot, ISDN_P_NONE, -1, 0, -1, 0);
 		ch->peer = NULL;
 		module_put(THIS_MODULE);
 		err = 0;
 		break;
 	case CONTROL_CHANNEL:
+		spin_lock_irqsave(&hc->lock, flags);
 		err = channel_bctrl(bch, arg);
+		spin_unlock_irqrestore(&hc->lock, flags);
 		break;
 	default:
 		printk(KERN_WARNING "%s: unknown prim(%x)\n",
@@ -3404,7 +3420,8 @@ static int
 open_dchannel(struct hfc_multi *hc, struct dchannel *dch,
     struct channel_req *rq)
 {
-	int err = 0;
+	int	err = 0;
+	u_long	flags;
 
 	if (debug & DEBUG_HW_OPEN)
 		printk(KERN_DEBUG "%s: dev(%d) open from %p\n", __FUNCTION__,
@@ -3427,7 +3444,9 @@ open_dchannel(struct hfc_multi *hc, struct dchannel *dch,
 				return err;
 		}
 		dch->dev.D.protocol = rq->protocol;
+		spin_lock_irqsave(&hc->lock, flags);
 		hfcmulti_initmode(dch);
+		spin_unlock_irqrestore(&hc->lock, flags);
 	}
 	
 	if (((rq->protocol == ISDN_P_NT_S0) && (dch->state == 3)) ||
@@ -3485,7 +3504,7 @@ channel_dctrl(struct dchannel *dch, struct mISDN_ctrl_req *cq)
 
 	switch(cq->op) {
 	case MISDN_CTRL_GETOP:
-		cq->op = 0; // TODO
+		cq->op = 0;
 		break;
 	default:
 		printk(KERN_WARNING "%s: unknown Op %x\n",
@@ -3504,6 +3523,7 @@ hfcm_dctrl(struct mISDNchannel *ch, u_int cmd, void *arg)
 	struct hfc_multi	*hc = dch->hw;
 	struct channel_req	*rq;
 	int			err = 0;
+	u_long			flags;
 
 	if (dch->debug & DEBUG_HW)
 		printk(KERN_DEBUG "%s: cmd:%x %p\n",
@@ -3518,7 +3538,7 @@ hfcm_dctrl(struct mISDNchannel *ch, u_int cmd, void *arg)
 				err = -EINVAL;
 				break;
 			}
-			err = open_dchannel(hc, dch, rq);
+			err = open_dchannel(hc, dch, rq); // locked there
 			break;
 		case ISDN_P_TE_E1:
 		case ISDN_P_NT_E1:
@@ -3526,10 +3546,12 @@ hfcm_dctrl(struct mISDNchannel *ch, u_int cmd, void *arg)
 				err = -EINVAL;
 				break;
 			}
-			err = open_dchannel(hc, dch, rq);
+			err = open_dchannel(hc, dch, rq); // locked there
 			break;
 		default:
+			spin_lock_irqsave(&hc->lock, flags);
 			err = open_bchannel(hc, dch, rq);
+			spin_unlock_irqrestore(&hc->lock, flags);
 		}
 		break;
 	case CLOSE_CHANNEL:
@@ -3540,7 +3562,9 @@ hfcm_dctrl(struct mISDNchannel *ch, u_int cmd, void *arg)
 		module_put(THIS_MODULE);
 		break;
 	case CONTROL_CHANNEL:
+		spin_lock_irqsave(&hc->lock, flags);
 		err = channel_dctrl(dch, arg);
+		spin_unlock_irqrestore(&hc->lock, flags);
 		break;
 	default:
 		if (dch->debug & DEBUG_HW)

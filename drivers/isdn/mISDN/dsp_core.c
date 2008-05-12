@@ -637,8 +637,11 @@ dsp_function(struct mISDNchannel *ch,  struct sk_buff *skb)
 		}
 		if (dsp->hdlc) {
 			/* hdlc */
-			if (dsp->conf)
+			if (dsp->conf) {
+				spin_lock_irqsave(&dsp_lock, flags);
 				dsp_cmx_hdlc(dsp, skb);
+				spin_unlock_irqrestore(&dsp_lock, flags);
+			}
 			if (dsp->rx_disabled) {
 				/* if receive is not allowed */
 				break;
@@ -792,10 +795,11 @@ dsp_function(struct mISDNchannel *ch,  struct sk_buff *skb)
 			return(0);
 		}
 		/* send data to tx-buffer (if no tone is played) */
-		spin_lock_irqsave(&dsp_lock, flags);
-		if (!dsp->tone.tone)
+		if (!dsp->tone.tone) {
+			spin_lock_irqsave(&dsp_lock, flags);
 			dsp_cmx_transmit(dsp, skb);
-		spin_unlock_irqrestore(&dsp_lock, flags);
+			spin_unlock_irqrestore(&dsp_lock, flags);
+		}
 		break;
 	case (PH_CONTROL_REQ):
 		spin_lock_irqsave(&dsp_lock, flags);
@@ -818,9 +822,14 @@ dsp_function(struct mISDNchannel *ch,  struct sk_buff *skb)
 	case (PH_DEACTIVATE_REQ):
 		if (dsp_debug & DEBUG_DSP_CORE)
 			printk(KERN_DEBUG "%s: releasing b_channel %s\n", __FUNCTION__, dsp->name);
+		spin_lock_irqsave(&dsp_lock, flags);
 		dsp->tone.tone = dsp->tone.hardware = dsp->tone.software = 0;
 		if (timer_pending(&dsp->tone.tl))
 			del_timer(&dsp->tone.tl);
+		if (dsp->conf)
+			dsp_cmx_conf(dsp, 0); /* dsp_cmx_hardware will also be called here */
+		skb_queue_purge(&dsp->sendq);
+		spin_unlock_irqrestore(&dsp_lock, flags);
 		hh->prim = PH_DEACTIVATE_REQ;
 		if (ch->peer)
 			return(ch->recv(ch->peer, skb));
