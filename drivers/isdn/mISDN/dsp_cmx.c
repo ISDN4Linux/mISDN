@@ -405,6 +405,9 @@ dsp_cmx_hardware(conference_t *conf, dsp_t *dsp)
 			dsp_cmx_hw_message(dsp, MISDN_CTRL_HFC_CONF_SPLIT, 0, 0, 0, 0);
 			dsp->hfc_conf = -1;
 		}
+		/* process hw echo */
+		if (dsp->features.pcm_banks < 1)
+			return;
 		if (!dsp->echo) {
 			/* NO ECHO: remove PCM slot if assigned */
 			if (dsp->pcm_slot_tx >= 0 || dsp->pcm_slot_rx >= 0) {
@@ -430,7 +433,7 @@ dsp_cmx_hardware(conference_t *conf, dsp_t *dsp)
 		/* ECHO: if slot already assigned */
 		if (dsp->pcm_slot_tx >= 0) {
 			dsp->pcm_slot_rx = dsp->pcm_slot_tx;
-			dsp->pcm_bank_tx = 2; /* loop */
+			dsp->pcm_bank_tx = 2; /* 2 means loop */
 			dsp->pcm_bank_rx = 2;
 			if (dsp_debug & DEBUG_DSP_CMX)
 				printk(KERN_DEBUG
@@ -654,7 +657,7 @@ dsp_cmx_hardware(conference_t *conf, dsp_t *dsp)
 			    "%s conf %d cannot form a HW conference, "
 			    "because dsp is alone\n", __FUNCTION__, conf->id);
 		conf->hardware = 0;
-		conf->software = 1;
+		conf->software = 0;
 		member = list_entry(conf->mlist.next, conf_member_t, list);
 		dsp = member->dsp;
 		goto one_member;
@@ -1054,34 +1057,26 @@ dsp_cmx_conf(dsp_t *dsp, u32 conf_id)
 				dsp->conf->id);
 		/* remove us from conf */
 		conf = dsp->conf;
-#warning testing
-printk(KERN_DEBUG "1\n");
 		err = dsp_cmx_del_conf_member(dsp);
-printk(KERN_DEBUG "2\n");
 		if (err)
 			return err;
 		dsp->conf_id = 0;
-printk(KERN_DEBUG "3\n");
 
 		/* update hardware */
 		dsp_cmx_hardware(NULL, dsp);
-printk(KERN_DEBUG "4\n");
 
 		/* conf now empty? */
 		if (list_empty(&conf->mlist)) {
 			if (dsp_debug & DEBUG_DSP_CMX)
 				printk(KERN_DEBUG
 				    "conference is empty, so we remove it.\n");
-printk(KERN_DEBUG "5\n");
 			err = dsp_cmx_del_conf(conf);
-printk(KERN_DEBUG "6\n");
 			if (err)
 				return err;
 		} else {
 			/* update members left on conf */
 			dsp_cmx_hardware(conf, NULL);
 		}
-printk(KERN_DEBUG "7\n");
 	}
 
 	/* if split */
@@ -1649,14 +1644,17 @@ dsp_cmx_send(void *arg)
 		p = dsp->rx_buff;
 		q = dsp->tx_buff;
 		r = dsp->rx_R;
-		rr = (r + dsp_poll) & CMX_BUFF_MASK;
-		/* delete rx-data */
-		while (r != rr) {
-			p[r] = dsp_silence;
-			r = (r+1) & CMX_BUFF_MASK;
+		/* move receive pointer when receiving */
+		if (!dsp->rx_is_off) {
+			rr = (r + dsp_poll) & CMX_BUFF_MASK;
+			/* delete rx-data */
+			while (r != rr) {
+				p[r] = dsp_silence;
+				r = (r+1) & CMX_BUFF_MASK;
+			}
+			/* increment rx-buffer pointer */
+			dsp->rx_R = r; /* write incremented read pointer */
 		}
-		/* increment rx-buffer pointer */
-		dsp->rx_R = r; /* write incremented read pointer */
 
 		/* check current rx_delay */
 		delay = (dsp->rx_W-dsp->rx_R) & CMX_BUFF_MASK;

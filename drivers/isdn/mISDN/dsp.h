@@ -126,6 +126,7 @@ typedef struct _conference {
 	struct list_head	mlist;
 	int			software; /* conf is processed by software */
 	int			hardware; /* conf is processed by hardware */
+				/* note: if both unset, has only one member */
 } conference_t;
 
 
@@ -183,7 +184,8 @@ typedef struct _dsp {
 	unsigned char	name[64];
 	int		b_active;
 	int		echo; /* echo is enabled */
-	int		rx_disabled;
+	int		rx_disabled; /* what the user wants */
+	int		rx_is_off; /* what the card is */
 	int		tx_mix;
 	tone_t		tone;
 	dtmf_t		dtmf;
@@ -217,6 +219,7 @@ typedef struct _dsp {
 
 	/* hardware stuff */
 	struct dsp_features features;
+	int		features_rx_off; /* set if rx_off is featured */
 	int		pcm_slot_rx; /* current PCM slot (or -1) */
 	int		pcm_bank_rx;
 	int		pcm_slot_tx;

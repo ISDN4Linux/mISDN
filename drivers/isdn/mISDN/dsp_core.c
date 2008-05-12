@@ -187,6 +187,71 @@ int dsp_debug = 0;
 int dsp_options = 0;
 int dsp_poll = 0, dsp_tics = 0;
 
+/* check if rx may be turned off or must be turned on */
+static void
+dsp_rx_off_member(dsp_t *dsp)
+{
+	struct mISDN_ctrl_req	cq;
+	int rx_off = 1;
+
+	if (!dsp->features_rx_off)
+		return;
+
+	/* not disabled */
+	if (!dsp->rx_disabled)
+		rx_off = 0;
+	/* software dtmf */
+	else if (dsp->dtmf.software)
+		rx_off = 0;
+	/* echo in software */
+	else if (dsp->echo && dsp->pcm_slot_tx < 0)
+		rx_off = 0;
+	/* bridge in software */
+	else if (dsp->conf) {
+		if (dsp->conf->software)
+			rx_off = 0;
+	}
+
+	if (rx_off == dsp->rx_is_off)
+		return;
+	
+	if (!dsp->ch.peer) {
+		if (dsp_debug & DEBUG_DSP_CORE)
+			printk(KERN_DEBUG "%s: no peer, no rx_off\n",
+				__FUNCTION__);
+		return;
+	}
+	cq.op = MISDN_CTRL_RX_OFF;
+	cq.p1 = rx_off;
+	if (dsp->ch.peer->ctrl(dsp->ch.peer, CONTROL_CHANNEL, &cq)) {
+		printk(KERN_DEBUG "%s: 2nd CONTROL_CHANNEL failed\n",
+			__FUNCTION__);
+		return;
+	}
+	dsp->rx_is_off = rx_off;
+	if (dsp_debug & DEBUG_DSP_CORE)
+		printk(KERN_DEBUG "%s: %s set rx_off = %d\n",
+			__FUNCTION__, dsp->name, rx_off);
+}
+static void
+dsp_rx_off(dsp_t *dsp)
+{
+	conf_member_t	*member;
+
+	if (dsp_options & DSP_OPT_NOHARDWARE)
+		return;
+
+	/* no conf */
+	if (!dsp->conf) {
+		dsp_rx_off_member(dsp);
+		return;
+	}
+	/* check all members in conf */
+	list_for_each_entry(member, &dsp->conf->mlist, list) {
+		dsp_rx_off_member(member->dsp);
+	}
+}
+
 static int
 dsp_control_req(dsp_t *dsp, struct mISDNhead *hh, struct sk_buff *skb)
 {
@@ -219,12 +284,9 @@ dsp_control_req(dsp_t *dsp, struct mISDNhead *hh, struct sk_buff *skb)
 #endif
 			/* init goertzel */
 			dsp_dtmf_goertzel_init(dsp);
-#warning testing
-printk(KERN_DEBUG "dtmf done\n");
 
 			/* check dtmf hardware */
 			dsp_dtmf_hardware(dsp);
-printk(KERN_DEBUG "dtmf hardware done\n");
 			break;
 		case DTMF_TONE_STOP: /* turn off DTMF */
 			if (dsp_debug & DEBUG_DSP_CORE)
@@ -242,6 +304,7 @@ printk(KERN_DEBUG "dtmf hardware done\n");
 			if (dsp_debug & DEBUG_DSP_CORE)
 				printk(KERN_DEBUG "%s: join conference %d\n", __FUNCTION__, *((u32 *)data));
 			ret = dsp_cmx_conf(dsp, *((u32 *)data)); /* dsp_cmx_hardware will also be called here */
+			dsp_rx_off(dsp);
 			if (dsp_debug & DEBUG_DSP_CMX)
 				dsp_cmx_debug(dsp);
 			break;
@@ -252,6 +315,7 @@ printk(KERN_DEBUG "dtmf hardware done\n");
 			ret = dsp_cmx_conf(dsp, 0); /* dsp_cmx_hardware will also be called here */
 			if (dsp_debug & DEBUG_DSP_CMX)
 				dsp_cmx_debug(dsp);
+			dsp_rx_off(dsp);
 			break;
 		case DSP_TONE_PATT_ON: /* play tone */
 			if (dsp->hdlc) {
@@ -265,8 +329,10 @@ printk(KERN_DEBUG "dtmf hardware done\n");
 			if (dsp_debug & DEBUG_DSP_CORE)
 				printk(KERN_DEBUG "%s: turn tone 0x%x on\n", __FUNCTION__, *((int *)skb->data));
 			ret = dsp_tone(dsp, *((int *)data));
-			if (!ret)
+			if (!ret) {
 				dsp_cmx_hardware(dsp->conf, dsp);
+				dsp_rx_off(dsp);
+			}
 			if (!dsp->tone.tone)
 				goto tone_off;
 			break;
@@ -279,6 +345,7 @@ printk(KERN_DEBUG "dtmf hardware done\n");
 				printk(KERN_DEBUG "%s: turn tone off\n", __FUNCTION__);
 			dsp_tone(dsp, 0);
 			dsp_cmx_hardware(dsp->conf, dsp);
+			dsp_rx_off(dsp);
 			/* reset tx buffers (user space data) */
 			tone_off:
 			dsp->tx_R = dsp->tx_W = 0;
@@ -297,6 +364,7 @@ printk(KERN_DEBUG "dtmf hardware done\n");
 				printk(KERN_DEBUG "%s: change tx volume to %d\n", __FUNCTION__, dsp->tx_volume);
 			dsp_cmx_hardware(dsp->conf, dsp);
 			dsp_dtmf_hardware(dsp);
+			dsp_rx_off(dsp);
 			break;
 		case DSP_VOL_CHANGE_RX: /* change volume */
 			if (dsp->hdlc) {
@@ -312,12 +380,14 @@ printk(KERN_DEBUG "dtmf hardware done\n");
 				printk(KERN_DEBUG "%s: change rx volume to %d\n", __FUNCTION__, dsp->tx_volume);
 			dsp_cmx_hardware(dsp->conf, dsp);
 			dsp_dtmf_hardware(dsp);
+			dsp_rx_off(dsp);
 			break;
 		case DSP_ECHO_ON: /* enable echo */
 			dsp->echo = 1; /* soft echo */
 			if (dsp_debug & DEBUG_DSP_CORE)
 				printk(KERN_DEBUG "%s: enable cmx-echo\n", __FUNCTION__);
 			dsp_cmx_hardware(dsp->conf, dsp);
+			dsp_rx_off(dsp);
 			if (dsp_debug & DEBUG_DSP_CMX)
 				dsp_cmx_debug(dsp);
 			break;
@@ -326,6 +396,7 @@ printk(KERN_DEBUG "dtmf hardware done\n");
 			if (dsp_debug & DEBUG_DSP_CORE)
 				printk(KERN_DEBUG "%s: disable cmx-echo\n", __FUNCTION__);
 			dsp_cmx_hardware(dsp->conf, dsp);
+			dsp_rx_off(dsp);
 			if (dsp_debug & DEBUG_DSP_CMX)
 				dsp_cmx_debug(dsp);
 			break;
@@ -333,13 +404,13 @@ printk(KERN_DEBUG "dtmf hardware done\n");
 			if (dsp_debug & DEBUG_DSP_CORE)
 				printk(KERN_DEBUG "%s: enable receive to user space\n", __FUNCTION__);
 			dsp->rx_disabled = 0;
-			dsp_cmx_hardware(dsp->conf, dsp);
+			dsp_rx_off(dsp);
 			break;
 		case DSP_RECEIVE_OFF: /* disable receive to user space */
 			if (dsp_debug & DEBUG_DSP_CORE)
 				printk(KERN_DEBUG "%s: disable receive to user space\n", __FUNCTION__);
 			dsp->rx_disabled = 1;
-			dsp_cmx_hardware(dsp->conf, dsp);
+			dsp_rx_off(dsp);
 			break;
 		case DSP_MIX_ON: /* enable mixing of transmit data with conference members */
 			if (dsp->hdlc) {
@@ -350,6 +421,7 @@ printk(KERN_DEBUG "dtmf hardware done\n");
 				printk(KERN_DEBUG "%s: enable mixing of tx-data with conf mebers\n", __FUNCTION__);
 			dsp->tx_mix = 1;
 			dsp_cmx_hardware(dsp->conf, dsp);
+			dsp_rx_off(dsp);
 			if (dsp_debug & DEBUG_DSP_CMX)
 				dsp_cmx_debug(dsp);
 			break;
@@ -362,6 +434,7 @@ printk(KERN_DEBUG "dtmf hardware done\n");
 				printk(KERN_DEBUG "%s: disable mixing of tx-data with conf mebers\n", __FUNCTION__);
 			dsp->tx_mix = 0;
 			dsp_cmx_hardware(dsp->conf, dsp);
+			dsp_rx_off(dsp);
 			if (dsp_debug & DEBUG_DSP_CMX)
 				dsp_cmx_debug(dsp);
 			break;
@@ -370,6 +443,7 @@ printk(KERN_DEBUG "dtmf hardware done\n");
 			if (dsp_debug & DEBUG_DSP_CORE)
 				printk(KERN_DEBUG "%s: enable tx-data\n", __FUNCTION__);
 			dsp_cmx_hardware(dsp->conf, dsp);
+			dsp_rx_off(dsp);
 			if (dsp_debug & DEBUG_DSP_CMX)
 				dsp_cmx_debug(dsp);
 			break;
@@ -378,6 +452,7 @@ printk(KERN_DEBUG "dtmf hardware done\n");
 			if (dsp_debug & DEBUG_DSP_CORE)
 				printk(KERN_DEBUG "%s: disable tx-data\n", __FUNCTION__);
 			dsp_cmx_hardware(dsp->conf, dsp);
+			dsp_rx_off(dsp);
 			if (dsp_debug & DEBUG_DSP_CMX)
 				dsp_cmx_debug(dsp);
 			break;
@@ -436,6 +511,7 @@ printk(KERN_DEBUG "dtmf hardware done\n");
 				dsp_cmx_hardware(dsp->conf, dsp);
 				ret = dsp_pipeline_build(&dsp->pipeline, len > 0 ? (char *)data : NULL);
 				dsp_cmx_hardware(dsp->conf, dsp);
+				dsp_rx_off(dsp);
 			}
 			break;
 		case DSP_BF_ENABLE_KEY: /* turn blowfish on */
@@ -467,6 +543,7 @@ printk(KERN_DEBUG "dtmf hardware done\n");
 			if (!ret) {
 				dsp_cmx_hardware(dsp->conf, dsp);
 				dsp_dtmf_hardware(dsp);
+				dsp_rx_off(dsp);
 			}
 			break;
 		case DSP_BF_DISABLE: /* turn blowfish off */
@@ -479,6 +556,7 @@ printk(KERN_DEBUG "dtmf hardware done\n");
 			dsp_bf_cleanup(dsp);
 			dsp_cmx_hardware(dsp->conf, dsp);
 			dsp_dtmf_hardware(dsp);
+			dsp_rx_off(dsp);
 			break;
 		default:
 			if (dsp_debug & DEBUG_DSP_CORE)
@@ -509,19 +587,19 @@ get_features(struct mISDNchannel *ch)
 			__FUNCTION__);
 		return;
 	}
-	if (!(cq.op & MISDN_CTRL_HW_FEATURES_OP)) {
+	if (cq.op & MISDN_CTRL_RX_OFF)
+		dsp->features_rx_off = 1;
+	if ((cq.op & MISDN_CTRL_HW_FEATURES_OP)) {
+		cq.op = MISDN_CTRL_HW_FEATURES;
+		cq.p1 = (int)&dsp->features;
+		if (ch->peer->ctrl(ch->peer, CONTROL_CHANNEL, &cq)) {
+			printk(KERN_DEBUG "%s: 2nd CONTROL_CHANNEL failed\n",
+				__FUNCTION__);
+		}
+	} else
 		if (dsp_debug & DEBUG_DSP_CORE)
 			printk(KERN_DEBUG "%s: features not supported for %s\n",
 				__FUNCTION__, dsp->name);
-		return;
-	}
-	cq.op = MISDN_CTRL_HW_FEATURES;
-	cq.p1 = (int)&dsp->features;
-	if (ch->peer->ctrl(ch->peer, CONTROL_CHANNEL, &cq)) {
-		printk(KERN_DEBUG "%s: 2nd CONTROL_CHANNEL failed\n",
-			__FUNCTION__);
-		return;
-	}
 }
 
 static int
@@ -648,6 +726,7 @@ dsp_function(struct mISDNchannel *ch,  struct sk_buff *skb)
 				printk(KERN_DEBUG "%s: change tx volume to %d\n", __FUNCTION__, dsp->tx_volume);
 			dsp_cmx_hardware(dsp->conf, dsp);
 			dsp_dtmf_hardware(dsp);
+			dsp_rx_off(dsp);
 			spin_unlock_irqrestore(&dsp_lock, flags);
 			break;
 		default:
@@ -668,10 +747,8 @@ dsp_function(struct mISDNchannel *ch,  struct sk_buff *skb)
 		dsp->rx_W = dsp->rx_R = -1; /* reset RX buffer */
 		memset(dsp->rx_buff, 0, sizeof(dsp->rx_buff));
 		dsp_cmx_hardware(dsp->conf, dsp);
-#warning testing
-printk(KERN_DEBUG "done with dsp_cmx_hardware\n");
 		dsp_dtmf_hardware(dsp);
-printk(KERN_DEBUG "done with dsp_dtmf_hardware\n");
+		dsp_rx_off(dsp);
 		spin_unlock_irqrestore(&dsp_lock, flags);
 		if (dsp_debug & DEBUG_DSP_CORE)
 			printk(KERN_DEBUG "%s: done with activation, sending confirm to user space. %s\n", __FUNCTION__, dsp->name);
@@ -689,6 +766,7 @@ printk(KERN_DEBUG "done with dsp_dtmf_hardware\n");
 		dsp->b_active = 0;
 		dsp->hdlc_pending = 0;
 		dsp_cmx_hardware(dsp->conf, dsp);
+		dsp_rx_off(dsp);
 		spin_unlock_irqrestore(&dsp_lock, flags);
 		hh->prim = DL_RELEASE_CNF;
 		if (dsp->up)
@@ -821,8 +899,6 @@ dsp_send_bh(struct work_struct *work)
 	{
 		if (dsp->hdlc && dsp->hdlc_pending)
 			break;
-#warning debugging
-//printk("sending packet of %s\n", dsp->name);
 		/* send packet */
 		if (dsp->ch.peer) {
 			if (dsp->hdlc)
