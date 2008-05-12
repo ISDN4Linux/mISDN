@@ -58,14 +58,14 @@
  *	example: 0x0001,0x0000,0x0000,0x0000 one HFC-4S with master clock received from port 1
  *
  *	HFC-E1 only bits:
- *	Bit 0     = 0x001 = interface: 0=copper, 1=optical
- *	Bit 1     = 0x002 = reserved (later for 32 B-channels transparent mode)
- *	Bit 2     = 0x004 = Report LOS
- *	Bit 3     = 0x008 = Report AIS
- *	Bit 4     = 0x010 = Report SLIP
- *	Bit 5     = 0x020 = Report RDI (not yet supported)
- *	Bit 6-7   = 0x0X0 = elastic jitter buffer (1-3), Set both bits to 0 for default.
- *	Bit 8     = 0x100 = Turn off CRC-4 Multiframe Mode, use double frame mode instead.
+ *	Bit 0     = 0x0001 = interface: 0=copper, 1=optical
+ *	Bit 1     = 0x0002 = reserved (later for 32 B-channels transparent mode)
+ *	Bit 2     = 0x0004 = Report LOS
+ *	Bit 3     = 0x0008 = Report AIS
+ *	Bit 4     = 0x0010 = Report SLIP
+ *	Bit 5     = 0x0020 = Report RDI (not yet supported)
+ *	Bit 8     = 0x0100 = Turn off CRC-4 Multiframe Mode, use double frame mode instead.
+ *	Bit 8-9   = 0xX000 = elastic jitter buffer (1-3), Set both bits to 0 for default.
  * (all other bits are reserved and shall be 0)
  *
  * debug:
@@ -1178,7 +1178,7 @@ hfcmulti_dtmf(struct hfc_multi *hc)
 
 	if (debug & DEBUG_HFCMULTI_DTMF)
 		printk(KERN_DEBUG "%s: dtmf detection irq\n", __FUNCTION__);
-	for (ch = 0; ch < 32; ch++) {
+	for (ch = 0; ch <= 31; ch++) {
 		/* only process enabled B-channels */
 		bch = hc->chan[ch].bch;
 		if (!bch) {
@@ -1631,10 +1631,19 @@ hfcmulti_rx(struct hfc_multi *hc, int ch)
 	else
 		HFC_outb_(hc, R_FIFO, (ch<<1)|1);
 	HFC_wait_(hc);
+	if (hc->chan[ch].rx_off)
+		return;
 	bch = hc->chan[ch].bch;
 	dch = hc->chan[ch].dch;
 	if ((!dch) && (!bch))
 		return;
+	if (dch) {
+		sp = &dch->rx_skb;
+		maxlen = dch->maxlen;
+	} else {
+		sp = &bch->rx_skb;
+		maxlen = bch->maxlen;
+	}
 next_frame:
 	if (dch || test_bit(FLG_HDLC, &bch->Flags)) {
 		f1 = HFC_inb_(hc, A_F1);
@@ -1668,13 +1677,6 @@ next_frame:
 	if (Zsize <= 0)
 		return;
 
-	if (dch) {
-		sp = &dch->rx_skb;
-		maxlen = dch->maxlen;
-	} else {
-		sp = &bch->rx_skb;
-		maxlen = bch->maxlen;
-	}
 	if (*sp == NULL) {
 		*sp = mI_alloc_skb(maxlen + 3, GFP_ATOMIC);
 		if (*sp == NULL) {
@@ -1729,12 +1731,6 @@ next_frame:
 				skb_trim(*sp, 0);
 				goto next_frame;
 			}
-			/* only send dchannel if in active state */
-			if (dch && hc->type == 1 && 
-			    hc->chan[ch].e1_state != 1) {
-				skb_trim(*sp, 0);
-				goto next_frame;
-			}
 			skb_trim(*sp, (*sp)->len - 3);
 			if ((*sp)->len < MISDN_COPY_SIZE) {
 				skb = *sp;
@@ -1756,12 +1752,7 @@ next_frame:
 				printk("\n");
 			}
 			if (dch)
-#warning testing
-{
-printk(KERN_DEBUG "DCH pointer %p\n", dch->rx_skb);
-if (dch->rx_skb)
 				recv_Dchannel(dch);
-}
 			else
 				recv_Bchannel(bch);
 			*sp = skb;
@@ -1826,28 +1817,29 @@ handle_timer_irq(struct hfc_multi *hc)
 	int		ch, temp;
 	struct dchannel	*dch;
 
-	for (ch = 0; ch < 32; ch++) {
-		if (hc->created[hc->chan[ch].port]) {
-			hfcmulti_tx(hc, ch);
-			/* fifo is started when switching to rx-fifo */
-			hfcmulti_rx(hc, ch);
-			if (hc->chan[ch].dch &&
-			    hc->chan[ch].nt_timer > -1) {
-				dch = hc->chan[ch].dch;
-				if (!(--hc->chan[ch].nt_timer)) {
-					schedule_event(dch,
-					    FLG_PHCHANGE);
-					if (debug &
-					    DEBUG_HFCMULTI_STATE)
-						printk(KERN_DEBUG
-						    "%s: nt_timer at "
-						    "state %x\n",
-						    __FUNCTION__,
-						    dch->state);
+	if (hc->type != 1 || hc->e1_state == 1)
+		for (ch = 0; ch <= 31; ch++) {
+			if (hc->created[hc->chan[ch].port]) {
+				hfcmulti_tx(hc, ch);
+				/* fifo is started when switching to rx-fifo */
+				hfcmulti_rx(hc, ch);
+				if (hc->chan[ch].dch &&
+				    hc->chan[ch].nt_timer > -1) {
+					dch = hc->chan[ch].dch;
+					if (!(--hc->chan[ch].nt_timer)) {
+						schedule_event(dch,
+						    FLG_PHCHANGE);
+						if (debug &
+						    DEBUG_HFCMULTI_STATE)
+							printk(KERN_DEBUG
+							    "%s: nt_timer at "
+							    "state %x\n",
+							    __FUNCTION__,
+							    dch->state);
+					}
 				}
 			}
 		}
-	}
 	if (hc->type == 1 && hc->created[0]) {
 		dch = hc->chan[hc->dslot].dch;
 		if (test_bit(HFC_CFG_REPORT_LOS, &hc->chan[hc->dslot].cfg)) {
@@ -1973,7 +1965,7 @@ ph_state_irq(struct hfc_multi *hc, u_char r_irq_statech)
 	int		active;
 
 	/* state machine */
-	for (ch = 0; ch < 32; ch++) {
+	for (ch = 0; ch <= 31; ch++) {
 		if (hc->chan[ch].dch) {
 			dch = hc->chan[ch].dch;
 			if (r_irq_statech & 1) {
@@ -2216,9 +2208,14 @@ mode_hfcmulti(struct hfc_multi *hc, int ch, int protocol, int slot_tx,
     int bank_tx, int slot_rx, int bank_rx)
 {
 	int flow_tx = 0, flow_rx = 0, routing = 0;
-	int oslot_tx = hc->chan[ch].slot_tx;
-	int oslot_rx = hc->chan[ch].slot_rx;
-	int conf = hc->chan[ch].conf;
+	int oslot_tx, oslot_rx;
+	int conf;
+
+	if (ch < 0 || ch > 31)
+		return(EINVAL);
+	oslot_tx = hc->chan[ch].slot_tx;
+	oslot_rx = hc->chan[ch].slot_rx;
+	conf = hc->chan[ch].conf;
 
 	if (debug & DEBUG_HFCMULTI_MODE)
 		printk(KERN_DEBUG
@@ -2678,8 +2675,6 @@ hfcm_l1callback(struct dchannel *dch, u_int cmd)
 		}
 		dch->tx_idx = 0;
 		if (dch->rx_skb) {
-#warning debugging
-printk(KERN_DEBUG "hw_deac so we free skb\n");
 			dev_kfree_skb(dch->rx_skb);
 			dch->rx_skb = NULL;
 		}
@@ -2813,8 +2808,6 @@ handle_dmsg(struct mISDNchannel *ch, struct sk_buff *skb)
 			}
 			dch->tx_idx = 0;
 			if (dch->rx_skb) {
-#warning debugging
-printk(KERN_DEBUG "ph_deac so we free skb\n");
 				dev_kfree_skb(dch->rx_skb);
 				dch->rx_skb = NULL;
 			}
@@ -2878,8 +2871,6 @@ handle_bmsg(struct mISDNchannel *ch, struct sk_buff *skb)
 	case PH_DATA_REQ:
 		if (!skb->len)
 			break;
-#warning testing
-//printk(KERN_DEBUG "%s getting from up\n", __FUNCTION__);
 		spin_lock_irqsave(&hc->lock, flags);
 		ret = bchannel_senddata(bch, skb);
 		if (ret > 0) { /* direct TX */
@@ -2980,7 +2971,19 @@ channel_bctrl(struct bchannel *bch, struct mISDN_ctrl_req *cq)
 
 	switch(cq->op) {
 	case MISDN_CTRL_GETOP:
-		cq->op = MISDN_CTRL_HFC_OP | MISDN_CTRL_HW_FEATURES_OP;
+		cq->op = MISDN_CTRL_HFC_OP | MISDN_CTRL_HW_FEATURES_OP
+			| MISDN_CTRL_RX_OFF;
+		break;
+	case MISDN_CTRL_RX_OFF: /* turn off / on rx stream */
+		if (!(hc->chan[bch->slot].rx_off = !!cq->p1))
+		/* reset fifo on rx on */
+		HFC_outb_(hc, R_FIFO, (bch->slot << 1) | 1);
+		HFC_wait_(hc);
+		HFC_outb_(hc, R_INC_RES_FIFO,V_RES_F);
+		HFC_wait_(hc);
+		if (debug & DEBUG_HFCMULTI_MSG)
+			printk(KERN_DEBUG "%s: RX_OFF request (off=%d)\n",
+			    __FUNCTION__, hc->chan[bch->slot].rx_off);
 		break;
 	case MISDN_CTRL_HW_FEATURES: /* fill features structure */
 		if (debug & DEBUG_HFCMULTI_MSG)
@@ -3081,6 +3084,7 @@ hfcm_bctrl(struct mISDNchannel *ch, u_int cmd, void *arg)
 		if (test_bit(FLG_ACTIVE, &bch->Flags))
 			deactivate_bchannel(bch);
 		ch->protocol = ISDN_P_NONE;
+		mode_hfcmulti(bch->hw, bch->slot, ISDN_P_NONE, -1, 0, -1, 0);
 		ch->peer = NULL;
 		module_put(THIS_MODULE);
 		err = 0;
@@ -3104,7 +3108,7 @@ static void
 ph_state_change(struct dchannel *dch)
 {
 	struct hfc_multi *hc = dch->hw;
-	int ch;
+	int ch, i;
 
 	if (!dch) {
 		printk(KERN_WARNING "%s: ERROR given dch is NULL\n",
@@ -3127,19 +3131,28 @@ ph_state_change(struct dchannel *dch)
 		}
 		switch (dch->state) {
 			case (1):
+				if (hc->e1_state != 1) {
+				    for (i = 1; i <= 31; i++) {
+					/* reset fifos on e1 activation */
+					HFC_outb_(hc, R_FIFO, (i << 1) | 1);
+					HFC_wait_(hc);
+					HFC_outb_(hc, R_INC_RES_FIFO,V_RES_F);
+					HFC_wait_(hc);
+				    }
+				}
 				test_and_set_bit(FLG_ACTIVE, &dch->Flags);
 				_queue_data(&dch->dev.D, PH_ACTIVATE_IND,
 				    MISDN_ID_ANY, 0, NULL, GFP_ATOMIC);
 				break;
 
 			default:
-				if (hc->chan[ch].e1_state != 1)
+				if (hc->e1_state != 1)
 					return;
 				test_and_clear_bit(FLG_ACTIVE, &dch->Flags);
 				_queue_data(&dch->dev.D, PH_DEACTIVATE_IND,
 				    MISDN_ID_ANY, 0, NULL, GFP_ATOMIC);
 		}
-		hc->chan[ch].e1_state = dch->state;
+		hc->e1_state = dch->state;
 	} else {
 		if (dch->dev.D.protocol == ISDN_P_TE_S0) {
 			if (debug & DEBUG_HFCMULTI_STATE)
@@ -3455,6 +3468,7 @@ open_bchannel(struct hfc_multi *hc, struct dchannel *dch,
 	if (test_and_set_bit(FLG_OPEN, &bch->Flags))
 		return -EBUSY; /* b-channel can be only open once */
 	bch->ch.protocol = rq->protocol;
+	hc->chan[ch].rx_off = 0;
 	rq->ch = &bch->ch;
 	if (!try_module_get(THIS_MODULE))
 		printk(KERN_WARNING "%s:cannot get module\n", __FUNCTION__);
@@ -3819,7 +3833,7 @@ release_port(struct hfc_multi *hc, struct dchannel *dch)
 
 	if (hc->type == 1) { /* E1 */
 		/* free channels */
-		for (i = 0; i < 32; i++) {
+		for (i = 0; i <= 31; i++) {
 			if (hc->chan[i].bch) {
 				if (debug & DEBUG_HFCMULTI_INIT)
 					printk(KERN_DEBUG
@@ -3895,7 +3909,7 @@ release_card(struct hfc_multi *hc)
 	if (debug & DEBUG_HFCMULTI_INIT)
 		printk(KERN_DEBUG "%s: disable all channels (d and b)\n",
 		    __FUNCTION__);
-	for (ch = 0; ch < 32; ch++) {
+	for (ch = 0; ch <= 31; ch++) {
 		if (hc->chan[ch].dch)
 			release_port(hc, hc->chan[ch].dch);
 	}
@@ -4029,18 +4043,6 @@ init_e1_port(struct hfc_multi *hc, struct hm_map *m)
 		    &hc->chan[hc->dslot].cfg);
 	}
 #endif
-	/* set elastic jitter buffer */
-	if (port[Port_cnt] & 0x0c0) {
-		if (debug & DEBUG_HFCMULTI_INIT)
-			printk(KERN_DEBUG
-			    "%s: PROTOCOL set elastic "
-			    "buffer to %d: card(%d) port(%d)\n",
-			    __FUNCTION__, hc->chan[ch].jitter,
-			    HFC_cnt + 1, 1);
-		hc->chan[hc->dslot].jitter =
-		    (port[Port_cnt]>>6) & 0x3;
-	} else
-		hc->chan[ch].jitter = 2; /* default */
 	/* set CRC-4 Mode */
 	if (! (port[Port_cnt] & 0x100)) {
 		if (debug & DEBUG_HFCMULTI_INIT)
@@ -4055,6 +4057,18 @@ init_e1_port(struct hfc_multi *hc, struct hm_map *m)
 		   		" report: card(%d) port(%d)\n",
 		   		__FUNCTION__, HFC_cnt + 1, 1);
 	}
+	/* set elastic jitter buffer */
+	if (port[Port_cnt] & 0x3000) {
+		if (debug & DEBUG_HFCMULTI_INIT)
+			printk(KERN_DEBUG
+			    "%s: PROTOCOL set elastic "
+			    "buffer to %d: card(%d) port(%d)\n",
+			    __FUNCTION__, hc->chan[ch].jitter,
+			    HFC_cnt + 1, 1);
+		hc->chan[hc->dslot].jitter =
+		    (port[Port_cnt]>>12) & 0x3;
+	} else
+		hc->chan[ch].jitter = 2; /* default */
 	snprintf(name, MISDN_MAX_IDLEN - 1, "hfc-e1.%d", HFC_cnt + 1);
 	ret = mISDN_register_device(&dch->dev, name);
 	if (ret)

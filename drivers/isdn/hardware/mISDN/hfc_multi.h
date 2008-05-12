@@ -62,7 +62,7 @@ struct hfc_chan {
 	int		conf;	/* conference setting of TX slot */
 	int		txpending;	/* if there is currently data in */
 					/* the FIFO 0=no, 1=yes, 2=splloop */
-	int		e1_state; /* keep track of last state */
+	int		rx_off; /* set to turn fifo receive off */
 };
 
 
@@ -164,6 +164,7 @@ struct hfc_multi {
 	u_int		activity[8]; 	/* if there is any action on this */
 					/* port (will be cleared after */
 					/* showing led-states) */
+	int		e1_state; /* keep track of last state */
 
 	spinlock_t	lock;	/* the lock */
 
