@@ -42,6 +42,7 @@ extern int dsp_poll;
 extern int dsp_tics;
 extern spinlock_t dsp_lock;
 extern struct work_struct dsp_workq;
+extern u32 dsp_poll_diff; /* calculated fix-comma corrected poll value */
 
 #if 0
 // spin debugging
@@ -194,10 +195,10 @@ typedef struct _dsp {
 	/* queue for sending frames */
 	struct work_struct	workq;
 	struct sk_buff_head	sendq;
+	int		hdlc;	/* if mode is hdlc */
+	int		data_pending;	/* currently an unconfirmed frame */
 
 	/* conference stuff */
-	int		hdlc;	/* if mode is hdlc */
-	int		hdlc_pending;	/* currently an unconfirmed frame */
 	u32		conf_id;
 	conference_t	*conf;
 	conf_member_t	*member;

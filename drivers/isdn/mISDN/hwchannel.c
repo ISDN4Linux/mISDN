@@ -234,7 +234,8 @@ get_next_bframe(struct bchannel *bch)
 		if (bch->tx_skb) {
 			bch->next_skb = NULL;
 			test_and_clear_bit(FLG_TX_NEXT, &bch->Flags);
-			confirm_Bsend(bch);
+			if (!test_bit(FLG_TRANSPARENT, &bch->Flags))
+				confirm_Bsend(bch); // not for transparent
 			return 1;
 		} else {
 			test_and_clear_bit(FLG_TX_NEXT, &bch->Flags);

@@ -180,7 +180,6 @@ MODULE_LICENSE("GPL");
 //int spinnest = 0;
 
 spinlock_t dsp_lock;
-struct work_struct dsp_workq;
 struct list_head dsp_ilist;
 struct list_head conf_ilist;
 int dsp_debug = 0;
@@ -617,10 +616,11 @@ dsp_function(struct mISDNchannel *ch,  struct sk_buff *skb)
 	switch(hh->prim) {
 	/* FROM DOWN */
 	case (PH_DATA_CNF):
-		/* flush response, because no relation to upper layer */
+		dsp->data_pending = 0;
+		/* trigger next hdlc frame, if any */
 		if (dsp->hdlc) {
-			dsp->hdlc_pending = 0;
-			schedule_work(&dsp->workq);
+			if (dsp->b_active)
+				schedule_work(&dsp->workq);
 		}
 		break;
 	case (PH_DATA_IND):
@@ -751,7 +751,7 @@ dsp_function(struct mISDNchannel *ch,  struct sk_buff *skb)
 		/* bchannel now active */
 		spin_lock_irqsave(&dsp_lock, flags);
 		dsp->b_active = 1;
-		dsp->hdlc_pending = 0;
+		dsp->data_pending = 0;
 		dsp->tx_W = dsp->tx_R = 0; /* clear TX buffer */
 		dsp->rx_W = dsp->rx_R = -1; /* reset RX buffer */
 		memset(dsp->rx_buff, 0, sizeof(dsp->rx_buff));
@@ -773,7 +773,7 @@ dsp_function(struct mISDNchannel *ch,  struct sk_buff *skb)
 		/* bchannel now inactive */
 		spin_lock_irqsave(&dsp_lock, flags);
 		dsp->b_active = 0;
-		dsp->hdlc_pending = 0;
+		dsp->data_pending = 0;
 		dsp_cmx_hardware(dsp->conf, dsp);
 		dsp_rx_off(dsp);
 		spin_unlock_irqrestore(&dsp_lock, flags);
@@ -790,8 +790,10 @@ dsp_function(struct mISDNchannel *ch,  struct sk_buff *skb)
 		}
 		if (dsp->hdlc) {
 			/* hdlc */
-			skb_queue_tail(&dsp->sendq, skb);
-			schedule_work(&dsp->workq);
+			if (dsp->b_active) {
+				skb_queue_tail(&dsp->sendq, skb);
+				schedule_work(&dsp->workq);
+			}
 			return(0);
 		}
 		/* send data to tx-buffer (if no tone is played) */
@@ -862,6 +864,14 @@ dsp_ctrl(struct mISDNchannel *ch, u_int cmd, void *arg)
 		if (dsp->ch.peer)
 			dsp->ch.peer->ctrl(dsp->ch.peer, CLOSE_CHANNEL, NULL);
 
+		/* wait until workqueue has finished,
+		 * must lock here, or we may hit send-process currently
+		 * queueing. */
+		spin_lock_irqsave(&dsp_lock, flags);
+		dsp->b_active = 0;
+		spin_unlock_irqrestore(&dsp_lock, flags);
+		/* may not be locked, because it waits until queue is done. */
+		cancel_work_sync(&dsp->workq);
 		spin_lock_irqsave(&dsp_lock, flags);
 		if (timer_pending(&dsp->tone.tl))
 			del_timer(&dsp->tone.tl);
@@ -908,22 +918,41 @@ dsp_send_bh(struct work_struct *work)
 {
 	dsp_t *dsp = container_of(work, dsp_t, workq);
 	struct sk_buff *skb;
+	struct mISDNhead	*hh;
 
 	/* send queued data */
 	while((skb = skb_dequeue(&dsp->sendq)))
 	{
-		if (dsp->hdlc && dsp->hdlc_pending)
-			break;
-		/* send packet */
-		if (dsp->ch.peer) {
-			if (dsp->hdlc)
-				dsp->hdlc_pending = 1;
-			if (dsp->ch.recv(dsp->ch.peer, skb)) {
+		/* in locked date, we must have still data in queue */
+		if (dsp->hdlc && dsp->data_pending)
+			break; // wait until data has been acknowledged
+
+		if (dsp->data_pending) {
+			if (dsp_debug & DEBUG_DSP_CORE)
+				printk(KERN_DEBUG "%s: fifo full %s, this is "
+					"no bug!\n", __FUNCTION__, dsp->name);
+			continue; // flush transparent data, if not acked
+		}
+		hh = mISDN_HEAD_P(skb);
+		if (hh->prim == DL_DATA_REQ)
+		{
+			/* send packet up */
+			if (dsp->up) {
+				if (dsp->up->send(dsp->up, skb))
+					dev_kfree_skb(skb);
+			} else
 				dev_kfree_skb(skb);
-				dsp->hdlc_pending = 0;
-			}
-		} else
-			dev_kfree_skb(skb);
+		} else {
+			/* send packet down */
+			if (dsp->ch.peer) {
+				dsp->data_pending = 1;
+				if (dsp->ch.recv(dsp->ch.peer, skb)) {
+					dev_kfree_skb(skb);
+					dsp->data_pending = 0;
+				}
+			} else
+				dev_kfree_skb(skb);
+		}
 	}
 }
 
@@ -1056,7 +1085,9 @@ static int dsp_init(void)
 		err = -EINVAL;
 		return(err);
 	}
-	printk(KERN_INFO "mISDN_dsp: DSP clocks every %d samples. This equals %d jiffies.\n", poll, dsp_tics);
+	printk(KERN_INFO "mISDN_dsp: DSP clocks every %d samples. This equals %d jiffies.\n", dsp_poll, dsp_tics);
+	dsp_poll_diff = ((s32)dsp_poll) << 16;
+
 	spin_lock_init(&dsp_lock);
 	INIT_LIST_HEAD(&dsp_ilist);
 	INIT_LIST_HEAD(&conf_ilist);

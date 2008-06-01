@@ -1497,6 +1497,9 @@ dsp_cmx_send_member(dsp_t *dsp, int len, s32 *c, int members)
 	goto send_packet;
 
 send_packet:
+	/* if queue is too slow */
+	if (!skb_queue_empty(&dsp->sendq))
+		printk(KERN_WARNING "mISDN_dsp.o: send-que too slow\n");
 	/*
 	 * send tx-data if enabled - don't filter,
 	 * becuase we want what we send, not what we filtered
@@ -1509,42 +1512,37 @@ send_packet:
 			    "FATAL ERROR in mISDN_dsp.o: "
 			    "cannot alloc %d bytes\n", len);
 		} else {
-			thh = mISDN_HEAD_P(nskb);
-			thh->prim = PH_CONTROL_IND;
-			thh->id = DSP_TX_DATA;
+			thh = mISDN_HEAD_P(txskb);
+			thh->prim = DL_DATA_REQ;
+			thh->id = 0;
 			memcpy(skb_put(txskb, len), nskb->data+preload, len);
-			if (dsp->up) {
-				if (dsp->up->send(dsp->up, txskb))
-					dev_kfree_skb(txskb);
-			} else
-				dev_kfree_skb(txskb);
+			/* queue (trigger later) */
+			skb_queue_tail(&dsp->sendq, txskb);
 		}
 	}
-
 	/* adjust volume */
 	if (dsp->tx_volume)
 		dsp_change_volume(nskb, dsp->tx_volume);
-
 	/* pipeline */
 	if (dsp->pipeline.inuse)
 		dsp_pipeline_process_tx(&dsp->pipeline, nskb->data, nskb->len);
-
 	/* crypt */
 	if (dsp->bf_enable)
 		dsp_bf_encrypt(dsp, nskb->data, nskb->len);
-
-	/* queue and trigget */
-	if (!skb_queue_empty(&dsp->sendq))
-		printk(KERN_ERR "mISDN_dsp.o: send-que too slow\n");
-	else {
-		skb_queue_tail(&dsp->sendq, nskb);
-		schedule_work(&dsp->workq);
-	}
+	/* queue and trigger */
+	skb_queue_tail(&dsp->sendq, nskb);
+	schedule_work(&dsp->workq);
 }
 
 u32	samplecount;
 struct timer_list dsp_spl_tl;
-u32	dsp_spl_jiffies;
+u32	dsp_spl_jiffies; /* calculate the next time to fire */
+u32	dsp_start_jiffies; /* jiffies at the time, the calculation begins */
+struct timeval dsp_start_tv; /* time at start of calculation */
+s32	dsp_start_seconds = 10; /* how long to calibrate */
+s32	dsp_start_count; /* count calibration time */
+u32	dsp_poll_diff; /* calculated fix-comma corrected poll value */
+u32	dsp_count = 0; /* current fix-comma counter */ 
 
 void
 dsp_cmx_send(void *arg)
@@ -1558,17 +1556,55 @@ dsp_cmx_send(void *arg)
 	int r, rr;
 	int jittercheck = 0, delay, i;
 	u_long flags;
-
+	struct timeval tv;
+	u32 celapsed;
+	s32 jelapsed;
+	s32 skew10seconds;
+	u32 lo, hi;
+	s16 length;
 
 	/* lock */
 	spin_lock_irqsave(&dsp_lock, flags);
 
+	/* do callibration of jiffies */
+	if (dsp_start_seconds) {
+		if (!dsp_start_tv.tv_sec) {
+			dsp_start_jiffies = jiffies;
+			do_gettimeofday(&dsp_start_tv);
+			dsp_start_count = 0;
+		}
+		jelapsed = (s32)((u32)jiffies - dsp_start_jiffies);
+		jelapsed = jelapsed * 8000 / HZ;
+		do_gettimeofday(&tv);
+		if (jelapsed/8000 > dsp_start_count) {
+			dsp_start_count = jelapsed/8000;
+			celapsed = ((tv.tv_sec - dsp_start_tv.tv_sec) * 8000)
+			    + ((s32)(tv.tv_usec - dsp_start_tv.tv_usec) / 125);
+			skew10seconds = celapsed * 10 / dsp_start_count;
+			/* calculate actually poll value (fix-comma) */
+			hi = (skew10seconds * (s32)dsp_poll) / 80000;
+			lo = (skew10seconds * (s32)dsp_poll) % 80000;
+			lo = lo * 53687L;
+			dsp_poll_diff = (hi << 16) | (lo >> 16);
+			printk(KERN_INFO"mISDN_dsp: seconds=%d clock=%d timer=%d skew10seconds=%d\n", dsp_start_count, celapsed, jelapsed, skew10seconds);
+		}
+		if (dsp_start_count >= dsp_start_seconds) {
+			dsp_start_seconds = 0;
+		}
+	}
+
+	/* calculate how much to send */
+	length = (s16)(dsp_count >> 16);
+	dsp_count += dsp_poll_diff;
+	length = (s16)((dsp_count >> 16) - (u16)length);
+//	printk(KERN_DEBUG "len=%d dsp_count=0x%x.%04x dsp_poll_diff=0x%x.%04x\n", length, dsp_count >> 16, dsp_count & 0xffff, dsp_poll_diff >> 16, dsp_poll_diff & 0xffff);
+
 	/*
 	 * check if jitter needs to be checked
-	 * (this is every second = 8000 samples)
+	 * (this is about every second = 8192 samples)
 	 */
-	samplecount += dsp_poll;
-	if (samplecount%8000 < dsp_poll)
+	samplecount += length;
+	if ((samplecount & 8191) < length)
 		jittercheck = 1;
 
 	/* loop all members that do not require conference mixing */
@@ -1590,7 +1626,7 @@ dsp_cmx_send(void *arg)
 
 		/* transmission required */
 		if (!mustmix) {
-			dsp_cmx_send_member(dsp, dsp_poll, mixbuffer, members);
+			dsp_cmx_send_member(dsp, length, mixbuffer, members);
 				
 			/*
 			 * unused mixbuffer is given to prevent a
@@ -1613,14 +1649,14 @@ dsp_cmx_send(void *arg)
 			if (member->dsp->hdlc)
 				continue;
 			/* mix all data */
-			memset(mixbuffer, 0, dsp_poll*sizeof(s32));
+			memset(mixbuffer, 0, length*sizeof(s32));
 			list_for_each_entry(member, &conf->mlist, list) {
 				dsp = member->dsp;
 				/* get range of data to mix */
 				c = mixbuffer;
 				q = dsp->rx_buff;
 				r = dsp->rx_R;
-				rr = (r + dsp_poll) & CMX_BUFF_MASK;
+				rr = (r + length) & CMX_BUFF_MASK;
 				/* add member's data */
 				while (r != rr) {
 					*c++ += dsp_audio_law_to_s32[q[r]];
@@ -1631,7 +1667,7 @@ dsp_cmx_send(void *arg)
 			/* process each member */
 			list_for_each_entry(member, &conf->mlist, list) {
 				/* transmission */
-				dsp_cmx_send_member(member->dsp, dsp_poll,
+				dsp_cmx_send_member(member->dsp, length,
 				    mixbuffer, members);
 			}
 		}
@@ -1646,7 +1682,7 @@ dsp_cmx_send(void *arg)
 		r = dsp->rx_R;
 		/* move receive pointer when receiving */
 		if (!dsp->rx_is_off) {
-			rr = (r + dsp_poll) & CMX_BUFF_MASK;
+			rr = (r + length) & CMX_BUFF_MASK;
 			/* delete rx-data */
 			while (r != rr) {
 				p[r] = dsp_silence;
@@ -1822,6 +1858,10 @@ dsp_cmx_hdlc(dsp_t *dsp, struct sk_buff *skb)
 {
 	struct sk_buff *nskb;
 	conf_member_t *member;
+
+	/* not if not active */
+	if (!dsp->b_active)
+		return;
 
 	/* check if we have sompen */
 	if (skb->len < 1)

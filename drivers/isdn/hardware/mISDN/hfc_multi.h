@@ -7,26 +7,10 @@ typedef unsigned short WORD;
 typedef unsigned long DWORD;
 
 
-/* If you want to use Memory Access instead of IO Access uncoment the following line or by kernel option */
-//#define CONFIG_HFCMULTI_PCIMEM
-
-/*
- *  IMPORTANT!!! use  CONFIG_PLX_PCI_BRIDGE only in conjunction with
- * CONFIG_HFCMULTI_PCIMEM
- */
-
-// #define CONFIG_PLX_PCI_BRIDGE   // TODO should be defined in kernel config
-
-#ifdef CONFIG_PLX_PCI_BRIDGE
-#undef FIFO_32BIT_ACCESS
-#ifndef CONFIG_HFCMULTI_PCIMEM
-#define	CONFIG_HFCMULTI_PCIMEM
-#endif
-#endif
-
 #define DEBUG_HFCMULTI_FIFO	0x00010000
 #define	DEBUG_HFCMULTI_CRC	0x00020000
 #define	DEBUG_HFCMULTI_INIT	0x00040000
+#define	DEBUG_HFCMULTI_PLXSD	0x00080000
 #define	DEBUG_HFCMULTI_MODE	0x00100000
 #define	DEBUG_HFCMULTI_MSG	0x00200000
 #define	DEBUG_HFCMULTI_STATE	0x00400000
@@ -50,7 +34,7 @@ struct hfc_chan {
 	int		port; 	/* the interface port this */
 				/* channel is associated with */
 	int		nt_timer; /* -1 if off, 0 if elapsed, >0 if running */
-	int		los, ais, slip_tx, slip_rx; /* current alarms */
+	int		los, ais, slip_tx, slip_rx, rdi; /* current alarms */
 	int		jitter;
 	u_long		cfg;	/* port configuration */
 	int		sync;	/* sync state (used by E1) */
@@ -63,6 +47,8 @@ struct hfc_chan {
 	int		txpending;	/* if there is currently data in */
 					/* the FIFO 0=no, 1=yes, 2=splloop */
 	int		rx_off; /* set to turn fifo receive off */
+	int		coeff_count; /* curren coeff block */
+	s32		*coeff; /* memory pointer to 8 coeff blocks */
 };
 
 
@@ -90,8 +76,9 @@ struct hfcm_hw {
 #define	HFC_CFG_REPORT_LOS	5 /* the card should report loss of signal */
 #define	HFC_CFG_REPORT_AIS	6 /* the card should report alarm ind. sign. */
 #define	HFC_CFG_REPORT_SLIP	7 /* the card should report bit slips */
-#define	HFC_CFG_DTMF		8 /* enable DTMF-detection */
-#define	HFC_CFG_CRC4		9 /* disable CRC-4 Multiframe mode, */
+#define	HFC_CFG_REPORT_RDI	8 /* the card should report remote alarm */
+#define	HFC_CFG_DTMF		9 /* enable DTMF-detection */
+#define	HFC_CFG_CRC4		10 /* disable CRC-4 Multiframe mode, */
 					/* use double frame instead. */
 
 #define	HFC_CHIP_EXRAM_128	0 /* external ram 128k */
@@ -103,11 +90,17 @@ struct hfcm_hw {
 #define	HFC_CHIP_DTMF		6 /* DTMF decoding is enabled */
 #define	HFC_CHIP_ULAW		7 /* ULAW mode */
 #define	HFC_CHIP_CLOCK2		8 /* double clock mode */
-#define	HFC_CHIP_CRYSTAL_CLOCK	9 /* autarc clocking mode */
-#define	HFC_CHIP_WATCHDOG	10 /* whether we should send signals */
+#define	HFC_CHIP_E1CLOCK_GET	9 /* always get clock from E1 interface */
+#define	HFC_CHIP_E1CLOCK_PUT	10 /* always put clock from E1 interface */
+#define	HFC_CHIP_WATCHDOG	11 /* whether we should send signals */
 					/* to the watchdog */
-#define	HFC_CHIP_B410P		11 /* whether we have a b410p with echocan in */
+#define	HFC_CHIP_B410P		12 /* whether we have a b410p with echocan in */
 					/* hw */
+#define	HFC_CHIP_PLXSD		13 /* whether we have a Speech-Design PLX */
+
+#define HFC_IO_MODE_PCIMEM	0x00 /* normal memory mapped IO */
+#define HFC_IO_MODE_REGIO	0x01 /* PCI io access */
+#define HFC_IO_MODE_PLXSD	0x02 /* access HFC via PLX9030 */
 
 /* table entry in the PCI devices list */
 struct hm_map {
@@ -119,6 +112,7 @@ struct hm_map {
 	int leds;
 	int opticalsupport;
 	int dip_type;
+	int io_mode;
 };
 
 struct hfc_multi {
@@ -132,21 +126,53 @@ struct hfc_multi {
 	u_int		irq;	/* irq used by card */
 	u_int		irqcnt;
 	struct pci_dev	*pci_dev;
-#ifdef CONFIG_HFCMULTI_PCIMEM
-	u_long	 pci_origmembase, plx_origmembase, dsp_origmembase;
-	u_char	*pci_membase; /* PCI memory (MUST BE BYTE POINTER) */
-	u_char	*plx_membase; /* PCI memory (MUST BE BYTE POINTER) */
-	u_char	*dsp_membase; /* PCI memory (MUST BE BYTE POINTER) */
+	int		io_mode; /* selects mode */
+#ifdef HFC_REGISTER_DEBUG
+	void		(*HFC_outb)(struct hfc_multi *hc, u_char reg,
+				u_char val, const char *function, int line);
+	void		(*HFC_outb_nodebug)(struct hfc_multi *hc, u_char reg,
+				u_char val, const char *function, int line);
+	u_char		(*HFC_inb)(struct hfc_multi *hc, u_char reg,
+				const char *function, int line);
+	u_char		(*HFC_inb_nodebug)(struct hfc_multi *hc, u_char reg,
+				const char *function, int line);
+	u_short		(*HFC_inw)(struct hfc_multi *hc, u_char reg,
+				const char *function, int line);
+	u_short		(*HFC_inw_nodebug)(struct hfc_multi *hc, u_char reg,
+				const char *function, int line);
+	void		(*HFC_wait)(struct hfc_multi *hc,
+				const char *function, int line);
+	void		(*HFC_wait_nodebug)(struct hfc_multi *hc,
+				const char *function, int line);
 #else
-	u_int		pci_iobase; /* PCI IO (MUST BE BYTE POINTER) */
+	void		(*HFC_outb)(struct hfc_multi *hc, u_char reg,
+				u_char val);
+	void		(*HFC_outb_nodebug)(struct hfc_multi *hc, u_char reg,
+				u_char val);
+	u_char		(*HFC_inb)(struct hfc_multi *hc, u_char reg);
+	u_char		(*HFC_inb_nodebug)(struct hfc_multi *hc, u_char reg);
+	u_short		(*HFC_inw)(struct hfc_multi *hc, u_char reg);
+	u_short		(*HFC_inw_nodebug)(struct hfc_multi *hc, u_char reg);
+	void		(*HFC_wait)(struct hfc_multi *hc);
+	void		(*HFC_wait_nodebug)(struct hfc_multi *hc);
 #endif
+	void		(*read_fifo)(struct hfc_multi *hc, u_char *data,
+				int len);
+	void		(*write_fifo)(struct hfc_multi *hc, u_char *data,
+				int len);
+	u_long		pci_origmembase, plx_origmembase, dsp_origmembase;
+	u_char		*pci_membase; /* PCI memory (MUST BE BYTE POINTER) */
+	u_char		*plx_membase; /* PLX memory */
+	u_char		*dsp_membase; /* DSP on PLX */
+	u_long		pci_iobase; /* PCI IO */
 	struct hfcm_hw	hw;	/* remember data of write-only-registers */
 
 	u_long		chip;	/* chip configuration */
 	int		masterclk; /* port that provides master clock -1=off */
 	int		dtmf;	/* flag that dtmf is currently in process */
 	int		Flen;	/* F-buffer size */
-	int		Zlen;	/* Z-buffer size (not maximum) */
+	int		Zlen;	/* Z-buffer size (must be int for calculation)*/
+	int		max_trans; /* maximum transparent fifo fill */
 	int		Zmin;	/* Z-buffer offset */
 	int		DTMFbase; /* base address of DTMF coefficients */
 
@@ -165,6 +191,9 @@ struct hfc_multi {
 					/* port (will be cleared after */
 					/* showing led-states) */
 	int		e1_state; /* keep track of last state */
+	int		e1_getclock; /* if sync is retrieved from interface */
+	int		syncronized; /* keep track of existing sync interface */
+	int		e1_resync; /* resync jobs */
 
 	spinlock_t	lock;	/* the lock */
 
@@ -177,6 +206,50 @@ struct hfc_multi {
 	u_char		created[8]; /* what port is created */
 	signed char	slot_owner[256]; /* owner channel of slot */
 };
+
+/* PLX GPIOs */
+#define	PLX_GPIO4_DIR_BIT	13
+#define	PLX_GPIO4_BIT		14
+#define	PLX_GPIO5_DIR_BIT	16
+#define	PLX_GPIO5_BIT		17
+#define	PLX_GPIO6_DIR_BIT	19
+#define	PLX_GPIO6_BIT		20
+#define	PLX_GPIO7_DIR_BIT	22
+#define	PLX_GPIO7_BIT		23
+#define PLX_GPIO8_DIR_BIT	25
+#define PLX_GPIO8_BIT		26
+
+#define	PLX_GPIO4		(1 << PLX_GPIO4_BIT)
+#define	PLX_GPIO5		(1 << PLX_GPIO5_BIT)
+#define	PLX_GPIO6		(1 << PLX_GPIO6_BIT)
+#define	PLX_GPIO7		(1 << PLX_GPIO7_BIT)
+#define PLX_GPIO8		(1 << PLX_GPIO8_BIT)
+
+#define	PLX_GPIO4_DIR		(1 << PLX_GPIO4_DIR_BIT)
+#define	PLX_GPIO5_DIR		(1 << PLX_GPIO5_DIR_BIT)
+#define	PLX_GPIO6_DIR		(1 << PLX_GPIO6_DIR_BIT)
+#define	PLX_GPIO7_DIR		(1 << PLX_GPIO7_DIR_BIT)
+#define PLX_GPIO8_DIR		(1 << PLX_GPIO8_DIR_BIT)
+
+#define	PLX_TERM_ON			PLX_GPIO7
+#define	PLX_SLAVE_EN_N		PLX_GPIO5
+#define	PLX_MASTER_EN		PLX_GPIO6
+#define	PLX_SYNC_O_EN		PLX_GPIO4
+#define PLX_DSP_RES_N		PLX_GPIO8
+/* GPIO4..8 Enable & Set to OUT, SLAVE_EN_N = 1 */
+#define PLX_GPIOC_INIT		( PLX_GPIO4_DIR | PLX_GPIO5_DIR | PLX_GPIO6_DIR | PLX_GPIO7_DIR | PLX_GPIO8_DIR | PLX_SLAVE_EN_N ) 
+
+/* PLX Interrupt Control/STATUS */
+#define PLX_INTCSR_LINTI1_ENABLE 0x01
+#define PLX_INTCSR_LINTI1_STATUS 0x04
+#define PLX_INTCSR_LINTI2_ENABLE 0x08
+#define PLX_INTCSR_LINTI2_STATUS 0x20
+#define PLX_INTCSR_PCIINT_ENABLE 0x40
+
+/* PLX Registers */
+#define PLX_INTCSR 0x4c
+#define PLX_CNTRL  0x50
+#define PLX_GPIOC  0x54
 
 
 /*
@@ -303,10 +376,10 @@ struct hfc_multi {
 #define R_STATUS		0x1C
 #define R_CHIP_RV		0x1F
 #define R_STATE			0x20
-#define R_RX_STA0		0x24
-#define R_RX_STA1		0x25
-#define R_RX_STA2		0x26
-#define R_RX_STA3		0x27
+#define R_SYNC_STA		0x24
+#define R_RX_SL0_0		0x25
+#define R_RX_SL0_1		0x26
+#define R_RX_SL0_2		0x27
 #define R_JATT_DIR		0x2b /* undocumented */
 #define R_SLIP			0x2c
 #define A_ST_RD_STA		0x30
@@ -589,14 +662,14 @@ struct hfc_multi {
 #define V_E1_STA		0x01
 #define V_ALT_FR_RX		0x40
 #define V_ALT_FR_TX		0x80
-/* R_RX_STA0 */
+/* R_SYNC_STA */
 #define V_RX_STA		0x01
 #define V_FR_SYNC_E1		0x04
 #define V_SIG_LOS		0x08
 #define V_MFA_STA		0x10
 #define V_AIS			0x40
 #define V_NO_MF_SYNC		0x80
-/* R_RX_STA1 */
+/* R_RX_SL0_0 */
 #define V_SI_FAS		0x01
 #define V_SI_NFAS		0x02
 #define V_A			0x04
@@ -649,7 +722,7 @@ struct hfc_multi {
 #define V_PCM_LOOP		0x40
 /* R_PCM_MD2 */
 #define V_SYNC_PLL		0x02
-#define V_SYCN_SRC		0x04
+#define V_SYNC_SRC		0x04
 #define V_SYNC_OUT		0x08
 #define V_ICR_FR_TIME		0x40
 #define V_EN_PLL		0x80
@@ -976,7 +1049,7 @@ struct hfc_multi {
 
 /* map of all registers, used for debugging */
 
-#ifdef HFC_REGISTER_MAP
+#ifdef HFC_REGISTER_DEBUG
 struct hfc_register_names {
 	char *name;
 	u_char reg;
@@ -1081,10 +1154,10 @@ struct hfc_register_names {
 	{"R_STATUS",		0x1C},
 	{"R_CHIP_RV",		0x1F},
 	{"R_STATE",		0x20},
-	{"R_RX_STA0",		0x24},
-	{"R_RX_STA1",		0x25},
-	{"R_RX_STA2",		0x26},
-	{"R_RX_STA3",		0x27},
+	{"R_SYNC_STA",		0x24},
+	{"R_RX_SL0_0",		0x25},
+	{"R_RX_SL0_1",		0x26},
+	{"R_RX_SL0_2",		0x27},
 	{"R_JATT_DIR",		0x2b},
 	{"R_SLIP",		0x2c},
 	{"A_ST_RD_STA",		0x30},
@@ -1123,227 +1196,5 @@ struct hfc_register_names {
 	{"R_IRQ_FIFO_BL6",	0xCE},
 	{"R_IRQ_FIFO_BL7",	0xCF},
 };
-#endif /* HFC_REGISTER_MAP */
+#endif /* HFC_REGISTER_DEBUG */
 
-#ifdef CONFIG_HFCMULTI_PCIMEM
-
-/* ACCESS TO PCI MEMORY MAPPED REGISTERS */
-
-#define HFC_outl(a,b,c) \
-	(writel(c, (volatile u_long *)((a->pci_membase)+b)))
-#define HFC_inl(a,b) \
-	(readl((volatile u_long *)((a->pci_membase)+b)))
-#define HFC_outl_(a,b,c) \
-	(writel(c, (volatile u_long *)((a->pci_membase)+b)))
-#define HFC_inl_(a,b) \
-	(readl((volatile u_long *)((a->pci_membase)+b)))
-#define HFC_outw_(a,b,c) \
-	(writew(c, (volatile u_short *)((a->pci_membase)+b)))
-#define HFC_inw_(a,b) \
-	(readw((volatile u_short *)((a->pci_membase)+b)))
-#define HFC_outb_(a,b,c) \
-	(writeb(c, (volatile u_char *)((a->pci_membase)+b)))
-#define HFC_inb_(a,b) \
-	(readb((volatile u_char *)((a->pci_membase)+b)))
-#define HFC_wait_(a) \
-	while(readb((volatile u_char *)((a->pci_membase)+R_STATUS)) & V_BUSY)
-
-/*
- * version of HFC_inw_(a,b) that makes 8bit access instead of 16bit
- * only for test purposes
- */
-#if 0
-u_short
-HFC_inw_(struct hfc_multi *a, int b)
-{
-	u_short	zl,zh;
-
-	zl = (*((volatile u_char *)((a->pci_membase)+(b*4))));
-	zh = (*((volatile u_char *)((a->pci_membase)+((b+1)*4))));
-	return(zl | (zh<<8));
-
-}
-#endif
-
-/* macros */
-#ifndef HFC_REGISTER_MAP
-
-/* usage: HFC_outX(card,register,value); */
-#define HFC_outb(a, b, c) \
-	(writeb(c, (volatile u_char *)((a->pci_membase)+b)))
-#define HFC_outw(a, b, c) \
-	(writeb(c, (volatile u_char *)((a->pci_membase)+b)))
-/* usage: register=HFC_inX(card,register); */
-#define HFC_inb(a, b) \
-	(readb((volatile u_char *)((a->pci_membase)+b)))
-#define HFC_inw(a, b) \
-	(readw((volatile u_short *)((a->pci_membase)+b)))
-/* usage: HFC_wait(card); */
-#define HFC_wait(a) \
-	while(readb((volatile u_char *)((a->pci_membase)+R_STATUS)) & V_BUSY)
-
-#else /* HFC_REGISTER_MAP */
-
-#define HFC_outb(a, b, c) _HFC_outb(a, b, c, __FUNCTION__, __LINE__)
-static BYTE _HFC_outb(struct hfc_multi *a, BYTE b, BYTE c, const char *function, int line)
-{
-	char regname[256] = "", bits[9] = "xxxxxxxx";
-	int i;
-
-	i = -1;
-	while (hfc_register_names[++i].name) {
-		if (hfc_register_names[i].reg == b)
-			strcat(regname, hfc_register_names[i].name);
-	}
-	if (regname[0] == '\0')
-		strcpy(regname, "register");
-
-	bits[7] = '0'+(!!(c&1));
-	bits[6] = '0'+(!!(c&2));
-	bits[5] = '0'+(!!(c&4));
-	bits[4] = '0'+(!!(c&8));
-	bits[3] = '0'+(!!(c&16));
-	bits[2] = '0'+(!!(c&32));
-	bits[1] = '0'+(!!(c&64));
-	bits[0] = '0'+(!!(c&128));
-	printk(KERN_DEBUG
-	    "HFC_outb(chip %d, %02x=%s, 0x%02x=%s); in %s() line %d\n",
-	    a->id, b, regname, c, bits, function, line);
-	return (writeb(c, (volatile u_char *)((a->pci_membase)+b)));
-}
-#define HFC_inb(a, b) _HFC_inb(a, b, __FUNCTION__, __LINE__)
-static BYTE
-_HFC_inb(struct hfc_multi *a, BYTE b, const char *function, int line)
-{
-	char regname[256] = "", bits[9] = "xxxxxxxx";
-	u_char c = (readb((volatile u_char *)((a->pci_membase)+b)));
-	int i;
-
-	i = 0;
-	while (hfc_register_names[i++].name)
-		;
-	while (hfc_register_names[++i].name) {
-		if (hfc_register_names[i].reg == b)
-			strcat(regname, hfc_register_names[i].name);
-	}
-	if (regname[0] == '\0')
-		strcpy(regname, "register");
-
-	bits[7] = '0'+(!!(c&1));
-	bits[6] = '0'+(!!(c&2));
-	bits[5] = '0'+(!!(c&4));
-	bits[4] = '0'+(!!(c&8));
-	bits[3] = '0'+(!!(c&16));
-	bits[2] = '0'+(!!(c&32));
-	bits[1] = '0'+(!!(c&64));
-	bits[0] = '0'+(!!(c&128));
-	printk(KERN_DEBUG
-	    "HFC_inb(chip %d, %02x=%s) = 0x%02x=%s; in %s() line %d\n",
-	    a->id, b, regname, c, bits, function, line);
-	return (c);
-}
-#define HFC_inw(a, b) _HFC_inw(a, b, __FUNCTION__, __LINE__)
-static WORD _HFC_inw(struct hfc_multi *a, BYTE b, const char *function, int line)
-{
-	char regname[256] = "";
-	u_short c = (readw((volatile u_short *)((a->pci_membase)+b)));
-	int i;
-
-	i = 0;
-	while (hfc_register_names[i++].name)
-		;
-	while (hfc_register_names[++i].name) {
-		if (hfc_register_names[i].reg == b)
-			strcat(regname, hfc_register_names[i].name);
-	}
-	if (regname[0] == '\0')
-		strcpy(regname, "register");
-
-	printk(KERN_DEBUG
-	    "HFC_inw(chip %d, %02x=%s) = 0x%04x; in %s() line %d\n",
-	    a->id, b, regname, c, function, line);
-	return (c);
-}
-#define HFC_wait(a) _HFC_wait(a, __FUNCTION__, __LINE__)
-static void _HFC_wait(struct hfc_multi *a, const char *function, int line)
-{
-	printk(KERN_DEBUG "HFC_wait(chip %d); in %s() line %d\n",
-	    a->id, function, line);
-	while(readb((volatile u_char *)((a->pci_membase)+R_STATUS)) & V_BUSY);
-}
-
-#endif /* else HFC_REGISTER_MAP */
-
-#else /* CONFIG_HFCMULTI_PCIMEM */
-
-/* ACCESS TO PCI IO REGISTERS */
-
-#ifdef HFC_REGISTER_MAP
-#error Please use "HFC_REGISTER_MAP" debugging \
-	only in conjuction with PCIMEM access.
-#endif
-
-/* usage: HFC_outX(card,register,value); */
-static inline void HFC_outb(struct hfc_multi *a, unsigned short b, u_char c)
-{
-	outw(b, (a->pci_iobase)+4);
-	outb(c, a->pci_iobase);
-}
-static inline void HFC_outl(struct hfc_multi *a, unsigned short b, u_long c)
-{
-	outw(b, (a->pci_iobase)+4);
-	outl(c, a->pci_iobase);
-}
-
-static inline void HFC_outw(struct hfc_multi *a, unsigned short b, u_long c)
-{
-	outw(b, (a->pci_iobase)+4);
-	outw(c, a->pci_iobase);
-}
-
-/* usage: value=HFC_inX(card,register); */
-static inline u_char HFC_inb(struct hfc_multi *a, unsigned short b)
-{
-	outw(b, (a->pci_iobase)+4);
-	return (inb((volatile u_int)a->pci_iobase));
-}
-static inline u_short HFC_inw(struct hfc_multi *a, unsigned short b)
-{
-	outw(b, (a->pci_iobase)+4);
-	return (inw((volatile u_int)a->pci_iobase));
-}
-static inline u_long HFC_inl(struct hfc_multi *a, unsigned short b)
-{
-	outw(b, (a->pci_iobase)+4);
-	return (inl((volatile u_int)a->pci_iobase));
-}
-
-/* usage: HFC_wait(card); */
-static inline void HFC_wait(struct hfc_multi *a)
-{
-	outb(R_STATUS, (a->pci_iobase)+4);
-	while (inb((volatile u_int)a->pci_iobase) & V_BUSY);
-}
-
-/* usage: HFC_set(card,register); */
-#define HFC_set(a, b) outb(b, (a->pci_iobase)+4)
-
-/* usage: HFC_putX(card,value); */
-#define HFC_putb(a, b) outb(b, a->pci_iobase)
-#define HFC_putl(a, b) outl(b, a->pci_iobase)
-#define HFC_putw(a, b) outw(b, a->pci_iobase)
-
-/* usage: value=HFC_getX(card); */
-#define HFC_getb(a) inb((volatile u_int)a->pci_iobase)
-#define HFC_getl(a) inl((volatile u_int)a->pci_iobase)
-#define HFC_getw(a) inw((volatile u_int)a->pci_iobase)
-
-/* no debug */
-#define HFC_outl_(a, b, c) HFC_outl(a, b, c)
-#define HFC_inl_(a, b) HFC_inl(a, b)
-#define HFC_inw_(a, b) HFC_inw(a, b)
-#define HFC_outb_(a, b, c) HFC_outb(a, b, c)
-#define HFC_inb_(a, b) HFC_inb(a, b)
-#define HFC_wait_(a) HFC_wait(a)
-
-#endif /* CONFIG_HFCMULTI_PCIMEM */

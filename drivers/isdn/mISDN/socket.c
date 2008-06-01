@@ -481,6 +481,7 @@ data_sock_bind(struct socket *sock, struct sockaddr *addr, int addr_len)
 		break;
 	case ISDN_P_LAPD_TE:
 	case ISDN_P_LAPD_NT:
+#warning TODO create_l2entity muss ausserhalb lock_sock() aufgerufen werden
 		err = create_l2entity(_pms(sk)->dev, &_pms(sk)->ch,
 		    sk->sk_protocol, maddr);
 		break;

@@ -868,7 +868,7 @@ handle_dmsg(struct mISDNchannel *ch, struct sk_buff *skb)
 
 	switch (hh->prim) {
 	case PH_DATA_REQ:
-		if (skb->len <= 0) {
+		if (skb->len < 1) {
 			printk(KERN_WARNING "%s: skb too small\n",
 				__FUNCTION__);
 			break;

@@ -780,6 +780,7 @@ hfcpci_fill_fifo(struct bchannel *bch)
 	u_char		*bdata;
 	u_char		new_f1, *src, *dst;
 	unsigned short	*z1t, *z2t;
+	struct mISDNhead *hh;
 
 	if ((bch->debug & DEBUG_HW_BCHANNEL) && !(bch->debug & DEBUG_HW_BFIFO))
 		printk(KERN_DEBUG "%s\n", __FUNCTION__);
@@ -806,46 +807,52 @@ hfcpci_fill_fifo(struct bchannel *bch)
 			fcnt += B_FIFO_SIZE;
 			    /* fcnt contains available bytes in fifo */
 		fcnt = B_FIFO_SIZE - fcnt;
-		    /* remaining bytes to send */
+		    /* remaining bytes to send (bytes in fifo) */
 next_t_frame:
-		if (fcnt < (2 * HFCPCI_BTRANS_THRESHOLD)) {
-			count = bch->tx_skb->len - bch->tx_idx;
-			if (count >= B_FIFO_SIZE - fcnt)
-				count = B_FIFO_SIZE - fcnt -1;
-			if (count <= 0)
-				return;
-			/* data is suitable for fifo */
-			new_z1 = le16_to_cpu(*z1t) + count;
-			    /* new buffer Position */
-			if (new_z1 >= (B_FIFO_SIZE + B_SUB_VAL))
-				new_z1 -= B_FIFO_SIZE;	/* buffer wrap */
-			src = bch->tx_skb->data + bch->tx_idx;
-			    /* source pointer */
-			dst = bdata + (le16_to_cpu(*z1t) - B_SUB_VAL);
-			maxlen = (B_FIFO_SIZE + B_SUB_VAL) - le16_to_cpu(*z1t);
-			    /* end of fifo */
-			if (bch->debug & DEBUG_HW_BFIFO)
-				printk(KERN_DEBUG "hfcpci_FFt fcnt(%d) "
-				    "maxl(%d) nz1(%x) dst(%p)\n",
-				    fcnt, maxlen, new_z1, dst);
-			fcnt += count;
-			bch->tx_idx += count;
-			if (maxlen > count)
-				maxlen = count;		/* limit size */
-			memcpy(dst, src, maxlen);	/* first copy */
-			count -= maxlen;	/* remaining bytes */
-			if (count) {
-				dst = bdata;	/* start of buffer */
-				src += maxlen;	/* new position */
-				memcpy(dst, src, count);
-			}
-			*z1t = cpu_to_le16(new_z1);	/* now send data */
-			if (bch->tx_idx < bch->tx_skb->len)
-				return;
-			dev_kfree_skb(bch->tx_skb);
-			if (get_next_bframe(bch))
-				goto next_t_frame;
+		count = bch->tx_skb->len - bch->tx_idx;
+		/* maximum fill shall be HFCPCI_BTRANS_MAX */
+		if (count > HFCPCI_BTRANS_MAX - fcnt)
+			count = HFCPCI_BTRANS_MAX - fcnt;
+		if (count <= 0)
+			return;
+		/* data is suitable for fifo */
+		new_z1 = le16_to_cpu(*z1t) + count;
+		    /* new buffer Position */
+		if (new_z1 >= (B_FIFO_SIZE + B_SUB_VAL))
+			new_z1 -= B_FIFO_SIZE;	/* buffer wrap */
+		src = bch->tx_skb->data + bch->tx_idx;
+		    /* source pointer */
+		dst = bdata + (le16_to_cpu(*z1t) - B_SUB_VAL);
+		maxlen = (B_FIFO_SIZE + B_SUB_VAL) - le16_to_cpu(*z1t);
+		    /* end of fifo */
+		if (bch->debug & DEBUG_HW_BFIFO)
+			printk(KERN_DEBUG "hfcpci_FFt fcnt(%d) "
+			    "maxl(%d) nz1(%x) dst(%p)\n",
+			    fcnt, maxlen, new_z1, dst);
+		fcnt += count;
+		bch->tx_idx += count;
+		if (maxlen > count)
+			maxlen = count;		/* limit size */
+		memcpy(dst, src, maxlen);	/* first copy */
+		count -= maxlen;	/* remaining bytes */
+		if (count) {
+			dst = bdata;	/* start of buffer */
+			src += maxlen;	/* new position */
+			memcpy(dst, src, count);
 		}
+		*z1t = cpu_to_le16(new_z1);	/* now send data */
+		if (bch->tx_idx < bch->tx_skb->len)
+			return;
+		/* send confirm, on trans, free on hdlc. */
+		if (test_bit(FLG_TRANSPARENT, &bch->Flags)) {
+			skb_trim(bch->tx_skb, 0);
+			hh = mISDN_HEAD_P(bch->tx_skb);
+			queue_ch_frame(&bch->ch, PH_DATA_CNF, hh->id,
+				bch->tx_skb);
+		} else
+			dev_kfree_skb(bch->tx_skb);
+		if (get_next_bframe(bch))
+			goto next_t_frame;
 		return;
 	}
 	if (bch->debug & DEBUG_HW_BCHANNEL)
@@ -1613,6 +1620,7 @@ hfcpci_l2l1D(struct mISDNchannel *ch, struct sk_buff *skb)
 	struct hfc_pci		*hc = dch->hw;
 	int			ret = -EINVAL;
 	struct mISDNhead	*hh = mISDN_HEAD_P(skb);
+	u_long			id;
 	u_long			flags;
 
 	switch (hh->prim) {
@@ -1620,10 +1628,11 @@ hfcpci_l2l1D(struct mISDNchannel *ch, struct sk_buff *skb)
 		spin_lock_irqsave(&hc->lock, flags);
 		ret = dchannel_senddata(dch, skb);
 		if (ret > 0) { /* direct TX */
+			id = hh->id; /* skb can be freed */
 			hfcpci_fill_dfifo(dch->hw);
-			spin_unlock_irqrestore(&hc->lock, flags);
-			queue_ch_frame(ch, PH_DATA_CNF, hh->id, NULL);
 			ret = 0;
+			spin_unlock_irqrestore(&hc->lock, flags);
+			queue_ch_frame(ch, PH_DATA_CNF, id, NULL);
 		} else
 			spin_unlock_irqrestore(&hc->lock, flags);
 		return ret;
@@ -1702,6 +1711,7 @@ hfcpci_l2l1B(struct mISDNchannel *ch, struct sk_buff *skb)
 	struct hfc_pci		*hc = bch->hw;
 	int			ret = -EINVAL;
 	struct mISDNhead	*hh = mISDN_HEAD_P(skb);
+	u_long			id;
 	u_long			flags;
 
 	switch (hh->prim) {
@@ -1709,14 +1719,12 @@ hfcpci_l2l1B(struct mISDNchannel *ch, struct sk_buff *skb)
 		spin_lock_irqsave(&hc->lock, flags);
 		ret = bchannel_senddata(bch, skb);
 		if (ret > 0) { /* direct TX */
+			id = hh->id; /* skb can be freed */
 			hfcpci_fill_fifo(bch);
-			spin_unlock_irqrestore(&hc->lock, flags);
-#warning KARSTEN: in hfcpci_fill_fifo wird der tx_skb freigegeben.
-#warning 1. hh->id is dann nicht mehr valide, somal der confirm gerade allokierit wird
-#warning 2. sollte das freigeben nicht heir stattfinden, wie im tx_birq, wenn der fifo komplett gesendet wurde?
-#warning ich würde vorschlagen: freigabe erfolgt bevor get_next_Xframe() im jeweiligen *fill_fifo. dann muss man aber dies auch im dchannel machen. dann kann das freigeben auch aus dem tx_Xirq raus.
-			queue_ch_frame(ch, PH_DATA_CNF, hh->id, NULL);
 			ret = 0;
+			spin_unlock_irqrestore(&hc->lock, flags);
+			if (!test_bit(FLG_TRANSPARENT, &bch->Flags))
+				queue_ch_frame(ch, PH_DATA_CNF, id, NULL);
 		} else
 			spin_unlock_irqrestore(&hc->lock, flags);
 		return ret;
@@ -2085,11 +2093,11 @@ release_card(struct hfc_pci *hc) {
 		hc->dch.timer.function = NULL;
 	}
 	spin_unlock_irqrestore(&hc->lock, flags);
-	release_io_hfcpci(hc);
 	if (hc->hw.protocol == ISDN_P_TE_S0)
 		l1_event(hc->dch.l1, CLOSE_CHANNEL);
 	if (hc->initdone)
 		free_irq(hc->irq, hc);
+	release_io_hfcpci(hc); // must release after free_irq!
 	mISDN_unregister_device(&hc->dch.dev);
 	mISDN_freebchannel(&hc->bch[1]);
 	mISDN_freebchannel(&hc->bch[0]);

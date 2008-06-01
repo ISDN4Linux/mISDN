@@ -425,12 +425,18 @@ connect_layer1(struct mISDNdevice *dev, struct mISDNchannel *ch,
 			adr->tei);
 	switch(protocol) {
 	case ISDN_P_NT_S0:
-	case ISDN_P_TE_S0:
 	case ISDN_P_NT_E1:
+	case ISDN_P_TE_S0:
 	case ISDN_P_TE_E1:
-#warning temporarily removed
-//		if (dev->D.protocol && dev->D.protocol != protocol)
-//			return -EINVAL;
+#warning TODO
+#if 0
+		if (!list_empty(&dev->D.st->layer2)
+			&& dev->D.protocol != protocol)
+			return -EBUSY;
+		if (!hlist_empty(&dev->D.st->l1sock.head)
+			&& dev->D.protocol != protocol)
+			return -EBUSY;
+#endif
 	 	ch->recv = mISDN_queue_message;
 	 	ch->peer = &dev->D.st->own;
 		ch->st = dev->D.st;
@@ -528,6 +534,15 @@ create_l2entity(struct mISDNdevice *dev, struct mISDNchannel *ch,
 		if (dev->Dprotocols & (1 << ISDN_P_NT_E1))
 			rq.protocol = ISDN_P_NT_E1;
 	case ISDN_P_LAPD_TE:
+#warning TODO
+#if 0
+		if (!list_empty(&dev->D.st->layer2)
+			&& dev->D.protocol != protocol)
+			return -EBUSY;
+		if (!hlist_empty(&dev->D.st->l1sock.head)
+			&& dev->D.protocol != protocol)
+			return -EBUSY;
+#endif
 	 	ch->recv = mISDN_queue_message;
 	 	ch->peer = &dev->D.st->own;
 		ch->st = dev->D.st;
@@ -641,7 +656,7 @@ delete_stack(struct mISDNdevice *dev)
 		printk(KERN_WARNING "%s: layer2 list not empty\n",
 		    __FUNCTION__);
 	if (!hlist_empty(&st->l1sock.head))
-		printk(KERN_WARNING "%s: layer2 list not empty\n",
+		printk(KERN_WARNING "%s: layer1 list not empty\n",
 		    __FUNCTION__);
 	kfree(st);
 }
