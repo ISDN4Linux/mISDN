@@ -1887,10 +1887,6 @@ hfcmulti_tx(struct hfc_multi *hc, int ch)
 	dch = hc->chan[ch].dch;
 	if ((!dch) && (!bch))
 		return;
-	f1 = HFC_inb_nodebug(hc, A_F1);
-	f2 = HFC_inb_nodebug(hc, A_F2);
-	// printk(KERN_DEBUG "txf12:%x %x\n",f1,f2);
-	/* get skb, fifo & mode */
 
 	txpending = &hc->chan[ch].txpending;
 	slot_tx = hc->chan[ch].slot_tx;
@@ -2057,12 +2053,12 @@ next_frame:
 		HFC_wait_nodebug(hc);
 	}
 
-	/* send confirm, on trans, free on hdlc. */
+	/* send confirm */
 	if (bch && test_bit(FLG_TRANSPARENT, &bch->Flags))
 		confirm_Bsend(bch);
-	dev_kfree_skb(*sp);
 
 	/* check for next frame */
+	dev_kfree_skb(*sp);
 	if (bch && get_next_bframe(bch)) { // hdlc is confirmed here
 		len = (*sp)->len;
 		goto next_frame;
@@ -4319,7 +4315,7 @@ setup_pci(struct hfc_multi *hc, struct pci_dev *pdev, const struct pci_device_id
 			return -EIO;
 		}
 
-		if (!(hc->plx_membase = ioremap(hc->plx_origmembase, 256))) {
+		if (!(hc->plx_membase = ioremap(hc->plx_origmembase, 0x80))) {
 			printk(KERN_WARNING
 			    "HFC-multi: failed to remap plx address space. "
 			    "(internal error)\n");
