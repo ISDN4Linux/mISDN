@@ -870,7 +870,7 @@ dsp_ctrl(struct mISDNchannel *ch, u_int cmd, void *arg)
 		spin_lock_irqsave(&dsp_lock, flags);
 		dsp->b_active = 0;
 		spin_unlock_irqrestore(&dsp_lock, flags);
-		/* may not be locked, because it waits until queue is done. */
+		/* MUST not be locked, because it waits until queue is done. */
 		cancel_work_sync(&dsp->workq);
 		spin_lock_irqsave(&dsp_lock, flags);
 		if (timer_pending(&dsp->tone.tl))

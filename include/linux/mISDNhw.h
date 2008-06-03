@@ -183,6 +183,7 @@ extern int	dchannel_senddata(struct dchannel *, struct sk_buff *);
 extern int	bchannel_senddata(struct bchannel *, struct sk_buff *);
 extern void	recv_Dchannel(struct dchannel *);
 extern void	recv_Bchannel(struct bchannel *);
+extern void	confirm_Bsend(struct bchannel *bch);
 extern int	get_next_bframe(struct bchannel *);
 extern int	get_next_dframe(struct dchannel *);
 

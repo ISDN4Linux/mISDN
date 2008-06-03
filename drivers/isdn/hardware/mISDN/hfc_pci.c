@@ -780,7 +780,6 @@ hfcpci_fill_fifo(struct bchannel *bch)
 	u_char		*bdata;
 	u_char		new_f1, *src, *dst;
 	unsigned short	*z1t, *z2t;
-	struct mISDNhead *hh;
 
 	if ((bch->debug & DEBUG_HW_BCHANNEL) && !(bch->debug & DEBUG_HW_BFIFO))
 		printk(KERN_DEBUG "%s\n", __FUNCTION__);
@@ -844,13 +843,9 @@ next_t_frame:
 		if (bch->tx_idx < bch->tx_skb->len)
 			return;
 		/* send confirm, on trans, free on hdlc. */
-		if (test_bit(FLG_TRANSPARENT, &bch->Flags)) {
-			skb_trim(bch->tx_skb, 0);
-			hh = mISDN_HEAD_P(bch->tx_skb);
-			queue_ch_frame(&bch->ch, PH_DATA_CNF, hh->id,
-				bch->tx_skb);
-		} else
-			dev_kfree_skb(bch->tx_skb);
+		if (test_bit(FLG_TRANSPARENT, &bch->Flags))
+			confirm_Bsend(bch);
+		dev_kfree_skb(bch->tx_skb);
 		if (get_next_bframe(bch))
 			goto next_t_frame;
 		return;

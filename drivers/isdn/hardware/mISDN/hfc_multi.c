@@ -1882,7 +1882,6 @@ hfcmulti_tx(struct hfc_multi *hc, int ch)
 	struct  dchannel *dch;
 	struct  sk_buff **sp = NULL;
 	int *idxp;
-	struct mISDNhead *hh;
 
 	bch = hc->chan[ch].bch;
 	dch = hc->chan[ch].dch;
@@ -2059,12 +2058,9 @@ next_frame:
 	}
 
 	/* send confirm, on trans, free on hdlc. */
-	if (bch && test_bit(FLG_TRANSPARENT, &bch->Flags)) {
-		hh = mISDN_HEAD_P((*sp));
-		skb_trim(*sp, 0);
-		queue_ch_frame(&bch->ch, PH_DATA_CNF, hh->id, *sp);
-	} else
-		dev_kfree_skb(*sp);
+	if (bch && test_bit(FLG_TRANSPARENT, &bch->Flags))
+		confirm_Bsend(bch);
+	dev_kfree_skb(*sp);
 
 	/* check for next frame */
 	if (bch && get_next_bframe(bch)) { // hdlc is confirmed here
@@ -2081,7 +2077,7 @@ next_frame:
 	 * we set the last byte in fifo to 'silence' in case we will get
 	 * no more data at all. this prevents sending an undefined value.
 	 */
-	if (bch && !test_bit(FLG_HDLC, &bch->Flags))
+	if (bch && test_bit(FLG_TRANSPARENT, &bch->Flags))
 		HFC_outb_nodebug(hc, A_FIFO_DATA0_NOINC, silence);
 }
 
