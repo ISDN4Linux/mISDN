@@ -913,6 +913,8 @@ dsp_ctrl(struct mISDNchannel *ch, u_int cmd, void *arg)
 	return err;
 }
 
+#warning debugging crash
+void *inque = NULL;
 static void
 dsp_send_bh(struct work_struct *work)
 {
@@ -920,6 +922,8 @@ dsp_send_bh(struct work_struct *work)
 	struct sk_buff *skb;
 	struct mISDNhead	*hh;
 
+	if (inque == dsp) printk(KERN_ERR "DSP_SEND_BH is nesting.\n");
+	inque = dsp;
 	/* send queued data */
 	while((skb = skb_dequeue(&dsp->sendq)))
 	{
@@ -954,6 +958,7 @@ dsp_send_bh(struct work_struct *work)
 				dev_kfree_skb(skb);
 		}
 	}
+	inque = NULL;
 }
 
 static int
@@ -981,7 +986,7 @@ dspcreate(struct channel_req *crq)
 		printk(KERN_DEBUG "%s: creating new dsp instance\n", __FUNCTION__);
 
 	/* default enabled */
-	INIT_WORK(&ndsp->workq, (void *)dsp_send_bh);
+	_INIT_WORK(&ndsp->workq, (void *)dsp_send_bh);
 	skb_queue_head_init(&ndsp->sendq);
 	ndsp->ch.send = dsp_function;
 	ndsp->ch.ctrl = dsp_ctrl;
@@ -1000,8 +1005,8 @@ dspcreate(struct channel_req *crq)
 
 	dsp_pipeline_init(&ndsp->pipeline);
 
-	sprintf(ndsp->name, "DSP_S%x/C%x",
-		ndsp->up->st->dev->id, ndsp->up->nr);
+	sprintf(ndsp->name, "DSP_S%x/C??",
+		ndsp->up->st->dev->id /*, ndsp->up->nr*/);
 	/* set frame size to start */
 	ndsp->features.hfc_id = -1; /* current PCM id */
 	ndsp->features.pcm_id = -1; /* current PCM id */

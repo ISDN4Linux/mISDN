@@ -55,8 +55,9 @@ MINCLUDES+=-I$(MISDNDIR)/include
 all: VERSION test_old_misdn
 	cp $(MISDNDIR)/drivers/isdn/hardware/mISDN/Makefile.v2.6 $(MISDNDIR)/drivers/isdn/hardware/mISDN/Makefile
 	cp $(MISDNDIR)/drivers/isdn/mISDN/Makefile.v2.6 $(MISDNDIR)/drivers/isdn/mISDN/Makefile
-	export MINCLUDES=$(MISDNDIR)/include ; export MISDNVERSION=$(MISDNVERSION); make -C $(LINUX) SUBDIRS=$(MISDN_SRC) modules $(CONFIGS)  
 	export MINCLUDES=$(MISDNDIR)/include ; export MISDNVERSION=$(MISDNVERSION); make -C $(LINUX) SUBDIRS=$(MISDN_CORE_SRC) modules $(CONFIGS)  
+	cp $(MISDN_CORE_SRC)/Module.symvers $(MISDN_SRC)
+	export MINCLUDES=$(MISDNDIR)/include ; export MISDNVERSION=$(MISDNVERSION); make -C $(LINUX) SUBDIRS=$(MISDN_SRC) modules $(CONFIGS)  
 
 install: all modules-install
 	$(DEPMOD) 

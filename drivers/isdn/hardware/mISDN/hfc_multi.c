@@ -63,7 +63,7 @@
  *	Bit 2     = 0x0004 = Report LOS
  *	Bit 3     = 0x0008 = Report AIS
  *	Bit 4     = 0x0010 = Report SLIP
- *	Bit 5     = 0x0020 = Report RDI (not yet supported)
+ *	Bit 5     = 0x0020 = Report RDI
  *	Bit 8     = 0x0100 = Turn off CRC-4 Multiframe Mode, use double frame mode instead.
  *	Bit 9	  = 0x0200 = Force get clock from interface, even in NT mode.
  * or	Bit 10	  = 0x0400 = Force put clock to interface, even in TE mode.
@@ -194,7 +194,7 @@ EXPORT_SYMBOL(plx_lock);
 
 static int poll_timer = 6;	/* default = 128 samples = 16ms */
 /* number of POLL_TIMER interrupts for G2 timeout (ca 1s) */
-static int nt_t1_count[] = { 3840, 1920, 960, 480, 240, 120, 64, 32  };
+static int nt_t1_count[] = { 3840, 1920, 960, 480, 240, 120, 60, 30  };
 #define	CLKDEL_TE	0x0f	/* CLKDEL in TE mode */
 #define	CLKDEL_NT	0x6c	/* CLKDEL in NT mode
 				   (0x60 MUST be included!) */

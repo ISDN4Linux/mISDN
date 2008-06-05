@@ -1254,7 +1254,7 @@ release_card(l1oip_t *hc)
 	kfree(hc);
 }
 
-static void __exit
+static void
 l1oip_cleanup(void)
 {
 	l1oip_t *hc,*next;
