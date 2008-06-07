@@ -922,7 +922,8 @@ dsp_send_bh(struct work_struct *work)
 	struct sk_buff *skb;
 	struct mISDNhead	*hh;
 
-	if (inque == dsp) printk(KERN_ERR "DSP_SEND_BH is nesting.\n");
+	if (inque == dsp)
+		printk(KERN_ERR "DSP_SEND_BH is nesting.\n");
 	inque = dsp;
 	/* send queued data */
 	while((skb = skb_dequeue(&dsp->sendq)))
@@ -1003,8 +1004,6 @@ dspcreate(struct channel_req *crq)
 		printk(KERN_WARNING "%s:cannot get module\n",
 			__FUNCTION__);
 
-	dsp_pipeline_init(&ndsp->pipeline);
-
 	sprintf(ndsp->name, "DSP_S%x/C??",
 		ndsp->up->st->dev->id /*, ndsp->up->nr*/);
 	/* set frame size to start */
@@ -1025,8 +1024,9 @@ dspcreate(struct channel_req *crq)
 	}
 	ndsp->dtmf.treshold=dtmfthreshold*10000;
 
-	/* append to list */
+	/* init pipeline append to list */
 	spin_lock_irqsave(&dsp_lock, flags);
+	dsp_pipeline_init(&ndsp->pipeline);
 	list_add_tail(&ndsp->list, &dsp_ilist);
 	spin_unlock_irqrestore(&dsp_lock, flags);
 

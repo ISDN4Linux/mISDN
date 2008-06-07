@@ -25,7 +25,6 @@
  */
 
 #include <linux/kernel.h>
-#include <linux/spinlock.h>
 #include <linux/list.h>
 #include <linux/string.h>
 #include <linux/mISDNif.h>
@@ -53,7 +52,6 @@ typedef struct _dsp_element_entry {
 	struct list_head     list;
 } dsp_element_entry_t;
 
-static rwlock_t dsp_elements_lock;
 static LIST_HEAD(dsp_elements);
 
 /* sysfs */
@@ -115,9 +113,7 @@ int mISDN_dsp_element_register (mISDN_dsp_element_t *elem)
 		if ((re = class_device_create_file(&entry->dev, &element_attributes[i])))
 			goto err2;
 
-	write_lock_irqsave(&dsp_elements_lock, flags);
 	list_add_tail(&entry->list, &dsp_elements);
-	write_unlock_irqrestore(&dsp_elements_lock, flags);
 	
 	printk(KERN_DEBUG "%s: %s registered\n", __FUNCTION__, elem->name);
 
@@ -138,26 +134,19 @@ void mISDN_dsp_element_unregister (mISDN_dsp_element_t *elem)
 	if (!elem)
 		return;
 
-	write_lock_irqsave(&dsp_elements_lock, flags);
-	
 	list_for_each_entry_safe(entry, n, &dsp_elements, list)
 		if (entry->elem == elem) {
 			list_del(&entry->list);
-			write_unlock_irqrestore(&dsp_elements_lock, flags);
 			class_device_unregister(&entry->dev);
 			kfree(entry);
 			printk(KERN_DEBUG "%s: %s unregistered\n", __FUNCTION__, elem->name);
 			return;
 		}
-	
-	write_unlock_irqrestore(&dsp_elements_lock, flags);
 }
 
 int dsp_pipeline_module_init (void)
 {
 	int re;
-
-	rwlock_init(&dsp_elements_lock);
 
 	if ((re = class_register(&elements_class)))
 		return re;
@@ -178,13 +167,11 @@ void dsp_pipeline_module_exit (void)
 
 	class_unregister(&elements_class);
 
-	write_lock_irqsave(&dsp_elements_lock, flags);
 	list_for_each_entry_safe(entry, n, &dsp_elements, list) {
 		list_del(&entry->list);
 		printk(KERN_DEBUG "%s: element was still registered: %s\n", __FUNCTION__, entry->elem->name);
 		kfree(entry);
 	}
-	write_unlock_irqrestore(&dsp_elements_lock, flags);
 	
 	printk(KERN_DEBUG "%s: dsp pipeline module exited\n", __FUNCTION__);
 }
@@ -195,7 +182,6 @@ int dsp_pipeline_init (dsp_pipeline_t *pipeline)
 		return -EINVAL;
 
 	INIT_LIST_HEAD(&pipeline->list);
-	rwlock_init(&pipeline->lock);
 
 #ifdef PIPELINE_DEBUG
 	printk(KERN_DEBUG "%s: dsp pipeline ready\n", __FUNCTION__);
@@ -225,9 +211,7 @@ void dsp_pipeline_destroy (dsp_pipeline_t *pipeline)
 	if (!pipeline)
 		return;
 
-	write_lock_irqsave(&pipeline->lock, flags);
 	_dsp_pipeline_destroy(pipeline);
-	write_unlock_irqrestore(&pipeline->lock, flags);
 
 #ifdef PIPELINE_DEBUG
 	printk(KERN_DEBUG "%s: dsp pipeline destroyed\n", __FUNCTION__);
@@ -246,26 +230,19 @@ int dsp_pipeline_build (dsp_pipeline_t *pipeline, const char *cfg)
 	if (!pipeline)
 		return -EINVAL;
 
-	write_lock_irqsave(&pipeline->lock, pipeline_flags);
 	if (!list_empty(&pipeline->list))
 		_dsp_pipeline_destroy(pipeline);
 
-	if (!cfg) {
-		write_unlock_irqrestore(&pipeline->lock, pipeline_flags);
+	if (!cfg)
 		return 0;
-	}
 
 	len = strlen(cfg);
-	if (!len) {
-		write_unlock_irqrestore(&pipeline->lock, pipeline_flags);
+	if (!len)
 		return 0;
-	}
 
 	dup = kmalloc(len + 1, GFP_KERNEL);
-	if (!dup) {
-		write_unlock_irqrestore(&pipeline->lock, pipeline_flags);
+	if (!dup)
 		return 0;
-	}
 	strcpy(dup, cfg);
 	while ((tok = strsep(&dup, "|"))) {
 		if (!strlen(tok))
@@ -275,11 +252,9 @@ int dsp_pipeline_build (dsp_pipeline_t *pipeline, const char *cfg)
 		if (args && !*args)
 			args = 0;
 
-		read_lock_irqsave(&dsp_elements_lock, elements_flags);
 		list_for_each_entry_safe(entry, n, &dsp_elements, list)
 			if (!strcmp(entry->elem->name, name)) {
 				elem = entry->elem;
-				read_unlock_irqrestore(&dsp_elements_lock, elements_flags);
 
 				pipeline_entry = kmalloc(sizeof(dsp_pipeline_entry_t), GFP_KERNEL);
 				if (!pipeline_entry) {
@@ -313,7 +288,6 @@ int dsp_pipeline_build (dsp_pipeline_t *pipeline, const char *cfg)
 		if (found)
 			found = 0;
 		else {
-			read_unlock_irqrestore(&dsp_elements_lock, elements_flags);
 			printk(KERN_DEBUG "%s: element not found, skipping: %s\n", __FUNCTION__, name);
 			incomplete = 1;
 		}
@@ -325,7 +299,6 @@ _out:
 	else
 		pipeline->inuse=0;
 
-	write_unlock_irqrestore(&pipeline->lock, pipeline_flags);
 #ifdef PIPELINE_DEBUG
 	printk(KERN_DEBUG "%s: dsp pipeline built%s: %s\n", __FUNCTION__, incomplete ? " incomplete" : "", cfg);
 #endif
@@ -340,15 +313,9 @@ void dsp_pipeline_process_tx (dsp_pipeline_t *pipeline, u8 *data, int len)
 	if (!pipeline)
 		return;
 
-	read_lock(&pipeline->lock);
-//	if (!read_trylock(&pipeline->lock)) {
-//		printk(KERN_DEBUG "%s: bypassing pipeline because it is locked (TX)\n", __FUNCTION__);
-//		return;
-//	}
 	list_for_each_entry(entry, &pipeline->list, list)
 		if (entry->elem->process_tx)
 			entry->elem->process_tx(entry->p, data, len);
-	read_unlock(&pipeline->lock);
 }
 
 void dsp_pipeline_process_rx (dsp_pipeline_t *pipeline, u8 *data, int len)
@@ -358,15 +325,9 @@ void dsp_pipeline_process_rx (dsp_pipeline_t *pipeline, u8 *data, int len)
 	if (!pipeline)
 		return;
 
-	read_lock(&pipeline->lock);
-//	if (!read_trylock(&pipeline->lock)) {
-//		printk(KERN_DEBUG "%s: bypassing pipeline because it is locked (RX)\n", __FUNCTION__);
-//		return;
-//	}
 	list_for_each_entry_reverse(entry, &pipeline->list, list)
 		if (entry->elem->process_rx)
 			entry->elem->process_rx(entry->p, data, len);
-	read_unlock(&pipeline->lock);
 }
 
 EXPORT_SYMBOL(mISDN_dsp_element_register);
