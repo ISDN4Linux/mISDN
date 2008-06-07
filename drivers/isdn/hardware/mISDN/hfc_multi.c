@@ -4886,7 +4886,7 @@ hfcmulti_init(struct pci_dev *pdev, const struct pci_device_id *ent)
 			MAX_CARDS);
 		return -EINVAL;
 	}
-	if (type[HFC_cnt] && (type[HFC_cnt] & 0xff) != m->type) {
+	if ((type[HFC_cnt] & 0xff) && (type[HFC_cnt] & 0xff) != m->type) {
 		printk(KERN_WARNING "HFC-MULTI: Card '%s:%s' type %d found but "
 		    "type[%d] %d was supplied as module parameter\n",
 		    m->vendor_name, m->card_name, m->type, HFC_cnt,
