@@ -91,7 +91,6 @@ static struct class_device_attribute element_attributes[] = {
 int mISDN_dsp_element_register (mISDN_dsp_element_t *elem)
 {
 	dsp_element_entry_t *entry;
-	u_long flags;
 	int re, i;
 
 	if (!elem)
@@ -129,7 +128,6 @@ err1:
 void mISDN_dsp_element_unregister (mISDN_dsp_element_t *elem)
 {
 	dsp_element_entry_t *entry, *n;
-	u_long flags;
 
 	if (!elem)
 		return;
@@ -161,7 +159,6 @@ int dsp_pipeline_module_init (void)
 void dsp_pipeline_module_exit (void)
 {
 	dsp_element_entry_t *entry, *n;
-	u_long flags;
 
 	dsp_hwec_exit();
 
@@ -206,7 +203,6 @@ static inline void _dsp_pipeline_destroy (dsp_pipeline_t *pipeline)
 
 void dsp_pipeline_destroy (dsp_pipeline_t *pipeline)
 {
-	u_long flags;
 
 	if (!pipeline)
 		return;
@@ -225,7 +221,6 @@ int dsp_pipeline_build (dsp_pipeline_t *pipeline, const char *cfg)
 	dsp_element_entry_t *entry, *n;
 	dsp_pipeline_entry_t *pipeline_entry;
 	mISDN_dsp_element_t *elem;
-	u_long elements_flags, pipeline_flags;
 
 	if (!pipeline)
 		return -EINVAL;
