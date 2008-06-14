@@ -418,35 +418,54 @@ l1oip_socket_recv(l1oip_t *hc, u8 remotecodec, u8 channel, u16 timebase, u8 *buf
 	else
 		memcpy(p, buf, len);
 
-	/* expand 16 bit sequence number to 32 bit sequence number */
-	rx_counter = hc->chan[channel].rx_counter;
-	if (((s16)timebase) - ((s16)rx_counter) >= 0)
-	{
-		/* time has changed forward */
-		if (timebase >= ((u16)rx_counter))
-			rx_counter = (rx_counter & 0xffff0000) | timebase;
-		else
-			rx_counter = ((rx_counter & 0xffff0000)+0x10000)
-				| timebase;
-	} else
-	{
-		/* time has changed backwards */
-		if (timebase < ((u16)rx_counter))
-			rx_counter = (rx_counter & 0xffff0000) | timebase;
-		else
-			rx_counter = ((rx_counter & 0xffff0000)-0x10000)
-				| timebase;
-	}
-	hc->chan[channel].rx_counter = rx_counter;
-
 	/* send message up */
 	if (dch && len >= 2)
 	{
 		dch->rx_skb = nskb;
 		recv_Dchannel(dch);
 	}
-	if (bch)
+	if (bch) {
+		/* expand 16 bit sequence number to 32 bit sequence number */
+		rx_counter = hc->chan[channel].rx_counter;
+		if (((s16)(timebase - rx_counter)) >= 0)
+		{
+			printk(KERN_DEBUG "forward ");
+			/* time has changed forward */
+			if (timebase >= (rx_counter & 0xffff))
+				rx_counter =
+					(rx_counter & 0xffff0000) | timebase;
+			else
+				rx_counter = ((rx_counter & 0xffff0000)+0x10000)
+					| timebase;
+		} else
+		{
+			printk(KERN_DEBUG "backward ");
+			/* time has changed backwards */
+			if (timebase < (rx_counter & 0xffff))
+				rx_counter =
+					(rx_counter & 0xffff0000) | timebase;
+			else
+				rx_counter = ((rx_counter & 0xffff0000)-0x10000)
+					| timebase;
+		}
+		hc->chan[channel].rx_counter = rx_counter;
+
+#ifdef REORDER_DEBUG
+		if (hc->chan[channel].disorder_flag) {
+			struct sk_buff *skb;
+			int cnt;
+			skb = hc->chan[channel].disorder_skb;
+			hc->chan[channel].disorder_skb = nskb;
+			nskb = skb;
+			cnt = hc->chan[channel].disorder_cnt;
+			hc->chan[channel].disorder_cnt = rx_counter;
+			rx_counter = cnt;
+		}
+		hc->chan[channel].disorder_flag ^= 1;
+		if (nskb)
+#endif
 		queue_ch_frame(&bch->ch, PH_DATA_IND, rx_counter, nskb);
+	}
 }
 
 
@@ -1177,8 +1196,7 @@ channel_bctrl(struct bchannel *bch, struct mISDN_ctrl_req *cq)
 			    __FUNCTION__);
 		/* create confirm */
 		features->has_jitter = 1;
-// TODO: reordering not tested with unordered packets
-//		features->unordered = 1;
+		features->unordered = 1;
 		break;
 	default:
 		printk(KERN_WARNING "%s: unknown Op %x\n",
@@ -1245,6 +1263,10 @@ release_card(l1oip_t *hc)
 		if (hc->chan[ch].bch) {
 			mISDN_freebchannel(hc->chan[ch].bch);
 			kfree(hc->chan[ch].bch);
+#ifdef REORDER_DEBUG
+			if (hc->chan[ch].disorder_skb)
+				dev_kfree_skb(hc->chan[ch].disorder_skb);
+#endif
 		}
 	}
 

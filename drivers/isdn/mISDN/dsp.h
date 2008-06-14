@@ -179,6 +179,7 @@ typedef struct _dsp {
 	/* buffer stuff */
 	int		rx_W; /* current write pos for data without timestamp */
 	int		rx_R; /* current read pos for transmit clock */
+	int		rx_init; /* if set, pointers will be adjusted first */
 	int		tx_W; /* current write pos for transmit data */
 	int		tx_R; /* current read pos for transmit clock */
 	int		rx_delay[MAX_SECONDS_JITTER_CHECK];

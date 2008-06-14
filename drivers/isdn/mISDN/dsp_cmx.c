@@ -240,8 +240,8 @@ dsp_cmx_add_conf_member(dsp_t *dsp, conference_t *conf)
 	member->dsp = dsp;
 	/* clear rx buffer */
 	memset(dsp->rx_buff, dsp_silence, sizeof(dsp->rx_buff));
-#warning BUG must be fixed soon!!
-	dsp->rx_W = dsp->rx_R = -1; /* reset pointers */
+	dsp->rx_init = 1; /* rx_W and rx_R will be adjusted on first frame */
+	dsp->rx_W = dsp->rx_R = 0;
 
 	list_add_tail(&member->list, &conf->mlist);
 
@@ -1165,10 +1165,12 @@ dsp_cmx_receive(dsp_t *dsp, struct sk_buff *skb)
 	 * initialize pointers if not already -
 	 * also add delay if requested by PH_SIGNAL
 	 */
-	if (dsp->rx_W < 0) {
+	if (dsp->rx_init) {
+		dsp->rx_init = 0; 
 		if (dsp->features.unordered) {
 			dsp->rx_R = (hh->id & CMX_BUFF_MASK);
-			dsp->rx_W = (dsp->rx_R+dsp->cmx_delay) & CMX_BUFF_MASK;
+			dsp->rx_W = (dsp->rx_R + dsp->cmx_delay)
+				& CMX_BUFF_MASK;
 		} else {
 			dsp->rx_R = 0;
 			dsp->rx_W = dsp->cmx_delay;
@@ -1177,8 +1179,7 @@ dsp_cmx_receive(dsp_t *dsp, struct sk_buff *skb)
 	/* if frame contains time code, write directly */
 	if (dsp->features.unordered) {
 		dsp->rx_W = (hh->id & CMX_BUFF_MASK);
-#warning remove me when reordering is debugged
-		printk(KERN_DEBUG "%s %08x\n", dsp->name, hh->id);
+		// printk(KERN_DEBUG "%s %08x\n", dsp->name, hh->id);
 	}
 	/*
 	 * if we underrun (or maybe overrun),
@@ -1191,8 +1192,14 @@ dsp_cmx_receive(dsp_t *dsp, struct sk_buff *skb)
 			    "maximum delay), adjusting read pointer! "
 			    "(inst %s)\n", (u_long)dsp, dsp->name);
 		/* flush buffer */
-		dsp->rx_R = 0;
-		dsp->rx_W = dsp->cmx_delay;
+		if (dsp->features.unordered) {
+			dsp->rx_R = (hh->id & CMX_BUFF_MASK);
+			dsp->rx_W = (dsp->rx_R + dsp->cmx_delay)
+				& CMX_BUFF_MASK;
+		} else {
+			dsp->rx_R = 0;
+			dsp->rx_W = dsp->cmx_delay;
+		}
 		memset(dsp->rx_buff, dsp_silence, sizeof(dsp->rx_buff));
 	}
 	/* if we have reached double delay, jump back to middle */
@@ -1206,8 +1213,14 @@ dsp_cmx_receive(dsp_t *dsp, struct sk_buff *skb)
 				    "read pointer! (inst %s)\n",
 				    (u_long)dsp, dsp->name);
 		/* flush buffer */
-		dsp->rx_R = 0;
-		dsp->rx_W = dsp->cmx_delay;
+		if (dsp->features.unordered) {
+			dsp->rx_R = (hh->id & CMX_BUFF_MASK);
+			dsp->rx_W = (dsp->rx_R + dsp->cmx_delay)
+				& CMX_BUFF_MASK;
+		} else {
+			dsp->rx_R = 0;
+			dsp->rx_W = dsp->cmx_delay;
+		}
 		memset(dsp->rx_buff, dsp_silence, sizeof(dsp->rx_buff));
 	}
 

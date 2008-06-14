@@ -619,8 +619,10 @@ dsp_function(struct mISDNchannel *ch,  struct sk_buff *skb)
 		dsp->data_pending = 0;
 		/* trigger next hdlc frame, if any */
 		if (dsp->hdlc) {
+			spin_lock_irqsave(&dsp_lock, flags);
 			if (dsp->b_active)
 				schedule_work(&dsp->workq);
+			spin_unlock_irqrestore(&dsp_lock, flags);
 		}
 		break;
 	case (PH_DATA_IND):
@@ -752,8 +754,9 @@ dsp_function(struct mISDNchannel *ch,  struct sk_buff *skb)
 		spin_lock_irqsave(&dsp_lock, flags);
 		dsp->b_active = 1;
 		dsp->data_pending = 0;
-		dsp->tx_W = dsp->tx_R = 0; /* clear TX buffer */
-		dsp->rx_W = dsp->rx_R = -1; /* reset RX buffer */
+		dsp->rx_init = 1;
+			/* rx_W and rx_R will be adjusted on first frame */
+		dsp->rx_W = dsp->rx_R = 0;
 		memset(dsp->rx_buff, 0, sizeof(dsp->rx_buff));
 		dsp_cmx_hardware(dsp->conf, dsp);
 		dsp_dtmf_hardware(dsp);
@@ -790,10 +793,12 @@ dsp_function(struct mISDNchannel *ch,  struct sk_buff *skb)
 		}
 		if (dsp->hdlc) {
 			/* hdlc */
+			spin_lock_irqsave(&dsp_lock, flags);
 			if (dsp->b_active) {
 				skb_queue_tail(&dsp->sendq, skb);
 				schedule_work(&dsp->workq);
 			}
+			spin_unlock_irqrestore(&dsp_lock, flags);
 			return(0);
 		}
 		/* send data to tx-buffer (if no tone is played) */

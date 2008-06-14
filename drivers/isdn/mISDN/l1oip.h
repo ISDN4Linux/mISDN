@@ -8,6 +8,8 @@
 #define DEBUG_L1OIP_MGR		0x00040000
 #define DEBUG_L1OIP_MSG		0x00080000
 
+/* enable to disorder received bchannels by sequence 2143658798... */
+//#define REORDER_DEBUG
 
 /* frames */
 #define L1OIP_MAX_LEN		2048		/* max packet size form l2 */
@@ -30,6 +32,11 @@ struct l1oip_chan {
 	u32			tx_counter;	/* counts xmit bytes/packets */
 	u32			rx_counter;	/* counts recv bytes/packets */
 	u32			codecstate;	/* used by codec to save data */
+#ifdef REORDER_DEBUG
+	int			disorder_flag;
+	struct sk_buff		*disorder_skb;
+	u32			disorder_cnt;
+#endif
 };
 
 
