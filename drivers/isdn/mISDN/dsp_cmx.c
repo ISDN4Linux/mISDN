@@ -240,6 +240,7 @@ dsp_cmx_add_conf_member(dsp_t *dsp, conference_t *conf)
 	member->dsp = dsp;
 	/* clear rx buffer */
 	memset(dsp->rx_buff, dsp_silence, sizeof(dsp->rx_buff));
+#warning BUG must be fixed soon!!
 	dsp->rx_W = dsp->rx_R = -1; /* reset pointers */
 
 	list_add_tail(&member->list, &conf->mlist);
@@ -1247,9 +1248,6 @@ dsp_cmx_send_member(dsp_t *dsp, int len, s32 *c, int members)
 	int r, rr, t, tt, o_r, o_rr;
 	int preload = 0;
 	struct mISDNhead *hh, *thh;
-#ifdef CMX_TX_DEBUG
-	char debugbuf[256] = "";
-#endif
 
 	/* don't process if: */
 	if (!dsp->b_active) { /* if not active */
@@ -1349,8 +1347,9 @@ dsp_cmx_send_member(dsp_t *dsp, int len, s32 *c, int members)
 				t = (t+1) & CMX_BUFF_MASK;
 				r = (r+1) & CMX_BUFF_MASK;
 			}
-			if (r != rr)
+			if (r != rr) {
 				memset(d, dsp_silence, (rr-r)&CMX_BUFF_MASK);
+			}
 		/* -> if echo is enabled */
 		} else {
 			/*
@@ -1383,8 +1382,10 @@ dsp_cmx_send_member(dsp_t *dsp, int len, s32 *c, int members)
 			other = (list_entry(conf->mlist.prev,
 			    conf_member_t, list))->dsp;
 		o_q = other->rx_buff; /* received data */
-		o_r = other->rx_R; /* rx-pointers */
-		o_rr = (o_r + len) & CMX_BUFF_MASK;
+		o_rr = (other->rx_R + len) & CMX_BUFF_MASK;
+			/* end of rx-pointer */
+		o_r = (o_rr - rr + r) & CMX_BUFF_MASK;
+			/* start rx-pointer at current read position*/
 		/* -> if echo is NOT enabled */
 		if (!dsp->echo) {
 //			if (o_r!=o_rr) printk(KERN_DEBUG
@@ -1551,7 +1552,7 @@ dsp_cmx_send(void *arg)
 	conf_member_t *member;
 	dsp_t *dsp;
 	int mustmix, members;
-	s32 mixbuffer[MAX_POLL], *c;
+	s32 mixbuffer[MAX_POLL+100], *c;
 	u8 *p, *q;
 	int r, rr;
 	int jittercheck = 0, delay, i;
@@ -1586,7 +1587,9 @@ dsp_cmx_send(void *arg)
 			lo = (skew10seconds * (s32)dsp_poll) % 80000;
 			lo = lo * 53687L;
 			dsp_poll_diff = (hi << 16) | (lo >> 16);
-			printk(KERN_INFO"mISDN_dsp: seconds=%d clock=%d timer=%d skew10seconds=%d\n", dsp_start_count, celapsed, jelapsed, skew10seconds);
+			printk(KERN_INFO"mISDN_dsp: seconds=%d clock=%d "
+				"timer=%d skew10seconds=%d\n", dsp_start_count,
+				celapsed, jelapsed, skew10seconds);
 		}
 		if (dsp_start_count >= dsp_start_seconds) {
 			dsp_start_seconds = 0;
@@ -1597,6 +1600,8 @@ dsp_cmx_send(void *arg)
 	length = (s16)(dsp_count >> 16);
 	dsp_count += dsp_poll_diff;
 	length = (s16)((dsp_count >> 16) - (u16)length);
+	if (length > MAX_POLL + 100)
+		length = MAX_POLL + 100;
 //	printk(KERN_DEBUG "len=%d dsp_count=0x%x.%04x dsp_poll_diff=0x%x.%04x\n", length, dsp_count >> 16, dsp_count & 0xffff, dsp_poll_diff >> 16, dsp_poll_diff & 0xffff);
 
 	/*

@@ -1164,7 +1164,8 @@ static int
 channel_bctrl(struct bchannel *bch, struct mISDN_ctrl_req *cq)
 {
 	int			ret = 0;
-	struct dsp_features	*features = (struct dsp_features *)cq->p1;
+	struct dsp_features	*features =
+		(struct dsp_features *)(*((u_long *)&cq->p1));
 
 	switch(cq->op) {
 	case MISDN_CTRL_GETOP:
@@ -1176,7 +1177,7 @@ channel_bctrl(struct bchannel *bch, struct mISDN_ctrl_req *cq)
 			    __FUNCTION__);
 		/* create confirm */
 		features->has_jitter = 1;
-#warning remove comment when dsp ordering is debugged
+// TODO: reordering not tested with unordered packets
 //		features->unordered = 1;
 		break;
 	default:

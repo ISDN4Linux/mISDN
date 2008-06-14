@@ -439,12 +439,12 @@ write_fifo_regio(struct hfc_multi *hc, u_char *data, int len)
 {
 	outb(A_FIFO_DATA0, (hc->pci_iobase)+4);
 	while(len>>2) {
-		outl(*(u_long *)data, hc->pci_iobase);
+		outl(*(u32 *)data, hc->pci_iobase);
 		data+=4;
 		len-=4;
 	}
 	while(len>>1) {
-		outw(*(u_short *)data, hc->pci_iobase);
+		outw(*(u16 *)data, hc->pci_iobase);
 		data+=2;
 		len-=2;
 	}
@@ -459,13 +459,13 @@ void
 write_fifo_pcimem(struct hfc_multi *hc, u_char *data, int len)
 {
 	while(len>>2) {
-		writel(*(u_long *)data,
+		writel(*(u32 *)data,
 			(volatile u_long *)((hc->pci_membase)+A_FIFO_DATA0));
 		data+=4;
 		len-=4;
 	}
 	while(len>>1) {
-		writew(*(u_short *)data,
+		writew(*(u16 *)data,
 			(volatile u_short *)((hc->pci_membase)+A_FIFO_DATA0));
 		data+=2;
 		len-=2;
@@ -483,12 +483,12 @@ read_fifo_regio(struct hfc_multi *hc, u_char *data, int len)
 {
 	outb(A_FIFO_DATA0, (hc->pci_iobase)+4);
 	while(len>>2) {
-		*(u_long *)data = inl((volatile u_int)hc->pci_iobase);
+		*(u32 *)data = inl((volatile u_int)hc->pci_iobase);
 		data+=4;
 		len-=4;
 	}
 	while(len>>1) {
-		*(u_short *)data = inw((volatile u_int)hc->pci_iobase);
+		*(u16 *)data = inw((volatile u_int)hc->pci_iobase);
 		data+=2;
 		len-=2;
 	}
@@ -504,19 +504,19 @@ void
 read_fifo_pcimem(struct hfc_multi *hc, u_char *data, int len)
 {
 	while(len>>2) {
-		*(u_long *)data =
-			readl((volatile u_long *)((hc->pci_membase)+A_FIFO_DATA0));
+		*(u32 *)data =
+			readl((volatile u32 *)((hc->pci_membase)+A_FIFO_DATA0));
 		data+=4;
 		len-=4;
 	}
 	while(len>>1) {
-		*(u_short *)data =
-			readw((volatile u_short *)((hc->pci_membase)+A_FIFO_DATA0));
+		*(u16 *)data =
+			readw((volatile u16 *)((hc->pci_membase)+A_FIFO_DATA0));
 		data+=2;
 		len-=2;
 	}
 	while(len) {
-		*data = readb((volatile u_char *)((hc->pci_membase)
+		*data = readb((volatile u8 *)((hc->pci_membase)
 				+A_FIFO_DATA0));
 		data++;
 		len--;
@@ -3261,7 +3261,7 @@ handle_dmsg(struct mISDNchannel *ch, struct sk_buff *skb)
 	struct hfc_multi	*hc = dch->hw;
 	struct mISDNhead	*hh = mISDN_HEAD_P(skb);
 	int			ret = -EINVAL;
-	u_long			id;
+	unsigned int		id;
 	u_long			flags;
 
 	switch (hh->prim) {
@@ -3398,7 +3398,7 @@ handle_bmsg(struct mISDNchannel *ch, struct sk_buff *skb)
 	struct hfc_multi	*hc = bch->hw;
 	int			ret = -EINVAL;
 	struct mISDNhead	*hh = mISDN_HEAD_P(skb);
-	u_long			id;
+	unsigned int		id;
 	u_long			flags;
 
 	switch (hh->prim) {
@@ -3498,7 +3498,8 @@ static int
 channel_bctrl(struct bchannel *bch, struct mISDN_ctrl_req *cq)
 {
 	int			ret = 0;
-	struct dsp_features	*features = (struct dsp_features *)cq->p1;
+	struct dsp_features	*features =
+		(struct dsp_features *)(*((u_long *)&cq->p1));
 	struct hfc_multi	*hc = bch->hw;
 	int			slot_tx;
 	int			bank_tx;

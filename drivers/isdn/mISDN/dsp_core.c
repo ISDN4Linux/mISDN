@@ -590,7 +590,7 @@ get_features(struct mISDNchannel *ch)
 		dsp->features_rx_off = 1;
 	if ((cq.op & MISDN_CTRL_HW_FEATURES_OP)) {
 		cq.op = MISDN_CTRL_HW_FEATURES;
-		cq.p1 = (int)&dsp->features;
+		*((u_long *)&cq.p1) = (u_long)&dsp->features;
 		if (ch->peer->ctrl(ch->peer, CONTROL_CHANNEL, &cq)) {
 			printk(KERN_DEBUG "%s: 2nd CONTROL_CHANNEL failed\n",
 				__FUNCTION__);
@@ -913,8 +913,6 @@ dsp_ctrl(struct mISDNchannel *ch, u_int cmd, void *arg)
 	return err;
 }
 
-#warning debugging crash
-void *inque = NULL;
 static void
 dsp_send_bh(struct work_struct *work)
 {
@@ -922,9 +920,6 @@ dsp_send_bh(struct work_struct *work)
 	struct sk_buff *skb;
 	struct mISDNhead	*hh;
 
-	if (inque == dsp)
-		printk(KERN_ERR "DSP_SEND_BH is nesting.\n");
-	inque = dsp;
 	/* send queued data */
 	while((skb = skb_dequeue(&dsp->sendq)))
 	{
@@ -959,7 +954,6 @@ dsp_send_bh(struct work_struct *work)
 				dev_kfree_skb(skb);
 		}
 	}
-	inque = NULL;
 }
 
 static int

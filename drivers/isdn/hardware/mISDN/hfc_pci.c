@@ -1615,7 +1615,7 @@ hfcpci_l2l1D(struct mISDNchannel *ch, struct sk_buff *skb)
 	struct hfc_pci		*hc = dch->hw;
 	int			ret = -EINVAL;
 	struct mISDNhead	*hh = mISDN_HEAD_P(skb);
-	u_long			id;
+	unsigned int		id;
 	u_long			flags;
 
 	switch (hh->prim) {
@@ -1706,7 +1706,7 @@ hfcpci_l2l1B(struct mISDNchannel *ch, struct sk_buff *skb)
 	struct hfc_pci		*hc = bch->hw;
 	int			ret = -EINVAL;
 	struct mISDNhead	*hh = mISDN_HEAD_P(skb);
-	u_long			id;
+	unsigned int		id;
 	u_long			flags;
 
 	switch (hh->prim) {

@@ -30,10 +30,6 @@
 #include <linux/timer.h>
 #include <linux/workqueue.h>
 
-#ifdef MISDN_MEMDEBUG
-#include "memdbg.h"
-#endif
-
 #include "dsp_ecdis.h"
 
 extern int dsp_options;
@@ -43,29 +39,6 @@ extern int dsp_tics;
 extern spinlock_t dsp_lock;
 extern struct work_struct dsp_workq;
 extern u32 dsp_poll_diff; /* calculated fix-comma corrected poll value */
-
-#if 0
-// spin debugging
-extern int spinnest;
-static void _dsp_spin_lock(spinlock_t *lk, const char *func, int line)
-{
-	int was;
-	printk(KERN_DEBUG "SPIN locking %d in %s line %d\n", ++spinnest, func, line);
-	was = spinnest;
-	spin_lock(lk);
-	printk(KERN_DEBUG "SPIN locked (was %d) in %s line %d\n", was, func, line);
-}
-static void _dsp_spin_unlock(spinlock_t *lk, const char *func, int line)
-{
-	printk(KERN_DEBUG "SPIN unlocking %d in %s line %d\n", spinnest, func, line);
-	spin_unlock(lk);
-	--spinnest;
-}
-#undef spin_lock
-#undef spin_unlock
-#define spin_lock(a) _dsp_spin_lock(a, __FUNCTION__, __LINE__)
-#define spin_unlock(a) _dsp_spin_unlock(a, __FUNCTION__, __LINE__)
-#endif
 
 /***************
  * audio stuff *
