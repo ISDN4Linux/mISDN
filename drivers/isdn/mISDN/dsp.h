@@ -214,7 +214,7 @@ typedef struct _dsp {
 	u8		bf_data_out[9];
 	int		bf_sync;
 
-	dsp_pipeline_t pipeline;
+	dsp_pipeline_t	pipeline;
 } dsp_t;
 
 /* functions */

@@ -429,7 +429,6 @@ l1oip_socket_recv(l1oip_t *hc, u8 remotecodec, u8 channel, u16 timebase, u8 *buf
 		rx_counter = hc->chan[channel].rx_counter;
 		if (((s16)(timebase - rx_counter)) >= 0)
 		{
-			printk(KERN_DEBUG "forward ");
 			/* time has changed forward */
 			if (timebase >= (rx_counter & 0xffff))
 				rx_counter =
@@ -439,7 +438,6 @@ l1oip_socket_recv(l1oip_t *hc, u8 remotecodec, u8 channel, u16 timebase, u8 *buf
 					| timebase;
 		} else
 		{
-			printk(KERN_DEBUG "backward ");
 			/* time has changed backwards */
 			if (timebase < (rx_counter & 0xffff))
 				rx_counter =
@@ -1195,7 +1193,7 @@ channel_bctrl(struct bchannel *bch, struct mISDN_ctrl_req *cq)
 			printk(KERN_DEBUG "%s: HW_FEATURE request\n",
 			    __FUNCTION__);
 		/* create confirm */
-		features->has_jitter = 1;
+		features->unclocked = 1;
 		features->unordered = 1;
 		break;
 	default:

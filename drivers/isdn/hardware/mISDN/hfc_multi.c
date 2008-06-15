@@ -2670,8 +2670,8 @@ hfcmulti_interrupt(int intno, void *dev_id)
 			/* -> DTMF IRQ */
 			hfcmulti_dtmf(hc);
 		}
-#warning V_IRQ_PROC 125 us interrupt is not acceptable chip allows 1 khz timer
-		if (r_irq_misc & V_IRQ_PROC) { /* TODO: REPLACE !!!! 125 us Interrupts are not acceptable  */
+		/* TODO: REPLACE !!!! 125 us Interrupts are not acceptable  */
+		if (r_irq_misc & V_IRQ_PROC) {
 			/* IRQ every 125us */
 			count++;
 			/* generate 1kHz signal */
@@ -2876,13 +2876,8 @@ mode_hfcmulti(struct hfc_multi *hc, int ch, int protocol, int slot_tx,
 		case (ISDN_P_B_RAW): /* B-channel */
 
 			if (test_bit(HFC_CHIP_B410P, &hc->chip) &&
-#warning bitte ueberdenken und mir erklaeren, was das passiert
-#warning bank darf nur 0, 1 oder 2 haben (wo der slot geschaltet wird oder ob er geloopt werden soll)
 			    (hc->chan[ch].slot_rx < 0) &&
-//			    (hc->chan[ch].bank_rx == 0) &&
-			    (hc->chan[ch].slot_tx < 0) //&&
-//			    (hc->chan[ch].bank_tx == 0)
-							) {
+			    (hc->chan[ch].slot_tx < 0)) {
 
 				printk(KERN_DEBUG
 				    "Setting B-channel %d to echo cancelable "
@@ -3532,11 +3527,13 @@ channel_bctrl(struct bchannel *bch, struct mISDN_ctrl_req *cq)
 		if (test_bit(HFC_CHIP_DTMF, &hc->chip))
 			features->hfc_dtmf = 1;
 		features->hfc_loops = 0;
-		features->pcm_id = hc->pcm;
-		features->pcm_slots = hc->slots;
-		features->pcm_banks = 2;
-		if (test_bit(HFC_CHIP_B410P, &hc->chip))
+		if (test_bit(HFC_CHIP_B410P, &hc->chip)) {
 			features->hfc_echocanhw = 1;
+		} else {
+			features->pcm_id = hc->pcm;
+			features->pcm_slots = hc->slots;
+			features->pcm_banks = 2;
+		}
 		break;
 	case MISDN_CTRL_HFC_PCM_CONN: /* connect interface to pcm timeslot (0..N) */
 		slot_tx = cq->p1 & 0xff;
