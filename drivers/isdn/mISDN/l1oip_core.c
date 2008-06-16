@@ -80,15 +80,15 @@
 	enable debugging (see l1oip.h for debug options)
 
 
-Special PH_CONTROL messages:
+Special mISDN controls:
 
- dinfo = L1OIP_SETPEER*
- data bytes 0-3 : remote IP address in network order (left element first)
- data bytes 4-5 : remote port in network order (high byte first)
+ op = MISDN_CTRL_SETPEER*
+ p1 = bytes 0-3 : remote IP address in network order (left element first)
+ p2 = bytes 1-2 : remote port in network order (high byte first)
  optional:
- data bytes 6-7 : local port in network order (high byte first)
+ p2 = bytes 3-4 : local port in network order (high byte first)
  
- dinfo = L1OIP_UNSETPEER*
+ op = MISDN_CTRL_UNSETPEER*
 
  * Use l1oipctrl for comfortable setting or removing ip address.
    (Layer 1 Over IP CTRL)
@@ -946,9 +946,9 @@ channel_dctrl(struct dchannel *dch, struct mISDN_ctrl_req *cq)
 		cq->op = MISDN_CTRL_SETPEER | MISDN_CTRL_UNSETPEER;
 		break;
 	case MISDN_CTRL_SETPEER:
-		hc->remoteip = (u_long)cq->p1;
-		hc->localport = cq->p2 | 0xffff;
-		hc->remoteport = cq->p2 >> 16;
+		hc->remoteip = (u32)cq->p1;
+		hc->remoteport = cq->p2 | 0xffff;
+		hc->localport = cq->p2 >> 16;
 		if (!hc->remoteport)
 			hc->remoteport = hc->localport;
 		if (debug & DEBUG_L1OIP_SOCKET)
