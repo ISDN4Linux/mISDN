@@ -884,20 +884,7 @@ dsp_ctrl(struct mISDNchannel *ch, u_int cmd, void *arg)
 		if (dsp_debug & DEBUG_DSP_CTRL)
 			printk(KERN_DEBUG "%s: releasing member %s\n", __FUNCTION__, dsp->name);
 		dsp->b_active = 0;
-		dsp_cmx_hardware(dsp->conf, dsp);
-		conf = dsp->conf;
-		if (conf) {
-			if (dsp_debug & DEBUG_DSP_CMX)
-				printk(KERN_DEBUG "removing us from conference %d\n",
-					dsp->conf->id);
-			dsp_cmx_del_conf_member(dsp);
-			if (list_empty(&conf->mlist)) {
-				if (dsp_debug & DEBUG_DSP_CMX)
-					printk(KERN_DEBUG "conference is empty, so we remove it.\n");
-				dsp_cmx_del_conf(conf);
-			}
-		}
-
+		dsp_cmx_conf(dsp, 0); /* dsp_cmx_hardware will also be called here */
 		dsp_pipeline_destroy(&dsp->pipeline);
 
 		if (dsp_debug & DEBUG_DSP_CTRL)
