@@ -2462,7 +2462,7 @@ ph_state_irq(struct hfc_multi *hc, u_char r_irq_statech)
 	struct dchannel	*dch;
 	int		ch;
 	int		active;
-	u_char		st_status;
+	u_char		st_status, temp;
 
 	/* state machine */
 	for (ch = 0; ch <= 31; ch++) {
@@ -2471,7 +2471,20 @@ ph_state_irq(struct hfc_multi *hc, u_char r_irq_statech)
 			if (r_irq_statech & 1) {
 				HFC_outb_nodebug(hc, R_ST_SEL,
 					hc->chan[ch].port);
+				/* undocumented: delay after R_ST_SEL */
+				udelay(1);
+				/* undocumented: status changes during read */
 				st_status = HFC_inb_nodebug(hc, A_ST_RD_STATE);
+				while (st_status != (temp =
+					HFC_inb_nodebug(hc, A_ST_RD_STATE))) {
+					if (debug & DEBUG_HFCMULTI_STATE)
+						printk(KERN_DEBUG "%s: reread "
+						    "STATE because %d!=%d\n",
+						    __FUNCTION__, temp,
+						    st_status);
+					st_status = temp; /* repeat */
+				}
+				
 				/* Speech Design TE-sync indication */
 				if (test_bit(HFC_CHIP_PLXSD, &hc->chip) &&
 					dch->dev.D.protocol == ISDN_P_TE_S0) {
@@ -2572,7 +2585,7 @@ hfcmulti_interrupt(int intno, void *dev_id)
 	int			i;
 	// u_char bl1,bl2;
  	u_short			*plx_acc, wval;
-	u_char			e1_syncsta;
+	u_char			e1_syncsta, temp;
 	u_long			flags;
 
 	if (!hc) {
@@ -2651,6 +2664,17 @@ hfcmulti_interrupt(int intno, void *dev_id)
 						hc->syncronized = 1;
 					else
 						hc->syncronized = 0;
+				}
+				/* undocumented: status changes during read */
+				dch->state = HFC_inb_nodebug(hc, R_E1_RD_STA);
+				while (dch->state != (temp =
+					HFC_inb_nodebug(hc, R_E1_RD_STA))) {
+					if (debug & DEBUG_HFCMULTI_STATE)
+						printk(KERN_DEBUG "%s: reread "
+						    "STATE because %d!=%d\n",
+						    __FUNCTION__, temp,
+						    dch->state);
+					dch->state = temp; /* repeat */
 				}
  				dch->state = HFC_inb_nodebug(hc, R_E1_RD_STA)
 					& 0x7;
@@ -2863,6 +2887,8 @@ mode_hfcmulti(struct hfc_multi *hc, int ch, int protocol, int slot_tx,
 				hc->hw.a_st_ctrl0[hc->chan[ch].port] &=
 				    ((ch & 0x3) == 0)? ~V_B1_EN: ~V_B2_EN;
 				HFC_outb(hc, R_ST_SEL, hc->chan[ch].port);
+				/* undocumented: delay after R_ST_SEL */
+				udelay(1);
 				HFC_outb(hc, A_ST_CTRL0,
 				    hc->hw.a_st_ctrl0[hc->chan[ch].port]);
 			}
@@ -2963,6 +2989,8 @@ mode_hfcmulti(struct hfc_multi *hc, int ch, int protocol, int slot_tx,
 				hc->hw.a_st_ctrl0[hc->chan[ch].port] |=
 				    ((ch & 0x3) == 0) ? V_B1_EN : V_B2_EN;
 				HFC_outb(hc, R_ST_SEL, hc->chan[ch].port);
+				/* undocumented: delay after R_ST_SEL */
+				udelay(1);
 				HFC_outb(hc, A_ST_CTRL0,
 				    hc->hw.a_st_ctrl0[hc->chan[ch].port]);
 			}
@@ -3008,6 +3036,8 @@ mode_hfcmulti(struct hfc_multi *hc, int ch, int protocol, int slot_tx,
 					  ((ch&0x3) == 0) ? V_B1_EN : V_B2_EN;
 					HFC_outb(hc, R_ST_SEL,
 					  hc->chan[ch].port);
+					/* undocumented: delay after R_ST_SEL */
+					udelay(1);
 					HFC_outb(hc, A_ST_CTRL0,
 					  hc->hw.a_st_ctrl0[hc->chan[ch].port]);
 				}
@@ -3168,6 +3198,8 @@ hfcm_l1callback(struct dchannel *dch, u_int cmd)
 				    __FUNCTION__);
 		} else {
 			HFC_outb(hc, R_ST_SEL, hc->chan[dch->slot].port);
+			/* undocumented: delay after R_ST_SEL */
+			udelay(1);
 			HFC_outb(hc, A_ST_WR_STATE, V_ST_LD_STA | 3); /* F3 */
 			udelay(6); /* wait at least 5,21us */
 			HFC_outb(hc, A_ST_WR_STATE, 3);
@@ -3187,6 +3219,8 @@ hfcm_l1callback(struct dchannel *dch, u_int cmd)
 				    __FUNCTION__);
 		} else {
 			HFC_outb(hc, R_ST_SEL, hc->chan[dch->slot].port);
+			/* undocumented: delay after R_ST_SEL */
+			udelay(1);
 			HFC_outb(hc, A_ST_WR_STATE, V_ST_ACT*2);
 				/* deactivate */
 			if (test_bit(HFC_CHIP_PLXSD, &hc->chip)) {
@@ -3219,6 +3253,8 @@ hfcm_l1callback(struct dchannel *dch, u_int cmd)
 				    __FUNCTION__);
 		} else {
 			HFC_outb(hc, R_ST_SEL, hc->chan[dch->slot].port);
+			/* undocumented: delay after R_ST_SEL */
+			udelay(1);
 			HFC_outb(hc, A_ST_WR_STATE, 3 | 0x10); /* activate */
 			udelay(6); /* wait at least 5,21us */
 			HFC_outb(hc, A_ST_WR_STATE, 3); /* activate */
@@ -3296,6 +3332,8 @@ handle_dmsg(struct mISDNchannel *ch, struct sk_buff *skb)
 			} else {
 				HFC_outb(hc, R_ST_SEL,
 				    hc->chan[dch->slot].port);
+				/* undocumented: delay after R_ST_SEL */
+				udelay(1);
 				HFC_outb(hc, A_ST_WR_STATE, V_ST_LD_STA | 1);
 				    /* G1 */
 				udelay(6); /* wait at least 5,21us */
@@ -3326,6 +3364,8 @@ handle_dmsg(struct mISDNchannel *ch, struct sk_buff *skb)
 			} else {
 				HFC_outb(hc, R_ST_SEL,
 				    hc->chan[dch->slot].port);
+				/* undocumented: delay after R_ST_SEL */
+				udelay(1);
 				HFC_outb(hc, A_ST_WR_STATE, V_ST_ACT * 2);
 				    /* deactivate */
 				dch->state = 1;
@@ -3508,15 +3548,16 @@ channel_bctrl(struct bchannel *bch, struct mISDN_ctrl_req *cq)
 			| MISDN_CTRL_RX_OFF;
 		break;
 	case MISDN_CTRL_RX_OFF: /* turn off / on rx stream */
-		if (!(hc->chan[bch->slot].rx_off = !!cq->p1))
-		/* reset fifo on rx on */
-		HFC_outb_nodebug(hc, R_FIFO, (bch->slot << 1) | 1);
-		HFC_wait_nodebug(hc);
-		HFC_outb_nodebug(hc, R_INC_RES_FIFO,V_RES_F);
-		HFC_wait_nodebug(hc);
+		if (!(hc->chan[bch->slot].rx_off = !!cq->p1)) {
+			/* reset fifo on rx on */
+			HFC_outb_nodebug(hc, R_FIFO, (bch->slot << 1) | 1);
+			HFC_wait_nodebug(hc);
+			HFC_outb_nodebug(hc, R_INC_RES_FIFO,V_RES_F);
+			HFC_wait_nodebug(hc);
+		}
 		if (debug & DEBUG_HFCMULTI_MSG)
-			printk(KERN_DEBUG "%s: RX_OFF request (off=%d)\n",
-			    __FUNCTION__, hc->chan[bch->slot].rx_off);
+			printk(KERN_DEBUG "%s: RX_OFF request (nr=%d off=%d)\n",
+			    __FUNCTION__, bch->nr, hc->chan[bch->slot].rx_off);
 		break;
 	case MISDN_CTRL_HW_FEATURES: /* fill features structure */
 		if (debug & DEBUG_HFCMULTI_MSG)
@@ -3734,6 +3775,8 @@ ph_state_change(struct dchannel *dch)
 					hc->chan[ch].nt_timer = -1;
 					HFC_outb(hc, R_ST_SEL,
 					    hc->chan[ch].port);
+					/* undocumented: delay after R_ST_SEL */
+					udelay(1);
 					HFC_outb(hc, A_ST_WR_STATE, 4 |
 					    V_ST_LD_STA); /* G4 */
 					udelay(6); /* wait at least 5,21us */
@@ -3745,6 +3788,8 @@ ph_state_change(struct dchannel *dch)
 					    nt_t1_count[poll_timer] + 1;
 					HFC_outb(hc, R_ST_SEL,
 					    hc->chan[ch].port);
+					/* undocumented: delay after R_ST_SEL */
+					udelay(1);
 					/* allow G2 -> G3 transition */
 					HFC_outb(hc, A_ST_WR_STATE, 2 |
 					    V_SET_G2_G3);
@@ -3910,6 +3955,8 @@ hfcmulti_initmode(struct dchannel *dch)
 		pt = hc->chan[i].port;
 		/* select interface */
 		HFC_outb(hc, R_ST_SEL, pt);
+		/* undocumented: delay after R_ST_SEL */
+		udelay(1);
 		if (dch->dev.D.protocol == ISDN_P_NT_S0) {
 			if (debug & DEBUG_HFCMULTI_INIT)
 				printk(KERN_DEBUG 
