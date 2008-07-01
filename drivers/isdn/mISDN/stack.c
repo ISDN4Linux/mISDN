@@ -59,7 +59,7 @@ unlock:
 }
 
 static void
-send_socklist(struct mISDN_sock_list *sl, struct sk_buff *skb, gfp_t gfp_mask)
+send_socklist(struct mISDN_sock_list *sl, struct sk_buff *skb)
 {
 	struct hlist_node	*node;
 	struct sock		*sk;
@@ -70,7 +70,7 @@ send_socklist(struct mISDN_sock_list *sl, struct sk_buff *skb, gfp_t gfp_mask)
 		if (sk->sk_state != MISDN_BOUND)
 			continue;
 		if (!cskb)
-			cskb = skb_copy(skb, gfp_mask);
+			cskb = skb_copy(skb, GFP_KERNEL);
 		if (!cskb) {
 			printk(KERN_WARNING "%s no skb\n", __FUNCTION__);
 			break;
@@ -156,10 +156,12 @@ send_msg_to_layer(struct mISDNstack *st, struct sk_buff *skb)
 	if (lm == 0x1) {
 		if (!hlist_empty(&st->l1sock.head)) {
 			__net_timestamp(skb);
-			send_socklist(&st->l1sock, skb, GFP_KERNEL);
+			send_socklist(&st->l1sock, skb);
 		}
 		return st->layer1->send(st->layer1, skb);
 	} else if (lm == 0x2) {
+		if (!hlist_empty(&st->l1sock.head))
+			send_socklist(&st->l1sock, skb);
 		send_layer2(st, skb);
 		return 0;
 	} else if (lm == 0x4) {
@@ -330,10 +332,7 @@ l1_receive(struct mISDNchannel *ch, struct sk_buff *skb)
 {
 	if (!ch->st)
 		return -ENODEV;
-	if (!hlist_empty(&ch->st->l1sock.head)) {
-		__net_timestamp(skb);
-		send_socklist(&ch->st->l1sock, skb, GFP_ATOMIC);
-	}
+	__net_timestamp(skb);
 	_queue_message(ch->st, skb);
 	return 0;
 }
