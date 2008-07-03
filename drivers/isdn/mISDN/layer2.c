@@ -17,6 +17,10 @@
  */
 #include "fsm.h"
 #include "layer2.h"
+#ifdef MISDN_MEMDEBUG
+#include "memdbg.h"
+#endif
+
 
 static char *l2_revision = "$Revision: 2.0 $";
 

@@ -855,7 +855,6 @@ static int
 dsp_ctrl(struct mISDNchannel *ch, u_int cmd, void *arg)
 {
 	dsp_t		*dsp = container_of(ch, dsp_t, ch);
-	conference_t	*conf;
 	u_long		flags;
 	int		err = 0;
 

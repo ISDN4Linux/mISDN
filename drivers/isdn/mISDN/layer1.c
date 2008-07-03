@@ -22,6 +22,10 @@ static char *l1_revision = "$Revision: 2.0 $";
 #include <linux/mISDNhw.h>
 #include "layer1.h"
 #include "fsm.h"
+#ifdef MISDN_MEMDEBUG
+#include "memdbg.h"
+#endif
+
 
 static int *debug;
 

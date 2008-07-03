@@ -26,6 +26,9 @@
 #include <linux/pci.h>
 #include <linux/mISDNhw.h>
 #include <linux/isdn_compat.h>
+#ifdef MISDN_MEMDEBUG
+#include "../../mISDN/memdbg.h"
+#endif
 #include "hfcs_usb.h"
 
 #define DRIVER_NAME "hfcsusb"

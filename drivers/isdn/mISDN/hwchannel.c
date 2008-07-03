@@ -17,6 +17,9 @@
 
 #include <linux/module.h>
 #include <linux/mISDNhw.h>
+#ifdef MISDN_MEMDEBUG
+#include "memdbg.h"
+#endif
 
 static void
 dchannel_bh(struct work_struct *ws)

@@ -28,6 +28,9 @@
 #ifndef __OSLEC__
 #define __OSLEC__
 
+#ifdef MISDN_MEMDEBUG
+#include "memdbg.h"
+#endif
 
 #define EC_TYPE "OSLEC"
 

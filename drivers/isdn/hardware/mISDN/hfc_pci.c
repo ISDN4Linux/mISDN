@@ -30,9 +30,12 @@
 #include <linux/pci.h>
 #include <linux/delay.h>
 #include <linux/mISDNhw.h>
+#ifdef MISDN_MEMDEBUG
+#include "../../mISDN/memdbg.h"
+#endif
 
 #include "hfc_pci.h"
-#include <linux/isdn_compat.h>
+//#include <linux/isdn_compat.h>
 
 static const char *hfcpci_revision = "$Revision: 2.0 $";
 

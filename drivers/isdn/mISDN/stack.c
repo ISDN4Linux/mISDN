@@ -65,6 +65,7 @@ send_socklist(struct mISDN_sock_list *sl, struct sk_buff *skb)
 	struct sock		*sk;
 	struct sk_buff		*cskb = NULL;
 
+#warning KARSTEN: hier wird skb_copy im gelockten zustand aufgerufen (in_atomic == 1). das ist wohl wegen der sl-liste. das fÃhrt zu warnings
 	read_lock_bh(&sl->lock);
 	sk_for_each(sk, node, &sl->head) {
 		if (sk->sk_state != MISDN_BOUND)
