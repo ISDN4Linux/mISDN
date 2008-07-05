@@ -46,7 +46,7 @@ static mISDN_dsp_element_t dsp_hwec_p = {
 };
 mISDN_dsp_element_t *dsp_hwec = &dsp_hwec_p;
 
-void dsp_hwec_enable (dsp_t *dsp, const char *arg)
+void dsp_hwec_enable (struct dsp *dsp, const char *arg)
 {
 	int deftaps = 128,
 		len;
@@ -100,7 +100,7 @@ _do:
 	}
 }
 
-void dsp_hwec_disable (dsp_t *dsp)
+void dsp_hwec_disable (struct dsp *dsp)
 {
 	struct mISDN_ctrl_req	cq;
 

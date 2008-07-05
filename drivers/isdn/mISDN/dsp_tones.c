@@ -366,11 +366,11 @@ struct pattern {
  *
  * if tones has finished (e.g. knocking tone), dsp->tones is turned off
  */
-void dsp_tone_copy(dsp_t *dsp, u8 *data, int len)
+void dsp_tone_copy(struct dsp *dsp, u8 *data, int len)
 {
 	int index, count, start, num;
 	struct pattern *pat;
-	tone_t *tone = &dsp->tone;
+	struct dsp_tone *tone = &dsp->tone;
  
 	/* if we have no tone, we copy silence */
 	if (!tone->tone) {
@@ -428,7 +428,7 @@ void dsp_tone_copy(dsp_t *dsp, u8 *data, int len)
  *******************************/
 
 static void
-dsp_tone_hw_message(dsp_t *dsp, u8 *sample, int len)
+dsp_tone_hw_message(struct dsp *dsp, u8 *sample, int len)
 {
 	struct sk_buff *nskb;
 
@@ -451,8 +451,8 @@ dsp_tone_hw_message(dsp_t *dsp, u8 *sample, int len)
 void
 dsp_tone_timeout(void *arg)
 {
-	dsp_t *dsp = arg;
-	tone_t *tone = &dsp->tone;
+	struct dsp *dsp = arg;
+	struct dsp_tone *tone = &dsp->tone;
 	struct pattern *pat = (struct pattern *)tone->pattern;
 	int index = tone->index;
 
@@ -486,11 +486,11 @@ dsp_tone_timeout(void *arg)
  * timers.
  */
 int
-dsp_tone(dsp_t *dsp, int tone)
+dsp_tone(struct dsp *dsp, int tone)
 {
 	struct pattern *pat;
 	int i;
-	tone_t *tonet = &dsp->tone;
+	struct dsp_tone *tonet = &dsp->tone;
 
 	tonet->software = 0;
 	tonet->hardware = 0;

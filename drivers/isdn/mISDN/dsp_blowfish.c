@@ -367,7 +367,7 @@ static const u32 bf_sbox[256 * 4] = {
  * every block with 9 samples is encrypted
  */
 void
-dsp_bf_encrypt(dsp_t *dsp, u8 *data, int len)
+dsp_bf_encrypt(struct dsp *dsp, u8 *data, int len)
 {
 	int i = 0, j = dsp->bf_crypt_pos;
 	u8 *bf_data_in = dsp->bf_data_in;
@@ -455,7 +455,7 @@ dsp_bf_encrypt(dsp_t *dsp, u8 *data, int len)
  * every block with 9 bytes is decrypted
  */
 void
-dsp_bf_decrypt(dsp_t *dsp, u8 *data, int len)
+dsp_bf_decrypt(struct dsp *dsp, u8 *data, int len)
 {
 	int i = 0;
 	u8 j = dsp->bf_decrypt_in_pos;
@@ -595,7 +595,7 @@ encrypt_block(const u32 *P, const u32 *S, u32 *dst, u32 *src)
  * returns 0 if ok.
  */
 int
-dsp_bf_init(dsp_t *dsp, const u8 *key, uint keylen)
+dsp_bf_init(struct dsp *dsp, const u8 *key, uint keylen)
 {
 	short i, j, count;
 	u32 data[2], temp;
@@ -665,7 +665,7 @@ dsp_bf_init(dsp_t *dsp, const u8 *key, uint keylen)
  * turn encryption off
  */
 void
-dsp_bf_cleanup(dsp_t *dsp)
+dsp_bf_cleanup(struct dsp *dsp)
 {
 	dsp->bf_enable = 0;
 }

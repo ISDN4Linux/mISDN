@@ -2,11 +2,6 @@
  * see notice in hfc_multi.c
  */
 
-typedef unsigned char BYTE;
-typedef unsigned short WORD;
-typedef unsigned long DWORD;
-
-
 #define DEBUG_HFCMULTI_FIFO	0x00010000
 #define	DEBUG_HFCMULTI_CRC	0x00020000
 #define	DEBUG_HFCMULTI_INIT	0x00040000
@@ -26,7 +21,9 @@ typedef unsigned long DWORD;
  *       also registers are assigned differen for HFC-4s/8s and HFC-E1
  */
 
-// #define MAX_FRAME_SIZE	2048
+/*
+#define MAX_FRAME_SIZE	2048
+*/
 
 struct hfc_chan {
 	struct dchannel	*dch;	/* link if channel is a D-channel */
@@ -38,7 +35,7 @@ struct hfc_chan {
 	int		jitter;
 	u_long		cfg;	/* port configuration */
 	int		sync;	/* sync state (used by E1) */
-	DWORD		protocol; /* current protocol */
+	u_int		protocol; /* current protocol */
 	int		slot_tx; /* current pcm slot */
 	int		bank_tx; /* current pcm bank */
 	int		slot_rx;
@@ -53,17 +50,17 @@ struct hfc_chan {
 
 
 struct hfcm_hw {
-	BYTE	r_ctrl;
-	BYTE	r_irq_ctrl;
-	BYTE	r_cirm;
-	BYTE	r_ram_sz;
-	BYTE	r_pcm_md0;
-	BYTE	r_irqmsk_misc;
-	BYTE	r_dtmf;
-	BYTE	r_st_sync;
-	BYTE	r_sci_msk;
-	BYTE	r_tx0, r_tx1;
-	BYTE	a_st_ctrl0[8];
+	u_char	r_ctrl;
+	u_char	r_irq_ctrl;
+	u_char	r_cirm;
+	u_char	r_ram_sz;
+	u_char	r_pcm_md0;
+	u_char	r_irqmsk_misc;
+	u_char	r_dtmf;
+	u_char	r_st_sync;
+	u_char	r_sci_msk;
+	u_char	r_tx0, r_tx1;
+	u_char	a_st_ctrl0[8];
 	timer_t	timer;
 };
 
@@ -237,7 +234,8 @@ struct hfc_multi {
 #define	PLX_SYNC_O_EN		PLX_GPIO4
 #define PLX_DSP_RES_N		PLX_GPIO8
 /* GPIO4..8 Enable & Set to OUT, SLAVE_EN_N = 1 */
-#define PLX_GPIOC_INIT		( PLX_GPIO4_DIR | PLX_GPIO5_DIR | PLX_GPIO6_DIR | PLX_GPIO7_DIR | PLX_GPIO8_DIR | PLX_SLAVE_EN_N ) 
+#define PLX_GPIOC_INIT		(PLX_GPIO4_DIR | PLX_GPIO5_DIR | PLX_GPIO6_DIR \
+			| PLX_GPIO7_DIR | PLX_GPIO8_DIR | PLX_SLAVE_EN_N)
 
 /* PLX Interrupt Control/STATUS */
 #define PLX_INTCSR_LINTI1_ENABLE 0x01
@@ -655,8 +653,10 @@ struct hfc_multi {
 #define V_PCM_SYNC		0x04
 #define V_NEG_CLK		0x08
 #define V_HCLK			0x10
-// #define V_JATT_AUTO_DEL		0x20
-// #define V_JATT_AUTO		0x40
+/*
+#define V_JATT_AUTO_DEL		0x20
+#define V_JATT_AUTO		0x40
+*/
 #define V_JATT_OFF		0x80
 /* R_STATE */
 #define V_E1_STA		0x01
@@ -1092,7 +1092,7 @@ struct hfc_register_names {
 	{"R_TX_FR2",		0x2E},
 	{"R_JATT_ATT",		0x2F},
 	{"A_ST_xx_STA/R_RX_OFF", 0x30},
-	{"A_ST_CTRL0/R_SYNC_OUT",0x31},
+	{"A_ST_CTRL0/R_SYNC_OUT", 0x31},
 	{"A_ST_CTRL1",		0x32},
 	{"A_ST_CTRL2",		0x33},
 	{"A_ST_SQ_WR",		0x34},

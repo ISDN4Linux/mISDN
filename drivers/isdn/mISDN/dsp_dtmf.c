@@ -38,7 +38,7 @@ static char dtmf_matrix[4][4] =
 /* dtmf detection using goertzel algorithm
  * init function
  */
-void dsp_dtmf_goertzel_init(dsp_t *dsp)
+void dsp_dtmf_goertzel_init(struct dsp *dsp)
 {
 	dsp->dtmf.size = 0;
 	dsp->dtmf.lastwhat = '\0';
@@ -48,7 +48,7 @@ void dsp_dtmf_goertzel_init(dsp_t *dsp)
 
 /* check for hardware or software features
  */
-void dsp_dtmf_hardware(dsp_t *dsp)
+void dsp_dtmf_hardware(struct dsp *dsp)
 {
 	int hardware = 1;
 
@@ -105,7 +105,7 @@ void dsp_dtmf_hardware(dsp_t *dsp)
  */
 
 u8
-*dsp_dtmf_goertzel_decode(dsp_t *dsp, u8 *data, int len, int fmt)
+*dsp_dtmf_goertzel_decode(struct dsp *dsp, u8 *data, int len, int fmt)
 {
 	u8 what;
 	int size;

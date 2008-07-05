@@ -35,8 +35,8 @@
 /*#define PIPELINE_DEBUG*/
 
 extern mISDN_dsp_element_t *dsp_hwec;
-extern void dsp_hwec_enable          (dsp_t *dsp, const char *arg);
-extern void dsp_hwec_disable         (dsp_t *dsp);
+extern void dsp_hwec_enable          (struct dsp *dsp, const char *arg);
+extern void dsp_hwec_disable         (struct dsp *dsp);
 extern int  dsp_hwec_init            (void);
 extern void dsp_hwec_exit            (void);
 
@@ -173,7 +173,7 @@ void dsp_pipeline_module_exit (void)
 	printk(KERN_DEBUG "%s: dsp pipeline module exited\n", __FUNCTION__);
 }
 
-int dsp_pipeline_init (dsp_pipeline_t *pipeline)
+int dsp_pipeline_init (struct dsp_pipeline *pipeline)
 {
 	if (!pipeline)
 		return -EINVAL;
@@ -187,21 +187,21 @@ int dsp_pipeline_init (dsp_pipeline_t *pipeline)
 	return 0;
 }
 
-static inline void _dsp_pipeline_destroy (dsp_pipeline_t *pipeline)
+static inline void _dsp_pipeline_destroy (struct dsp_pipeline *pipeline)
 {
 	dsp_pipeline_entry_t *entry, *n;
 
 	list_for_each_entry_safe(entry, n, &pipeline->list, list) {
 		list_del(&entry->list);
 		if (entry->elem == dsp_hwec)
-			dsp_hwec_disable(container_of(pipeline, dsp_t, pipeline));
+			dsp_hwec_disable(container_of(pipeline, struct dsp, pipeline));
 		else
 			entry->elem->free(entry->p);
 		kfree(entry);
 	}
 }
 
-void dsp_pipeline_destroy (dsp_pipeline_t *pipeline)
+void dsp_pipeline_destroy (struct dsp_pipeline *pipeline)
 {
 
 	if (!pipeline)
@@ -214,7 +214,7 @@ void dsp_pipeline_destroy (dsp_pipeline_t *pipeline)
 #endif
 }
 
-int dsp_pipeline_build (dsp_pipeline_t *pipeline, const char *cfg)
+int dsp_pipeline_build (struct dsp_pipeline *pipeline, const char *cfg)
 {
 	int len, incomplete = 0, found = 0;
 	char *dup, *tok, *name, *args;
@@ -261,7 +261,7 @@ int dsp_pipeline_build (dsp_pipeline_t *pipeline, const char *cfg)
 
 				if (elem == dsp_hwec) {
 					/* This is a hack to make the hwec available as a pipeline module */
-					dsp_hwec_enable(container_of(pipeline, dsp_t, pipeline), args);
+					dsp_hwec_enable(container_of(pipeline, struct dsp, pipeline), args);
 					list_add_tail(&pipeline_entry->list, &pipeline->list);
 				} else {
 					pipeline_entry->p = elem->new(args);
@@ -301,7 +301,7 @@ _out:
 	return 0;
 }
 
-void dsp_pipeline_process_tx (dsp_pipeline_t *pipeline, u8 *data, int len)
+void dsp_pipeline_process_tx (struct dsp_pipeline *pipeline, u8 *data, int len)
 {
 	dsp_pipeline_entry_t *entry;
 
@@ -313,7 +313,7 @@ void dsp_pipeline_process_tx (dsp_pipeline_t *pipeline, u8 *data, int len)
 			entry->elem->process_tx(entry->p, data, len);
 }
 
-void dsp_pipeline_process_rx (dsp_pipeline_t *pipeline, u8 *data, int len)
+void dsp_pipeline_process_rx (struct dsp_pipeline *pipeline, u8 *data, int len)
 {
 	dsp_pipeline_entry_t *entry;
 

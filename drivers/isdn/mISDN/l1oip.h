@@ -9,7 +9,9 @@
 #define DEBUG_L1OIP_MSG		0x00080000
 
 /* enable to disorder received bchannels by sequence 2143658798... */
-//#define REORDER_DEBUG
+/*
+#define REORDER_DEBUG
+*/
 
 /* frames */
 #define L1OIP_MAX_LEN		2048		/* max packet size form l2 */
@@ -41,7 +43,7 @@ struct l1oip_chan {
 
 
 /* card structure */
-struct _l1oip_t {
+struct l1oip {
 	struct list_head        list;
 
 	/* card */
@@ -62,7 +64,6 @@ struct _l1oip_t {
 	struct timer_list 	timeout_tl;
 	int			timeout_on;
 	struct work_struct	workq;
-//	struct sk_buff_head	sendq;
 
 	/* socket */
 	struct socket 		*socket;	/* if set, socket is created */
@@ -81,8 +82,6 @@ struct _l1oip_t {
 	struct l1oip_chan	chan[128];	/* channel instances */
 };
 
-typedef struct _l1oip_t		l1oip_t;
-
 extern int l1oip_law_to_4bit(u8 *data, int len, u8 *result, u32 *state);
 extern int l1oip_4bit_to_law(u8 *data, int len, u8 *result);
 extern int l1oip_alaw_to_ulaw(u8 *data, int len, u8 *result);
@@ -90,4 +89,3 @@ extern int l1oip_ulaw_to_alaw(u8 *data, int len, u8 *result);
 extern void l1oip_4bit_free(void);
 extern int l1oip_4bit_alloc(int ulaw);
 
-	

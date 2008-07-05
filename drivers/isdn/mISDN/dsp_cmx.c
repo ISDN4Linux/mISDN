@@ -12,8 +12,8 @@
 /*
  * The process of adding and removing parties to/from a conference:
  *
- * There is a chain of conference_t which has one or more members in a chain
- * of conf_member_t.
+ * There is a chain of struct dsp_conf which has one or more members in a chain
+ * of struct dsp_conf_member.
  *
  * After a party is added, the conference is checked for hardware capability.
  * Also if a party is removed, the conference is checked again.
@@ -24,7 +24,7 @@
  * Depending on the change after removal or insertion of a party, hardware
  * commands are given.
  *
- * The current solution is stored within the conference_t entry.
+ * The current solution is stored within the struct dsp_conf entry.
  */
 
 /*
@@ -123,7 +123,7 @@
  *
  */
 
-// delay.h is required for hw_lock.h
+/* delay.h is required for hw_lock.h */
 
 #include <linux/delay.h>
 #include <linux/mISDNif.h>
@@ -135,17 +135,17 @@
  * by using conference even with two members
  */
 
-// #define CMX_CONF_DEBUG
+/* #define CMX_CONF_DEBUG */
 
-//#define CMX_DEBUG /* massive read/write pointer output */
-//#define CMX_TX_DEBUG /* massive read/write on tx-buffer with content */
+/*#define CMX_DEBUG * massive read/write pointer output */
+/*#define CMX_TX_DEBUG * massive read/write on tx-buffer with content */
 
 static inline int
 count_list_member(struct list_head *head)
 {
 	int			cnt = 0;
 	struct list_head	*m;
-		
+
 	list_for_each(m, head)
 		cnt++;
 	return(cnt);
@@ -155,11 +155,11 @@ count_list_member(struct list_head *head)
  * debug cmx memory structure
  */
 void
-dsp_cmx_debug(dsp_t *dsp)
+dsp_cmx_debug(struct dsp *dsp)
 {
-	conference_t	*conf;
-	conf_member_t	*member;
-	dsp_t		*odsp;
+	struct dsp_conf	*conf;
+	struct dsp_conf_member	*member;
+	struct dsp		*odsp;
 
 	printk(KERN_DEBUG "-----Current DSP\n");
 	list_for_each_entry(odsp, &dsp_ilist, list) {
@@ -190,13 +190,13 @@ dsp_cmx_debug(dsp_t *dsp)
 /*
  * search conference
  */
-static conference_t *
+static struct dsp_conf *
 dsp_cmx_search_conf(u32 id)
 {
-	conference_t *conf;
+	struct dsp_conf *conf;
 
 	if (!id) {
-		printk(KERN_WARNING "%s: conference ID is 0.\n", __FUNCTION__);
+		printk(KERN_WARNING "%s: conference ID is 0.\n", __func__);
 		return NULL;
 	}
 
@@ -213,28 +213,29 @@ dsp_cmx_search_conf(u32 id)
  * add member to conference
  */
 static int
-dsp_cmx_add_conf_member(dsp_t *dsp, conference_t *conf)
+dsp_cmx_add_conf_member(struct dsp *dsp, struct dsp_conf *conf)
 {
-	conf_member_t *member;
+	struct dsp_conf_member *member;
 
 	if (!conf || !dsp) {
-		printk(KERN_WARNING "%s: conf or dsp is 0.\n", __FUNCTION__);
+		printk(KERN_WARNING "%s: conf or dsp is 0.\n", __func__);
 		return -EINVAL;
 	}
 	if (dsp->member) {
-		printk(KERN_WARNING "%s: dsp is already member in a conf.\n", 
-			__FUNCTION__);
+		printk(KERN_WARNING "%s: dsp is already member in a conf.\n",
+			__func__);
 		return -EINVAL;
 	}
 
 	if (dsp->conf) {
-		printk(KERN_WARNING "%s: dsp is already in a conf.\n", 
-			__FUNCTION__);
+		printk(KERN_WARNING "%s: dsp is already in a conf.\n",
+			__func__);
 		return -EINVAL;
 	}
 
-	if (!(member = kzalloc(sizeof(conf_member_t), GFP_ATOMIC))) {
-		printk(KERN_ERR "kmalloc conf_member_t failed\n");
+	member = kzalloc(sizeof(struct dsp_conf_member), GFP_ATOMIC);
+	if (!member) {
+		printk(KERN_ERR "kmalloc struct dsp_conf_member failed\n");
 		return -ENOMEM;
 	}
 	member->dsp = dsp;
@@ -256,25 +257,25 @@ dsp_cmx_add_conf_member(dsp_t *dsp, conference_t *conf)
  * del member from conference
  */
 int
-dsp_cmx_del_conf_member(dsp_t *dsp)
+dsp_cmx_del_conf_member(struct dsp *dsp)
 {
-	conf_member_t *member;
+	struct dsp_conf_member *member;
 
 	if (!dsp) {
 		printk(KERN_WARNING "%s: dsp is 0.\n",
-			__FUNCTION__);
+			__func__);
 		return -EINVAL;
 	}
 
 	if (!dsp->conf) {
 		printk(KERN_WARNING "%s: dsp is not in a conf.\n",
-			__FUNCTION__);
+			__func__);
 		return -EINVAL;
 	}
 
 	if (list_empty(&dsp->conf->mlist)) {
 		printk(KERN_WARNING "%s: dsp has linked an empty conf.\n",
-			__FUNCTION__);
+			__func__);
 		return -EINVAL;
 	}
 
@@ -290,7 +291,7 @@ dsp_cmx_del_conf_member(dsp_t *dsp)
 	}
 	printk(KERN_WARNING
 	    "%s: dsp is not present in its own conf_meber list.\n",
-	    __FUNCTION__);
+	    __func__);
 
 	return -EINVAL;
 }
@@ -299,19 +300,20 @@ dsp_cmx_del_conf_member(dsp_t *dsp)
 /*
  * new conference
  */
-static conference_t
+static struct dsp_conf
 *dsp_cmx_new_conf(u32 id)
 {
-	conference_t *conf;
+	struct dsp_conf *conf;
 
 	if (!id) {
 		printk(KERN_WARNING "%s: id is 0.\n",
-		    __FUNCTION__);
+		    __func__);
 		return NULL;
 	}
 
-	if (!(conf = kzalloc(sizeof(conference_t), GFP_ATOMIC))) {
-		printk(KERN_ERR "kmalloc conference_t failed\n");
+	conf = kzalloc(sizeof(struct dsp_conf), GFP_ATOMIC);
+	if (!conf) {
+		printk(KERN_ERR "kmalloc struct dsp_conf failed\n");
 		return NULL;
 	}
 	INIT_LIST_HEAD(&conf->mlist);
@@ -327,17 +329,17 @@ static conference_t
  * del conference
  */
 int
-dsp_cmx_del_conf(conference_t *conf)
+dsp_cmx_del_conf(struct dsp_conf *conf)
 {
 	if (!conf) {
 		printk(KERN_WARNING "%s: conf is null.\n",
-		    __FUNCTION__);
+		    __func__);
 		return -EINVAL;
 	}
 
 	if (!list_empty(&conf->mlist)) {
 		printk(KERN_WARNING "%s: conf not empty.\n",
-		    __FUNCTION__);
+		    __func__);
 		return -EINVAL;
 	}
 	list_del(&conf->list);
@@ -351,7 +353,7 @@ dsp_cmx_del_conf(conference_t *conf)
  * send HW message to hfc card
  */
 static void
-dsp_cmx_hw_message(dsp_t *dsp, u32 message, u32 param1, u32 param2,
+dsp_cmx_hw_message(struct dsp *dsp, u32 message, u32 param1, u32 param2,
     u32 param3, u32 param4)
 {
 	struct mISDN_ctrl_req cq;
@@ -374,10 +376,10 @@ dsp_cmx_hw_message(dsp_t *dsp, u32 message, u32 param1, u32 param2,
  * be member of that conference.
  */
 void
-dsp_cmx_hardware(conference_t *conf, dsp_t *dsp)
+dsp_cmx_hardware(struct dsp_conf *conf, struct dsp *dsp)
 {
-	conf_member_t	*member, *nextm;
-	dsp_t		*finddsp;
+	struct dsp_conf_member	*member, *nextm;
+	struct dsp		*finddsp;
 	int		memb = 0, i, ii, i1, i2;
 	int		freeunits[8];
 	u_char		freeslots[256];
@@ -385,25 +387,22 @@ dsp_cmx_hardware(conference_t *conf, dsp_t *dsp)
 	    all_conf = 1;
 
 	/* dsp gets updated (no conf) */
-// printk("-----1\n");
 	if (!conf) {
-// printk("-----2\n");
 		if (!dsp)
 			return;
-// printk("-----3\n");
 		if (dsp_debug & DEBUG_DSP_CMX)
 			printk(KERN_DEBUG "%s checking dsp %s\n",
-			    __FUNCTION__, dsp->name);
-// printk("-----a\n");
-		one_member:
+			    __func__, dsp->name);
+one_member:
 		/* remove HFC conference if enabled */
 		if (dsp->hfc_conf >= 0) {
 			if (dsp_debug & DEBUG_DSP_CMX)
 				printk(KERN_DEBUG
 				    "%s removing %s from HFC conf %d "
-				    "because dsp is split\n", __FUNCTION__,
+				    "because dsp is split\n", __func__,
 				    dsp->name, dsp->hfc_conf);
-			dsp_cmx_hw_message(dsp, MISDN_CTRL_HFC_CONF_SPLIT, 0, 0, 0, 0);
+			dsp_cmx_hw_message(dsp, MISDN_CTRL_HFC_CONF_SPLIT,
+			    0, 0, 0, 0);
 			dsp->hfc_conf = -1;
 		}
 		/* process hw echo */
@@ -416,7 +415,7 @@ dsp_cmx_hardware(conference_t *conf, dsp_t *dsp)
 					printk(KERN_DEBUG "%s removing %s from"
 					    " PCM slot %d (TX) %d (RX) because"
 					    " dsp is split (no echo)\n",
-					    __FUNCTION__, dsp->name,
+					    __func__, dsp->name,
 					    dsp->pcm_slot_tx, dsp->pcm_slot_rx);
 				dsp_cmx_hw_message(dsp, MISDN_CTRL_HFC_PCM_DISC,
 				    0, 0, 0, 0);
@@ -439,10 +438,10 @@ dsp_cmx_hardware(conference_t *conf, dsp_t *dsp)
 			if (dsp_debug & DEBUG_DSP_CMX)
 				printk(KERN_DEBUG
 				    "%s refresh %s for echo using slot %d\n",
-				    __FUNCTION__, dsp->name,
+				    __func__, dsp->name,
 				    dsp->pcm_slot_tx);
-			dsp_cmx_hw_message(dsp, MISDN_CTRL_HFC_PCM_CONN, dsp->pcm_slot_tx,
-			    2, dsp->pcm_slot_rx, 2);
+			dsp_cmx_hw_message(dsp, MISDN_CTRL_HFC_PCM_CONN,
+			    dsp->pcm_slot_tx, 2, dsp->pcm_slot_rx, 2);
 			return;
 		}
 		/* ECHO: find slot */
@@ -470,7 +469,7 @@ dsp_cmx_hardware(conference_t *conf, dsp_t *dsp)
 			if (dsp_debug & DEBUG_DSP_CMX)
 				printk(KERN_DEBUG
 				    "%s no slot available for echo\n",
-				    __FUNCTION__);
+				    __func__);
 			/* no more slots available */
 			return;
 		}
@@ -482,25 +481,23 @@ dsp_cmx_hardware(conference_t *conf, dsp_t *dsp)
 		if (dsp_debug & DEBUG_DSP_CMX)
 			printk(KERN_DEBUG
 			    "%s assign echo for %s using slot %d\n",
-			    __FUNCTION__, dsp->name, dsp->pcm_slot_tx);
-		dsp_cmx_hw_message(dsp, MISDN_CTRL_HFC_PCM_CONN, dsp->pcm_slot_tx, 2,
-		    dsp->pcm_slot_rx, 2);
+			    __func__, dsp->name, dsp->pcm_slot_tx);
+		dsp_cmx_hw_message(dsp, MISDN_CTRL_HFC_PCM_CONN,
+		    dsp->pcm_slot_tx, 2, dsp->pcm_slot_rx, 2);
 		return;
 	}
 
-// printk("-----4\n");
 	/* conf gets updated (all members) */
 	if (dsp_debug & DEBUG_DSP_CMX)
 		printk(KERN_DEBUG "%s checking conference %d\n",
-		    __FUNCTION__, conf->id);
-// printk("-----5\n");
+		    __func__, conf->id);
 
 	if (list_empty(&conf->mlist)) {
 		printk(KERN_ERR "%s: conference whithout members\n",
-		    __FUNCTION__);
+		    __func__);
 		return;
 	}
-	member = list_entry(conf->mlist.next, conf_member_t, list);
+	member = list_entry(conf->mlist.next, struct dsp_conf_member, list);
 	same_hfc = member->dsp->features.hfc_id;
 	same_pcm = member->dsp->features.pcm_id;
 	/* check all members in our conference */
@@ -510,10 +507,9 @@ dsp_cmx_hardware(conference_t *conf, dsp_t *dsp)
 			if (dsp_debug & DEBUG_DSP_CMX)
 				printk(KERN_DEBUG
 				    "%s dsp %s cannot form a conf, because "
-				    "tx_mix is turned on\n", __FUNCTION__,
+				    "tx_mix is turned on\n", __func__,
 				    member->dsp->name);
-			conf_software:
-//			printk(KERN_NOTICE "****** SOFTWARE CONFERENCE\n");
+conf_software:
 			list_for_each_entry(member, &conf->mlist, list) {
 				dsp = member->dsp;
 				/* remove HFC conference if enabled */
@@ -523,10 +519,11 @@ dsp_cmx_hardware(conference_t *conf, dsp_t *dsp)
 						    "%s removing %s from HFC "
 						    "conf %d because not "
 						    "possible with hardware\n",
-						    __FUNCTION__,
+						    __func__,
 						    dsp->name,
 						    dsp->hfc_conf);
-					dsp_cmx_hw_message(dsp, MISDN_CTRL_HFC_CONF_SPLIT,
+					dsp_cmx_hw_message(dsp,
+					    MISDN_CTRL_HFC_CONF_SPLIT,
 					    0, 0, 0, 0);
 					dsp->hfc_conf = -1;
 				}
@@ -538,11 +535,12 @@ dsp_cmx_hardware(conference_t *conf, dsp_t *dsp)
 						    "%s from PCM slot %d (TX)"
 						    " slot %d (RX) because not"
 						    " possible with hardware\n",
-						    __FUNCTION__,
+						    __func__,
 						    dsp->name,
 						    dsp->pcm_slot_tx,
 						    dsp->pcm_slot_rx);
-					dsp_cmx_hw_message(dsp, MISDN_CTRL_HFC_PCM_DISC,
+					dsp_cmx_hw_message(dsp,
+					    MISDN_CTRL_HFC_PCM_DISC,
 					    0, 0, 0, 0);
 					dsp->pcm_slot_tx = -1;
 					dsp->pcm_bank_tx = -1;
@@ -559,7 +557,7 @@ dsp_cmx_hardware(conference_t *conf, dsp_t *dsp)
 			if (dsp_debug & DEBUG_DSP_CMX)
 				printk(KERN_DEBUG
 				    "%s dsp %s cannot form a conf, because "
-				    "echo is turned on\n", __FUNCTION__,
+				    "echo is turned on\n", __func__,
 				    member->dsp->name);
 			goto conf_software;
 		}
@@ -569,7 +567,7 @@ dsp_cmx_hardware(conference_t *conf, dsp_t *dsp)
 				printk(KERN_DEBUG
 				    "%s dsp %s cannot form a conf, because "
 				    "tx_mix is turned on\n",
-				    __FUNCTION__, member->dsp->name);
+				    __func__, member->dsp->name);
 			goto conf_software;
 		}
 		/* check if member changes volume at an not suppoted level */
@@ -578,7 +576,7 @@ dsp_cmx_hardware(conference_t *conf, dsp_t *dsp)
 				printk(KERN_DEBUG
 				    "%s dsp %s cannot form a conf, because "
 				    "tx_volume is changed\n",
-				    __FUNCTION__, member->dsp->name);
+				    __func__, member->dsp->name);
 			goto conf_software;
 		}
 		if (member->dsp->rx_volume) {
@@ -586,7 +584,7 @@ dsp_cmx_hardware(conference_t *conf, dsp_t *dsp)
 				printk(KERN_DEBUG
 				    "%s dsp %s cannot form a conf, because "
 				    "rx_volume is changed\n",
-				    __FUNCTION__, member->dsp->name);
+				    __func__, member->dsp->name);
 			goto conf_software;
 		}
 		/* check if tx-data turned on */
@@ -595,7 +593,7 @@ dsp_cmx_hardware(conference_t *conf, dsp_t *dsp)
 				printk(KERN_DEBUG
 				    "%s dsp %s cannot form a conf, because "
 				    "tx_data is turned on\n",
-				    __FUNCTION__, member->dsp->name);
+				    __func__, member->dsp->name);
 			goto conf_software;
 		}
 		/* check if pipeline exists */
@@ -603,7 +601,7 @@ dsp_cmx_hardware(conference_t *conf, dsp_t *dsp)
 			if (dsp_debug & DEBUG_DSP_CMX)
 				printk(KERN_DEBUG
 				    "%s dsp %s cannot form a conf, because "
-				    "pipeline exists\n", __FUNCTION__,
+				    "pipeline exists\n", __func__,
 				    member->dsp->name);
 			goto conf_software;
 		}
@@ -612,7 +610,7 @@ dsp_cmx_hardware(conference_t *conf, dsp_t *dsp)
 			if (dsp_debug & DEBUG_DSP_CMX)
 				printk(KERN_DEBUG "%s dsp %s cannot form a "
 				    "conf, because encryption is enabled\n",
-				    __FUNCTION__, member->dsp->name);
+				    __func__, member->dsp->name);
 			goto conf_software;
 		}
 		/* check if member is on a card with PCM support */
@@ -621,7 +619,7 @@ dsp_cmx_hardware(conference_t *conf, dsp_t *dsp)
 				printk(KERN_DEBUG
 				    "%s dsp %s cannot form a conf, because "
 				    "dsp has no PCM bus\n",
-				    __FUNCTION__, member->dsp->name);
+				    __func__, member->dsp->name);
 			goto conf_software;
 		}
 		/* check if relations are on the same PCM bus */
@@ -631,7 +629,7 @@ dsp_cmx_hardware(conference_t *conf, dsp_t *dsp)
 				    "%s dsp %s cannot form a conf, because "
 				    "dsp is on a different PCM bus than the "
 				    "first dsp\n",
-				    __FUNCTION__, member->dsp->name);
+				    __func__, member->dsp->name);
 			goto conf_software;
 		}
 		/* determine if members are on the same hfc chip */
@@ -656,10 +654,11 @@ dsp_cmx_hardware(conference_t *conf, dsp_t *dsp)
 		if (dsp_debug & DEBUG_DSP_CMX)
 			printk(KERN_DEBUG
 			    "%s conf %d cannot form a HW conference, "
-			    "because dsp is alone\n", __FUNCTION__, conf->id);
+			    "because dsp is alone\n", __func__, conf->id);
 		conf->hardware = 0;
 		conf->software = 0;
-		member = list_entry(conf->mlist.next, conf_member_t, list);
+		member = list_entry(conf->mlist.next, struct dsp_conf_member,
+			list);
 		dsp = member->dsp;
 		goto one_member;
 	}
@@ -672,18 +671,20 @@ dsp_cmx_hardware(conference_t *conf, dsp_t *dsp)
 
 	/* if we have only two members */
 	if (memb == 2) {
-		member = list_entry(conf->mlist.next, conf_member_t, list);
-		nextm = list_entry(member->list.next, conf_member_t, list);
+		member = list_entry(conf->mlist.next, struct dsp_conf_member,
+			list);
+		nextm = list_entry(member->list.next, struct dsp_conf_member,
+			list);
 		/* remove HFC conference if enabled */
 		if (member->dsp->hfc_conf >= 0) {
 			if (dsp_debug & DEBUG_DSP_CMX)
 				printk(KERN_DEBUG
 				    "%s removing %s from HFC conf %d because "
 				    "two parties require only a PCM slot\n",
-				    __FUNCTION__, member->dsp->name,
+				    __func__, member->dsp->name,
 				    member->dsp->hfc_conf);
-			dsp_cmx_hw_message(member->dsp, MISDN_CTRL_HFC_CONF_SPLIT,
-			    0, 0, 0, 0);
+			dsp_cmx_hw_message(member->dsp,
+			    MISDN_CTRL_HFC_CONF_SPLIT, 0, 0, 0, 0);
 			member->dsp->hfc_conf = -1;
 		}
 		if (nextm->dsp->hfc_conf >= 0) {
@@ -691,10 +692,10 @@ dsp_cmx_hardware(conference_t *conf, dsp_t *dsp)
 				printk(KERN_DEBUG
 				    "%s removing %s from HFC conf %d because "
 				    "two parties require only a PCM slot\n",
-				    __FUNCTION__, nextm->dsp->name,
+				    __func__, nextm->dsp->name,
 				    nextm->dsp->hfc_conf);
-			dsp_cmx_hw_message(nextm->dsp, MISDN_CTRL_HFC_CONF_SPLIT,
-			    0, 0, 0, 0);
+			dsp_cmx_hw_message(nextm->dsp,
+			    MISDN_CTRL_HFC_CONF_SPLIT, 0, 0, 0, 0);
 			nextm->dsp->hfc_conf = -1;
 		}
 		/* if members have two banks (and not on the same chip) */
@@ -723,7 +724,7 @@ dsp_cmx_hardware(conference_t *conf, dsp_t *dsp)
 					    "%s dsp %s & %s stay joined on "
 					    "PCM slot %d bank %d (TX) bank %d "
 					    "(RX) (on different chips)\n",
-					    __FUNCTION__,
+					    __func__,
 					    member->dsp->name,
 					    nextm->dsp->name,
 					    member->dsp->pcm_slot_tx,
@@ -761,7 +762,7 @@ dsp_cmx_hardware(conference_t *conf, dsp_t *dsp)
 				if (dsp_debug & DEBUG_DSP_CMX)
 					printk(KERN_DEBUG
 					    "%s no slot available for "
-					    "%s & %s\n", __FUNCTION__,
+					    "%s & %s\n", __func__,
 					    member->dsp->name,
 					    nextm->dsp->name);
 				/* no more slots available */
@@ -781,7 +782,7 @@ dsp_cmx_hardware(conference_t *conf, dsp_t *dsp)
 				    "%s adding %s & %s to new PCM slot %d "
 				    "(TX and RX on different chips) because "
 				    "both members have not same slots\n",
-				    __FUNCTION__,
+				    __func__,
 				    member->dsp->name,
 				    nextm->dsp->name,
 				    member->dsp->pcm_slot_tx);
@@ -816,7 +817,7 @@ dsp_cmx_hardware(conference_t *conf, dsp_t *dsp)
 					printk(KERN_DEBUG
 					    "%s dsp %s & %s stay joined on PCM "
 					    "slot %d (TX) %d (RX) on same chip "
-					    "or one bank PCM)\n", __FUNCTION__,
+					    "or one bank PCM)\n", __func__,
 					    member->dsp->name,
 					    nextm->dsp->name,
 					    member->dsp->pcm_slot_tx,
@@ -853,7 +854,7 @@ dsp_cmx_hardware(conference_t *conf, dsp_t *dsp)
 				if (dsp_debug & DEBUG_DSP_CMX)
 					printk(KERN_DEBUG
 					    "%s no slot available "
-					    "for %s & %s\n", __FUNCTION__,
+					    "for %s & %s\n", __func__,
 					    member->dsp->name,
 					    nextm->dsp->name);
 				/* no more slots available */
@@ -870,7 +871,7 @@ dsp_cmx_hardware(conference_t *conf, dsp_t *dsp)
 					printk(KERN_DEBUG
 					    "%s no slot available "
 					    "for %s & %s\n",
-					    __FUNCTION__,
+					    __func__,
 					    member->dsp->name,
 					    nextm->dsp->name);
 				/* no more slots available */
@@ -890,7 +891,7 @@ dsp_cmx_hardware(conference_t *conf, dsp_t *dsp)
 				    "%s adding %s & %s to new PCM slot %d "
 				    "(TX) %d (RX) on same chip or one bank "
 				    "PCM, because both members have not "
-				    "crossed slots\n", __FUNCTION__,
+				    "crossed slots\n", __func__,
 				    member->dsp->name,
 				    nextm->dsp->name,
 				    member->dsp->pcm_slot_tx,
@@ -919,7 +920,7 @@ dsp_cmx_hardware(conference_t *conf, dsp_t *dsp)
 			    "%s conference %d cannot be formed, because "
 			    "members are on different chips or not "
 			    "on HFC chip\n",
-			    __FUNCTION__, conf->id);
+			    __func__, conf->id);
 		goto conf_software;
 	}
 
@@ -937,12 +938,11 @@ dsp_cmx_hardware(conference_t *conf, dsp_t *dsp)
 	 * if there is an existing conference, but not all members have joined
 	 */
 	if (current_conf >= 0) {
-		join_members:
+join_members:
 		list_for_each_entry(member, &conf->mlist, list) {
 			/* join to current conference */
-			if (member->dsp->hfc_conf == current_conf) {
+			if (member->dsp->hfc_conf == current_conf)
 				continue;
-			}
 			/* get a free timeslot first */
 			memset(freeslots, 1, sizeof(freeslots));
 			list_for_each_entry(dsp, &dsp_ilist, list) {
@@ -979,13 +979,13 @@ dsp_cmx_hardware(conference_t *conf, dsp_t *dsp)
 					printk(KERN_DEBUG
 					    "%s conference %d cannot be formed,"
 					    " because no slot free\n",
-					    __FUNCTION__, conf->id);
+					    __func__, conf->id);
 				goto conf_software;
 			}
 			if (dsp_debug & DEBUG_DSP_CMX)
 				printk(KERN_DEBUG
 				    "%s changing dsp %s to HW conference "
-				    "%d slot %d\n", __FUNCTION__,
+				    "%d slot %d\n", __func__,
 				    member->dsp->name, current_conf, i);
 			/* assign free slot & set PCM & join conf */
 			member->dsp->pcm_slot_tx = i;
@@ -995,8 +995,8 @@ dsp_cmx_hardware(conference_t *conf, dsp_t *dsp)
 			member->dsp->hfc_conf = current_conf;
 			dsp_cmx_hw_message(member->dsp, MISDN_CTRL_HFC_PCM_CONN,
 			    i, 2, i, 2);
-			dsp_cmx_hw_message(member->dsp, MISDN_CTRL_HFC_CONF_JOIN,
-			    current_conf, 0, 0, 0);
+			dsp_cmx_hw_message(member->dsp,
+			    MISDN_CTRL_HFC_CONF_JOIN, current_conf, 0, 0, 0);
 		}
 		return;
 	}
@@ -1027,7 +1027,7 @@ dsp_cmx_hardware(conference_t *conf, dsp_t *dsp)
 			printk(KERN_DEBUG
 			    "%s conference %d cannot be formed, because "
 			    "no conference number free\n",
-			    __FUNCTION__, conf->id);
+			    __func__, conf->id);
 		goto conf_software;
 	}
 	/* join all members */
@@ -1041,11 +1041,11 @@ dsp_cmx_hardware(conference_t *conf, dsp_t *dsp)
  * conf_id == 0: split from conference if not already
  */
 int
-dsp_cmx_conf(dsp_t *dsp, u32 conf_id)
+dsp_cmx_conf(struct dsp *dsp, u32 conf_id)
 {
 	int err;
-	conference_t *conf;
-	conf_member_t	*member;
+	struct dsp_conf *conf;
+	struct dsp_conf_member	*member;
 
 	/* if conference doesn't change */
 	if (dsp->conf_id == conf_id)
@@ -1098,19 +1098,18 @@ dsp_cmx_conf(dsp_t *dsp, u32 conf_id)
 		if (!conf)
 			return -EINVAL;
 	} else if (!list_empty(&conf->mlist)) {
-		member = list_entry(conf->mlist.next, conf_member_t, list);
-		if (dsp->hdlc && !member->dsp->hdlc)
-		{
+		member = list_entry(conf->mlist.next, struct dsp_conf_member,
+			list);
+		if (dsp->hdlc && !member->dsp->hdlc) {
 			if (dsp_debug & DEBUG_DSP_CMX)
 				printk(KERN_DEBUG
-			 	   "cannot join transparent conference.\n");
+				    "cannot join transparent conference.\n");
 			return -EINVAL;
 		}
-		if (!dsp->hdlc && member->dsp->hdlc)
-		{
+		if (!dsp->hdlc && member->dsp->hdlc) {
 			if (dsp_debug & DEBUG_DSP_CMX)
 				printk(KERN_DEBUG
-			 	   "cannot join hdlc conference.\n");
+				    "cannot join hdlc conference.\n");
 			return -EINVAL;
 		}
 	}
@@ -1141,7 +1140,7 @@ dsp_cmx_conf(dsp_t *dsp, u32 conf_id)
  * audio data is received from card
  */
 void
-dsp_cmx_receive(dsp_t *dsp, struct sk_buff *skb)
+dsp_cmx_receive(struct dsp *dsp, struct sk_buff *skb)
 {
 	u8 *d, *p;
 	int len = skb->len;
@@ -1166,7 +1165,7 @@ dsp_cmx_receive(dsp_t *dsp, struct sk_buff *skb)
 	 * also add delay if requested by PH_SIGNAL
 	 */
 	if (dsp->rx_init) {
-		dsp->rx_init = 0; 
+		dsp->rx_init = 0;
 		if (dsp->features.unordered) {
 			dsp->rx_R = (hh->id & CMX_BUFF_MASK);
 			dsp->rx_W = (dsp->rx_R + dsp->cmx_delay)
@@ -1179,7 +1178,7 @@ dsp_cmx_receive(dsp_t *dsp, struct sk_buff *skb)
 	/* if frame contains time code, write directly */
 	if (dsp->features.unordered) {
 		dsp->rx_W = (hh->id & CMX_BUFF_MASK);
-		// printk(KERN_DEBUG "%s %08x\n", dsp->name, hh->id);
+		/* printk(KERN_DEBUG "%s %08x\n", dsp->name, hh->id); */
 	}
 	/*
 	 * if we underrun (or maybe overrun),
@@ -1251,10 +1250,10 @@ dsp_cmx_receive(dsp_t *dsp, struct sk_buff *skb)
  * send (mixed) audio data to card and control jitter
  */
 static void
-dsp_cmx_send_member(dsp_t *dsp, int len, s32 *c, int members)
+dsp_cmx_send_member(struct dsp *dsp, int len, s32 *c, int members)
 {
-	conference_t *conf = dsp->conf;
-	dsp_t *member, *other;
+	struct dsp_conf *conf = dsp->conf;
+	struct dsp *member, *other;
 	register s32 sample;
 	u8 *d, *p, *q, *o_q;
 	struct sk_buff *nskb, *txskb;
@@ -1360,9 +1359,8 @@ dsp_cmx_send_member(dsp_t *dsp, int len, s32 *c, int members)
 				t = (t+1) & CMX_BUFF_MASK;
 				r = (r+1) & CMX_BUFF_MASK;
 			}
-			if (r != rr) {
+			if (r != rr)
 				memset(d, dsp_silence, (rr-r)&CMX_BUFF_MASK);
-			}
 		/* -> if echo is enabled */
 		} else {
 			/*
@@ -1390,10 +1388,10 @@ dsp_cmx_send_member(dsp_t *dsp, int len, s32 *c, int members)
 #endif
 		/* "other" becomes other party */
 		other = (list_entry(conf->mlist.next,
-		    conf_member_t, list))->dsp;
+		    struct dsp_conf_member, list))->dsp;
 		if (other == member)
 			other = (list_entry(conf->mlist.prev,
-			    conf_member_t, list))->dsp;
+			    struct dsp_conf_member, list))->dsp;
 		o_q = other->rx_buff; /* received data */
 		o_rr = (other->rx_R + len) & CMX_BUFF_MASK;
 			/* end of rx-pointer */
@@ -1401,10 +1399,13 @@ dsp_cmx_send_member(dsp_t *dsp, int len, s32 *c, int members)
 			/* start rx-pointer at current read position*/
 		/* -> if echo is NOT enabled */
 		if (!dsp->echo) {
-//			if (o_r!=o_rr) printk(KERN_DEBUG
-//			    "receive data=0x%02x\n", o_q[o_r]);
-//			else
-//				printk(KERN_DEBUG "NO R!!!\n");
+#if 0
+			if (o_r != o_rr)
+				printk(KERN_DEBUG "receive data=0x%02x\n",
+					o_q[o_r]);
+			else
+				printk(KERN_DEBUG "NO R!!!\n");
+#endif
 			/*
 			 * -> copy other member's rx-data,
 			 * if tx-data is available, mix
@@ -1556,14 +1557,14 @@ struct timeval dsp_start_tv; /* time at start of calculation */
 s32	dsp_start_seconds = 10; /* how long to calibrate */
 s32	dsp_start_count; /* count calibration time */
 u32	dsp_poll_diff; /* calculated fix-comma corrected poll value */
-u32	dsp_count = 0; /* current fix-comma counter */ 
+u32	dsp_count; /* current fix-comma counter */
 
 void
 dsp_cmx_send(void *arg)
 {
-	conference_t *conf;
-	conf_member_t *member;
-	dsp_t *dsp;
+	struct dsp_conf *conf;
+	struct dsp_conf_member *member;
+	struct dsp *dsp;
 	int mustmix, members;
 	s32 mixbuffer[MAX_POLL+100], *c;
 	u8 *p, *q;
@@ -1604,9 +1605,8 @@ dsp_cmx_send(void *arg)
 				"timer=%d skew10seconds=%d\n", dsp_start_count,
 				celapsed, jelapsed, skew10seconds);
 		}
-		if (dsp_start_count >= dsp_start_seconds) {
+		if (dsp_start_count >= dsp_start_seconds)
 			dsp_start_seconds = 0;
-		}
 	}
 
 	/* calculate how much to send */
@@ -1615,7 +1615,10 @@ dsp_cmx_send(void *arg)
 	length = (s16)((dsp_count >> 16) - (u16)length);
 	if (length > MAX_POLL + 100)
 		length = MAX_POLL + 100;
-//	printk(KERN_DEBUG "len=%d dsp_count=0x%x.%04x dsp_poll_diff=0x%x.%04x\n", length, dsp_count >> 16, dsp_count & 0xffff, dsp_poll_diff >> 16, dsp_poll_diff & 0xffff);
+/* printk(KERN_DEBUG "len=%d dsp_count=0x%x.%04x dsp_poll_diff=0x%x.%04x\n",
+ length, dsp_count >> 16, dsp_count & 0xffff, dsp_poll_diff >> 16,
+ dsp_poll_diff & 0xffff);
+ */
 
 	/*
 	 * check if jitter needs to be checked
@@ -1645,7 +1648,7 @@ dsp_cmx_send(void *arg)
 		/* transmission required */
 		if (!mustmix) {
 			dsp_cmx_send_member(dsp, length, mixbuffer, members);
-				
+
 			/*
 			 * unused mixbuffer is given to prevent a
 			 * potential null-pointer-bug
@@ -1663,7 +1666,8 @@ dsp_cmx_send(void *arg)
 		if (conf->software && members > 2) {
 #endif
 			/* check for hdlc conf */
-			member = list_entry(conf->mlist.next, conf_member_t, list);
+			member = list_entry(conf->mlist.next,
+				struct dsp_conf_member, list);
 			if (member->dsp->hdlc)
 				continue;
 			/* mix all data */
@@ -1742,7 +1746,7 @@ dsp_cmx_send(void *arg)
 					printk(KERN_DEBUG
 					    "%s lowest rx_delay of %d bytes for"
 					    " dsp %s are now removed.\n",
-					    __FUNCTION__, delay,
+					    __func__, delay,
 					    dsp->name);
 				r = dsp->rx_R;
 				rr = (r + delay) & CMX_BUFF_MASK;
@@ -1772,7 +1776,7 @@ dsp_cmx_send(void *arg)
 					printk(KERN_DEBUG
 					    "%s lowest tx_delay of %d bytes for"
 					    " dsp %s are now removed.\n",
-					    __FUNCTION__, delay,
+					    __func__, delay,
 					    dsp->name);
 				r = dsp->tx_R;
 				rr = (r + delay) & CMX_BUFF_MASK;
@@ -1798,7 +1802,6 @@ dsp_cmx_send(void *arg)
 	}
 
 	/* restart timer, due to hang of CPU for too long */
-// old	if (dsp_spl_jiffies + dsp_tics < jiffies)
 	/* if next event would be in the past ... */
 	if ((s32)(dsp_spl_jiffies+dsp_tics-jiffies) < 0)
 		/* if next event would be in the past ... */
@@ -1817,11 +1820,11 @@ dsp_cmx_send(void *arg)
  * audio data is transmitted from upper layer to the dsp
  */
 void
-dsp_cmx_transmit(dsp_t *dsp, struct sk_buff *skb)
+dsp_cmx_transmit(struct dsp *dsp, struct sk_buff *skb)
 {
 	u_int w, ww;
 	u8 *d, *p;
-	int space; // todo: , l = skb->len;
+	int space; /* todo: , l = skb->len; */
 #ifdef CMX_TX_DEBUG
 	char debugbuf[256] = "";
 #endif
@@ -1872,10 +1875,10 @@ dsp_cmx_transmit(dsp_t *dsp, struct sk_buff *skb)
  * hdlc data is received from card and sent to all members.
  */
 void
-dsp_cmx_hdlc(dsp_t *dsp, struct sk_buff *skb)
+dsp_cmx_hdlc(struct dsp *dsp, struct sk_buff *skb)
 {
-	struct sk_buff *nskb;
-	conf_member_t *member;
+	struct sk_buff *nskb = NULL;
+	struct dsp_conf_member *member;
 
 	/* not if not active */
 	if (!dsp->b_active)
@@ -1891,7 +1894,8 @@ dsp_cmx_hdlc(dsp_t *dsp, struct sk_buff *skb)
 		if (dsp->pcm_slot_tx >= 0)
 			return;
 		if (dsp->echo)
-			if ((nskb = skb_clone(skb, GFP_ATOMIC))) {
+			nskb = skb_clone(skb, GFP_ATOMIC);
+			if (nskb) {
 				skb_queue_tail(&dsp->sendq, nskb);
 				schedule_work(&dsp->workq);
 			}
@@ -1902,7 +1906,8 @@ dsp_cmx_hdlc(dsp_t *dsp, struct sk_buff *skb)
 		return;
 	list_for_each_entry(member, &dsp->conf->mlist, list) {
 		if (dsp->echo || member->dsp != dsp) {
-			if ((nskb = skb_clone(skb, GFP_ATOMIC))) {
+			nskb = skb_clone(skb, GFP_ATOMIC);
+			if (nskb) {
 				skb_queue_tail(&dsp->sendq, nskb);
 				schedule_work(&dsp->workq);
 			}
