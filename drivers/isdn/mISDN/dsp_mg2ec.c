@@ -91,18 +91,18 @@ static void process_rx (void *p, u8 *data, int len)
 	dsp_cancel_rx(p, data, len);
 }
 
-static mISDN_dsp_element_arg_t args[] = {
+static struct mISDN_dsp_element_arg args[] = {
 	{ "deftaps", "128", "Set the number of taps of cancellation." },
 	{ "training", "0", "Enable echotraining (0: disabled, 1: enabled)." },
 };
 
-static mISDN_dsp_element_t dsp_mg2ec = {
+static struct mISDN_dsp_element dsp_mg2ec = {
 	.name = "mg2ec",
 	.new = new,
 	.free = free,
 	.process_tx = process_tx,
 	.process_rx = process_rx,
-	.num_args = sizeof(args) / sizeof(mISDN_dsp_element_arg_t),
+	.num_args = sizeof(args) / sizeof(struct mISDN_dsp_element_arg),
 	.args = args,
 };
 

@@ -1,4 +1,4 @@
-/* 
+/*
    Important constants for tuning mec2 echo can
  */
 #ifndef _MEC2_CONST_H
@@ -21,7 +21,8 @@
 #define RES_SUPR_FACTOR -20
 #define AGGRESSIVE_HCNTR 160	/* 20ms */
 
-/* Only use agressive echo cancellation for this amount of time then go back to normal cancelation */
+/* Only use agressive echo cancellation for this amount of time then
+   go back to normal cancelation */
 /* #define AGGRESSIVE_TIMELIMIT 150000 */ /* 8 = 1ms */
 
 #endif /* _MEC2_CONST_H */

@@ -44,8 +44,8 @@
 #define ECHO_STATE_ACTIVE		(5)
 #define AMI_MASK			0x55
 
-typedef struct _ec_prv_t {
-	struct echo_can_state * ec;
+struct ec_prv {
+	struct echo_can_state *ec;
 	uint16_t echotimer;
 	uint16_t echostate;
 	uint16_t echolastupdate;
@@ -55,14 +55,14 @@ typedef struct _ec_prv_t {
 	int  rxbuflen;
 	int  underrun;
 	int  overflow;
-} ec_prv_t;
+};
 
 static inline void *
 dsp_cancel_new(int deftaps, int training)
 {
-	ec_prv_t *p;
+	struct ec_prv *p;
 
-	p = kmalloc(sizeof(ec_prv_t), GFP_KERNEL);
+	p = kmalloc(sizeof(struct ec_prv), GFP_KERNEL);
 	if (!p)
 		goto err1;
 
@@ -87,7 +87,7 @@ err1:
 }
 
 static inline void
-dsp_cancel_free(ec_prv_t *p)
+dsp_cancel_free(struct ec_prv *p)
 {
 	if (!p)
 		return;
@@ -97,7 +97,7 @@ dsp_cancel_free(ec_prv_t *p)
 
 /** Processes one TX- and one RX-packet with echocancellation */
 static inline void
-echocancel_chunk(ec_prv_t *p, uint8_t *rxchunk,
+echocancel_chunk(struct ec_prv *p, uint8_t *rxchunk,
     uint8_t *txchunk, uint16_t size)
 {
 	int16_t rxlin, txlin;
@@ -133,12 +133,12 @@ echocancel_chunk(ec_prv_t *p, uint8_t *rxchunk,
 			rxlin = dsp_audio_law_to_s32[rxchunk[x]&0xff];
 			txlin = dsp_audio_law_to_s32[txchunk[x]&0xff];
 			rxlin = echo_can_update(p->ec, txlin, rxlin);
-			rxchunk[x] = dsp_audio_s16_to_law[rxlin &0xffff];
+			rxchunk[x] = dsp_audio_s16_to_law[rxlin&0xffff];
 		}
 	}
 }
 
-static inline void dsp_cancel_tx(ec_prv_t *p, u8 *data, int len)
+static inline void dsp_cancel_tx(struct ec_prv *p, u8 *data, int len)
 {
 	if (!p || !data)
 		return;
@@ -148,8 +148,9 @@ static inline void dsp_cancel_tx(ec_prv_t *p, u8 *data, int len)
 		p->txbuflen += len;
 	} else {
 		if (p->overflow >= 4000) {
-			printk("ECHOCAN: TXBUF Overflow:%d txbuflen:%d "
-			    "txcancellen:%d\n", p->overflow, p->txbuflen, len);
+			printk(KERN_DEBUG "ECHOCAN: TXBUF Overflow:%d "
+				"txbuflen:%d txcancellen:%d\n", p->overflow,
+				p->txbuflen, len);
 			p->overflow = 0;
 		}
 		p->overflow += len;
@@ -157,7 +158,7 @@ static inline void dsp_cancel_tx(ec_prv_t *p, u8 *data, int len)
 	}
 }
 
-static inline void dsp_cancel_rx(ec_prv_t *p, u8 *data, int len)
+static inline void dsp_cancel_rx(struct ec_prv *p, u8 *data, int len)
 {
 	if (!p || !data)
 		return;

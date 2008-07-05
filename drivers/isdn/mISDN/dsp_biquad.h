@@ -26,8 +26,7 @@
  *
  */
 
-typedef struct
-{
+struct biquad2_state {
 	int32_t gain;
 	int32_t a1;
 	int32_t a2;
@@ -36,9 +35,9 @@ typedef struct
 
 	int32_t z1;
 	int32_t z2;
-} biquad2_state_t;
+};
 
-static inline void biquad2_init(biquad2_state_t *bq,
+static inline void biquad2_init(struct biquad2_state *bq,
     int32_t gain, int32_t a1, int32_t a2, int32_t b1, int32_t b2)
 {
 	bq->gain = gain;
@@ -51,7 +50,7 @@ static inline void biquad2_init(biquad2_state_t *bq,
 	bq->z2 = 0;
 }
 
-static inline int16_t biquad2(biquad2_state_t *bq, int16_t sample)
+static inline int16_t biquad2(struct biquad2_state *bq, int16_t sample)
 {
 	int32_t y;
 	int32_t z0;

@@ -41,7 +41,7 @@ u8 dsp_silence;
 
 #define AMI_MASK 0x55
 
-static inline unsigned char linear2alaw (short int linear)
+static inline unsigned char linear2alaw(short int linear)
 {
 	int mask;
 	int seg;
@@ -66,12 +66,12 @@ static inline unsigned char linear2alaw (short int linear)
 			break;
 	}
 	/* Combine the sign, segment, and quantization bits. */
-	return  ((seg << 4) | 
+	return  ((seg << 4) |
 		 ((pcm_val >> ((seg)  ?  (seg + 3)  :  4)) & 0x0F)) ^ mask;
 }
 
 
-static inline short int alaw2linear (unsigned char alaw)
+static inline short int alaw2linear(unsigned char alaw)
 {
 	int i;
 	int seg;
@@ -87,7 +87,7 @@ static inline short int alaw2linear (unsigned char alaw)
 static inline short int ulaw2linear(unsigned char ulaw)
 {
 	short mu, e, f, y;
-	static short etab[] = {0,132,396,924,1980,4092,8316,16764};
+	static short etab[] = {0, 132, 396, 924, 1980, 4092, 8316, 16764};
 
 	mu = 255 - ulaw;
 	e = (mu & 0x70) / 16;
@@ -103,49 +103,48 @@ static inline short int ulaw2linear(unsigned char ulaw)
 
 static unsigned char linear2ulaw(short sample)
 {
-        static int exp_lut[256] = {
-                0,0,1,1,2,2,2,2,3,3,3,3,3,3,3,3,
-                4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,
-                5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,
-                5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,
-                6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,
-                6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,
-                6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,
-                6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,
-                7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,
-                7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,
-                7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,
-                7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,
-                7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,
-                7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,
-                7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,
-                7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7 };
-        int sign, exponent, mantissa;
-        unsigned char ulawbyte;
+	static int exp_lut[256] = {
+		0, 0, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 3, 3, 3, 3,
+		4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4,
+		5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5,
+		5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5,
+		6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6,
+		6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6,
+		6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6,
+		6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6,
+		7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7,
+		7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7,
+		7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7,
+		7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7,
+		7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7,
+		7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7,
+		7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7,
+		7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7};
+	int sign, exponent, mantissa;
+	unsigned char ulawbyte;
 
-        /* Get the sample into sign-magnitude. */
-        sign = (sample >> 8) & 0x80;          /* set aside the sign */
-        if (sign != 0)
-                sample = -sample;              /* get magnitude */
+	/* Get the sample into sign-magnitude. */
+	sign = (sample >> 8) & 0x80;	  /* set aside the sign */
+	if (sign != 0)
+		sample = -sample;	      /* get magnitude */
 
-        /* Convert from 16 bit linear to ulaw. */
-        sample = sample + BIAS;
-        exponent = exp_lut[(sample >> 7) & 0xFF];
-        mantissa = (sample >> (exponent + 3)) & 0x0F;
-        ulawbyte = ~(sign | (exponent << 4) | mantissa);
+	/* Convert from 16 bit linear to ulaw. */
+	sample = sample + BIAS;
+	exponent = exp_lut[(sample >> 7) & 0xFF];
+	mantissa = (sample >> (exponent + 3)) & 0x0F;
+	ulawbyte = ~(sign | (exponent << 4) | mantissa);
 
-        return ulawbyte;
+	return ulawbyte;
 }
 
 static int reverse_bits(int i)
 {
-	int z,j;
+	int z, j;
 	z = 0;
 
 	for (j = 0; j < 8; j++) {
-		if ((i & (1 << j)) != 0) {
+		if ((i & (1 << j)) != 0)
 			z |= 1 << (7 - j);
-		}
 	}
 	return z;
 }
@@ -154,18 +153,16 @@ static int reverse_bits(int i)
 void dsp_audio_generate_law_tables(void)
 {
 	int i;
-	for (i = 0; i < 256; i++) {
+	for (i = 0; i < 256; i++)
 		dsp_audio_alaw_to_s32[i] = alaw2linear(reverse_bits(i));
-	}
 
-        for (i = 0; i < 256; i++) {
-                dsp_audio_ulaw_to_s32[i] = ulaw2linear(reverse_bits(i));
-        }
+	for (i = 0; i < 256; i++)
+		dsp_audio_ulaw_to_s32[i] = ulaw2linear(reverse_bits(i));
 
 	for (i = 0; i < 256; i++) {
-		dsp_audio_alaw_to_ulaw[i] = 
+		dsp_audio_alaw_to_ulaw[i] =
 			linear2ulaw(dsp_audio_alaw_to_s32[i]);
-		dsp_audio_ulaw_to_alaw[i] = 
+		dsp_audio_ulaw_to_alaw[i] =
 			linear2alaw(dsp_audio_ulaw_to_s32[i]);
 	}
 }
@@ -178,13 +175,13 @@ dsp_audio_generate_s2law_table(void)
 	if (dsp_options & DSP_OPT_ULAW) {
 		/* generating ulaw-table */
 		for (i = -32768; i < 32768; i++) {
-			dsp_audio_s16_to_law[i & 0xffff] = 
+			dsp_audio_s16_to_law[i & 0xffff] =
 				reverse_bits(linear2ulaw(i));
 		}
 	} else {
 		/* generating alaw-table */
 		for (i = -32768; i < 32768; i++) {
-			dsp_audio_s16_to_law[i & 0xffff] = 
+			dsp_audio_s16_to_law[i & 0xffff] =
 				reverse_bits(linear2alaw(i));
 		}
 	}
@@ -210,7 +207,7 @@ dsp_audio_generate_seven(void)
 	u8 sorted_alaw[256];
 
 	/* generate alaw table, sorted by the linear value */
-        for (i = 0; i < 256; i++) {
+	for (i = 0; i < 256; i++) {
 		j = 0;
 		for (k = 0; k < 256; k++) {
 			if (dsp_audio_alaw_to_s32[k]
@@ -258,16 +255,17 @@ dsp_audio_generate_mix_table(void)
 	s32 sample;
 
 	i = 0;
-	while(i < 256) {
+	while (i < 256) {
 		j = 0;
-		while(j < 256) {
+		while (j < 256) {
 			sample = dsp_audio_law_to_s32[i];
 			sample += dsp_audio_law_to_s32[j];
 			if (sample > 32767)
 				sample = 32767;
 			if (sample < -32768)
 				sample = -32768;
-			dsp_audio_mix_law[(i<<8)|j] = dsp_audio_s16_to_law[sample & 0xffff];
+			dsp_audio_mix_law[(i<<8)|j] =
+				dsp_audio_s16_to_law[sample & 0xffff];
 			j++;
 		}
 		i++;
@@ -324,15 +322,23 @@ dsp_audio_generate_volume_changes(void)
 	int denum[] = { 100, 100, 100, 100, 100, 100, 100, 100 };
 
 	i = 0;
-	while(i < 256) {
-		dsp_audio_reduce8[i] = dsp_audio_s16_to_law[(dsp_audio_law_to_s32[i] * denum[7] / num[7] ) & 0xffff];
-		dsp_audio_reduce7[i] = dsp_audio_s16_to_law[(dsp_audio_law_to_s32[i] * denum[6] / num[6]) & 0xffff];
-		dsp_audio_reduce6[i] = dsp_audio_s16_to_law[(dsp_audio_law_to_s32[i] * denum[5] / num[5]) & 0xffff];
-		dsp_audio_reduce5[i] = dsp_audio_s16_to_law[(dsp_audio_law_to_s32[i] * denum[4] / num[4]) & 0xffff];
-		dsp_audio_reduce4[i] = dsp_audio_s16_to_law[(dsp_audio_law_to_s32[i] * denum[3] / num[3]) & 0xffff];
-		dsp_audio_reduce3[i] = dsp_audio_s16_to_law[(dsp_audio_law_to_s32[i] * denum[2] / num[2]) & 0xffff];
-		dsp_audio_reduce2[i] = dsp_audio_s16_to_law[(dsp_audio_law_to_s32[i] * denum[1] / num[1]) & 0xffff];
-		dsp_audio_reduce1[i] = dsp_audio_s16_to_law[(dsp_audio_law_to_s32[i] * denum[0] / num[0]) & 0xffff];
+	while (i < 256) {
+		dsp_audio_reduce8[i] = dsp_audio_s16_to_law[
+			(dsp_audio_law_to_s32[i] * denum[7] / num[7]) & 0xffff];
+		dsp_audio_reduce7[i] = dsp_audio_s16_to_law[
+			(dsp_audio_law_to_s32[i] * denum[6] / num[6]) & 0xffff];
+		dsp_audio_reduce6[i] = dsp_audio_s16_to_law[
+			(dsp_audio_law_to_s32[i] * denum[5] / num[5]) & 0xffff];
+		dsp_audio_reduce5[i] = dsp_audio_s16_to_law[
+			(dsp_audio_law_to_s32[i] * denum[4] / num[4]) & 0xffff];
+		dsp_audio_reduce4[i] = dsp_audio_s16_to_law[
+			(dsp_audio_law_to_s32[i] * denum[3] / num[3]) & 0xffff];
+		dsp_audio_reduce3[i] = dsp_audio_s16_to_law[
+			(dsp_audio_law_to_s32[i] * denum[2] / num[2]) & 0xffff];
+		dsp_audio_reduce2[i] = dsp_audio_s16_to_law[
+			(dsp_audio_law_to_s32[i] * denum[1] / num[1]) & 0xffff];
+		dsp_audio_reduce1[i] = dsp_audio_s16_to_law[
+			(dsp_audio_law_to_s32[i] * denum[0] / num[0]) & 0xffff];
 		sample = dsp_audio_law_to_s32[i] * num[0] / denum[0];
 		if (sample < -32768)
 			sample = -32768;
@@ -420,7 +426,7 @@ dsp_change_volume(struct sk_buff *skb, int volume)
 	ii = skb->len;
 	p = skb->data;
 	/* change volume */
-	while(i < ii) {
+	while (i < ii) {
 		*p = volume_change[*p];
 		p++;
 		i++;

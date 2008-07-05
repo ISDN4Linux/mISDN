@@ -47,8 +47,7 @@ static void echo_can_shutdown(void)
 }
 #endif
 
-struct echo_can_state
-{
+struct echo_can_state {
 	void	*pvOctvqeEchoCanceller;
 };
 

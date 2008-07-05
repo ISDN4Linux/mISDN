@@ -31,7 +31,7 @@
 #include "dsp_mec2.h"
 #include "dsp_cancel.h"
 
-static void* new (const char *arg)
+static void *new(const char *arg)
 {
 	int deftaps = 128,
 		training = 0,
@@ -72,49 +72,50 @@ static void* new (const char *arg)
 	}
 
 _out:
-	printk(KERN_DEBUG "%s: creating %s with deftaps=%d and training=%d\n", __FUNCTION__, EC_TYPE, deftaps, training);
+	printk(KERN_DEBUG "%s: creating %s with deftaps=%d and training=%d\n",
+		__func__, EC_TYPE, deftaps, training);
 	return dsp_cancel_new(deftaps, training);
 }
 
-static void free (void *p)
+static void free(void *p)
 {
 	dsp_cancel_free(p);
 }
 
-static void process_tx (void *p, u8 *data, int len)
+static void process_tx(void *p, u8 *data, int len)
 {
 	dsp_cancel_tx(p, data, len);
 }
 
-static void process_rx (void *p, u8 *data, int len)
+static void process_rx(void *p, u8 *data, int len)
 {
 	dsp_cancel_rx(p, data, len);
 }
 
-static mISDN_dsp_element_arg_t args[] = {
+static struct mISDN_dsp_element_arg args[] = {
 	{ "deftaps", "128", "Set the number of taps of cancellation." },
 	{ "training", "0", "Enable echotraining (0: disabled, 1: enabled)." },
 };
 
-static mISDN_dsp_element_t dsp_mec2 = {
+static struct mISDN_dsp_element dsp_mec2 = {
 	.name = "mec2",
 	.new = new,
 	.free = free,
 	.process_tx = process_tx,
 	.process_rx = process_rx,
-	.num_args = sizeof(args) / sizeof(mISDN_dsp_element_arg_t),
+	.num_args = sizeof(args) / sizeof(struct mISDN_dsp_element_arg),
 	.args = args,
 };
 
 #ifdef MODULE
-static int __init dsp_mec2_init (void)
+static int __init dsp_mec2_init(void)
 {
 	mISDN_dsp_element_register(&dsp_mec2);
 
 	return 0;
 }
 
-static void __exit dsp_mec2_exit (void)
+static void __exit dsp_mec2_exit(void)
 {
 	mISDN_dsp_element_unregister(&dsp_mec2);
 }

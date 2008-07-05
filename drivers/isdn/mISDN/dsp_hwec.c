@@ -1,5 +1,6 @@
 /*
- * dsp_hwec.c: builtin mISDN dsp pipeline element for enabling the hw echocanceller
+ * dsp_hwec.c:
+ * builtin mISDN dsp pipeline element for enabling the hw echocanceller
  *
  * Copyright (C) 2007, Nadi Sarrar
  *
@@ -30,30 +31,32 @@
 #include <linux/mISDNif.h>
 #include "core.h"
 #include "dsp.h"
+#include "dsp_hwec.h"
 
-static mISDN_dsp_element_arg_t args[] = {
+static struct mISDN_dsp_element_arg args[] = {
 	{ "deftaps", "128", "Set the number of taps of cancellation." },
 };
 
-static mISDN_dsp_element_t dsp_hwec_p = {
+static struct mISDN_dsp_element dsp_hwec_p = {
 	.name = "hwec",
 	.new = NULL,
 	.free = NULL,
 	.process_tx = NULL,
 	.process_rx = NULL,
-	.num_args = sizeof(args) / sizeof(mISDN_dsp_element_arg_t),
+	.num_args = sizeof(args) / sizeof(struct mISDN_dsp_element_arg),
 	.args = args,
 };
-mISDN_dsp_element_t *dsp_hwec = &dsp_hwec_p;
+struct mISDN_dsp_element *dsp_hwec = &dsp_hwec_p;
 
-void dsp_hwec_enable (struct dsp *dsp, const char *arg)
+void dsp_hwec_enable(struct dsp *dsp, const char *arg)
 {
 	int deftaps = 128,
 		len;
 	struct mISDN_ctrl_req	cq;
 
 	if (!dsp) {
-		printk(KERN_ERR "%s: failed to enable hwec: dsp is NULL\n", __FUNCTION__);
+		printk(KERN_ERR "%s: failed to enable hwec: dsp is NULL\n",
+			__func__);
 		return;
 	}
 
@@ -89,44 +92,46 @@ void dsp_hwec_enable (struct dsp *dsp, const char *arg)
 	}
 
 _do:
-	printk(KERN_DEBUG "%s: enabling hwec with deftaps=%d\n", __FUNCTION__, deftaps);
+	printk(KERN_DEBUG "%s: enabling hwec with deftaps=%d\n",
+		__func__, deftaps);
 	memset(&cq, 0, sizeof(cq));
 	cq.op = MISDN_CTRL_HFC_ECHOCAN_ON;
 	cq.p1 = deftaps;
 	if (!dsp->ch.peer->ctrl(&dsp->ch, CONTROL_CHANNEL, &cq)) {
 		printk(KERN_DEBUG "%s: CONTROL_CHANNEL failed\n",
-			__FUNCTION__);
+			__func__);
 		return;
 	}
 }
 
-void dsp_hwec_disable (struct dsp *dsp)
+void dsp_hwec_disable(struct dsp *dsp)
 {
 	struct mISDN_ctrl_req	cq;
 
 	if (!dsp) {
-		printk(KERN_ERR "%s: failed to disable hwec: dsp is NULL\n", __FUNCTION__);
+		printk(KERN_ERR "%s: failed to disable hwec: dsp is NULL\n",
+			__func__);
 		return;
 	}
 
-	printk(KERN_DEBUG "%s: disabling hwec\n", __FUNCTION__);
+	printk(KERN_DEBUG "%s: disabling hwec\n", __func__);
 	memset(&cq, 0, sizeof(cq));
 	cq.op = MISDN_CTRL_HFC_ECHOCAN_OFF;
 	if (!dsp->ch.peer->ctrl(&dsp->ch, CONTROL_CHANNEL, &cq)) {
 		printk(KERN_DEBUG "%s: CONTROL_CHANNEL failed\n",
-			__FUNCTION__);
+			__func__);
 		return;
 	}
 }
 
-int dsp_hwec_init (void)
+int dsp_hwec_init(void)
 {
 	mISDN_dsp_element_register(dsp_hwec);
 
 	return 0;
 }
 
-void dsp_hwec_exit (void)
+void dsp_hwec_exit(void)
 {
 	mISDN_dsp_element_unregister(dsp_hwec);
 }

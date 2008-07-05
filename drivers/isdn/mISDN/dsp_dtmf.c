@@ -54,28 +54,36 @@ void dsp_dtmf_hardware(struct dsp *dsp)
 
 	if (!dsp->features.hfc_dtmf)
 		hardware = 0;
-	
+
 	/* check for volume change */
 	if (dsp->tx_volume) {
 		if (dsp_debug & DEBUG_DSP_DTMF)
-			printk(KERN_DEBUG "%s dsp %s cannot do hardware DTMF, because tx_volume is changed\n", __FUNCTION__, dsp->name);
+			printk(KERN_DEBUG "%s dsp %s cannot do hardware DTMF, "
+				"because tx_volume is changed\n",
+				__func__, dsp->name);
 		hardware = 0;
 	}
 	if (dsp->rx_volume) {
 		if (dsp_debug & DEBUG_DSP_DTMF)
-			printk(KERN_DEBUG "%s dsp %s cannot do hardware DTMF, because rx_volume is changed\n", __FUNCTION__, dsp->name);
+			printk(KERN_DEBUG "%s dsp %s cannot do hardware DTMF, "
+				"because rx_volume is changed\n",
+				__func__, dsp->name);
 		hardware = 0;
 	}
 	/* check if encryption is enabled */
 	if (dsp->bf_enable) {
 		if (dsp_debug & DEBUG_DSP_DTMF)
-			printk(KERN_DEBUG "%s dsp %s cannot do hardware DTMF, because encryption is enabled\n", __FUNCTION__, dsp->name);
+			printk(KERN_DEBUG "%s dsp %s cannot do hardware DTMF, "
+				"because encryption is enabled\n",
+				__func__, dsp->name);
 		hardware = 0;
 	}
 	/* check if pipeline exists */
 	if (dsp->pipeline.inuse) {
 		if (dsp_debug & DEBUG_DSP_DTMF)
-			printk(KERN_DEBUG "%s dsp %s cannot do hardware DTMF, because pipeline exists.\n", __FUNCTION__, dsp->name);
+			printk(KERN_DEBUG "%s dsp %s cannot do hardware DTMF, "
+				"because pipeline exists.\n",
+				__func__, dsp->name);
 		hardware = 0;
 	}
 
@@ -126,29 +134,32 @@ again:
 	/* convert samples */
 	size = dsp->dtmf.size;
 	buf = dsp->dtmf.buffer;
-	switch(fmt) {
-		case 0: /* alaw */
-		case 1: /* ulaw */
-		while(size<DSP_DTMF_NPOINTS && len) {
+	switch (fmt) {
+	case 0: /* alaw */
+	case 1: /* ulaw */
+		while (size < DSP_DTMF_NPOINTS && len) {
 			buf[size++] = dsp_audio_law_to_s32[*data++];
 			len--;
 		}
 		break;
 
-		case 2: /* HFC coefficients */
-		default:
+	case 2: /* HFC coefficients */
+	default:
 		if (len < 64) {
 			if (len > 0)
-				printk(KERN_ERR "%s: coefficients have invalid size. (is=%d < must=%d)\n",
-					__FUNCTION__, len, 64);
+				printk(KERN_ERR "%s: coefficients have invalid "
+					"size. (is=%d < must=%d)\n",
+					__func__, len, 64);
 			return(dsp->dtmf.digits);
 		}
 		hfccoeff = (s32 *)data;
 		for (k = 0; k < NCOEFF; k++) {
 			sk2 = (*hfccoeff++)>>4;
 			sk = (*hfccoeff++)>>4;
-			if (sk>32767 || sk<-32767 || sk2>32767 || sk2<-32767)
-				printk(KERN_WARNING "DTMF-Detection overflow\n");
+			if (sk > 32767 || sk < -32767 || sk2 > 32767
+			    || sk2 < -32767)
+				printk(KERN_WARNING
+					"DTMF-Detection overflow\n");
 			/* compute |X(k)|**2 */
 			result[k] =
 				 (sk * sk) -
@@ -177,21 +188,21 @@ again:
 			sk2 = sk1;
 			sk1 = sk;
 		}
-		sk>>=8;
-		sk2>>=8;
-		if (sk>32767 || sk<-32767 || sk2>32767 || sk2<-32767)
+		sk >>= 8;
+		sk2 >>= 8;
+		if (sk > 32767 || sk < -32767 || sk2 > 32767 || sk2 < -32767)
 			printk(KERN_WARNING "DTMF-Detection overflow\n");
 		/* compute |X(k)|**2 */
 		result[k] =
-		   	 (sk * sk) -
-		   	 (((cos2pik[k] * sk) >> 15) * sk2) +
-		   	 (sk2 * sk2);
+			(sk * sk) -
+			(((cos2pik[k] * sk) >> 15) * sk2) +
+			(sk2 * sk2);
 	}
 
 	/* our (squared) coefficients have been calculated, we need to process
 	 * them.
 	 */
-	coefficients:
+coefficients:
 	tresh = 0;
 	for (i = 0; i < NCOEFF; i++) {
 		if (result[i] < 0)
@@ -231,9 +242,9 @@ again:
 		}
 		/* good level found. This is allowed only one time per group */
 		if (i < NCOEFF/2) {
-			/* lowgroup*/
+			/* lowgroup */
 			if (lowgroup >= 0) {
-				// Bad. Another tone found. */
+				/* Bad. Another tone found. */
 				lowgroup = -1;
 				break;
 			} else
@@ -241,7 +252,7 @@ again:
 		} else {
 			/* higroup */
 			if (highgroup >= 0) {
-				// Bad. Another tone found. */
+				/* Bad. Another tone found. */
 				highgroup = -1;
 				break;
 			} else
@@ -251,27 +262,30 @@ again:
 
 	/* get digit or null */
 	what = 0;
-	if (lowgroup>=0 && highgroup>=0)
+	if (lowgroup >= 0 && highgroup >= 0)
 		what = dtmf_matrix[lowgroup][highgroup];
 
 storedigit:
 	if (what && (dsp_debug & DEBUG_DSP_DTMF))
 		printk(KERN_DEBUG "DTMF what: %c\n", what);
 
-	if (dsp->dtmf.lastwhat!=what)
+	if (dsp->dtmf.lastwhat != what)
 		dsp->dtmf.count = 0;
 
 	/* the tone (or no tone) must remain 3 times without change */
 	if (dsp->dtmf.count == 2) {
-		if (dsp->dtmf.lastdigit!=what) {
+		if (dsp->dtmf.lastdigit != what) {
 			dsp->dtmf.lastdigit = what;
 			if (what) {
 				if (dsp_debug & DEBUG_DSP_DTMF)
 					printk(KERN_DEBUG "DTMF digit: %c\n",
 						what);
-				if ((strlen(dsp->dtmf.digits)+1) <sizeof(dsp->dtmf.digits)) {
-					dsp->dtmf.digits[strlen(dsp->dtmf.digits)+1] = '\0';
-					dsp->dtmf.digits[strlen(dsp->dtmf.digits)] = what;
+				if ((strlen(dsp->dtmf.digits)+1)
+					< sizeof(dsp->dtmf.digits)) {
+					dsp->dtmf.digits[strlen(
+						dsp->dtmf.digits)+1] = '\0';
+					dsp->dtmf.digits[strlen(
+						dsp->dtmf.digits)] = what;
 				}
 			}
 		}
