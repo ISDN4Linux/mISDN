@@ -101,15 +101,21 @@ int mISDN_dsp_element_register(struct mISDN_dsp_element *elem)
 	class_set_devdata(&entry->dev, elem);
 	snprintf(entry->dev.class_id, BUS_ID_SIZE, elem->name);
 	ret = class_device_register(&entry->dev);
+	if (ret) {
+		printk(KERN_ERR "%s: failed to register %s\n",
+			__func__, elem->name);
 		goto err1;
-	if (ret)
+	}
 
 	for (i = 0; i < (sizeof(element_attributes)
 		/ sizeof(struct class_device_attribute)); ++i)
 		ret = class_device_create_file(&entry->dev,
 				&element_attributes[i]);
-		if (ret)
+		if (ret) {
+			printk(KERN_ERR "%s: failed to create device file\n",
+				__func__);
 			goto err2;
+		}
 
 	list_add_tail(&entry->list, &dsp_elements);
 
@@ -141,6 +147,7 @@ void mISDN_dsp_element_unregister(struct mISDN_dsp_element *elem)
 				__func__, elem->name);
 			return;
 		}
+	printk(KERN_ERR "%s: element %s not in list.\n", __func__, elem->name);
 }
 EXPORT_SYMBOL(mISDN_dsp_element_unregister);
 
@@ -152,7 +159,9 @@ int dsp_pipeline_module_init(void)
 	if (ret)
 		return ret;
 
+#ifdef PIPELINE_DEBUG
 	printk(KERN_DEBUG "%s: dsp pipeline module initialized\n", __func__);
+#endif
 
 	dsp_hwec_init();
 
@@ -169,7 +178,7 @@ void dsp_pipeline_module_exit(void)
 
 	list_for_each_entry_safe(entry, n, &dsp_elements, list) {
 		list_del(&entry->list);
-		printk(KERN_DEBUG "%s: element was still registered: %s\n",
+		printk(KERN_WARNING "%s: element was still registered: %s\n",
 			__func__, entry->elem->name);
 		kfree(entry);
 	}

@@ -167,15 +167,10 @@ static spinlock_t HFClock;
 
 static void ph_state_change(struct dchannel *);
 
-extern const char *CardType[];
-
 static const char *hfcmulti_revision = "$Revision: 2.00 $";
 
-extern void ztdummy_extern_interrupt(void);
 static void (*hfc_interrupt)(void);
-extern void ztdummy_register_interrupt(void);
 static void (*register_interrupt)(void);
-extern int ztdummy_unregister_interrupt(void);
 static int (*unregister_interrupt)(void);
 static int interrupt_registered;
 
@@ -285,7 +280,7 @@ HFC_outb_pcimem(struct hfc_multi *hc, u_char reg, u_char val,
 HFC_outb_pcimem(struct hfc_multi *hc, u_char reg, u_char val)
 #endif
 {
-	writeb(val, (volatile u_char *)((hc->pci_membase)+reg));
+	writeb(val, (hc->pci_membase)+reg);
 }
 static u_char
 #ifdef HFC_REGISTER_DEBUG
@@ -294,7 +289,7 @@ HFC_inb_pcimem(struct hfc_multi *hc, u_char reg, const char *function, int line)
 HFC_inb_pcimem(struct hfc_multi *hc, u_char reg)
 #endif
 {
-	return readb((volatile u_char *)((hc->pci_membase)+reg));
+	return readb((hc->pci_membase)+reg);
 }
 static u_short
 #ifdef HFC_REGISTER_DEBUG
@@ -303,7 +298,7 @@ HFC_inw_pcimem(struct hfc_multi *hc, u_char reg, const char *function, int line)
 HFC_inw_pcimem(struct hfc_multi *hc, u_char reg)
 #endif
 {
-	return readw((volatile u_short *)((hc->pci_membase)+reg));
+	return readw((hc->pci_membase)+reg);
 }
 static void
 #ifdef HFC_REGISTER_DEBUG
@@ -312,7 +307,7 @@ HFC_wait_pcimem(struct hfc_multi *hc, const char *function, int line)
 HFC_wait_pcimem(struct hfc_multi *hc)
 #endif
 {
-	while (readb((volatile u_char *)((hc->pci_membase)+R_STATUS)) & V_BUSY);
+	while (readb((hc->pci_membase)+R_STATUS) & V_BUSY);
 }
 
 /* HFC_IO_MODE_REGIO */
@@ -335,7 +330,7 @@ HFC_inb_regio(struct hfc_multi *hc, u_char reg)
 #endif
 {
 	outb(reg, (hc->pci_iobase)+4);
-	return (inb((volatile u_int)hc->pci_iobase));
+	return (inb(hc->pci_iobase));
 }
 static u_short
 #ifdef HFC_REGISTER_DEBUG
@@ -345,7 +340,7 @@ HFC_inw_regio(struct hfc_multi *hc, u_char reg)
 #endif
 {
 	outb(reg, (hc->pci_iobase)+4);
-	return (inw((volatile u_int)hc->pci_iobase));
+	return (inw(hc->pci_iobase));
 }
 static void
 #ifdef HFC_REGISTER_DEBUG
@@ -355,7 +350,7 @@ HFC_wait_regio(struct hfc_multi *hc)
 #endif
 {
 	outb(R_STATUS, (hc->pci_iobase)+4);
-	while (inb((volatile u_int)hc->pci_iobase) & V_BUSY);
+	while (inb(hc->pci_iobase) & V_BUSY);
 }
 
 #ifdef HFC_REGISTER_DEBUG
@@ -474,20 +469,17 @@ void
 write_fifo_pcimem(struct hfc_multi *hc, u_char *data, int len)
 {
 	while (len>>2) {
-		writel(*(u32 *)data,
-			(volatile u_long *)((hc->pci_membase)+A_FIFO_DATA0));
+		writel(*(u32 *)data, (hc->pci_membase)+A_FIFO_DATA0);
 		data += 4;
 		len -= 4;
 	}
 	while (len>>1) {
-		writew(*(u16 *)data,
-			(volatile u_short *)((hc->pci_membase)+A_FIFO_DATA0));
+		writew(*(u16 *)data, (hc->pci_membase)+A_FIFO_DATA0);
 		data += 2;
 		len -= 2;
 	}
 	while (len) {
-		writeb(*data,
-			(volatile u_char *)((hc->pci_membase)+A_FIFO_DATA0));
+		writeb(*data, (hc->pci_membase)+A_FIFO_DATA0);
 		data++;
 		len--;
 	}
@@ -498,17 +490,17 @@ read_fifo_regio(struct hfc_multi *hc, u_char *data, int len)
 {
 	outb(A_FIFO_DATA0, (hc->pci_iobase)+4);
 	while (len>>2) {
-		*(u32 *)data = inl((volatile u_int)hc->pci_iobase);
+		*(u32 *)data = inl(hc->pci_iobase);
 		data += 4;
 		len -= 4;
 	}
 	while (len>>1) {
-		*(u16 *)data = inw((volatile u_int)hc->pci_iobase);
+		*(u16 *)data = inw(hc->pci_iobase);
 		data += 2;
 		len -= 2;
 	}
 	while (len) {
-		*data = inb((volatile u_int)hc->pci_iobase);
+		*data = inb(hc->pci_iobase);
 		data++;
 		len--;
 	}
@@ -520,19 +512,18 @@ read_fifo_pcimem(struct hfc_multi *hc, u_char *data, int len)
 {
 	while (len>>2) {
 		*(u32 *)data =
-			readl((volatile u32 *)((hc->pci_membase)+A_FIFO_DATA0));
+			readl((hc->pci_membase)+A_FIFO_DATA0);
 		data += 4;
 		len -= 4;
 	}
 	while (len>>1) {
 		*(u16 *)data =
-			readw((volatile u16 *)((hc->pci_membase)+A_FIFO_DATA0));
+			readw((hc->pci_membase)+A_FIFO_DATA0);
 		data += 2;
 		len -= 2;
 	}
 	while (len) {
-		*data = readb((volatile u8 *)((hc->pci_membase)
-				+A_FIFO_DATA0));
+		*data = readb((hc->pci_membase)+A_FIFO_DATA0);
 		data++;
 		len--;
 	}
@@ -589,7 +580,7 @@ readpcibridge(struct hfc_multi *hc, unsigned char address)
 	/* select local bridge port address by writing to CIP port */
 	/* data = HFC_inb(c, cipv); * was _io before */
 	outw(cipv, hc->pci_iobase + 4);
-	data = inb((volatile u_int)hc->pci_iobase);
+	data = inb(hc->pci_iobase);
 
 	/* restore R_CTRL for normal PCI read cycle speed */
 	HFC_outb(hc, R_CTRL, 0x0); /* was _io before */
@@ -5075,10 +5066,10 @@ hfcmulti_init(struct pci_dev *pdev, const struct pci_device_id *ent)
 		 * some dummy reads are required to
 		 * read valid DIP switch data
 		 */
-		dips = inb((volatile u_int)hc->pci_iobase);
-		dips = inb((volatile u_int)hc->pci_iobase);
-		dips = inb((volatile u_int)hc->pci_iobase);
-		dips = ~inb((volatile u_int)hc->pci_iobase) & 0x3F;
+		dips = inb(hc->pci_iobase);
+		dips = inb(hc->pci_iobase);
+		dips = inb(hc->pci_iobase);
+		dips = ~inb(hc->pci_iobase) & 0x3F;
 		outw(0x0, hc->pci_iobase + 4);
 		/* disable PCI auxbridge function */
 		HFC_outb(hc, R_BRG_PCM_CFG, V_PCM_CLK);
