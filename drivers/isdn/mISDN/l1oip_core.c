@@ -301,8 +301,8 @@ l1oip_socket_send(struct l1oip *hc, u8 localcodec, u8 channel, u32 chanmask,
 	if (debug & DEBUG_L1OIP_MSG)
 		printk(KERN_DEBUG "%s: resetting timer\n", __func__);
 
-	/* drop if we have no remote ip */
-	if (!hc->sin_remote.sin_addr.s_addr) {
+	/* drop if we have no remote ip or port */
+	if (!hc->sin_remote.sin_addr.s_addr || !hc->sin_remote.sin_port) {
 		if (debug & DEBUG_L1OIP_MSG)
 			printk(KERN_DEBUG "%s: dropping frame, because remote "
 				"IP is not set.\n", __func__);
@@ -638,14 +638,18 @@ multiframe:
 	} else /* only adjust timer */
 		hc->timeout_tl.expires = jiffies + L1OIP_TIMEOUT*HZ;
 
-	/* if ip changes */
-	if (hc->sin_remote.sin_addr.s_addr != sin->sin_addr.s_addr) {
+	/* if ip or source port changes */
+	if ((hc->sin_remote.sin_addr.s_addr != sin->sin_addr.s_addr)
+	 || (hc->sin_remote.sin_port != sin->sin_port)) {
 		if (debug & DEBUG_L1OIP_SOCKET)
-			printk(KERN_DEBUG "%s: remote IP address changes from "
-				"0x%08x to 0x%08x\n", __func__,
-				hc->sin_remote.sin_addr.s_addr,
-				sin->sin_addr.s_addr);
+			printk(KERN_DEBUG "%s: remote address changes from "
+				"0x%08x to 0x%08x (port %d to %d)\n", __func__,
+				ntohl(hc->sin_remote.sin_addr.s_addr),
+				ntohl(sin->sin_addr.s_addr),
+				ntohs(hc->sin_remote.sin_port),
+				ntohs(sin->sin_port));
 		hc->sin_remote.sin_addr.s_addr = sin->sin_addr.s_addr;
+		hc->sin_remote.sin_port = sin->sin_port;
 	}
 }
 
