@@ -1,8 +1,5 @@
-/* $Id: core.c,v 2.0 2007/06/06 10:43:45 kkeil Exp $
- *
- * Author	Karsten Keil <kkeil@novell.com>
- *
- * Copyright 2007  by Karsten Keil <kkeil@novell.com>
+/*
+ * Copyright 2008  by Karsten Keil <kkeil@novell.com>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -22,24 +19,21 @@
 #include <linux/mISDNif.h>
 #include "core.h"
 
-static char		*core_revision = "$Revision: 2.0 $";
-static char		*core_version = MISDNVERSION ;
-
 static u_int debug;
 
 #ifdef MODULE
 MODULE_AUTHOR("Karsten Keil");
 MODULE_LICENSE("GPL");
-module_param (debug, uint, S_IRUGO | S_IWUSR);
+module_param(debug, uint, S_IRUGO | S_IWUSR);
 #endif
 
 static LIST_HEAD(devices);
-static rwlock_t		device_lock = RW_LOCK_UNLOCKED;
+DEFINE_RWLOCK(device_lock);
 static u64		device_ids;
 #define MAX_DEVICE_ID	63
 
 static LIST_HEAD(Bprotocols);
-static rwlock_t		bp_lock = RW_LOCK_UNLOCKED;
+DEFINE_RWLOCK(bp_lock);
 
 struct mISDNdevice
 *get_mdevice(u_int id)
@@ -50,10 +44,10 @@ struct mISDNdevice
 	list_for_each_entry(dev, &devices, D.list)
 		if (dev->id == id) {
 			read_unlock(&device_lock);
-			return(dev);
+			return dev;
 		}
 	read_unlock(&device_lock);
-	return(NULL);
+	return NULL;
 }
 
 int
@@ -66,7 +60,7 @@ get_mdevice_count(void)
 	list_for_each_entry(dev, &devices, D.list)
 		cnt++;
 	read_unlock(&device_lock);
-	return(cnt);
+	return cnt;
 }
 
 static int
@@ -104,7 +98,6 @@ mISDN_register_device(struct mISDNdevice *dev, char *name)
 	write_unlock_irqrestore(&device_lock, flags);
 	return 0;
 }
-
 EXPORT_SYMBOL(mISDN_register_device);
 
 void
@@ -120,7 +113,6 @@ mISDN_unregister_device(struct mISDNdevice *dev) {
 	test_and_clear_bit(dev->id, (u_long *)&device_ids);
 	delete_stack(dev);
 }
-
 EXPORT_SYMBOL(mISDN_unregister_device);
 
 u_int
@@ -158,7 +150,7 @@ get_Bprotocol4id(u_int id)
 
 	if (id < ISDN_P_B_START || id > 63) {
 		printk(KERN_WARNING "%s id not in range  %d\n",
-		    __FUNCTION__, id);
+		    __func__, id);
 		return NULL;
 	}
 	m = 1 << (id & ISDN_P_B_MASK);
@@ -172,7 +164,7 @@ mISDN_register_Bprotocol(struct Bprotocol *bp)
 	struct Bprotocol	*old;
 
 	if (debug & DEBUG_CORE)
-		printk(KERN_DEBUG "%s: %s/%x\n", __FUNCTION__,
+		printk(KERN_DEBUG "%s: %s/%x\n", __func__,
 		    bp->name, bp->Bprotocols);
 	old = get_Bprotocol4mask(bp->Bprotocols);
 	if (old) {
@@ -186,7 +178,6 @@ mISDN_register_Bprotocol(struct Bprotocol *bp)
 	write_unlock_irqrestore(&bp_lock, flags);
 	return 0;
 }
-
 EXPORT_SYMBOL(mISDN_register_Bprotocol);
 
 void
@@ -195,37 +186,30 @@ mISDN_unregister_Bprotocol(struct Bprotocol *bp)
 	u_long	flags;
 
 	if (debug & DEBUG_CORE)
-		printk(KERN_DEBUG "%s: %s/%x\n", __FUNCTION__,
-		    bp->name, bp->Bprotocols);
+		printk(KERN_DEBUG "%s: %s/%x\n", __func__, bp->name,
+			bp->Bprotocols);
 	write_lock_irqsave(&bp_lock, flags);
 	list_del(&bp->list);
 	write_unlock_irqrestore(&bp_lock, flags);
 }
-
 EXPORT_SYMBOL(mISDN_unregister_Bprotocol);
-
-extern int	l1_init(u_int *);
-extern void	l1_cleanup(void);
-extern int 	Isdnl2_Init(u_int *);
-extern void	Isdnl2_cleanup(void);
 
 int
 mISDNInit(void)
 {
 	int	err;
 
-	printk(KERN_INFO "Modular ISDN core version (%s) revision (%s)\n",
-		core_version, core_revision);
+	printk(KERN_INFO "Modular ISDN core version %d.%d.%d\n",
+		MISDN_MAJOR_VERSION, MISDN_MINOR_VERSION, MISDN_RELEASE);
 #ifdef MISDN_MEMDEBUG
 	err = __mid_init();
 	if (err)
-		return(err);
+		return err;
 #endif
 	mISDN_initstack(&debug);
 	err = mISDN_inittimer(&debug);
-	if (err) {
+	if (err)
 		goto error;
-	}
 	err = l1_init(&debug);
 	if (err) {
 		mISDN_timer_cleanup();
@@ -250,18 +234,18 @@ error:
 	return err;
 }
 
-void mISDN_cleanup(void) {
+void mISDN_cleanup(void)
+{
 	misdn_sock_cleanup();
 	mISDN_timer_cleanup();
 	l1_cleanup();
 	Isdnl2_cleanup();
-	
-	if (!list_empty(&devices)) {
-		printk(KERN_ERR "%s devices still registered\n", __FUNCTION__);
-	}
-	if (!list_empty(&Bprotocols)) {
-		printk(KERN_ERR "%s Bprotocols still registered\n", __FUNCTION__);
-	}
+
+	if (!list_empty(&devices))
+		printk(KERN_ERR "%s devices still registered\n", __func__);
+
+	if (!list_empty(&Bprotocols))
+		printk(KERN_ERR "%s Bprotocols still registered\n", __func__);
 #ifdef MISDN_MEMDEBUG
 	__mid_cleanup();
 #endif

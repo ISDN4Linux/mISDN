@@ -1,11 +1,11 @@
-/* $Id: mISDNif.h,v 2.0 2007/06/06 15:39:31 kkeil Exp $
+/*
  *
  * Author	Karsten Keil <kkeil@novell.com>
  *
  * Copyright 2007  by Karsten Keil <kkeil@novell.com>
  *
  * This code is free software; you can redistribute it and/or modify
- * it under the terms of the GNU LESSER GENERAL PUBLIC LICENSE 
+ * it under the terms of the GNU LESSER GENERAL PUBLIC LICENSE
  * version 2.1 as published by the Free Software Foundation.
  *
  * This code is distributed in the hope that it will be useful,
@@ -39,22 +39,13 @@
 #define	MISDN_MINOR_VERSION	0
 #define MISDN_RELEASE		16
 
-#define MISDN_REVISION		"$Revision: 2.0 $"
-#define MISDN_DATE		"$Date: 2007/06/05 15:39:31 $"
-
-
-#define MISDN_MSG_STATS
-
-/* collect some statistics about the message queues */
-//#define MISDN_MSG_STATS
-
 /* primitives for information exchange
  * generell format
  * <16  bit  0 >
  * <8  bit command>
  *    BIT 8 = 1 LAYER private
  *    BIT 7 = 1 answer
- *    BIT 6 = 1 DATA 
+ *    BIT 6 = 1 DATA
  * <8  bit target layer mask>
  *
  * Layer = 00 is reserved for general commands
@@ -196,7 +187,7 @@
 #define L1_SIGNAL_SLIP_RX	0x0020
 #define L1_SIGNAL_SLIP_TX	0x0021
 
-/* 
+/*
  * protocol ids
  * D channel 1-31
  * B channel 33 - 63
@@ -209,7 +200,7 @@
 #define ISDN_P_TE_E1		0x03
 #define ISDN_P_NT_E1  		0x04
 #define ISDN_P_LAPD_TE		0x10
-#define	ISDN_P_LAPD_NT		0x11	
+#define	ISDN_P_LAPD_NT		0x11
 
 #define ISDN_P_B_MASK		0x1f
 #define ISDN_P_B_START		0x20
@@ -356,10 +347,10 @@ struct mISDN_ctrl_req {
 #define DEBUG_L2_TEI		0x00100000
 #define DEBUG_L2_TEIFSM		0x00200000
 #define DEBUG_TIMER		0x01000000
- 
+
 #define mISDN_HEAD_P(s)		((struct mISDNhead *)&s->cb[0])
-#define mISDN_HEAD_PRIM(s)	((struct mISDNhead *)&s->cb[0])->prim
-#define mISDN_HEAD_ID(s)	((struct mISDNhead *)&s->cb[0])->id
+#define mISDN_HEAD_PRIM(s)	(((struct mISDNhead *)&s->cb[0])->prim)
+#define mISDN_HEAD_ID(s)	(((struct mISDNhead *)&s->cb[0])->id)
 
 /* socket states */
 #define MISDN_OPEN	1
@@ -473,7 +464,7 @@ _alloc_mISDN_skb(u_int prim, u_int id, u_int len, void *dp, gfp_t gfp_mask)
 	hh->prim = prim;
 	hh->id = id;
 	return skb;
-}	
+}
 
 static inline void
 _queue_data(struct mISDNchannel *ch, u_int prim,

@@ -1,9 +1,8 @@
 /*
- * $Id: layer1.c,v 2.0 2007/06/08 10:43:45 kkeil Exp $
  *
  * Author	Karsten Keil <kkeil@novell.com>
  *
- * Copyright 2007  by Karsten Keil <kkeil@novell.com>
+ * Copyright 2008  by Karsten Keil <kkeil@novell.com>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -16,7 +15,6 @@
  *
  */
 
-static char *l1_revision = "$Revision: 2.0 $";
 
 #include <linux/module.h>
 #include <linux/mISDNhw.h>
@@ -41,8 +39,7 @@ struct layer1 {
 #define TIMER3_VALUE 7000
 
 static
-struct Fsm l1fsm_s =
-{NULL, 0, 0, NULL, NULL};
+struct Fsm l1fsm_s = {NULL, 0, 0, NULL, NULL};
 
 enum {
 	ST_L1_F2,
@@ -146,7 +143,7 @@ l1_power_up_s(struct FsmInst *fi, int event, void *arg)
 
 	if (test_bit(FLG_L1_ACTIVATING, &l1->Flags)) {
 		mISDN_FsmChangeState(fi, ST_L1_F4);
-		l1->dcb(l1->dch,INFO3_P8);
+		l1->dcb(l1->dch, INFO3_P8);
 	} else
 		mISDN_FsmChangeState(fi, ST_L1_F3);
 }
@@ -317,7 +314,7 @@ l1_event(struct layer1 *l1, u_int event)
 
 	if (!l1)
 		return -EINVAL;
-	switch(event) {
+	switch (event) {
 	case HW_RESET_IND:
 		mISDN_FsmEvent(&l1->l1m, EV_RESET_IND, NULL);
 		break;
@@ -359,7 +356,7 @@ l1_event(struct layer1 *l1, u_int event)
 	default:
 		if (*debug & DEBUG_L1)
 			printk(KERN_DEBUG "%s %x unhandled\n",
-			    __FUNCTION__, event);
+			    __func__, event);
 		err = -EINVAL;
 	}
 	return err;
@@ -370,7 +367,8 @@ int
 create_l1(struct dchannel *dch, dchannel_l1callback *dcb) {
 	struct layer1	*nl1;
 
-	if (!(nl1 = kzalloc(sizeof(struct layer1), GFP_ATOMIC))) {
+	nl1 = kzalloc(sizeof(struct layer1), GFP_ATOMIC);
+	if (!nl1) {
 		printk(KERN_ERR "kmalloc struct layer1 failed\n");
 		return -ENOMEM;
 	}
@@ -394,7 +392,6 @@ int
 l1_init(u_int *deb)
 {
 	debug = deb;
-	printk(KERN_INFO "mISDN L1 driver %s\n", l1_revision);
 	l1fsm_s.state_count = L1S_STATE_COUNT;
 	l1fsm_s.event_count = L1_EVENT_COUNT;
 	l1fsm_s.strEvent = strL1Event;

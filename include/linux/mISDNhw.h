@@ -1,10 +1,10 @@
-/* $Id: mISDNhw.h,v 1.0 2007/06/06 10:43:45 kkeil Exp $
+/*
  *
  * Author	Karsten Keil <kkeil@novell.com>
  *
  *   Basic declarations for the mISDN HW channels
  *
- * Copyright 2007  by Karsten Keil <kkeil@novell.com>
+ * Copyright 2008  by Karsten Keil <kkeil@novell.com>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -22,7 +22,7 @@
 #include <linux/mISDNif.h>
 #include <linux/timer.h>
 
-/* 
+/*
  * HW DEBUG 0xHHHHGGGG
  * H - hardware driver specific bits
  * G - for all drivers
@@ -49,8 +49,8 @@
 #define FLG_ACTIVE		6	/* channel is activated */
 #define FLG_BUSY_TIMER		7
 /* channel type */
-//#define FLG_DCHANNEL		8	/* channel is D-channel */
-//#define FLG_BCHANNEL		9	/* channel is B-channel */
+#define FLG_DCHANNEL		8	/* channel is D-channel */
+#define FLG_BCHANNEL		9	/* channel is B-channel */
 #define FLG_ECHANNEL		10	/* channel is E-channel */
 #define FLG_TRANSPARENT		12	/* channel use transparent data */
 #define FLG_HDLC		13	/* channel use hdlc data */
@@ -72,14 +72,14 @@
 #define FLG_LL_CONN		24
 #define FLG_DTMFSEND		25
 
-/* workq events */ 
+/* workq events */
 #define FLG_RECVQUEUE		30
 #define	FLG_PHCHANGE		31
 
 #define schedule_event(s, ev)	do { \
 					test_and_set_bit(ev, &((s)->Flags)); \
 					schedule_work(&((s)->workq)); \
-				} while(0)
+				} while (0)
 
 struct dchannel {
 	struct mISDNdevice	dev;
