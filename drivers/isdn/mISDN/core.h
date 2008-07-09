@@ -1,6 +1,14 @@
-/* $Id: core.h,v 2.0 2007/06/06 15:25:06 kkeil Exp $
+/*
+ * Copyright 2008  by Karsten Keil <kkeil@novell.com>
  *
- * This file is (c) under GPL version 2
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
  *
  */
 
@@ -40,18 +48,12 @@ extern int			get_mdevice_count(void);
 #define MGR_OPT_USER		24
 #define MGR_OPT_NETWORK		25
 
-static inline void
-set_address(struct mISDNchannel *ch, u_int sapi, u_int tei)
-{
-	ch->addr = sapi | (tei <<8);
-}
-
 extern int	connect_Bstack(struct mISDNdevice *, struct mISDNchannel *,
-                    u_int, struct sockaddr_mISDN *);
+			u_int, struct sockaddr_mISDN *);
 extern int	connect_layer1(struct mISDNdevice *, struct mISDNchannel *,
-                    u_int, struct sockaddr_mISDN *);
+			u_int, struct sockaddr_mISDN *);
 extern int	create_l2entity(struct mISDNdevice *, struct mISDNchannel *,
-                    u_int, struct sockaddr_mISDN *);
+			u_int, struct sockaddr_mISDN *);
 
 extern int	create_stack(struct mISDNdevice *);
 extern int	create_teimanager(struct mISDNdevice *);
@@ -70,5 +72,10 @@ struct Bprotocol	*get_Bprotocol4id(u_int);
 
 extern int	mISDN_inittimer(u_int *);
 extern void	mISDN_timer_cleanup(void);
+
+extern int	l1_init(u_int *);
+extern void	l1_cleanup(void);
+extern int 	Isdnl2_Init(u_int *);
+extern void	Isdnl2_cleanup(void);
 
 #endif

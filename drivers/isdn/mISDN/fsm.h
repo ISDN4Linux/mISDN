@@ -1,6 +1,19 @@
-/* $Id: fsm.h,v 1.2 2004/01/30 23:46:37 keil Exp $
+/*
  *
- * This file is (c) under GNU PUBLIC LICENSE
+ * Author       Karsten Keil <kkeil@novell.com>
+ *
+ * Thanks to    Jan den Ouden
+ *              Fritz Elfert
+ * Copyright 2008  by Karsten Keil <kkeil@novell.com>
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
  *
  */
 
@@ -13,7 +26,7 @@
 
 struct FsmInst;
 
-typedef void (* FSMFNPTR)(struct FsmInst *, int, void *);
+typedef void (*FSMFNPTR)(struct FsmInst *, int, void *);
 
 struct Fsm {
 	FSMFNPTR *jumpmatrix;

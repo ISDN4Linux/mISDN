@@ -1,6 +1,4 @@
 /*
- * $Id: hfc_pci.h,v 1.3 2003/06/21 21:39:54 kkeil Exp $
- *
  *  specific defines for CCD's HFC 2BDS0 PCI chips
  *
  * Author     Werner Cornelius (werner@isdn4linux.de)
@@ -31,24 +29,17 @@
 #define HFCPCI_BTRANS_MAX	256
 #define HFCPCI_BTRANS_THRESMASK 0x00
 
-
-
 /* defines for PCI config */
-
 #define PCI_ENA_MEMIO		0x02
 #define PCI_ENA_MASTER		0x04
 
-
 /* GCI/IOM bus monitor registers */
-
 #define HCFPCI_C_I		0x08
 #define HFCPCI_TRxR		0x0C
 #define HFCPCI_MON1_D		0x28
 #define HFCPCI_MON2_D		0x2C
 
-
 /* GCI/IOM bus timeslot registers */
-
 #define HFCPCI_B1_SSL		0x80
 #define HFCPCI_B2_SSL		0x84
 #define HFCPCI_AUX1_SSL		0x88
@@ -59,21 +50,18 @@
 #define HFCPCI_AUX2_RSL		0x9C
 
 /* GCI/IOM bus data registers */
-
 #define HFCPCI_B1_D		0xA0
 #define HFCPCI_B2_D		0xA4
 #define HFCPCI_AUX1_D		0xA8
 #define HFCPCI_AUX2_D		0xAC
 
 /* GCI/IOM bus configuration registers */
-
 #define HFCPCI_MST_EMOD		0xB4
 #define HFCPCI_MST_MODE		0xB8
 #define HFCPCI_CONNECT 		0xBC
 
 
 /* Interrupt and status registers */
-
 #define HFCPCI_FIFO_EN		0x44
 #define HFCPCI_TRM		0x48
 #define HFCPCI_B_MODE		0x4C
@@ -87,7 +75,6 @@
 #define HFCPCI_STATUS		0x70
 
 /* S/T section registers */
-
 #define HFCPCI_STATES		0xC0
 #define HFCPCI_SCTRL		0xC4
 #define HFCPCI_SCTRL_E		0xC8
@@ -177,9 +164,7 @@
 #define HFCPCI_IGNORE_COL	0x08
 #define HFCPCI_CHG_B1_B2	0x80
 
-/*
- * bits in FIFO_EN register
- */
+/* bits in FIFO_EN register */
 #define HFCPCI_FIFOEN_B1	0x03
 #define HFCPCI_FIFOEN_B2	0x0C
 #define HFCPCI_FIFOEN_DTX	0x10
@@ -189,9 +174,7 @@
 #define HFCPCI_FIFOEN_B2RX	0x08
 
 
-/*
- * definitions of fifo memory area
- */
+/* definitions of fifo memory area */
 #define MAX_D_FRAMES 15
 #define MAX_B_FRAMES 31
 #define B_SUB_VAL    0x200
@@ -199,46 +182,47 @@
 #define D_FIFO_SIZE  512
 #define D_FREG_MASK  0xF
 
-typedef struct {
+struct zt {
 	unsigned short z1;  /* Z1 pointer 16 Bit */
 	unsigned short z2;  /* Z2 pointer 16 Bit */
-} z_type;
+};
 
-typedef struct {
+struct dfifo {
 	u_char data[D_FIFO_SIZE]; /* FIFO data space */
 	u_char fill1[0x20A0-D_FIFO_SIZE]; /* reserved, do not use */
 	u_char f1, f2; /* f pointers */
 	u_char fill2[0x20C0-0x20A2]; /* reserved, do not use */
-	z_type za[MAX_D_FRAMES+1]; /* mask index with D_FREG_MASK for access */
+	/* mask index with D_FREG_MASK for access */
+	struct zt za[MAX_D_FRAMES+1];
 	u_char fill3[0x4000-0x2100]; /* align 16K */
-} dfifo_type;
+};
 
-typedef struct {
-	z_type za[MAX_B_FRAMES+1]; /* only range 0x0..0x1F allowed */
-	u_char f1, f2; /* f pointers */
-	u_char fill[0x2100-0x2082]; /* alignment */
-} bzfifo_type;
+struct bzfifo {
+	struct zt	za[MAX_B_FRAMES+1]; /* only range 0x0..0x1F allowed */
+	u_char		f1, f2; /* f pointers */
+	u_char		fill[0x2100-0x2082]; /* alignment */
+};
 
 
-typedef union {
+union fifo_area {
 	struct {
-		dfifo_type d_tx; /* D-send channel */
-		dfifo_type d_rx; /* D-receive channel */
+		struct dfifo d_tx; /* D-send channel */
+		struct dfifo d_rx; /* D-receive channel */
 	} d_chan;
 	struct {
-		u_char fill1[0x200];
-		u_char txdat_b1[B_FIFO_SIZE];
-		bzfifo_type txbz_b1;
-		bzfifo_type txbz_b2;
-		u_char txdat_b2[B_FIFO_SIZE];
-		u_char fill2[D_FIFO_SIZE];
-		u_char rxdat_b1[B_FIFO_SIZE];
-		bzfifo_type rxbz_b1;
-		bzfifo_type rxbz_b2;
+		u_char		fill1[0x200];
+		u_char		txdat_b1[B_FIFO_SIZE];
+		struct bzfifo	txbz_b1;
+		struct bzfifo	txbz_b2;
+		u_char		txdat_b2[B_FIFO_SIZE];
+		u_char		fill2[D_FIFO_SIZE];
+		u_char		rxdat_b1[B_FIFO_SIZE];
+		struct bzfifo	rxbz_b1;
+		struct bzfifo	rxbz_b2;
 		u_char rxdat_b2[B_FIFO_SIZE];
 	} b_chans;
 	u_char fill[32768];
-} fifo_area;
+};
 
 #define Write_hfc(a, b, c) (writeb(c, (a->hw.pci_io)+b))
 #define Read_hfc(a, b) (readb((a->hw.pci_io)+b))

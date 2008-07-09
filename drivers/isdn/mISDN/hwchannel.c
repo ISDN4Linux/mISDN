@@ -1,8 +1,8 @@
-/* $Id: hwchannel.c,v 2.0 2007/06/06 12:58:31 kkeil Exp $
+/*
  *
  * Author	Karsten Keil <kkeil@novell.com>
  *
- * Copyright 2007  by Karsten Keil <kkeil@novell.com>
+ * Copyright 2008  by Karsten Keil <kkeil@novell.com>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -111,7 +111,7 @@ mISDN_freedchannel(struct dchannel *ch)
 	skb_queue_purge(&ch->squeue);
 	skb_queue_purge(&ch->rqueue);
 	flush_scheduled_work();
-	return (0);
+	return 0;
 }
 EXPORT_SYMBOL(mISDN_freedchannel);
 
@@ -151,7 +151,7 @@ recv_Dchannel(struct dchannel *dch)
 {
 	struct mISDNhead *hh;
 
-	if (dch->rx_skb->len < 2) { // at least 2 for sapi / tei
+	if (dch->rx_skb->len < 2) { /* at least 2 for sapi / tei */
 		dev_kfree_skb(dch->rx_skb);
 		dch->rx_skb = NULL;
 	}
@@ -162,7 +162,6 @@ recv_Dchannel(struct dchannel *dch)
 	dch->rx_skb = NULL;
 	schedule_event(dch, FLG_RECVQUEUE);
 }
-
 EXPORT_SYMBOL(recv_Dchannel);
 
 void
@@ -177,7 +176,6 @@ recv_Bchannel(struct bchannel *bch)
 	bch->rx_skb = NULL;
 	schedule_event(bch, FLG_RECVQUEUE);
 }
-
 EXPORT_SYMBOL(recv_Bchannel);
 
 static void
@@ -188,7 +186,7 @@ confirm_Dsend(struct dchannel *dch)
 	skb = _alloc_mISDN_skb(PH_DATA_CNF, mISDN_HEAD_ID(dch->tx_skb),
 	    0, NULL, GFP_ATOMIC);
 	if (!skb) {
-		printk(KERN_ERR "%s: no skb id %x\n", __FUNCTION__,
+		printk(KERN_ERR "%s: no skb id %x\n", __func__,
 		    mISDN_HEAD_ID(dch->tx_skb));
 		return;
 	}
@@ -209,7 +207,6 @@ get_next_dframe(struct dchannel *dch)
 	test_and_clear_bit(FLG_TX_BUSY, &dch->Flags);
 	return 0;
 }
-
 EXPORT_SYMBOL(get_next_dframe);
 
 void
@@ -220,14 +217,13 @@ confirm_Bsend(struct bchannel *bch)
 	skb = _alloc_mISDN_skb(PH_DATA_CNF, mISDN_HEAD_ID(bch->tx_skb),
 	    0, NULL, GFP_ATOMIC);
 	if (!skb) {
-		printk(KERN_ERR "%s: no skb id %x\n", __FUNCTION__,
+		printk(KERN_ERR "%s: no skb id %x\n", __func__,
 		    mISDN_HEAD_ID(bch->tx_skb));
 		return;
 	}
 	skb_queue_tail(&bch->rqueue, skb);
 	schedule_event(bch, FLG_RECVQUEUE);
 }
-
 EXPORT_SYMBOL(confirm_Bsend);
 
 int
@@ -240,7 +236,7 @@ get_next_bframe(struct bchannel *bch)
 			bch->next_skb = NULL;
 			test_and_clear_bit(FLG_TX_NEXT, &bch->Flags);
 			if (!test_bit(FLG_TRANSPARENT, &bch->Flags))
-				confirm_Bsend(bch); // not for transparent
+				confirm_Bsend(bch); /* not for transparent */
 			return 1;
 		} else {
 			test_and_clear_bit(FLG_TX_NEXT, &bch->Flags);
@@ -251,7 +247,6 @@ get_next_bframe(struct bchannel *bch)
 	test_and_clear_bit(FLG_TX_BUSY, &bch->Flags);
 	return 0;
 }
-
 EXPORT_SYMBOL(get_next_bframe);
 
 void
@@ -272,7 +267,6 @@ queue_ch_frame(struct mISDNchannel *ch, u_int pr, int id, struct sk_buff *skb)
 		dev_kfree_skb(skb);
 	}
 }
-
 EXPORT_SYMBOL(queue_ch_frame);
 
 int
@@ -280,12 +274,12 @@ dchannel_senddata(struct dchannel *ch, struct sk_buff *skb)
 {
 	/* check oversize */
 	if (skb->len <= 0) {
-		printk(KERN_WARNING "%s: skb too small\n", __FUNCTION__);
+		printk(KERN_WARNING "%s: skb too small\n", __func__);
 		return -EINVAL;
 	}
 	if (skb->len > ch->maxlen) {
 		printk(KERN_WARNING "%s: skb too large(%d/%d)\n",
-			__FUNCTION__, skb->len, ch->maxlen);
+			__func__, skb->len, ch->maxlen);
 		return -EINVAL;
 	}
 	/* HW lock must be obtained */
@@ -307,12 +301,12 @@ bchannel_senddata(struct bchannel *ch, struct sk_buff *skb)
 
 	/* check oversize */
 	if (skb->len <= 0) {
-		printk(KERN_WARNING "%s: skb too small\n", __FUNCTION__);
+		printk(KERN_WARNING "%s: skb too small\n", __func__);
 		return -EINVAL;
 	}
 	if (skb->len > ch->maxlen) {
 		printk(KERN_WARNING "%s: skb too large(%d/%d)\n",
-			__FUNCTION__, skb->len, ch->maxlen);
+			__func__, skb->len, ch->maxlen);
 		return -EINVAL;
 	}
 	/* HW lock must be obtained */
@@ -320,7 +314,7 @@ bchannel_senddata(struct bchannel *ch, struct sk_buff *skb)
 	if (ch->next_skb) {
 		printk(KERN_WARNING
 		    "%s: next_skb exist ERROR (skb->len=%d next_skb->len=%d)\n",
-		    __FUNCTION__, skb->len, ch->next_skb->len);
+		    __func__, skb->len, ch->next_skb->len);
 		return -EBUSY;
 	}
 	if (test_and_set_bit(FLG_TX_BUSY, &ch->Flags)) {

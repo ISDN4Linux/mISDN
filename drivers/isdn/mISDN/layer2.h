@@ -1,8 +1,16 @@
-/* $Id: layer2.h,v 1.7 2006/03/06 12:52:07 keil Exp $
- *
+/*
  * Layer 2 defines
  *
- * This file is (c) under GNU PUBLIC LICENSE
+ * Copyright 2008  by Karsten Keil <kkeil@novell.com>
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
  *
  */
 
@@ -24,7 +32,7 @@ struct manager {
 	struct mISDNchannel	*up;
 	u_int			nextid;
 	u_int			lastid;
-}; 
+};
 
 struct teimgr {
 	int			ri;
@@ -36,10 +44,10 @@ struct teimgr {
 	struct manager		*mgr;
 };
 
-typedef struct _laddr {
+struct laddr {
 	u_char	A;
 	u_char	B;
-} laddr_t;
+};
 
 struct layer2 {
 	struct list_head	list;
@@ -49,7 +57,7 @@ struct layer2 {
 	struct mISDNchannel	*up;
 	signed char		sapi;
 	signed char		tei;
-	laddr_t			addr;
+	struct laddr		addr;
 	u_int			maxlen;
 	struct teimgr		*tm;
 	u_int			vs, va, vr;
@@ -81,7 +89,8 @@ enum {
 
 #define L2_STATE_COUNT (ST_L2_8+1)
 
-extern struct layer2	*create_l2(struct mISDNchannel *, u_int, u_long, u_long arg);
+extern struct layer2	*create_l2(struct mISDNchannel *, u_int,
+				u_long, u_long);
 extern int		tei_l2(struct layer2 *, u_int, u_long arg);
 
 

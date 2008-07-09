@@ -1,8 +1,17 @@
-/* $Id: layer1.h,v 1.5 2006/03/06 12:52:07 keil Exp $
+/*
  *
  * Layer 1 defines
  *
- * This file is (c) under GNU PUBLIC LICENSE
+ * Copyright 2008  by Karsten Keil <kkeil@novell.com>
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
  *
  */
 
