@@ -1130,7 +1130,9 @@ static int dsp_init(void)
 	}
 	printk(KERN_INFO "mISDN_dsp: DSP clocks every %d samples. This equals "
 		"%d jiffies.\n", dsp_poll, dsp_tics);
+#if 0
 	dsp_poll_diff = ((s32)dsp_poll) << 16;
+#endif
 
 	spin_lock_init(&dsp_lock);
 	INIT_LIST_HEAD(&dsp_ilist);
