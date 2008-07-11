@@ -1,7 +1,5 @@
 #include <linux/stddef.h>
-//#include <linux/config.h>
 #include <linux/list.h>
-#include <linux/slab.h>
 #include <linux/vmalloc.h>
 #include <linux/skbuff.h>
 #include <linux/mISDNif.h>
@@ -13,7 +11,6 @@ static struct list_head mISDN_memdbg_list = LIST_HEAD_INIT(mISDN_memdbg_list);
 static struct list_head mISDN_skbdbg_list = LIST_HEAD_INIT(mISDN_skbdbg_list);
 static spinlock_t	memdbg_lock = SPIN_LOCK_UNLOCKED;
 static spinlock_t	skbdbg_lock = SPIN_LOCK_UNLOCKED;
-static struct kmem_cache *mid_sitem_cache;
 
 #define MAX_FILE_STRLEN		(64 - 3*sizeof(u_int) - sizeof(struct list_head))
 
@@ -48,6 +45,32 @@ __mid_kmalloc(size_t size, int ord, char *fn, int line)
 		mid->typ  = MID_ITEM_TYP_KMALLOC;
 		mid->size = size;
 		mid->line = line;
+		if (strlen(fn)+1 > MAX_FILE_STRLEN)
+			fn += strlen(fn)+1 - MAX_FILE_STRLEN;
+		memcpy(mid->file, fn, MAX_FILE_STRLEN);
+		mid->file[MAX_FILE_STRLEN-1] = 0;
+		spin_lock_irqsave(&memdbg_lock, flags);
+		list_add_tail(&mid->head, &mISDN_memdbg_list);
+		spin_unlock_irqrestore(&memdbg_lock, flags);
+		return((void *)&mid->file[MAX_FILE_STRLEN]);
+	} else
+		return(NULL);
+}
+
+void *
+__mid_kzalloc(size_t size, int ord, char *fn, int line)
+{
+	_mid_item_t	*mid;
+	u_long		flags;
+
+	mid = kzalloc(size + sizeof(_mid_item_t), ord);
+	if (mid) {
+		INIT_LIST_HEAD(&mid->head);
+		mid->typ  = MID_ITEM_TYP_KMALLOC;
+		mid->size = size;
+		mid->line = line;
+		if (strlen(fn)+1 > MAX_FILE_STRLEN)
+			fn += strlen(fn)+1 - MAX_FILE_STRLEN;
 		memcpy(mid->file, fn, MAX_FILE_STRLEN);
 		mid->file[MAX_FILE_STRLEN-1] = 0;
 		spin_lock_irqsave(&memdbg_lock, flags);
@@ -85,6 +108,8 @@ __mid_vmalloc(size_t size, char *fn, int line)
 		mid->typ  = MID_ITEM_TYP_VMALLOC;
 		mid->size = size;
 		mid->line = line;
+		if (strlen(fn)+1 > MAX_FILE_STRLEN)
+			fn += strlen(fn)+1 - MAX_FILE_STRLEN;
 		memcpy(mid->file, fn, MAX_FILE_STRLEN);
 		mid->file[MAX_FILE_STRLEN-1] = 0; 
 		spin_lock_irqsave(&memdbg_lock, flags);
@@ -123,7 +148,7 @@ __mid_skb_destructor(struct sk_buff *skb)
 		if (sid->skb == skb) {
 			list_del(&sid->head);
 			spin_unlock_irqrestore(&skbdbg_lock, flags);
-			kmem_cache_free(mid_sitem_cache, sid);
+			kfree(sid);
 			return;
 		}
 	}
@@ -137,7 +162,7 @@ __mid_sitem_setup(struct sk_buff *skb, unsigned int size, char *fn, int line)
 	_mid_sitem_t	*sid;
 	u_long		flags;
 
-	sid = kmem_cache_alloc(mid_sitem_cache, GFP_ATOMIC);
+	sid = kmalloc(size + sizeof(_mid_sitem_t), GFP_ATOMIC);
 	if (!sid) {
 		printk(KERN_DEBUG "%s: no memory for sitem skb %p %s:%d\n",
 			__FUNCTION__, skb, fn, line);
@@ -147,6 +172,8 @@ __mid_sitem_setup(struct sk_buff *skb, unsigned int size, char *fn, int line)
 	sid->skb = skb;
 	sid->size = size;
 	sid->line = line;
+	if (strlen(fn)+1 > MAX_FILE_STRLEN)
+		fn += strlen(fn)+1 - MAX_FILE_STRLEN;
 	memcpy(sid->file, fn, MAX_FILE_STRLEN);
 	sid->file[MAX_FILE_STRLEN-1] = 0; 
 	skb->destructor = __mid_skb_destructor;
@@ -271,26 +298,22 @@ __mid_cleanup(void)
 		/*maybe the skb is still aktiv */
 		sid->skb->destructor = NULL;
 		list_del(&sid->head);
-		kmem_cache_free(mid_sitem_cache, sid);
+		kfree(sid);
 		n++;
 	}
 	spin_unlock_irqrestore(&skbdbg_lock, flags);
-	if (mid_sitem_cache)
-		kmem_cache_destroy(mid_sitem_cache);
 	printk(KERN_DEBUG "%s: %d sk_buff item(s) freed\n", __FUNCTION__, n);
 }
 
 int
 __mid_init(void)
 {
-	mid_sitem_cache = KMEM_CACHE(_mid_sitem, 0);
-	if (!mid_sitem_cache)
-		return(-ENOMEM);
 	return(0);
 }
 
 #ifdef MODULE
 EXPORT_SYMBOL(__mid_kmalloc);
+EXPORT_SYMBOL(__mid_kzalloc);
 EXPORT_SYMBOL(__mid_kfree);
 EXPORT_SYMBOL(__mid_vmalloc);
 EXPORT_SYMBOL(__mid_vfree);

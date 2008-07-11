@@ -7,6 +7,7 @@
 #include <linux/slab.h>
 
 #undef kmalloc
+#undef kzalloc
 #undef kfree
 #undef vmalloc
 #undef vfree
@@ -19,6 +20,7 @@
 #undef skb_realloc_headroom
 
 #define kmalloc(a, b)			__mid_kmalloc(a, b, __FILE__, __LINE__)
+#define kzalloc(a, b)			__mid_kzalloc(a, b, __FILE__, __LINE__)
 #define kfree(a)			__mid_kfree(a)
 #define vmalloc(s)			__mid_vmalloc(s, __FILE__, __LINE__)
 #define vfree(p)			__mid_vfree(p)
@@ -31,6 +33,7 @@
 #define skb_realloc_headroom(a, b)	__mid_skb_realloc_headroom(a, b, __FILE__, __LINE__)
 
 extern void		*__mid_kmalloc(size_t, int, char *, int);
+extern void		*__mid_kzalloc(size_t, int, char *, int);
 extern void		__mid_kfree(const void *);
 extern void		*__mid_vmalloc(size_t, char *, int);
 extern void		__mid_vfree(const void *);
