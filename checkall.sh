@@ -13,6 +13,7 @@ usage() {
 
 	-h	This Text.
 	-k DIR	Kerneltree is in DIR instead of /usr/src/linux
+	-v	list all issues
 
 EOM
 	exit
