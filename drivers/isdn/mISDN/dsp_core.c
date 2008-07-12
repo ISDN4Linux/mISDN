@@ -997,7 +997,9 @@ dsp_send_bh(struct work_struct *work)
 			if (dsp_debug & DEBUG_DSP_CORE)
 				printk(KERN_DEBUG "%s: fifo full %s, this is "
 					"no bug!\n", __func__, dsp->name);
-			continue; /* flush transparent data, if not acked */
+			/* flush transparent data, if not acked */
+			dev_kfree_skb(skb);
+			continue;
 		}
 		hh = mISDN_HEAD_P(skb);
 		if (hh->prim == DL_DATA_REQ) {
