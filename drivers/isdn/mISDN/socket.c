@@ -80,6 +80,14 @@ mISDN_send(struct mISDNchannel *ch, struct sk_buff *skb)
 	if (msk->sk.sk_state == MISDN_CLOSED)
 		return -EUNATCH;
 	__net_timestamp(skb);
+#ifdef MISDN_MEMDEBUG
+	mid_sitem_update(skb);
+	/* removing from list, because it is not done by ..rcv_skb */
+	if (skb->destructor) {
+		skb->destructor(skb);
+		skb->destructor = NULL;
+	}
+#endif
 	err = sock_queue_rcv_skb(&msk->sk, skb);
 	if (err)
 		printk(KERN_WARNING "%s: error %d\n", __func__, err);

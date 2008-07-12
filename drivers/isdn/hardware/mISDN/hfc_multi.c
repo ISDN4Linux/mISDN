@@ -2165,9 +2165,6 @@ next_frame:
 
 	/* empty fifo with what we have */
 	if (dch || test_bit(FLG_HDLC, &bch->Flags)) {
-#ifdef MISDN_MEMDEBUG
-		mid_sitem_update(*sp);
-#endif
 		if (debug & DEBUG_HFCMULTI_FIFO)
 			printk(KERN_DEBUG "%s: fifo(%d) reading %d bytes (z1="
 			    "%04x, z2=%04x) HDLC %s (f1=%d, f2=%d) got=%d\n",
@@ -2217,9 +2214,6 @@ next_frame:
 					memcpy(skb_put(*sp, skb->len),
 					    skb->data, skb->len);
 					skb_trim(skb, 0);
-#ifdef MISDN_MEMDEBUG
-					mid_sitem_update(*sp);
-#endif
 				} else {
 					printk(KERN_DEBUG "%s: No mem\n",
 					    __func__);
@@ -2229,9 +2223,6 @@ next_frame:
 			} else {
 				skb = NULL;
 			}
-#ifdef MISDN_MEMDEBUG
-			mid_sitem_update(*sp);
-#endif
 			if (debug & DEBUG_HFCMULTI_FIFO) {
 				temp = 0;
 				while (temp < (*sp)->len)
@@ -2239,14 +2230,8 @@ next_frame:
 				printk("\n");
 			}
 			if (dch) {
-#ifdef MISDN_MEMDEBUG
-				mid_sitem_update(*sp);
-#endif
 				recv_Dchannel(dch);
 			} else {
-#ifdef MISDN_MEMDEBUG
-				mid_sitem_update(*sp);
-#endif
 				recv_Bchannel(bch);
 			}
 			*sp = skb;
@@ -2254,9 +2239,6 @@ next_frame:
 		}
 		/* there is an incomplete frame */
 	} else {
-#ifdef MISDN_MEMDEBUG
-		mid_sitem_update(*sp);
-#endif
 		/* transparent */
 		if (Zsize > skb_tailroom(*sp))
 			Zsize = skb_tailroom(*sp);

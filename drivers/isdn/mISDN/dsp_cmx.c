@@ -1294,9 +1294,6 @@ dsp_cmx_send_member(struct dsp *dsp, int len, s32 *c, int members)
 		    len + preload);
 		return;
 	}
-#ifdef MISDN_MEMDEBUG
-	mid_sitem_update(nskb);
-#endif
 	hh = mISDN_HEAD_P(nskb);
 	hh->prim = PH_DATA_REQ;
 	hh->id = 0;
@@ -1318,9 +1315,6 @@ dsp_cmx_send_member(struct dsp *dsp, int len, s32 *c, int members)
 		d += preload;
 	}
 
-#ifdef MISDN_MEMDEBUG
-	mid_sitem_update(nskb);
-#endif
 	/* PROCESS TONES/TX-DATA ONLY */
 	if (dsp->tone.tone && dsp->tone.software) {
 		/* -> copy tone */
@@ -1550,9 +1544,6 @@ send_packet:
 	/* crypt */
 	if (dsp->bf_enable)
 		dsp_bf_encrypt(dsp, nskb->data, nskb->len);
-#ifdef MISDN_MEMDEBUG
-	mid_sitem_update(nskb);
-#endif
 	/* queue and trigger */
 	skb_queue_tail(&dsp->sendq, nskb);
 	schedule_work(&dsp->workq);

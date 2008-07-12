@@ -81,6 +81,11 @@ send_socklist(struct mISDN_sock_list *sl, struct sk_buff *skb)
 		}
 #ifdef MISDN_MEMDEBUG
 		mid_sitem_update(cskb);
+		/* removing from list, because it is not done by ..rcv_skb */
+		if (cskb->destructor) {
+			cskb->destructor(cskb);
+			cskb->destructor = NULL;
+		}
 #endif
 		if (!sock_queue_rcv_skb(sk, cskb))
 			cskb = NULL;
