@@ -47,7 +47,7 @@ __mid_kmalloc(size_t size, int ord, char *fn, int line)
 		mid->line = line;
 		if (strlen(fn)+1 > MAX_FILE_STRLEN)
 			fn += strlen(fn)+1 - MAX_FILE_STRLEN;
-		memcpy(mid->file, fn, MAX_FILE_STRLEN);
+		strncpy(mid->file, fn, MAX_FILE_STRLEN);
 		mid->file[MAX_FILE_STRLEN-1] = 0;
 		spin_lock_irqsave(&memdbg_lock, flags);
 		list_add_tail(&mid->head, &mISDN_memdbg_list);
@@ -71,7 +71,7 @@ __mid_kzalloc(size_t size, int ord, char *fn, int line)
 		mid->line = line;
 		if (strlen(fn)+1 > MAX_FILE_STRLEN)
 			fn += strlen(fn)+1 - MAX_FILE_STRLEN;
-		memcpy(mid->file, fn, MAX_FILE_STRLEN);
+		strncpy(mid->file, fn, MAX_FILE_STRLEN);
 		mid->file[MAX_FILE_STRLEN-1] = 0;
 		spin_lock_irqsave(&memdbg_lock, flags);
 		list_add_tail(&mid->head, &mISDN_memdbg_list);
@@ -110,7 +110,7 @@ __mid_vmalloc(size_t size, char *fn, int line)
 		mid->line = line;
 		if (strlen(fn)+1 > MAX_FILE_STRLEN)
 			fn += strlen(fn)+1 - MAX_FILE_STRLEN;
-		memcpy(mid->file, fn, MAX_FILE_STRLEN);
+		strncpy(mid->file, fn, MAX_FILE_STRLEN);
 		mid->file[MAX_FILE_STRLEN-1] = 0; 
 		spin_lock_irqsave(&memdbg_lock, flags);
 		list_add_tail(&mid->head, &mISDN_memdbg_list);
@@ -159,13 +159,25 @@ __mid_skb_destructor(struct sk_buff *skb)
 static __inline__ void
 __mid_sitem_setup(struct sk_buff *skb, unsigned int size, char *fn, int line)
 {
-	_mid_sitem_t	*sid;
-	u_long		flags;
+	struct list_head	*item, *next;
+	_mid_sitem_t		*sid;
+	u_long			flags;
 
-	sid = kmalloc(size + sizeof(_mid_sitem_t), GFP_ATOMIC);
+	spin_lock_irqsave(&skbdbg_lock, flags);
+	list_for_each_safe(item, next, &mISDN_skbdbg_list) {
+		sid = (_mid_sitem_t *)item;
+		if (sid->skb == skb) {
+			printk(KERN_ERR "%s: skb already seen in sitem list: (sid=%p,fn=%s,line=%d) it did not call the destructor!\n", __func__, sid, sid->file, sid->line);
+			list_del(&sid->head);
+
+			kfree(sid);
+		}
+	}
+	sid = kmalloc(sizeof(_mid_sitem_t), GFP_ATOMIC);
 	if (!sid) {
 		printk(KERN_DEBUG "%s: no memory for sitem skb %p %s:%d\n",
 			__FUNCTION__, skb, fn, line);
+		spin_unlock_irqrestore(&skbdbg_lock, flags);
 		return;
 	}
 	INIT_LIST_HEAD(&sid->head);
@@ -174,12 +186,46 @@ __mid_sitem_setup(struct sk_buff *skb, unsigned int size, char *fn, int line)
 	sid->line = line;
 	if (strlen(fn)+1 > MAX_FILE_STRLEN)
 		fn += strlen(fn)+1 - MAX_FILE_STRLEN;
-	memcpy(sid->file, fn, MAX_FILE_STRLEN);
+	strncpy(sid->file, fn, MAX_FILE_STRLEN);
 	sid->file[MAX_FILE_STRLEN-1] = 0; 
 	skb->destructor = __mid_skb_destructor;
-	spin_lock_irqsave(&skbdbg_lock, flags);
 	list_add_tail(&sid->head, &mISDN_skbdbg_list);
 	spin_unlock_irqrestore(&skbdbg_lock, flags);
+}
+
+void
+__mid_sitem_update(struct sk_buff *skb, char *fn, int line)
+{
+	struct list_head	*item;
+	_mid_sitem_t		*sid;
+	u_long			flags;
+	_mid_sitem_t		*found = NULL;
+
+	if (!skb) {
+		printk(KERN_DEBUG "%s:%d item is NULL\n", fn, line);
+		return;
+	}
+	if (!skb->destructor) {
+		printk(KERN_DEBUG "%s:%d item has no destructor!\n", fn, line);
+		return;
+	}
+	spin_lock_irqsave(&skbdbg_lock, flags);
+	list_for_each(item, &mISDN_skbdbg_list) {
+		sid = (_mid_sitem_t *)item;
+		if (sid->skb == skb) {
+			if (found)
+				printk(KERN_ERR "%s: skb already seen in sitem list: (was:sid=%p,fn=%s,line=%d now:sid=%p,fn=%s,line=%d)\n", __func__, found, found->file, found->line, sid, sid->file, sid->line);
+			found = sid;
+			sid->line = line;
+			if (strlen(fn)+1 > MAX_FILE_STRLEN)
+				fn += strlen(fn)+1 - MAX_FILE_STRLEN;
+			strncpy(sid->file, fn, MAX_FILE_STRLEN);
+			sid->file[MAX_FILE_STRLEN-1] = 0; 
+		}
+	}
+	spin_unlock_irqrestore(&skbdbg_lock, flags);
+	if (!found)
+		printk(KERN_DEBUG "%s:%d item(%p) not in list\n", fn, line, skb);
 }
 
 struct sk_buff *
@@ -208,6 +254,10 @@ void
 __mid_kfree_skb(struct sk_buff *skb)
 {
 	if (skb->destructor)
+		__mid_sitem_update(skb, "free with destructor", __LINE__);
+	else
+		__mid_sitem_update(skb, "free no destructor", __LINE__);
+	if (skb->destructor)
 		skb->destructor(skb);
 	skb->destructor = NULL;
 	kfree_skb(skb);
@@ -216,6 +266,10 @@ __mid_kfree_skb(struct sk_buff *skb)
 void
 __mid_dev_kfree_skb(struct sk_buff *skb)
 {
+	if (skb->destructor)
+		__mid_sitem_update(skb, "free with destructor", __LINE__);
+	else
+		__mid_sitem_update(skb, "free no destructor", __LINE__);
 	if (skb->destructor)
 		skb->destructor(skb);
 	skb->destructor = NULL;
@@ -319,6 +373,7 @@ EXPORT_SYMBOL(__mid_vmalloc);
 EXPORT_SYMBOL(__mid_vfree);
 EXPORT_SYMBOL(__mid_alloc_skb);
 EXPORT_SYMBOL(__mid_dev_alloc_skb);
+EXPORT_SYMBOL(__mid_sitem_update);
 EXPORT_SYMBOL(__mid_kfree_skb);
 EXPORT_SYMBOL(__mid_dev_kfree_skb);
 EXPORT_SYMBOL(__mid_skb_clone);

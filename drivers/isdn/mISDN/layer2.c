@@ -1927,6 +1927,10 @@ l2_send(struct mISDNchannel *ch, struct sk_buff *skb)
 	struct mISDNhead	*hh =  mISDN_HEAD_P(skb);
 	int 			ret = -EINVAL;
 
+#ifdef MISDN_MEMDEBUG
+	mid_sitem_update(skb);
+#endif
+	
 	if (*debug & DEBUG_L2_RECV)
 		printk(KERN_DEBUG "%s: prim(%x) id(%x) tei(%d)\n",
 		    __func__, hh->prim, hh->id, l2->tei);

@@ -2107,10 +2107,18 @@ hfcmulti_rx(struct hfc_multi *hc, int ch)
 	dch = hc->chan[ch].dch;
 	if ((!dch) && (!bch))
 		return;
+#ifdef MISDN_MEMDEBUG
+	if (dch && bch)
+		printk(KERN_ERR "%s: dch and bch set, correct it!\n", __func__);
+#endif
 	if (dch) {
+		if (!test_bit(FLG_ACTIVE, &dch->Flags))
+			return;
 		sp = &dch->rx_skb;
 		maxlen = dch->maxlen;
 	} else {
+		if (!test_bit(FLG_ACTIVE, &bch->Flags))
+			return;
 		sp = &bch->rx_skb;
 		maxlen = bch->maxlen;
 	}
@@ -2157,6 +2165,9 @@ next_frame:
 
 	/* empty fifo with what we have */
 	if (dch || test_bit(FLG_HDLC, &bch->Flags)) {
+#ifdef MISDN_MEMDEBUG
+		mid_sitem_update(*sp);
+#endif
 		if (debug & DEBUG_HFCMULTI_FIFO)
 			printk(KERN_DEBUG "%s: fifo(%d) reading %d bytes (z1="
 			    "%04x, z2=%04x) HDLC %s (f1=%d, f2=%d) got=%d\n",
@@ -2206,27 +2217,46 @@ next_frame:
 					memcpy(skb_put(*sp, skb->len),
 					    skb->data, skb->len);
 					skb_trim(skb, 0);
+#ifdef MISDN_MEMDEBUG
+					mid_sitem_update(*sp);
+#endif
 				} else {
+					printk(KERN_DEBUG "%s: No mem\n",
+					    __func__);
+					*sp = skb;
 					skb = NULL;
 				}
 			} else {
 				skb = NULL;
 			}
+#ifdef MISDN_MEMDEBUG
+			mid_sitem_update(*sp);
+#endif
 			if (debug & DEBUG_HFCMULTI_FIFO) {
 				temp = 0;
 				while (temp < (*sp)->len)
 					printk("%02x ", (*sp)->data[temp++]);
 				printk("\n");
 			}
-			if (dch)
+			if (dch) {
+#ifdef MISDN_MEMDEBUG
+				mid_sitem_update(*sp);
+#endif
 				recv_Dchannel(dch);
-			else
+			} else {
+#ifdef MISDN_MEMDEBUG
+				mid_sitem_update(*sp);
+#endif
 				recv_Bchannel(bch);
+			}
 			*sp = skb;
 			goto next_frame;
 		}
 		/* there is an incomplete frame */
 	} else {
+#ifdef MISDN_MEMDEBUG
+		mid_sitem_update(*sp);
+#endif
 		/* transparent */
 		if (Zsize > skb_tailroom(*sp))
 			Zsize = skb_tailroom(*sp);
@@ -2239,6 +2269,8 @@ next_frame:
 				    skb->data, skb->len);
 				skb_trim(skb, 0);
 			} else {
+				printk(KERN_DEBUG "%s: No mem\n", __func__);
+				*sp = skb;
 				skb = NULL;
 			}
 		} else {
@@ -3280,6 +3312,10 @@ handle_dmsg(struct mISDNchannel *ch, struct sk_buff *skb)
 	unsigned int		id;
 	u_long			flags;
 
+#ifdef MISDN_MEMDEBUG
+	mid_sitem_update(skb);
+#endif
+	
 	switch (hh->prim) {
 	case PH_DATA_REQ:
 		if (skb->len < 1)
@@ -3422,6 +3458,10 @@ handle_bmsg(struct mISDNchannel *ch, struct sk_buff *skb)
 	unsigned int		id;
 	u_long			flags;
 
+#ifdef MISDN_MEMDEBUG
+	mid_sitem_update(skb);
+#endif
+	
 	switch (hh->prim) {
 	case PH_DATA_REQ:
 		if (!skb->len)
@@ -4554,6 +4594,8 @@ release_port(struct hfc_multi *hc, struct dchannel *dch)
 
 	spin_unlock_irqrestore(&hc->lock, flags);
 
+	if (debug & DEBUG_HFCMULTI_INIT)
+		printk(KERN_DEBUG "%s: free port %d channel D\n", __func__, pt);
 	mISDN_freedchannel(dch);
 	kfree(dch);
 

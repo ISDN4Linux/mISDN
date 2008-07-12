@@ -1,4 +1,4 @@
-/* hfcs_usb.c
+* hfcs_usb.c
  * mISDN driver for Colognechip HFC-S USB chip
  *
  * Copyright 2001 by Peter Sprenger (sprenger@moving-bytes.de)
@@ -228,6 +228,10 @@ hfcusb_l2l1B(struct mISDNchannel *ch, struct sk_buff *skb)
 	struct mISDNhead	*hh = mISDN_HEAD_P(skb);
 	u_long			flags;
 
+#ifdef MISDN_MEMDEBUG
+	mid_sitem_update(skb);
+#endif
+	
 	if (debug & DBG_HFC_CALL_TRACE)
 		printk (KERN_INFO "%s\n", __FUNCTION__);
 
@@ -290,6 +294,10 @@ hfcusb_l2l1D(struct mISDNchannel *ch, struct sk_buff *skb)
         struct mISDNhead	*hh = mISDN_HEAD_P(skb);
         u_long			flags;
 
+#ifdef MISDN_MEMDEBUG
+	mid_sitem_update(skb);
+#endif
+	
 	// TODO mbachem
 	return -EINVAL;
 }

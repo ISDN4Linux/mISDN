@@ -1619,6 +1619,10 @@ hfcpci_l2l1D(struct mISDNchannel *ch, struct sk_buff *skb)
 	unsigned int		id;
 	u_long			flags;
 
+#ifdef MISDN_MEMDEBUG
+	mid_sitem_update(skb);
+#endif
+	
 	switch (hh->prim) {
 	case PH_DATA_REQ:
 		spin_lock_irqsave(&hc->lock, flags);
@@ -1702,6 +1706,10 @@ hfcpci_l2l1B(struct mISDNchannel *ch, struct sk_buff *skb)
 	unsigned int		id;
 	u_long			flags;
 
+#ifdef MISDN_MEMDEBUG
+	mid_sitem_update(skb);
+#endif
+	
 	switch (hh->prim) {
 	case PH_DATA_REQ:
 		spin_lock_irqsave(&hc->lock, flags);

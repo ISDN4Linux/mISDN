@@ -636,10 +636,17 @@ dsp_function(struct mISDNchannel *ch,  struct sk_buff *skb)
 	struct			sk_buff *nskb;
 	u_long			flags;
 
+#ifdef MISDN_MEMDEBUG
+	mid_sitem_update(skb);
+#endif
+	
 	hh = mISDN_HEAD_P(skb);
 	switch (hh->prim) {
 	/* FROM DOWN */
 	case (PH_DATA_CNF):
+#ifdef MISDN_MEMDEBUG
+		mid_sitem_update(skb);
+#endif
 		dsp->data_pending = 0;
 		/* trigger next hdlc frame, if any */
 		if (dsp->hdlc) {
@@ -651,6 +658,9 @@ dsp_function(struct mISDNchannel *ch,  struct sk_buff *skb)
 		break;
 	case (PH_DATA_IND):
 	case (DL_DATA_IND):
+#ifdef MISDN_MEMDEBUG
+		mid_sitem_update(skb);
+#endif
 		if (skb->len < 1) {
 			ret = -EINVAL;
 			break;
@@ -724,6 +734,9 @@ dsp_function(struct mISDNchannel *ch,  struct sk_buff *skb)
 		}
 		spin_unlock_irqrestore(&dsp_lock, flags);
 
+#ifdef MISDN_MEMDEBUG
+		mid_sitem_update(skb);
+#endif
 		if (dsp->rx_disabled) {
 			/* if receive is not allowed */
 			break;
@@ -840,6 +853,9 @@ dsp_function(struct mISDNchannel *ch,  struct sk_buff *skb)
 	/* FROM UP */
 	case (DL_DATA_REQ):
 	case (PH_DATA_REQ):
+#ifdef MISDN_MEMDEBUG
+		mid_sitem_update(skb);
+#endif
 		if (skb->len < 1) {
 			ret = -EINVAL;
 			break;
@@ -970,6 +986,9 @@ dsp_send_bh(struct work_struct *work)
 
 	/* send queued data */
 	while ((skb = skb_dequeue(&dsp->sendq))) {
+#ifdef MISDN_MEMDEBUG
+		mid_sitem_update(skb);
+#endif
 		/* in locked date, we must have still data in queue */
 		if (dsp->hdlc && dsp->data_pending)
 			break; /* wait until data has been acknowledged */
@@ -982,6 +1001,9 @@ dsp_send_bh(struct work_struct *work)
 		}
 		hh = mISDN_HEAD_P(skb);
 		if (hh->prim == DL_DATA_REQ) {
+#ifdef MISDN_MEMDEBUG
+			mid_sitem_update(skb);
+#endif
 			/* send packet up */
 			if (dsp->up) {
 				if (dsp->up->send(dsp->up, skb))
@@ -989,6 +1011,9 @@ dsp_send_bh(struct work_struct *work)
 			} else
 				dev_kfree_skb(skb);
 		} else {
+#ifdef MISDN_MEMDEBUG
+			mid_sitem_update(skb);
+#endif
 			/* send packet down */
 			if (dsp->ch.peer) {
 				dsp->data_pending = 1;

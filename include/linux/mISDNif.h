@@ -439,21 +439,40 @@ struct mISDNstack {
 
 /* global alloc/queue dunctions */
 
+#ifdef MISDN_MEMDEBUG
+extern struct sk_buff	*__mid_alloc_skb(unsigned int,int, char *, int);
+#define mI_alloc_skb(a, b) __mI_alloc_skb(a, b, __FILE__, __LINE__)
+static inline struct sk_buff *
+__mI_alloc_skb(unsigned int len, gfp_t gfp_mask, char *fn, int line)
+#else
 static inline struct sk_buff *
 mI_alloc_skb(unsigned int len, gfp_t gfp_mask)
+#endif
 {
 	struct sk_buff	*skb;
 
+#ifdef MISDN_MEMDEBUG
+	skb = __mid_alloc_skb(len + MISDN_HEADER_LEN, gfp_mask, fn, line);
+#else
 	skb = alloc_skb(len + MISDN_HEADER_LEN, gfp_mask);
+#endif
 	if (likely(skb))
 		skb_reserve(skb, MISDN_HEADER_LEN);
 	return skb;
 }
 
+#ifdef MISDN_MEMDEBUG
+#define _alloc_mISDN_skb(a, b, c, d, e) __alloc_mISDN_skb(a, b, c, d, e, __FILE__, __LINE__)
+static inline struct sk_buff *
+__alloc_mISDN_skb(u_int prim, u_int id, u_int len, void *dp, gfp_t gfp_mask, char *fn, int line)
+{
+	struct sk_buff	*skb = __mI_alloc_skb(len, gfp_mask, fn, line);
+#else
 static inline struct sk_buff *
 _alloc_mISDN_skb(u_int prim, u_int id, u_int len, void *dp, gfp_t gfp_mask)
 {
 	struct sk_buff	*skb = mI_alloc_skb(len, gfp_mask);
+#endif
 	struct mISDNhead *hh;
 
 	if (!skb)
@@ -466,15 +485,26 @@ _alloc_mISDN_skb(u_int prim, u_int id, u_int len, void *dp, gfp_t gfp_mask)
 	return skb;
 }
 
+#ifdef MISDN_MEMDEBUG
+#define _queue_data(a, b, c, d, e, f) __queue_data(a, b, c, d, e, f, __FILE__, __LINE__)
+static inline void
+__queue_data(struct mISDNchannel *ch, u_int prim,
+    u_int id, u_int len, void *dp, gfp_t gfp_mask, char *fn, int line)
+#else
 static inline void
 _queue_data(struct mISDNchannel *ch, u_int prim,
     u_int id, u_int len, void *dp, gfp_t gfp_mask)
+#endif
 {
 	struct sk_buff		*skb;
 
 	if (!ch->peer)
 		return;
+#ifdef MISDN_MEMDEBUG
+	skb = __alloc_mISDN_skb(prim, id, len, dp, gfp_mask, fn, line);
+#else
 	skb = _alloc_mISDN_skb(prim, id, len, dp, gfp_mask);
+#endif
 	if (!skb)
 		return;
 	if (ch->recv(ch->peer, skb))

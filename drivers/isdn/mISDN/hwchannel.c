@@ -30,6 +30,9 @@ dchannel_bh(struct work_struct *ws)
 
 	if (test_and_clear_bit(FLG_RECVQUEUE, &dch->Flags)) {
 		while ((skb = skb_dequeue(&dch->rqueue))) {
+#ifdef MISDN_MEMDEBUG
+			mid_sitem_update(skb);
+#endif
 			if (likely(dch->dev.D.peer)) {
 				err = dch->dev.D.recv(dch->dev.D.peer, skb);
 				if (err)
@@ -53,6 +56,9 @@ bchannel_bh(struct work_struct *ws)
 
 	if (test_and_clear_bit(FLG_RECVQUEUE, &bch->Flags)) {
 		while ((skb = skb_dequeue(&bch->rqueue))) {
+#ifdef MISDN_MEMDEBUG
+			mid_sitem_update(skb);
+#endif
 			if (likely(bch->ch.peer)) {
 				err = bch->ch.recv(bch->ch.peer, skb);
 				if (err)
@@ -108,6 +114,15 @@ mISDN_freedchannel(struct dchannel *ch)
 		dev_kfree_skb(ch->rx_skb);
 		ch->rx_skb = NULL;
 	}
+#ifdef MISDN_MEMDEBUG
+	{
+		struct sk_buff *skb;
+		while ((skb = skb_dequeue(&ch->squeue)))
+			dev_kfree_skb(skb);
+		while ((skb = skb_dequeue(&ch->rqueue)))
+			dev_kfree_skb(skb);
+	}
+#endif
 	skb_queue_purge(&ch->squeue);
 	skb_queue_purge(&ch->rqueue);
 	flush_scheduled_work();

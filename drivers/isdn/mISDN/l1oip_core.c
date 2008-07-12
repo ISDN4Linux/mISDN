@@ -885,6 +885,10 @@ handle_dmsg(struct mISDNchannel *ch, struct sk_buff *skb)
 	int			l, ll;
 	unsigned char		*p;
 
+#ifdef MISDN_MEMDEBUG
+	mid_sitem_update(skb);
+#endif
+	
 	switch (hh->prim) {
 	case PH_DATA_REQ:
 		if (skb->len < 1) {
@@ -1093,6 +1097,10 @@ handle_bmsg(struct mISDNchannel *ch, struct sk_buff *skb)
 	int			l, ll, i;
 	unsigned char		*p;
 
+#ifdef MISDN_MEMDEBUG
+	mid_sitem_update(skb);
+#endif
+	
 	switch (hh->prim) {
 	case PH_DATA_REQ:
 		if (skb->len <= 0) {
