@@ -73,7 +73,6 @@ mISDN_send(struct mISDNchannel *ch, struct sk_buff *skb)
 #ifdef MISDN_MEMDEBUG
 	mid_sitem_update(skb);
 #endif
-	
 	msk = container_of(ch, struct mISDN_sock, ch);
 	if (*debug & DEBUG_SOCKET)
 		printk(KERN_DEBUG "%s len %d %p\n", __func__, skb->len, skb);
