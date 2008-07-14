@@ -56,6 +56,10 @@ bchannel_bh(struct work_struct *ws)
 
 	if (test_and_clear_bit(FLG_RECVQUEUE, &bch->Flags)) {
 		while ((skb = skb_dequeue(&bch->rqueue))) {
+			if (bch->rcount >= 64)
+				printk(KERN_WARNING "B-channel %p receive "
+					"queue if full, but empties...\n", bch);
+			bch->rcount--;
 #ifdef MISDN_MEMDEBUG
 			mid_sitem_update(skb);
 #endif
@@ -97,6 +101,7 @@ mISDN_initbchannel(struct bchannel *ch, int maxlen)
 	ch->tx_skb = NULL;
 	ch->tx_idx = 0;
 	skb_queue_head_init(&ch->rqueue);
+	ch->rcount = 0;
 	ch->next_skb = NULL;
 	_INIT_WORK(&ch->workq, bchannel_bh);
 	return 0;
@@ -145,7 +150,15 @@ mISDN_freebchannel(struct bchannel *ch)
 		dev_kfree_skb(ch->next_skb);
 		ch->next_skb = NULL;
 	}
+#ifdef MISDN_MEMDEBUG
+	{
+		struct sk_buff *skb;
+		while ((skb = skb_dequeue(&ch->rqueue)))
+			dev_kfree_skb(skb);
+	}
+#endif
 	skb_queue_purge(&ch->rqueue);
+	ch->rcount = 0;
 	flush_scheduled_work();
 	return 0;
 }
@@ -169,6 +182,7 @@ recv_Dchannel(struct dchannel *dch)
 	if (dch->rx_skb->len < 2) { /* at least 2 for sapi / tei */
 		dev_kfree_skb(dch->rx_skb);
 		dch->rx_skb = NULL;
+		return;
 	}
 	hh = mISDN_HEAD_P(dch->rx_skb);
 	hh->prim = PH_DATA_IND;
@@ -187,11 +201,46 @@ recv_Bchannel(struct bchannel *bch)
 	hh = mISDN_HEAD_P(bch->rx_skb);
 	hh->prim = PH_DATA_IND;
 	hh->id = MISDN_ID_ANY;
+	if (bch->rcount >= 64) {
+#ifdef MISDN_MEMDEBUG
+		__mid_dev_kfree_skb(bch->rx_skb, NULL, 0);
+#else
+		dev_kfree_skb(bch->rx_skb);
+#endif
+		bch->rx_skb = NULL;
+		return;
+	}
+	bch->rcount++;
 	skb_queue_tail(&bch->rqueue, bch->rx_skb);
 	bch->rx_skb = NULL;
 	schedule_event(bch, FLG_RECVQUEUE);
 }
 EXPORT_SYMBOL(recv_Bchannel);
+
+void
+recv_Dchannel_skb(struct dchannel *dch, struct sk_buff *skb)
+{
+	skb_queue_tail(&dch->rqueue, skb);
+	schedule_event(dch, FLG_RECVQUEUE);
+}
+EXPORT_SYMBOL(recv_Dchannel_skb);
+
+void
+recv_Bchannel_skb(struct bchannel *bch, struct sk_buff *skb)
+{
+	if (bch->rcount >= 64) {
+#ifdef MISDN_MEMDEBUG
+		__mid_dev_kfree_skb(skb, NULL, 0);
+#else
+		dev_kfree_skb(skb);
+#endif
+		return;
+	}
+	bch->rcount++;
+	skb_queue_tail(&bch->rqueue, skb);
+	schedule_event(bch, FLG_RECVQUEUE);
+}
+EXPORT_SYMBOL(recv_Bchannel_skb);
 
 static void
 confirm_Dsend(struct dchannel *dch)
@@ -229,6 +278,8 @@ confirm_Bsend(struct bchannel *bch)
 {
 	struct sk_buff	*skb;
 
+	if (bch->rcount >= 64)
+		return;
 	skb = _alloc_mISDN_skb(PH_DATA_CNF, mISDN_HEAD_ID(bch->tx_skb),
 	    0, NULL, GFP_ATOMIC);
 	if (!skb) {
@@ -236,6 +287,7 @@ confirm_Bsend(struct bchannel *bch)
 		    mISDN_HEAD_ID(bch->tx_skb));
 		return;
 	}
+	bch->rcount++;
 	skb_queue_tail(&bch->rqueue, skb);
 	schedule_event(bch, FLG_RECVQUEUE);
 }

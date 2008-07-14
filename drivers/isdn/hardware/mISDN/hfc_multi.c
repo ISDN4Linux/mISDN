@@ -851,10 +851,8 @@ vpm_echocan_on(struct hfc_multi *hc, int ch, int taps)
 #ifdef TXADJ
 	skb = _alloc_mISDN_skb(PH_CONTROL_IND, HFC_VOL_CHANGE_TX,
 		sizeof(int), &txadj, GFP_ATOMIC);
-	if (skb) {
-		skb_queue_tail(&bch->rqueue, skb);
-		schedule_event(bch, FLG_RECVQUEUE);
-	}
+	if (skb)
+		recv_Bchannel_skb(bch, skb);
 #endif
 
 	timeslot = ((ch/4)*8) + ((ch%4)*4) + 1;
@@ -886,10 +884,8 @@ vpm_echocan_off(struct hfc_multi *hc, int ch)
 #ifdef TXADJ
 	skb = _alloc_mISDN_skb(PH_CONTROL_IND, HFC_VOL_CHANGE_TX,
 		sizeof(int), &txadj, GFP_ATOMIC);
-	if (skb) {
-		skb_queue_tail(&bch->rqueue, skb);
-		schedule_event(bch, FLG_RECVQUEUE);
-	}
+	if (skb)
+		recv_Bchannel_skb(bch, skb);
 #endif
 
 	timeslot = ((ch/4)*8) + ((ch%4)*4) + 1;
@@ -1856,8 +1852,7 @@ hfcmulti_dtmf(struct hfc_multi *hc)
 			hh->prim = PH_CONTROL_IND;
 			hh->id = DTMF_HFC_COEF;
 			memcpy(skb_put(skb, 512), hc->chan[ch].coeff, 512);
-			skb_queue_tail(&bch->rqueue, skb);
-			schedule_event(bch, FLG_RECVQUEUE);
+			recv_Bchannel_skb(bch, skb);
 		}
 	}
 
@@ -2229,11 +2224,10 @@ next_frame:
 					printk("%02x ", (*sp)->data[temp++]);
 				printk("\n");
 			}
-			if (dch) {
+			if (dch)
 				recv_Dchannel(dch);
-			} else {
+			else
 				recv_Bchannel(bch);
-			}
 			*sp = skb;
 			goto next_frame;
 		}
@@ -2288,8 +2282,7 @@ signal_state_up(struct dchannel *dch, int info, char *msg)
 		GFP_ATOMIC);
 	if (!skb)
 		return;
-	skb_queue_tail(&dch->rqueue, skb);
-	schedule_event(dch, FLG_RECVQUEUE);
+	recv_Dchannel_skb(dch, skb);
 }
 
 static inline void
@@ -3443,7 +3436,7 @@ handle_bmsg(struct mISDNchannel *ch, struct sk_buff *skb)
 #ifdef MISDN_MEMDEBUG
 	mid_sitem_update(skb);
 #endif
-	
+
 	switch (hh->prim) {
 	case PH_DATA_REQ:
 		if (!skb->len)

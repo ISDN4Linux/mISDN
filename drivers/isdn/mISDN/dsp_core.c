@@ -697,27 +697,24 @@ dsp_function(struct mISDNchannel *ch,  struct sk_buff *skb)
 		if (dsp->dtmf.software) {
 			digits = dsp_dtmf_goertzel_decode(dsp, skb->data,
 				skb->len, (dsp_options&DSP_OPT_ULAW)?1:0);
-			if (digits) {
-				while (*digits) {
-					if (dsp_debug & DEBUG_DSP_DTMF)
-						printk(KERN_DEBUG "%s: digit"
-						    "(%c) to layer %s\n",
-						    __func__, *digits,
-						    dsp->name);
-					cont = DTMF_TONE_VAL | *digits;
-					nskb = _alloc_mISDN_skb(PH_CONTROL_IND,
-					    MISDN_ID_ANY, sizeof(int), &cont,
-					    GFP_ATOMIC);
-					if (nskb) {
-						if (dsp->up) {
-							if (dsp->up->send(
-							    dsp->up, nskb))
-							dev_kfree_skb(nskb);
-						} else
-							dev_kfree_skb(nskb);
-					}
-					digits++;
+			while (*digits) {
+				if (dsp_debug & DEBUG_DSP_DTMF)
+					printk(KERN_DEBUG "%s: digit"
+					    "(%c) to layer %s\n",
+					    __func__, *digits, dsp->name);
+				cont = DTMF_TONE_VAL | *digits;
+				nskb = _alloc_mISDN_skb(PH_CONTROL_IND,
+				    MISDN_ID_ANY, sizeof(int), &cont,
+				    GFP_ATOMIC);
+				if (nskb) {
+					if (dsp->up) {
+						if (dsp->up->send(
+						    dsp->up, nskb))
+						dev_kfree_skb(nskb);
+					} else
+						dev_kfree_skb(nskb);
 				}
+				digits++;
 			}
 		}
 		/* we need to process receive data if software */
@@ -752,29 +749,26 @@ dsp_function(struct mISDNchannel *ch,  struct sk_buff *skb)
 			}
 			digits = dsp_dtmf_goertzel_decode(dsp, skb->data,
 				skb->len, 2);
-			if (digits) {
-				while (*digits) {
-					int k;
-					struct sk_buff *nskb;
-					if (dsp_debug & DEBUG_DSP_DTMF)
-						printk(KERN_DEBUG "%s: digit"
-						    "(%c) to layer %s\n",
-						    __func__, *digits,
-						    dsp->name);
-					k = *digits | DTMF_TONE_VAL;
-					nskb = _alloc_mISDN_skb(PH_CONTROL_IND,
-						MISDN_ID_ANY, sizeof(int), &k,
-						GFP_ATOMIC);
-					if (nskb) {
-						if (dsp->up) {
-							if (dsp->up->send(
-							    dsp->up, nskb))
-							dev_kfree_skb(nskb);
-						} else
-							dev_kfree_skb(nskb);
-					}
-					digits++;
+			while (*digits) {
+				int k;
+				struct sk_buff *nskb;
+				if (dsp_debug & DEBUG_DSP_DTMF)
+					printk(KERN_DEBUG "%s: digit"
+					    "(%c) to layer %s\n",
+					    __func__, *digits, dsp->name);
+				k = *digits | DTMF_TONE_VAL;
+				nskb = _alloc_mISDN_skb(PH_CONTROL_IND,
+					MISDN_ID_ANY, sizeof(int), &k,
+					GFP_ATOMIC);
+				if (nskb) {
+					if (dsp->up) {
+						if (dsp->up->send(
+						    dsp->up, nskb))
+						dev_kfree_skb(nskb);
+					} else
+						dev_kfree_skb(nskb);
 				}
+				digits++;
 			}
 			break;
 		case (HFC_VOL_CHANGE_TX): /* change volume */
@@ -1180,7 +1174,7 @@ static int dsp_init(void)
 	dsp_spl_jiffies = dsp_spl_tl.expires;
 	add_timer(&dsp_spl_tl);
 
-	return err;
+	return 0;
 }
 
 

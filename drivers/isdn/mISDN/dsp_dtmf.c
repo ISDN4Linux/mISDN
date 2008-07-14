@@ -127,8 +127,8 @@ u8
 
 	dsp->dtmf.digits[0] = '\0';
 
-	/* note: the function will loop until the buffer are not enough samples
-	 * left to decode a full frame
+	/* Note: The function will loop until the buffer has not enough samples
+	 * left to decode a full frame.
 	 */
 again:
 	/* convert samples */

@@ -209,6 +209,9 @@ __mid_sitem_update(struct sk_buff *skb, char *fn, int line)
 		printk(KERN_DEBUG "%s:%d item has no destructor!\n", fn, line);
 		return;
 	}
+#warning remove
+if (fn)
+printk(KERN_ERR "before lock (%s:%d)\n", fn, line);
 	spin_lock_irqsave(&skbdbg_lock, flags);
 	list_for_each(item, &mISDN_skbdbg_list) {
 		sid = (_mid_sitem_t *)item;
@@ -216,14 +219,22 @@ __mid_sitem_update(struct sk_buff *skb, char *fn, int line)
 			if (found)
 				printk(KERN_ERR "%s: skb already seen in sitem list: (was:sid=%p,fn=%s,line=%d now:sid=%p,fn=%s,line=%d)\n", __func__, found, found->file, found->line, sid, sid->file, sid->line);
 			found = sid;
-			sid->line = line;
-			if (strlen(fn)+1 > MAX_FILE_STRLEN)
-				fn += strlen(fn)+1 - MAX_FILE_STRLEN;
-			strncpy(sid->file, fn, MAX_FILE_STRLEN);
+			if (fn) {
+				sid->line = line;
+				if (strlen(fn)+1 > MAX_FILE_STRLEN)
+					fn += strlen(fn)+1 - MAX_FILE_STRLEN;
+				strncpy(sid->file, fn, MAX_FILE_STRLEN);
+			} else {
+				sid->line = 0;
+				strcpy(sid->file, "(no info)");
+			}
 			sid->file[MAX_FILE_STRLEN-1] = 0; 
 		}
 	}
 	spin_unlock_irqrestore(&skbdbg_lock, flags);
+#warning remove
+if (fn)
+printk(KERN_ERR "after unlock\n");
 	if (!found)
 		printk(KERN_DEBUG "%s:%d item(%p) not in list\n", fn, line, skb);
 }
@@ -232,9 +243,13 @@ struct sk_buff *
 __mid_alloc_skb(unsigned int size, int gfp_mask, char *fn, int line)
 {
 	struct sk_buff	*skb = alloc_skb(size, gfp_mask);
+	u_long		flags;
 
-	if (!skb)
-		return(NULL);
+	if (!skb) {
+		printk(KERN_ERR "No Memory, locking forever! (%s:%d)\n", fn, line);
+		spin_lock_irqsave(&skbdbg_lock, flags);
+		while (1) ;
+	}
 	__mid_sitem_setup(skb, size, fn, line);
 	return(skb);
 }
@@ -243,20 +258,24 @@ struct sk_buff *
 __mid_dev_alloc_skb(unsigned int size, char *fn, int line)
 {
 	struct sk_buff	*skb = dev_alloc_skb(size);
+	u_long		flags;
 
-	if (!skb)
-		return(NULL);
+	if (!skb) {
+		printk(KERN_ERR "No Memory, locking forever! (%s:%d)\n", fn, line);
+		spin_lock_irqsave(&skbdbg_lock, flags);
+		while (1) ;
+	}
 	__mid_sitem_setup(skb, size, fn, line);
 	return(skb);
 }
 
 void
-__mid_kfree_skb(struct sk_buff *skb)
+__mid_kfree_skb(struct sk_buff *skb, char *fn, int line)
 {
 	if (skb->destructor)
-		__mid_sitem_update(skb, "free with destructor", __LINE__);
+		__mid_sitem_update(skb, fn, line);
 	else
-		__mid_sitem_update(skb, "free no destructor", __LINE__);
+		__mid_sitem_update(skb, fn, line);
 	if (skb->destructor)
 		skb->destructor(skb);
 	skb->destructor = NULL;
@@ -264,12 +283,12 @@ __mid_kfree_skb(struct sk_buff *skb)
 }
 
 void
-__mid_dev_kfree_skb(struct sk_buff *skb)
+__mid_dev_kfree_skb(struct sk_buff *skb, char *fn, int line)
 {
 	if (skb->destructor)
-		__mid_sitem_update(skb, "free with destructor", __LINE__);
+		__mid_sitem_update(skb, fn, line);
 	else
-		__mid_sitem_update(skb, "free no destructor", __LINE__);
+		__mid_sitem_update(skb, fn, line);
 	if (skb->destructor)
 		skb->destructor(skb);
 	skb->destructor = NULL;
@@ -280,9 +299,13 @@ struct sk_buff
 *__mid_skb_clone(struct sk_buff *skb, int gfp_mask, char *fn, int line)
 {
 	struct sk_buff	*nskb = skb_clone(skb, gfp_mask);
+	u_long		flags;
 
-	if (!nskb)
-		return(NULL);
+	if (!nskb) {
+		printk(KERN_ERR "No Memory, locking forever! (%s:%d)\n", fn, line);
+		spin_lock_irqsave(&skbdbg_lock, flags);
+		while (1) ;
+	}
 	__mid_sitem_setup(nskb, (nskb->end - nskb->head), fn, line);
 	return(nskb);
 }
@@ -291,9 +314,13 @@ struct sk_buff
 *__mid_skb_copy(struct sk_buff *skb, int gfp_mask, char *fn, int line)
 {
 	struct sk_buff	*nskb = skb_copy(skb, gfp_mask);
+	u_long		flags;
 
-	if (!nskb)
-		return(NULL);
+	if (!nskb) {
+		printk(KERN_ERR "No Memory, locking forever! (%s:%d)\n", fn, line);
+		spin_lock_irqsave(&skbdbg_lock, flags);
+		while (1) ;
+	}
 	__mid_sitem_setup(nskb, (nskb->end - nskb->head), fn, line);
 	return(nskb);
 }

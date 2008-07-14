@@ -1513,8 +1513,11 @@ dsp_cmx_send_member(struct dsp *dsp, int len, s32 *c, int members)
 
 send_packet:
 	/* if queue is too slow */
+#if 0
 	if (!skb_queue_empty(&dsp->sendq))
-		printk(KERN_WARNING "mISDN_dsp.o: send-que too slow\n");
+		printk(KERN_WARNING "mISDN_dsp.o: (%s) send-que too slow\n",
+			dsp->name);
+#endif
 	/*
 	 * send tx-data if enabled - don't filter,
 	 * becuase we want what we send, not what we filtered
@@ -1822,11 +1825,9 @@ dsp_cmx_send(void *arg)
 		}
 	}
 
-	/* restart timer, due to hang of CPU for too long */
 	/* if next event would be in the past ... */
-	if ((s32)(dsp_spl_jiffies+dsp_tics-jiffies) < 0)
-		/* if next event would be in the past ... */
-		dsp_spl_jiffies = jiffies;
+	if ((s32)(dsp_spl_jiffies+dsp_tics-jiffies) <= 0)
+		dsp_spl_jiffies = jiffies + 1;
 	else
 		dsp_spl_jiffies += dsp_tics;
 
