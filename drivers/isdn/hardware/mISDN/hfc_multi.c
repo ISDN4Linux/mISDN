@@ -3085,7 +3085,7 @@ hfcmulti_conf(struct hfc_multi *hc, int ch, int num)
  */
 
 /* NOTE: this function is experimental and therefore disabled */
-static void
+/* static */ void
 hfcmulti_splloop(struct hfc_multi *hc, int ch, u_char *data, int len)
 {
 	struct bchannel *bch = hc->chan[ch].bch;
@@ -3161,7 +3161,7 @@ hfcmulti_splloop(struct hfc_multi *hc, int ch, u_char *data, int len)
 		HFC_wait(hc);
 	}
 
-.. udelay(300);
+	udelay(300);
 }
 
 /*

@@ -88,7 +88,7 @@ void oslec_echo_can_free(struct echo_can_state *ec)
 {
   down(&oslec_lock);
 
-  echo_can_free((echo_can_state_t *)(ec->ec));
+  echo_can_free((struct echo_can_state_s *)(ec->ec));
   free(ec);
 
   up(&oslec_lock);
@@ -98,7 +98,7 @@ short oslec_echo_can_update(struct echo_can_state *ec, short iref, short isig)
 {
     short clean;
 
-    clean = echo_can_update((echo_can_state_t *)(ec->ec), iref, isig);
+    clean = echo_can_update((struct echo_can_state_s *)(ec->ec), iref, isig);
 
     /*
       Simple IIR averager:

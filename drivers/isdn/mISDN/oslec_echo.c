@@ -148,7 +148,8 @@
 
 
 #ifdef __BLACKFIN_ASM__
-static inline void lms_adapt_bg(echo_can_state_t *ec, int clean, int shift)
+static inline void
+lms_adapt_bg(struct echo_can_state_s *ec, int clean, int shift)
 {
     int i, j;
     int offset1;
@@ -219,7 +220,8 @@ static inline void lms_adapt_bg(echo_can_state_t *ec, int clean, int shift)
 */
 
 #else
-static inline void lms_adapt_bg(echo_can_state_t *ec, int clean, int shift)
+static inline void
+lms_adapt_bg(struct echo_can_state_s *ec, int clean, int shift)
 {
     int i;
 
@@ -251,13 +253,13 @@ static inline void lms_adapt_bg(echo_can_state_t *ec, int clean, int shift)
 
 /*- End of function --------------------------------------------------------*/
 
-echo_can_state_t *echo_can_create(int len, int adaption_mode)
+struct echo_can_state_s *echo_can_create(int len, int adaption_mode)
 {
-    echo_can_state_t *ec;
+    struct echo_can_state_s *ec;
     int i;
     int j;
 
-    ec = (echo_can_state_t *) malloc(sizeof(*ec));
+    ec = (struct echo_can_state_s *) malloc(sizeof(*ec));
     if (ec == NULL)
 	return  NULL;
     memset(ec, 0, sizeof(*ec));
@@ -320,7 +322,7 @@ echo_can_state_t *echo_can_create(int len, int adaption_mode)
 }
 /*- End of function --------------------------------------------------------*/
 
-void echo_can_free(echo_can_state_t *ec)
+void echo_can_free(struct echo_can_state_s *ec)
 {
     int i;
 
@@ -333,13 +335,13 @@ void echo_can_free(echo_can_state_t *ec)
 }
 /*- End of function --------------------------------------------------------*/
 
-void echo_can_adaption_mode(echo_can_state_t *ec, int adaption_mode)
+void echo_can_adaption_mode(struct echo_can_state_s *ec, int adaption_mode)
 {
     ec->adaption_mode = adaption_mode;
 }
 /*- End of function --------------------------------------------------------*/
 
-void echo_can_flush(echo_can_state_t *ec)
+void echo_can_flush(struct echo_can_state_s *ec)
 {
     int i;
 
@@ -375,7 +377,7 @@ void echo_can_flush(echo_can_state_t *ec)
 }
 /*- End of function --------------------------------------------------------*/
 
-void echo_can_snapshot(echo_can_state_t *ec)
+void echo_can_snapshot(struct echo_can_state_s *ec)
 {
     memcpy(ec->snapshot, ec->fir_taps16[0], ec->taps*sizeof(int16_t));
 }
@@ -383,7 +385,7 @@ void echo_can_snapshot(echo_can_state_t *ec)
 
 /* Dual Path Echo Canceller ------------------------------------------------*/
 
-int16_t echo_can_update(echo_can_state_t *ec, int16_t tx, int16_t rx)
+int16_t echo_can_update(struct echo_can_state_s *ec, int16_t tx, int16_t rx)
 {
     int32_t echo_value;
     int clean_bg;
@@ -623,7 +625,7 @@ int16_t echo_can_update(echo_can_state_t *ec, int16_t tx, int16_t rx)
    for LMS algorithms.
 */
 
-int16_t echo_can_hpf_tx(echo_can_state_t *ec, int16_t tx)
+int16_t echo_can_hpf_tx(struct echo_can_state_s *ec, int16_t tx)
 {
     int tmp, tmp1;
 

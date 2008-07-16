@@ -133,7 +133,7 @@ minor burden.
     G.168 echo canceller descriptor. This defines the working state for a line
     echo canceller.
 */
-struct echo_can_state {
+struct echo_can_state_s {
     int16_t tx, rx;
     int16_t clean;
     int16_t clean_nlp;
@@ -158,8 +158,8 @@ struct echo_can_state {
     int Lbgn, Lbgn_acc, Lbgn_upper, Lbgn_upper_acc;
 
     /* foreground and background filter states */
-    fir16_state_t fir_state;
-    fir16_state_t fir_state_bg;
+    struct fir16_state fir_state;
+    struct fir16_state fir_state_bg;
     int16_t *fir_taps16[2];
 
     /* DC blocking filter states */
@@ -184,25 +184,25 @@ struct echo_can_state {
     \return The new canceller context, or NULL if the canceller could not be
     created.
 */
-struct echo_can_state *echo_can_create(int len, int adaption_mode);
+struct echo_can_state_s *echo_can_create(int len, int adaption_mode);
 
 /*! Free a voice echo canceller context.
     \param ec The echo canceller context.
 */
-void echo_can_free(struct echo_can_state *ec);
+void echo_can_free(struct echo_can_state_s *ec);
 
 /*! Flush (reinitialise) a voice echo canceller context.
     \param ec The echo canceller context.
 */
-void echo_can_flush(struct echo_can_state *ec);
+void echo_can_flush(struct echo_can_state_s *ec);
 
 /*! Set the adaption mode of a voice echo canceller context.
     \param ec The echo canceller context.
     \param adapt The mode.
 */
-void echo_can_adaption_mode(struct echo_can_state *ec, int adaption_mode);
+void echo_can_adaption_mode(struct echo_can_state_s *ec, int adaption_mode);
 
-void echo_can_snapshot(struct echo_can_state *ec);
+void echo_can_snapshot(struct echo_can_state_s *ec);
 
 /*! Process a sample through a voice echo canceller.
     \param ec The echo canceller context.
@@ -210,14 +210,14 @@ void echo_can_snapshot(struct echo_can_state *ec);
     \param rx The received audio sample.
     \return The clean (echo cancelled) received sample.
 */
-int16_t echo_can_update(struct echo_can_state *ec, int16_t tx, int16_t rx);
+int16_t echo_can_update(struct echo_can_state_s *ec, int16_t tx, int16_t rx);
 
 /*! Process to high pass filter the tx signal.
     \param ec The echo canceller context.
     \param tx The transmitted auio sample.
     \return The HP filtered transmit sample, send this to your D/A.
 */
-int16_t echo_can_hpf_tx(struct echo_can_state *ec, int16_t tx);
+int16_t echo_can_hpf_tx(struct echo_can_state_s *ec, int16_t tx);
 
 #endif
 /*- End of file ------------------------------------------------------------*/

@@ -84,7 +84,7 @@ struct fir16_state {
     instance of an FIR filter using 32 bit integer coefficients, and filtering
     16 bit integer data.
 */
-struct fir32_staet {
+struct fir32_state {
     int taps;
     int curr_pos;
     const int32_t *coeffs;
