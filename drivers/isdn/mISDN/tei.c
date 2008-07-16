@@ -1066,10 +1066,6 @@ mgr_send(struct mISDNchannel *ch, struct sk_buff *skb)
 	struct mISDNhead	*hh =  mISDN_HEAD_P(skb);
 	int			ret = -EINVAL;
 
-#ifdef MISDN_MEMDEBUG
-	mid_sitem_update(skb);
-#endif
-
 	mgr = container_of(ch, struct manager, ch);
 	if (*debug & DEBUG_L2_RECV)
 		printk(KERN_DEBUG "%s: prim(%x) id(%x)\n",
@@ -1236,10 +1232,6 @@ mgr_bcast(struct mISDNchannel *ch, struct sk_buff *skb)
 	struct layer2		*l2;
 	u_long			flags;
 	int			ret;
-
-#ifdef MISDN_MEMDEBUG
-	mid_sitem_update(skb);
-#endif
 
 	read_lock_irqsave(&mgr->lock, flags);
 	list_for_each_entry(l2, &mgr->layer2, list) {

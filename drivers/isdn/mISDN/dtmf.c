@@ -321,10 +321,6 @@ dtmf_function(struct mISDNchannel *ch,  struct sk_buff *skb)
 	struct dtmf		*dtmf = container_of(ch, struct dtmf, ch);
 	struct mISDNhead	*hh;
 
-#ifdef MISDN_MEMDEBUG
-	mid_sitem_update(skb);
-#endif
-	
 	hh = mISDN_HEAD_P(skb);
 	switch (hh->prim) {
 	case (PH_DATA_IND):

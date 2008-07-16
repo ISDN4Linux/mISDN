@@ -6,9 +6,6 @@ EXTRA_CFLAGS += -ggdb
 ifdef MINCLUDES
 EXTRA_CFLAGS += -I$(MINCLUDES) -g
 endif
-ifdef CONFIG_MISDN_MEMDEBUG
-EXTRA_CFLAGS += -DMISDN_MEMDEBUG
-endif
 
 EXTRA_CFLAGS += -DMISDNVERSION=\"$(MISDNVERSION)\"
 
@@ -27,9 +24,6 @@ endif
 # multi objects
 
 mISDN_core-objs := core.o fsm.o socket.o hwchannel.o stack.o layer1.o layer2.o tei.o timerdev.o
-ifdef CONFIG_MISDN_MEMDEBUG
-mISDN_core-objs += memdbg.o
-endif
 mISDN_dtmf-objs := dtmf.o
 mISDN_dsp-objs := dsp_core.o dsp_cmx.o dsp_tones.o dsp_dtmf.o dsp_audio.o dsp_blowfish.o dsp_pipeline.o dsp_hwec.o
 mISDN_dsp_mec2-objs := dsp_mec2.o

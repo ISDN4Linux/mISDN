@@ -70,23 +70,12 @@ mISDN_send(struct mISDNchannel *ch, struct sk_buff *skb)
 	struct mISDN_sock *msk;
 	int	err;
 
-#ifdef MISDN_MEMDEBUG
-	mid_sitem_update(skb);
-#endif
 	msk = container_of(ch, struct mISDN_sock, ch);
 	if (*debug & DEBUG_SOCKET)
 		printk(KERN_DEBUG "%s len %d %p\n", __func__, skb->len, skb);
 	if (msk->sk.sk_state == MISDN_CLOSED)
 		return -EUNATCH;
 	__net_timestamp(skb);
-#ifdef MISDN_MEMDEBUG
-	mid_sitem_update(skb);
-	/* removing from list, because it is not done by ..rcv_skb */
-	if (skb->destructor) {
-		skb->destructor(skb);
-		skb->destructor = NULL;
-	}
-#endif
 	err = sock_queue_rcv_skb(&msk->sk, skb);
 	if (err)
 		printk(KERN_WARNING "%s: error %d\n", __func__, err);
@@ -240,9 +229,6 @@ mISDN_sock_sendmsg(struct kiocb *iocb, struct socket *sock,
 		printk(KERN_DEBUG "%s: ID:%x\n",
 		     __func__, mISDN_HEAD_ID(skb));
 
-#ifdef MISDN_MEMDEBUG
-	mid_sitem_update(skb);
-#endif
 	err = -ENODEV;
 	if (!_pms(sk)->ch.peer ||
 	    (err = _pms(sk)->ch.recv(_pms(sk)->ch.peer, skb)))

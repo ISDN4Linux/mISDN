@@ -635,10 +635,6 @@ dsp_function(struct mISDNchannel *ch,  struct sk_buff *skb)
 	struct			sk_buff *nskb;
 	u_long			flags;
 
-#ifdef MISDN_MEMDEBUG
-	mid_sitem_update(skb);
-#endif
-	
 	hh = mISDN_HEAD_P(skb);
 	switch (hh->prim) {
 	/* FROM DOWN */
@@ -970,9 +966,6 @@ dsp_send_bh(struct work_struct *work)
 
 	/* send queued data */
 	while ((skb = skb_dequeue(&dsp->sendq))) {
-#ifdef MISDN_MEMDEBUG
-		mid_sitem_update(skb);
-#endif
 		/* in locked date, we must have still data in queue */
 		if (dsp->hdlc && dsp->data_pending)
 			break; /* wait until data has been acknowledged */

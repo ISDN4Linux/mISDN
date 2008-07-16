@@ -10,15 +10,6 @@ menuconfig MISDN
 
 if MISDN != n
 
-config MISDN_MEMDEBUG
-	bool "Enable memory leak debug for mISDN"
-	help
-	  This option is for watching the use of several resources in mISDN.
-	  It includes extra code to maintain list of allocated memory and
-	  sk_buffs. On module unload you can see not freed resources an
-	  their allocation orging and some object specific informations.
-	  If unsure, say 'N'.
-
 config MISDN_DSP
 	bool "Digital Audio Processing of transparent data"
 	help

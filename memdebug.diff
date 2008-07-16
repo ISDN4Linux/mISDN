@@ -1,0 +1,1043 @@
+diff -Nur -x '*symvers' -x '*mod.c' -x '*.o' -x '*.ko' mISDN/drivers/isdn/Config.in.v2.4 mISDN-memdebug/drivers/isdn/Config.in.v2.4
+--- mISDN/drivers/isdn/Config.in.v2.4	2008-07-15 09:49:45.000000000 +0200
++++ mISDN-memdebug/drivers/isdn/Config.in.v2.4	2008-07-10 12:16:12.000000000 +0200
+@@ -172,5 +172,6 @@
+    bool '  Winbond W6692 cards' CONFIG_MISDN_W6692
+    comment '  mISDN supported features'
+    bool '  mISDN audio DSP module' CONFIG_MISDN_DSP
++   bool '  mISDN memory leak debug' CONFIG_MISDN_MEMDEBUG
+ fi
+ endmenu
+diff -Nur -x '*symvers' -x '*mod.c' -x '*.o' -x '*.ko' mISDN/drivers/isdn/hardware/mISDN/Makefile mISDN-memdebug/drivers/isdn/hardware/mISDN/Makefile
+--- mISDN/drivers/isdn/hardware/mISDN/Makefile	2008-07-15 10:54:52.000000000 +0200
++++ mISDN-memdebug/drivers/isdn/hardware/mISDN/Makefile	2008-07-11 18:21:37.000000000 +0200
+@@ -6,6 +6,9 @@
+ ifdef MINCLUDES
+ EXTRA_CFLAGS += -I$(MINCLUDES) -g
+ endif
++ifdef CONFIG_MISDN_MEMDEBUG
++EXTRA_CFLAGS += -DMISDN_MEMDEBUG
++endif
+ 
+ EXTRA_CFLAGS += -DMISDNVERSION=\"$(MISDNVERSION)\"
+ 
+diff -Nur -x '*symvers' -x '*mod.c' -x '*.o' -x '*.ko' mISDN/drivers/isdn/hardware/mISDN/Makefile.v2.6 mISDN-memdebug/drivers/isdn/hardware/mISDN/Makefile.v2.6
+--- mISDN/drivers/isdn/hardware/mISDN/Makefile.v2.6	2008-07-15 09:50:37.000000000 +0200
++++ mISDN-memdebug/drivers/isdn/hardware/mISDN/Makefile.v2.6	2008-07-10 12:16:49.000000000 +0200
+@@ -6,6 +6,9 @@
+ ifdef MINCLUDES
+ EXTRA_CFLAGS += -I$(MINCLUDES) -g
+ endif
++ifdef CONFIG_MISDN_MEMDEBUG
++EXTRA_CFLAGS += -DMISDN_MEMDEBUG
++endif
+ 
+ EXTRA_CFLAGS += -DMISDNVERSION=\"$(MISDNVERSION)\"
+ 
+diff -Nur -x '*symvers' -x '*mod.c' -x '*.o' -x '*.ko' mISDN/drivers/isdn/hardware/mISDN/hfc_multi.c mISDN-memdebug/drivers/isdn/hardware/mISDN/hfc_multi.c
+--- mISDN/drivers/isdn/hardware/mISDN/hfc_multi.c	2008-07-15 10:03:30.000000000 +0200
++++ mISDN-memdebug/drivers/isdn/hardware/mISDN/hfc_multi.c	2008-07-15 09:47:25.000000000 +0200
+@@ -144,6 +144,9 @@
+ #include <linux/delay.h>
+ #include <linux/mISDNhw.h>
+ #include <linux/mISDNdsp.h>
++#ifdef MISDN_MEMDEBUG
++#include "../../mISDN/memdbg.h"
++#endif
+ 
+ /*
+ #define IRQCOUNT_DEBUG
+@@ -2099,6 +2102,10 @@
+ 	dch = hc->chan[ch].dch;
+ 	if ((!dch) && (!bch))
+ 		return;
++#ifdef MISDN_MEMDEBUG
++	if (dch && bch)
++		printk(KERN_ERR "%s: dch and bch set, correct it!\n", __func__);
++#endif
+ 	if (dch) {
+ 		if (!test_bit(FLG_ACTIVE, &dch->Flags))
+ 			return;
+@@ -3280,6 +3287,10 @@
+ 	unsigned int		id;
+ 	u_long			flags;
+ 
++#ifdef MISDN_MEMDEBUG
++	mid_sitem_update(skb);
++#endif
++	
+ 	switch (hh->prim) {
+ 	case PH_DATA_REQ:
+ 		if (skb->len < 1)
+@@ -3422,6 +3433,10 @@
+ 	unsigned int		id;
+ 	u_long			flags;
+ 
++#ifdef MISDN_MEMDEBUG
++	mid_sitem_update(skb);
++#endif
++
+ 	switch (hh->prim) {
+ 	case PH_DATA_REQ:
+ 		if (!skb->len)
+diff -Nur -x '*symvers' -x '*mod.c' -x '*.o' -x '*.ko' mISDN/drivers/isdn/hardware/mISDN/hfc_pci.c mISDN-memdebug/drivers/isdn/hardware/mISDN/hfc_pci.c
+--- mISDN/drivers/isdn/hardware/mISDN/hfc_pci.c	2008-07-15 10:03:57.000000000 +0200
++++ mISDN-memdebug/drivers/isdn/hardware/mISDN/hfc_pci.c	2008-07-15 09:47:25.000000000 +0200
+@@ -29,6 +29,9 @@
+ #include <linux/pci.h>
+ #include <linux/delay.h>
+ #include <linux/mISDNhw.h>
++#ifdef MISDN_MEMDEBUG
++#include "../../mISDN/memdbg.h"
++#endif
+ 
+ #include "hfc_pci.h"
+ 
+@@ -1616,6 +1619,10 @@
+ 	unsigned int		id;
+ 	u_long			flags;
+ 
++#ifdef MISDN_MEMDEBUG
++	mid_sitem_update(skb);
++#endif
++	
+ 	switch (hh->prim) {
+ 	case PH_DATA_REQ:
+ 		spin_lock_irqsave(&hc->lock, flags);
+@@ -1699,6 +1706,10 @@
+ 	unsigned int		id;
+ 	u_long			flags;
+ 
++#ifdef MISDN_MEMDEBUG
++	mid_sitem_update(skb);
++#endif
++	
+ 	switch (hh->prim) {
+ 	case PH_DATA_REQ:
+ 		spin_lock_irqsave(&hc->lock, flags);
+diff -Nur -x '*symvers' -x '*mod.c' -x '*.o' -x '*.ko' mISDN/drivers/isdn/hardware/mISDN/hfcs_usb.c mISDN-memdebug/drivers/isdn/hardware/mISDN/hfcs_usb.c
+--- mISDN/drivers/isdn/hardware/mISDN/hfcs_usb.c	2008-07-15 10:04:17.000000000 +0200
++++ mISDN-memdebug/drivers/isdn/hardware/mISDN/hfcs_usb.c	2008-07-15 09:47:25.000000000 +0200
+@@ -26,6 +26,9 @@
+ #include <linux/pci.h>
+ #include <linux/mISDNhw.h>
+ #include <linux/isdn_compat.h>
++#ifdef MISDN_MEMDEBUG
++#include "../../mISDN/memdbg.h"
++#endif
+ #include "hfcs_usb.h"
+ 
+ #define DRIVER_NAME "hfcsusb"
+@@ -225,6 +228,10 @@
+ 	struct mISDNhead	*hh = mISDN_HEAD_P(skb);
+ 	u_long			flags;
+ 
++#ifdef MISDN_MEMDEBUG
++	mid_sitem_update(skb);
++#endif
++	
+ 	if (debug & DBG_HFC_CALL_TRACE)
+ 		printk (KERN_INFO "%s\n", __FUNCTION__);
+ 
+@@ -287,6 +294,10 @@
+         struct mISDNhead	*hh = mISDN_HEAD_P(skb);
+         u_long			flags;
+ 
++#ifdef MISDN_MEMDEBUG
++	mid_sitem_update(skb);
++#endif
++	
+ 	// TODO mbachem
+ 	return -EINVAL;
+ }
+diff -Nur -x '*symvers' -x '*mod.c' -x '*.o' -x '*.ko' mISDN/drivers/isdn/mISDN/Kconfig.v2.6 mISDN-memdebug/drivers/isdn/mISDN/Kconfig.v2.6
+--- mISDN/drivers/isdn/mISDN/Kconfig.v2.6	2008-07-15 10:52:55.000000000 +0200
++++ mISDN-memdebug/drivers/isdn/mISDN/Kconfig.v2.6	2008-07-10 12:16:49.000000000 +0200
+@@ -10,6 +10,15 @@
+ 
+ if MISDN != n
+ 
++config MISDN_MEMDEBUG
++	bool "Enable memory leak debug for mISDN"
++	help
++	  This option is for watching the use of several resources in mISDN.
++	  It includes extra code to maintain list of allocated memory and
++	  sk_buffs. On module unload you can see not freed resources an
++	  their allocation orging and some object specific informations.
++	  If unsure, say 'N'.
++
+ config MISDN_DSP
+ 	bool "Digital Audio Processing of transparent data"
+ 	help
+diff -Nur -x '*symvers' -x '*mod.c' -x '*.o' -x '*.ko' mISDN/drivers/isdn/mISDN/Makefile mISDN-memdebug/drivers/isdn/mISDN/Makefile
+--- mISDN/drivers/isdn/mISDN/Makefile	2008-07-15 10:54:52.000000000 +0200
++++ mISDN-memdebug/drivers/isdn/mISDN/Makefile	2008-07-11 18:21:37.000000000 +0200
+@@ -6,6 +6,9 @@
+ ifdef MINCLUDES
+ EXTRA_CFLAGS += -I$(MINCLUDES) -g
+ endif
++ifdef CONFIG_MISDN_MEMDEBUG
++EXTRA_CFLAGS += -DMISDN_MEMDEBUG
++endif
+ 
+ EXTRA_CFLAGS += -DMISDNVERSION=\"$(MISDNVERSION)\"
+ 
+@@ -24,6 +27,9 @@
+ # multi objects
+ 
+ mISDN_core-objs := core.o fsm.o socket.o hwchannel.o stack.o layer1.o layer2.o tei.o timerdev.o
++ifdef CONFIG_MISDN_MEMDEBUG
++mISDN_core-objs += memdbg.o
++endif
+ mISDN_dtmf-objs := dtmf.o
+ mISDN_dsp-objs := dsp_core.o dsp_cmx.o dsp_tones.o dsp_dtmf.o dsp_audio.o dsp_blowfish.o dsp_pipeline.o dsp_hwec.o
+ mISDN_dsp_mec2-objs := dsp_mec2.o
+diff -Nur -x '*symvers' -x '*mod.c' -x '*.o' -x '*.ko' mISDN/drivers/isdn/mISDN/Makefile.v2.6 mISDN-memdebug/drivers/isdn/mISDN/Makefile.v2.6
+--- mISDN/drivers/isdn/mISDN/Makefile.v2.6	2008-07-15 10:53:08.000000000 +0200
++++ mISDN-memdebug/drivers/isdn/mISDN/Makefile.v2.6	2008-07-10 12:16:49.000000000 +0200
+@@ -6,6 +6,9 @@
+ ifdef MINCLUDES
+ EXTRA_CFLAGS += -I$(MINCLUDES) -g
+ endif
++ifdef CONFIG_MISDN_MEMDEBUG
++EXTRA_CFLAGS += -DMISDN_MEMDEBUG
++endif
+ 
+ EXTRA_CFLAGS += -DMISDNVERSION=\"$(MISDNVERSION)\"
+ 
+@@ -24,6 +27,9 @@
+ # multi objects
+ 
+ mISDN_core-objs := core.o fsm.o socket.o hwchannel.o stack.o layer1.o layer2.o tei.o timerdev.o
++ifdef CONFIG_MISDN_MEMDEBUG
++mISDN_core-objs += memdbg.o
++endif
+ mISDN_dtmf-objs := dtmf.o
+ mISDN_dsp-objs := dsp_core.o dsp_cmx.o dsp_tones.o dsp_dtmf.o dsp_audio.o dsp_blowfish.o dsp_pipeline.o dsp_hwec.o
+ mISDN_dsp_mec2-objs := dsp_mec2.o
+diff -Nur -x '*symvers' -x '*mod.c' -x '*.o' -x '*.ko' mISDN/drivers/isdn/mISDN/core.c mISDN-memdebug/drivers/isdn/mISDN/core.c
+--- mISDN/drivers/isdn/mISDN/core.c	2008-07-15 10:39:59.000000000 +0200
++++ mISDN-memdebug/drivers/isdn/mISDN/core.c	2008-07-10 12:16:49.000000000 +0200
+@@ -201,6 +201,11 @@
+ 
+ 	printk(KERN_INFO "Modular ISDN core version %d.%d.%d\n",
+ 		MISDN_MAJOR_VERSION, MISDN_MINOR_VERSION, MISDN_RELEASE);
++#ifdef MISDN_MEMDEBUG
++	err = __mid_init();
++	if (err)
++		return err;
++#endif
+ 	mISDN_initstack(&debug);
+ 	err = mISDN_inittimer(&debug);
+ 	if (err)
+@@ -223,6 +228,9 @@
+ 		Isdnl2_cleanup();
+ 	}
+ error:
++#ifdef MISDN_MEMDEBUG
++	__mid_cleanup();
++#endif
+ 	return err;
+ }
+ 
+@@ -238,6 +246,9 @@
+ 
+ 	if (!list_empty(&Bprotocols))
+ 		printk(KERN_ERR "%s Bprotocols still registered\n", __func__);
++#ifdef MISDN_MEMDEBUG
++	__mid_cleanup();
++#endif
+ 	printk(KERN_DEBUG "mISDNcore unloaded\n");
+ }
+ 
+diff -Nur -x '*symvers' -x '*mod.c' -x '*.o' -x '*.ko' mISDN/drivers/isdn/mISDN/core.h mISDN-memdebug/drivers/isdn/mISDN/core.h
+--- mISDN/drivers/isdn/mISDN/core.h	2008-07-15 10:40:05.000000000 +0200
++++ mISDN-memdebug/drivers/isdn/mISDN/core.h	2008-07-10 12:16:49.000000000 +0200
+@@ -15,6 +15,10 @@
+ #ifndef mISDN_CORE_H
+ #define mISDN_CORE_H
+ 
++#ifdef MISDN_MEMDEBUG
++#include "memdbg.h"
++#endif
++
+ extern struct mISDNdevice	*get_mdevice(u_int);
+ extern int			get_mdevice_count(void);
+ 
+diff -Nur -x '*symvers' -x '*mod.c' -x '*.o' -x '*.ko' mISDN/drivers/isdn/mISDN/dsp.h mISDN-memdebug/drivers/isdn/mISDN/dsp.h
+--- mISDN/drivers/isdn/mISDN/dsp.h	2008-07-15 10:53:19.000000000 +0200
++++ mISDN-memdebug/drivers/isdn/mISDN/dsp.h	2008-07-10 12:16:49.000000000 +0200
+@@ -9,6 +9,10 @@
+  *
+  */
+ 
++#ifdef MISDN_MEMDEBUG
++#include "memdbg.h"
++#endif
++
+ #define DEBUG_DSP_CTRL		0x0001
+ #define DEBUG_DSP_CORE		0x0002
+ #define DEBUG_DSP_DTMF		0x0004
+diff -Nur -x '*symvers' -x '*mod.c' -x '*.o' -x '*.ko' mISDN/drivers/isdn/mISDN/dsp_core.c mISDN-memdebug/drivers/isdn/mISDN/dsp_core.c
+--- mISDN/drivers/isdn/mISDN/dsp_core.c	2008-07-15 10:53:28.000000000 +0200
++++ mISDN-memdebug/drivers/isdn/mISDN/dsp_core.c	2008-07-15 09:47:25.000000000 +0200
+@@ -636,6 +636,10 @@
+ 	struct			sk_buff *nskb;
+ 	u_long			flags;
+ 
++#ifdef MISDN_MEMDEBUG
++	mid_sitem_update(skb);
++#endif
++	
+ 	hh = mISDN_HEAD_P(skb);
+ 	switch (hh->prim) {
+ 	/* FROM DOWN */
+@@ -964,6 +968,9 @@
+ 
+ 	/* send queued data */
+ 	while ((skb = skb_dequeue(&dsp->sendq))) {
++#ifdef MISDN_MEMDEBUG
++		mid_sitem_update(skb);
++#endif
+ 		/* in locked date, we must have still data in queue */
+ 		if (dsp->hdlc && dsp->data_pending)
+ 			break; /* wait until data has been acknowledged */
+diff -Nur -x '*symvers' -x '*mod.c' -x '*.o' -x '*.ko' mISDN/drivers/isdn/mISDN/dtmf.c mISDN-memdebug/drivers/isdn/mISDN/dtmf.c
+--- mISDN/drivers/isdn/mISDN/dtmf.c	2008-07-15 10:53:43.000000000 +0200
++++ mISDN-memdebug/drivers/isdn/mISDN/dtmf.c	2008-07-15 09:47:25.000000000 +0200
+@@ -321,6 +321,10 @@
+ 	struct dtmf		*dtmf = container_of(ch, struct dtmf, ch);
+ 	struct mISDNhead	*hh;
+ 
++#ifdef MISDN_MEMDEBUG
++	mid_sitem_update(skb);
++#endif
++	
+ 	hh = mISDN_HEAD_P(skb);
+ 	switch (hh->prim) {
+ 	case (PH_DATA_IND):
+diff -Nur -x '*symvers' -x '*mod.c' -x '*.o' -x '*.ko' mISDN/drivers/isdn/mISDN/hwchannel.c mISDN-memdebug/drivers/isdn/mISDN/hwchannel.c
+--- mISDN/drivers/isdn/mISDN/hwchannel.c	2008-07-15 10:40:43.000000000 +0200
++++ mISDN-memdebug/drivers/isdn/mISDN/hwchannel.c	2008-07-15 09:47:25.000000000 +0200
+@@ -17,6 +17,9 @@
+ 
+ #include <linux/module.h>
+ #include <linux/mISDNhw.h>
++#ifdef MISDN_MEMDEBUG
++#include "memdbg.h"
++#endif
+ 
+ static void
+ dchannel_bh(struct work_struct *ws)
+@@ -27,6 +30,9 @@
+ 
+ 	if (test_and_clear_bit(FLG_RECVQUEUE, &dch->Flags)) {
+ 		while ((skb = skb_dequeue(&dch->rqueue))) {
++#ifdef MISDN_MEMDEBUG
++			mid_sitem_update(skb);
++#endif
+ 			if (likely(dch->dev.D.peer)) {
+ 				err = dch->dev.D.recv(dch->dev.D.peer, skb);
+ 				if (err)
+@@ -54,6 +60,9 @@
+ 				printk(KERN_WARNING "B-channel %p receive "
+ 					"queue if full, but empties...\n", bch);
+ 			bch->rcount--;
++#ifdef MISDN_MEMDEBUG
++			mid_sitem_update(skb);
++#endif
+ 			if (likely(bch->ch.peer)) {
+ 				err = bch->ch.recv(bch->ch.peer, skb);
+ 				if (err)
+@@ -110,6 +119,15 @@
+ 		dev_kfree_skb(ch->rx_skb);
+ 		ch->rx_skb = NULL;
+ 	}
++#ifdef MISDN_MEMDEBUG
++	{
++		struct sk_buff *skb;
++		while ((skb = skb_dequeue(&ch->squeue)))
++			dev_kfree_skb(skb);
++		while ((skb = skb_dequeue(&ch->rqueue)))
++			dev_kfree_skb(skb);
++	}
++#endif
+ 	skb_queue_purge(&ch->squeue);
+ 	skb_queue_purge(&ch->rqueue);
+ 	flush_scheduled_work();
+@@ -132,6 +150,13 @@
+ 		dev_kfree_skb(ch->next_skb);
+ 		ch->next_skb = NULL;
+ 	}
++#ifdef MISDN_MEMDEBUG
++	{
++		struct sk_buff *skb;
++		while ((skb = skb_dequeue(&ch->rqueue)))
++			dev_kfree_skb(skb);
++	}
++#endif
+ 	skb_queue_purge(&ch->rqueue);
+ 	ch->rcount = 0;
+ 	flush_scheduled_work();
+@@ -177,7 +202,11 @@
+ 	hh->prim = PH_DATA_IND;
+ 	hh->id = MISDN_ID_ANY;
+ 	if (bch->rcount >= 64) {
++#ifdef MISDN_MEMDEBUG
++		__mid_dev_kfree_skb(bch->rx_skb, NULL, 0);
++#else
+ 		dev_kfree_skb(bch->rx_skb);
++#endif
+ 		bch->rx_skb = NULL;
+ 		return;
+ 	}
+@@ -200,7 +229,11 @@
+ recv_Bchannel_skb(struct bchannel *bch, struct sk_buff *skb)
+ {
+ 	if (bch->rcount >= 64) {
++#ifdef MISDN_MEMDEBUG
++		__mid_dev_kfree_skb(skb, NULL, 0);
++#else
+ 		dev_kfree_skb(skb);
++#endif
+ 		return;
+ 	}
+ 	bch->rcount++;
+diff -Nur -x '*symvers' -x '*mod.c' -x '*.o' -x '*.ko' mISDN/drivers/isdn/mISDN/l1oip_core.c mISDN-memdebug/drivers/isdn/mISDN/l1oip_core.c
+--- mISDN/drivers/isdn/mISDN/l1oip_core.c	2008-07-15 10:53:59.000000000 +0200
++++ mISDN-memdebug/drivers/isdn/mISDN/l1oip_core.c	2008-07-15 09:47:25.000000000 +0200
+@@ -885,6 +885,10 @@
+ 	int			l, ll;
+ 	unsigned char		*p;
+ 
++#ifdef MISDN_MEMDEBUG
++	mid_sitem_update(skb);
++#endif
++	
+ 	switch (hh->prim) {
+ 	case PH_DATA_REQ:
+ 		if (skb->len < 1) {
+@@ -1093,6 +1097,10 @@
+ 	int			l, ll, i;
+ 	unsigned char		*p;
+ 
++#ifdef MISDN_MEMDEBUG
++	mid_sitem_update(skb);
++#endif
++	
+ 	switch (hh->prim) {
+ 	case PH_DATA_REQ:
+ 		if (skb->len <= 0) {
+diff -Nur -x '*symvers' -x '*mod.c' -x '*.o' -x '*.ko' mISDN/drivers/isdn/mISDN/layer1.c mISDN-memdebug/drivers/isdn/mISDN/layer1.c
+--- mISDN/drivers/isdn/mISDN/layer1.c	2008-07-15 10:54:08.000000000 +0200
++++ mISDN-memdebug/drivers/isdn/mISDN/layer1.c	2008-07-10 12:16:49.000000000 +0200
+@@ -20,6 +20,9 @@
+ #include <linux/mISDNhw.h>
+ #include "layer1.h"
+ #include "fsm.h"
++#ifdef MISDN_MEMDEBUG
++#include "memdbg.h"
++#endif
+ 
+ 
+ static int *debug;
+diff -Nur -x '*symvers' -x '*mod.c' -x '*.o' -x '*.ko' mISDN/drivers/isdn/mISDN/layer2.c mISDN-memdebug/drivers/isdn/mISDN/layer2.c
+--- mISDN/drivers/isdn/mISDN/layer2.c	2008-07-15 10:14:59.000000000 +0200
++++ mISDN-memdebug/drivers/isdn/mISDN/layer2.c	2008-07-15 09:47:25.000000000 +0200
+@@ -17,6 +17,9 @@
+ 
+ #include "fsm.h"
+ #include "layer2.h"
++#ifdef MISDN_MEMDEBUG
++#include "memdbg.h"
++#endif
+ 
+ static int *debug;
+ 
+@@ -1924,6 +1927,10 @@
+ 	struct mISDNhead	*hh =  mISDN_HEAD_P(skb);
+ 	int 			ret = -EINVAL;
+ 
++#ifdef MISDN_MEMDEBUG
++	mid_sitem_update(skb);
++#endif
++	
+ 	if (*debug & DEBUG_L2_RECV)
+ 		printk(KERN_DEBUG "%s: prim(%x) id(%x) tei(%d)\n",
+ 		    __func__, hh->prim, hh->id, l2->tei);
+diff -Nur -x '*symvers' -x '*mod.c' -x '*.o' -x '*.ko' mISDN/drivers/isdn/mISDN/memdbg.c mISDN-memdebug/drivers/isdn/mISDN/memdbg.c
+--- mISDN/drivers/isdn/mISDN/memdbg.c	1970-01-01 01:00:00.000000000 +0100
++++ mISDN-memdebug/drivers/isdn/mISDN/memdbg.c	2008-07-15 09:47:25.000000000 +0200
+@@ -0,0 +1,410 @@
++#include <linux/stddef.h>
++#include <linux/list.h>
++#include <linux/vmalloc.h>
++#include <linux/skbuff.h>
++#include <linux/mISDNif.h>
++//#ifdef CONFIG_KMOD
++//#include <linux/kmod.h>
++//#endif
++
++static struct list_head mISDN_memdbg_list = LIST_HEAD_INIT(mISDN_memdbg_list);
++static struct list_head mISDN_skbdbg_list = LIST_HEAD_INIT(mISDN_skbdbg_list);
++static spinlock_t	memdbg_lock = SPIN_LOCK_UNLOCKED;
++static spinlock_t	skbdbg_lock = SPIN_LOCK_UNLOCKED;
++
++#define MAX_FILE_STRLEN		(64 - 3*sizeof(u_int) - sizeof(struct list_head))
++
++#define MID_ITEM_TYP_KMALLOC	1
++#define MID_ITEM_TYP_VMALLOC	2
++
++typedef struct _mid_item {
++	struct list_head	head;
++	u_int			typ;
++	u_int			size;
++	u_int			line;
++	char			file[MAX_FILE_STRLEN];
++} _mid_item_t;
++
++typedef struct _mid_sitem {
++	struct list_head	head;
++	struct sk_buff		*skb;
++	unsigned int		size;
++	int			line;
++	char			file[MAX_FILE_STRLEN];
++} _mid_sitem_t;
++
++void *
++__mid_kmalloc(size_t size, int ord, char *fn, int line)
++{
++	_mid_item_t	*mid;
++	u_long		flags;
++
++	mid = kmalloc(size + sizeof(_mid_item_t), ord);
++	if (mid) {
++		INIT_LIST_HEAD(&mid->head);
++		mid->typ  = MID_ITEM_TYP_KMALLOC;
++		mid->size = size;
++		mid->line = line;
++		if (strlen(fn)+1 > MAX_FILE_STRLEN)
++			fn += strlen(fn)+1 - MAX_FILE_STRLEN;
++		strncpy(mid->file, fn, MAX_FILE_STRLEN);
++		mid->file[MAX_FILE_STRLEN-1] = 0;
++		spin_lock_irqsave(&memdbg_lock, flags);
++		list_add_tail(&mid->head, &mISDN_memdbg_list);
++		spin_unlock_irqrestore(&memdbg_lock, flags);
++		return((void *)&mid->file[MAX_FILE_STRLEN]);
++	} else
++		return(NULL);
++}
++
++void *
++__mid_kzalloc(size_t size, int ord, char *fn, int line)
++{
++	_mid_item_t	*mid;
++	u_long		flags;
++
++	mid = kzalloc(size + sizeof(_mid_item_t), ord);
++	if (mid) {
++		INIT_LIST_HEAD(&mid->head);
++		mid->typ  = MID_ITEM_TYP_KMALLOC;
++		mid->size = size;
++		mid->line = line;
++		if (strlen(fn)+1 > MAX_FILE_STRLEN)
++			fn += strlen(fn)+1 - MAX_FILE_STRLEN;
++		strncpy(mid->file, fn, MAX_FILE_STRLEN);
++		mid->file[MAX_FILE_STRLEN-1] = 0;
++		spin_lock_irqsave(&memdbg_lock, flags);
++		list_add_tail(&mid->head, &mISDN_memdbg_list);
++		spin_unlock_irqrestore(&memdbg_lock, flags);
++		return((void *)&mid->file[MAX_FILE_STRLEN]);
++	} else
++		return(NULL);
++}
++
++void
++__mid_kfree(const void *p)
++{
++	_mid_item_t	*mid;
++	u_long		flags;
++
++	if (!p)
++		return;
++	mid = (_mid_item_t *)((u_char *)p - sizeof(_mid_item_t));
++	spin_lock_irqsave(&memdbg_lock, flags);
++	list_del(&mid->head);
++	spin_unlock_irqrestore(&memdbg_lock, flags);
++	kfree(mid);
++}
++
++void *
++__mid_vmalloc(size_t size, char *fn, int line)
++{
++	_mid_item_t	*mid;
++	u_long		flags;
++
++	mid = vmalloc(size + sizeof(_mid_item_t));
++	if (mid) {
++		INIT_LIST_HEAD(&mid->head);
++		mid->typ  = MID_ITEM_TYP_VMALLOC;
++		mid->size = size;
++		mid->line = line;
++		if (strlen(fn)+1 > MAX_FILE_STRLEN)
++			fn += strlen(fn)+1 - MAX_FILE_STRLEN;
++		strncpy(mid->file, fn, MAX_FILE_STRLEN);
++		mid->file[MAX_FILE_STRLEN-1] = 0; 
++		spin_lock_irqsave(&memdbg_lock, flags);
++		list_add_tail(&mid->head, &mISDN_memdbg_list);
++		spin_unlock_irqrestore(&memdbg_lock, flags);
++		return((void *)&mid->file[MAX_FILE_STRLEN]);
++	} else
++		return(NULL);
++}
++
++void
++__mid_vfree(const void *p)
++{
++	_mid_item_t	*mid;
++	u_long		flags;
++
++	if (!p)
++		return;
++	mid = (_mid_item_t *)((u_char *)p - sizeof(_mid_item_t));
++	spin_lock_irqsave(&memdbg_lock, flags);
++	list_del(&mid->head);
++	spin_unlock_irqrestore(&memdbg_lock, flags);
++	vfree(mid);
++}
++
++static void
++__mid_skb_destructor(struct sk_buff *skb)
++{
++	struct list_head	*item;
++	_mid_sitem_t		*sid;
++	u_long		flags;
++
++	spin_lock_irqsave(&skbdbg_lock, flags);
++	list_for_each(item, &mISDN_skbdbg_list) {
++		sid = (_mid_sitem_t *)item;
++		if (sid->skb == skb) {
++			list_del(&sid->head);
++			spin_unlock_irqrestore(&skbdbg_lock, flags);
++			kfree(sid);
++			return;
++		}
++	}
++	spin_unlock_irqrestore(&skbdbg_lock, flags);
++	printk(KERN_DEBUG "%s: item(%p) not in list\n", __FUNCTION__, skb);
++}
++
++static __inline__ void
++__mid_sitem_setup(struct sk_buff *skb, unsigned int size, char *fn, int line)
++{
++	struct list_head	*item, *next;
++	_mid_sitem_t		*sid;
++	u_long			flags;
++
++	spin_lock_irqsave(&skbdbg_lock, flags);
++	list_for_each_safe(item, next, &mISDN_skbdbg_list) {
++		sid = (_mid_sitem_t *)item;
++		if (sid->skb == skb) {
++			printk(KERN_ERR "%s: skb already seen in sitem list: (sid=%p,fn=%s,line=%d) it did not call the destructor!\n", __func__, sid, sid->file, sid->line);
++			list_del(&sid->head);
++
++			kfree(sid);
++		}
++	}
++	sid = kmalloc(sizeof(_mid_sitem_t), GFP_ATOMIC);
++	if (!sid) {
++		printk(KERN_DEBUG "%s: no memory for sitem skb %p %s:%d\n",
++			__FUNCTION__, skb, fn, line);
++		spin_unlock_irqrestore(&skbdbg_lock, flags);
++		return;
++	}
++	INIT_LIST_HEAD(&sid->head);
++	sid->skb = skb;
++	sid->size = size;
++	sid->line = line;
++	if (strlen(fn)+1 > MAX_FILE_STRLEN)
++		fn += strlen(fn)+1 - MAX_FILE_STRLEN;
++	strncpy(sid->file, fn, MAX_FILE_STRLEN);
++	sid->file[MAX_FILE_STRLEN-1] = 0; 
++	skb->destructor = __mid_skb_destructor;
++	list_add_tail(&sid->head, &mISDN_skbdbg_list);
++	spin_unlock_irqrestore(&skbdbg_lock, flags);
++}
++
++void
++__mid_sitem_update(struct sk_buff *skb, char *fn, int line)
++{
++	struct list_head	*item;
++	_mid_sitem_t		*sid;
++	u_long			flags;
++	_mid_sitem_t		*found = NULL;
++
++	if (!skb) {
++		printk(KERN_DEBUG "%s:%d item is NULL\n", fn, line);
++		return;
++	}
++	if (!skb->destructor) {
++		printk(KERN_DEBUG "%s:%d item has no destructor!\n", fn, line);
++		return;
++	}
++#warning remove
++if (fn)
++printk(KERN_ERR "before lock (%s:%d)\n", fn, line);
++	spin_lock_irqsave(&skbdbg_lock, flags);
++	list_for_each(item, &mISDN_skbdbg_list) {
++		sid = (_mid_sitem_t *)item;
++		if (sid->skb == skb) {
++			if (found)
++				printk(KERN_ERR "%s: skb already seen in sitem list: (was:sid=%p,fn=%s,line=%d now:sid=%p,fn=%s,line=%d)\n", __func__, found, found->file, found->line, sid, sid->file, sid->line);
++			found = sid;
++			if (fn) {
++				sid->line = line;
++				if (strlen(fn)+1 > MAX_FILE_STRLEN)
++					fn += strlen(fn)+1 - MAX_FILE_STRLEN;
++				strncpy(sid->file, fn, MAX_FILE_STRLEN);
++			} else {
++				sid->line = 0;
++				strcpy(sid->file, "(no info)");
++			}
++			sid->file[MAX_FILE_STRLEN-1] = 0; 
++		}
++	}
++	spin_unlock_irqrestore(&skbdbg_lock, flags);
++#warning remove
++if (fn)
++printk(KERN_ERR "after unlock\n");
++	if (!found)
++		printk(KERN_DEBUG "%s:%d item(%p) not in list\n", fn, line, skb);
++}
++
++struct sk_buff *
++__mid_alloc_skb(unsigned int size, int gfp_mask, char *fn, int line)
++{
++	struct sk_buff	*skb = alloc_skb(size, gfp_mask);
++	u_long		flags;
++
++	if (!skb) {
++		printk(KERN_ERR "No Memory, locking forever! (%s:%d)\n", fn, line);
++		spin_lock_irqsave(&skbdbg_lock, flags);
++		while (1) ;
++	}
++	__mid_sitem_setup(skb, size, fn, line);
++	return(skb);
++}
++
++struct sk_buff *
++__mid_dev_alloc_skb(unsigned int size, char *fn, int line)
++{
++	struct sk_buff	*skb = dev_alloc_skb(size);
++	u_long		flags;
++
++	if (!skb) {
++		printk(KERN_ERR "No Memory, locking forever! (%s:%d)\n", fn, line);
++		spin_lock_irqsave(&skbdbg_lock, flags);
++		while (1) ;
++	}
++	__mid_sitem_setup(skb, size, fn, line);
++	return(skb);
++}
++
++void
++__mid_kfree_skb(struct sk_buff *skb, char *fn, int line)
++{
++	if (skb->destructor)
++		__mid_sitem_update(skb, fn, line);
++	else
++		__mid_sitem_update(skb, fn, line);
++	if (skb->destructor)
++		skb->destructor(skb);
++	skb->destructor = NULL;
++	kfree_skb(skb);
++}
++
++void
++__mid_dev_kfree_skb(struct sk_buff *skb, char *fn, int line)
++{
++	if (skb->destructor)
++		__mid_sitem_update(skb, fn, line);
++	else
++		__mid_sitem_update(skb, fn, line);
++	if (skb->destructor)
++		skb->destructor(skb);
++	skb->destructor = NULL;
++	dev_kfree_skb(skb);
++}
++
++struct sk_buff
++*__mid_skb_clone(struct sk_buff *skb, int gfp_mask, char *fn, int line)
++{
++	struct sk_buff	*nskb = skb_clone(skb, gfp_mask);
++	u_long		flags;
++
++	if (!nskb) {
++		printk(KERN_ERR "No Memory, locking forever! (%s:%d)\n", fn, line);
++		spin_lock_irqsave(&skbdbg_lock, flags);
++		while (1) ;
++	}
++	__mid_sitem_setup(nskb, (nskb->end - nskb->head), fn, line);
++	return(nskb);
++}
++
++struct sk_buff
++*__mid_skb_copy(struct sk_buff *skb, int gfp_mask, char *fn, int line)
++{
++	struct sk_buff	*nskb = skb_copy(skb, gfp_mask);
++	u_long		flags;
++
++	if (!nskb) {
++		printk(KERN_ERR "No Memory, locking forever! (%s:%d)\n", fn, line);
++		spin_lock_irqsave(&skbdbg_lock, flags);
++		while (1) ;
++	}
++	__mid_sitem_setup(nskb, (nskb->end - nskb->head), fn, line);
++	return(nskb);
++}
++
++struct sk_buff
++*__mid_skb_realloc_headroom(struct sk_buff *skb, unsigned int headroom, char *fn, int line)
++{
++	struct sk_buff	*nskb = skb_realloc_headroom(skb, headroom);
++
++	if (!nskb || (nskb == skb))
++		return(nskb);
++	__mid_sitem_setup(nskb, (nskb->end - nskb->head), fn, line);
++	return(nskb);
++}
++
++void
++__mid_cleanup(void)
++{
++	struct list_head	*item, *next;
++	_mid_item_t		*mid;
++	_mid_sitem_t		*sid;
++	struct mISDNhead	*hh;
++	int			n = 0;
++	u_long			flags;
++
++	spin_lock_irqsave(&memdbg_lock, flags);
++	list_for_each_safe(item, next, &mISDN_memdbg_list) {
++		mid = (_mid_item_t *)item;
++		switch(mid->typ) {
++			case MID_ITEM_TYP_KMALLOC:
++				printk(KERN_ERR "not freed kmalloc size(%d) from %s:%d\n",
++					mid->size, mid->file, mid->line);
++				kfree(mid);
++				break;
++			case MID_ITEM_TYP_VMALLOC:
++				printk(KERN_ERR "not freed vmalloc size(%d) from %s:%d\n",
++					mid->size, mid->file, mid->line);
++				vfree(mid);
++				break;
++			default:
++				printk(KERN_ERR "unknown mid->typ(%d) size(%d) from %s:%d\n",
++					mid->typ, mid->size, mid->file, mid->line);
++				break;
++		}
++		n++;
++	}
++	spin_unlock_irqrestore(&memdbg_lock, flags);
++	printk(KERN_DEBUG "%s: %d kmalloc item(s) freed\n", __FUNCTION__, n);
++	n = 0;
++	spin_lock_irqsave(&skbdbg_lock, flags);
++	list_for_each_safe(item, next, &mISDN_skbdbg_list) {
++		sid = (_mid_sitem_t *)item;
++		hh = mISDN_HEAD_P(sid->skb);
++		printk(KERN_ERR "not freed skb(%p) size(%d) prim(%x) dinfo(%x) allocated at %s:%d\n",
++			sid->skb, sid->size, hh->prim, hh->id, sid->file, sid->line);
++		/*maybe the skb is still aktiv */
++		sid->skb->destructor = NULL;
++		list_del(&sid->head);
++		kfree(sid);
++		n++;
++	}
++	spin_unlock_irqrestore(&skbdbg_lock, flags);
++	printk(KERN_DEBUG "%s: %d sk_buff item(s) freed\n", __FUNCTION__, n);
++}
++
++int
++__mid_init(void)
++{
++	return(0);
++}
++
++#ifdef MODULE
++EXPORT_SYMBOL(__mid_kmalloc);
++EXPORT_SYMBOL(__mid_kzalloc);
++EXPORT_SYMBOL(__mid_kfree);
++EXPORT_SYMBOL(__mid_vmalloc);
++EXPORT_SYMBOL(__mid_vfree);
++EXPORT_SYMBOL(__mid_alloc_skb);
++EXPORT_SYMBOL(__mid_dev_alloc_skb);
++EXPORT_SYMBOL(__mid_sitem_update);
++EXPORT_SYMBOL(__mid_kfree_skb);
++EXPORT_SYMBOL(__mid_dev_kfree_skb);
++EXPORT_SYMBOL(__mid_skb_clone);
++EXPORT_SYMBOL(__mid_skb_copy);
++EXPORT_SYMBOL(__mid_skb_realloc_headroom);
++#endif
++
+diff -Nur -x '*symvers' -x '*mod.c' -x '*.o' -x '*.ko' mISDN/drivers/isdn/mISDN/memdbg.h mISDN-memdebug/drivers/isdn/mISDN/memdbg.h
+--- mISDN/drivers/isdn/mISDN/memdbg.h	1970-01-01 01:00:00.000000000 +0100
++++ mISDN-memdebug/drivers/isdn/mISDN/memdbg.h	2008-07-15 09:47:25.000000000 +0200
+@@ -0,0 +1,53 @@
++#ifndef MEMDBG_H
++#define MEMDBG_H
++
++#ifdef MISDN_MEMDEBUG
++/*#warning THIS WARNING MUST SHOW UP IN ALL MISDN SOURCES*/
++#include <linux/vmalloc.h>
++#include <linux/slab.h>
++
++#undef kmalloc
++#undef kzalloc
++#undef kfree
++#undef vmalloc
++#undef vfree
++#undef alloc_skb
++#undef dev_alloc_skb
++#undef kfree_skb
++#undef dev_kfree_skb
++#undef skb_clone
++#undef skb_copy
++#undef skb_realloc_headroom
++
++#define kmalloc(a, b)			__mid_kmalloc(a, b, __FILE__, __LINE__)
++#define kzalloc(a, b)			__mid_kzalloc(a, b, __FILE__, __LINE__)
++#define kfree(a)			__mid_kfree(a)
++#define vmalloc(s)			__mid_vmalloc(s, __FILE__, __LINE__)
++#define vfree(p)			__mid_vfree(p)
++#define alloc_skb(a, b)			__mid_alloc_skb(a, b, __FILE__, __LINE__)
++#define dev_alloc_skb(a)		__mid_dev_alloc_skb(a, __FILE__, __LINE__)
++#define mid_sitem_update(a)		__mid_sitem_update(a, __FILE__, __LINE__)
++#define kfree_skb(a)			__mid_kfree_skb(a, __FILE__, __LINE__)
++#define dev_kfree_skb(a)		__mid_dev_kfree_skb(a, __FILE__, __LINE__)
++#define skb_clone(a, b)			__mid_skb_clone(a, b, __FILE__, __LINE__)
++#define skb_copy(a, b)			__mid_skb_copy(a, b, __FILE__, __LINE__)
++#define skb_realloc_headroom(a, b)	__mid_skb_realloc_headroom(a, b, __FILE__, __LINE__)
++
++extern void		*__mid_kmalloc(size_t, int, char *, int);
++extern void		*__mid_kzalloc(size_t, int, char *, int);
++extern void		__mid_kfree(const void *);
++extern void		*__mid_vmalloc(size_t, char *, int);
++extern void		__mid_vfree(const void *);
++extern void		__mid_cleanup(void);
++extern int		__mid_init(void);
++extern struct sk_buff	*__mid_alloc_skb(unsigned int,int, char *, int);
++extern struct sk_buff	*__mid_dev_alloc_skb(unsigned int,char *, int);
++extern void		__mid_sitem_update(struct sk_buff *, char *, int);
++extern void		__mid_kfree_skb(struct sk_buff *, char *, int);
++extern void		__mid_dev_kfree_skb(struct sk_buff *, char *, int);
++extern struct sk_buff	*__mid_skb_clone(struct sk_buff *, int, char *, int);
++extern struct sk_buff	*__mid_skb_copy(struct sk_buff *, int, char *, int);
++extern struct sk_buff	*__mid_skb_realloc_headroom(struct sk_buff *, unsigned int, char *, int);
++#endif
++
++#endif
+diff -Nur -x '*symvers' -x '*mod.c' -x '*.o' -x '*.ko' mISDN/drivers/isdn/mISDN/oslec.h mISDN-memdebug/drivers/isdn/mISDN/oslec.h
+--- mISDN/drivers/isdn/mISDN/oslec.h	2008-07-15 10:54:20.000000000 +0200
++++ mISDN-memdebug/drivers/isdn/mISDN/oslec.h	2008-07-10 12:16:49.000000000 +0200
+@@ -28,6 +28,10 @@
+ #ifndef __OSLEC__
+ #define __OSLEC__
+ 
++#ifdef MISDN_MEMDEBUG
++#include "memdbg.h"
++#endif
++
+ #define EC_TYPE "OSLEC"
+ 
+ struct echo_can_state {
+diff -Nur -x '*symvers' -x '*mod.c' -x '*.o' -x '*.ko' mISDN/drivers/isdn/mISDN/socket.c mISDN-memdebug/drivers/isdn/mISDN/socket.c
+--- mISDN/drivers/isdn/mISDN/socket.c	2008-07-15 10:54:28.000000000 +0200
++++ mISDN-memdebug/drivers/isdn/mISDN/socket.c	2008-07-15 09:47:25.000000000 +0200
+@@ -70,12 +70,23 @@
+ 	struct mISDN_sock *msk;
+ 	int	err;
+ 
++#ifdef MISDN_MEMDEBUG
++	mid_sitem_update(skb);
++#endif
+ 	msk = container_of(ch, struct mISDN_sock, ch);
+ 	if (*debug & DEBUG_SOCKET)
+ 		printk(KERN_DEBUG "%s len %d %p\n", __func__, skb->len, skb);
+ 	if (msk->sk.sk_state == MISDN_CLOSED)
+ 		return -EUNATCH;
+ 	__net_timestamp(skb);
++#ifdef MISDN_MEMDEBUG
++	mid_sitem_update(skb);
++	/* removing from list, because it is not done by ..rcv_skb */
++	if (skb->destructor) {
++		skb->destructor(skb);
++		skb->destructor = NULL;
++	}
++#endif
+ 	err = sock_queue_rcv_skb(&msk->sk, skb);
+ 	if (err)
+ 		printk(KERN_WARNING "%s: error %d\n", __func__, err);
+@@ -229,6 +240,9 @@
+ 		printk(KERN_DEBUG "%s: ID:%x\n",
+ 		     __func__, mISDN_HEAD_ID(skb));
+ 
++#ifdef MISDN_MEMDEBUG
++	mid_sitem_update(skb);
++#endif
+ 	err = -ENODEV;
+ 	if (!_pms(sk)->ch.peer ||
+ 	    (err = _pms(sk)->ch.recv(_pms(sk)->ch.peer, skb)))
+diff -Nur -x '*symvers' -x '*mod.c' -x '*.o' -x '*.ko' mISDN/drivers/isdn/mISDN/stack.c mISDN-memdebug/drivers/isdn/mISDN/stack.c
+--- mISDN/drivers/isdn/mISDN/stack.c	2008-07-15 10:14:08.000000000 +0200
++++ mISDN-memdebug/drivers/isdn/mISDN/stack.c	2008-07-15 09:47:25.000000000 +0200
+@@ -38,6 +38,10 @@
+ int
+ mISDN_queue_message(struct mISDNchannel *ch, struct sk_buff *skb)
+ {
++#ifdef MISDN_MEMDEBUG
++	mid_sitem_update(skb);
++#endif
++	
+ 	_queue_message(ch->st, skb);
+ 	return 0;
+ }
+@@ -75,6 +79,14 @@
+ 			printk(KERN_WARNING "%s no skb\n", __func__);
+ 			break;
+ 		}
++#ifdef MISDN_MEMDEBUG
++		mid_sitem_update(cskb);
++		/* removing from list, because it is not done by ..rcv_skb */
++		if (cskb->destructor) {
++			cskb->destructor(cskb);
++			cskb->destructor = NULL;
++		}
++#endif
+ 		if (!sock_queue_rcv_skb(sk, cskb))
+ 			cskb = NULL;
+ 	}
+diff -Nur -x '*symvers' -x '*mod.c' -x '*.o' -x '*.ko' mISDN/drivers/isdn/mISDN/tei.c mISDN-memdebug/drivers/isdn/mISDN/tei.c
+--- mISDN/drivers/isdn/mISDN/tei.c	2008-07-15 10:14:31.000000000 +0200
++++ mISDN-memdebug/drivers/isdn/mISDN/tei.c	2008-07-15 09:47:25.000000000 +0200
+@@ -1066,6 +1066,10 @@
+ 	struct mISDNhead	*hh =  mISDN_HEAD_P(skb);
+ 	int			ret = -EINVAL;
+ 
++#ifdef MISDN_MEMDEBUG
++	mid_sitem_update(skb);
++#endif
++
+ 	mgr = container_of(ch, struct manager, ch);
+ 	if (*debug & DEBUG_L2_RECV)
+ 		printk(KERN_DEBUG "%s: prim(%x) id(%x)\n",
+@@ -1233,6 +1237,10 @@
+ 	u_long			flags;
+ 	int			ret;
+ 
++#ifdef MISDN_MEMDEBUG
++	mid_sitem_update(skb);
++#endif
++
+ 	read_lock_irqsave(&mgr->lock, flags);
+ 	list_for_each_entry(l2, &mgr->layer2, list) {
+ 		if ((hh->id & MISDN_ID_SAPI_MASK) ==

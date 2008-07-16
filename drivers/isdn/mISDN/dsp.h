@@ -9,10 +9,6 @@
  *
  */
 
-#ifdef MISDN_MEMDEBUG
-#include "memdbg.h"
-#endif
-
 #define DEBUG_DSP_CTRL		0x0001
 #define DEBUG_DSP_CORE		0x0002
 #define DEBUG_DSP_DTMF		0x0004

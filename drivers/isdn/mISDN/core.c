@@ -201,11 +201,6 @@ mISDNInit(void)
 
 	printk(KERN_INFO "Modular ISDN core version %d.%d.%d\n",
 		MISDN_MAJOR_VERSION, MISDN_MINOR_VERSION, MISDN_RELEASE);
-#ifdef MISDN_MEMDEBUG
-	err = __mid_init();
-	if (err)
-		return err;
-#endif
 	mISDN_initstack(&debug);
 	err = mISDN_inittimer(&debug);
 	if (err)
@@ -228,9 +223,6 @@ mISDNInit(void)
 		Isdnl2_cleanup();
 	}
 error:
-#ifdef MISDN_MEMDEBUG
-	__mid_cleanup();
-#endif
 	return err;
 }
 
@@ -246,9 +238,6 @@ void mISDN_cleanup(void)
 
 	if (!list_empty(&Bprotocols))
 		printk(KERN_ERR "%s Bprotocols still registered\n", __func__);
-#ifdef MISDN_MEMDEBUG
-	__mid_cleanup();
-#endif
 	printk(KERN_DEBUG "mISDNcore unloaded\n");
 }
 

@@ -15,10 +15,6 @@
 #ifndef mISDN_CORE_H
 #define mISDN_CORE_H
 
-#ifdef MISDN_MEMDEBUG
-#include "memdbg.h"
-#endif
-
 extern struct mISDNdevice	*get_mdevice(u_int);
 extern int			get_mdevice_count(void);
 

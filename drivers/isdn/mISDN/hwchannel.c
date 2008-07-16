@@ -17,9 +17,6 @@
 
 #include <linux/module.h>
 #include <linux/mISDNhw.h>
-#ifdef MISDN_MEMDEBUG
-#include "memdbg.h"
-#endif
 
 static void
 dchannel_bh(struct work_struct *ws)
@@ -30,9 +27,6 @@ dchannel_bh(struct work_struct *ws)
 
 	if (test_and_clear_bit(FLG_RECVQUEUE, &dch->Flags)) {
 		while ((skb = skb_dequeue(&dch->rqueue))) {
-#ifdef MISDN_MEMDEBUG
-			mid_sitem_update(skb);
-#endif
 			if (likely(dch->dev.D.peer)) {
 				err = dch->dev.D.recv(dch->dev.D.peer, skb);
 				if (err)
@@ -60,9 +54,6 @@ bchannel_bh(struct work_struct *ws)
 				printk(KERN_WARNING "B-channel %p receive "
 					"queue if full, but empties...\n", bch);
 			bch->rcount--;
-#ifdef MISDN_MEMDEBUG
-			mid_sitem_update(skb);
-#endif
 			if (likely(bch->ch.peer)) {
 				err = bch->ch.recv(bch->ch.peer, skb);
 				if (err)
@@ -119,15 +110,6 @@ mISDN_freedchannel(struct dchannel *ch)
 		dev_kfree_skb(ch->rx_skb);
 		ch->rx_skb = NULL;
 	}
-#ifdef MISDN_MEMDEBUG
-	{
-		struct sk_buff *skb;
-		while ((skb = skb_dequeue(&ch->squeue)))
-			dev_kfree_skb(skb);
-		while ((skb = skb_dequeue(&ch->rqueue)))
-			dev_kfree_skb(skb);
-	}
-#endif
 	skb_queue_purge(&ch->squeue);
 	skb_queue_purge(&ch->rqueue);
 	flush_scheduled_work();
@@ -150,13 +132,6 @@ mISDN_freebchannel(struct bchannel *ch)
 		dev_kfree_skb(ch->next_skb);
 		ch->next_skb = NULL;
 	}
-#ifdef MISDN_MEMDEBUG
-	{
-		struct sk_buff *skb;
-		while ((skb = skb_dequeue(&ch->rqueue)))
-			dev_kfree_skb(skb);
-	}
-#endif
 	skb_queue_purge(&ch->rqueue);
 	ch->rcount = 0;
 	flush_scheduled_work();
@@ -202,11 +177,7 @@ recv_Bchannel(struct bchannel *bch)
 	hh->prim = PH_DATA_IND;
 	hh->id = MISDN_ID_ANY;
 	if (bch->rcount >= 64) {
-#ifdef MISDN_MEMDEBUG
-		__mid_dev_kfree_skb(bch->rx_skb, NULL, 0);
-#else
 		dev_kfree_skb(bch->rx_skb);
-#endif
 		bch->rx_skb = NULL;
 		return;
 	}
@@ -229,11 +200,7 @@ void
 recv_Bchannel_skb(struct bchannel *bch, struct sk_buff *skb)
 {
 	if (bch->rcount >= 64) {
-#ifdef MISDN_MEMDEBUG
-		__mid_dev_kfree_skb(skb, NULL, 0);
-#else
 		dev_kfree_skb(skb);
-#endif
 		return;
 	}
 	bch->rcount++;

@@ -26,9 +26,6 @@
 #include <linux/pci.h>
 #include <linux/mISDNhw.h>
 #include <linux/isdn_compat.h>
-#ifdef MISDN_MEMDEBUG
-#include "../../mISDN/memdbg.h"
-#endif
 #include "hfcs_usb.h"
 
 #define DRIVER_NAME "hfcsusb"
@@ -228,10 +225,6 @@ hfcusb_l2l1B(struct mISDNchannel *ch, struct sk_buff *skb)
 	struct mISDNhead	*hh = mISDN_HEAD_P(skb);
 	u_long			flags;
 
-#ifdef MISDN_MEMDEBUG
-	mid_sitem_update(skb);
-#endif
-	
 	if (debug & DBG_HFC_CALL_TRACE)
 		printk (KERN_INFO "%s\n", __FUNCTION__);
 
@@ -294,10 +287,6 @@ hfcusb_l2l1D(struct mISDNchannel *ch, struct sk_buff *skb)
         struct mISDNhead	*hh = mISDN_HEAD_P(skb);
         u_long			flags;
 
-#ifdef MISDN_MEMDEBUG
-	mid_sitem_update(skb);
-#endif
-	
 	// TODO mbachem
 	return -EINVAL;
 }

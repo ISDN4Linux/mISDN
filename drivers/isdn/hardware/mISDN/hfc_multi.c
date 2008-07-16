@@ -144,9 +144,6 @@
 #include <linux/delay.h>
 #include <linux/mISDNhw.h>
 #include <linux/mISDNdsp.h>
-#ifdef MISDN_MEMDEBUG
-#include "../../mISDN/memdbg.h"
-#endif
 
 /*
 #define IRQCOUNT_DEBUG
@@ -2108,10 +2105,6 @@ hfcmulti_rx(struct hfc_multi *hc, int ch)
 	dch = hc->chan[ch].dch;
 	if ((!dch) && (!bch))
 		return;
-#ifdef MISDN_MEMDEBUG
-	if (dch && bch)
-		printk(KERN_ERR "%s: dch and bch set, correct it!\n", __func__);
-#endif
 	if (dch) {
 		if (!test_bit(FLG_ACTIVE, &dch->Flags))
 			return;
@@ -3291,10 +3284,6 @@ handle_dmsg(struct mISDNchannel *ch, struct sk_buff *skb)
 	unsigned int		id;
 	u_long			flags;
 
-#ifdef MISDN_MEMDEBUG
-	mid_sitem_update(skb);
-#endif
-	
 	switch (hh->prim) {
 	case PH_DATA_REQ:
 		if (skb->len < 1)
@@ -3436,10 +3425,6 @@ handle_bmsg(struct mISDNchannel *ch, struct sk_buff *skb)
 	struct mISDNhead	*hh = mISDN_HEAD_P(skb);
 	unsigned int		id;
 	u_long			flags;
-
-#ifdef MISDN_MEMDEBUG
-	mid_sitem_update(skb);
-#endif
 
 	switch (hh->prim) {
 	case PH_DATA_REQ:
