@@ -24,9 +24,9 @@
 
 /*
   Copyright (C) 2007 David Rowe
- 
+
   All rights reserved.
- 
+
   This program is free software; you can redistribute it and/or modify
   it under the terms of the GNU General Public License version 2, as
   published by the Free Software Foundation.
@@ -34,19 +34,19 @@
   but WITHOUT ANY WARRANTY; without even the implied warranty of
   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
   GNU General Public License for more details.
- 
+
   You should have received a copy of the GNU General Public License
   along with this program; if not, write to the Free Software
   Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
 */
 
-#include <linux/kernel.h>       
-#include <linux/module.h>      
+#include <linux/kernel.h>
+#include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/version.h>
 #include <linux/slab.h>
 #include <linux/proc_fs.h>
-#include <asm/delay.h>
+#include <linux/delay.h>
 
 
 #define malloc(a) kmalloc((a), GFP_KERNEL)
@@ -66,41 +66,44 @@
 
 DECLARE_MUTEX(oslec_lock);
 
-struct echo_can_state *oslec_echo_can_create(int len, int adaption_mode) {
+struct echo_can_state *oslec_echo_can_create(int len, int adaption_mode)
+{
   struct echo_can_state *ec;
 
   down(&oslec_lock);
 
   ec = (struct echo_can_state *)malloc(sizeof(struct echo_can_state));
-  ec->ec = (void*)echo_can_create(len,   ECHO_CAN_USE_ADAPTION 
-				       | ECHO_CAN_USE_NLP 
-				       | ECHO_CAN_USE_CLIP
-				       | ECHO_CAN_USE_TX_HPF
-				       | ECHO_CAN_USE_RX_HPF);
-				   
+  ec->ec = (void *)echo_can_create(len,   ECHO_CAN_USE_ADAPTION
+					| ECHO_CAN_USE_NLP
+					| ECHO_CAN_USE_CLIP
+					| ECHO_CAN_USE_TX_HPF
+					| ECHO_CAN_USE_RX_HPF);
+
   up(&oslec_lock);
 
   return ec;
 }
 
-void oslec_echo_can_free(struct echo_can_state *ec) {
+void oslec_echo_can_free(struct echo_can_state *ec)
+{
   down(&oslec_lock);
 
-  echo_can_free((echo_can_state_t*)(ec->ec));
+  echo_can_free((echo_can_state_t *)(ec->ec));
   free(ec);
 
   up(&oslec_lock);
 }
 
-short oslec_echo_can_update(struct echo_can_state *ec, short iref, short isig) {
+short oslec_echo_can_update(struct echo_can_state *ec, short iref, short isig)
+{
     short clean;
 
-    clean = echo_can_update((echo_can_state_t*)(ec->ec), iref, isig);
+    clean = echo_can_update((echo_can_state_t *)(ec->ec), iref, isig);
 
     /*
       Simple IIR averager:
 
-                   -LTC           -LTC
+		   -LTC           -LTC
       y(n) = (1 - 2    )y(n-1) + 2    x(n)
 
     */

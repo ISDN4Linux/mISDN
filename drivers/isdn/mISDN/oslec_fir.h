@@ -36,13 +36,13 @@
 #if !defined(_FIR_H_)
 #define _FIR_H_
 
-/* 
+/*
    Blackfin NOTES & IDEAS:
 
    A simple dot product function is used to implement the filter.  This performs
    just one MAC/cycle which is inefficient but was easy to implement as a first
    pass.  The current Blackfin code also uses an unrolled form of the filter
-   history to avoid 0 length hardware loop issues.  This is wasteful of 
+   history to avoid 0 length hardware loop issues.  This is wasteful of
    memory.
 
    Ideas for improvement:
@@ -72,62 +72,61 @@
     16 bit integer FIR descriptor. This defines the working state for a single
     instance of an FIR filter using 16 bit integer coefficients.
 */
-typedef struct
-{
+struct fir16_state {
     int taps;
     int curr_pos;
     const int16_t *coeffs;
     int16_t *history;
-} fir16_state_t;
+};
 
 /*!
     32 bit integer FIR descriptor. This defines the working state for a single
     instance of an FIR filter using 32 bit integer coefficients, and filtering
     16 bit integer data.
 */
-typedef struct
-{
+struct fir32_staet {
     int taps;
     int curr_pos;
     const int32_t *coeffs;
     int16_t *history;
-} fir32_state_t;
+};
 
 /*!
     Floating point FIR descriptor. This defines the working state for a single
     instance of an FIR filter using floating point coefficients and data.
 */
-typedef struct
-{
+struct fir_float_state {
     int taps;
     int curr_pos;
     const float *coeffs;
     float *history;
-} fir_float_state_t;
+};
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-static __inline__ const int16_t *fir16_create(fir16_state_t *fir,
-                                              const int16_t *coeffs,
-                                              int taps)
+static inline const int16_t *fir16_create(struct fir16_state *fir,
+					      const int16_t *coeffs,
+					      int taps)
 {
     fir->taps = taps;
     fir->curr_pos = taps - 1;
     fir->coeffs = coeffs;
 #if defined(USE_MMX)  ||  defined(USE_SSE2) || defined(__BLACKFIN_ASM__)
-    if ((fir->history = malloc(2*taps*sizeof(int16_t))))
-        memset(fir->history, 0, 2*taps*sizeof(int16_t));
+    fir->history = malloc(2*taps*sizeof(int16_t));
+    if (fir->history)
+	memset(fir->history, 0, 2*taps*sizeof(int16_t));
 #else
-    if ((fir->history = (int16_t *) malloc(taps*sizeof(int16_t))))
-        memset(fir->history, 0, taps*sizeof(int16_t));
+    fir->history = (int16_t *)malloc(taps*sizeof(int16_t));
+    if (fir->history)
+	memset(fir->history, 0, taps*sizeof(int16_t));
 #endif
     return fir->history;
 }
 /*- End of function --------------------------------------------------------*/
 
-static __inline__ void fir16_flush(fir16_state_t *fir)
+static inline void fir16_flush(struct fir16_state *fir)
 {
 #if defined(USE_MMX)  ||  defined(USE_SSE2) || defined(__BLACKFIN_ASM__)
     memset(fir->history, 0, 2*fir->taps*sizeof(int16_t));
@@ -137,7 +136,7 @@ static __inline__ void fir16_flush(fir16_state_t *fir)
 }
 /*- End of function --------------------------------------------------------*/
 
-static __inline__ void fir16_free(fir16_state_t *fir)
+static inline void fir16_free(struct fir16_state *fir)
 {
     free(fir->history);
 }
@@ -150,7 +149,7 @@ static inline int32_t dot_asm(short *x, short *y, int len)
 
    len--;
 
-   __asm__ 
+   __asm__
    (
    "I0 = %1;\n\t"
    "I1 = %2;\n\t"
@@ -173,7 +172,7 @@ static inline int32_t dot_asm(short *x, short *y, int len)
 #endif
 /*- End of function --------------------------------------------------------*/
 
-static __inline__ int16_t fir16(fir16_state_t *fir, int16_t sample)
+static inline int16_t fir16(struct fir16_state *fir, int16_t sample)
 {
     int32_t y;
 #if defined(USE_MMX)
@@ -189,19 +188,18 @@ static __inline__ int16_t fir16(fir16_state_t *fir, int16_t sample)
     i = fir->taps;
     pxor_r2r(mm4, mm4);
     /* 8 samples per iteration, so the filter must be a multiple of 8 long. */
-    while (i > 0)
-    {
-        movq_m2r(mmx_coeffs[0], mm0);
-        movq_m2r(mmx_coeffs[1], mm2);
-        movq_m2r(mmx_hist[0], mm1);
-        movq_m2r(mmx_hist[1], mm3);
-        mmx_coeffs += 2;
-        mmx_hist += 2;
-        pmaddwd_r2r(mm1, mm0);
-        pmaddwd_r2r(mm3, mm2);
-        paddd_r2r(mm0, mm4);
-        paddd_r2r(mm2, mm4);
-        i -= 8;
+    while (i > 0) {
+	movq_m2r(mmx_coeffs[0], mm0);
+	movq_m2r(mmx_coeffs[1], mm2);
+	movq_m2r(mmx_hist[0], mm1);
+	movq_m2r(mmx_hist[1], mm3);
+	mmx_coeffs += 2;
+	mmx_hist += 2;
+	pmaddwd_r2r(mm1, mm0);
+	pmaddwd_r2r(mm3, mm2);
+	paddd_r2r(mm0, mm4);
+	paddd_r2r(mm2, mm4);
+	i -= 8;
     }
     movq_r2r(mm4, mm0);
     psrlq_i2r(32, mm0);
@@ -221,19 +219,18 @@ static __inline__ int16_t fir16(fir16_state_t *fir, int16_t sample)
     i = fir->taps;
     pxor_r2r(xmm4, xmm4);
     /* 16 samples per iteration, so the filter must be a multiple of 16 long. */
-    while (i > 0)
-    {
-        movdqu_m2r(xmm_coeffs[0], xmm0);
-        movdqu_m2r(xmm_coeffs[1], xmm2);
-        movdqu_m2r(xmm_hist[0], xmm1);
-        movdqu_m2r(xmm_hist[1], xmm3);
-        xmm_coeffs += 2;
-        xmm_hist += 2;
-        pmaddwd_r2r(xmm1, xmm0);
-        pmaddwd_r2r(xmm3, xmm2);
-        paddd_r2r(xmm0, xmm4);
-        paddd_r2r(xmm2, xmm4);
-        i -= 16;
+    while (i > 0) {
+	movdqu_m2r(xmm_coeffs[0], xmm0);
+	movdqu_m2r(xmm_coeffs[1], xmm2);
+	movdqu_m2r(xmm_hist[0], xmm1);
+	movdqu_m2r(xmm_hist[1], xmm3);
+	xmm_coeffs += 2;
+	xmm_hist += 2;
+	pmaddwd_r2r(xmm1, xmm0);
+	pmaddwd_r2r(xmm3, xmm2);
+	paddd_r2r(xmm0, xmm4);
+	paddd_r2r(xmm2, xmm4);
+	i -= 16;
     }
     movdqa_r2r(xmm4, xmm0);
     psrldq_i2r(8, xmm0);
@@ -245,7 +242,8 @@ static __inline__ int16_t fir16(fir16_state_t *fir, int16_t sample)
 #elif defined(__BLACKFIN_ASM__)
     fir->history[fir->curr_pos] = sample;
     fir->history[fir->curr_pos + fir->taps] = sample;
-    y = dot_asm((int16_t*)fir->coeffs, &fir->history[fir->curr_pos], fir->taps);
+    y = dot_asm((int16_t *)fir->coeffs, &fir->history[fir->curr_pos],
+	fir->taps);
 #else
     int i;
     int offset1;
@@ -257,44 +255,44 @@ static __inline__ int16_t fir16(fir16_state_t *fir, int16_t sample)
     offset1 = fir->taps - offset2;
     y = 0;
     for (i = fir->taps - 1;  i >= offset1;  i--)
-        y += fir->coeffs[i]*fir->history[i - offset1];
+	y += fir->coeffs[i]*fir->history[i - offset1];
     for (  ;  i >= 0;  i--)
-        y += fir->coeffs[i]*fir->history[i + offset2];
+	y += fir->coeffs[i]*fir->history[i + offset2];
 #endif
     if (fir->curr_pos <= 0)
-    	fir->curr_pos = fir->taps;
+	fir->curr_pos = fir->taps;
     fir->curr_pos--;
     return (int16_t) (y >> 15);
 }
 /*- End of function --------------------------------------------------------*/
 
-static __inline__ const int16_t *fir32_create(fir32_state_t *fir,
-                                              const int32_t *coeffs,
-                                              int taps)
+static inline const int16_t *fir32_create(struct fir32_state *fir,
+					      const int32_t *coeffs,
+					      int taps)
 {
     fir->taps = taps;
     fir->curr_pos = taps - 1;
     fir->coeffs = coeffs;
     fir->history = (int16_t *) malloc(taps*sizeof(int16_t));
     if (fir->history)
-    	memset(fir->history, '\0', taps*sizeof(int16_t));
+	memset(fir->history, '\0', taps*sizeof(int16_t));
     return fir->history;
 }
 /*- End of function --------------------------------------------------------*/
 
-static __inline__ void fir32_flush(fir32_state_t *fir)
+static inline void fir32_flush(struct fir32_state *fir)
 {
     memset(fir->history, 0, fir->taps*sizeof(int16_t));
 }
 /*- End of function --------------------------------------------------------*/
 
-static __inline__ void fir32_free(fir32_state_t *fir)
+static inline void fir32_free(struct fir32_state *fir)
 {
     free(fir->history);
 }
 /*- End of function --------------------------------------------------------*/
 
-static __inline__ int16_t fir32(fir32_state_t *fir, int16_t sample)
+static inline int16_t fir32(struct fir32_state *fir, int16_t sample)
 {
     int i;
     int32_t y;
@@ -306,38 +304,38 @@ static __inline__ int16_t fir32(fir32_state_t *fir, int16_t sample)
     offset1 = fir->taps - offset2;
     y = 0;
     for (i = fir->taps - 1;  i >= offset1;  i--)
-        y += fir->coeffs[i]*fir->history[i - offset1];
+	y += fir->coeffs[i]*fir->history[i - offset1];
     for (  ;  i >= 0;  i--)
-        y += fir->coeffs[i]*fir->history[i + offset2];
+	y += fir->coeffs[i]*fir->history[i + offset2];
     if (fir->curr_pos <= 0)
-    	fir->curr_pos = fir->taps;
+	fir->curr_pos = fir->taps;
     fir->curr_pos--;
     return (int16_t) (y >> 15);
 }
 /*- End of function --------------------------------------------------------*/
 
 #ifndef __KERNEL__
-static __inline__ const float *fir_float_create(fir_float_state_t *fir,
-                                                const float *coeffs,
-    	    	    	                        int taps)
+static inline const float *fir_float_create(struct fir_float_state *fir,
+						const float *coeffs,
+						int taps)
 {
     fir->taps = taps;
     fir->curr_pos = taps - 1;
     fir->coeffs = coeffs;
     fir->history = (float *) malloc(taps*sizeof(float));
     if (fir->history)
-        memset(fir->history, '\0', taps*sizeof(float));
+	memset(fir->history, '\0', taps*sizeof(float));
     return fir->history;
 }
 /*- End of function --------------------------------------------------------*/
-    
-static __inline__ void fir_float_free(fir_float_state_t *fir)
+
+static inline void fir_float_free(struct fir_float_state *fir)
 {
     free(fir->history);
 }
 /*- End of function --------------------------------------------------------*/
 
-static __inline__ int16_t fir_float(fir_float_state_t *fir, int16_t sample)
+static inline int16_t fir_float(struct fir_float_state *fir, int16_t sample)
 {
     int i;
     float y;
@@ -350,11 +348,11 @@ static __inline__ int16_t fir_float(fir_float_state_t *fir, int16_t sample)
     offset1 = fir->taps - offset2;
     y = 0;
     for (i = fir->taps - 1;  i >= offset1;  i--)
-        y += fir->coeffs[i]*fir->history[i - offset1];
+	y += fir->coeffs[i]*fir->history[i - offset1];
     for (  ;  i >= 0;  i--)
-        y += fir->coeffs[i]*fir->history[i + offset2];
+	y += fir->coeffs[i]*fir->history[i + offset2];
     if (fir->curr_pos <= 0)
-    	fir->curr_pos = fir->taps;
+	fir->curr_pos = fir->taps;
     fir->curr_pos--;
     return  (int16_t) y;
 }

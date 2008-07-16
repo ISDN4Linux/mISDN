@@ -238,16 +238,16 @@ echo_can_update(struct echo_can_state *ec, short iref, short isig)
 	} else
 		Py_i = (1 << 15);
 
-#if 0
+	/*
 	printf("Py: %e, Py_i: %e\n", Py, Py_i * AMPL_SCALE_1);
-#endif
+	*/
 
 	/* Vary rate of adaptation depending on position in the file
 	   Do not do this for the first (DEFAULT_UPDATE_TIME) secs after speech
 	   has begun of the file to allow the echo cancellor to estimate the
 	   channel accurately
-	*/
-#if 0
+	*
+
 	if (ec->start_speech_d != 0) {
 		if (ec->i_d > (DEFAULT_T0 + ec->start_speech_d)*(SAMPLE_FREQ)) {
 			ec->beta2_d = max_cc_float(MIN_BETA,
@@ -257,7 +257,7 @@ echo_can_update(struct echo_can_state *ec, short iref, short isig)
 		}
 	} else
 		ec->beta2_d = DEFAULT_BETA1;
-#endif
+	*/
 
 	ec->beta2_i = DEFAULT_BETA1_I; /* Fixed point, inverted */
 
@@ -278,11 +278,11 @@ echo_can_update(struct echo_can_state *ec, short iref, short isig)
 	if (ec->Ly_i < DEFAULT_CUTOFF_I)
 		ec->Ly_i = DEFAULT_CUTOFF_I;
 
-#if 0
+	/*
 	printf("Float: %e, Int: %e\n", ec->Ly_d,
 		(ec->Ly_i >> DEFAULT_SIGMA_LY_I)
 	* AMPL_SCALE_1);
-#endif
+	*/
 
 	if (ec->y_tilde_i > ec->max_y_tilde) {
 		/* New highest y_tilde with full life */
@@ -353,7 +353,7 @@ echo_can_update(struct echo_can_state *ec, short iref, short isig)
 #endif
 #endif
 
-#if 0
+	/*
 	if ((ec->HCNTR_d == 0) && ((ec->Lu_d/ec->Ly_d) < DEFAULT_SUPPR) &&
 		(ec->Lu_d/ec->Ly_d > EC_MIN_DB_VALUE)) {
 			suppr_factor = (10/(float)(SUPPR_FLOOR-SUPPR_CEIL))
@@ -364,7 +364,7 @@ echo_can_update(struct echo_can_state *ec, short iref, short isig)
 			* u_suppr;
 
 	}
-#endif
+	*/
 	ec->i_d++;
 	return u;
 }

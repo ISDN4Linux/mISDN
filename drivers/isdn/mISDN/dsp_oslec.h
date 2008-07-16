@@ -332,11 +332,21 @@ void echo_can_flush(echo_can_state_t *ec)
 {
 	int i;
 
-	ec->Ltxacc = ec->Lrxacc = ec->Lcleanacc = ec->Lclean_bgacc = 0;
-	ec->Ltx = ec->Lrx = ec->Lclean = ec->Lclean_bg = 0;
-	ec->tx_1 = ec->tx_2 = ec->rx_1 = ec->rx_2 = 0;
+	ec->Ltxacc = 0;
+	ec->Lrxacc = 0;
+	ec->Lcleanacc = 0;
+	ec->Lclean_bgacc = 0;
+	ec->Ltx = 0;
+	ec->Lrx = 0;
+	ec->Lclean = 0;
+	ec->Lclean_bg = 0;
+	ec->tx_1 = 0;
+	ec->tx_2 = 0;
+	ec->rx_1 = 0;
+	ec->rx_2 = 0;
 
-	ec->Lbgn = ec->Lbgn_acc = 0;
+	ec->Lbgn = 0;
+	ec->Lbgn_acc = 0;
 	ec->Lbgn_upper = 200;
 	ec->Lbgn_upper_acc = ec->Lbgn_upper << 13;
 

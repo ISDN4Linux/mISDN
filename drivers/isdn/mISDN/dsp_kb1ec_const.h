@@ -1,4 +1,4 @@
-/* 
+/*
    Important constants for tuning kb1 echo can
  */
 #ifndef _MEC2_CONST_H
@@ -11,12 +11,12 @@
 /* Constants for various power computations */
 #define DEFAULT_SIGMA_LY_I 7
 #define DEFAULT_SIGMA_LU_I 7
-#define DEFAULT_ALPHA_ST_I 5 		/* near-end speech detection sensitivity factor */
+#define DEFAULT_ALPHA_ST_I 5 /* near-end speech detection sensitivity factor */
 #define DEFAULT_ALPHA_YT_I 5
 
 #define DEFAULT_CUTOFF_I 128
 
-/* Define the near-end speech hangover counter: if near-end speech 
+/* Define the near-end speech hangover counter: if near-end speech
  *  is declared, hcntr is set equal to hangt (see pg. 432)
  */
 #define DEFAULT_HANGT 600  		/* in samples, so 600 samples = 75ms */
@@ -24,15 +24,15 @@
 /* define the residual error suppression threshold */
 #define DEFAULT_SUPPR_I 16		/* 16 = -24db */
 
-/* This is the minimum reference signal power estimate level 
+/* This is the minimum reference signal power estimate level
  *  that will result in filter adaptation.
- * If this is too low then background noise will cause the filter 
+ * If this is too low then background noise will cause the filter
  *  coefficients to constantly be updated.
  */
 #define MIN_UPDATE_THRESH_I 4096
 
 /* The number of samples used to update coefficients using the
- *  the block update method (M). It should be related back to the 
+ *  the block update method (M). It should be related back to the
  *  length of the echo can.
  * ie. it only updates coefficients when (sample number MOD default_m) = 0
  *
@@ -40,15 +40,15 @@
  */
 #define DEFAULT_M 16		  	/* every 16th sample */
 
-/* If AGGRESSIVE supression is enabled, then we start cancelling residual 
- * echos again even while there is potentially the very end of a near-side 
+/* If AGGRESSIVE supression is enabled, then we start cancelling residual
+ * echos again even while there is potentially the very end of a near-side
  *  signal present.
  * This defines how many samples of DEFAULT_HANGT can remain before we
  *  kick back in
  */
 #define AGGRESSIVE_HCNTR 160		/* in samples, so 160 samples = 20ms */
 
-/* This knob controls the number of passes the residual echo supression 
+/* This knob controls the number of passes the residual echo supression
  * algorithm makes.
  */
 #ifdef AGGRESSIVE_SUPPRESSOR
@@ -61,8 +61,8 @@
 /***************************************************************/
 /* The following knobs are not implemented in the current code */
 
-/* we need a dynamic level of suppression varying with the ratio of the 
-   power of the echo to the power of the reference signal this is 
+/* we need a dynamic level of suppression varying with the ratio of the
+   power of the echo to the power of the reference signal this is
    done so that we have a  smoother background. 		
    we have a higher suppression when the power ratio is closer to
    suppr_ceil and reduces logarithmically as we approach suppr_floor.

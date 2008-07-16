@@ -180,7 +180,9 @@ again:
 
 	/* now we have a full buffer of signed long samples - we do goertzel */
 	for (k = 0; k < NCOEFF; k++) {
-		sk = sk1 = sk2 = 0;
+		sk = 0;
+		sk1 = 0;
+		sk2 = 0;
 		buf = dsp->dtmf.buffer;
 		cos2pik_ = cos2pik[k];
 		for (n = 0; n < DSP_DTMF_NPOINTS; n++) {
@@ -230,14 +232,16 @@ coefficients:
 			result[6]/(tresh/100), result[7]/(tresh/100));
 
 	/* calc digit (lowgroup/highgroup) */
-	lowgroup = highgroup = -1;
+	lowgroup = -1;
+	highgroup = -1;
 	treshl = tresh >> 3;  /* tones which are not on, must be below 9 dB */
 	tresh = tresh >> 2;  /* touchtones must match within 6 dB */
 	for (i = 0; i < NCOEFF; i++) {
 		if (result[i] < treshl)
 			continue;  /* ignore */
 		if (result[i] < tresh) {
-			lowgroup = highgroup = -1;
+			lowgroup = -1;
+			highgroup = -1;
 			break;  /* noise inbetween */
 		}
 		/* good level found. This is allowed only one time per group */

@@ -178,7 +178,7 @@ MODULE_LICENSE("GPL");
 
 /*int spinnest = 0;*/
 
-spinlock_t dsp_lock;
+spinlock_t dsp_lock; /* global dsp lock */
 struct list_head dsp_ilist;
 struct list_head conf_ilist;
 int dsp_debug;
@@ -273,13 +273,11 @@ dsp_control_req(struct dsp *dsp, struct mISDNhead *hh, struct sk_buff *skb)
 		}
 		if (dsp_debug & DEBUG_DSP_CORE)
 			printk(KERN_DEBUG "%s: start dtmf\n", __func__);
-#if 0
 		if (len == sizeof(int)) {
 			printk(KERN_NOTICE "changing DTMF Threshold "
 				"to %d\n", *((int *)data));
 			dsp->dtmf.treshold = (*(int *)data) * 10000;
 		}
-#endif
 		/* init goertzel */
 		dsp_dtmf_goertzel_init(dsp);
 
@@ -350,7 +348,8 @@ conf_split:
 		dsp_rx_off(dsp);
 		/* reset tx buffers (user space data) */
 tone_off:
-		dsp->tx_R = dsp->tx_W = 0;
+		dsp->rx_W = 0;
+		dsp->rx_R = 0;
 		break;
 	case DSP_VOL_CHANGE_TX: /* change volume */
 		if (dsp->hdlc) {
@@ -804,7 +803,8 @@ dsp_function(struct mISDNchannel *ch,  struct sk_buff *skb)
 		dsp->data_pending = 0;
 		dsp->rx_init = 1;
 			/* rx_W and rx_R will be adjusted on first frame */
-		dsp->rx_W = dsp->rx_R = 0;
+		dsp->rx_W = 0;
+		dsp->rx_R = 0;
 		memset(dsp->rx_buff, 0, sizeof(dsp->rx_buff));
 		dsp_cmx_hardware(dsp->conf, dsp);
 		dsp_dtmf_hardware(dsp);
@@ -883,7 +883,9 @@ dsp_function(struct mISDNchannel *ch,  struct sk_buff *skb)
 			printk(KERN_DEBUG "%s: releasing b_channel %s\n",
 				__func__, dsp->name);
 		spin_lock_irqsave(&dsp_lock, flags);
-		dsp->tone.tone = dsp->tone.hardware = dsp->tone.software = 0;
+		dsp->tone.tone = 0;
+		dsp->tone.hardware = 0;
+		dsp->tone.software = 0;
 		if (timer_pending(&dsp->tone.tl))
 			del_timer(&dsp->tone.tl);
 		if (dsp->conf)
@@ -1133,9 +1135,6 @@ static int dsp_init(void)
 	}
 	printk(KERN_INFO "mISDN_dsp: DSP clocks every %d samples. This equals "
 		"%d jiffies.\n", dsp_poll, dsp_tics);
-#if 0
-	dsp_poll_diff = ((s32)dsp_poll) << 16;
-#endif
 
 	spin_lock_init(&dsp_lock);
 	INIT_LIST_HEAD(&dsp_ilist);

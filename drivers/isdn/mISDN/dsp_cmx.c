@@ -242,7 +242,8 @@ dsp_cmx_add_conf_member(struct dsp *dsp, struct dsp_conf *conf)
 	/* clear rx buffer */
 	memset(dsp->rx_buff, dsp_silence, sizeof(dsp->rx_buff));
 	dsp->rx_init = 1; /* rx_W and rx_R will be adjusted on first frame */
-	dsp->rx_W = dsp->rx_R = 0;
+	dsp->rx_W = 0;
+	dsp->rx_R = 0;
 
 	list_add_tail(&member->list, &conf->mlist);
 
@@ -1319,7 +1320,8 @@ dsp_cmx_send_member(struct dsp *dsp, int len, s32 *c, int members)
 	if (dsp->tone.tone && dsp->tone.software) {
 		/* -> copy tone */
 		dsp_tone_copy(dsp, d, len);
-		dsp->tx_R = dsp->tx_W = 0; /* clear tx buffer */
+		dsp->tx_R = 0; /* clear tx buffer */
+		dsp->tx_W = 0;
 		goto send_packet;
 	}
 	/* if we have tx-data but do not use mixing */
@@ -1399,13 +1401,6 @@ dsp_cmx_send_member(struct dsp *dsp, int len, s32 *c, int members)
 			/* start rx-pointer at current read position*/
 		/* -> if echo is NOT enabled */
 		if (!dsp->echo) {
-#if 0
-			if (o_r != o_rr)
-				printk(KERN_DEBUG "receive data=0x%02x\n",
-					o_q[o_r]);
-			else
-				printk(KERN_DEBUG "NO R!!!\n");
-#endif
 			/*
 			 * -> copy other member's rx-data,
 			 * if tx-data is available, mix
@@ -1512,12 +1507,6 @@ dsp_cmx_send_member(struct dsp *dsp, int len, s32 *c, int members)
 	goto send_packet;
 
 send_packet:
-	/* if queue is too slow */
-#if 0
-	if (!skb_queue_empty(&dsp->sendq))
-		printk(KERN_WARNING "mISDN_dsp.o: (%s) send-que too slow\n",
-			dsp->name);
-#endif
 	/*
 	 * send tx-data if enabled - don't filter,
 	 * becuase we want what we send, not what we filtered
@@ -1557,12 +1546,6 @@ struct timer_list dsp_spl_tl;
 u32	dsp_spl_jiffies; /* calculate the next time to fire */
 u32	dsp_start_jiffies; /* jiffies at the time, the calculation begins */
 struct timeval dsp_start_tv; /* time at start of calculation */
-#if 0
-s32	dsp_start_seconds = 10; /* how long to calibrate */
-s32	dsp_start_count; /* count calibration time */
-u32	dsp_poll_diff; /* calculated fix-comma corrected poll value */
-u32	dsp_count; /* current fix-comma counter */
-#endif
 
 void
 dsp_cmx_send(void *arg)
@@ -1577,54 +1560,12 @@ dsp_cmx_send(void *arg)
 	int jittercheck = 0, delay, i;
 	u_long flags;
 	struct timeval tv;
-#if 0
-	u32 celapsed;
-	s32 jelapsed;
-	s32 skew10seconds;
-	u32 lo, hi;
-#else
 	u32 elapsed;
-#endif
 	s16 length;
 
 	/* lock */
 	spin_lock_irqsave(&dsp_lock, flags);
 
-#if 0
-	/* do callibration of jiffies */
-	if (dsp_start_seconds) {
-		if (!dsp_start_tv.tv_sec) {
-			dsp_start_jiffies = jiffies;
-			do_gettimeofday(&dsp_start_tv);
-			dsp_start_count = 0;
-		}
-		jelapsed = (s32)((u32)jiffies - dsp_start_jiffies);
-		jelapsed = jelapsed * 8000 / HZ;
-		do_gettimeofday(&tv);
-		if (jelapsed / 8000 > dsp_start_count) {
-			dsp_start_count = jelapsed / 8000;
-			celapsed = ((tv.tv_sec - dsp_start_tv.tv_sec) * 8000)
-			    + ((s32)(tv.tv_usec / 125
-				- dsp_start_tv.tv_usec / 125));
-			skew10seconds = celapsed * 10 / dsp_start_count;
-			/* calculate actually poll value (fix-comma) */
-			hi = (skew10seconds * (s32)dsp_poll) / 80000;
-			lo = (skew10seconds * (s32)dsp_poll) % 80000;
-			lo = lo * 53687L;
-			dsp_poll_diff = (hi << 16) | (lo >> 16);
-			printk(KERN_INFO"mISDN_dsp: seconds=%d clock=%d "
-				"timer=%d skew10seconds=%d\n", dsp_start_count,
-				celapsed, jelapsed, skew10seconds);
-		}
-		if (dsp_start_count >= dsp_start_seconds)
-			dsp_start_seconds = 0;
-	}
-
-	/* calculate how much to send */
-	length = (s16)(dsp_count >> 16);
-	dsp_count += dsp_poll_diff;
-	length = (s16)((dsp_count >> 16) - (u16)length);
-#else
 	if (!dsp_start_tv.tv_sec) {
 		do_gettimeofday(&dsp_start_tv);
 		length = dsp_poll;
@@ -1636,7 +1577,6 @@ dsp_cmx_send(void *arg)
 		dsp_start_tv.tv_usec = tv.tv_usec;
 		length = elapsed;
 	}
-#endif
 	if (length > MAX_POLL + 100)
 		length = MAX_POLL + 100;
 /* printk(KERN_DEBUG "len=%d dsp_count=0x%x.%04x dsp_poll_diff=0x%x.%04x\n",

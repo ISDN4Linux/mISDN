@@ -1590,16 +1590,22 @@ hfcmulti_leds(struct hfc_multi *hc)
 		 */
 		if (hc->chan[hc->dslot].sync != 2) { /* no frame sync */
 			if (hc->chan[hc->dslot].dch->dev.D.protocol
-				!= ISDN_P_NT_E1)
-				led[0] = led[1] = 1;
-			else if (hc->ledcount>>11)
-				led[0] = led[1] = 1;
-			else
-				led[0] = led[1] = 0;
-			led[2] = led[3] = 0;
+				!= ISDN_P_NT_E1) {
+				led[0] = 1;
+				led[1] = 1;
+			} else if (hc->ledcount>>11) {
+				led[0] = 1;
+				led[1] = 1;
+			} else {
+				led[0] = 0;
+				led[1] = 0;
+			}
+			led[2] = 0;
+			led[3] = 0;
 		} else { /* with frame sync */
 			/* TODO make it work */
-			led[0] = led[1] = 0;
+			led[0] = 0;
+			led[1] = 0;
 			led[2] = 0;
 			led[3] = 1;
 		}
@@ -3086,7 +3092,6 @@ hfcmulti_conf(struct hfc_multi *hc, int ch, int num)
  */
 
 /* NOTE: this function is experimental and therefore disabled */
-#if 0
 static void
 hfcmulti_splloop(struct hfc_multi *hc, int ch, u_char *data, int len)
 {
@@ -3165,7 +3170,6 @@ hfcmulti_splloop(struct hfc_multi *hc, int ch, u_char *data, int len)
 
 .. udelay(300);
 }
-#endif
 
 /*
  * Layer 1 callback function
@@ -3499,18 +3503,18 @@ handle_bmsg(struct mISDNchannel *ch, struct sk_buff *skb)
 			printk(KERN_DEBUG
 			    "%s: HFC_SPL_LOOP_ON (len = %d)\n",
 			    __func__, skb->len);
-#if 0
+			/* not working, so disabled
 			hfcmulti_splloop(hc, bch->slot, skb->data, skb->len);
-#endif
+			*/
 			ret = 0;
 			break;
 		case HFC_SPL_LOOP_OFF: /* set silence */
 			if (debug & DEBUG_HFCMULTI_MSG)
 				printk(KERN_DEBUG "%s: HFC_SPL_LOOP_OFF\n",
 				    __func__);
-#if 0
+			/* not working, so disabled
 			hfcmulti_splloop(hc, bch->slot, NULL, 0);
-#endif
+			*/
 			ret = 0;
 			break;
 		default:

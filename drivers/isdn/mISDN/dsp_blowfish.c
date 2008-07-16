@@ -392,7 +392,8 @@ dsp_bf_encrypt(struct dsp *dsp, u8 *data, int len)
 		yl = (yl<<7) | dsp_audio_law2seven[bf_data_in[1]];
 		yl = (yl<<7) | dsp_audio_law2seven[bf_data_in[2]];
 		yl = (yl<<7) | dsp_audio_law2seven[bf_data_in[3]];
-		yr = nibble = dsp_audio_law2seven[bf_data_in[4]];
+		nibble = dsp_audio_law2seven[bf_data_in[4]];
+		yr = nibble;
 		yl = (yl<<4) | (nibble>>3);
 		yr = (yr<<7) | dsp_audio_law2seven[bf_data_in[5]];
 		yr = (yr<<7) | dsp_audio_law2seven[bf_data_in[6]];
@@ -489,7 +490,8 @@ dsp_bf_decrypt(struct dsp *dsp, u8 *data, int len)
 		yl = (yl<<7) | bf_crypt_inring[j++ & 15]; /* bit7 = 0 */
 		yl = (yl<<7) | bf_crypt_inring[j++ & 15]; /* bit7 = 0 */
 		yl = (yl<<7) | bf_crypt_inring[j++ & 15]; /* bit7 = 0 */
-		yr = nibble = bf_crypt_inring[j++ & 15]; /* bit7 = 0 */
+		nibble = bf_crypt_inring[j++ & 15]; /* bit7 = 0 */
+		yr = nibble;
 		yl = (yl<<4) | (nibble>>3);
 		cs2 = bf_crypt_inring[j++ & 15];
 		yr = (yr<<7) | (cs2 & 0x7f);

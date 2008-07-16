@@ -337,13 +337,12 @@ echo_can_update(struct echo_can_state *ec, short iref, short isig)
 		Py_i = (1 << 15);
 	}
 
-#if 0
 	/* Vary rate of adaptation depending on position in the file
 	 *  Do not do this for the first (DEFAULT_UPDATE_TIME) secs after speech
 	 *  has begun of the file to allow the echo cancellor to estimate the
 	 *  channel accurately
 	 * Still needs conversion!
-	 */
+	 *
 
 	if (ec->start_speech_d != 0) {
 		if (ec->i_d > (DEFAULT_T0 + ec->start_speech_d)*(SAMPLE_FREQ)) {
@@ -355,7 +354,7 @@ echo_can_update(struct echo_can_state *ec, short iref, short isig)
 	} else {
 		ec->beta2_d = DEFAULT_BETA1;
 	}
-#endif
+	*/
 
 	/* Fixed point, inverted */
 	ec->beta2_i = DEFAULT_BETA1_I;
@@ -520,8 +519,7 @@ echo_can_update(struct echo_can_state *ec, short iref, short isig)
 #endif
 #endif
 
-#if 0
-	/* This will generate a non-linear supression factor, once converted */
+	/* This will generate a non-linear supression factor, once converted *
 	if ((ec->HCNTR_d == 0) &&
 	   ((ec->Lu_d/ec->Ly_d) < DEFAULT_SUPPR) &&
 	    (ec->Lu_d/ec->Ly_d > EC_MIN_DB_VALUE)) {
@@ -531,7 +529,7 @@ echo_can_update(struct echo_can_state *ec, short iref, short isig)
 		u_suppr = pow(10.0, (suppr_factor) * RES_SUPR_FACTOR / 10.0)
 			* u_suppr;
 	}
-#endif
+	*/
 
 #ifdef MEC2_STATS
 	/* Periodically dump performance stats */
