@@ -902,7 +902,7 @@ vpm_echocan_off(struct hfc_multi *hc, int ch)
  * Also multiple interrupts may nest, so must lock each access (lists, card)!
  */
 static inline void
-hfcmulti_resync(struct hfc_multi *locked, struct hfc_multi *newmaster)
+hfcmulti_resync(struct hfc_multi *locked, struct hfc_multi *newmaster, int rm)
 {
 	struct hfc_multi *hc, *next, *pcmmaster = 0;
 	u_int *plx_acc_32, pv;
@@ -990,8 +990,9 @@ hfcmulti_resync(struct hfc_multi *locked, struct hfc_multi *newmaster)
 			pv |= PLX_SYNC_O_EN;
 			writel(pv, plx_acc_32);
 		} else
-			printk(KERN_ERR "%s no pcm master, this MUST not "
-				"happen!\n", __func__);
+			if (!rm)
+				printk(KERN_ERR "%s no pcm master, this MUST "
+					"not happen!\n", __func__);
 	}
 	syncmaster = newmaster;
 
@@ -1001,7 +1002,7 @@ hfcmulti_resync(struct hfc_multi *locked, struct hfc_multi *newmaster)
 
 /* This must be called AND hc must be locked irqsave!!! */
 inline void
-plxsd_checksync(struct hfc_multi *hc)
+plxsd_checksync(struct hfc_multi *hc, int rm)
 {
 	if (hc->syncronized) {
 		if (syncmaster == NULL) {
@@ -1009,7 +1010,7 @@ plxsd_checksync(struct hfc_multi *hc)
 				printk(KERN_WARNING "%s: GOT sync on card %d"
 					" (id=%d)\n", __func__, hc->id + 1,
 					hc->id);
-			hfcmulti_resync(hc, hc);
+			hfcmulti_resync(hc, hc, rm);
 		}
 	} else {
 		if (syncmaster == hc) {
@@ -1017,7 +1018,7 @@ plxsd_checksync(struct hfc_multi *hc)
 				printk(KERN_WARNING "%s: LOST sync on card %d"
 					" (id=%d)\n", __func__, hc->id + 1,
 					hc->id);
-			hfcmulti_resync(hc, NULL);
+			hfcmulti_resync(hc, NULL, rm);
 		}
 	}
 }
@@ -2525,7 +2526,7 @@ ph_state_irq(struct hfc_multi *hc, u_char r_irq_statech)
 		}
 	}
 	if (test_bit(HFC_CHIP_PLXSD, &hc->chip))
-		plxsd_checksync(hc);
+		plxsd_checksync(hc, 0);
 }
 
 static void
@@ -2687,7 +2688,7 @@ hfcmulti_interrupt(int intno, void *dev_id)
 					    "%s: E1 (id=%d) newstate %x\n",
 					    __func__, hc->id, dch->state);
 				if (test_bit(HFC_CHIP_PLXSD, &hc->chip))
-					plxsd_checksync(hc);
+					plxsd_checksync(hc, 0);
 			}
 		}
 		if (r_irq_misc & V_TI_IRQ)
@@ -3215,7 +3216,7 @@ hfcm_l1callback(struct dchannel *dch, u_int cmd)
 			if (test_bit(HFC_CHIP_PLXSD, &hc->chip)) {
 				hc->syncronized &=
 				   ~(1 << hc->chan[dch->slot].port);
-				plxsd_checksync(hc);
+				plxsd_checksync(hc, 0);
 			}
 		}
 		skb_queue_purge(&dch->squeue);
@@ -3928,7 +3929,7 @@ hfcmulti_initmode(struct dchannel *dch)
 		HFC_outb(hc, R_E1_WR_STA, r_e1_wr_sta);
 		if (test_bit(HFC_CHIP_PLXSD, &hc->chip)) {
 			hc->syncronized = 0;
-			plxsd_checksync(hc);
+			plxsd_checksync(hc, 0);
 		}
 	} else {
 		i = dch->slot;
@@ -3995,7 +3996,7 @@ hfcmulti_initmode(struct dchannel *dch)
 		if (test_bit(HFC_CHIP_PLXSD, &hc->chip)) {
 			hc->syncronized &=
 			   ~(1 << hc->chan[dch->slot].port);
-			plxsd_checksync(hc);
+			plxsd_checksync(hc, 0);
 		}
 	}
 	if (debug & DEBUG_HFCMULTI_INIT)
@@ -4500,7 +4501,7 @@ release_port(struct hfc_multi *hc, struct dchannel *dch)
 		/* remove sync */
 		if (test_bit(HFC_CHIP_PLXSD, &hc->chip)) {
 			hc->syncronized = 0;
-			plxsd_checksync(hc);
+			plxsd_checksync(hc, 1);
 		}
 		/* free channels */
 		for (i = 0; i <= 31; i++) {
@@ -4523,7 +4524,7 @@ release_port(struct hfc_multi *hc, struct dchannel *dch)
 		if (test_bit(HFC_CHIP_PLXSD, &hc->chip)) {
 			hc->syncronized &=
 			   ~(1 << hc->chan[ci].port);
-			plxsd_checksync(hc);
+			plxsd_checksync(hc, 1);
 		}
 		/* free channels */
 		if (hc->chan[ci - 2].bch) {

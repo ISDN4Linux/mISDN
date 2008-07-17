@@ -681,8 +681,8 @@ diff -Nur -x '*symvers' -x '*mod.c' -x '*.o' -x '*.ko' mISDN/drivers/isdn/mISDN/
 +		return;
 +	}
 +#warning remove
-+if (fn)
-+printk(KERN_ERR "before lock (%s:%d)\n", fn, line);
++//if (fn)
++//printk(KERN_ERR "before lock (%s:%d)\n", fn, line);
 +	spin_lock_irqsave(&skbdbg_lock, flags);
 +	list_for_each(item, &mISDN_skbdbg_list) {
 +		sid = (_mid_sitem_t *)item;
@@ -704,8 +704,8 @@ diff -Nur -x '*symvers' -x '*mod.c' -x '*.o' -x '*.ko' mISDN/drivers/isdn/mISDN/
 +	}
 +	spin_unlock_irqrestore(&skbdbg_lock, flags);
 +#warning remove
-+if (fn)
-+printk(KERN_ERR "after unlock\n");
++//if (fn)
++//printk(KERN_ERR "after unlock\n");
 +	if (!found)
 +		printk(KERN_DEBUG "%s:%d item(%p) not in list\n", fn, line, skb);
 +}

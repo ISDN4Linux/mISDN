@@ -276,7 +276,13 @@ data_sock_release(struct socket *sock)
 		mISDN_sock_unlink(&data_sockets, sk);
 		break;
 	}
+
+	lock_sock(sk);
+
 	sock_orphan(sk);
+	skb_queue_purge(&sk->sk_receive_queue);
+
+	release_sock(sk);
 	sock_put(sk);
 
 	return 0;
