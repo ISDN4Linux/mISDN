@@ -1927,8 +1927,8 @@ next_frame:
 		while (f2 != (temp = HFC_inb_nodebug(hc, A_F2))) {
 			if (debug & DEBUG_HFCMULTI_FIFO)
 				printk(KERN_DEBUG
-				    "%s: reread f2 because %d!=%d\n",
-				    __func__, temp, f2);
+				    "%s(card %d): reread f2 because %d!=%d\n",
+				    __func__, hc->id + 1, temp, f2);
 			f2 = temp; /* repeat until F2 is equal */
 		}
 		Fspace = f2 - f1 - 1;
@@ -1959,8 +1959,8 @@ next_frame:
 	z2 = HFC_inw_nodebug(hc, A_Z2) - hc->Zmin;
 	while (z2 != (temp = (HFC_inw_nodebug(hc, A_Z2) - hc->Zmin))) {
 		if (debug & DEBUG_HFCMULTI_FIFO)
-			printk(KERN_DEBUG "%s: reread z2 because %d!=%d\n",
-				__func__, temp, z2);
+			printk(KERN_DEBUG "%s(card %d): reread z2 because "
+				"%d!=%d\n", __func__, hc->id + 1, temp, z2);
 		z2 = temp; /* repeat unti Z2 is equal */
 	}
 	Zspace = z2 - z1;
@@ -2031,9 +2031,9 @@ next_frame:
 	if (ii - i > Zspace)
 		ii = Zspace + i;
 	if (debug & DEBUG_HFCMULTI_FIFO)
-		printk(KERN_DEBUG "%s: fifo(%d) has %d bytes space left "
-		    "(z1=%04x, z2=%04x) sending %d of %d bytes %s\n",
-			__func__, ch, Zspace, z1, z2, ii-i, len-i,
+		printk(KERN_DEBUG "%s(card %d): fifo(%d) has %d bytes space "
+		    "left (z1=%04x, z2=%04x) sending %d of %d bytes %s\n",
+			__func__, hc->id + 1, ch, Zspace, z1, z2, ii-i, len-i,
 			temp ? "HDLC":"TRANS");
 
 
@@ -2123,8 +2123,8 @@ next_frame:
 		while (f1 != (temp = HFC_inb_nodebug(hc, A_F1))) {
 			if (debug & DEBUG_HFCMULTI_FIFO)
 				printk(KERN_DEBUG
-				    "%s: reread f1 because %d!=%d\n",
-				    __func__, temp, f1);
+				    "%s(card %d): reread f1 because %d!=%d\n",
+				    __func__, hc->id + 1, temp, f1);
 			f1 = temp; /* repeat until F1 is equal */
 		}
 		f2 = HFC_inb_nodebug(hc, A_F2);
@@ -2132,8 +2132,8 @@ next_frame:
 	z1 = HFC_inw_nodebug(hc, A_Z1) - hc->Zmin;
 	while (z1 != (temp = (HFC_inw_nodebug(hc, A_Z1) - hc->Zmin))) {
 		if (debug & DEBUG_HFCMULTI_FIFO)
-			printk(KERN_DEBUG "%s: reread z2 because %d!=%d\n",
-			    __func__, temp, z2);
+			printk(KERN_DEBUG "%s(card %d): reread z2 because "
+				"%d!=%d\n", __func__, hc->id + 1, temp, z2);
 		z1 = temp; /* repeat until Z1 is equal */
 	}
 	z2 = HFC_inw_nodebug(hc, A_Z2) - hc->Zmin;
@@ -2161,9 +2161,9 @@ next_frame:
 	/* empty fifo with what we have */
 	if (dch || test_bit(FLG_HDLC, &bch->Flags)) {
 		if (debug & DEBUG_HFCMULTI_FIFO)
-			printk(KERN_DEBUG "%s: fifo(%d) reading %d bytes (z1="
-			    "%04x, z2=%04x) HDLC %s (f1=%d, f2=%d) got=%d\n",
-				__func__, ch, Zsize, z1, z2,
+			printk(KERN_DEBUG "%s(card %d): fifo(%d) reading %d "
+			    "bytes (z1=%04x, z2=%04x) HDLC %s (f1=%d, f2=%d) "
+			    "got=%d\n", __func__, hc->id + 1, ch, Zsize, z1, z2,
 				(f1 == f2) ? "fragment" : "COMPLETE",
 				f1, f2, Zsize + (*sp)->len);
 		/* HDLC */
@@ -2171,7 +2171,7 @@ next_frame:
 			if (debug & DEBUG_HFCMULTI_FIFO)
 				printk(KERN_DEBUG
 				    "%s: hdlc-frame too large.\n",
-				    __func__);
+				    __func__, hc->id + 1);
 			skb_trim(*sp, 0);
 			HFC_outb_nodebug(hc, R_INC_RES_FIFO, V_RES_F);
 			HFC_wait_nodebug(hc);
@@ -2188,8 +2188,8 @@ next_frame:
 			if ((*sp)->len < 4) {
 				if (debug & DEBUG_HFCMULTI_FIFO)
 					printk(KERN_DEBUG
-					    "%s: Frame below minimum size\n",
-					    __func__);
+					    "%s(card %d): Frame below minimum "
+					    "size\n", __func__, hc->id + 1);
 				skb_trim(*sp, 0);
 				goto next_frame;
 			}
@@ -2219,9 +2219,11 @@ next_frame:
 				skb = NULL;
 			}
 			if (debug & DEBUG_HFCMULTI_FIFO) {
+				printk(KERN_DEBUG "%s(card %d):",
+					__func__, hc->id + 1);
 				temp = 0;
 				while (temp < (*sp)->len)
-					printk("%02x ", (*sp)->data[temp++]);
+					printk(" %02x", (*sp)->data[temp++]);
 				printk("\n");
 			}
 			if (dch)
@@ -2254,9 +2256,9 @@ next_frame:
 		}
 		if (debug & DEBUG_HFCMULTI_FIFO)
 			printk(KERN_DEBUG
-			    "%s: fifo(%d) reading %d bytes "
+			    "%s(card %d): fifo(%d) reading %d bytes "
 			    "(z1=%04x, z2=%04x) TRANS\n",
-				__func__, ch, Zsize, z1, z2);
+				__func__, hc->id + 1, ch, Zsize, z1, z2);
 		/* only bch is transparent */
 		recv_Bchannel(bch);
 		*sp = skb;
