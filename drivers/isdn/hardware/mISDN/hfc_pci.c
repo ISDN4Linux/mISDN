@@ -43,11 +43,7 @@ MODULE_AUTHOR("Karsten Keil");
 #ifdef MODULE_LICENSE
 MODULE_LICENSE("GPL");
 #endif
-#ifdef OLD_MODULE_PARAM
-MODULE_PARM(debug, "1i");
-#else
 module_param(debug, uint, 0);
-#endif
 #endif
 
 static LIST_HEAD(HFClist);
@@ -180,7 +176,7 @@ struct hfc_pci {
 	u_int			irqcnt;
 	struct pci_dev		*pdev;
 	struct hfcPCI_hw	hw;
-	spinlock_t		lock;
+	spinlock_t		lock;	/* card lock */
 	struct dchannel		dch;
 	struct bchannel		bch[2];
 };
@@ -1148,11 +1144,7 @@ tx_dirq(struct dchannel *dch)
 }
 
 static irqreturn_t
-#ifdef	OLD_IRQ_CALL
-hfcpci_int(int intno, void *dev_id, struct pt_regs *regs)
-#else
 hfcpci_int(int intno, void *dev_id)
-#endif
 {
 	struct hfc_pci	*hc = dev_id;
 	u_char		exval;
@@ -1927,7 +1919,8 @@ open_dchannel(struct hfc_pci *hc, struct mISDNchannel *ch,
 			if (err)
 				return err;
 		}
-		hc->hw.protocol = ch->protocol = rq->protocol;
+		hc->hw.protocol = rq->protocol;
+		ch->protocol = rq->protocol;
 		err = init_card(hc);
 		if (err)
 			return err;
@@ -1935,7 +1928,8 @@ open_dchannel(struct hfc_pci *hc, struct mISDNchannel *ch,
 		if (rq->protocol != ch->protocol) {
 			if (hc->hw.protocol == ISDN_P_TE_S0)
 				l1_event(hc->dch.l1, CLOSE_CHANNEL);
-			hc->hw.protocol = ch->protocol = rq->protocol;
+			hc->hw.protocol = rq->protocol;
+			ch->protocol = rq->protocol;
 			hfcpci_setmode(hc);
 		}
 	}
@@ -2297,12 +2291,6 @@ HFC_init(void)
 	int		err;
 
 	err = pci_register_driver(&hfc_driver);
-#ifdef OLD_PCI_REGISTER_DRIVER
-	if (err == 0) {
-		err = -ENODEV;
-		pci_unregister_driver(&hfc_driver);
-	}
-#endif
 	return err;
 }
 

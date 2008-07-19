@@ -1,4 +1,4 @@
-* hfcs_usb.c
+/* hfcs_usb.c
  * mISDN driver for Colognechip HFC-S USB chip
  *
  * Copyright 2001 by Peter Sprenger (sprenger@moving-bytes.de)

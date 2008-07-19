@@ -327,7 +327,7 @@ HFC_inb_regio(struct hfc_multi *hc, u_char reg)
 #endif
 {
 	outb(reg, (hc->pci_iobase)+4);
-	return (inb(hc->pci_iobase));
+	return inb(hc->pci_iobase);
 }
 static u_short
 #ifdef HFC_REGISTER_DEBUG
@@ -337,7 +337,7 @@ HFC_inw_regio(struct hfc_multi *hc, u_char reg)
 #endif
 {
 	outb(reg, (hc->pci_iobase)+4);
-	return (inw(hc->pci_iobase));
+	return inw(hc->pci_iobase);
 }
 static void
 #ifdef HFC_REGISTER_DEBUG
@@ -407,7 +407,7 @@ HFC_inb_debug(struct hfc_multi *hc, u_char reg, const char *function, int line)
 	printk(KERN_DEBUG
 	    "HFC_inb(chip %d, %02x=%s) = 0x%02x=%s; in %s() line %d\n",
 	    hc->id, reg, regname, val, bits, function, line);
-	return (val);
+	return val;
 }
 static u_short
 HFC_inw_debug(struct hfc_multi *hc, u_char reg, const char *function, int line)
@@ -429,7 +429,7 @@ HFC_inw_debug(struct hfc_multi *hc, u_char reg, const char *function, int line)
 	printk(KERN_DEBUG
 	    "HFC_inw(chip %d, %02x=%s) = 0x%04x; in %s() line %d\n",
 	    hc->id, reg, regname, val, function, line);
-	return (val);
+	return val;
 }
 static void
 HFC_wait_debug(struct hfc_multi *hc, const char *function, int line)
@@ -2763,7 +2763,7 @@ mode_hfcmulti(struct hfc_multi *hc, int ch, int protocol, int slot_tx,
 	int conf;
 
 	if (ch < 0 || ch > 31)
-		return(EINVAL);
+		return EINVAL;
 	oslot_tx = hc->chan[ch].slot_tx;
 	oslot_rx = hc->chan[ch].slot_rx;
 	conf = hc->chan[ch].conf;
@@ -5270,10 +5270,10 @@ hfcmulti_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 }
 
 static struct pci_driver hfcmultipci_driver = {
-name:		"hfc_multi",
-probe:		hfcmulti_probe,
-remove:		__devexit_p(hfc_remove_pci),
-id_table:	hfmultipci_ids,
+	.name		= "hfc_multi",
+	.probe		= hfcmulti_probe,
+	.remove		= __devexit_p(hfc_remove_pci),
+	.id_table	= hfmultipci_ids,
 };
 
 static void __exit

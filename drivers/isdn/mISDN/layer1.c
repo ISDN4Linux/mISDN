@@ -21,7 +21,6 @@
 #include "layer1.h"
 #include "fsm.h"
 
-
 static int *debug;
 
 struct layer1 {
