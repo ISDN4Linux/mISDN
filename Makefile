@@ -90,6 +90,8 @@ clean:
 	rm -rf drivers/isdn/hardware/mISDN/*.ko
 	rm -rf drivers/isdn/mISDN/*.o
 	rm -rf drivers/isdn/mISDN/*.ko
+	rm -rf drivers/isdn/mISDN/octvqe/*.o
+	rm -rf drivers/isdn/mISDN/octvqe/*.ko
 	rm -rf *~
 	find . -iname ".*.cmd" -exec rm -rf {} \;
 	find . -iname ".*.d" -exec rm -rf {} \;
