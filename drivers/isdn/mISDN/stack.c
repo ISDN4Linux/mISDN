@@ -370,7 +370,7 @@ create_stack(struct mISDNdevice *dev)
 {
 	struct mISDNstack	*newst;
 	int			err;
-	DECLARE_COMPLETION(done);
+	DECLARE_COMPLETION_ONSTACK(done);
 
 	newst = kzalloc(sizeof(struct mISDNstack), GFP_KERNEL);
 	if (!newst) {
@@ -631,7 +631,7 @@ void
 delete_stack(struct mISDNdevice *dev)
 {
 	struct mISDNstack	*st = dev->D.st;
-	DECLARE_COMPLETION(done);
+	DECLARE_COMPLETION_ONSTACK(done);
 
 	if (*debug & DEBUG_CORE_FUNC)
 		printk(KERN_DEBUG "%s: st(%s)\n", __func__,

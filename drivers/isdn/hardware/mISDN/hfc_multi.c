@@ -160,7 +160,7 @@
 #define	MAX_PORTS	64
 
 static LIST_HEAD(HFClist);
-static spinlock_t HFClock;
+static spinlock_t HFClock; /* global hfc list lock */
 
 static void ph_state_change(struct dchannel *);
 
@@ -173,7 +173,7 @@ static int interrupt_registered;
 
 static struct hfc_multi *syncmaster;
 int plxsd_master; /* if we have a master card (yet) */
-static spinlock_t plx_lock;
+static spinlock_t plx_lock; /* may not acquire other lock inside */
 EXPORT_SYMBOL(plx_lock);
 
 #define	VENDOR_CCD	"Cologne Chip AG"
@@ -909,7 +909,7 @@ hfcmulti_resync(struct hfc_multi *locked, struct hfc_multi *newmaster, int rm)
 	u_long flags;
 
 	spin_lock_irqsave(&HFClock, flags);
-	spin_lock(&plx_lock);
+	spin_lock(&plx_lock); /* must be locked inside other locks */
 
 	if (debug & DEBUG_HFCMULTI_PLXSD)
 		printk(KERN_DEBUG "%s: RESYNC(syncmaster=0x%p)\n",
@@ -1183,6 +1183,7 @@ init_chip(struct hfc_multi *hc)
 		/* Put the DSP in Reset */
 		pv &= ~PLX_DSP_RES_N;
 		writel(pv, plx_acc_32);
+		spin_unlock_irqrestore(&plx_lock, plx_flags);
 		if (debug & DEBUG_HFCMULTI_INIT)
 			printk(KERN_WARNING "%s: slave/term: PLX_GPIO=%x\n",
 				__func__, pv);
@@ -1205,17 +1206,18 @@ init_chip(struct hfc_multi *hc)
 				printk(KERN_DEBUG "%s: card %d is between, so "
 					"we disable termination\n",
 				    __func__, plx_last_hc->id + 1);
+			spin_lock_irqsave(&plx_lock, plx_flags);
 			plx_acc_32 = (u_int *)(plx_last_hc->plx_membase
 					+ PLX_GPIOC);
 			pv = readl(plx_acc_32);
 			pv &= ~PLX_TERM_ON;
 			writel(pv, plx_acc_32);
+			spin_unlock_irqrestore(&plx_lock, plx_flags);
 			if (debug & DEBUG_HFCMULTI_INIT)
 			    printk(KERN_WARNING "%s: term off: PLX_GPIO=%x\n",
 					__func__, pv);
 		}
 		spin_unlock_irqrestore(&HFClock, hfc_flags);
-		spin_unlock_irqrestore(&plx_lock, plx_flags);
 		hc->hw.r_pcm_md0 = V_F0_LEN; /* shift clock for DSP */
 	}
 
@@ -2170,7 +2172,7 @@ next_frame:
 		if ((Zsize + (*sp)->len) > (maxlen + 3)) {
 			if (debug & DEBUG_HFCMULTI_FIFO)
 				printk(KERN_DEBUG
-				    "%s: hdlc-frame too large.\n",
+				    "%s(card %d): hdlc-frame too large.\n",
 				    __func__, hc->id + 1);
 			skb_trim(*sp, 0);
 			HFC_outb_nodebug(hc, R_INC_RES_FIFO, V_RES_F);
