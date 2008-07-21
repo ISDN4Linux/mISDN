@@ -1,13 +1,13 @@
 /*
  *
- * hfc_pci.c     low level driver for CCD's hfc-pci based cards
+ * hfcpci.c     low level driver for CCD's hfc-pci based cards
  *
  * Author     Werner Cornelius (werner@isdn4linux.de)
  *            based on existing driver for CCD hfc ISA cards
  *            type approval valid for HFC-S PCI A based card
  *
  * Copyright 1999  by Werner Cornelius (werner@isdn-development.de)
- * Copyright 2007  by Karsten Keil (kkeil@suse.de)
+ * Copyright 2008  by Karsten Keil (kkeil@suse.de)
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
