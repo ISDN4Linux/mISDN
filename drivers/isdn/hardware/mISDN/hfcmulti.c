@@ -1,5 +1,5 @@
 /*
- * hfc_multi.c  low level driver for hfc-4s/hfc-8s/hfc-e1 based cards
+ * hfcmulti.c  low level driver for hfc-4s/hfc-8s/hfc-e1 based cards
  *
  * Author	Andreas Eversberg (jolly@eversberg.eu)
  * ported to mqueue mechanism:
@@ -7,7 +7,8 @@
  *
  * inspired by existing hfc-pci driver:
  * Copyright 1999  by Werner Cornelius (werner@isdn-development.de)
- * Copyright 2001,2007  by Karsten Keil (kkeil@suse.de)
+ * Copyright 2001,2008  by Karsten Keil (kkeil@suse.de)
+ * Copyright 2008  by Andreas Eversberg (jolly@eversberg.eu)
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
