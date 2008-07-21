@@ -1894,9 +1894,13 @@ hfcmulti_tx(struct hfc_multi *hc, int ch)
 	txpending = &hc->chan[ch].txpending;
 	slot_tx = hc->chan[ch].slot_tx;
 	if (dch) {
+		if (!test_bit(FLG_ACTIVE, &dch->Flags))
+			return;
 		sp = &dch->tx_skb;
 		idxp = &dch->tx_idx;
 	} else {
+		if (!test_bit(FLG_ACTIVE, &bch->Flags))
+			return;
 		sp = &bch->tx_skb;
 		idxp = &bch->tx_idx;
 	}
@@ -2088,22 +2092,12 @@ hfcmulti_rx(struct hfc_multi *hc, int ch)
 	int temp;
 	int Zsize, z1, z2 = 0; /* = 0, to make GCC happy */
 	int f1 = 0, f2 = 0; /* = 0, to make GCC happy */
+	int again = 0;
 	struct	bchannel *bch;
 	struct  dchannel *dch;
 	struct sk_buff 	*skb, **sp = NULL;
 	int	maxlen;
 
-	/* lets see how much data we received */
-	if (test_bit(HFC_CHIP_B410P, &hc->chip) &&
-	    (hc->chan[ch].protocol == ISDN_P_B_RAW) &&
-	    (hc->chan[ch].slot_rx < 0) &&
-	    (hc->chan[ch].slot_tx < 0))
-		HFC_outb_nodebug(hc, R_FIFO, 0x20 | (ch<<1) | 1);
-	else
-		HFC_outb_nodebug(hc, R_FIFO, (ch<<1)|1);
-	HFC_wait_nodebug(hc);
-	if (hc->chan[ch].rx_off)
-		return;
 	bch = hc->chan[ch].bch;
 	dch = hc->chan[ch].dch;
 	if ((!dch) && (!bch))
@@ -2120,6 +2114,21 @@ hfcmulti_rx(struct hfc_multi *hc, int ch)
 		maxlen = bch->maxlen;
 	}
 next_frame:
+	/* on first AND before getting next valid frame, R_FIFO must be written
+	   to. */
+	if (test_bit(HFC_CHIP_B410P, &hc->chip) &&
+	    (hc->chan[ch].protocol == ISDN_P_B_RAW) &&
+	    (hc->chan[ch].slot_rx < 0) &&
+	    (hc->chan[ch].slot_tx < 0))
+		HFC_outb_nodebug(hc, R_FIFO, 0x20 | (ch<<1) | 1);
+	else
+		HFC_outb_nodebug(hc, R_FIFO, (ch<<1)|1);
+	HFC_wait_nodebug(hc);
+
+	/* ignore if rx is off BUT change fifo (above) to start pending TX */
+	if (hc->chan[ch].rx_off)
+		return;
+
 	if (dch || test_bit(FLG_HDLC, &bch->Flags)) {
 		f1 = HFC_inb_nodebug(hc, A_F1);
 		while (f1 != (temp = HFC_inb_nodebug(hc, A_F1))) {
@@ -2165,9 +2174,9 @@ next_frame:
 		if (debug & DEBUG_HFCMULTI_FIFO)
 			printk(KERN_DEBUG "%s(card %d): fifo(%d) reading %d "
 			    "bytes (z1=%04x, z2=%04x) HDLC %s (f1=%d, f2=%d) "
-			    "got=%d\n", __func__, hc->id + 1, ch, Zsize, z1, z2,
-				(f1 == f2) ? "fragment" : "COMPLETE",
-				f1, f2, Zsize + (*sp)->len);
+			    "got=%d (again %d)\n", __func__, hc->id + 1, ch,
+			    Zsize, z1, z2, (f1 == f2) ? "fragment" : "COMPLETE",
+			    f1, f2, Zsize + (*sp)->len, again);
 		/* HDLC */
 		if ((Zsize + (*sp)->len) > (maxlen + 3)) {
 			if (debug & DEBUG_HFCMULTI_FIFO)
@@ -2233,6 +2242,7 @@ next_frame:
 			else
 				recv_Bchannel(bch);
 			*sp = skb;
+			again++;
 			goto next_frame;
 		}
 		/* there is an incomplete frame */
@@ -3459,6 +3469,7 @@ handle_bmsg(struct mISDNchannel *ch, struct sk_buff *skb)
 		spin_lock_irqsave(&hc->lock, flags);
 		/* activate B-channel if not already activated */
 		if (!test_and_set_bit(FLG_ACTIVE, &bch->Flags)) {
+			hc->chan[bch->slot].txpending = 0;
 			ret = mode_hfcmulti(hc, bch->slot,
 				ch->protocol,
 				hc->chan[bch->slot].slot_tx,
