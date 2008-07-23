@@ -236,7 +236,7 @@ socket process and create a new one.
 #include "core.h"
 #include "l1oip.h"
 
-static const char *l1oip_revision = "$Revision: 2.00 $";
+static const char *l1oip_revision = "2.00";
 
 static int l1oip_cnt;
 static spinlock_t l1oip_lock;
@@ -306,7 +306,7 @@ l1oip_socket_send(struct l1oip *hc, u8 localcodec, u8 channel, u32 chanmask,
 		if (debug & DEBUG_L1OIP_MSG)
 			printk(KERN_DEBUG "%s: dropping frame, because remote "
 				"IP is not set.\n", __func__);
-		return(len);
+		return len;
 	}
 
 	/* assemble frame */
@@ -343,7 +343,7 @@ l1oip_socket_send(struct l1oip *hc, u8 localcodec, u8 channel, u32 chanmask,
 	spin_lock(&hc->socket_lock);
 	if (!hc->socket) {
 		spin_unlock(&hc->socket_lock);
-		return(0);
+		return 0;
 	}
 	/* seize socket */
 	socket = hc->socket;
@@ -362,7 +362,7 @@ l1oip_socket_send(struct l1oip *hc, u8 localcodec, u8 channel, u32 chanmask,
 	/* give socket back */
 	hc->socket = socket; /* no locking required */
 
-	return(len);
+	return len;
 }
 
 
@@ -477,7 +477,7 @@ l1oip_socket_parse(struct l1oip *hc, struct sockaddr_in *sin, u8 *buf, int len)
 	u8			remotecodec;
 	u16			timebase;
 	int			m, mlen;
-	int 			len_start = len; /* initial frame length */
+	int			len_start = len; /* initial frame length */
 	struct dchannel		*dch = hc->chan[hc->d_idx].dch;
 
 	if (debug & DEBUG_L1OIP_MSG)
@@ -678,7 +678,7 @@ l1oip_socket_thread(void *data)
 	/* create socket */
 	if (sock_create(PF_INET, SOCK_DGRAM, IPPROTO_UDP, &socket)) {
 		printk(KERN_ERR "%s: Failed to create socket.\n", __func__);
-		return(-EIO);
+		return -EIO;
 	}
 
 	/* set incoming address */
@@ -775,7 +775,7 @@ fail:
 	if (debug & DEBUG_L1OIP_SOCKET)
 		printk(KERN_DEBUG "%s: socket thread terminated\n",
 			__func__);
-	return(ret);
+	return ret;
 }
 
 static void
@@ -805,12 +805,12 @@ l1oip_socket_open(struct l1oip *hc)
 		printk(KERN_ERR "%s: Failed to create socket process.\n",
 			__func__);
 		sock_release(hc->socket);
-		return(-EIO);
+		return -EIO;
 	}
 	if (debug & DEBUG_L1OIP_SOCKET)
 		printk(KERN_DEBUG "%s: socket thread created\n", __func__);
 
-	return(0);
+	return 0;
 }
 
 
@@ -1511,7 +1511,7 @@ l1oip_init(void)
 		l1oip_cnt++;
 	}
 	printk(KERN_INFO "%d virtual devices registered\n", l1oip_cnt);
-	return(0);
+	return 0;
 }
 
 

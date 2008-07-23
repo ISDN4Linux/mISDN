@@ -226,7 +226,7 @@ l1oip_law_to_4bit(u8 *data, int len, u8 *result, u32 *state)
 	int ii, i = 0, o = 0;
 
 	if (!len)
-		return(0);
+		return 0;
 
 	/* send saved byte and first input byte */
 	if (*state) {
@@ -250,7 +250,7 @@ l1oip_law_to_4bit(u8 *data, int len, u8 *result, u32 *state)
 	else
 		*state = 0;
 
-	return(o);
+	return o;
 }
 
 /* Decompress data to the result buffer
@@ -270,7 +270,7 @@ l1oip_4bit_to_law(u8 *data, int len, u8 *result)
 		i++;
 	}
 
-	return (len << 1);
+	return len << 1;
 }
 
 
@@ -287,7 +287,7 @@ l1oip_alaw_to_ulaw(u8 *data, int len, u8 *result)
 		i++;
 	}
 
-	return(len);
+	return len;
 }
 
 int
@@ -300,7 +300,7 @@ l1oip_ulaw_to_alaw(u8 *data, int len, u8 *result)
 		i++;
 	}
 
-	return(len);
+	return len;
 }
 
 
@@ -325,14 +325,14 @@ l1oip_4bit_alloc(int ulaw)
 
 	/* in case, it is called again */
 	if (table_dec)
-		return(0);
+		return 0;
 
 	/* alloc conversion tables */
 	table_com = vmalloc(65536);
 	table_dec = vmalloc(512);
 	if (!table_com | !table_dec) {
 		l1oip_4bit_free();
-		return(-ENOMEM);
+		return -ENOMEM;
 	}
 	memset(table_com, 0, 65536);
 	memset(table_dec, 0, 512);
@@ -368,7 +368,7 @@ l1oip_4bit_alloc(int ulaw)
 		i1++;
 	}
 
-	return(0);
+	return 0;
 }
 
 

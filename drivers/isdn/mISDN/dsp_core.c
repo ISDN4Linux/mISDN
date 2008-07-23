@@ -1,5 +1,4 @@
-/* $Id: dsp_core.c,v 1.30 2007/04/03 17:47:26 jolly Exp $
- *
+/*
  * Author       Andreas Eversberg (jolly@eversberg.eu)
  * Based on source code structure by
  *		Karsten Keil (keil@isdn4linux.de)
@@ -162,7 +161,7 @@
 #include "core.h"
 #include "dsp.h"
 
-const char *mISDN_dsp_revision = "$Revision: 2.0 $";
+const char *mISDN_dsp_revision = "2.0";
 
 static int debug;
 static int options;
@@ -585,7 +584,7 @@ tone_off:
 				__func__, cont);
 		ret = -EINVAL;
 	}
-	return(ret);
+	return ret;
 }
 
 static void
@@ -673,7 +672,7 @@ dsp_function(struct mISDNchannel *ch,  struct sk_buff *skb)
 			}
 			hh->prim = DL_DATA_IND;
 			if (dsp->up)
-				return(dsp->up->send(dsp->up, skb));
+				return dsp->up->send(dsp->up, skb);
 		break;
 		}
 
@@ -726,7 +725,7 @@ dsp_function(struct mISDNchannel *ch,  struct sk_buff *skb)
 		}
 		hh->prim = DL_DATA_IND;
 		if (dsp->up)
-			return(dsp->up->send(dsp->up, skb));
+			return dsp->up->send(dsp->up, skb);
 		break;
 	case (PH_CONTROL_IND):
 		if (dsp_debug & DEBUG_DSP_DTMFCOEFF)
@@ -813,7 +812,7 @@ dsp_function(struct mISDNchannel *ch,  struct sk_buff *skb)
 		/* send activation to upper layer */
 		hh->prim = DL_ESTABLISH_CNF;
 		if (dsp->up)
-			return(dsp->up->send(dsp->up, skb));
+			return dsp->up->send(dsp->up, skb);
 		break;
 	case (PH_DEACTIVATE_IND):
 	case (PH_DEACTIVATE_CNF):
@@ -829,7 +828,7 @@ dsp_function(struct mISDNchannel *ch,  struct sk_buff *skb)
 		spin_unlock_irqrestore(&dsp_lock, flags);
 		hh->prim = DL_RELEASE_CNF;
 		if (dsp->up)
-			return(dsp->up->send(dsp->up, skb));
+			return dsp->up->send(dsp->up, skb);
 		break;
 	/* FROM UP */
 	case (DL_DATA_REQ):
@@ -846,7 +845,7 @@ dsp_function(struct mISDNchannel *ch,  struct sk_buff *skb)
 				schedule_work(&dsp->workq);
 			}
 			spin_unlock_irqrestore(&dsp_lock, flags);
-			return(0);
+			return 0;
 		}
 		/* send data to tx-buffer (if no tone is played) */
 		if (!dsp->tone.tone) {
@@ -871,7 +870,7 @@ dsp_function(struct mISDNchannel *ch,  struct sk_buff *skb)
 		/* send ph_activate */
 		hh->prim = PH_ACTIVATE_REQ;
 		if (ch->peer)
-			return(ch->recv(ch->peer, skb));
+			return ch->recv(ch->peer, skb);
 		break;
 	case (DL_RELEASE_REQ):
 	case (PH_DEACTIVATE_REQ):
@@ -891,7 +890,7 @@ dsp_function(struct mISDNchannel *ch,  struct sk_buff *skb)
 		spin_unlock_irqrestore(&dsp_lock, flags);
 		hh->prim = PH_DEACTIVATE_REQ;
 		if (ch->peer)
-			return(ch->recv(ch->peer, skb));
+			return ch->recv(ch->peer, skb);
 		break;
 	default:
 		if (dsp_debug & DEBUG_DSP_CORE)
@@ -1012,7 +1011,7 @@ dspcreate(struct channel_req *crq)
 	ndsp = vmalloc(sizeof(struct dsp));
 	if (!ndsp) {
 		printk(KERN_ERR "%s: vmalloc struct dsp failed\n", __func__);
-		return(-ENOMEM);
+		return -ENOMEM;
 	}
 	memset(ndsp, 0, sizeof(struct dsp));
 	if (dsp_debug & DEBUG_DSP_CTRL)
@@ -1089,13 +1088,13 @@ static int dsp_init(void)
 			printk(KERN_ERR "%s: Wrong poll value (%d), use %d "
 				"maximum.\n", __func__, poll, MAX_POLL);
 			err = -EINVAL;
-			return(err);
+			return err;
 		}
 		if (dsp_poll < 8) {
 			printk(KERN_ERR "%s: Wrong poll value (%d), use 8 "
 				"minimum.\n", __func__, dsp_poll);
 			err = -EINVAL;
-			return(err);
+			return err;
 		}
 		dsp_tics = poll * HZ / 8000;
 		if (dsp_tics * 8000 != poll * HZ) {
@@ -1103,7 +1102,7 @@ static int dsp_init(void)
 				"samples (0,125 ms). It is not a multiple of "
 				"%d HZ.\n", poll, HZ);
 			err = -EINVAL;
-			return(err);
+			return err;
 		}
 	} else {
 		poll = 8;
@@ -1124,7 +1123,7 @@ static int dsp_init(void)
 			"samples. (Choose kernel clock speed like 100, 250, "
 			"300, 1000)\n");
 		err = -EINVAL;
-		return(err);
+		return err;
 	}
 	printk(KERN_INFO "mISDN_dsp: DSP clocks every %d samples. This equals "
 		"%d jiffies.\n", dsp_poll, dsp_tics);
