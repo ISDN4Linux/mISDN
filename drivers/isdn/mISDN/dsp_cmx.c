@@ -1,5 +1,4 @@
-/* $Id: dsp_cmx.c,v 1.17 2007/04/03 17:47:26 jolly Exp $
- *
+/*
  * Audio crossconnecting/conferrencing (hardware level).
  *
  * Copyright 2002 by Andreas Eversberg (jolly@eversberg.eu)
@@ -148,7 +147,7 @@ count_list_member(struct list_head *head)
 
 	list_for_each(m, head)
 		cnt++;
-	return(cnt);
+	return cnt;
 }
 
 /*

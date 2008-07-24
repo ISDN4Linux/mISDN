@@ -672,7 +672,6 @@ l1oip_socket_thread(void *data)
 	DECLARE_COMPLETION(wait);
 
 	/* make daemon */
-	daemonize(hc->name);
 	allow_signal(SIGTERM);
 
 	/* create socket */
@@ -794,19 +793,22 @@ l1oip_socket_close(struct l1oip *hc)
 static int
 l1oip_socket_open(struct l1oip *hc)
 {
+	struct task_struct *t;
+
 	/* in case of reopen, we need to close first */
 	l1oip_socket_close(hc);
 
 	init_completion(&hc->socket_complete);
 
 	/* create receive process */
-	hc->socket_pid = kernel_thread(l1oip_socket_thread, hc, CLONE_KERNEL);
-	if (hc->socket_pid < 0) {
+	t = kthread_run(l1oip_socket_thread, hc, "l1oip_%s", hc->name);
+	if (IS_ERR(t)) {
 		printk(KERN_ERR "%s: Failed to create socket process.\n",
 			__func__);
 		sock_release(hc->socket);
-		return -EIO;
-	}
+		return PTR_ERR(t);
+	} else
+		hc->socket_pid = t->pid;
 	if (debug & DEBUG_L1OIP_SOCKET)
 		printk(KERN_DEBUG "%s: socket thread created\n", __func__);
 

@@ -1,5 +1,4 @@
-/* $Id: dsp_tones.c,v 1.8 2007/03/27 15:06:29 jolly Exp $
- *
+/*
  * Audio support data for ISDN4Linux.
  *
  * Copyright Andreas Eversberg (jolly@eversberg.eu)
@@ -16,23 +15,23 @@
 
 
 #define DATA_S sample_silence
-#define SIZE_S &sizeof_silence
+#define SIZE_S (&sizeof_silence)
 #define DATA_GA sample_german_all
-#define SIZE_GA &sizeof_german_all
+#define SIZE_GA (&sizeof_german_all)
 #define DATA_GO sample_german_old
-#define SIZE_GO &sizeof_german_old
+#define SIZE_GO (&sizeof_german_old)
 #define DATA_DT sample_american_dialtone
-#define SIZE_DT &sizeof_american_dialtone
+#define SIZE_DT (&sizeof_american_dialtone)
 #define DATA_RI sample_american_ringing
-#define SIZE_RI &sizeof_american_ringing
+#define SIZE_RI (&sizeof_american_ringing)
 #define DATA_BU sample_american_busy
-#define SIZE_BU &sizeof_american_busy
+#define SIZE_BU (&sizeof_american_busy)
 #define DATA_S1 sample_special1
-#define SIZE_S1 &sizeof_special1
+#define SIZE_S1 (&sizeof_special1)
 #define DATA_S2 sample_special2
-#define SIZE_S2 &sizeof_special2
+#define SIZE_S2 (&sizeof_special2)
 #define DATA_S3 sample_special3
-#define SIZE_S3 &sizeof_special3
+#define SIZE_S3 (&sizeof_special3)
 
 /***************/
 /* tones loops */
@@ -505,7 +504,7 @@ dsp_tone(struct dsp *dsp, int tone)
 		if (dsp->features.hfc_loops)
 			dsp_tone_hw_message(dsp, NULL, 0);
 		tonet->tone = 0;
-		return(0);
+		return 0;
 	}
 
 	pat = NULL;
@@ -519,7 +518,7 @@ dsp_tone(struct dsp *dsp, int tone)
 	}
 	if (!pat) {
 		printk(KERN_WARNING "dsp: given tone 0x%x is invalid\n", tone);
-		return(-EINVAL);
+		return -EINVAL;
 	}
 	if (dsp_debug & DEBUG_DSP_TONE)
 		printk(KERN_DEBUG "%s: now starting tone %d (index=%d)\n",
@@ -543,7 +542,7 @@ dsp_tone(struct dsp *dsp, int tone)
 		tonet->software = 1;
 	}
 
-	return(0);
+	return 0;
 }
 
 

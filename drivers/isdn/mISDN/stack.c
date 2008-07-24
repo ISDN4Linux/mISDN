@@ -197,15 +197,13 @@ do_clear_stack(struct mISDNstack *st)
 static int
 mISDNStackd(void *data)
 {
-	struct mISDNstack	*st = data;
-	int		err = 0;
+	struct mISDNstack *st = data;
+	int err = 0;
 
 #ifdef CONFIG_SMP
 	lock_kernel();
 #endif
-	daemonize(st->dev->name);
 	sigfillset(&current->blocked);
-	st->thread = current;
 #ifdef CONFIG_SMP
 	unlock_kernel();
 #endif
@@ -340,7 +338,7 @@ l1_receive(struct mISDNchannel *ch, struct sk_buff *skb)
 void
 set_channel_address(struct mISDNchannel *ch, u_int sapi, u_int tei)
 {
-        ch->addr = sapi | (tei << 8);
+	ch->addr = sapi | (tei << 8);
 }
 
 void
@@ -404,9 +402,18 @@ create_stack(struct mISDNdevice *dev)
 	if (*debug & DEBUG_CORE_FUNC)
 		printk(KERN_DEBUG "%s: st(%s)\n", __func__, newst->dev->name);
 	newst->notify = &done;
-	kernel_thread(mISDNStackd, (void *)newst, 0);
-	wait_for_completion(&done);
-	return 0;
+	newst->thread = kthread_run(mISDNStackd, (void *)newst, "mISDN_%s",
+		newst->dev->name);
+	if (IS_ERR(newst->thread)) {
+		err = PTR_ERR(newst->thread);
+		printk(KERN_ERR
+			"mISDN:cannot create kernel thread for %s (%s)\n",
+			newst->dev->name, strerror(err));
+		delete_teimanager(dev->teimgr);
+		kfree(newst);
+	} else
+		wait_for_completion(&done);
+	return err;
 }
 
 int
@@ -427,8 +434,8 @@ connect_layer1(struct mISDNdevice *dev, struct mISDNchannel *ch,
 	case ISDN_P_NT_E1:
 	case ISDN_P_TE_S0:
 	case ISDN_P_TE_E1:
-#warning TODO
-#if 0
+#ifdef PROTOCOL_CHECK
+		/* this should be enhanced */
 		if (!list_empty(&dev->D.st->layer2)
 			&& dev->D.protocol != protocol)
 			return -EBUSY;
@@ -533,8 +540,8 @@ create_l2entity(struct mISDNdevice *dev, struct mISDNchannel *ch,
 		if (dev->Dprotocols & (1 << ISDN_P_NT_E1))
 			rq.protocol = ISDN_P_NT_E1;
 	case ISDN_P_LAPD_TE:
-#warning TODO
-#if 0
+#ifdef PROTOCOL_CHECK
+		/* this should be enhanced */
 		if (!list_empty(&dev->D.st->layer2)
 			&& dev->D.protocol != protocol)
 			return -EBUSY;

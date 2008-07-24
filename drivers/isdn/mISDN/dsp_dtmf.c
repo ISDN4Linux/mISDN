@@ -1,5 +1,4 @@
-/* $Id: dsp_dtmf.c,v 1.7 2007/03/27 15:06:29 jolly Exp $
- *
+/*
  * DTMF decoder.
  *
  * Copyright            by Andreas Eversberg (jolly@eversberg.eu)
@@ -150,7 +149,7 @@ again:
 				printk(KERN_ERR "%s: coefficients have invalid "
 					"size. (is=%d < must=%d)\n",
 					__func__, len, 64);
-			return(dsp->dtmf.digits);
+			return dsp->dtmf.digits;
 		}
 		hfccoeff = (s32 *)data;
 		for (k = 0; k < NCOEFF; k++) {
@@ -174,7 +173,7 @@ again:
 	dsp->dtmf.size = size;
 
 	if (size < DSP_DTMF_NPOINTS)
-		return(dsp->dtmf.digits);
+		return dsp->dtmf.digits;
 
 	dsp->dtmf.size = 0;
 

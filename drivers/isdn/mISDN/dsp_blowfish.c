@@ -1,5 +1,4 @@
-/* $Id: dsp_blowfish.c,v 1.5 2007/03/27 15:06:29 jolly Exp $
- *
+/*
  * Blowfish encryption/decryption for mISDN_dsp.
  *
  * Copyright Andreas Eversberg (jolly@eversberg.eu)
@@ -358,8 +357,8 @@ static const u32 bf_sbox[256 * 4] = {
 #define bf_F(x) (((S[GET32_0(x)] + S[256 + GET32_1(x)]) ^ \
     S[512 + GET32_2(x)]) + S[768 + GET32_3(x)])
 
-#define EROUND(a, b, n)  b ^= P[n]; a ^= bf_F(b)
-#define DROUND(a, b, n)  a ^= bf_F(b); b ^= P[n]
+#define EROUND(a, b, n)  do { b ^= P[n]; a ^= bf_F(b); } while (0)
+#define DROUND(a, b, n)  do { a ^= bf_F(b); b ^= P[n]; } while (0)
 
 
 /*
@@ -605,7 +604,7 @@ dsp_bf_init(struct dsp *dsp, const u8 *key, uint keylen)
 	u32 *S = (u32 *)dsp->bf_s;
 
 	if (keylen < 4 || keylen > 56)
-		return (1);
+		return 1;
 
 	/* Set dsp states */
 	i = 0;
@@ -659,7 +658,7 @@ dsp_bf_init(struct dsp *dsp, const u8 *key, uint keylen)
 		}
 	}
 
-	return (0);
+	return 0;
 }
 
 

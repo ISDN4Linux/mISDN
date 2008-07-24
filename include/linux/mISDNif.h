@@ -428,7 +428,7 @@ struct mISDNstack {
 	struct list_head	layer2;
 	struct mISDNchannel	*layer1;
 	struct mISDNchannel	own;
-	struct mutex		lmutex;
+	struct mutex		lmutex; /* protect lists */
 	struct mISDN_sock_list	l1sock;
 #ifdef MISDN_MSG_STATS
 	u_int			msg_cnt;
