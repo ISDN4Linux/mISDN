@@ -4382,8 +4382,8 @@ setup_pci(struct hfc_multi *hc, struct pci_dev *pdev,
 			return -EIO;
 		}
 		printk(KERN_INFO
-			"HFC-multi: plx_membase:%#x plx_origmembase:%#x\n",
-		    (u_int) hc->plx_membase, (u_int)hc->plx_origmembase);
+			"HFC-multi: plx_membase:%#lx plx_origmembase:%#lx\n",
+		    (u_long)hc->plx_membase, hc->plx_origmembase);
 
 		hc->pci_origmembase =  hc->pci_dev->resource[2].start;
 		    /* MEMBASE 1 is PLX PCI Bridge */
@@ -4403,10 +4403,9 @@ setup_pci(struct hfc_multi *hc, struct pci_dev *pdev,
 		}
 
 		printk(KERN_INFO
-		    "card %d: defined at MEMBASE %#x (%#x) IRQ %d HZ %d "
+		    "card %d: defined at MEMBASE %#lx (%#lx) IRQ %d HZ %d "
 		    "leds-type %d\n",
-		    hc->id, (u_int) hc->pci_membase,
-		    (u_int) hc->pci_origmembase,
+		    hc->id, hc->pci_membase, hc->pci_origmembase,
 		    hc->pci_dev->irq, HZ, hc->leds);
 		pci_write_config_word(hc->pci_dev, PCI_COMMAND, PCI_ENA_MEMIO);
 		break;
@@ -4427,10 +4426,9 @@ setup_pci(struct hfc_multi *hc, struct pci_dev *pdev,
 			pci_disable_device(hc->pci_dev);
 			return -EIO;
 		}
-		printk(KERN_INFO "card %d: defined at MEMBASE %#x (%#x) IRQ %d "
-		    "HZ %d leds-type %d\n", hc->id, (u_int) hc->pci_membase,
-		    (u_int) hc->pci_origmembase, hc->pci_dev->irq, HZ,
-		    hc->leds);
+		printk(KERN_INFO "card %d: defined at MEMBASE %#lx (%#lx) IRQ %d "
+		    "HZ %d leds-type %d\n", hc->id, (u_long)hc->pci_membase,
+		    hc->pci_origmembase, hc->pci_dev->irq, HZ, hc->leds);
 		pci_write_config_word(hc->pci_dev, PCI_COMMAND, PCI_ENA_MEMIO);
 		break;
 	case HFC_IO_MODE_REGIO:
