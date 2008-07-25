@@ -5279,6 +5279,7 @@ hfcmulti_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 		return -ENODEV;
 	}
 	ret = hfcmulti_init(pdev, ent);
+	if (ret)
 		return ret;
 	HFC_cnt++;
 	printk(KERN_INFO "%d devices registered\n", HFC_cnt);
