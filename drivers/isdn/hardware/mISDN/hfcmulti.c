@@ -4382,7 +4382,7 @@ setup_pci(struct hfc_multi *hc, struct pci_dev *pdev,
 			return -EIO;
 		}
 		printk(KERN_INFO
-			"HFC-multi: plx_membase:%#lx plx_origmembase:%#lx\n",
+		    "HFC-multi: plx_membase:%#lx plx_origmembase:%#lx\n",
 		    (u_long)hc->plx_membase, hc->plx_origmembase);
 
 		hc->pci_origmembase =  hc->pci_dev->resource[2].start;
@@ -4405,7 +4405,7 @@ setup_pci(struct hfc_multi *hc, struct pci_dev *pdev,
 		printk(KERN_INFO
 		    "card %d: defined at MEMBASE %#lx (%#lx) IRQ %d HZ %d "
 		    "leds-type %d\n",
-		    hc->id, hc->pci_membase, hc->pci_origmembase,
+		    hc->id, (u_long)hc->pci_membase, hc->pci_origmembase,
 		    hc->pci_dev->irq, HZ, hc->leds);
 		pci_write_config_word(hc->pci_dev, PCI_COMMAND, PCI_ENA_MEMIO);
 		break;
