@@ -232,6 +232,7 @@ socket process and create a new one.
 #include <linux/in.h>
 #include <linux/inet.h>
 #include <linux/workqueue.h>
+#include <linux/kthread.h>
 #include <net/sock.h>
 #include "core.h"
 #include "l1oip.h"

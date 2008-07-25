@@ -16,6 +16,7 @@
  */
 
 #include <linux/mISDNif.h>
+#include <linux/kthread.h>
 #include "core.h"
 
 static u_int	*debug;
@@ -407,8 +408,8 @@ create_stack(struct mISDNdevice *dev)
 	if (IS_ERR(newst->thread)) {
 		err = PTR_ERR(newst->thread);
 		printk(KERN_ERR
-			"mISDN:cannot create kernel thread for %s (%s)\n",
-			newst->dev->name, strerror(err));
+			"mISDN:cannot create kernel thread for %s (%d)\n",
+			newst->dev->name, err);
 		delete_teimanager(dev->teimgr);
 		kfree(newst);
 	} else
