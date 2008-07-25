@@ -4788,16 +4788,15 @@ init_e1_port(struct hfc_multi *hc, struct hm_map *m)
 	}
 	/* set elastic jitter buffer */
 	if (port[Port_cnt] & 0x3000) {
+		hc->chan[hc->dslot].jitter = (port[Port_cnt]>>12) & 0x3;
 		if (debug & DEBUG_HFCMULTI_INIT)
 			printk(KERN_DEBUG
 			    "%s: PORT set elastic "
 			    "buffer to %d: card(%d) port(%d)\n",
-			    __func__, hc->chan[ch].jitter,
+			    __func__, hc->chan[hc->dslot].jitter,
 			    HFC_cnt + 1, 1);
-		hc->chan[hc->dslot].jitter =
-		    (port[Port_cnt]>>12) & 0x3;
 	} else
-		hc->chan[ch].jitter = 2; /* default */
+		hc->chan[hc->dslot].jitter = 2; /* default */
 	snprintf(name, MISDN_MAX_IDLEN - 1, "hfc-e1.%d", HFC_cnt + 1);
 	ret = mISDN_register_device(&dch->dev, name);
 	if (ret)
