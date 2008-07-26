@@ -770,7 +770,7 @@ fail:
 
 	/* if we got killed, signal completion */
 	complete(&hc->socket_complete);
-	hc->socket_pid = 0; /* show termination of thread */
+	hc->socket_thread = NULL; /* show termination of thread */
 
 	if (debug & DEBUG_L1OIP_SOCKET)
 		printk(KERN_DEBUG "%s: socket thread terminated\n",
@@ -782,11 +782,11 @@ static void
 l1oip_socket_close(struct l1oip *hc)
 {
 	/* kill thread */
-	if (hc->socket_pid) {
+	if (hc->socket_thread) {
 		if (debug & DEBUG_L1OIP_SOCKET)
 			printk(KERN_DEBUG "%s: socket thread exists, "
 				"killing...\n", __func__);
-		kill_proc(hc->socket_pid, SIGTERM, 0);
+		send_sig(SIGTERM, hc->socket_thread, 0);
 		wait_for_completion(&hc->socket_complete);
 	}
 }
@@ -794,22 +794,22 @@ l1oip_socket_close(struct l1oip *hc)
 static int
 l1oip_socket_open(struct l1oip *hc)
 {
-	struct task_struct *t;
-
 	/* in case of reopen, we need to close first */
 	l1oip_socket_close(hc);
 
 	init_completion(&hc->socket_complete);
 
 	/* create receive process */
-	t = kthread_run(l1oip_socket_thread, hc, "l1oip_%s", hc->name);
-	if (IS_ERR(t)) {
-		printk(KERN_ERR "%s: Failed to create socket process.\n",
-			__func__);
+	hc->socket_thread = kthread_run(l1oip_socket_thread, hc, "l1oip_%s",
+		hc->name);
+	if (IS_ERR(hc->socket_thread)) {
+		int err = PTR_ERR(hc->socket_thread);
+		printk(KERN_ERR "%s: Failed (%d) to create socket process.\n",
+			__func__, err);
+		hc->socket_thread = NULL;
 		sock_release(hc->socket);
-		return PTR_ERR(t);
-	} else
-		hc->socket_pid = t->pid;
+		return err;
+	}
 	if (debug & DEBUG_L1OIP_SOCKET)
 		printk(KERN_DEBUG "%s: socket thread created\n", __func__);
 
@@ -1250,7 +1250,7 @@ release_card(struct l1oip *hc)
 	if (timer_pending(&hc->timeout_tl))
 		del_timer(&hc->timeout_tl);
 
-	if (hc->socket_pid)
+	if (hc->socket_thread)
 		l1oip_socket_close(hc);
 
 	if (hc->registered && hc->chan[hc->d_idx].dch)

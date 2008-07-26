@@ -68,7 +68,7 @@ struct l1oip {
 	/* socket */
 	struct socket 		*socket;	/* if set, socket is created */
 	struct completion 	socket_complete;/* completion of sock thread */
-	int			socket_pid;
+	struct task_struct	*socket_thread;
 	spinlock_t 		socket_lock;	/* access sock outside thread */
 	u32			remoteip;	/* if all set, ip is assigned */
 	u16	 		localport;	/* must always be set */
