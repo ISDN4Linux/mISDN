@@ -42,27 +42,19 @@ struct dsp_pipeline_entry {
 };
 struct dsp_element_entry {
 	struct mISDN_dsp_element *elem;
-	struct class_device  dev;
+	struct device	     dev;
 	struct list_head     list;
 };
 
 static LIST_HEAD(dsp_elements);
 
 /* sysfs */
-static void elements_class_release(struct class_device *dev)
-{}
+static struct class *elements_class;
 
-static struct class elements_class = {
-	.name = "mISDN-dsp-elements",
-#ifndef CLASS_WITHOUT_OWNER
-	.owner = THIS_MODULE,
-#endif
-	.release = &elements_class_release,
-};
-
-static ssize_t attr_show_args(struct class_device *dev, char *buf)
+static ssize_t
+attr_show_args(struct device *dev, struct device_attribute *attr, char *buf)
 {
-	struct mISDN_dsp_element *elem = class_get_devdata(dev);
+	struct mISDN_dsp_element *elem = dev_get_drvdata(dev);
 	ssize_t len = 0;
 	int i = 0;
 
@@ -79,7 +71,7 @@ static ssize_t attr_show_args(struct class_device *dev, char *buf)
 	return len;
 }
 
-static struct class_device_attribute element_attributes[] = {
+static struct device_attribute element_attributes[] = {
 	__ATTR(args, 0444, attr_show_args, NULL),
 };
 
@@ -97,10 +89,10 @@ int mISDN_dsp_element_register(struct mISDN_dsp_element *elem)
 
 	entry->elem = elem;
 
-	entry->dev.class = &elements_class;
-	class_set_devdata(&entry->dev, elem);
-	snprintf(entry->dev.class_id, BUS_ID_SIZE, elem->name);
-	ret = class_device_register(&entry->dev);
+	entry->dev.class = elements_class;
+	dev_set_drvdata(&entry->dev, elem);
+	snprintf(entry->dev.bus_id, BUS_ID_SIZE, elem->name);
+	ret = device_register(&entry->dev);
 	if (ret) {
 		printk(KERN_ERR "%s: failed to register %s\n",
 			__func__, elem->name);
@@ -108,8 +100,8 @@ int mISDN_dsp_element_register(struct mISDN_dsp_element *elem)
 	}
 
 	for (i = 0; i < (sizeof(element_attributes)
-		/ sizeof(struct class_device_attribute)); ++i)
-		ret = class_device_create_file(&entry->dev,
+		/ sizeof(struct device_attribute)); ++i)
+		ret = device_create_file(&entry->dev,
 				&element_attributes[i]);
 		if (ret) {
 			printk(KERN_ERR "%s: failed to create device file\n",
@@ -124,7 +116,7 @@ int mISDN_dsp_element_register(struct mISDN_dsp_element *elem)
 	return 0;
 
 err2:
-	class_device_unregister(&entry->dev);
+	device_unregister(&entry->dev);
 err1:
 	kfree(entry);
 	return ret;
@@ -141,7 +133,7 @@ void mISDN_dsp_element_unregister(struct mISDN_dsp_element *elem)
 	list_for_each_entry_safe(entry, n, &dsp_elements, list)
 		if (entry->elem == elem) {
 			list_del(&entry->list);
-			class_device_unregister(&entry->dev);
+			device_unregister(&entry->dev);
 			kfree(entry);
 			printk(KERN_DEBUG "%s: %s unregistered\n",
 				__func__, elem->name);
@@ -153,11 +145,9 @@ EXPORT_SYMBOL(mISDN_dsp_element_unregister);
 
 int dsp_pipeline_module_init(void)
 {
-	int ret;
-
-	ret = class_register(&elements_class);
-	if (ret)
-		return ret;
+	elements_class = class_create(THIS_MODULE, "dsp_pipeline");
+	if (IS_ERR(elements_class))
+		return PTR_ERR(elements_class);
 
 #ifdef PIPELINE_DEBUG
 	printk(KERN_DEBUG "%s: dsp pipeline module initialized\n", __func__);
@@ -174,7 +164,7 @@ void dsp_pipeline_module_exit(void)
 
 	dsp_hwec_exit();
 
-	class_unregister(&elements_class);
+	class_destroy(elements_class);
 
 	list_for_each_entry_safe(entry, n, &dsp_elements, list) {
 		list_del(&entry->list);

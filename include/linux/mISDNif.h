@@ -2,7 +2,7 @@
  *
  * Author	Karsten Keil <kkeil@novell.com>
  *
- * Copyright 2007  by Karsten Keil <kkeil@novell.com>
+ * Copyright 2008  by Karsten Keil <kkeil@novell.com>
  *
  * This code is free software; you can redistribute it and/or modify
  * it under the terms of the GNU LESSER GENERAL PUBLIC LICENSE
@@ -37,7 +37,7 @@
  */
 #define	MISDN_MAJOR_VERSION	1
 #define	MISDN_MINOR_VERSION	0
-#define MISDN_RELEASE		16
+#define MISDN_RELEASE		18
 
 /* primitives for information exchange
  * generell format
@@ -415,7 +415,7 @@ struct mISDNdevice {
 	u_long			channelmap[MISDN_CHMAP_SIZE];
 	struct list_head	bchannels;
 	struct mISDNchannel	*teimgr;
-	struct class_device	class_dev;
+	struct device		dev;
 };
 
 struct mISDNstack {
