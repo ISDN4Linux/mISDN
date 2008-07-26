@@ -2061,7 +2061,7 @@ next_frame:
 		HFC_wait_nodebug(hc);
 	}
 
-	/* send confirm */
+	/* send confirm, since get_net_bframe will not do it with trans */
 	if (bch && test_bit(FLG_TRANSPARENT, &bch->Flags))
 		confirm_Bsend(bch);
 
@@ -3015,10 +3015,12 @@ mode_hfcmulti(struct hfc_multi *hc, int ch, int protocol, int slot_tx,
 		/* enable TX fifo */
 		HFC_outb(hc, R_FIFO, ch<<1);
 		HFC_wait(hc);
-		if (hc->type == 1) { /* E1 */
+		if (hc->type == 1 || hc->chan[ch].bch) {
+			/* E1 or B-channel */
 			HFC_outb(hc, A_CON_HDLC, flow_tx | 0x04);
 			HFC_outb(hc, A_SUBCH_CFG, 0);
 		} else {
+			/* D-Channel without HDLC fill flags */
 			HFC_outb(hc, A_CON_HDLC, flow_tx | 0x04 | V_IFF);
 			HFC_outb(hc, A_SUBCH_CFG, 2);
 		}
@@ -3029,10 +3031,10 @@ mode_hfcmulti(struct hfc_multi *hc, int ch, int protocol, int slot_tx,
 		HFC_outb(hc, R_FIFO, (ch<<1)|1);
 		HFC_wait(hc);
 		HFC_outb(hc, A_CON_HDLC, flow_rx | 0x04);
-		if (hc->type == 1)
-			HFC_outb(hc, A_SUBCH_CFG, 0);
+		if (hc->type == 1 || hc->chan[ch].bch)
+			HFC_outb(hc, A_SUBCH_CFG, 0); /* full 8 bits */
 		else
-			HFC_outb(hc, A_SUBCH_CFG, 2);
+			HFC_outb(hc, A_SUBCH_CFG, 2); /* 2 bits dchannel */
 		HFC_outb(hc, A_IRQ_MSK, V_IRQ);
 		HFC_outb(hc, R_INC_RES_FIFO, V_RES_F);
 		HFC_wait(hc);

@@ -661,11 +661,9 @@ dsp_function(struct mISDNchannel *ch,  struct sk_buff *skb)
 		}
 		if (dsp->hdlc) {
 			/* hdlc */
-			if (dsp->conf) {
-				spin_lock_irqsave(&dsp_lock, flags);
-				dsp_cmx_hdlc(dsp, skb);
-				spin_unlock_irqrestore(&dsp_lock, flags);
-			}
+			spin_lock_irqsave(&dsp_lock, flags);
+			dsp_cmx_hdlc(dsp, skb);
+			spin_unlock_irqrestore(&dsp_lock, flags);
 			if (dsp->rx_disabled) {
 				/* if receive is not allowed */
 				break;
@@ -673,7 +671,7 @@ dsp_function(struct mISDNchannel *ch,  struct sk_buff *skb)
 			hh->prim = DL_DATA_IND;
 			if (dsp->up)
 				return dsp->up->send(dsp->up, skb);
-		break;
+			break;
 		}
 
 		/* decrypt if enabled */
@@ -963,12 +961,12 @@ dsp_send_bh(struct work_struct *work)
 	struct sk_buff *skb;
 	struct mISDNhead	*hh;
 
+	if (dsp->hdlc && dsp->data_pending)
+		return; /* wait until data has been acknowledged */
+
 	/* send queued data */
 	while ((skb = skb_dequeue(&dsp->sendq))) {
 		/* in locked date, we must have still data in queue */
-		if (dsp->hdlc && dsp->data_pending)
-			break; /* wait until data has been acknowledged */
-
 		if (dsp->data_pending) {
 			if (dsp_debug & DEBUG_DSP_CORE)
 				printk(KERN_DEBUG "%s: fifo full %s, this is "
@@ -1035,8 +1033,8 @@ dspcreate(struct channel_req *crq)
 		printk(KERN_WARNING "%s:cannot get module\n",
 			__func__);
 
-	sprintf(ndsp->name, "DSP_S%x/C??",
-		ndsp->up->st->dev->id /*, ndsp->up->nr*/);
+	sprintf(ndsp->name, "DSP_C%x(0x%p)",
+		ndsp->up->st->dev->id + 1, ndsp);
 	/* set frame size to start */
 	ndsp->features.hfc_id = -1; /* current PCM id */
 	ndsp->features.pcm_id = -1; /* current PCM id */

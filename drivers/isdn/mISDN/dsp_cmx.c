@@ -1840,6 +1840,7 @@ dsp_cmx_hdlc(struct dsp *dsp, struct sk_buff *skb)
 {
 	struct sk_buff *nskb = NULL;
 	struct dsp_conf_member *member;
+	struct mISDNhead *hh;
 
 	/* not if not active */
 	if (!dsp->b_active)
@@ -1850,13 +1851,16 @@ dsp_cmx_hdlc(struct dsp *dsp, struct sk_buff *skb)
 		return;
 
 	/* no conf */
-	if (dsp->conf) {
+	if (!dsp->conf) {
 		/* in case of hardware (echo) */
 		if (dsp->pcm_slot_tx >= 0)
 			return;
 		if (dsp->echo)
 			nskb = skb_clone(skb, GFP_ATOMIC);
 			if (nskb) {
+				hh = mISDN_HEAD_P(nskb);
+				hh->prim = PH_DATA_REQ;
+				hh->id = 0;
 				skb_queue_tail(&dsp->sendq, nskb);
 				schedule_work(&dsp->workq);
 			}
@@ -1869,8 +1873,11 @@ dsp_cmx_hdlc(struct dsp *dsp, struct sk_buff *skb)
 		if (dsp->echo || member->dsp != dsp) {
 			nskb = skb_clone(skb, GFP_ATOMIC);
 			if (nskb) {
-				skb_queue_tail(&dsp->sendq, nskb);
-				schedule_work(&dsp->workq);
+				hh = mISDN_HEAD_P(nskb);
+				hh->prim = PH_DATA_REQ;
+				hh->id = 0;
+				skb_queue_tail(&member->dsp->sendq, nskb);
+				schedule_work(&member->dsp->workq);
 			}
 		}
 	}
