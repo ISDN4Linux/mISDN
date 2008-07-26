@@ -255,11 +255,8 @@ static u_int id[MAX_CARDS];
 static int debug;
 static int ulaw;
 
-#ifdef MODULE
 MODULE_AUTHOR("Andreas Eversberg");
-#ifdef MODULE_LICENSE
 MODULE_LICENSE("GPL");
-#endif
 module_param_array(type, uint, NULL, S_IRUGO | S_IWUSR);
 module_param_array(codec, uint, NULL, S_IRUGO | S_IWUSR);
 module_param_array(ip, uint, NULL, S_IRUGO | S_IWUSR);
@@ -270,7 +267,6 @@ module_param_array(limit, uint, NULL, S_IRUGO | S_IWUSR);
 module_param_array(id, uint, NULL, S_IRUGO | S_IWUSR);
 module_param(ulaw, uint, S_IRUGO | S_IWUSR);
 module_param(debug, uint, S_IRUGO | S_IWUSR);
-#endif
 
 /*
  * send a frame via socket, if open and restart timer
@@ -952,7 +948,7 @@ channel_dctrl(struct dchannel *dch, struct mISDN_ctrl_req *cq)
 		break;
 	case MISDN_CTRL_SETPEER:
 		hc->remoteip = (u32)cq->p1;
-		hc->remoteport = cq->p2 | 0xffff;
+		hc->remoteport = cq->p2 & 0xffff;
 		hc->localport = cq->p2 >> 16;
 		if (!hc->remoteport)
 			hc->remoteport = hc->localport;
@@ -1515,10 +1511,6 @@ l1oip_init(void)
 	return 0;
 }
 
-
-
-#ifdef MODULE
 module_init(l1oip_init);
 module_exit(l1oip_cleanup);
-#endif
 
