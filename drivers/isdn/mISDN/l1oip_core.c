@@ -1010,8 +1010,7 @@ open_bchannel(struct l1oip *hc, struct dchannel *dch, struct channel_req *rq)
 	struct bchannel	*bch;
 	int		ch;
 
-	if (!test_bit(rq->adr.channel & 0x1f,
-		&dch->dev.channelmap[rq->adr.channel >> 5]))
+	if (!test_channelmap(rq->adr.channel, dch->dev.channelmap))
 		return -EINVAL;
 	if (rq->protocol == ISDN_P_NONE)
 		return -EINVAL;
@@ -1416,8 +1415,7 @@ init_card(struct l1oip *hc, int pri, int bundle)
 		bch->ch.nr = i + ch;
 		list_add(&bch->ch.list, &dch->dev.bchannels);
 		hc->chan[i + ch].bch = bch;
-		test_and_set_bit(bch->nr & 0x1f,
-			&dch->dev.channelmap[bch->nr >> 5]);
+		set_channelmap(bch->nr, dch->dev.channelmap);
 	}
 	ret = mISDN_register_device(&dch->dev, hc->name);
 	if (ret)
