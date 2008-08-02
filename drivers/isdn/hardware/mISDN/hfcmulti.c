@@ -205,7 +205,6 @@ static int nt_t1_count[] = { 3840, 1920, 960, 480, 240, 120, 60, 30  };
 #define	CLKDEL_TE	0x0f	/* CLKDEL in TE mode */
 #define	CLKDEL_NT	0x6c	/* CLKDEL in NT mode
 				   (0x60 MUST be included!) */
-static u_char silence =	0xff;	/* silence by LAW */
 
 #define	DIP_4S	0x1		/* DIP Switches for Beronet 1S/2S/4S cards */
 #define	DIP_8S	0x2		/* DIP Switches for Beronet 8S+ cards */
@@ -2007,6 +2006,17 @@ next_frame:
 		return; /* no data */
 	}
 
+	/* "fill fifo if empty" feature */
+	if (bch && test_bit(FLG_FILLEMPTY, &bch->Flags)
+		&& !test_bit(FLG_HDLC, &bch->Flags) && z2 == z1) {
+		if (debug & DEBUG_HFCMULTI_FILL)
+			printk(KERN_DEBUG "%s: buffer empty, so we have "
+				"underrun\n", __func__);
+		/* fill buffer, to prevent future underrun */
+		hc->write_fifo(hc, hc->silence_data, poll >> 1);
+		Zspace -= (poll >> 1);
+	}
+
 	/* if audio data and connected slot */
 	if (bch && (!test_bit(FLG_HDLC, &bch->Flags)) && (!*txpending)
 		&& slot_tx >= 0) {
@@ -2042,7 +2052,6 @@ next_frame:
 		    "left (z1=%04x, z2=%04x) sending %d of %d bytes %s\n",
 			__func__, hc->id + 1, ch, Zspace, z1, z2, ii-i, len-i,
 			temp ? "HDLC":"TRANS");
-
 
 	/* Have to prep the audio data */
 	hc->write_fifo(hc, d, ii - i);
@@ -2082,7 +2091,7 @@ next_frame:
 	 * no more data at all. this prevents sending an undefined value.
 	 */
 	if (bch && test_bit(FLG_TRANSPARENT, &bch->Flags))
-		HFC_outb_nodebug(hc, A_FIFO_DATA0_NOINC, silence);
+		HFC_outb_nodebug(hc, A_FIFO_DATA0_NOINC, hc->silence);
 }
 
 
@@ -2969,7 +2978,7 @@ mode_hfcmulti(struct hfc_multi *hc, int ch, int protocol, int slot_tx,
 			HFC_outb(hc, R_INC_RES_FIFO, V_RES_F);
 			HFC_wait(hc);
 			/* tx silence */
-			HFC_outb_nodebug(hc, A_FIFO_DATA0_NOINC, silence);
+			HFC_outb_nodebug(hc, A_FIFO_DATA0_NOINC, hc->silence);
 			HFC_outb(hc, R_SLOT, (((ch / 4) * 8) +
 			    ((ch % 4) * 4)) << 1);
 			HFC_outb(hc, A_SL_CFG, 0x80 | 0x20 | (ch << 1));
@@ -2984,7 +2993,7 @@ mode_hfcmulti(struct hfc_multi *hc, int ch, int protocol, int slot_tx,
 			HFC_outb(hc, R_INC_RES_FIFO, V_RES_F);
 			HFC_wait(hc);
 			/* tx silence */
-			HFC_outb_nodebug(hc, A_FIFO_DATA0_NOINC, silence);
+			HFC_outb_nodebug(hc, A_FIFO_DATA0_NOINC, hc->silence);
 			/* enable RX fifo */
 			HFC_outb(hc, R_FIFO, (ch<<1)|1);
 			HFC_wait(hc);
@@ -3130,7 +3139,7 @@ hfcmulti_splloop(struct hfc_multi *hc, int ch, u_char *data, int len)
 
 	/* if off */
 	if (len <= 0) {
-		HFC_outb_nodebug(hc, A_FIFO_DATA0_NOINC, silence);
+		HFC_outb_nodebug(hc, A_FIFO_DATA0_NOINC, hc->silence);
 		if (hc->chan[ch].slot_tx >= 0) {
 			if (debug & DEBUG_HFCMULTI_MODE)
 				printk(KERN_DEBUG "%s: connecting PCM due to "
@@ -3560,7 +3569,7 @@ channel_bctrl(struct bchannel *bch, struct mISDN_ctrl_req *cq)
 	switch (cq->op) {
 	case MISDN_CTRL_GETOP:
 		cq->op = MISDN_CTRL_HFC_OP | MISDN_CTRL_HW_FEATURES_OP
-			| MISDN_CTRL_RX_OFF;
+			| MISDN_CTRL_RX_OFF | MISDN_CTRL_FILL_EMPTY;
 		break;
 	case MISDN_CTRL_RX_OFF: /* turn off / on rx stream */
 		hc->chan[bch->slot].rx_off = !!cq->p1;
@@ -3574,6 +3583,13 @@ channel_bctrl(struct bchannel *bch, struct mISDN_ctrl_req *cq)
 		if (debug & DEBUG_HFCMULTI_MSG)
 			printk(KERN_DEBUG "%s: RX_OFF request (nr=%d off=%d)\n",
 			    __func__, bch->nr, hc->chan[bch->slot].rx_off);
+		break;
+	case MISDN_CTRL_FILL_EMPTY: /* fill fifo, if empty */
+		printk(KERN_DEBUG "!!!!!!!!!!!!!!!!!!!\n");
+		test_and_set_bit(FLG_FILLEMPTY, &bch->Flags);
+		if (debug & DEBUG_HFCMULTI_MSG)
+			printk(KERN_DEBUG "%s: FILL_EMPTY request (nr=%d "
+				"off=%d)\n", __func__, bch->nr, !!cq->p1);
 		break;
 	case MISDN_CTRL_HW_FEATURES: /* fill features structure */
 		if (debug & DEBUG_HFCMULTI_MSG)
@@ -4091,6 +4107,7 @@ open_bchannel(struct hfc_multi *hc, struct dchannel *dch,
 	}
 	if (test_and_set_bit(FLG_OPEN, &bch->Flags))
 		return -EBUSY; /* b-channel can be only open once */
+	test_and_clear_bit(FLG_FILLEMPTY, &bch->Flags);
 	bch->ch.protocol = rq->protocol;
 	hc->chan[ch].rx_off = 0;
 	rq->ch = &bch->ch;
@@ -4909,8 +4926,8 @@ init_multi_port(struct hfc_multi *hc, int pt)
 		test_and_set_bit(HFC_CFG_DIS_ECHANNEL,
 		    &hc->chan[i + 2].cfg);
 	}
-#if 0
 	/* register E-channel */
+/*
 	if (protocol[Port_cnt] & 0x008) {
 		if (debug & DEBUG_HFCMULTI_INIT)
 			printk(KERN_DEBUG
@@ -4920,7 +4937,7 @@ init_multi_port(struct hfc_multi *hc, int pt)
 		test_and_set_bit(HFC_CFG_REG_ECHANNEL,
 		    &hc->chan[i + 2].cfg);
 	}
-#endif
+*/
 	snprintf(name, MISDN_MAX_IDLEN - 1, "hfc-%ds.%d/%d",
 		hc->type, HFC_cnt + 1, pt + 1);
 	ret = mISDN_register_device(&dch->dev, name);
@@ -4942,6 +4959,7 @@ hfcmulti_init(struct pci_dev *pdev, const struct pci_device_id *ent)
 	struct hfc_multi	*hc;
 	u_long		flags;
 	u_char		dips = 0, pmj = 0; /* dip settings, port mode Jumpers */
+	int		i;
 
 	if (HFC_cnt >= MAX_CARDS) {
 		printk(KERN_ERR "too many cards (max=%d).\n",
@@ -4975,11 +4993,11 @@ hfcmulti_init(struct pci_dev *pdev, const struct pci_device_id *ent)
 	hc->id = HFC_cnt;
 	hc->pcm = pcm[HFC_cnt];
 	hc->io_mode = iomode[HFC_cnt];
-	if (dslot[HFC_cnt] < 0) {
+	if (dslot[HFC_cnt] < 0 && hc->type == 1) {
 		hc->dslot = 0;
 		printk(KERN_INFO "HFC-E1 card has disabled D-channel, but "
 			"31 B-channels\n");
-	} if (dslot[HFC_cnt] > 0 && dslot[HFC_cnt] < 32) {
+	} if (dslot[HFC_cnt] > 0 && dslot[HFC_cnt] < 32 && hc->type == 1) {
 		hc->dslot = dslot[HFC_cnt];
 		printk(KERN_INFO "HFC-E1 card has alternating D-channel on "
 			"time slot %d\n", dslot[HFC_cnt]);
@@ -4990,9 +5008,17 @@ hfcmulti_init(struct pci_dev *pdev, const struct pci_device_id *ent)
 	hc->masterclk = -1;
 	if (type[HFC_cnt] & 0x100) {
 		test_and_set_bit(HFC_CHIP_ULAW, &hc->chip);
-		silence = 0xff; /* ulaw silence */
+		hc->silence = 0xff; /* ulaw silence */
 	} else
-		silence = 0x2a; /* alaw silence */
+		hc->silence = 0x2a; /* alaw silence */
+	if ((poll >> 1) > sizeof(hc->silence_data)) {
+		printk(KERN_ERR "HFCMULTI error: silence_data too small, "
+			"please fix\n");
+		return -EINVAL;
+	}
+	for (i = 0; i < (poll >> 1); i++)
+		hc->silence_data[i] = hc->silence;
+
 	if (!(type[HFC_cnt] & 0x200))
 		test_and_set_bit(HFC_CHIP_DTMF, &hc->chip);
 

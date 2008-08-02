@@ -13,6 +13,7 @@ extern int ztdummy_unregister_interrupt(void);
 #define	DEBUG_HFCMULTI_MODE	0x00100000
 #define	DEBUG_HFCMULTI_MSG	0x00200000
 #define	DEBUG_HFCMULTI_STATE	0x00400000
+#define	DEBUG_HFCMULTI_FILL	0x00800000
 #define	DEBUG_HFCMULTI_SYNC	0x01000000
 #define	DEBUG_HFCMULTI_DTMF	0x02000000
 #define	DEBUG_HFCMULTI_LOCK	0x80000000
@@ -170,6 +171,8 @@ struct hfc_multi {
 
 	u_long		chip;	/* chip configuration */
 	int		masterclk; /* port that provides master clock -1=off */
+	unsigned char	silence;/* silence byte */
+	unsigned char	silence_data[128];/* silence block */
 	int		dtmf;	/* flag that dtmf is currently in process */
 	int		Flen;	/* F-buffer size */
 	int		Zlen;	/* Z-buffer size (must be int for calculation)*/
