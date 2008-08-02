@@ -3585,7 +3585,6 @@ channel_bctrl(struct bchannel *bch, struct mISDN_ctrl_req *cq)
 			    __func__, bch->nr, hc->chan[bch->slot].rx_off);
 		break;
 	case MISDN_CTRL_FILL_EMPTY: /* fill fifo, if empty */
-		printk(KERN_DEBUG "!!!!!!!!!!!!!!!!!!!\n");
 		test_and_set_bit(FLG_FILLEMPTY, &bch->Flags);
 		if (debug & DEBUG_HFCMULTI_MSG)
 			printk(KERN_DEBUG "%s: FILL_EMPTY request (nr=%d "

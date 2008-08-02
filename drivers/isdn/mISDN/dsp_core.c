@@ -265,7 +265,6 @@ dsp_fill_empty(struct dsp *dsp)
 				__func__);
 		return;
 	}
-	printk(KERN_DEBUG "222222222222222222\n");
 	cq.op = MISDN_CTRL_FILL_EMPTY;
 	cq.p1 = 1;
 	if (dsp->ch.peer->ctrl(dsp->ch.peer, CONTROL_CHANNEL, &cq)) {
@@ -639,7 +638,6 @@ get_features(struct mISDNchannel *ch)
 		dsp->features_rx_off = 1;
 	if (cq.op & MISDN_CTRL_FILL_EMPTY)
 		dsp->features_fill_empty = 1;
-	printk(KERN_DEBUG "AAAAAAAAAAAAAAAAAAAAA %d\n", dsp->features_fill_empty);
 	if (dsp_options & DSP_OPT_NOHARDWARE)
 		return;
 	if ((cq.op & MISDN_CTRL_HW_FEATURES_OP)) {
