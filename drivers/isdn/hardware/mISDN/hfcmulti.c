@@ -3,11 +3,11 @@
  *
  * Author	Andreas Eversberg (jolly@eversberg.eu)
  * ported to mqueue mechanism:
- * 		Peter Sprenger (sprengermoving-bytes.de)
+ *		Peter Sprenger (sprengermoving-bytes.de)
  *
  * inspired by existing hfc-pci driver:
  * Copyright 1999  by Werner Cornelius (werner@isdn-development.de)
- * Copyright 2001,2008  by Karsten Keil (kkeil@suse.de)
+ * Copyright 2008  by Karsten Keil (kkeil@suse.de)
  * Copyright 2008  by Andreas Eversberg (jolly@eversberg.eu)
  *
  * This program is free software; you can redistribute it and/or modify
@@ -31,8 +31,8 @@
 /*
  * module parameters:
  * type:
- * 	By default (0), the card is automatically detected.
- * 	Or use the following combinations:
+ *	By default (0), the card is automatically detected.
+ *	Or use the following combinations:
  *	Bit 0-7   = 0x00001 = HFC-E1 (1 port)
  * or	Bit 0-7   = 0x00004 = HFC-4S (4 ports)
  * or	Bit 0-7   = 0x00008 = HFC-8S (8 ports)
@@ -41,7 +41,7 @@
  *	Bit 10    = spare
  *	Bit 11    = 0x00800 = Force PCM bus into slave mode. (otherwhise auto)
  * or   Bit 12    = 0x01000 = Force PCM bus into master mode. (otherwhise auto)
- * 	Bit 13	  = spare
+ *	Bit 13	  = spare
  *	Bit 14    = 0x04000 = Use external ram (128K)
  *	Bit 15    = 0x08000 = Use external ram (512K)
  *	Bit 16    = 0x10000 = Use 64 timeslots instead of 32
@@ -93,9 +93,9 @@
  * pcm:
  *	NOTE: only one pcm value must be given for every card.
  *	The PCM bus id tells the mISDNdsp module about the connected PCM bus.
- * 	By default (0), the PCM bus id is 100 for the card that is PCM master.
- * 	If multiple cards are PCM master (because they are not interconnected),
- * 	each card with PCM master will have increasing PCM id.
+ *	By default (0), the PCM bus id is 100 for the card that is PCM master.
+ *	If multiple cards are PCM master (because they are not interconnected),
+ *	each card with PCM master will have increasing PCM id.
  *	All PCM busses with the same ID are expected to be connected and have
  *	common time slots slots.
  *	Only one chip of the PCM bus must be master, the others slave.
@@ -135,8 +135,8 @@
  *	This register is needed for the TBR3 certification, so don't change it.
  */
 
-/*debug register access (never use this, it will flood your system log) */
 /*
+ * debug register access (never use this, it will flood your system log)
  * #define HFC_REGISTER_DEBUG
  */
 
@@ -157,10 +157,10 @@ static const char *hfcmulti_revision = "2.02";
 #ifdef ECHOPREP
 #include "gaintab.h"
 #endif
+#include "compat_ids.h"
 
-/* NOTE: MAX_PORTS must be 8*MAX_CARDS */
 #define	MAX_CARDS	8
-#define	MAX_PORTS	64
+#define	MAX_PORTS	(8 * MAX_CARDS)
 
 static LIST_HEAD(HFClist);
 static spinlock_t HFClock; /* global hfc list lock */
@@ -176,24 +176,6 @@ static struct hfc_multi *syncmaster;
 int plxsd_master; /* if we have a master card (yet) */
 static spinlock_t plx_lock; /* may not acquire other lock inside */
 EXPORT_SYMBOL(plx_lock);
-
-#define	VENDOR_CCD	"Cologne Chip AG"
-#define	VENDOR_BN	"beroNet GmbH"
-#define	VENDOR_DIG	"Digium Inc."
-#define VENDOR_JH	"Junghanns.NET GmbH"
-#define VENDOR_PRIM	"PrimuX"
-
-#ifndef CCAG_VID
-#define	CCAG_VID	0x1397	/* Cologne Chip Vendor ID */
-#define	HFC4S_ID	0x08B4
-#define	HFC8S_ID	0x16B8
-#define	HFCE1_ID	0x30B1
-#endif
-
-#ifndef PRIM_VID
-#define PRIM_VID	0x0301  /* PrimuX Vendor ID */
-#endif
-
 
 #define	TYP_E1		1
 #define	TYP_4S		4
@@ -228,11 +210,8 @@ static uint	clockdelay_nt = CLKDEL_NT;
 
 static int	HFC_cnt, Port_cnt, PCM_cnt = 99;
 
-#ifdef MODULE
 MODULE_AUTHOR("Andreas Eversberg");
-#ifdef MODULE_LICENSE
 MODULE_LICENSE("GPL");
-#endif
 module_param(debug, uint, S_IRUGO | S_IWUSR);
 module_param(poll, uint, S_IRUGO | S_IWUSR);
 module_param(timer, uint, S_IRUGO | S_IWUSR);
@@ -243,30 +222,33 @@ module_param_array(pcm, uint, NULL, S_IRUGO | S_IWUSR);
 module_param_array(dslot, uint, NULL, S_IRUGO | S_IWUSR);
 module_param_array(iomode, uint, NULL, S_IRUGO | S_IWUSR);
 module_param_array(port, uint, NULL, S_IRUGO | S_IWUSR);
-#endif
 
 #ifdef HFC_REGISTER_DEBUG
 #define HFC_outb(hc, reg, val) \
-	hc->HFC_outb(hc, reg, val, __func__, __LINE__)
+	(hc->HFC_outb(hc, reg, val, __func__, __LINE__))
 #define HFC_outb_nodebug(hc, reg, val) \
-	hc->HFC_outb_nodebug(hc, reg, val, __func__, __LINE__)
-#define HFC_inb(hc, reg) hc->HFC_inb(hc, reg, __func__, __LINE__)
+	(hc->HFC_outb_nodebug(hc, reg, val, __func__, __LINE__))
+#define HFC_inb(hc, reg) \
+	(hc->HFC_inb(hc, reg, __func__, __LINE__))
 #define HFC_inb_nodebug(hc, reg) \
-	hc->HFC_inb_nodebug(hc, reg, __func__, __LINE__)
-#define HFC_inw(hc, reg) hc->HFC_inw(hc, reg, __func__, __LINE__)
+	(hc->HFC_inb_nodebug(hc, reg, __func__, __LINE__))
+#define HFC_inw(hc, reg) \
+	(hc->HFC_inw(hc, reg, __func__, __LINE__))
 #define HFC_inw_nodebug(hc, reg) \
-	hc->HFC_inw_nodebug(hc, reg, __func__, __LINE__)
-#define HFC_wait(hc) hc->HFC_wait(hc, __func__, __LINE__)
-#define HFC_wait_nodebug(hc) hc->HFC_wait_nodebug(hc, __func__, __LINE__)
+	(hc->HFC_inw_nodebug(hc, reg, __func__, __LINE__))
+#define HFC_wait(hc) \
+	(hc->HFC_wait(hc, __func__, __LINE__))
+#define HFC_wait_nodebug(hc) \
+	(hc->HFC_wait_nodebug(hc, __func__, __LINE__))
 #else
-#define HFC_outb(hc, reg, val) hc->HFC_outb(hc, reg, val)
-#define HFC_outb_nodebug(hc, reg, val) hc->HFC_outb_nodebug(hc, reg, val)
-#define HFC_inb(hc, reg) hc->HFC_inb(hc, reg)
-#define HFC_inb_nodebug(hc, reg) hc->HFC_inb_nodebug(hc, reg)
-#define HFC_inw(hc, reg) hc->HFC_inw(hc, reg)
-#define HFC_inw_nodebug(hc, reg) hc->HFC_inw_nodebug(hc, reg)
-#define HFC_wait(hc) hc->HFC_wait(hc)
-#define HFC_wait_nodebug(hc) hc->HFC_wait_nodebug(hc)
+#define HFC_outb(hc, reg, val)		(hc->HFC_outb(hc, reg, val))
+#define HFC_outb_nodebug(hc, reg, val)	(hc->HFC_outb_nodebug(hc, reg, val))
+#define HFC_inb(hc, reg)		(hc->HFC_inb(hc, reg))
+#define HFC_inb_nodebug(hc, reg)	(hc->HFC_inb_nodebug(hc, reg))
+#define HFC_inw(hc, reg)		(hc->HFC_inw(hc, reg))
+#define HFC_inw_nodebug(hc, reg)	(hc->HFC_inw_nodebug(hc, reg))
+#define HFC_wait(hc)			(hc->HFC_wait(hc))
+#define HFC_wait_nodebug(hc)		(hc->HFC_wait_nodebug(hc))
 #endif
 
 /* HFC_IO_MODE_PCIMEM */
@@ -1097,7 +1079,7 @@ release_io_hfcmulti(struct hfc_multi *hc)
 static int
 init_chip(struct hfc_multi *hc)
 {
-	u_long 			flags, val, val2 = 0, rev;
+	u_long			flags, val, val2 = 0, rev;
 	int			i, err = 0;
 	u_char			r_conf_en, rval;
 	u_int			*plx_acc_32, pv;
@@ -2098,7 +2080,7 @@ hfcmulti_rx(struct hfc_multi *hc, int ch)
 	int again = 0;
 	struct	bchannel *bch;
 	struct  dchannel *dch;
-	struct sk_buff 	*skb, **sp = NULL;
+	struct sk_buff	*skb, **sp = NULL;
 	int	maxlen;
 
 	bch = hc->chan[ch].bch;
@@ -2604,7 +2586,7 @@ hfcmulti_interrupt(int intno, void *dev_id)
 	static int		count;
 	struct hfc_multi	*hc = dev_id;
 	struct dchannel		*dch;
-	u_char 			r_irq_statech, status, r_irq_misc, r_irq_oview;
+	u_char			r_irq_statech, status, r_irq_misc, r_irq_oview;
 	int			i;
 	u_short			*plx_acc, wval;
 	u_char			e1_syncsta, temp;
@@ -4193,7 +4175,7 @@ hfcm_dctrl(struct mISDNchannel *ch, u_int cmd, void *arg)
 static int
 init_card(struct hfc_multi *hc)
 {
-	int 	err = -EIO;
+	int	err = -EIO;
 	u_long	flags;
 	u_short	*plx_acc;
 	u_long	plx_flags;
@@ -5160,8 +5142,13 @@ static void __devexit hfc_remove_pci(struct pci_dev *pdev)
 	}
 }
 
-static const struct hm_map hfcm_map[] =
-{
+#define	VENDOR_CCD	"Cologne Chip AG"
+#define	VENDOR_BN	"beroNet GmbH"
+#define	VENDOR_DIG	"Digium Inc."
+#define VENDOR_JH	"Junghanns.NET GmbH"
+#define VENDOR_PRIM	"PrimuX"
+
+static const struct hm_map hfcm_map[] = {
 /*0*/	{VENDOR_BN, "HFC-1S Card (mini PCI)", 4, 1, 1, 3, 0, DIP_4S, 0},
 /*1*/	{VENDOR_BN, "HFC-2S Card", 4, 2, 1, 3, 0, DIP_4S, 0},
 /*2*/	{VENDOR_BN, "HFC-2S Card (mini PCI)", 4, 2, 1, 3, 0, DIP_4S, 0},
@@ -5204,55 +5191,85 @@ static const struct hm_map hfcm_map[] =
 };
 
 #undef H
-#define H(x)	(unsigned long)&hfcm_map[x]
+#define H(x)	((unsigned long)&hfcm_map[x])
 static struct pci_device_id hfmultipci_ids[] __devinitdata = {
 
 	/* Cards with HFC-4S Chip */
-	{ CCAG_VID, 0x08B4, CCAG_VID, 0xB567, 0, 0, H(0)}, /* BN1S mini PCI */
-	{ CCAG_VID, 0x08B4, CCAG_VID, 0xB566, 0, 0, H(1)}, /* BN2S */
-	{ CCAG_VID, 0x08B4, CCAG_VID, 0xB569, 0, 0, H(2)}, /* BN2S mini PCI */
-	{ CCAG_VID, 0x08B4, CCAG_VID, 0xB560, 0, 0, H(3)}, /* BN4S */
-	{ CCAG_VID, 0x08B4, CCAG_VID, 0xB568, 0, 0, H(4)}, /* BN4S mini PCI */
-	{ CCAG_VID, 0x08B4, CCAG_VID, 0x08B4, 0, 0, H(5)}, /* Old Eval */
-	{ CCAG_VID, 0x08B4, CCAG_VID, 0xB520, 0, 0, H(6)}, /* IOB4ST */
-	{ CCAG_VID, 0x08B4, CCAG_VID, 0xB620, 0, 0, H(7)}, /* 4S */
-	{ 0xD161, 0xB410, 0xD161, 0xB410, 0, 0, H(8)}, /* 4S - Digium */
-	{ CCAG_VID, 0x08B4, CCAG_VID, 0xB540, 0, 0, H(9)}, /* 4S Swyx */
-	{ CCAG_VID, 0x08B4, CCAG_VID, 0xB550, 0, 0, H(10)},
-	    /* 4S junghanns 2.0 */
-	{ CCAG_VID, 0x08B4, CCAG_VID, 0x1234, 0, 0, H(11)}, /* Primux */
-	{ CCAG_VID, 0x08B4, CCAG_VID, 0xE888, 0, 0, H(28)}, /* OpenVox 4 */
-	{ CCAG_VID, 0x08B4, CCAG_VID, 0xE884, 0, 0, H(29)}, /* OpenVox 2 */
+	{ PCI_VENDOR_ID_CCD, PCI_DEVICE_ID_CCD_HFC4S, PCI_VENDOR_ID_CCD,
+		PCI_SUBDEVICE_ID_CCD_BN1SM, 0, 0, H(0)}, /* BN1S mini PCI */
+	{ PCI_VENDOR_ID_CCD, PCI_DEVICE_ID_CCD_HFC4S, PCI_VENDOR_ID_CCD,
+		PCI_SUBDEVICE_ID_CCD_BN2S, 0, 0, H(1)}, /* BN2S */
+	{ PCI_VENDOR_ID_CCD, PCI_DEVICE_ID_CCD_HFC4S, PCI_VENDOR_ID_CCD,
+		PCI_SUBDEVICE_ID_CCD_BN2SM, 0, 0, H(2)}, /* BN2S mini PCI */
+	{ PCI_VENDOR_ID_CCD, PCI_DEVICE_ID_CCD_HFC4S, PCI_VENDOR_ID_CCD,
+		PCI_SUBDEVICE_ID_CCD_BN4S, 0, 0, H(3)}, /* BN4S */
+	{ PCI_VENDOR_ID_CCD, PCI_DEVICE_ID_CCD_HFC4S, PCI_VENDOR_ID_CCD,
+		PCI_SUBDEVICE_ID_CCD_BN4SM, 0, 0, H(4)}, /* BN4S mini PCI */
+	{ PCI_VENDOR_ID_CCD, PCI_DEVICE_ID_CCD_HFC4S, PCI_VENDOR_ID_CCD,
+		PCI_DEVICE_ID_CCD_HFC4S, 0, 0, H(5)}, /* Old Eval */
+	{ PCI_VENDOR_ID_CCD, PCI_DEVICE_ID_CCD_HFC4S, PCI_VENDOR_ID_CCD,
+		PCI_SUBDEVICE_ID_CCD_IOB4ST, 0, 0, H(6)}, /* IOB4ST */
+	{ PCI_VENDOR_ID_CCD, PCI_DEVICE_ID_CCD_HFC4S, PCI_VENDOR_ID_CCD,
+		PCI_SUBDEVICE_ID_CCD_HFC4S, 0, 0, H(7)}, /* 4S */
+	{ PCI_VENDOR_ID_DIGIUM, PCI_DEVICE_ID_DIGIUM_HFC4S,
+		PCI_VENDOR_ID_DIGIUM, PCI_DEVICE_ID_DIGIUM_HFC4S, 0, 0, H(8)},
+	{ PCI_VENDOR_ID_CCD, PCI_DEVICE_ID_CCD_HFC4S, PCI_VENDOR_ID_CCD,
+		PCI_SUBDEVICE_ID_CCD_SWYX4S, 0, 0, H(9)}, /* 4S Swyx */
+	{ PCI_VENDOR_ID_CCD, PCI_DEVICE_ID_CCD_HFC4S, PCI_VENDOR_ID_CCD,
+		PCI_SUBDEVICE_ID_CCD_JH4S20, 0, 0, H(10)},
+	{ PCI_VENDOR_ID_CCD, PCI_DEVICE_ID_CCD_HFC4S, PCI_VENDOR_ID_CCD,
+		PCI_SUBDEVICE_ID_CCD_PMX2S, 0, 0, H(11)}, /* Primux */
+	{ PCI_VENDOR_ID_CCD, PCI_DEVICE_ID_CCD_HFC4S, PCI_VENDOR_ID_CCD,
+		PCI_SUBDEVICE_ID_CCD_OV4S, 0, 0, H(28)}, /* OpenVox 4 */
+	{ PCI_VENDOR_ID_CCD, PCI_DEVICE_ID_CCD_HFC4S, PCI_VENDOR_ID_CCD,
+		PCI_SUBDEVICE_ID_CCD_OV2S, 0, 0, H(29)}, /* OpenVox 2 */
 
 	/* Cards with HFC-8S Chip */
-	{ CCAG_VID, 0x16B8, CCAG_VID, 0xB562, 0, 0, H(12)}, /* BN8S */
-	{ CCAG_VID, 0x16B8, CCAG_VID, 0xB56B, 0, 0, H(13)}, /* BN8S+ */
-	{ CCAG_VID, 0x16B8, CCAG_VID, 0x16B8, 0, 0, H(14)}, /* old Eval */
-	{ CCAG_VID, 0x16B8, CCAG_VID, 0xB521, 0, 0, H(15)},
-	    /* IOB8ST Recording */
-	{ CCAG_VID, 0x16B8, CCAG_VID, 0xB522, 0, 0, H(16)}, /* IOB8ST  */
-	{ CCAG_VID, 0x16B8, CCAG_VID, 0xB552, 0, 0, H(17)}, /* IOB8ST  */
-	{ CCAG_VID, 0x16B8, CCAG_VID, 0xB622, 0, 0, H(18)}, /* 8S */
-	{ CCAG_VID, 0x16B8, CCAG_VID, 0xE998, 0, 0, H(30)}, /* OpenVox 8 */
+	{ PCI_VENDOR_ID_CCD, PCI_DEVICE_ID_CCD_HFC8S, PCI_VENDOR_ID_CCD,
+	PCI_SUBDEVICE_ID_CCD_BN8S, 0, 0, H(12)}, /* BN8S */
+	{ PCI_VENDOR_ID_CCD, PCI_DEVICE_ID_CCD_HFC8S, PCI_VENDOR_ID_CCD,
+	PCI_SUBDEVICE_ID_CCD_BN8SP, 0, 0, H(13)}, /* BN8S+ */
+	{ PCI_VENDOR_ID_CCD, PCI_DEVICE_ID_CCD_HFC8S, PCI_VENDOR_ID_CCD,
+	PCI_DEVICE_ID_CCD_HFC8S, 0, 0, H(14)}, /* old Eval */
+	{ PCI_VENDOR_ID_CCD, PCI_DEVICE_ID_CCD_HFC8S, PCI_VENDOR_ID_CCD,
+	PCI_SUBDEVICE_ID_CCD_IOB8STR, 0, 0, H(15)}, /* IOB8ST Recording */
+	{ PCI_VENDOR_ID_CCD, PCI_DEVICE_ID_CCD_HFC8S, PCI_VENDOR_ID_CCD,
+		PCI_SUBDEVICE_ID_CCD_IOB8ST, 0, 0, H(16)}, /* IOB8ST  */
+	{ PCI_VENDOR_ID_CCD, PCI_DEVICE_ID_CCD_HFC8S, PCI_VENDOR_ID_CCD,
+		PCI_SUBDEVICE_ID_CCD_IOB8ST_1, 0, 0, H(17)}, /* IOB8ST  */
+	{ PCI_VENDOR_ID_CCD, PCI_DEVICE_ID_CCD_HFC8S, PCI_VENDOR_ID_CCD,
+		PCI_SUBDEVICE_ID_CCD_HFC8S, 0, 0, H(18)}, /* 8S */
+	{ PCI_VENDOR_ID_CCD, PCI_DEVICE_ID_CCD_HFC8S, PCI_VENDOR_ID_CCD,
+		PCI_SUBDEVICE_ID_CCD_OV8S, 0, 0, H(30)}, /* OpenVox 8 */
 
 
 	/* Cards with HFC-E1 Chip */
-	{ CCAG_VID, 0x30B1, CCAG_VID, 0xB563, 0, 0, H(19)}, /* BNE1 */
-	{ CCAG_VID, 0x30B1, CCAG_VID, 0xB56A, 0, 0, H(20)}, /* BNE1 mini PCI */
-	{ CCAG_VID, 0x30B1, CCAG_VID, 0xB565, 0, 0, H(21)}, /* BNE1 + (Dual) */
-	{ CCAG_VID, 0x30B1, CCAG_VID, 0xB564, 0, 0, H(22)}, /* BNE1 (Dual) */
+	{ PCI_VENDOR_ID_CCD, PCI_DEVICE_ID_CCD_HFCE1, PCI_VENDOR_ID_CCD,
+		PCI_SUBDEVICE_ID_CCD_BNE1, 0, 0, H(19)}, /* BNE1 */
+	{ PCI_VENDOR_ID_CCD, PCI_DEVICE_ID_CCD_HFCE1, PCI_VENDOR_ID_CCD,
+		PCI_SUBDEVICE_ID_CCD_BNE1M, 0, 0, H(20)}, /* BNE1 mini PCI */
+	{ PCI_VENDOR_ID_CCD, PCI_DEVICE_ID_CCD_HFCE1, PCI_VENDOR_ID_CCD,
+		PCI_SUBDEVICE_ID_CCD_BNE1DP, 0, 0, H(21)}, /* BNE1 + (Dual) */
+	{ PCI_VENDOR_ID_CCD, PCI_DEVICE_ID_CCD_HFCE1, PCI_VENDOR_ID_CCD,
+		PCI_SUBDEVICE_ID_CCD_BNE1D, 0, 0, H(22)}, /* BNE1 (Dual) */
 
-	{ CCAG_VID, 0x30B1, CCAG_VID, 0x30B1, 0, 0, H(23)}, /* Old Eval */
-	{ CCAG_VID, 0x30B1, CCAG_VID, 0xB523, 0, 0, H(24)}, /* IOB1E1 */
-	{ CCAG_VID, 0x30B1, CCAG_VID, 0xC523, 0, 0, H(25)}, /* E1 */
+	{ PCI_VENDOR_ID_CCD, PCI_DEVICE_ID_CCD_HFCE1, PCI_VENDOR_ID_CCD,
+		PCI_DEVICE_ID_CCD_HFCE1, 0, 0, H(23)}, /* Old Eval */
+	{ PCI_VENDOR_ID_CCD, PCI_DEVICE_ID_CCD_HFCE1, PCI_VENDOR_ID_CCD,
+		PCI_SUBDEVICE_ID_CCD_IOB1E1, 0, 0, H(24)}, /* IOB1E1 */
+	{ PCI_VENDOR_ID_CCD, PCI_DEVICE_ID_CCD_HFCE1, PCI_VENDOR_ID_CCD,
+		PCI_SUBDEVICE_ID_CCD_HFCE1, 0, 0, H(25)}, /* E1 */
 
-	{ 0x10B5, 0x9030, CCAG_VID, 0x3136, 0, 0, H(26)},
-	    /* PLX PCI Bridge */
-	{ 0x10B5, 0x9030, CCAG_VID, 0x3137, 0, 0, H(27)},
-	    /* PLX PCI Bridge */
-	{ CCAG_VID, 0x08B4, PCI_ANY_ID, PCI_ANY_ID, 0, 0, 0},
-	{ CCAG_VID, 0x16B8, PCI_ANY_ID, PCI_ANY_ID, 0, 0, 0},
-	{ CCAG_VID, 0x30B1, PCI_ANY_ID, PCI_ANY_ID, 0, 0, 0},
+	{ PCI_VENDOR_ID_PLX, PCI_DEVICE_ID_PLX_9030, PCI_VENDOR_ID_CCD,
+		PCI_SUBDEVICE_ID_CCD_SPD4S, 0, 0, H(26)}, /* PLX PCI Bridge */
+	{ PCI_VENDOR_ID_PLX, PCI_DEVICE_ID_PLX_9030, PCI_VENDOR_ID_CCD,
+		PCI_SUBDEVICE_ID_CCD_SPDE1, 0, 0, H(27)}, /* PLX PCI Bridge */
+	{ PCI_VENDOR_ID_CCD, PCI_DEVICE_ID_CCD_HFC4S, PCI_ANY_ID, PCI_ANY_ID,
+		0, 0, 0},
+	{ PCI_VENDOR_ID_CCD, PCI_DEVICE_ID_CCD_HFC8S, PCI_ANY_ID, PCI_ANY_ID,
+		0, 0, 0},
+	{ PCI_VENDOR_ID_CCD, PCI_DEVICE_ID_CCD_HFCE1, PCI_ANY_ID, PCI_ANY_ID,
+		0, 0, 0},
 	{0, }
 };
 #undef H
@@ -5395,7 +5412,5 @@ HFCmulti_init(void)
 }
 
 
-#ifdef MODULE
 module_init(HFCmulti_init);
 module_exit(HFCmulti_cleanup);
-#endif
