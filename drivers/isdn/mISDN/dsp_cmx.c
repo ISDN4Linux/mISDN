@@ -1817,12 +1817,12 @@ dsp_cmx_transmit(struct dsp *dsp, struct sk_buff *skb)
 	d = skb->data;
 	space = (ww - w - 1) & CMX_BUFF_MASK;
 	/* write-pointer should not overrun nor reach read pointer */
-	if (space < skb->len)
+	if (space < skb->len) {
 		/* write to the space we have left */
 		ww = (ww - 1) & CMX_BUFF_MASK; /* end one byte prior tx_R */
 		if (dsp_debug & DEBUG_DSP_CLOCK)
 			printk(KERN_DEBUG "%s: TX overflow\n", __func__);
-	else
+	} else
 		/* write until all byte are copied */
 		ww = (w + skb->len) & CMX_BUFF_MASK;
 	dsp->tx_W = ww;
