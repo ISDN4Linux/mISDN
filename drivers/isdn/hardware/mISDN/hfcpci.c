@@ -7,7 +7,7 @@
  *            type approval valid for HFC-S PCI A based card
  *
  * Copyright 1999  by Werner Cornelius (werner@isdn-development.de)
- * Copyright 2008  by Karsten Keil (kkeil@suse.de)
+ * Copyright 2008  by Karsten Keil <kkeil@novell.com>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -38,13 +38,9 @@ static const char *hfcpci_revision = "2.0";
 static int HFC_cnt;
 static uint debug;
 
-#ifdef MODULE
 MODULE_AUTHOR("Karsten Keil");
-#ifdef MODULE_LICENSE
 MODULE_LICENSE("GPL");
-#endif
 module_param(debug, uint, 0);
-#endif
 
 static LIST_HEAD(HFClist);
 DEFINE_RWLOCK(HFClock);
@@ -74,55 +70,6 @@ enum {
 	HFC_ABOCOM_2BD1,
 	HFC_SITECOM_DC105V2,
 };
-
-#ifndef PCI_VENDOR_ID_CCD
-#define PCI_VENDOR_ID_CCD		0x1397
-#define PCI_DEVICE_ID_CCD_2BD0		0x2BD0
-#define PCI_DEVICE_ID_CCD_B000		0xB000
-#define PCI_DEVICE_ID_CCD_B006		0xB006
-#define PCI_DEVICE_ID_CCD_B007		0xB007
-#define PCI_DEVICE_ID_CCD_B008		0xB008
-#define PCI_DEVICE_ID_CCD_B009		0xB009
-#define PCI_DEVICE_ID_CCD_B00A		0xB00A
-#define PCI_DEVICE_ID_CCD_B00B		0xB00B
-#define PCI_DEVICE_ID_CCD_B00C		0xB00C
-#define PCI_DEVICE_ID_CCD_B100		0xB100
-
-#define PCI_VENDOR_ID_ASUSTEK		0x1043
-#define PCI_DEVICE_ID_ASUSTEK_0675	0x0675
-
-#define PCI_VENDOR_ID_BERKOM		0x0871
-#define PCI_DEVICE_ID_BERKOM_A1T	0xFFA1
-#define PCI_DEVICE_ID_BERKOM_T_CONCEPT	0xFFA2
-
-#define PCI_VENDOR_ID_ANIGMA		0x1051
-#define PCI_DEVICE_ID_ANIGMA_MC145575	0x0100
-
-#define PCI_VENDOR_ID_ZOLTRIX		0x15b0
-#define PCI_DEVICE_ID_ZOLTRIX_2BD0	0x2BD0
-
-#define PCI_DEVICE_ID_DIGI_DF_M_IOM2_E	0x0070
-#define PCI_DEVICE_ID_DIGI_DF_M_E	0x0071
-#define PCI_DEVICE_ID_DIGI_DF_M_IOM2_A	0x0072
-#define PCI_DEVICE_ID_DIGI_DF_M_A	0x0073
-
-#define PCI_VENDOR_ID_ABOCOM		0x13D1
-#define PCI_DEVICE_ID_ABOCOM_2BD1	0x2BD1
-#endif
-
-#ifndef PCI_VENDOR_ID_SITECOM
-#define PCI_VENDOR_ID_SITECOM		0x182D
-#define PCI_DEVICE_ID_SITECOM_DC105V2	0x3069
-#endif
-
-/* new device IDs, obsolete when include/linux/pci_ids.h will be updated */
-#ifndef PCI_DEVICE_ID_CCD_B700
-#define PCI_DEVICE_ID_CCD_B700		0xb700
-#endif
-#ifndef PCI_DEVICE_ID_CCD_B701
-#define PCI_DEVICE_ID_CCD_B701		0xb701
-#endif
-
 
 struct hfcPCI_hw {
 	unsigned char		cirm;
@@ -2294,7 +2241,6 @@ HFC_init(void)
 	return err;
 }
 
-#ifdef MODULE
 static void __exit
 HFC_cleanup(void)
 {
@@ -2308,4 +2254,3 @@ HFC_cleanup(void)
 
 module_init(HFC_init);
 module_exit(HFC_cleanup);
-#endif

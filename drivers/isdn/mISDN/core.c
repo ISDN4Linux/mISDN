@@ -21,11 +21,9 @@
 
 static u_int debug;
 
-#ifdef MODULE
 MODULE_AUTHOR("Karsten Keil");
 MODULE_LICENSE("GPL");
 module_param(debug, uint, S_IRUGO | S_IWUSR);
-#endif
 
 static LIST_HEAD(devices);
 DEFINE_RWLOCK(device_lock);
