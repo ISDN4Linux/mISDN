@@ -135,10 +135,12 @@
  *	This register is needed for the TBR3 certification, so don't change it.
  */
 
-/* debug register access (never use this, it will flood your system log) */
+/*debug register access (never use this, it will flood your system log) */
 /*
-#define HFC_REGISTER_DEBUG
-*/
+ * #define HFC_REGISTER_DEBUG
+ */
+
+static const char *hfcmulti_revision = "2.02";
 
 #include <linux/module.h>
 #include <linux/pci.h>
@@ -164,8 +166,6 @@ static LIST_HEAD(HFClist);
 static spinlock_t HFClock; /* global hfc list lock */
 
 static void ph_state_change(struct dchannel *);
-
-static const char *hfcmulti_revision = "$Revision: 2.00 $";
 
 static void (*hfc_interrupt)(void);
 static void (*register_interrupt)(void);
@@ -446,12 +446,12 @@ write_fifo_regio(struct hfc_multi *hc, u_char *data, int len)
 {
 	outb(A_FIFO_DATA0, (hc->pci_iobase)+4);
 	while (len>>2) {
-		outl(*(u32 *)data, hc->pci_iobase);
+		outl(cpu_to_le32(*(u32 *)data), hc->pci_iobase);
 		data += 4;
 		len -= 4;
 	}
 	while (len>>1) {
-		outw(*(u16 *)data, hc->pci_iobase);
+		outw(cpu_to_le16(*(u16 *)data), hc->pci_iobase);
 		data += 2;
 		len -= 2;
 	}
@@ -466,17 +466,19 @@ void
 write_fifo_pcimem(struct hfc_multi *hc, u_char *data, int len)
 {
 	while (len>>2) {
-		writel(*(u32 *)data, (hc->pci_membase)+A_FIFO_DATA0);
+		writel(cpu_to_le32(*(u32 *)data),
+			hc->pci_membase + A_FIFO_DATA0);
 		data += 4;
 		len -= 4;
 	}
 	while (len>>1) {
-		writew(*(u16 *)data, (hc->pci_membase)+A_FIFO_DATA0);
+		writew(cpu_to_le16(*(u16 *)data),
+			hc->pci_membase + A_FIFO_DATA0);
 		data += 2;
 		len -= 2;
 	}
 	while (len) {
-		writeb(*data, (hc->pci_membase)+A_FIFO_DATA0);
+		writeb(*data, hc->pci_membase + A_FIFO_DATA0);
 		data++;
 		len--;
 	}
@@ -487,12 +489,12 @@ read_fifo_regio(struct hfc_multi *hc, u_char *data, int len)
 {
 	outb(A_FIFO_DATA0, (hc->pci_iobase)+4);
 	while (len>>2) {
-		*(u32 *)data = inl(hc->pci_iobase);
+		*(u32 *)data = le32_to_cpu(inl(hc->pci_iobase));
 		data += 4;
 		len -= 4;
 	}
 	while (len>>1) {
-		*(u16 *)data = inw(hc->pci_iobase);
+		*(u16 *)data = le16_to_cpu(inw(hc->pci_iobase));
 		data += 2;
 		len -= 2;
 	}
@@ -509,18 +511,18 @@ read_fifo_pcimem(struct hfc_multi *hc, u_char *data, int len)
 {
 	while (len>>2) {
 		*(u32 *)data =
-			readl((hc->pci_membase)+A_FIFO_DATA0);
+			le32_to_cpu(readl(hc->pci_membase + A_FIFO_DATA0));
 		data += 4;
 		len -= 4;
 	}
 	while (len>>1) {
 		*(u16 *)data =
-			readw((hc->pci_membase)+A_FIFO_DATA0);
+			le16_to_cpu(readw(hc->pci_membase + A_FIFO_DATA0));
 		data += 2;
 		len -= 2;
 	}
 	while (len) {
-		*data = readb((hc->pci_membase)+A_FIFO_DATA0);
+		*data = readb(hc->pci_membase + A_FIFO_DATA0);
 		data++;
 		len--;
 	}
@@ -4090,7 +4092,7 @@ open_bchannel(struct hfc_multi *hc, struct dchannel *dch,
 	struct bchannel	*bch;
 	int		ch;
 
-	if (!test_bit(rq->adr.channel, &dch->dev.channelmap[0]))
+	if (!test_channelmap(rq->adr.channel, dch->dev.channelmap))
 		return -EINVAL;
 	if (rq->protocol == ISDN_P_NONE)
 		return -EINVAL;
@@ -4398,8 +4400,8 @@ setup_pci(struct hfc_multi *hc, struct pci_dev *pdev,
 			return -EIO;
 		}
 		printk(KERN_INFO
-			"HFC-multi: plx_membase:%#x plx_origmembase:%#x\n",
-		    (u_int) hc->plx_membase, (u_int)hc->plx_origmembase);
+		    "HFC-multi: plx_membase:%#lx plx_origmembase:%#lx\n",
+		    (u_long)hc->plx_membase, hc->plx_origmembase);
 
 		hc->pci_origmembase =  hc->pci_dev->resource[2].start;
 		    /* MEMBASE 1 is PLX PCI Bridge */
@@ -4419,10 +4421,9 @@ setup_pci(struct hfc_multi *hc, struct pci_dev *pdev,
 		}
 
 		printk(KERN_INFO
-		    "card %d: defined at MEMBASE %#x (%#x) IRQ %d HZ %d "
+		    "card %d: defined at MEMBASE %#lx (%#lx) IRQ %d HZ %d "
 		    "leds-type %d\n",
-		    hc->id, (u_int) hc->pci_membase,
-		    (u_int) hc->pci_origmembase,
+		    hc->id, (u_long)hc->pci_membase, hc->pci_origmembase,
 		    hc->pci_dev->irq, HZ, hc->leds);
 		pci_write_config_word(hc->pci_dev, PCI_COMMAND, PCI_ENA_MEMIO);
 		break;
@@ -4443,10 +4444,9 @@ setup_pci(struct hfc_multi *hc, struct pci_dev *pdev,
 			pci_disable_device(hc->pci_dev);
 			return -EIO;
 		}
-		printk(KERN_INFO "card %d: defined at MEMBASE %#x (%#x) IRQ %d "
-		    "HZ %d leds-type %d\n", hc->id, (u_int) hc->pci_membase,
-		    (u_int) hc->pci_origmembase, hc->pci_dev->irq, HZ,
-		    hc->leds);
+		printk(KERN_INFO "card %d: defined at MEMBASE %#lx (%#lx) IRQ %d "
+		    "HZ %d leds-type %d\n", hc->id, (u_long)hc->pci_membase,
+		    hc->pci_origmembase, hc->pci_dev->irq, HZ, hc->leds);
 		pci_write_config_word(hc->pci_dev, PCI_COMMAND, PCI_ENA_MEMIO);
 		break;
 	case HFC_IO_MODE_REGIO:
@@ -4709,7 +4709,7 @@ init_e1_port(struct hfc_multi *hc, struct hm_map *m)
 		list_add(&bch->ch.list, &dch->dev.bchannels);
 		hc->chan[ch].bch = bch;
 		hc->chan[ch].port = 0;
-		test_and_set_bit(bch->nr, &dch->dev.channelmap[0]);
+		set_channelmap(bch->nr, dch->dev.channelmap);
 	}
 	/* set optical line type */
 	if (port[Port_cnt] & 0x001) {
@@ -4806,16 +4806,15 @@ init_e1_port(struct hfc_multi *hc, struct hm_map *m)
 	}
 	/* set elastic jitter buffer */
 	if (port[Port_cnt] & 0x3000) {
+		hc->chan[hc->dslot].jitter = (port[Port_cnt]>>12) & 0x3;
 		if (debug & DEBUG_HFCMULTI_INIT)
 			printk(KERN_DEBUG
 			    "%s: PORT set elastic "
 			    "buffer to %d: card(%d) port(%d)\n",
-			    __func__, hc->chan[ch].jitter,
+			    __func__, hc->chan[hc->dslot].jitter,
 			    HFC_cnt + 1, 1);
-		hc->chan[hc->dslot].jitter =
-		    (port[Port_cnt]>>12) & 0x3;
 	} else
-		hc->chan[ch].jitter = 2; /* default */
+		hc->chan[hc->dslot].jitter = 2; /* default */
 	snprintf(name, MISDN_MAX_IDLEN - 1, "hfc-e1.%d", HFC_cnt + 1);
 	ret = mISDN_register_device(&dch->dev, name);
 	if (ret)
@@ -4878,7 +4877,7 @@ init_multi_port(struct hfc_multi *hc, int pt)
 		list_add(&bch->ch.list, &dch->dev.bchannels);
 		hc->chan[i + ch].bch = bch;
 		hc->chan[i + ch].port = pt;
-		test_and_set_bit(bch->nr, &dch->dev.channelmap[0]);
+		set_channelmap(bch->nr, dch->dev.channelmap);
 	}
 	/* set master clock */
 	if (port[Port_cnt] & 0x001) {
@@ -5189,12 +5188,12 @@ static void __devexit hfc_remove_pci(struct pci_dev *pdev)
 static const struct hm_map hfcm_map[] =
 {
 /*0*/	{VENDOR_BN, "HFC-1S Card (mini PCI)", 4, 1, 1, 3, 0, DIP_4S, 0},
-/*1*/	{VENDOR_BN, "HFC-2S Card", 4, 2, 1, 3, 0, DIP_4S},
+/*1*/	{VENDOR_BN, "HFC-2S Card", 4, 2, 1, 3, 0, DIP_4S, 0},
 /*2*/	{VENDOR_BN, "HFC-2S Card (mini PCI)", 4, 2, 1, 3, 0, DIP_4S, 0},
 /*3*/	{VENDOR_BN, "HFC-4S Card", 4, 4, 1, 2, 0, DIP_4S, 0},
 /*4*/	{VENDOR_BN, "HFC-4S Card (mini PCI)", 4, 4, 1, 2, 0, 0, 0},
 /*5*/	{VENDOR_CCD, "HFC-4S Eval (old)", 4, 4, 0, 0, 0, 0, 0},
-/*6*/	{VENDOR_CCD, "HFC-4S IOB4ST", 4, 4, 1, 2, 0, 0, 0},
+/*6*/	{VENDOR_CCD, "HFC-4S IOB4ST", 4, 4, 1, 2, 0, DIP_4S, 0},
 /*7*/	{VENDOR_CCD, "HFC-4S", 4, 4, 1, 2, 0, 0, 0},
 /*8*/	{VENDOR_DIG, "HFC-4S Card", 4, 4, 0, 2, 0, 0, HFC_IO_MODE_REGIO},
 /*9*/	{VENDOR_CCD, "HFC-4S Swyx 4xS0 SX2 QuadBri", 4, 4, 1, 2, 0, 0, 0},
@@ -5359,9 +5358,6 @@ HFCmulti_init(void)
 	if (debug & DEBUG_HFCMULTI_INIT)
 		printk(KERN_DEBUG "%s: init entered\n", __func__);
 
-#ifdef __BIG_ENDIAN
-#error "not running on big endian machines now"
-#endif
 	hfc_interrupt = symbol_get(ztdummy_extern_interrupt);
 	register_interrupt = symbol_get(ztdummy_register_interrupt);
 	unregister_interrupt = symbol_get(ztdummy_unregister_interrupt);

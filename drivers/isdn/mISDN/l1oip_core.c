@@ -255,11 +255,8 @@ static u_int id[MAX_CARDS];
 static int debug;
 static int ulaw;
 
-#ifdef MODULE
 MODULE_AUTHOR("Andreas Eversberg");
-#ifdef MODULE_LICENSE
 MODULE_LICENSE("GPL");
-#endif
 module_param_array(type, uint, NULL, S_IRUGO | S_IWUSR);
 module_param_array(codec, uint, NULL, S_IRUGO | S_IWUSR);
 module_param_array(ip, uint, NULL, S_IRUGO | S_IWUSR);
@@ -270,7 +267,6 @@ module_param_array(limit, uint, NULL, S_IRUGO | S_IWUSR);
 module_param_array(id, uint, NULL, S_IRUGO | S_IWUSR);
 module_param(ulaw, uint, S_IRUGO | S_IWUSR);
 module_param(debug, uint, S_IRUGO | S_IWUSR);
-#endif
 
 /*
  * send a frame via socket, if open and restart timer
@@ -770,7 +766,7 @@ fail:
 
 	/* if we got killed, signal completion */
 	complete(&hc->socket_complete);
-	hc->socket_pid = 0; /* show termination of thread */
+	hc->socket_thread = NULL; /* show termination of thread */
 
 	if (debug & DEBUG_L1OIP_SOCKET)
 		printk(KERN_DEBUG "%s: socket thread terminated\n",
@@ -782,11 +778,11 @@ static void
 l1oip_socket_close(struct l1oip *hc)
 {
 	/* kill thread */
-	if (hc->socket_pid) {
+	if (hc->socket_thread) {
 		if (debug & DEBUG_L1OIP_SOCKET)
 			printk(KERN_DEBUG "%s: socket thread exists, "
 				"killing...\n", __func__);
-		kill_proc(hc->socket_pid, SIGTERM, 0);
+		send_sig(SIGTERM, hc->socket_thread, 0);
 		wait_for_completion(&hc->socket_complete);
 	}
 }
@@ -794,22 +790,22 @@ l1oip_socket_close(struct l1oip *hc)
 static int
 l1oip_socket_open(struct l1oip *hc)
 {
-	struct task_struct *t;
-
 	/* in case of reopen, we need to close first */
 	l1oip_socket_close(hc);
 
 	init_completion(&hc->socket_complete);
 
 	/* create receive process */
-	t = kthread_run(l1oip_socket_thread, hc, "l1oip_%s", hc->name);
-	if (IS_ERR(t)) {
-		printk(KERN_ERR "%s: Failed to create socket process.\n",
-			__func__);
+	hc->socket_thread = kthread_run(l1oip_socket_thread, hc, "l1oip_%s",
+		hc->name);
+	if (IS_ERR(hc->socket_thread)) {
+		int err = PTR_ERR(hc->socket_thread);
+		printk(KERN_ERR "%s: Failed (%d) to create socket process.\n",
+			__func__, err);
+		hc->socket_thread = NULL;
 		sock_release(hc->socket);
-		return PTR_ERR(t);
-	} else
-		hc->socket_pid = t->pid;
+		return err;
+	}
 	if (debug & DEBUG_L1OIP_SOCKET)
 		printk(KERN_DEBUG "%s: socket thread created\n", __func__);
 
@@ -952,7 +948,7 @@ channel_dctrl(struct dchannel *dch, struct mISDN_ctrl_req *cq)
 		break;
 	case MISDN_CTRL_SETPEER:
 		hc->remoteip = (u32)cq->p1;
-		hc->remoteport = cq->p2 | 0xffff;
+		hc->remoteport = cq->p2 & 0xffff;
 		hc->localport = cq->p2 >> 16;
 		if (!hc->remoteport)
 			hc->remoteport = hc->localport;
@@ -1010,8 +1006,7 @@ open_bchannel(struct l1oip *hc, struct dchannel *dch, struct channel_req *rq)
 	struct bchannel	*bch;
 	int		ch;
 
-	if (!test_bit(rq->adr.channel & 0x1f,
-		&dch->dev.channelmap[rq->adr.channel >> 5]))
+	if (!test_channelmap(rq->adr.channel, dch->dev.channelmap))
 		return -EINVAL;
 	if (rq->protocol == ISDN_P_NONE)
 		return -EINVAL;
@@ -1250,7 +1245,7 @@ release_card(struct l1oip *hc)
 	if (timer_pending(&hc->timeout_tl))
 		del_timer(&hc->timeout_tl);
 
-	if (hc->socket_pid)
+	if (hc->socket_thread)
 		l1oip_socket_close(hc);
 
 	if (hc->registered && hc->chan[hc->d_idx].dch)
@@ -1416,8 +1411,7 @@ init_card(struct l1oip *hc, int pri, int bundle)
 		bch->ch.nr = i + ch;
 		list_add(&bch->ch.list, &dch->dev.bchannels);
 		hc->chan[i + ch].bch = bch;
-		test_and_set_bit(bch->nr & 0x1f,
-			&dch->dev.channelmap[bch->nr >> 5]);
+		set_channelmap(bch->nr, dch->dev.channelmap);
 	}
 	ret = mISDN_register_device(&dch->dev, hc->name);
 	if (ret)
@@ -1517,10 +1511,6 @@ l1oip_init(void)
 	return 0;
 }
 
-
-
-#ifdef MODULE
 module_init(l1oip_init);
 module_exit(l1oip_cleanup);
-#endif
 

@@ -2,7 +2,7 @@
  *
  * Author	Karsten Keil <kkeil@novell.com>
  *
- * Copyright 2007  by Karsten Keil <kkeil@novell.com>
+ * Copyright 2008  by Karsten Keil <kkeil@novell.com>
  *
  * This code is free software; you can redistribute it and/or modify
  * it under the terms of the GNU LESSER GENERAL PUBLIC LICENSE
@@ -37,7 +37,7 @@
  */
 #define	MISDN_MAJOR_VERSION	1
 #define	MISDN_MINOR_VERSION	0
-#define MISDN_RELEASE		16
+#define MISDN_RELEASE		19
 
 /* primitives for information exchange
  * generell format
@@ -242,7 +242,8 @@ struct mISDNhead {
 #define TEI_SAPI		63
 #define CTRL_SAPI		0
 
-#define MISDN_CHMAP_SIZE	4
+#define MISDN_MAX_CHANNEL	127
+#define MISDN_CHMAP_SIZE	((MISDN_MAX_CHANNEL + 1) >> 3)
 
 /* socket */
 #ifndef	AF_ISDN
@@ -281,10 +282,31 @@ struct mISDN_devinfo {
 	u_int			Dprotocols;
 	u_int			Bprotocols;
 	u_int			protocol;
-	u_long			channelmap[MISDN_CHMAP_SIZE];
+	u_char			channelmap[MISDN_CHMAP_SIZE];
 	u_int			nrbchan;
 	char			name[MISDN_MAX_IDLEN];
 };
+
+static inline int
+test_channelmap(u_int nr, u_char *map)
+{
+	if (nr <= MISDN_MAX_CHANNEL)
+		return map[nr >> 3] & (1 << (nr & 7));
+	else
+		return 0;
+}
+
+static inline void
+set_channelmap(u_int nr, u_char *map)
+{
+	map[nr >> 3] |= (1 << (nr & 7));
+}
+
+static inline void
+clear_channelmap(u_int nr, u_char *map)
+{
+	map[nr >> 3] &= ~(1 << (nr & 7));
+}
 
 /* CONTROL_CHANNEL parameters */
 #define MISDN_CTRL_GETOP		0x0000
@@ -413,10 +435,10 @@ struct mISDNdevice {
 	u_int			Dprotocols;
 	u_int			Bprotocols;
 	u_int			nrbchan;
-	u_long			channelmap[MISDN_CHMAP_SIZE];
+	u_char			channelmap[MISDN_CHMAP_SIZE];
 	struct list_head	bchannels;
 	struct mISDNchannel	*teimgr;
-	struct class_device	class_dev;
+	struct device		dev;
 };
 
 struct mISDNstack {
@@ -438,7 +460,7 @@ struct mISDNstack {
 #endif
 };
 
-/* global alloc/queue dunctions */
+/* global alloc/queue functions */
 
 static inline struct sk_buff *
 mI_alloc_skb(unsigned int len, gfp_t gfp_mask)
