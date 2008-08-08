@@ -5,7 +5,6 @@
 #ifndef __HFCS_USB_H__
 #define __HFCS_USB_H__
 
-
 /*
  * additional Hardware specific DEBUG flags for module
  * parameter debug=x
@@ -16,9 +15,13 @@
  */
 #define DBG_HFC_URB_INFO	0x00010000
 #define DBG_HFC_URB_ERROR	0x00020000
-#define DBG_HFC_CALL_TRACE	0x20000000
+#define DBG_HFC_CALL_TRACE	0x10000000
+#define DBG_HFC_DCHANNEL	0x20000000
 #define DBG_HFC_FIFO_VERBOSE	0x40000000
 #define DBG_HFC_USB_VERBOSE	0x80000000
+
+
+#define DRIVER_NAME "HFC-S USB"
 
 /*
  * when ISO URB completes with -EXDEV, have a look
@@ -179,6 +182,11 @@ symbolic(struct hfcusb_symbolic_list list[], const int num)
 #define EP_BLK 4		// Bulk endpoint mandatory at this position
 #define EP_INT 5		// Interrupt endpoint mandatory at this position
 
+#define HFC_CHAN_D	0
+#define HFC_CHAN_B1	1
+#define HFC_CHAN_B2	2
+#define HFC_CHAN_E	3
+
 
 /*
  * List of all supported enpoints configiration sets, used to find the
@@ -260,7 +268,7 @@ typedef struct iso_urb_struct {
 typedef struct usb_fifo {
 	int fifonum;		/* fifo index attached to this structure */
 	int active;		/* fifo is currently active */
-	struct _hfcsusb_t *card;	/* pointer to main structure */
+	struct _hfcsusb_t *hw;	/* pointer to main structure */
 	int pipe;		/* address of endpoint */
 	__u8 usb_packet_maxlen;	/* maximum length for usb transfer */
 	unsigned int max_size;	/* maximum size of receive/send packet */
@@ -273,7 +281,7 @@ typedef struct usb_fifo {
 	iso_urb_struct iso[2];	/* need two urbs to have one always for pending */
 
 	struct dchannel * dch;	/* link to hfcsusb_t->dch, NULL if Fifos is bch */
-	struct dchannel * bch;	/* link to hfcsusb_t->bch, NULL if Fifos is dch */
+	struct bchannel * bch;	/* link to hfcsusb_t->bch, NULL if Fifos is dch */
 	int last_urblen;	/* remember length of last packet */
 } usb_fifo;
 
@@ -310,6 +318,7 @@ typedef struct _hfcsusb_t {
 	__u8			portmode;	/* TE ?, NT ?, NT Timer runnning? */
 	int			nt_timer;
 	__u8			initdone;
+	int			tn;		/* iterative number of each TA */
 } hfcsusb_t;
 
 /* private vendor specific data */
@@ -318,6 +327,7 @@ typedef struct {
 	signed short	led_bits[8];	// array of 8 possible LED bitmask settings
 	char		*vend_name;	// device name
 } hfcsusb_vdata;
+
 
 /* supported devices */
 static struct usb_device_id hfcsusb_idtab[] = {
@@ -391,6 +401,5 @@ static struct usb_device_id hfcsusb_idtab[] = {
 };
 
 MODULE_DEVICE_TABLE(usb, hfcsusb_idtab);
-
 
 #endif	/* __HFCS_USB_H__ */
