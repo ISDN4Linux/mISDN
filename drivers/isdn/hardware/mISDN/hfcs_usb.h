@@ -5,6 +5,7 @@
 #ifndef __HFCS_USB_H__
 #define __HFCS_USB_H__
 
+
 /*
  * additional Hardware specific DEBUG flags for module
  * parameter debug=x
