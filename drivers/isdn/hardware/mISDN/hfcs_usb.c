@@ -28,10 +28,9 @@
 #include <linux/isdn_compat.h>
 #include "hfcs_usb.h"
 
-const char *hfcsusb_rev = "Revision: 2.1 ALPHA (socket), 2008-08-12";
+const char *hfcsusb_rev = "Revision: 0.2.1 (socket), 2008-08-13";
 
 static int debug = 0;
-static int poll = 128;
 
 static LIST_HEAD(HFClist);
 static rwlock_t HFClock = RW_LOCK_UNLOCKED;
@@ -206,9 +205,7 @@ handle_led(hfcsusb_t * hw, int event)
 
 	if (hw->led_state != tmpled)
 		write_usb(hw, HFCUSB_P_DATA, hw->led_state);
-
 }
-
 
 /*
  * Layer2 -> Layer 1 Bchannel data
@@ -220,39 +217,41 @@ hfcusb_l2l1B(struct mISDNchannel *ch, struct sk_buff *skb)
 	hfcsusb_t		*hw = bch->hw;
 	int			ret = -EINVAL;
 	struct mISDNhead	*hh = mISDN_HEAD_P(skb);
-	u_long			flags;
 
 	if (debug & DBG_HFC_CALL_TRACE)
 		printk (KERN_INFO DRIVER_NAME ": %s\n",
 		        __FUNCTION__);
 
 	switch (hh->prim) {
-	case PH_DATA_REQ:
-		spin_lock_irqsave(&hw->lock, flags);
-		ret = bchannel_senddata(bch, skb);
-		if (ret > 0) {
-			spin_unlock_irqrestore(&hw->lock, flags);
-			queue_ch_frame(ch, PH_DATA_CNF, hh->id, NULL);
+		case PH_DATA_REQ:
+			ret = bchannel_senddata(bch, skb);
+			if (debug & DBG_HFC_CALL_TRACE)
+				printk (KERN_INFO DRIVER_NAME
+				        ": %s PH_DATA_REQ ret(%i)\n",
+					__FUNCTION__, ret);
+			if (ret > 0) {
+				if (!test_bit(FLG_TRANSPARENT, &bch->Flags))
+					queue_ch_frame(ch, PH_DATA_CNF,
+				        hh->id, NULL);
+				ret = 0;
+			}
+			return ret;
+		case PH_ACTIVATE_REQ:
+			if (!test_and_set_bit(FLG_ACTIVE, &bch->Flags)) {
+				hfcsusb_start_endpoint(hw, bch->nr);
+				ret = hfcsusb_setup_bch(bch, ch->protocol);
+			} else
+				ret = 0;
+			if (!ret)
+				_queue_data(ch, PH_ACTIVATE_IND, MISDN_ID_ANY,
+				            0, NULL, GFP_KERNEL);
+			break;
+		case PH_DEACTIVATE_REQ:
+			deactivate_bchannel(bch);
+			_queue_data(ch, PH_DEACTIVATE_IND, MISDN_ID_ANY,
+			            0, NULL, GFP_KERNEL);
 			ret = 0;
-		} else
-			spin_unlock_irqrestore(&hw->lock, flags);
-		return ret;
-	case PH_ACTIVATE_REQ:
-		spin_lock_irqsave(&hw->lock, flags);
-		if (!test_and_set_bit(FLG_ACTIVE, &bch->Flags)) {
-			hfcsusb_start_endpoint(hw, bch->nr);
-			ret = hfcsusb_setup_bch(bch, ch->protocol);
-		} else
-			ret = 0;
-		spin_unlock_irqrestore(&hw->lock, flags);
-		if (!ret)
-			_queue_data(ch, PH_ACTIVATE_IND, MISDN_ID_ANY, 0, NULL, GFP_KERNEL);
-		break;
-	case PH_DEACTIVATE_REQ:
-		deactivate_bchannel(bch);
-		_queue_data(ch, PH_DEACTIVATE_IND, MISDN_ID_ANY, 0, NULL, GFP_KERNEL);
-		ret = 0;
-		break;
+			break;
 	}
 	if (!ret)
 		dev_kfree_skb(skb);
@@ -292,17 +291,28 @@ hfcusb_l2l1D(struct mISDNchannel *ch, struct sk_buff *skb)
 			if (debug & DBG_HFC_CALL_TRACE)
 				printk (KERN_INFO DRIVER_NAME ": %s: PH_ACTIVATE_REQ\n",
 		        		__FUNCTION__);
-			hfcsusb_ph_command(hw, HFC_L1_ACTIVATE_TE);
+
+			if (hw->portmode == ISDN_P_NT_S0) {
+				// TODO mbachem NT mode
+			} else {
+				hfcsusb_ph_command(hw, HFC_L1_ACTIVATE_TE);
+				ret = l1_event(dch->l1, hh->prim);
+			}
 			break;
 
 		case PH_DEACTIVATE_REQ:
 			if (debug & DBG_HFC_CALL_TRACE)
 				printk (KERN_INFO DRIVER_NAME ": %s: PH_DEACTIVATE_REQ\n",
 		        		__FUNCTION__);
+			test_and_clear_bit(FLG_L2_ACTIVATED, &dch->Flags);
+			if (hw->portmode == ISDN_P_NT_S0) {
+				// TODO mbachem NT mode
+			} else {
+				ret = l1_event(dch->l1, hh->prim);
+			}
 			break;
 	}
 
-	// TODO mbachem
 	return ret;
 }
 
@@ -339,7 +349,6 @@ hfc_l1callback(struct dchannel *dch, u_int cmd)
 			break;
 		case PH_DEACTIVATE_IND:
 			printk(KERN_INFO "PH_DEACTIVATE_IND\n");
-
 			break;
 		default:
 			if (dch->debug & DEBUG_HW)
@@ -490,7 +499,9 @@ hfc_dctrl(struct mISDNchannel *ch, u_int cmd, void *arg)
 	return err;
 }
 
-/* S0 TE state change event handler */
+/*
+ * S0 TE state change event handler
+ */
 static void
 ph_state_te(struct dchannel * dch)
 {
@@ -620,17 +631,17 @@ hfcsusb_setup_bch(struct bchannel *bch, int protocol)
 		/* reset fifo */
 		queued_Write_hfc(hw, HFCUSB_INC_RES_F, 2);
 
-		sctrl = 0x40 + ((hw->portmode & ISDN_P_TE_S0)?0x00:0x04);
+		sctrl = 0x40 + ((hw->portmode == ISDN_P_TE_S0)?0x00:0x04);
 		sctrl_r = 0x0;
 
-		if (hw->bch[0].state) {
-			sctrl |= ((hw->bch[0].nr)?2:1);
-			sctrl_r |= ((hw->bch[0].nr)?2:1);
+		if (test_bit(FLG_ACTIVE, &hw->bch[0].Flags)) {
+			sctrl |= 1;
+			sctrl_r |= 1;
 		}
 
-		if (hw->bch[1].state) {
-			sctrl |= ((hw->bch[1].nr)?2:1);
-			sctrl_r |= ((hw->bch[1].nr)?2:1);
+		if (test_bit(FLG_ACTIVE, &hw->bch[1].Flags)) {
+			sctrl |= 2;
+			sctrl_r |= 2;
 		}
 
 		/*
@@ -818,11 +829,8 @@ hfcsusb_rx_frame(usb_fifo * fifo, __u8 * data, unsigned int len, int finish)
 			}
 		}
 	} else {
-		if (finish || rx_skb->len >= poll) {
-			/* deliver transparent data to layer2 */
-			// TODO mbachem: ask jolly for transparent flow control
-			recv_Bchannel(fifo->bch);
-		}
+		/* deliver transparent data to layer2 */
+		recv_Bchannel(fifo->bch);
 	}
 }
 
@@ -1259,15 +1267,15 @@ tx_iso_complete(struct urb *urb)
 					printk("\n");
 				}
 
+				if (fifo->bch && test_bit(FLG_TRANSPARENT, &fifo->bch->Flags))
+					confirm_Bsend(fifo->bch);
+
 				dev_kfree_skb(tx_skb);
 				tx_skb = NULL;
-				if ((fifo->dch) && (get_next_dframe(fifo->dch))) {
+				if ((fifo->dch) && (get_next_dframe(fifo->dch)))
 					tx_skb = fifo->dch->tx_skb;
-				}
-				else if ((fifo->bch) && (get_next_bframe(fifo->bch))) {
+				else if ((fifo->bch) && (get_next_bframe(fifo->bch)))
 					tx_skb = fifo->bch->tx_skb;
-					hdlc = test_bit(FLG_HDLC, &fifo->bch->Flags);
-				}
 			}
 		}
 		errcode = usb_submit_urb(urb, GFP_ATOMIC);
