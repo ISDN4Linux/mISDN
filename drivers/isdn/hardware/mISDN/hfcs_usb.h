@@ -98,10 +98,6 @@
 #define HFCUSB_PCM_RX		7
 
 
-/*
- * used to switch snd_transfer_mode for different TA modes e.g. the Billion USB TA just
- * supports ISO out, while the Cologne Chip EVAL TA just supports BULK out
- */
 #define USB_INT		0
 #define USB_BULK	1
 #define USB_ISOC	2
@@ -128,6 +124,7 @@ static int iso_packets[8] =
 #define write_usb(a,b,c)usb_control_msg((a)->dev,(a)->ctrl_out_pipe,0,0x40,(c),(b),0,0,HFC_CTRL_TIMEOUT)
 #define read_usb(a,b,c) usb_control_msg((a)->dev,(a)->ctrl_in_pipe,1,0xC0,0,(b),(c),1,HFC_CTRL_TIMEOUT)
 #define HFC_CTRL_BUFSIZE 32
+
 typedef struct {
 	__u8 hfcs_reg;		/* register number */
 	__u8 reg_val;		/* value to be written (or read) */
@@ -176,11 +173,11 @@ symbolic(struct hfcusb_symbolic_list list[], const int num)
 #define CNF_4ISO3ISO	3	// 4 ISO IN, 3 ISO OUT
 #define CNF_3ISO3ISO	4	// 3 ISO IN, 3 ISO OUT
 
-#define EP_NUL 1		// Endpoint at this position not allowed
-#define EP_NOP 2		// all type of endpoints allowed at this position
-#define EP_ISO 3		// Isochron endpoint mandatory at this position
-#define EP_BLK 4		// Bulk endpoint mandatory at this position
-#define EP_INT 5		// Interrupt endpoint mandatory at this position
+#define EP_NUL 1	// Endpoint at this position not allowed
+#define EP_NOP 2	// all type of endpoints allowed at this position
+#define EP_ISO 3	// Isochron endpoint mandatory at this position
+#define EP_BLK 4	// Bulk endpoint mandatory at this position
+#define EP_INT 5	// Interrupt endpoint mandatory at this position
 
 #define HFC_CHAN_D	0
 #define HFC_CHAN_B1	1
@@ -211,7 +208,7 @@ validconf[][19] = {
 	{EP_NUL, EP_NUL, EP_NUL, EP_NUL, EP_NUL, EP_NUL, EP_NUL, EP_NUL,
 	 EP_ISO, EP_ISO, EP_ISO, EP_ISO, EP_ISO, EP_ISO, EP_NUL, EP_NUL,
 	 CNF_3ISO3ISO, 2, 0},
-	{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}	// EOL element
+	{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0} // EOL element
 };
 
 /* string description of chosen config */
@@ -252,16 +249,12 @@ struct usb_fifo;
 /* structure defining input+output fifos (interrupt/bulk mode) */
 typedef struct iso_urb_struct {
 	struct urb *purb;
-	__u8 buffer[ISO_BUFFER_SIZE];	/* buffer incoming/outgoing USB URB data */
+	__u8 buffer[ISO_BUFFER_SIZE];	/* buffer rx/tx USB URB data */
 	struct usb_fifo *owner_fifo;	/* pointer to owner fifo */
 	__u8 indx; // Fifos's ISO double buffer 0 or 1 ?
 #ifdef ISO_FRAME_START_DEBUG
 	int start_frames[ISO_FRAME_START_RING_COUNT];
 	__u8 iso_frm_strt_pos; // index in start_frame[]
-#endif
-#ifdef HFCUSB_ISO_RESURRECTION
-	struct timer_list timer;
-	int iso_res_cnt;
 #endif
 } iso_urb_struct;
 
@@ -277,11 +270,11 @@ typedef struct usb_fifo {
 	__u8 buffer[128];	/* buffer USB INT OUT URB data */
 	int bit_line;		/* how much bits are in the fifo? */
 
-	volatile __u8 usb_transfer_mode;	/* switched between ISO and INT */
-	iso_urb_struct iso[2];	/* need two urbs to have one always for pending */
+	volatile __u8 usb_transfer_mode; /* switched between ISO and INT */
+	iso_urb_struct iso[2]; /* two urbs to have one always one pending */
 
-	struct dchannel * dch;	/* link to hfcsusb_t->dch, NULL if Fifos is bch */
-	struct bchannel * bch;	/* link to hfcsusb_t->bch, NULL if Fifos is dch */
+	struct dchannel * dch;	/* link to hfcsusb_t->dch, 0 if Fifos is bch */
+	struct bchannel * bch;	/* link to hfcsusb_t->bch, 0 if Fifos is dch */
 	int last_urblen;	/* remember length of last packet */
 } usb_fifo;
 
@@ -298,36 +291,59 @@ typedef struct _hfcsusb_t {
 	int			vend_idx;	/* index in hfcsusb_idtab */
 	int			packet_size;
 	int			iso_packet_size;
-	int			disc_flag;	/* 1 if device was disonnected to avoid some USB actions */
-	usb_fifo		fifos[HFCUSB_NUM_FIFOS];	/* structure holding all fifo data */
+	int			disc_flag;	/* usb device disconnected */
+	usb_fifo		fifos[HFCUSB_NUM_FIFOS];
 
 	/* control pipe background handling */
-	ctrl_buft		ctrl_buff[HFC_CTRL_BUFSIZE];	/* buffer holding queued data */
-	volatile int		ctrl_in_idx, ctrl_out_idx, ctrl_cnt;	/* input/output pointer + count */
-	struct urb		*ctrl_urb;	/* transfer structure for control channel */
-	struct usb_ctrlrequest	ctrl_write;	/* buffer for control write request */
-	struct usb_ctrlrequest	ctrl_read;	/* same for read request */
-	int			ctrl_paksize;	/* control pipe packet size */
-	int			ctrl_in_pipe, ctrl_out_pipe;	/* handles for control pipe */
-	spinlock_t		ctrl_lock;	/* queueing ctrl urbs needs to be locked */
+	ctrl_buft		ctrl_buff[HFC_CTRL_BUFSIZE];
+	volatile int		ctrl_in_idx, ctrl_out_idx, ctrl_cnt;
+	struct urb		*ctrl_urb;
+	struct usb_ctrlrequest	ctrl_write;
+	struct usb_ctrlrequest	ctrl_read;
+	int			ctrl_paksize;
+	int			ctrl_in_pipe, ctrl_out_pipe;
+	spinlock_t		ctrl_lock;
 	spinlock_t              lock;
 
-	volatile __u8		threshold_mask;	/* threshold in fifo flow control */
+	volatile __u8		threshold_mask;
 	__u8			led_state;
 
-	__u8			portmode;	/* TE ?, NT ?, NT Timer runnning? */
+	__u8			portmode;
 	int			nt_timer;
 	__u8			initdone;
-	int			tn;		/* iterative number of each TA */
+	int			tn; /* iterative number of each TA */
 } hfcsusb_t;
 
 /* private vendor specific data */
 typedef struct {
-	__u8		led_scheme;	// led display scheme
-	signed short	led_bits[8];	// array of 8 possible LED bitmask settings
-	char		*vend_name;	// device name
+	__u8		led_scheme;  // led display scheme
+	signed short	led_bits[8]; // array of 8 possible LED bitmask settings
+	char		*vend_name;  // device name
 } hfcsusb_vdata;
 
+
+#define HFC_MAX_TE_LAYER1_STATE 8
+#define HFC_MAX_NT_LAYER1_STATE 4
+
+const char *HFC_TE_LAYER1_STATES[HFC_MAX_TE_LAYER1_STATE + 1] = {
+	"TE F0 - Reset",
+	"TE F1 - Reset",
+	"TE F2 - Sensing",
+	"TE F3 - Deactivated",
+	"TE F4 - Awaiting signal",
+	"TE F5 - Identifying input",
+	"TE F6 - Synchronized",
+	"TE F7 - Activated"
+	"TE F8 - Lost framing",
+};
+
+const char *HFC_NT_LAYER1_STATES[HFC_MAX_NT_LAYER1_STATE + 1] = {
+	"NT G0 - Reset",
+	"NT G1 - Deactive",
+	"NT G2 - Pending activation",
+	"NT G3 - Active",
+	"NT G4 - Pending deactivation",
+};
 
 /* supported devices */
 static struct usb_device_id hfcsusb_idtab[] = {
