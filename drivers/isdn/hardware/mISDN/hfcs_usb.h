@@ -333,7 +333,7 @@ const char *HFC_TE_LAYER1_STATES[HFC_MAX_TE_LAYER1_STATE + 1] = {
 	"TE F4 - Awaiting signal",
 	"TE F5 - Identifying input",
 	"TE F6 - Synchronized",
-	"TE F7 - Activated"
+	"TE F7 - Activated",
 	"TE F8 - Lost framing",
 };
 

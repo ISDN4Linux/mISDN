@@ -373,7 +373,6 @@ hfc_l1callback(struct dchannel *dch, u_int cmd)
 			test_and_clear_bit(FLG_TX_BUSY, &dch->Flags);
 			break;
 		case PH_ACTIVATE_IND:
-			printk(KERN_INFO "PH_ACTIVATE_IND\n");
 			test_and_clear_bit(FLG_ACTIVE, &dch->Flags);
 			_queue_data(&dch->dev.D, cmd, MISDN_ID_ANY, 0, NULL,
 			    GFP_ATOMIC);
@@ -519,6 +518,7 @@ hfc_dctrl(struct mISDNchannel *ch, u_int cmd, void *arg)
 				    ": %s: dev(%d) close from %p\n",
 				    __FUNCTION__, hw->dch.dev.id,
 				    __builtin_return_address(0));
+			handle_led(hw, LED_POWER_ON);
 			hfcsusb_stop_endpoint(hw, HFC_CHAN_D);
 			module_put(THIS_MODULE);
 			break;
@@ -673,8 +673,8 @@ hfcsusb_setup_bch(struct bchannel *bch, int protocol)
 			if (bch->state == ISDN_P_NONE)
 				return (0); /* already in idle state */
 			bch->state = ISDN_P_NONE;
-			test_and_clear_bit(FLG_HDLC, &bch->Flags);
-			test_and_clear_bit(FLG_TRANSPARENT, &bch->Flags);
+			clear_bit(FLG_HDLC, &bch->Flags);
+			clear_bit(FLG_TRANSPARENT, &bch->Flags);
 			break;
 		case (ISDN_P_B_RAW):
 			conhdlc |= 2;
@@ -1793,11 +1793,10 @@ deactivate_bchannel(struct bchannel *bch)
 		bch->rx_skb = NULL;
 	}
 
+	clear_bit(FLG_ACTIVE, &bch->Flags);
+	clear_bit(FLG_TX_BUSY, &bch->Flags);
 	hfcsusb_setup_bch(bch, ISDN_P_NONE);
 	hfcsusb_stop_endpoint(hw, bch->nr);
-
-	test_and_clear_bit(FLG_ACTIVE, &bch->Flags);
-	test_and_clear_bit(FLG_TX_BUSY, &bch->Flags);
 }
 
 /*
