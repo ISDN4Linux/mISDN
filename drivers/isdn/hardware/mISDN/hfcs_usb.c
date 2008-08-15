@@ -1718,7 +1718,7 @@ release_hw(hfcsusb_t * hw)
 {
 	int	i;
 
-	if (debug & DEBUG_HW)
+	if (debug & DBG_HFC_CALL_TRACE)
 		printk (KERN_INFO DRIVER_NAME ": %s\n", __FUNCTION__);
 
 	/* tell all fifos to terminate */
@@ -1759,9 +1759,9 @@ release_hw(hfcsusb_t * hw)
 	hfcsusb_cnt--;
 	if (hw->intf)
 		usb_set_intfdata(hw->intf, NULL);
-
 	list_del(&hw->list);
 	kfree(hw);
+	hw = NULL;
 }
 
 static void
@@ -2088,10 +2088,11 @@ hfcsusb_probe(struct usb_interface *intf, const struct usb_device_id *id)
 		driver_info->vend_name, conf_str[small_match],
 		ifnum, alt_used);
 
-	hw->intf = intf;
-	if (setup_instance(hw)) {
+	if (setup_instance(hw))
 		return (-EIO);
-	}
+
+	hw->intf = intf;
+	usb_set_intfdata(hw->intf, hw);
 	return (0);
 }
 
@@ -2099,8 +2100,15 @@ hfcsusb_probe(struct usb_interface *intf, const struct usb_device_id *id)
 static void
 hfcsusb_disconnect(struct usb_interface *intf)
 {
+	hfcsusb_t * hw = usb_get_intfdata(intf);
+	
 	if (debug & DBG_HFC_CALL_TRACE)
-		printk(KERN_INFO DRIVER_NAME ": %s\n", __FUNCTION__);
+		printk(KERN_INFO DRIVER_NAME ": %s hw(%p)\n",
+		    __FUNCTION__, hw);
+
+	handle_led(hw, LED_POWER_OFF);
+	release_hw(hw);
+
 	usb_set_intfdata(intf, NULL);
 }
 
@@ -2129,20 +2137,8 @@ hfcsusb_init(void)
 static void __exit
 hfcsusb_cleanup(void)
 {
-	u_long flags;
-	hfcsusb_t *hw, *next;
-
 	if (debug & DBG_HFC_CALL_TRACE)
 		printk(KERN_INFO DRIVER_NAME ": %s\n", __FUNCTION__);
-
-	write_lock_irqsave(&HFClock, flags);
-	list_for_each_entry_safe(hw, next, &HFClist, list) {
-		handle_led(hw, LED_POWER_OFF);
-	}
-	list_for_each_entry_safe(hw, next, &HFClist, list) {
-		release_hw(hw);
-	}
-	write_unlock_irqrestore(&HFClock, flags);
 
 	/* unregister Hardware */
 	usb_deregister(&hfcsusb_drv);	/* release our driver */
