@@ -28,7 +28,7 @@
 #include <linux/isdn_compat.h>
 #include "hfcs_usb.h"
 
-const char *hfcsusb_rev = "Revision: 0.2.2 (socket), 2008-08-14";
+const char *hfcsusb_rev = "Revision: 0.2.3 (socket), 2008-08-15";
 
 static int debug = 0;
 
@@ -92,8 +92,8 @@ queued_Write_hfc(hfcsusb_t * hw, __u8 reg, __u8 val)
 	ctrl_buft *buf;
 
 	if (debug & DBG_HFC_CALL_TRACE)
-		printk (KERN_INFO DRIVER_NAME ": %s\n",
-		        __FUNCTION__);
+		printk (KERN_INFO DRIVER_NAME ": %s reg(0x%02x) val(0x%02x)\n",
+		        __FUNCTION__, reg, val);
 
 	spin_lock(&hw->ctrl_lock);
 	if (hw->ctrl_cnt >= HFC_CTRL_BUFSIZE)
@@ -136,9 +136,6 @@ ctrl_complete(struct urb *urb)
 static void
 set_led_bit(hfcsusb_t * hw, signed short led_bits, int set_on)
 {
-	if (debug & DBG_HFC_CALL_TRACE)
-		printk (KERN_INFO DRIVER_NAME ": %s\n", __FUNCTION__);
-
 	if (set_on) {
 		if (led_bits < 0)
 			hw->led_state &= ~abs(led_bits);
@@ -159,9 +156,6 @@ handle_led(hfcsusb_t * hw, int event)
 	hfcsusb_vdata *driver_info =
 	    (hfcsusb_vdata *) hfcsusb_idtab[hw->vend_idx].driver_info;
 	__u8 tmpled;
-
-	if (debug & DBG_HFC_CALL_TRACE)
-		printk (KERN_INFO DRIVER_NAME ": %s\n", __FUNCTION__);
 
 	if (driver_info->led_scheme == LED_OFF) {
 		return;
@@ -201,8 +195,14 @@ handle_led(hfcsusb_t * hw, int event)
 			break;
 	}
 
-	if (hw->led_state != tmpled)
+	if (hw->led_state != tmpled) {
+		if (debug & DBG_HFC_CALL_TRACE)
+			printk (KERN_INFO DRIVER_NAME
+			    ": %s reg(0x%02x) val(x%02x)\n",
+			    __FUNCTION__, HFCUSB_P_DATA, hw->led_state);
+
 		write_usb(hw, HFCUSB_P_DATA, hw->led_state);
+	}
 }
 
 /*
@@ -268,9 +268,6 @@ hfcusb_l2l1D(struct mISDNchannel *ch, struct sk_buff *skb)
 	hfcsusb_t		*hw = dch->hw;
 	int			ret = -EINVAL;
 
-	if (debug & DBG_HFC_CALL_TRACE)
-		printk (KERN_INFO DRIVER_NAME ": %s\n", __FUNCTION__);
-
 	switch (hh->prim) {
 		case PH_DATA_REQ:
 			if (debug & DBG_HFC_CALL_TRACE)
@@ -287,7 +284,8 @@ hfcusb_l2l1D(struct mISDNchannel *ch, struct sk_buff *skb)
 		case PH_ACTIVATE_REQ:
 			if (debug & DBG_HFC_CALL_TRACE)
 				printk (KERN_INFO DRIVER_NAME
-				    ": %s: PH_ACTIVATE_REQ\n", __FUNCTION__);
+				    ": %s: PH_ACTIVATE_REQ %s\n", __FUNCTION__,
+				    (hw->portmode == ISDN_P_NT_S0)?"NT":"TE");
 
 			if (hw->portmode == ISDN_P_NT_S0) {
 				ret = 0;
@@ -520,6 +518,8 @@ hfc_dctrl(struct mISDNchannel *ch, u_int cmd, void *arg)
 				    __builtin_return_address(0));
 			handle_led(hw, LED_POWER_ON);
 			hfcsusb_stop_endpoint(hw, HFC_CHAN_D);
+			clear_bit(FLG_ACTIVE, &hw->dch.Flags);
+			hw->dch.state = 0;
 			module_put(THIS_MODULE);
 			break;
 		case CONTROL_CHANNEL:
@@ -601,18 +601,18 @@ ph_state_nt(struct dchannel * dch)
 			test_and_clear_bit(FLG_ACTIVE, &dch->Flags);
 			test_and_clear_bit(FLG_L2_ACTIVATED, &dch->Flags);
 			hw->nt_timer = 0;
-			hw->portmode &= ~NT_ACTIVATION_TIMER;
+			hw->timers &= ~NT_ACTIVATION_TIMER;
 			handle_led(hw, LED_S0_OFF);
 			break;
 
 		case (2):
 			if (hw->nt_timer < 0) {
 				hw->nt_timer = 0;
-				hw->portmode &= ~NT_ACTIVATION_TIMER;
+				hw->timers &= ~NT_ACTIVATION_TIMER;
 				hfcsusb_ph_command(dch->hw,
 				    HFC_L1_DEACTIVATE_NT);
 			} else {
-				hw->portmode |= NT_ACTIVATION_TIMER;
+				hw->timers |= NT_ACTIVATION_TIMER;
 				hw->nt_timer = NT_T1_COUNT;
 				/* allow G2 -> G3 transition */
 				queued_Write_hfc(hw, HFCUSB_STATES,
@@ -621,7 +621,7 @@ ph_state_nt(struct dchannel * dch)
 			break;
 		case (3):
 			hw->nt_timer = 0;
-			hw->portmode &= ~NT_ACTIVATION_TIMER;
+			hw->timers &= ~NT_ACTIVATION_TIMER;
 			test_and_set_bit(FLG_ACTIVE, &dch->Flags);
 			_queue_data(&dch->dev.D, PH_ACTIVATE_IND,
 			    MISDN_ID_ANY, 0, NULL, GFP_ATOMIC);
@@ -629,7 +629,7 @@ ph_state_nt(struct dchannel * dch)
 			break;
 		case (4):
 			hw->nt_timer = 0;
-			hw->portmode &= ~NT_ACTIVATION_TIMER;
+			hw->timers &= ~NT_ACTIVATION_TIMER;
 			return;
 		default:
 			break;
@@ -971,8 +971,7 @@ rx_iso_complete(struct urb *urb)
 			buf = context_iso_urb->buffer + offset;
 			iso_status = urb->iso_frame_desc[k].status;
 
-			if ((iso_status && !hw->disc_flag) &&
-			    (debug & DBG_HFC_FIFO_VERBOSE)) {
+			if (iso_status && (debug & DBG_HFC_FIFO_VERBOSE)) {
 				printk(KERN_INFO
 				    DRIVER_NAME ": rx_iso_complete "
 				    "ISO packet %i, status: %i\n",
@@ -1037,13 +1036,11 @@ rx_iso_complete(struct urb *urb)
 				    "ISO URB: %d\n", errcode);
 		}
 	} else {
-		if (status && !hw->disc_flag) {
-			if (debug & DBG_HFC_URB_INFO)
-				printk(KERN_INFO
-				    DRIVER_NAME ": rx_iso_complete : "
-				    "urb->status %d, fifonum %d\n",
-				    status, fifon);
-		}
+		if (status && (debug & DBG_HFC_URB_INFO))
+			printk(KERN_INFO
+			    DRIVER_NAME ": rx_iso_complete : "
+			    "urb->status %d, fifonum %d\n",
+			    status, fifon);
 	}
 }
 
@@ -1305,20 +1302,18 @@ tx_iso_complete(struct urb *urb)
 		 * fifo->intervall (ms)
 		 */
 		if ((fifon == HFCUSB_D_TX) && (hw->portmode & ISDN_P_NT_S0)
-		    && (hw->portmode & NT_ACTIVATION_TIMER)) {
+		    && (hw->timers & NT_ACTIVATION_TIMER)) {
 			if ((--hw->nt_timer) < 0)
 				schedule_event(&hw->dch, FLG_PHCHANGE);
 		}
 
 	} else {
-		if (status && !hw->disc_flag) {
-			if (debug & DBG_HFC_URB_ERROR)
-				printk(KERN_INFO DRIVER_NAME 
-				    ": tx_iso_complete : urb->status %s (%i), "
-				    "fifonum=%d\n",
-				    symbolic(urb_errlist, status), status,
-				    fifon);
-		}
+		if (status && (debug & DBG_HFC_URB_ERROR)) 
+			printk(KERN_INFO DRIVER_NAME
+			    ": tx_iso_complete : urb->status %s (%i)"
+			    "fifonum=%d\n",
+			    symbolic(urb_errlist, status), status,
+			    fifon);
 	}
 }
 
@@ -1677,7 +1672,6 @@ setup_hfcsusb(hfcsusb_t * hw)
 	/* first set the needed config, interface and alternate */
 	err = usb_set_interface(hw->dev, hw->if_used, hw->alt_used);
 
-	hw->disc_flag = 0;
 	hw->led_state = 0;
 
 	/* init the background machinery for control requests */
@@ -2006,11 +2000,9 @@ hfcsusb_probe(struct usb_interface *intf, const struct usb_device_id *id)
 	}	/* (alt_idx < intf->num_altsetting) */
 
 	/* not found a valid USB Ta Endpoint config */
-	if (small_match == 0xffff) {
-		printk(KERN_WARNING DRIVER_NAME
-		       ": no valid endpoint found in USB descriptor\n");
+	if (small_match == 0xffff)
 		return (-EIO);
-	}
+
 	iface = iface_used;
 	hw = kzalloc(sizeof(hfcsusb_t), GFP_KERNEL);
 	if (!hw)
@@ -2107,19 +2099,8 @@ hfcsusb_probe(struct usb_interface *intf, const struct usb_device_id *id)
 static void
 hfcsusb_disconnect(struct usb_interface *intf)
 {
-	hfcsusb_t *hw = usb_get_intfdata(intf);
-
-	printk(KERN_INFO DRIVER_NAME ": device disconnect\n");
-	if (!hw) {
-		if (debug & 0x10000)
-			printk(KERN_INFO DRIVER_NAME "%i: %s : NO CONTEXT!\n",
-			       hw->tn, __FUNCTION__);
-		return;
-	}
-	if (debug & 0x10000)
+	if (debug & DBG_HFC_CALL_TRACE)
 		printk(KERN_INFO DRIVER_NAME ": %s\n", __FUNCTION__);
-	hw->disc_flag = 1;
-
 	usb_set_intfdata(intf, NULL);
 }
 
@@ -2151,7 +2132,7 @@ hfcsusb_cleanup(void)
 	u_long flags;
 	hfcsusb_t *hw, *next;
 
-	if (debug & 0x10000)
+	if (debug & DBG_HFC_CALL_TRACE)
 		printk(KERN_INFO DRIVER_NAME ": %s\n", __FUNCTION__);
 
 	write_lock_irqsave(&HFClock, flags);

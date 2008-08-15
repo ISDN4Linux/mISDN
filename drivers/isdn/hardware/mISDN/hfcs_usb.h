@@ -14,12 +14,11 @@
  *    G - for all drivers
  * G described at mISDNhw.h
  */
-#define DBG_HFC_URB_INFO	0x00010000
-#define DBG_HFC_URB_ERROR	0x00020000
-#define DBG_HFC_CALL_TRACE	0x10000000
-#define DBG_HFC_DCHANNEL	0x20000000
-#define DBG_HFC_FIFO_VERBOSE	0x40000000
-#define DBG_HFC_USB_VERBOSE	0x80000000
+#define DBG_HFC_CALL_TRACE	0x00010000
+#define DBG_HFC_FIFO_VERBOSE	0x00020000
+#define DBG_HFC_USB_VERBOSE	0x00100000
+#define DBG_HFC_URB_INFO	0x00200000
+#define DBG_HFC_URB_ERROR	0x00400000
 
 #define DRIVER_NAME "HFC-S USB"
 
@@ -39,10 +38,10 @@
 #define CLKDEL_NT		0x6c	/* CLKDEL in NT mode */
 
 /* hfcsusb Layer1 commands */
-#define HFC_L1_ACTIVATE_TE		0x01
-#define HFC_L1_ACTIVATE_NT		0x02
-#define HFC_L1_DEACTIVATE_NT		0x03
-#define HFC_L1_FORCE_DEACTIVATE_TE	0x04
+#define HFC_L1_ACTIVATE_TE		1
+#define HFC_L1_ACTIVATE_NT		2
+#define HFC_L1_DEACTIVATE_NT		3
+#define HFC_L1_FORCE_DEACTIVATE_TE	4
 
 /* cmd FLAGS in HFCUSB_STATES register */
 #define HFCUSB_LOAD_STATE	0x10
@@ -50,8 +49,8 @@
 #define HFCUSB_DO_ACTION	0x40
 #define HFCUSB_NT_G2_G3		0x80
 
-/* bits in hw_mode */
-#define NT_ACTIVATION_TIMER	0x04	/* enables NT mode activation Timer */
+/* timers */
+#define NT_ACTIVATION_TIMER	0x01	/* enables NT mode activation Timer */
 #define NT_T1_COUNT		10
 
 #define MAX_BCH_SIZE 		2048	/* allowed B-channel packet size */
@@ -291,7 +290,6 @@ typedef struct _hfcsusb_t {
 	int			vend_idx;	/* index in hfcsusb_idtab */
 	int			packet_size;
 	int			iso_packet_size;
-	int			disc_flag;	/* usb device disconnected */
 	usb_fifo		fifos[HFCUSB_NUM_FIFOS];
 
 	/* control pipe background handling */
@@ -310,6 +308,7 @@ typedef struct _hfcsusb_t {
 
 	__u8			portmode;
 	int			nt_timer;
+	__u8			timers;
 	__u8			initdone;
 	int			tn; /* iterative number of each TA */
 } hfcsusb_t;
