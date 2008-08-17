@@ -20,7 +20,7 @@
 #define DBG_HFC_URB_INFO	0x00200000
 #define DBG_HFC_URB_ERROR	0x00400000
 
-#define DRIVER_NAME "HFC-S USB"
+#define DRIVER_NAME "HFC-S_USB"
 
 /*
  * when ISO URB completes with -EXDEV, have a look
@@ -310,7 +310,7 @@ typedef struct _hfcsusb_t {
 	int			nt_timer;
 	__u8			timers;
 	__u8			initdone;
-	int			tn; /* iterative number of each TA */
+	char			name[MISDN_MAX_IDLEN];
 } hfcsusb_t;
 
 /* private vendor specific data */
