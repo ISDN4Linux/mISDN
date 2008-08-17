@@ -823,8 +823,6 @@ hfcsusb_rx_frame(usb_fifo * fifo, __u8 * data, unsigned int len, int finish)
 	}
 
 	if (!rx_skb) {
-		printk(KERN_INFO DRIVER_NAME ": %s: alloc new rx_skb\n",
-		    __FUNCTION__);
 		rx_skb = mI_alloc_skb(maxlen, GFP_ATOMIC);
 		if (rx_skb) {
 			if (fifo->dch)
@@ -1286,6 +1284,9 @@ tx_iso_complete(struct urb *urb)
 				else if (fifo->bch &&
 				    get_next_bframe(fifo->bch))
 					tx_skb = fifo->bch->tx_skb;
+
+				// tmp workaround, TODO MB !!!
+				tx_skb = NULL;
 			}
 		}
 		errcode = usb_submit_urb(urb, GFP_ATOMIC);
@@ -1845,7 +1846,6 @@ setup_instance(hfcsusb_t * hw)
 	spin_lock_init(&hw->lock);
 
 	hw->dch.debug = debug & 0xFFFF;
-	spin_lock_init(&hw->lock);
 	mISDN_initdchannel(&hw->dch, MAX_DFRAME_LEN_L1, ph_state);
 	hw->dch.hw = hw;
 	hw->dch.dev.Dprotocols = (1 << ISDN_P_TE_S0) | (1 << ISDN_P_NT_S0);
