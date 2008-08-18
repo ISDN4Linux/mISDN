@@ -28,7 +28,7 @@
 #include <linux/isdn_compat.h>
 #include "hfcs_usb.h"
 
-const char *hfcsusb_rev = "Revision: 0.2.3 (socket), 2008-08-15";
+const char *hfcsusb_rev = "Revision: 0.2.4 (socket), 2008-08-18";
 
 static int debug = 0;
 
@@ -157,9 +157,8 @@ handle_led(hfcsusb_t * hw, int event)
 	    (hfcsusb_vdata *) hfcsusb_idtab[hw->vend_idx].driver_info;
 	__u8 tmpled;
 
-	if (driver_info->led_scheme == LED_OFF) {
+	if (driver_info->led_scheme == LED_OFF)
 		return;
-	}
 	tmpled = hw->led_state;
 
 	switch (event) {
@@ -215,13 +214,16 @@ hfcusb_l2l1B(struct mISDNchannel *ch, struct sk_buff *skb)
 	hfcsusb_t		*hw = bch->hw;
 	int			ret = -EINVAL;
 	struct mISDNhead	*hh = mISDN_HEAD_P(skb);
+	u_long			flags;
 
 	if (debug & DBG_HFC_CALL_TRACE)
 		printk (KERN_DEBUG "%s: %s\n", hw->name, __func__);
 
 	switch (hh->prim) {
 		case PH_DATA_REQ:
+			spin_lock_irqsave(&hw->lock, flags);
 			ret = bchannel_senddata(bch, skb);
+			spin_unlock_irqrestore(&hw->lock, flags);
 			if (debug & DBG_HFC_CALL_TRACE)
 				printk (KERN_DEBUG
 				    "%s: %s PH_DATA_REQ ret(%i)\n",
@@ -266,6 +268,7 @@ hfcusb_l2l1D(struct mISDNchannel *ch, struct sk_buff *skb)
 	struct mISDNhead	*hh = mISDN_HEAD_P(skb);
 	hfcsusb_t		*hw = dch->hw;
 	int			ret = -EINVAL;
+	u_long			flags;
 
 	switch (hh->prim) {
 		case PH_DATA_REQ:
@@ -273,7 +276,9 @@ hfcusb_l2l1D(struct mISDNchannel *ch, struct sk_buff *skb)
 				printk (KERN_DEBUG "%s: %s: PH_DATA_REQ\n",
 				    hw->name, __func__);
 
+			spin_lock_irqsave(&hw->lock, flags);
 			ret = dchannel_senddata(dch, skb);
+			spin_unlock_irqrestore(&hw->lock, flags);
 			if (ret > 0) {
 				ret = 0;
 				queue_ch_frame(ch, PH_DATA_CNF, hh->id, NULL);
@@ -385,7 +390,7 @@ hfc_l1callback(struct dchannel *dch, u_int cmd)
 			break;
 		default:
 			if (dch->debug & DEBUG_HW)
-				printk(KERN_DEBUG "%s: %s: unknown command %x\n",
+				printk(KERN_DEBUG "%s: %s: unknown cmd %x\n",
 				    hw->name, __func__, cmd);
 			return -1;
 	}
@@ -947,10 +952,10 @@ rx_iso_complete(struct urb *urb)
 	__u8 *buf;
 	static __u8 eof[8];
 	__u8 s0_state;
+
 	fifon = fifo->fifonum;
 	status = urb->status;
-	s0_state = 0;
-
+	
 	/*
 	 * ISO transfer only partially completed,
 	 * look at individual frame status for details
@@ -965,6 +970,7 @@ rx_iso_complete(struct urb *urb)
 		status = 0;
 	}
 
+	s0_state = 0;
 	if (fifo->active && !status) {
 		num_isoc_packets = iso_packets[fifon];
 		maxlen = fifo->usb_packet_maxlen;
@@ -1127,6 +1133,7 @@ tx_iso_complete(struct urb *urb)
 	int frame_complete, fifon, status;
 	__u8 threshbit;
 
+	spin_lock(&hw->lock);
 	if (fifo->dch) {
 		tx_skb = fifo->dch->tx_skb;
 		tx_idx = &fifo->dch->tx_idx;
@@ -1140,6 +1147,7 @@ tx_iso_complete(struct urb *urb)
 	else {
 		printk(KERN_DEBUG "%s: %s: neither BCH nor DCH\n",
 		    hw->name, __func__);
+		spin_unlock(&hw->lock);
 		return;
 	}
 
@@ -1240,7 +1248,7 @@ tx_iso_complete(struct urb *urb)
 				if ((fifon == HFCUSB_D_RX) &&
 				    (debug & DBG_HFC_USB_VERBOSE)) {
 					printk (KERN_DEBUG
-					    "%s: %s (%d/%d) offset(%d) len(%d) ",
+					    "%s: %s (%d/%d) offs(%d) len(%d) ",
 					    hw->name, __func__,
 					    k, num_isoc_packets-1,
 					    urb->iso_frame_desc[k].offset,
@@ -1293,9 +1301,6 @@ tx_iso_complete(struct urb *urb)
 				else if (fifo->bch &&
 				    get_next_bframe(fifo->bch))
 					tx_skb = fifo->bch->tx_skb;
-
-				// tmp workaround, TODO MB !!!
-				tx_skb = NULL;
 			}
 		}
 		errcode = usb_submit_urb(urb, GFP_ATOMIC);
@@ -1324,6 +1329,7 @@ tx_iso_complete(struct urb *urb)
 			    hw->name, __func__,
 			    symbolic(urb_errlist, status), status, fifon);
 	}
+	spin_unlock(&hw->lock);
 }
 
 /*
@@ -1709,20 +1715,6 @@ setup_hfcsusb(hfcsusb_t * hw)
 		hw->fifos[i].active = 0;
 	}
 
-#ifdef TEST_LEDS
-	__u8 t;
-
-	// LED test toggle sequence: USB, S0, B1, B2
-	for (t=LED_POWER_ON; t<=LED_B2_OFF; t++) {
-		handle_led(hw, t);
-		set_current_state(TASK_UNINTERRUPTIBLE);
-		printk (KERN_INFO DRIVER_NAME 
-		    ": TEST_LED (%d) P_DATA: 0x%02x\n",
-		    t, hw->led_state);
-		schedule_timeout(2 * HZ);
-	}
-#endif
-
 	return (0);
 }
 
@@ -1763,7 +1755,6 @@ release_hw(hfcsusb_t * hw)
 	mISDN_freebchannel(&hw->bch[0]);
 	mISDN_freedchannel(&hw->dch);
 
-	/* wait for all URBS to terminate */
 	if (hw->ctrl_urb) {
 		usb_kill_urb(hw->ctrl_urb);
 		usb_free_urb(hw->ctrl_urb);
@@ -1856,8 +1847,8 @@ setup_instance(hfcsusb_t * hw)
 	spin_lock_init(&hw->ctrl_lock);
 	spin_lock_init(&hw->lock);
 
-	hw->dch.debug = debug & 0xFFFF;
 	mISDN_initdchannel(&hw->dch, MAX_DFRAME_LEN_L1, ph_state);
+	hw->dch.debug = debug & 0xFFFF;
 	hw->dch.hw = hw;
 	hw->dch.dev.Dprotocols = (1 << ISDN_P_TE_S0) | (1 << ISDN_P_NT_S0);
 	hw->dch.dev.Bprotocols = (1 << (ISDN_P_B_RAW & ISDN_P_B_MASK)) |
