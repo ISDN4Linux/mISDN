@@ -32,7 +32,6 @@
 #include <linux/module.h>
 #include <linux/delay.h>
 #include <linux/usb.h>
-#include <linux/pci.h>
 #include <linux/mISDNhw.h>
 #include <linux/isdn_compat.h>
 #include "hfcs_usb.h"
@@ -55,8 +54,6 @@ module_param(debug, uint, 0);
 module_param(poll, int, 0);
 #endif
 
-
-#define MAX_CARDS 8
 
 static int hfcsusb_cnt;
 
@@ -1935,7 +1932,7 @@ hfcsusb_probe(struct usb_interface *intf, const struct usb_device_id *id)
 		}
 	}
 
-	printk(KERN_DEBUG 
+	printk(KERN_DEBUG
 	    "%s: interface(%d) actalt(%d) minor(%d) vend_idx(%d)\n",
 	    __func__, ifnum, iface->desc.bAlternateSetting,
 	    intf->minor, vend_idx);
@@ -2138,8 +2135,8 @@ static struct usb_driver hfcsusb_drv = {
 static int __init
 hfcsusb_init(void)
 {
-	printk(KERN_INFO DRIVER_NAME " driver Rev. %s (debug=0x%x)\n",
-	    hfcsusb_rev, debug);
+	printk(KERN_INFO DRIVER_NAME " driver Rev. %s debug(0x%x) poll(%i)\n",
+	    hfcsusb_rev, debug, poll);
 
 	if (usb_register(&hfcsusb_drv)) {
 		printk(KERN_INFO DRIVER_NAME
