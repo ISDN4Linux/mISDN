@@ -22,14 +22,14 @@
  *
  * - interfaces=<n>, default 1, min: 1, max: 64
  * - vline=<n>, default 1
- *     0 : no virtual line at all, all interfaces behaves like
+ *     0 : no virtual line at all, all interfaces behave like
  *         ISDN TAs without any bus connection
  *     1 : all interfaces are connected to one virtual
  *         ISDN bus. the first interface opened as NT interface
  *         will configure all others as TE interface
- *     2 : each interface is virtually equipped with a virtual cross
+ *     2 : each interface is virtually equipped with a cross
  *         connector, so all data is looped internally
- * - numbch=<n>, default 2, min: 2, max: *?*
+ * - numbch=<n>, default 2, min: 2, max: 30
  *     number of bchannels each interface will consist of
  * - debug=<n>, default=0, with n=0xHHHHGGGG
  *      H - l1 driver flags described in hfcs_usb.h
@@ -42,7 +42,7 @@
 #include <linux/isdn_compat.h>
 #include "l1loop.h"
 
-const char *l1loop_rev = "Revision: 0.1.2 (socket), 2008-08-22";
+const char *l1loop_rev = "Revision: 0.1.2 (socket), 2008-08-24";
 
 
 static int l1loop_cnt;
