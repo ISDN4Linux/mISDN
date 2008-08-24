@@ -6,10 +6,9 @@
 #define __HWSKEL_H__
 
 
-#define DRIVER_NAME 		"l1loop"
-#define DEFAULT_NUM_PORTS	1
+#define DRIVER_NAME "hwskel"
 
-/* hfcsusb Layer1 commands */
+/* layer1 commands */
 #define L1_ACTIVATE_TE		1
 #define L1_ACTIVATE_NT		2
 #define L1_DEACTIVATE_NT	3

@@ -32,10 +32,10 @@
 #include <linux/isdn_compat.h>
 #include "hwskel.h"
 
-const char *hfcsusb_rev = "Revision: 0.1.1 (socket), 2008-08-22";
+const char *hwskel_rev = "Revision: 0.1.2 (socket), 2008-08-24";
 
 static unsigned int debug = 0;
-static unsigned int numports = DEFAULT_NUM_PORTS;
+static unsigned int interfaces = 1;
 
 static int hwskel_cnt;
 static LIST_HEAD(hwskel_list);
@@ -48,11 +48,8 @@ MODULE_AUTHOR("Martin Bachem");
 MODULE_LICENSE("GPL");
 #endif
 module_param(debug, uint, 0);
-module_param(numports, uint, 0);
+module_param(interfaces, uint, 0);
 #endif
-
-
-const char *hwskel_rev = "Revision: 0.1.1 (socket), 2008-08-22";
 
 
 /*
@@ -88,7 +85,7 @@ hwskel_l1callback(struct dchannel *dch, u_int cmd)
 			test_and_clear_bit(FLG_TX_BUSY, &dch->Flags);
 			break;
 		case PH_ACTIVATE_IND:
-			test_and_clear_bit(FLG_ACTIVE, &dch->Flags);
+			test_and_set_bit(FLG_ACTIVE, &dch->Flags);
 			_queue_data(&dch->dev.D, cmd, MISDN_ID_ANY, 0, NULL,
 				     GFP_ATOMIC);
 			break;
@@ -307,7 +304,7 @@ hwskel_l2l1D(struct mISDNchannel *ch, struct sk_buff *skb) {
 
 		case PH_ACTIVATE_REQ:
 			if (debug & DEBUG_HW)
-				printk (KERN_DEBUG 
+				printk (KERN_DEBUG
 					"%s: %s: PH_ACTIVATE_REQ %s\n",
 					p->name, __func__,
 					(p->portmode == ISDN_P_NT_S0)?
@@ -662,7 +659,7 @@ setup_instance(struct hwskel *hw) {
 
 	spin_lock_init(&hw->lock);
 
-	for (i=0; i<numports; i++) {
+	for (i=0; i<interfaces; i++) {
 		p = hw->ports + i;
 		spin_lock_init(&p->lock);
 		mISDN_initdchannel(&p->dch, MAX_DFRAME_LEN_L1, ph_state);
@@ -676,7 +673,7 @@ setup_instance(struct hwskel *hw) {
 		p->dch.dev.D.ctrl = hwskel_dctrl;
 		p->dch.dev.nrbchan = 2;
 		for (j=0; j<2; j++) {
-			p->bch[j].nr = i + 1;
+			p->bch[j].nr = j + 1;
 			test_and_set_bit(j + 1,
 					 (u_long *)p->dch.dev.channelmap);
 			p->bch[j].debug = debug;
@@ -717,7 +714,7 @@ release_instance(struct hwskel *hw) {
 	if (debug)
 		printk (KERN_DEBUG "%s: %s\n", DRIVER_NAME, __func__);
 
-	for (i=0; i<numports; i++) {
+	for (i=0; i<interfaces; i++) {
 		p = hw->ports + i;
 		hwskel_setup_bch(&p->bch[0], ISDN_P_NONE);
 		hwskel_setup_bch(&p->bch[1], ISDN_P_NONE);
@@ -741,28 +738,29 @@ release_instance(struct hwskel *hw) {
 static int __init
 hwskel_init(void)
 {
-	if (numports > 64)
-		numports = 64; /* mISDN max ports ? */
+	if (interfaces <= 0)
+		interfaces = 1;
+	if (interfaces > 64)
+		interfaces = 64;
 
 	printk(KERN_INFO DRIVER_NAME " driver Rev. %s "
-		"debug(0x%x) numports(%i)\n",
-		hwskel_rev, debug, numports);
+		"debug(0x%x) interfaces(%i)\n",
+		hwskel_rev, debug, interfaces);
 
 	if (!(hw = kzalloc(sizeof(struct hwskel), GFP_KERNEL))) {
-		printk(KERN_ERR "%s: %s: no kmem for skelhw\n",
+		printk(KERN_ERR "%s: %s: no kmem for hw\n",
 		       DRIVER_NAME, __FUNCTION__);
 		return -ENOMEM;
 	}
 
-	if (!(hw->ports = kzalloc(sizeof(struct port)*numports, GFP_KERNEL))) {
-		printk(KERN_ERR "%s: %s: no kmem for skelhw's ports\n",
+	if (!(hw->ports = kzalloc(sizeof(struct port)*interfaces, GFP_KERNEL))) {
+		printk(KERN_ERR "%s: %s: no kmem for interfaces\n",
 		       DRIVER_NAME, __FUNCTION__);
 		kfree(hw);
 		return -ENOMEM;
 	}
 
-	return setup_instance(hw);
-	return 0;
+	return (setup_instance(hw));
 }
 
 static void __exit
