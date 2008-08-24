@@ -388,7 +388,7 @@ hfc_l1callback(struct dchannel *dch, u_int cmd)
 			test_and_clear_bit(FLG_TX_BUSY, &dch->Flags);
 			break;
 		case PH_ACTIVATE_IND:
-			test_and_clear_bit(FLG_ACTIVE, &dch->Flags);
+			test_and_set_bit(FLG_ACTIVE, &dch->Flags);
 			_queue_data(&dch->dev.D, cmd, MISDN_ID_ANY, 0, NULL,
 			    GFP_ATOMIC);
 			break;
