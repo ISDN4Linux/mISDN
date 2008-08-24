@@ -46,6 +46,10 @@ ifdef CONFIG_MISDN_XHFC
 obj-$(CONFIG_MISDN) += xhfc.o
 endif
 
+ifdef CONFIG_MISDN_HWSKEL
+obj-$(CONFIG_MISDN) += mISDN_hwskel.o
+endif
+
 ifdef CONFIG_MISDN_L1LOOP
 obj-$(CONFIG_MISDN) += mISDN_l1loop.o
 endif
@@ -60,4 +64,5 @@ hfcsmini-objs := hfcs_mini.o
 w6692pci-objs := w6692.o
 xhfc-objs := xhfc_su.o xhfc_pci2pi.o
 mISDN_isac-objs := isac.o arcofi.o
-mISDN_l1loop-objs := hwskel.o
+mISDN_hwskel-objs := hwskel.o
+mISDN_l1loop-objs := l1loop.o
