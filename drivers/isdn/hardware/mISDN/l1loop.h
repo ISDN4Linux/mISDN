@@ -6,21 +6,29 @@
 #define __L1LOOP_H__
 
 
-#define DRIVER_NAME "l1loop"
+#define DRIVER_NAME "mISDN_l1loop"
 
-/* hfcsusb Layer1 commands */
+/* layer1 ph commands */
 #define L1_ACTIVATE_TE		1
 #define L1_ACTIVATE_NT		2
 #define L1_DEACTIVATE_NT	3
 
 /* virtual ISDN line modes */
-#define VLINE_NONE	0
-#define VLINE_BUS	1
-#define VLINE_LOOP	2
+#define VLINE_NONE		0
+#define VLINE_BUS		1
+#define VLINE_LOOP		2
+#define MAX_VLINE_OPTION	2
 
-/* virtual BUS states */
+const char *VLINE_MODES[] = {
+	"none",
+	"bus",
+	"loop"
+};
+
+/* virtual bus states */
 #define VBUS_ACTIVE	1
 #define VBUS_INACTIVE	0
+
 
 struct hwskel;
 

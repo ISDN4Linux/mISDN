@@ -294,9 +294,8 @@ vbus_deactivate(struct port *p)
 	}
 }
 
-/* S0 phyical commandy (activattion / deactivation) */
 static void
-l1loop_ph_command(struct port * p, u_char command) {
+ph_command(struct port * p, u_char command) {
 	if (debug & DEBUG_HW)
 		printk(KERN_DEBUG "%s: %s: %x\n",
 		       p->name, __func__, command);
@@ -439,7 +438,7 @@ l1loop_l2l1D(struct mISDNchannel *ch, struct sk_buff *skb) {
 						PH_ACTIVATE_IND, MISDN_ID_ANY,
 						0, NULL, GFP_ATOMIC);
 				else {
-					l1loop_ph_command(p, L1_ACTIVATE_NT);
+					ph_command(p, L1_ACTIVATE_NT);
 					test_and_set_bit(FLG_L2_ACTIVATED,
 						&dch->Flags);
 				}
@@ -449,7 +448,7 @@ l1loop_l2l1D(struct mISDNchannel *ch, struct sk_buff *skb) {
 						PH_ACTIVATE_CNF, MISDN_ID_ANY,
 						0, NULL, GFP_ATOMIC);
 				else
-					l1loop_ph_command(p, L1_ACTIVATE_TE);
+					ph_command(p, L1_ACTIVATE_TE);
 			}
 			break;
 
@@ -463,7 +462,7 @@ l1loop_l2l1D(struct mISDNchannel *ch, struct sk_buff *skb) {
 			test_and_clear_bit(FLG_L2_ACTIVATED, &dch->Flags);
 
 			if (p->portmode == ISDN_P_NT_S0)
-				l1loop_ph_command(p, L1_DEACTIVATE_NT);
+				ph_command(p, L1_DEACTIVATE_NT);
 
 			spin_lock(&p->lock);
 			skb_queue_purge(&dch->squeue);
@@ -833,10 +832,12 @@ l1loop_init(void)
 		numbch = 2;
 	if (numbch > 30)
 		numbch = 30;
+	if (vline > MAX_VLINE_OPTION)
+		return -ENODEV;
 
 	printk(KERN_INFO DRIVER_NAME " driver Rev. %s "
-		"debug(0x%x) interfaces(%i)\n",
-		l1loop_rev, debug, interfaces);
+		"debug(0x%x) interfaces(%i) numbch(%i) vline(%s)\n",
+		l1loop_rev, debug, interfaces, numbch, VLINE_MODES[vline]);
 
 	if (!(hw = kzalloc(sizeof(struct l1loop), GFP_KERNEL))) {
 		printk(KERN_ERR "%s: %s: no kmem for hw\n",
