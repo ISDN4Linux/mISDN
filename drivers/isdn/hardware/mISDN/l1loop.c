@@ -247,10 +247,10 @@ vbus_activate(struct port *p)
 {
 	int i;
 
-	if ((vbusnt) && (vbusnt->opened)) {
+	if ((vbusnt) && test_bit(FLG_OPEN, &vbusnt->dch.Flags)) {
 		for (i=0; i<interfaces; i++) {
 			p = hw->ports + i;
-			if (p->opened) {
+			if (test_bit(FLG_OPEN, &p->dch.Flags)) {
 				p->dch.state = VBUS_ACTIVE;
 				ph_state(&p->dch);
 			}
@@ -271,7 +271,7 @@ vbus_deactivate(struct port *p)
 
 	for (i=0; i<interfaces; i++) {
 		p = hw->ports + i;
-		if (p->opened) {
+		if (test_bit(FLG_OPEN, &p->dch.Flags)) {
 			dch = &p->dch;
 			dch->state = VBUS_ACTIVE;
 			ph_state(dch);
@@ -414,10 +414,10 @@ l1loop_l2l1D(struct mISDNchannel *ch, struct sk_buff *skb) {
 				printk (KERN_DEBUG
 					"%s: %s: PH_ACTIVATE_REQ %s\n",
 					p->name, __func__,
-					(p->portmode == ISDN_P_TE_S0)?
+					(p->protocol == ISDN_P_TE_S0)?
 							"TE":"NT");
 			ret = 0;
-			if (p->portmode == ISDN_P_NT_S0) {
+			if (p->protocol == ISDN_P_NT_S0) {
 				if (test_bit(FLG_ACTIVE, &dch->Flags))
 					_queue_data(&dch->dev.D,
 						PH_ACTIVATE_IND, MISDN_ID_ANY,
@@ -442,11 +442,11 @@ l1loop_l2l1D(struct mISDNchannel *ch, struct sk_buff *skb) {
 				printk (KERN_DEBUG
 					"%s: %s: PH_DEACTIVATE_REQ %s\n",
 					p->name, __func__,
-					(p->portmode == ISDN_P_TE_S0)?
+					(p->protocol == ISDN_P_TE_S0)?
 							"TE":"NT");
 			test_and_clear_bit(FLG_L2_ACTIVATED, &dch->Flags);
 
-			if (p->portmode == ISDN_P_NT_S0)
+			if (p->protocol == ISDN_P_NT_S0)
 				ph_command(p, L1_DEACTIVATE_NT);
 
 			spin_lock(&p->lock);
@@ -545,7 +545,7 @@ open_dchannel(struct port *p, struct mISDNchannel *ch, struct channel_req *rq)
 		return -EINVAL;
 
 	test_and_clear_bit(FLG_ACTIVE, &p->dch.Flags);
-	p->dch.state = 0;
+	p->dch.state = VBUS_INACTIVE;
 
 	if (!p->initdone) {
 		/*
@@ -559,23 +559,20 @@ open_dchannel(struct port *p, struct mISDNchannel *ch, struct channel_req *rq)
 			vbusnt = p;
 
 		p->initdone = 1;
-		p->portmode = rq->protocol;
+		p->protocol = rq->protocol;
 		ch->protocol = rq->protocol;
-
-		if ((rq->protocol == ISDN_P_TE_S0) && (vbusnt))
-			p->dch.state = vbusnt->dch.state;
-		else
-			p->dch.state = VBUS_INACTIVE;
 
 	} else {
 		if (rq->protocol != ch->protocol)
 			return -EPROTONOSUPPORT;
 	}
 
-	p->opened = 1;
-	if (p->dch.state == VBUS_ACTIVE)
-		_queue_data(ch, PH_ACTIVATE_IND, MISDN_ID_ANY,
-			    0, NULL, GFP_KERNEL);
+	set_bit(FLG_OPEN, &p->dch.Flags);
+	if ((rq->protocol == ISDN_P_TE_S0) && (vbusnt))
+		p->dch.state = vbusnt->dch.state;
+	else
+		p->dch.state = VBUS_INACTIVE;
+	ph_state(&p->dch);
 
 	rq->ch = ch;
 	if (!try_module_get(THIS_MODULE))
@@ -663,8 +660,9 @@ l1loop_dctrl(struct mISDNchannel *ch, u_int cmd, void *arg) {
 					"%s: %s: dev(%d) close from %p\n",
 					p->name, __func__, p->dch.dev.id,
 					__builtin_return_address(0));
-			p->opened = 0;
+			p->dch.state = VBUS_INACTIVE;
 			clear_bit(FLG_ACTIVE, &p->dch.Flags);
+			clear_bit(FLG_OPEN, &dch->Flags);
 			module_put(THIS_MODULE);
 			break;
 		case CONTROL_CHANNEL:
@@ -688,7 +686,7 @@ ph_state(struct dchannel *dch)
 	if (debug & DEBUG_HW)
 		printk (KERN_INFO "%s: %s: %s %s\n",
 			p->name, __func__,
-			(p->portmode == ISDN_P_TE_S0)?"TE":"NT",
+			(p->protocol == ISDN_P_TE_S0)?"TE":"NT",
 			(dch->state)?"ACTIVE":"INACTIVE");
 
 	switch (dch->state) {
