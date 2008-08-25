@@ -6,32 +6,15 @@
 #define __HFCS_USB_H__
 
 
-/*
- * additional Hardware specific DEBUG flags for module
- * parameter debug=x
- *    HW DEBUG 0xHHHHGGGG
- *    H - hardware driver specific bits
- *    G - for all drivers
- * G described at mISDNhw.h
- */
+#define DRIVER_NAME "HFC-S_USB"
+
 #define DBG_HFC_CALL_TRACE	0x00010000
 #define DBG_HFC_FIFO_VERBOSE	0x00020000
 #define DBG_HFC_USB_VERBOSE	0x00100000
 #define DBG_HFC_URB_INFO	0x00200000
 #define DBG_HFC_URB_ERROR	0x00400000
 
-#define DRIVER_NAME "HFC-S_USB"
-
-/*
- * when ISO URB completes with -EXDEV, have a look
- * at the urb->start_frame history of a few URBs
- * if ISO_FRAME_START_DEBUG is enabled
- */
-// #define ISO_FRAME_START_DEBUG
-#ifdef ISO_FRAME_START_DEBUG
-	#define ISO_FRAME_START_RING_COUNT 16
-#endif
-
+#define DEFAULT_TRANSP_BURST_SZ 128
 
 #define HFC_CTRL_TIMEOUT	20	/* 5ms timeout writing/reading regs */
 #define CLKDEL_TE		0x0f	/* CLKDEL in TE mode */
@@ -120,9 +103,9 @@ static int iso_packets[8] =
 #define BITLINE_INF	(-64*8)
 
 /* HFC-S USB register access by Control-URSs */
-#define write_usb(a,b,c)usb_control_msg((a)->dev,(a)->ctrl_out_pipe,0,0x40,(c),(b),0,0,HFC_CTRL_TIMEOUT)
-#define read_usb(a,b,c) usb_control_msg((a)->dev,(a)->ctrl_in_pipe,1,0xC0,0,(b),(c),1,HFC_CTRL_TIMEOUT)
-#define HFC_CTRL_BUFSIZE 32
+#define write_reg_atomic(a,b,c)usb_control_msg((a)->dev,(a)->ctrl_out_pipe,0,0x40,(c),(b),0,0,HFC_CTRL_TIMEOUT)
+#define read_reg_atomic(a,b,c) usb_control_msg((a)->dev,(a)->ctrl_in_pipe,1,0xC0,0,(b),(c),1,HFC_CTRL_TIMEOUT)
+#define HFC_CTRL_BUFSIZE 64
 
 typedef struct {
 	__u8 hfcs_reg;		/* register number */
@@ -178,9 +161,9 @@ symbolic(struct hfcusb_symbolic_list list[], const int num)
 #define EP_BLK 4	// Bulk endpoint mandatory at this position
 #define EP_INT 5	// Interrupt endpoint mandatory at this position
 
-#define HFC_CHAN_D	0
-#define HFC_CHAN_B1	1
-#define HFC_CHAN_B2	2
+#define HFC_CHAN_B1	0
+#define HFC_CHAN_B2	1
+#define HFC_CHAN_D	2
 #define HFC_CHAN_E	3
 
 
@@ -247,7 +230,7 @@ struct usb_fifo;
 
 /* structure defining input+output fifos (interrupt/bulk mode) */
 typedef struct iso_urb_struct {
-	struct urb *purb;
+	struct urb *urb;
 	__u8 buffer[ISO_BUFFER_SIZE];	/* buffer rx/tx USB URB data */
 	struct usb_fifo *owner_fifo;	/* pointer to owner fifo */
 	__u8 indx; // Fifos's ISO double buffer 0 or 1 ?
@@ -275,6 +258,7 @@ typedef struct usb_fifo {
 	struct dchannel * dch;	/* link to hfcsusb_t->dch, 0 if Fifos is bch */
 	struct bchannel * bch;	/* link to hfcsusb_t->bch, 0 if Fifos is dch */
 	int last_urblen;	/* remember length of last packet */
+	__u8 stop_gracefull;	/* stops URB retransmission */
 } usb_fifo;
 
 typedef struct _hfcsusb_t {
