@@ -22,13 +22,13 @@
  *
  * - interfaces=<n>, n=[1..64] default 2
  * - vline=<n>, n=[0,1,2] default 1
- *     0 : no virtual line at all, all interfaces behave like
- *         ISDN TAs without any bus connection
- *     1 : all interfaces are connected to one virtual
+ *     0 : NONE (no virtual line at all, all interfaces behave like
+ *         ISDN TAs without any bus connection)
+ *     1 : VBUS (all interfaces are connected to one virtual
  *         ISDN bus. the first interface opened as NT interface
- *         will configure all others as TE interface
- *     2 : each interface is virtually equipped with a cross
- *         connector, so all data is looped internally
+ *         will configure all others as TE interface)
+ *     2 : VLOOP (each interface is virtually equipped with a cross
+ *         connector, so all data is looped internally)
  * - nchannel=<n>, n=[2..30] default 2
  *     number of bchannels each interface will consist of
  * - debug=<n>, default=0, with n=0xHHHHGGGG
