@@ -25,6 +25,19 @@ const char *VLINE_MODES[] = {
 	"loop"
 };
 
+#define ISDN_P_MAX ISDN_P_NT_E1
+char *ISDN_P_TEXT[] = {
+	"ISDN_P_NONE"
+	"ISDN_P_TE_S0",
+	"ISDN_P_NT_S0",
+	"ISDN_P_TE_E1",
+	"ISDN_P_NT_E1"
+	"<unknown/illegal>"
+};
+#define IS_TE(p) ((p & ISDN_P_TE_S0) || (p & ISDN_P_TE_E1))
+#define IS_NT(p) ((p & ISDN_P_NT_S0) || (p & ISDN_P_NT_E1))
+
+
 /* virtual bus states */
 #define VBUS_ACTIVE	1
 #define VBUS_INACTIVE	0
@@ -37,11 +50,8 @@ struct port {
 	char		name[MISDN_MAX_IDLEN];
 	struct dchannel	dch;
 	struct bchannel	*bch;
-	int		nt_timer;
-	__u8		portmode;
-	__u8		timers;
+	__u8		protocol;
 	__u8		initdone;
-	__u8		opened;
 	struct hwskel	*hw;
 };
 
