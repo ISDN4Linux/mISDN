@@ -103,14 +103,18 @@ static int iso_packets[8] =
 #define BITLINE_INF	(-64*8)
 
 /* HFC-S USB register access by Control-URSs */
-#define write_reg_atomic(a,b,c)usb_control_msg((a)->dev,(a)->ctrl_out_pipe,0,0x40,(c),(b),0,0,HFC_CTRL_TIMEOUT)
-#define read_reg_atomic(a,b,c) usb_control_msg((a)->dev,(a)->ctrl_in_pipe,1,0xC0,0,(b),(c),1,HFC_CTRL_TIMEOUT)
+#define write_reg_atomic(a, b, c) \
+	usb_control_msg((a)->dev, (a)->ctrl_out_pipe, 0, 0x40, (c), (b), \
+		0, 0, HFC_CTRL_TIMEOUT)
+#define read_reg_atomic(a, b, c) \
+	usb_control_msg((a)->dev, (a)->ctrl_in_pipe, 1, 0xC0, 0, (b), (c), \
+		1, HFC_CTRL_TIMEOUT)
 #define HFC_CTRL_BUFSIZE 64
 
-typedef struct {
+struct ctrl_buf {
 	__u8 hfcs_reg;		/* register number */
 	__u8 reg_val;		/* value to be written (or read) */
-} ctrl_buft;
+};
 
 /*
  * URB error codes
@@ -145,21 +149,21 @@ symbolic(struct hfcusb_symbolic_list list[], const int num)
 	int i;
 	for (i = 0; list[i].name != NULL; i++)
 		if (list[i].num == num)
-			return (list[i].name);
+			return list[i].name;
 	return "<unkown USB Error>";
 }
 
 /* USB descriptor need to contain one of the following EndPoint combination: */
-#define CNF_4INT3ISO	1	// 4 INT IN, 3 ISO OUT
-#define CNF_3INT3ISO	2	// 3 INT IN, 3 ISO OUT
-#define CNF_4ISO3ISO	3	// 4 ISO IN, 3 ISO OUT
-#define CNF_3ISO3ISO	4	// 3 ISO IN, 3 ISO OUT
+#define CNF_4INT3ISO	1	/* 4 INT IN, 3 ISO OUT */
+#define CNF_3INT3ISO	2	/* 3 INT IN, 3 ISO OUT */
+#define CNF_4ISO3ISO	3	/* 4 ISO IN, 3 ISO OUT */
+#define CNF_3ISO3ISO	4	/* 3 ISO IN, 3 ISO OUT */
 
-#define EP_NUL 1	// Endpoint at this position not allowed
-#define EP_NOP 2	// all type of endpoints allowed at this position
-#define EP_ISO 3	// Isochron endpoint mandatory at this position
-#define EP_BLK 4	// Bulk endpoint mandatory at this position
-#define EP_INT 5	// Interrupt endpoint mandatory at this position
+#define EP_NUL 1	/* Endpoint at this position not allowed */
+#define EP_NOP 2	/* all type of endpoints allowed at this position */
+#define EP_ISO 3	/* Isochron endpoint mandatory at this position */
+#define EP_BLK 4	/* Bulk endpoint mandatory at this position */
+#define EP_INT 5	/* Interrupt endpoint mandatory at this position */
 
 #define HFC_CHAN_B1	0
 #define HFC_CHAN_B2	1
@@ -176,21 +180,21 @@ symbolic(struct hfcusb_symbolic_list list[], const int num)
  */
 static int
 validconf[][19] = {
-	// INT in, ISO out config
+	/* INT in, ISO out config */
 	{EP_NUL, EP_INT, EP_NUL, EP_INT, EP_NUL, EP_INT, EP_NOP, EP_INT,
 	 EP_ISO, EP_NUL, EP_ISO, EP_NUL, EP_ISO, EP_NUL, EP_NUL, EP_NUL,
 	 CNF_4INT3ISO, 2, 1},
 	{EP_NUL, EP_INT, EP_NUL, EP_INT, EP_NUL, EP_INT, EP_NUL, EP_NUL,
 	 EP_ISO, EP_NUL, EP_ISO, EP_NUL, EP_ISO, EP_NUL, EP_NUL, EP_NUL,
 	 CNF_3INT3ISO, 2, 0},
-	// ISO in, ISO out config
+	/* ISO in, ISO out config */
 	{EP_NUL, EP_NUL, EP_NUL, EP_NUL, EP_NUL, EP_NUL, EP_NUL, EP_NUL,
 	 EP_ISO, EP_ISO, EP_ISO, EP_ISO, EP_ISO, EP_ISO, EP_NOP, EP_ISO,
 	 CNF_4ISO3ISO, 2, 1},
 	{EP_NUL, EP_NUL, EP_NUL, EP_NUL, EP_NUL, EP_NUL, EP_NUL, EP_NUL,
 	 EP_ISO, EP_ISO, EP_ISO, EP_ISO, EP_ISO, EP_ISO, EP_NUL, EP_NUL,
 	 CNF_3ISO3ISO, 2, 0},
-	{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0} // EOL element
+	{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0} /* EOL element */
 };
 
 /* string description of chosen config */
@@ -202,9 +206,9 @@ char *conf_str[] = {
 };
 
 
-#define LED_OFF		0	// no LED support
-#define LED_SCHEME1	1	// LED standard scheme
-#define LED_SCHEME2	2	// not used yet...
+#define LED_OFF		0	/* no LED support */
+#define LED_SCHEME1	1	/* LED standard scheme */
+#define LED_SCHEME2	2	/* not used yet... */
 
 #define LED_POWER_ON	1
 #define LED_POWER_OFF	2
@@ -217,33 +221,33 @@ char *conf_str[] = {
 #define LED_B2_OFF	9
 #define LED_B2_DATA	10
 
-#define LED_NORMAL	0	// LEDs are normal
-#define LED_INVERTED 	1	// LEDs are inverted
+#define LED_NORMAL	0	/* LEDs are normal */
+#define LED_INVERTED 	1	/* LEDs are inverted */
 
 /* time in ms to perform a Flashing LED when B-Channel has traffic */
 #define LED_TIME      250
 
 
 
-struct _hfcsusb_t;
+struct hfcsusb;
 struct usb_fifo;
 
 /* structure defining input+output fifos (interrupt/bulk mode) */
-typedef struct iso_urb_struct {
+struct iso_urb {
 	struct urb *urb;
 	__u8 buffer[ISO_BUFFER_SIZE];	/* buffer rx/tx USB URB data */
 	struct usb_fifo *owner_fifo;	/* pointer to owner fifo */
-	__u8 indx; // Fifos's ISO double buffer 0 or 1 ?
+	__u8 indx; /* Fifos's ISO double buffer 0 or 1 ? */
 #ifdef ISO_FRAME_START_DEBUG
 	int start_frames[ISO_FRAME_START_RING_COUNT];
-	__u8 iso_frm_strt_pos; // index in start_frame[]
+	__u8 iso_frm_strt_pos; /* index in start_frame[] */
 #endif
-} iso_urb_struct;
+};
 
-typedef struct usb_fifo {
+struct usb_fifo {
 	int fifonum;		/* fifo index attached to this structure */
 	int active;		/* fifo is currently active */
-	struct _hfcsusb_t *hw;	/* pointer to main structure */
+	struct hfcsusb *hw;	/* pointer to main structure */
 	int pipe;		/* address of endpoint */
 	__u8 usb_packet_maxlen;	/* maximum length for usb transfer */
 	unsigned int max_size;	/* maximum size of receive/send packet */
@@ -252,16 +256,17 @@ typedef struct usb_fifo {
 	__u8 buffer[128];	/* buffer USB INT OUT URB data */
 	int bit_line;		/* how much bits are in the fifo? */
 
-	volatile __u8 usb_transfer_mode; /* switched between ISO and INT */
-	iso_urb_struct iso[2]; /* two urbs to have one always one pending */
+	__u8 usb_transfer_mode; /* switched between ISO and INT */
+	struct iso_urb	iso[2]; /* two urbs to have one always
+					 one pending */
 
-	struct dchannel * dch;	/* link to hfcsusb_t->dch, 0 if Fifos is bch */
-	struct bchannel * bch;	/* link to hfcsusb_t->bch, 0 if Fifos is dch */
+	struct dchannel *dch;	/* link to hfcsusb_t->dch, 0 if Fifos is bch */
+	struct bchannel *bch;	/* link to hfcsusb_t->bch, 0 if Fifos is dch */
 	int last_urblen;	/* remember length of last packet */
 	__u8 stop_gracefull;	/* stops URB retransmission */
-} usb_fifo;
+};
 
-typedef struct _hfcsusb_t {
+struct hfcsusb {
 	struct list_head	list;
 	struct dchannel		dch;
 	struct bchannel		bch[2];
@@ -274,20 +279,20 @@ typedef struct _hfcsusb_t {
 	int			vend_idx;	/* index in hfcsusb_idtab */
 	int			packet_size;
 	int			iso_packet_size;
-	usb_fifo		fifos[HFCUSB_NUM_FIFOS];
+	struct usb_fifo		fifos[HFCUSB_NUM_FIFOS];
 
 	/* control pipe background handling */
-	ctrl_buft		ctrl_buff[HFC_CTRL_BUFSIZE];
-	volatile int		ctrl_in_idx, ctrl_out_idx, ctrl_cnt;
+	struct ctrl_buf		ctrl_buff[HFC_CTRL_BUFSIZE];
+	int			ctrl_in_idx, ctrl_out_idx, ctrl_cnt;
 	struct urb		*ctrl_urb;
 	struct usb_ctrlrequest	ctrl_write;
 	struct usb_ctrlrequest	ctrl_read;
 	int			ctrl_paksize;
 	int			ctrl_in_pipe, ctrl_out_pipe;
-	spinlock_t		ctrl_lock;
+	spinlock_t		ctrl_lock; /* lock for ctrl */
 	spinlock_t              lock;
 
-	volatile __u8		threshold_mask;
+	__u8			threshold_mask;
 	__u8			led_state;
 
 	__u8			portmode;
@@ -295,14 +300,14 @@ typedef struct _hfcsusb_t {
 	__u8			timers;
 	__u8			initdone;
 	char			name[MISDN_MAX_IDLEN];
-} hfcsusb_t;
+};
 
 /* private vendor specific data */
-typedef struct {
-	__u8		led_scheme;  // led display scheme
-	signed short	led_bits[8]; // array of 8 possible LED bitmask settings
-	char		*vend_name;  // device name
-} hfcsusb_vdata;
+struct hfcsusb_vdata {
+	__u8		led_scheme;  /* led display scheme */
+	signed short	led_bits[8]; /* array of 8 possible LED bitmask */
+	char		*vend_name;  /* device name */
+};
 
 
 #define HFC_MAX_TE_LAYER1_STATE 8
@@ -332,67 +337,67 @@ const char *HFC_NT_LAYER1_STATES[HFC_MAX_NT_LAYER1_STATE + 1] = {
 static struct usb_device_id hfcsusb_idtab[] = {
 	{
 	 USB_DEVICE(0x0959, 0x2bd0),
-	 .driver_info = (unsigned long) &((hfcsusb_vdata)
+	 .driver_info = (unsigned long) &((struct hfcsusb_vdata)
 			  {LED_OFF, {4, 0, 2, 1},
 			   "ISDN USB TA (Cologne Chip HFC-S USB based)"}),
 	},
 	{
 	 USB_DEVICE(0x0675, 0x1688),
-	 .driver_info = (unsigned long) &((hfcsusb_vdata)
+	 .driver_info = (unsigned long) &((struct hfcsusb_vdata)
 			  {LED_SCHEME1, {1, 2, 0, 0},
 			   "DrayTek miniVigor 128 USB ISDN TA"}),
 	},
 	{
 	 USB_DEVICE(0x07b0, 0x0007),
-	 .driver_info = (unsigned long) &((hfcsusb_vdata)
+	 .driver_info = (unsigned long) &((struct hfcsusb_vdata)
 			  {LED_SCHEME1, {0x80, -64, -32, -16},
 			   "Billion tiny USB ISDN TA 128"}),
 	},
 	{
 	 USB_DEVICE(0x0742, 0x2008),
-	 .driver_info = (unsigned long) &((hfcsusb_vdata)
+	 .driver_info = (unsigned long) &((struct hfcsusb_vdata)
 			  {LED_SCHEME1, {4, 0, 2, 1},
 			   "Stollmann USB TA"}),
 	},
 	{
 	 USB_DEVICE(0x0742, 0x2009),
-	 .driver_info = (unsigned long) &((hfcsusb_vdata)
+	 .driver_info = (unsigned long) &((struct hfcsusb_vdata)
 			  {LED_SCHEME1, {4, 0, 2, 1},
 			   "Aceex USB ISDN TA"}),
 	},
 	{
 	 USB_DEVICE(0x0742, 0x200A),
-	 .driver_info = (unsigned long) &((hfcsusb_vdata)
+	 .driver_info = (unsigned long) &((struct hfcsusb_vdata)
 			  {LED_SCHEME1, {4, 0, 2, 1},
 			   "OEM USB ISDN TA"}),
 	},
 	{
 	 USB_DEVICE(0x08e3, 0x0301),
-	 .driver_info = (unsigned long) &((hfcsusb_vdata)
+	 .driver_info = (unsigned long) &((struct hfcsusb_vdata)
 			  {LED_SCHEME1, {2, 0, 1, 4},
 			   "Olitec USB RNIS"}),
 	},
 	{
 	 USB_DEVICE(0x07fa, 0x0846),
-	 .driver_info = (unsigned long) &((hfcsusb_vdata)
+	 .driver_info = (unsigned long) &((struct hfcsusb_vdata)
 			  {LED_SCHEME1, {0x80, -64, -32, -16},
 			   "Bewan Modem RNIS USB"}),
 	},
 	{
 	 USB_DEVICE(0x07fa, 0x0847),
-	 .driver_info = (unsigned long) &((hfcsusb_vdata)
+	 .driver_info = (unsigned long) &((struct hfcsusb_vdata)
 			  {LED_SCHEME1, {0x80, -64, -32, -16},
 			   "Djinn Numeris USB"}),
 	},
 	{
 	 USB_DEVICE(0x07b0, 0x0006),
-	 .driver_info = (unsigned long) &((hfcsusb_vdata)
+	 .driver_info = (unsigned long) &((struct hfcsusb_vdata)
 			  {LED_SCHEME1, {0x80, -64, -32, -16},
 			   "Twister ISDN TA"}),
 	},
 	{
 	 USB_DEVICE(0x071d, 0x1005),
-	 .driver_info = (unsigned long) &((hfcsusb_vdata)
+	 .driver_info = (unsigned long) &((struct hfcsusb_vdata)
 			  {LED_SCHEME1, {0x02, 0, 0x01, 0x04},
 			   "Eicon DIVA USB 4.0"}),
 	},
