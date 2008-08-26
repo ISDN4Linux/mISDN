@@ -31,9 +31,13 @@
  *         connector, so all data is looped internally)
  * - nchannel=<n>, n=[2..30] default 2
  *     number of bchannels each interface will consist of
+ * - pri=<n>, n=[0,1] default 0
+ *      0: register all interfaces as BRI
+ *      1: register all interfaces as PRI
  * - debug=<n>, default=0, with n=0xHHHHGGGG
  *      H - l1 driver flags described in hfcs_usb.h
  *      G - common mISDN debug flags described at mISDNhw.h
+ *
  */
 
 #include <linux/module.h>
@@ -42,7 +46,7 @@
 #include <linux/isdn_compat.h>
 #include "l1loop.h"
 
-const char *l1loop_rev = "Revision: 0.1.2 (socket), 2008-08-24";
+const char *l1loop_rev = "Revision: 0.1.3 (socket), 2008-08-25";
 
 
 static int l1loop_cnt;
@@ -55,6 +59,7 @@ struct port *vbusnt = NULL; /* NT of virtual S0 bus when using vline=1 */
 static unsigned int interfaces = 2;
 static unsigned int vline = 1;
 static unsigned int nchannel = 2;
+static unsigned int pri = 0;
 static unsigned int debug = 0;
 
 #ifdef MODULE
@@ -65,6 +70,7 @@ MODULE_LICENSE("GPL");
 module_param(interfaces, uint, 0);
 module_param(vline, uint, 0);
 module_param(nchannel, uint, 0);
+module_param(pri, uint, 0);
 module_param(debug, uint, 0);
 #endif
 
@@ -149,7 +155,7 @@ static void bch_vline_loop(struct bchannel *bch, struct sk_buff *skb)
 {
 	struct port *p = bch->hw;
 
-	bch->rx_skb = skb_copy(skb, GFP_ATOMIC);
+	bch->rx_skb = skb_copy(skb, GFP_KERNEL);
 	if (bch->rx_skb)
 		recv_Bchannel(bch);
 	else
@@ -176,7 +182,8 @@ static void bch_vbus(struct bchannel *bch, struct sk_buff *skb)
 		party = hw->ports + i;
 		target = &party->bch[b];
 		if ((me != party) && test_bit(FLG_ACTIVE, &target->Flags)) {
-			target->rx_skb = skb_copy(skb, GFP_ATOMIC);
+			// immediately queue data to bch's RX queue
+			target->rx_skb = skb_copy(skb, GFP_KERNEL);
 			if (target->rx_skb)
 				recv_Bchannel(target);
 		}
@@ -340,7 +347,7 @@ static void dch_vline_loop(struct dchannel *dch, struct sk_buff *skb)
 {
 	struct port *p = dch->hw;
 
-	dch->rx_skb = skb_copy(skb, GFP_ATOMIC);
+	dch->rx_skb = skb_copy(skb, GFP_KERNEL);
 	if (dch->rx_skb)
 		recv_Dchannel(dch);
 	else
@@ -366,7 +373,7 @@ static void dch_vbus(struct dchannel *dch, struct sk_buff *skb)
 		party = hw->ports + i;
 		if ((me != party) && test_bit(FLG_ACTIVE, &party->dch.Flags)) {
 			party_dch = &party->dch;
-			party_dch->rx_skb = skb_copy(skb, GFP_ATOMIC);
+			party_dch->rx_skb = skb_copy(skb, GFP_KERNEL);
 			if (party_dch->rx_skb)
 				recv_Dchannel(party_dch);
 		}
@@ -386,6 +393,12 @@ l1loop_l2l1D(struct mISDNchannel *ch, struct sk_buff *skb) {
 	struct mISDNhead	*hh = mISDN_HEAD_P(skb);
 	struct port		*p = dch->hw;
 	int			ret = -EINVAL;
+	char			*ptext;
+
+	if (p->protocol <= ISDN_P_MAX)
+		ptext = ISDN_P_TEXT[p->protocol];
+	else
+		ptext = ISDN_P_TEXT[ISDN_P_MAX+1];
 
 	switch (hh->prim) {
 		case PH_DATA_REQ:
@@ -413,15 +426,13 @@ l1loop_l2l1D(struct mISDNchannel *ch, struct sk_buff *skb) {
 			if (debug & DEBUG_HW)
 				printk (KERN_DEBUG
 					"%s: %s: PH_ACTIVATE_REQ %s\n",
-					p->name, __func__,
-					(p->protocol == ISDN_P_TE_S0)?
-							"TE":"NT");
+					p->name, __func__, ptext);
 			ret = 0;
-			if (p->protocol == ISDN_P_NT_S0) {
+			if (IS_NT(p->protocol)) {
 				if (test_bit(FLG_ACTIVE, &dch->Flags))
 					_queue_data(&dch->dev.D,
 						PH_ACTIVATE_IND, MISDN_ID_ANY,
-						0, NULL, GFP_ATOMIC);
+						0, NULL, GFP_KERNEL);
 				else {
 					ph_command(p, L1_ACTIVATE_NT);
 					test_and_set_bit(FLG_L2_ACTIVATED,
@@ -431,7 +442,7 @@ l1loop_l2l1D(struct mISDNchannel *ch, struct sk_buff *skb) {
 				if (test_bit(FLG_ACTIVE, &dch->Flags))
 					_queue_data(&dch->dev.D,
 						PH_ACTIVATE_CNF, MISDN_ID_ANY,
-						0, NULL, GFP_ATOMIC);
+						0, NULL, GFP_KERNEL);
 				else
 					ph_command(p, L1_ACTIVATE_TE);
 			}
@@ -441,12 +452,10 @@ l1loop_l2l1D(struct mISDNchannel *ch, struct sk_buff *skb) {
 			if (debug & DEBUG_HW)
 				printk (KERN_DEBUG
 					"%s: %s: PH_DEACTIVATE_REQ %s\n",
-					p->name, __func__,
-					(p->protocol == ISDN_P_TE_S0)?
-							"TE":"NT");
+					p->name, __func__,  ptext);
 			test_and_clear_bit(FLG_L2_ACTIVATED, &dch->Flags);
 
-			if (p->protocol == ISDN_P_NT_S0)
+			if (IS_NT(p->protocol))
 				ph_command(p, L1_DEACTIVATE_NT);
 
 			spin_lock(&p->lock);
@@ -552,10 +561,9 @@ open_dchannel(struct port *p, struct mISDNchannel *ch, struct channel_req *rq)
 		 * first process claiming NT sets the one and only NT when
 		 * using vline=VLINE_BUS (default)
 		 */
-		if ((vline==VLINE_BUS) && (rq->protocol == ISDN_P_NT_S0) &&
-				   vbusnt)
+		if ((vline==VLINE_BUS) && (IS_NT(rq->protocol)) && vbusnt)
 			return -EPROTONOSUPPORT;
-		if ((vline==VLINE_BUS) && (rq->protocol == ISDN_P_NT_S0))
+		if ((vline==VLINE_BUS) && (IS_NT(rq->protocol)))
 			vbusnt = p;
 
 		p->initdone = 1;
@@ -568,7 +576,7 @@ open_dchannel(struct port *p, struct mISDNchannel *ch, struct channel_req *rq)
 	}
 
 	set_bit(FLG_OPEN, &p->dch.Flags);
-	if ((rq->protocol == ISDN_P_TE_S0) && (vbusnt))
+	if (IS_TE(rq->protocol) && (vbusnt))
 		p->dch.state = vbusnt->dch.state;
 	else
 		p->dch.state = VBUS_INACTIVE;
@@ -682,11 +690,16 @@ static void
 ph_state(struct dchannel *dch)
 {
 	struct port *p = dch->hw;
+	char *ptext;
+
+	if (p->protocol <= ISDN_P_MAX)
+		ptext = ISDN_P_TEXT[p->protocol];
+	else
+		ptext = ISDN_P_TEXT[ISDN_P_MAX+1];
 
 	if (debug & DEBUG_HW)
 		printk (KERN_INFO "%s: %s: %s %s\n",
-			p->name, __func__,
-			(p->protocol == ISDN_P_TE_S0)?"TE":"NT",
+			p->name, __func__, ptext,
 			(dch->state)?"ACTIVE":"INACTIVE");
 
 	switch (dch->state) {
@@ -694,15 +707,15 @@ ph_state(struct dchannel *dch)
 			clear_bit(FLG_L2_ACTIVATED, &dch->Flags);
 			clear_bit(FLG_ACTIVE, &dch->Flags);
 			_queue_data(&dch->dev.D, PH_DEACTIVATE_IND,
-				     MISDN_ID_ANY, 0, NULL, GFP_ATOMIC);
+				     MISDN_ID_ANY, 0, NULL, GFP_KERNEL);
 			break;
 		case VBUS_ACTIVE:
 			if (!(test_and_set_bit(FLG_ACTIVE, &dch->Flags)))
 				_queue_data(&dch->dev.D, PH_ACTIVATE_IND,
-					     MISDN_ID_ANY, 0, NULL, GFP_ATOMIC);
+					     MISDN_ID_ANY, 0, NULL, GFP_KERNEL);
 			else
 				_queue_data(&dch->dev.D, PH_ACTIVATE_CNF,
-					     MISDN_ID_ANY, 0, NULL, GFP_ATOMIC);
+					     MISDN_ID_ANY, 0, NULL, GFP_KERNEL);
 			break;
 		default:
 			break;
@@ -734,8 +747,12 @@ setup_instance(struct l1loop *hw) {
 		mISDN_initdchannel(&p->dch, MAX_DFRAME_LEN_L1, ph_state);
 		p->dch.debug = debug & 0xFFFF;
 		p->dch.hw = p;
-		p->dch.dev.Dprotocols = (1 << ISDN_P_TE_S0) |
-				(1 << ISDN_P_NT_S0);
+		if (!pri)
+			p->dch.dev.Dprotocols = (1 << ISDN_P_TE_S0) |
+					(1 << ISDN_P_NT_S0);
+		else
+			p->dch.dev.Dprotocols = (1 << ISDN_P_TE_E1) |
+					(1 << ISDN_P_NT_E1);
 		p->dch.dev.Bprotocols = (1 << (ISDN_P_B_RAW & ISDN_P_B_MASK)) |
 				(1 << (ISDN_P_B_HDLC & ISDN_P_B_MASK));
 		p->dch.dev.D.send = l1loop_l2l1D;
