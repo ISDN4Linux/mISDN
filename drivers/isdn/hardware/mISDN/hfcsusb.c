@@ -1,4 +1,4 @@
-/* hfcs_usb.c
+/* hfcsusb.c
  * mISDN driver for Colognechip HFC-S USB chip
  *
  * Copyright 2001 by Peter Sprenger (sprenger@moving-bytes.de)
@@ -21,7 +21,7 @@
  *
  * module params
  *   debug=<n>, default=0, with n=0xHHHHGGGG
- *      H - l1 driver flags described in hfcs_usb.h
+ *      H - l1 driver flags described in hfcsusb.h
  *      G - common mISDN debug flags described at mISDNhw.h
  *
  *   poll=<n>, default 128
@@ -34,7 +34,7 @@
 #include <linux/usb.h>
 #include <linux/mISDNhw.h>
 #include <linux/isdn_compat.h>
-#include "hfcs_usb.h"
+#include "hfcsusb.h"
 
 const char *hfcsusb_rev = "Revision: 0.3.0 (socket), 2008-08-22";
 

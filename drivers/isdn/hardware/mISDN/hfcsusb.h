@@ -1,9 +1,9 @@
 /*
- * hfcs_usb.h, HFC-S USB mISDN driver
+ * hfcsusb.h, HFC-S USB mISDN driver
  */
 
-#ifndef __HFCS_USB_H__
-#define __HFCS_USB_H__
+#ifndef __HFCSUSB_H__
+#define __HFCSUSB_H__
 
 
 #define DRIVER_NAME "HFC-S_USB"
@@ -406,4 +406,4 @@ static struct usb_device_id hfcsusb_idtab[] = {
 
 MODULE_DEVICE_TABLE(usb, hfcsusb_idtab);
 
-#endif	/* __HFCS_USB_H__ */
+#endif	/* __HFCSUSB_H__ */
