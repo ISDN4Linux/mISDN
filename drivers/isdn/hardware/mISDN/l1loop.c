@@ -259,9 +259,10 @@ ph_state(struct dchannel *dch)
 		ptext = ISDN_P_TEXT[ISDN_P_MAX+1];
 
 	if (debug & DEBUG_HW)
-		printk (KERN_INFO "%s: %s: %s %s\n",
+		printk (KERN_DEBUG "%s: %s: %s %s (%i)\n",
 			p->name, __func__, ptext,
-			(dch->state)?"ACTIVE":"INACTIVE");
+			(dch->state)?"ACTIVE":"INACTIVE",
+			test_bit(FLG_ACTIVE, &dch->Flags));
 
 	switch (dch->state) {
 		case VBUS_INACTIVE:
@@ -291,13 +292,12 @@ vbus_activate(struct port *p)
 {
 	int i;
 
-	if ((vbusnt) && test_bit(FLG_OPEN, &vbusnt->dch.Flags)) {
+	if (vbusnt) {
 		for (i=0; i<interfaces; i++) {
 			p = hw->ports + i;
-			if (test_bit(FLG_OPEN, &p->dch.Flags)) {
-				p->dch.state = VBUS_ACTIVE;
+			p->dch.state = VBUS_ACTIVE;
+			if (test_bit(FLG_OPEN, &p->dch.Flags))
 				ph_state(&p->dch);
-			}
 		}
 	}
 	else {
@@ -318,11 +318,10 @@ vbus_deactivate(struct port *p)
 
 	for (i=0; i<interfaces; i++) {
 		p = hw->ports + i;
-		if (test_bit(FLG_OPEN, &p->dch.Flags)) {
-			dch = &p->dch;
-			dch->state = VBUS_ACTIVE;
+		dch = &p->dch;
+		dch->state = VBUS_ACTIVE;
+		if (test_bit(FLG_OPEN, &p->dch.Flags))
 			ph_state(dch);
-		}
 	}
 }
 
@@ -475,7 +474,7 @@ l1loop_l2l1D(struct mISDNchannel *ch, struct sk_buff *skb) {
 			if (IS_NT(p->protocol)) {
 				if (test_bit(FLG_ACTIVE, &dch->Flags))
 					_queue_data(&dch->dev.D,
-						PH_ACTIVATE_IND, MISDN_ID_ANY,
+						PH_ACTIVATE_CNF, MISDN_ID_ANY,
 						0, NULL, GFP_KERNEL);
 				else {
 					ph_command(p, L1_ACTIVATE_NT);
@@ -596,9 +595,6 @@ open_dchannel(struct port *p, struct mISDNchannel *ch, struct channel_req *rq)
 	if (rq->protocol == ISDN_P_NONE)
 		return -EINVAL;
 
-	test_and_clear_bit(FLG_ACTIVE, &p->dch.Flags);
-	p->dch.state = VBUS_INACTIVE;
-
 	if (!p->initdone) {
 		if ((vline==VLINE_BUS) && (IS_NT(rq->protocol)) && vbusnt)
 			return -EPROTONOSUPPORT;
@@ -617,10 +613,15 @@ open_dchannel(struct port *p, struct mISDNchannel *ch, struct channel_req *rq)
 	}
 
 	set_bit(FLG_OPEN, &p->dch.Flags);
-	if (IS_TE(rq->protocol) && (vbusnt))
-		p->dch.state = vbusnt->dch.state;
-	else
+	if (vbusnt) {
+ 		if (p != vbusnt)
+			p->dch.state = vbusnt->dch.state;
+	} else {
+		if (debug & DEBUG_HW_OPEN)
+			printk(KERN_DEBUG "%s: %s: dev(%d) no NT found\n",
+				 p->name, __func__, p->dch.dev.id);
 		p->dch.state = VBUS_INACTIVE;
+	}
 	ph_state(&p->dch);
 
 	rq->ch = ch;
@@ -705,9 +706,11 @@ l1loop_dctrl(struct mISDNchannel *ch, u_int cmd, void *arg) {
 					"%s: %s: dev(%d) close from %p\n",
 					p->name, __func__, p->dch.dev.id,
 					__builtin_return_address(0));
+			/*
 			p->dch.state = VBUS_INACTIVE;
 			clear_bit(FLG_ACTIVE, &p->dch.Flags);
 			clear_bit(FLG_OPEN, &dch->Flags);
+			*/
 			module_put(THIS_MODULE);
 			break;
 		case CONTROL_CHANNEL:
@@ -861,7 +864,7 @@ static void __exit
 l1loop_cleanup(void)
 {
 	if (debug)
-		printk(KERN_INFO DRIVER_NAME ": %s\n", __func__);
+		printk(KERN_DEBUG DRIVER_NAME ": %s\n", __func__);
 
 	release_instance(hw);
 }
