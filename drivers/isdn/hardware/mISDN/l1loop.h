@@ -27,11 +27,11 @@ const char *VLINE_MODES[] = {
 
 #define ISDN_P_MAX ISDN_P_NT_E1
 char *ISDN_P_TEXT[] = {
-	"ISDN_P_NONE"
+	"ISDN_P_NONE",
 	"ISDN_P_TE_S0",
 	"ISDN_P_NT_S0",
 	"ISDN_P_TE_E1",
-	"ISDN_P_NT_E1"
+	"ISDN_P_NT_E1",
 	"<unknown/illegal>"
 };
 #define IS_TE(p) ((p & ISDN_P_TE_S0) || (p & ISDN_P_TE_E1))
