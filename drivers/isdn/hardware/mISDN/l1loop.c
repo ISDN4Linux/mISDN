@@ -46,14 +46,14 @@
 #include <linux/isdn_compat.h>
 #include "l1loop.h"
 
-const char *l1loop_rev = "Revision: 0.1.3 (socket), 2008-08-25";
+const char *l1loop_rev = "Revision: 0.1.4 (socket), 2008-08-27";
 
 
 static int l1loop_cnt;
 static LIST_HEAD(l1loop_list);
 static rwlock_t l1loop_lock = RW_LOCK_UNLOCKED;
 struct l1loop * hw;
-struct port *vbusnt = NULL; /* NT of virtual S0 bus when using vline=1 */
+struct port *vbusnt = NULL; /* NT of virtual S0/E1 bus when using vline=1 */
 
 /* module params */
 static unsigned int interfaces = 2;
@@ -74,8 +74,6 @@ module_param(pri, uint, 0);
 module_param(debug, uint, 0);
 #endif
 
-/* forward function prototypes */
-static void ph_state(struct dchannel * dch);
 
 /*
  * disable/enable BChannel for desired protocoll
@@ -149,7 +147,7 @@ deactivate_bchannel(struct bchannel *bch)
 }
 
 /*
- * bch layer1 loop (vline=2): immediatly loop back every Bchannel data
+ * bch layer1 loop (vline=2): immediatly loop back every B-channel data
  */
 static void bch_vline_loop(struct bchannel *bch, struct sk_buff *skb)
 {
@@ -182,7 +180,7 @@ static void bch_vbus(struct bchannel *bch, struct sk_buff *skb)
 		party = hw->ports + i;
 		target = &party->bch[b];
 		if ((me != party) && test_bit(FLG_ACTIVE, &target->Flags)) {
-			// immediately queue data to bch's RX queue
+			/* immediately queue data to bch's RX queue */
 			target->rx_skb = skb_copy(skb, GFP_KERNEL);
 			if (target->rx_skb)
 				recv_Bchannel(target);
@@ -195,7 +193,7 @@ static void bch_vbus(struct bchannel *bch, struct sk_buff *skb)
 }
 
 /*
- * Layer2 -> Layer 1 Bchannel data
+ * layer2 -> layer1 callback B-channel
  */
 static int
 l1loop_l2l1B(struct mISDNchannel *ch, struct sk_buff *skb) {
@@ -247,6 +245,45 @@ l1loop_l2l1B(struct mISDNchannel *ch, struct sk_buff *skb) {
 }
 
 /*
+ * 'physical' S0/E1 bus state change handler
+ */
+static void
+ph_state(struct dchannel *dch)
+{
+	struct port *p = dch->hw;
+	char *ptext;
+
+	if (p->protocol <= ISDN_P_MAX)
+		ptext = ISDN_P_TEXT[p->protocol];
+	else
+		ptext = ISDN_P_TEXT[ISDN_P_MAX+1];
+
+	if (debug & DEBUG_HW)
+		printk (KERN_INFO "%s: %s: %s %s\n",
+			p->name, __func__, ptext,
+			(dch->state)?"ACTIVE":"INACTIVE");
+
+	switch (dch->state) {
+		case VBUS_INACTIVE:
+			clear_bit(FLG_L2_ACTIVATED, &dch->Flags);
+			clear_bit(FLG_ACTIVE, &dch->Flags);
+			_queue_data(&dch->dev.D, PH_DEACTIVATE_IND,
+				     MISDN_ID_ANY, 0, NULL, GFP_KERNEL);
+			break;
+		case VBUS_ACTIVE:
+			if (!(test_and_set_bit(FLG_ACTIVE, &dch->Flags)))
+				_queue_data(&dch->dev.D, PH_ACTIVATE_IND,
+					     MISDN_ID_ANY, 0, NULL, GFP_KERNEL);
+			else
+				_queue_data(&dch->dev.D, PH_ACTIVATE_CNF,
+					     MISDN_ID_ANY, 0, NULL, GFP_KERNEL);
+			break;
+		default:
+			break;
+	}
+}
+
+/*
  * every activation (NT and TE) causes every listening party to activate
  */
 static void
@@ -264,12 +301,15 @@ vbus_activate(struct port *p)
 		}
 	}
 	else {
-		// no interfaces opened as NT yet
+		/* no interfaces opened as NT yet */
 		p->dch.state = VBUS_INACTIVE;
 		ph_state(&p->dch);
 	}
 }
 
+/*
+ * set every party member to state VBUS_ACTIVE
+ */
 static void
 vbus_deactivate(struct port *p)
 {
@@ -286,6 +326,10 @@ vbus_deactivate(struct port *p)
 	}
 }
 
+/*
+ * apply 'physical' bus commands:
+ *    L1_ACTIVATE_TE, L1_ACTIVATE_NT, L1_DEACTIVATE_NT
+ */
 static void
 ph_command(struct port * p, u_char command) {
 	if (debug & DEBUG_HW)
@@ -341,7 +385,7 @@ ph_command(struct port * p, u_char command) {
 }
 
 /*
- * dch layer1 loop (vline=2): immediatly loop back every Dchannel data
+ * dch layer1 loop (vline=2): immediatly loop back every D-channel data
  */
 static void dch_vline_loop(struct dchannel *dch, struct sk_buff *skb)
 {
@@ -384,7 +428,7 @@ static void dch_vbus(struct dchannel *dch, struct sk_buff *skb)
 }
 
 /*
- * Layer2 -> Layer 1 Dchannel data
+ * layer2 -> layer1 callback D-channel
  */
 static int
 l1loop_l2l1D(struct mISDNchannel *ch, struct sk_buff *skb) {
@@ -477,7 +521,7 @@ l1loop_l2l1D(struct mISDNchannel *ch, struct sk_buff *skb) {
 }
 
 /*
- * Layer 1 B-channel hardware access
+ * layer 1 B-channel 'hardware' access
  */
 static int
 channel_bctrl(struct bchannel *bch, struct mISDN_ctrl_req *cq)
@@ -506,7 +550,7 @@ channel_bctrl(struct bchannel *bch, struct mISDN_ctrl_req *cq)
 }
 
 /*
- * Layer 1 B-channel hardware access
+ * layer1 B-channel 'hardware' access
  */
 static int
 l1loop_bctrl(struct mISDNchannel *ch, u_int cmd, void *arg)
@@ -518,12 +562,6 @@ l1loop_bctrl(struct mISDNchannel *ch, u_int cmd, void *arg)
 		printk(KERN_DEBUG "%s: cmd:%x %p\n", __func__, cmd, arg);
 
 	switch (cmd) {
-		case HW_TESTRX_RAW:
-		case HW_TESTRX_HDLC:
-		case HW_TESTRX_OFF:
-			ret = -EINVAL;
-			break;
-
 		case CLOSE_CHANNEL:
 			test_and_clear_bit(FLG_OPEN, &bch->Flags);
 			if (test_bit(FLG_ACTIVE, &bch->Flags))
@@ -537,12 +575,17 @@ l1loop_bctrl(struct mISDNchannel *ch, u_int cmd, void *arg)
 			ret = channel_bctrl(bch, arg);
 			break;
 		default:
+			ret = -EINVAL;
 			printk(KERN_WARNING "%s: unknown prim(%x)\n",
 			       __func__, cmd);
 	}
 	return ret;
 }
 
+/*
+ * open interface due to user process:
+ *   intially register NT interface when using vline=VLINE_BUS (default)
+ */
 static int
 open_dchannel(struct port *p, struct mISDNchannel *ch, struct channel_req *rq)
 {
@@ -557,12 +600,10 @@ open_dchannel(struct port *p, struct mISDNchannel *ch, struct channel_req *rq)
 	p->dch.state = VBUS_INACTIVE;
 
 	if (!p->initdone) {
-		/*
-		 * first process claiming NT sets the one and only NT when
-		 * using vline=VLINE_BUS (default)
-		 */
 		if ((vline==VLINE_BUS) && (IS_NT(rq->protocol)) && vbusnt)
 			return -EPROTONOSUPPORT;
+
+		/* set VBUS NT interface */
 		if ((vline==VLINE_BUS) && (IS_NT(rq->protocol)))
 			vbusnt = p;
 
@@ -616,7 +657,6 @@ open_bchannel(struct port * p, struct channel_req *rq)
 	return 0;
 }
 
-
 static int
 channel_ctrl(struct port *p, struct mISDN_ctrl_req *cq)
 {
@@ -640,9 +680,6 @@ channel_ctrl(struct port *p, struct mISDN_ctrl_req *cq)
 	return ret;
 }
 
-/*
- * device control function
- */
 static int
 l1loop_dctrl(struct mISDNchannel *ch, u_int cmd, void *arg) {
 	struct mISDNdevice	*dev = container_of(ch, struct mISDNdevice, D);
@@ -684,42 +721,6 @@ l1loop_dctrl(struct mISDNchannel *ch, u_int cmd, void *arg) {
 			return -EINVAL;
 	}
 	return err;
-}
-
-static void
-ph_state(struct dchannel *dch)
-{
-	struct port *p = dch->hw;
-	char *ptext;
-
-	if (p->protocol <= ISDN_P_MAX)
-		ptext = ISDN_P_TEXT[p->protocol];
-	else
-		ptext = ISDN_P_TEXT[ISDN_P_MAX+1];
-
-	if (debug & DEBUG_HW)
-		printk (KERN_INFO "%s: %s: %s %s\n",
-			p->name, __func__, ptext,
-			(dch->state)?"ACTIVE":"INACTIVE");
-
-	switch (dch->state) {
-		case VBUS_INACTIVE:
-			clear_bit(FLG_L2_ACTIVATED, &dch->Flags);
-			clear_bit(FLG_ACTIVE, &dch->Flags);
-			_queue_data(&dch->dev.D, PH_DEACTIVATE_IND,
-				     MISDN_ID_ANY, 0, NULL, GFP_KERNEL);
-			break;
-		case VBUS_ACTIVE:
-			if (!(test_and_set_bit(FLG_ACTIVE, &dch->Flags)))
-				_queue_data(&dch->dev.D, PH_ACTIVATE_IND,
-					     MISDN_ID_ANY, 0, NULL, GFP_KERNEL);
-			else
-				_queue_data(&dch->dev.D, PH_ACTIVATE_CNF,
-					     MISDN_ID_ANY, 0, NULL, GFP_KERNEL);
-			break;
-		default:
-			break;
-	}
 }
 
 static int
