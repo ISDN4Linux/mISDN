@@ -1689,13 +1689,17 @@ setup_hfcsusb(struct hfcsusb *hw)
 static void
 release_hw(struct hfcsusb *hw)
 {
-	int i, j;
-
 	if (debug & DBG_HFC_CALL_TRACE)
 		printk(KERN_DEBUG "%s: %s\n", hw->name, __func__);
 
-	hfcsusb_setup_bch(&hw->bch[0], ISDN_P_NONE);
-	hfcsusb_setup_bch(&hw->bch[1], ISDN_P_NONE);
+	/*
+	 * stop all endpoints gracefully
+	 * TODO: mISDN_core should generate CLOSE_CHANNEL
+	 *       signals after calling mISDN_unregister_device()
+	 */
+	hfcsusb_stop_endpoint(hw, HFC_CHAN_D);
+	hfcsusb_stop_endpoint(hw, HFC_CHAN_B1);
+	hfcsusb_stop_endpoint(hw, HFC_CHAN_B2);
 	if (hw->portmode == ISDN_P_TE_S0)
 		l1_event(hw->dch.l1, CLOSE_CHANNEL);
 
@@ -1704,22 +1708,6 @@ release_hw(struct hfcsusb *hw)
 	mISDN_freebchannel(&hw->bch[0]);
 	mISDN_freedchannel(&hw->dch);
 
-	/* kill/free all USB URBs */
-	for (i = 0; i < HFCUSB_NUM_FIFOS; i++) {
-		if (hw->fifos[i].active) {
-			for (j = 0; j < 2; j++)
-				if (hw->fifos[i].iso[j].urb) {
-					usb_kill_urb(hw->fifos[i].iso[j].urb);
-					usb_free_urb(hw->fifos[i].iso[j].urb);
-					hw->fifos->iso[j].urb = NULL;
-				}
-			if (hw->fifos[i].urb) {
-				usb_kill_urb(hw->fifos[i].urb);
-				usb_free_urb(hw->fifos[i].urb);
-				hw->fifos[i].urb = NULL;
-			}
-		}
-	}
 	if (hw->ctrl_urb) {
 		usb_kill_urb(hw->ctrl_urb);
 		usb_free_urb(hw->ctrl_urb);
@@ -1907,7 +1895,7 @@ hfcsusb_probe(struct usb_interface *intf, const struct usb_device_id *id)
 	}
 	/* if vendor and product ID is OK, start probing alternate settings */
 	alt_idx = 0;
-	small_match = 0xffff;
+	small_match = -1;
 
 	/* default settings */
 	iso_packet_size = 16;
@@ -1921,42 +1909,46 @@ hfcsusb_probe(struct usb_interface *intf, const struct usb_device_id *id)
 		while (validconf[cfg_used][0]) {
 			cfg_found = 1;
 			vcf = validconf[cfg_used];
-			/* first endpoint descriptor */
 			ep = iface->endpoint;
 			memcpy(cmptbl, vcf, 16 * sizeof(int));
 
 			/* check for all endpoints in this alternate setting */
 			for (i = 0; i < iface->desc.bNumEndpoints; i++) {
 				ep_addr = ep->desc.bEndpointAddress;
+
 				/* get endpoint base */
 				idx = ((ep_addr & 0x7f) - 1) * 2;
 				if (ep_addr & 0x80)
 					idx++;
 				attr = ep->desc.bmAttributes;
-				if (cmptbl[idx] == EP_NUL)
-					cfg_found = 0;
-				if (attr == USB_ENDPOINT_XFER_INT
-					&& cmptbl[idx] == EP_INT)
-					cmptbl[idx] = EP_NUL;
-				if (attr == USB_ENDPOINT_XFER_BULK
-					&& cmptbl[idx] == EP_BLK)
-					cmptbl[idx] = EP_NUL;
-				if (attr == USB_ENDPOINT_XFER_ISOC
-					&& cmptbl[idx] == EP_ISO)
-					cmptbl[idx] = EP_NUL;
 
-				if (attr == USB_ENDPOINT_XFER_INT &&
-					ep->desc.bInterval < vcf[17]) {
-					cfg_found = 0;
+				if (cmptbl[idx] != EP_NOP) {
+					if (cmptbl[idx] == EP_NUL)
+						cfg_found = 0;
+					if (attr == USB_ENDPOINT_XFER_INT
+						&& cmptbl[idx] == EP_INT)
+						cmptbl[idx] = EP_NUL;
+					if (attr == USB_ENDPOINT_XFER_BULK
+						&& cmptbl[idx] == EP_BLK)
+						cmptbl[idx] = EP_NUL;
+					if (attr == USB_ENDPOINT_XFER_ISOC
+						&& cmptbl[idx] == EP_ISO)
+						cmptbl[idx] = EP_NUL;
+
+					if (attr == USB_ENDPOINT_XFER_INT &&
+						ep->desc.bInterval < vcf[17]) {
+						cfg_found = 0;
+					}
 				}
 				ep++;
 			}
-			for (i = 0; i < 16; i++) {
+
+			for (i = 0; i < 16; i++)
 				if (cmptbl[i] != EP_NOP && cmptbl[i] != EP_NUL)
 					cfg_found = 0;
-			}
+
 			if (cfg_found) {
-				if (cfg_used < small_match) {
+				if (small_match < cfg_used) {
 					small_match = cfg_used;
 					alt_used = probe_alt_setting;
 					iface_used = iface;
@@ -1968,7 +1960,7 @@ hfcsusb_probe(struct usb_interface *intf, const struct usb_device_id *id)
 	}	/* (alt_idx < intf->num_altsetting) */
 
 	/* not found a valid USB Ta Endpoint config */
-	if (small_match == 0xffff)
+	if (small_match == -1)
 		return -EIO;
 
 	iface = iface_used;
