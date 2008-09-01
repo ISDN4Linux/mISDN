@@ -1237,8 +1237,6 @@ tx_iso_complete(struct urb *urb)
 						/* add 2 byte flags and 16bit
 						 * CRC at end of ISDN frame */
 						fifo->bit_line += 32;
-						if (fifo->bit_line > 0)
-							fifo->bit_line = 0;
 					}
 					frame_complete = 1;
 				}
