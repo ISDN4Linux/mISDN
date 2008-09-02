@@ -260,8 +260,9 @@ struct usb_fifo {
 	struct iso_urb	iso[2]; /* two urbs to have one always
 					 one pending */
 
-	struct dchannel *dch;	/* link to hfcsusb_t->dch, 0 if Fifos is bch */
-	struct bchannel *bch;	/* link to hfcsusb_t->bch, 0 if Fifos is dch */
+	struct dchannel *dch;	/* link to hfcsusb_t->dch */
+	struct bchannel *bch;	/* link to hfcsusb_t->bch */
+	struct dchannel *ech;	/* link to hfcsusb_t->ech, TODO: E-CHANNEL */
 	int last_urblen;	/* remember length of last packet */
 	__u8 stop_gracefull;	/* stops URB retransmission */
 };
@@ -270,6 +271,7 @@ struct hfcsusb {
 	struct list_head	list;
 	struct dchannel		dch;
 	struct bchannel		bch[2];
+	struct dchannel		ech; /* TODO : wait for struct echannel ;) */
 
 	struct usb_device	*dev;		/* our device */
 	struct usb_interface	*intf;		/* used interface */
