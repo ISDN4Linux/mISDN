@@ -399,18 +399,28 @@ open_dchannel(struct hfcsusb *hw, struct mISDNchannel *ch,
 	int err = 0;
 
 	if (debug & DEBUG_HW_OPEN)
-		printk(KERN_DEBUG "%s: %s: dev(%d) open from %p\n",
-		    hw->name, __func__, hw->dch.dev.id,
+		printk(KERN_DEBUG "%s: %s: dev(%d) open addr(%i) from %p\n",
+		    hw->name, __func__, hw->dch.dev.id, rq->adr.channel,
 		    __builtin_return_address(0));
 	if (rq->protocol == ISDN_P_NONE)
 		return -EINVAL;
 
 	test_and_clear_bit(FLG_ACTIVE, &hw->dch.Flags);
+	test_and_clear_bit(FLG_ACTIVE, &hw->ech.Flags);
 	hw->dch.state = 0;
-
 	hfcsusb_start_endpoint(hw, HFC_CHAN_D);
-	if (hw->fifos[HFCUSB_PCM_RX].pipe)
-		hfcsusb_start_endpoint(hw, HFC_CHAN_E);
+
+	/* E-Channel logging */
+	if (rq->adr.channel == 1) {
+		if (hw->fifos[HFCUSB_PCM_RX].pipe) {
+			hfcsusb_start_endpoint(hw, HFC_CHAN_E);
+			set_bit(FLG_ACTIVE, &hw->ech.Flags);
+			_queue_data(&hw->ech.dev.D, PH_ACTIVATE_IND,
+				     MISDN_ID_ANY, 0, NULL, GFP_ATOMIC);
+		}
+		else
+			return -EINVAL;
+	}
 
 	if (!hw->initdone) {
 		if (rq->protocol == ISDN_P_TE_S0) {
@@ -515,7 +525,8 @@ hfc_dctrl(struct mISDNchannel *ch, u_int cmd, void *arg)
 	switch (cmd) {
 	case OPEN_CHANNEL:
 		rq = arg;
-		if (rq->adr.channel == 0)
+		if ((rq->protocol == ISDN_P_TE_S0) ||
+		    (rq->protocol == ISDN_P_NT_S0))
 			err = open_dchannel(hw, ch, rq);
 		else
 			err = open_bchannel(hw, rq);
@@ -527,6 +538,8 @@ hfc_dctrl(struct mISDNchannel *ch, u_int cmd, void *arg)
 				hw->name, __func__, hw->dch.dev.id,
 				__builtin_return_address(0));
 		hfcsusb_stop_endpoint(hw, HFC_CHAN_D);
+		if (hw->fifos[HFCUSB_PCM_RX].pipe)
+			hfcsusb_stop_endpoint(hw, HFC_CHAN_E);
 		handle_led(hw, LED_POWER_ON);
 		module_put(THIS_MODULE);
 		break;
@@ -795,8 +808,8 @@ hfcsusb_rx_frame(struct usb_fifo *fifo, __u8 *data, unsigned int len,
 	int finish)
 {
 	struct hfcsusb	*hw = fifo->hw;
-	struct sk_buff	*rx_skb; /* data buffer for upper layer */
-	int		maxlen;
+	struct sk_buff	*rx_skb = NULL;
+	int		maxlen = 0;
 	int		fifon = fifo->fifonum;
 	int		i;
 	int		hdlc;
@@ -810,23 +823,27 @@ hfcsusb_rx_frame(struct usb_fifo *fifo, __u8 *data, unsigned int len,
 	if (!len)
 		return;
 
+	if ((!!fifo->dch + !!fifo->bch + !!fifo->ech) != 1) {
+		printk(KERN_DEBUG "%s: %s: undefined channel\n",
+		       hw->name, __func__);
+		return;
+	}
+
 	spin_lock(&hw->lock);
 	if (fifo->dch) {
 		rx_skb = fifo->dch->rx_skb;
 		maxlen = fifo->dch->maxlen;
 		hdlc = 1;
-	} else if (fifo->bch) {
+	}
+	if (fifo->bch) {
 		rx_skb = fifo->bch->rx_skb;
 		maxlen = fifo->bch->maxlen;
 		hdlc = test_bit(FLG_HDLC, &fifo->bch->Flags);
-	} else if (fifo->ech) {
+	}
+	if (fifo->ech) {
 		rx_skb = fifo->ech->rx_skb;
 		maxlen = fifo->ech->maxlen;
 		hdlc = 1;
-	} else  {
-		printk(KERN_DEBUG "%s: %s: undefined channel\n",
-		    hw->name, __func__);
-		return;
 	}
 
 	if (!rx_skb) {
@@ -876,7 +893,6 @@ hfcsusb_rx_frame(struct usb_fifo *fifo, __u8 *data, unsigned int len,
 		if (finish) {
 			if ((rx_skb->len > 3) &&
 			   (!(rx_skb->data[rx_skb->len - 1]))) {
-
 				if (debug & DBG_HFC_FIFO_VERBOSE) {
 					printk(KERN_DEBUG "%s: %s: fifon(%i)"
 					    " new RX len(%i): ",
@@ -896,11 +912,9 @@ hfcsusb_rx_frame(struct usb_fifo *fifo, __u8 *data, unsigned int len,
 					recv_Dchannel(fifo->dch);
 				if (fifo->bch)
 					recv_Bchannel(fifo->bch);
-
-				/* TODO: E-CHANNEL */
 				if (fifo->ech)
-					skb_trim(rx_skb, 0);
-
+					recv_Echannel(fifo->ech,
+						     &hw->dch);
 			} else {
 				if (debug & DBG_HFC_FIFO_VERBOSE) {
 					printk(KERN_DEBUG
@@ -1830,14 +1844,18 @@ setup_instance(struct hfcsusb *hw)
 	spin_lock_init(&hw->lock);
 
 	mISDN_initdchannel(&hw->dch, MAX_DFRAME_LEN_L1, ph_state);
-	mISDN_initdchannel(&hw->ech, MAX_DFRAME_LEN_L1, 0); /* TODO:E-CHANNEL */
 	hw->dch.debug = debug & 0xFFFF;
 	hw->dch.hw = hw;
 	hw->dch.dev.Dprotocols = (1 << ISDN_P_TE_S0) | (1 << ISDN_P_NT_S0);
-	hw->dch.dev.Bprotocols = (1 << (ISDN_P_B_RAW & ISDN_P_B_MASK)) |
-	    (1 << (ISDN_P_B_HDLC & ISDN_P_B_MASK));
 	hw->dch.dev.D.send = hfcusb_l2l1D;
 	hw->dch.dev.D.ctrl = hfc_dctrl;
+
+	/* enable E-Channel logging */
+	if (hw->fifos[HFCUSB_PCM_RX].pipe)
+		mISDN_initdchannel(&hw->ech, MAX_DFRAME_LEN_L1, NULL);
+
+	hw->dch.dev.Bprotocols = (1 << (ISDN_P_B_RAW & ISDN_P_B_MASK)) |
+	    (1 << (ISDN_P_B_HDLC & ISDN_P_B_MASK));
 	hw->dch.dev.nrbchan = 2;
 	for (i = 0; i < 2; i++) {
 		hw->bch[i].nr = i + 1;
