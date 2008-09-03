@@ -412,15 +412,41 @@ static void dch_vbus(struct dchannel *dch, struct sk_buff *skb)
 	struct dchannel *party_dch;
 	int i;
 
-	for (i=0; i<interfaces; i++) {
-		party = hw->ports + i;
-		if ((me != party) && test_bit(FLG_ACTIVE, &party->dch.Flags)) {
-			party_dch = &party->dch;
-			party_dch->rx_skb = skb_copy(skb, GFP_KERNEL);
-			if (party_dch->rx_skb)
-				recv_Dchannel(party_dch);
+	if (vbusnt) {
+		if (me != vbusnt) {
+			/* TE -> NT */
+			vbusnt->dch.rx_skb = skb_copy(skb, GFP_KERNEL);
+			if (vbusnt->dch.rx_skb)
+				recv_Dchannel(&vbusnt->dch);
+			/* virtual E-channel ECHO */
+			for (i=0; i<interfaces; i++) {
+				party = hw->ports + i;
+				if ((party != vbusnt) && test_bit(FLG_ACTIVE,
+				     &party->dch.Flags)) {
+					party_dch = &party->dch;
+					party_dch->rx_skb = skb_copy(skb,
+							GFP_KERNEL);
+					if (party_dch->rx_skb)
+						recv_Echannel(party_dch,
+							party_dch);
+				}
+			}
+		} else {
+			/* NT -> all TEs */
+			for (i=0; i<interfaces; i++) {
+				party = hw->ports + i;
+				if ((me != party) && test_bit(FLG_ACTIVE,
+				     &party->dch.Flags)) {
+					party_dch = &party->dch;
+					party_dch->rx_skb = skb_copy(skb,
+							GFP_KERNEL);
+					if (party_dch->rx_skb)
+						recv_Dchannel(party_dch);
+				}
+			}
 		}
 	}
+
 	dev_kfree_skb(skb);
 	skb = NULL;
 	get_next_dframe(dch);
@@ -695,7 +721,10 @@ l1loop_dctrl(struct mISDNchannel *ch, u_int cmd, void *arg) {
 	switch (cmd) {
 		case OPEN_CHANNEL:
 			rq = arg;
-			if (rq->adr.channel == 0)
+			if ((rq->protocol == ISDN_P_TE_S0) ||
+			    (rq->protocol == ISDN_P_NT_S0) ||
+			    (rq->protocol == ISDN_P_NT_E1) ||
+			    (rq->protocol == ISDN_P_NT_E1))
 				err = open_dchannel(p, ch, rq);
 			else
 				err = open_bchannel(p, rq);
@@ -706,11 +735,6 @@ l1loop_dctrl(struct mISDNchannel *ch, u_int cmd, void *arg) {
 					"%s: %s: dev(%d) close from %p\n",
 					p->name, __func__, p->dch.dev.id,
 					__builtin_return_address(0));
-			/*
-			p->dch.state = VBUS_INACTIVE;
-			clear_bit(FLG_ACTIVE, &p->dch.Flags);
-			clear_bit(FLG_OPEN, &dch->Flags);
-			*/
 			module_put(THIS_MODULE);
 			break;
 		case CONTROL_CHANNEL:
