@@ -403,9 +403,9 @@ static void dch_vline_loop(struct dchannel *dch, struct sk_buff *skb)
 }
 
 /*
- * dch layer1 bus (vline=1): copy frame to all partys
+ * dch layer1 bus (vline=1) on S0 bus
  */
-static void dch_vbus(struct dchannel *dch, struct sk_buff *skb)
+static void dch_vbus_S0(struct dchannel *dch, struct sk_buff *skb)
 {
 	struct port *me = dch->hw;
 	struct port *party;
@@ -453,6 +453,31 @@ static void dch_vbus(struct dchannel *dch, struct sk_buff *skb)
 }
 
 /*
+ * dch layer1 bus (vline=1) on E1 bus
+ */
+static void dch_vbus_E1(struct dchannel *dch, struct sk_buff *skb)
+{
+	struct port *me = dch->hw;
+	struct port *party;
+	struct dchannel *party_dch;
+	int i;
+
+	/* NT->TE / TE->NT */
+	for (i=0; i<interfaces; i++) {
+		party = hw->ports + i;
+		if ((me != party) && test_bit(FLG_ACTIVE, &party->dch.Flags)) {
+			party_dch = &party->dch;
+			party_dch->rx_skb = skb_copy(skb, GFP_KERNEL);
+			if (party_dch->rx_skb)
+				recv_Dchannel(party_dch);
+		}
+	}
+
+	dev_kfree_skb(skb);
+	skb = NULL;
+	get_next_dframe(dch);
+}
+/*
  * layer2 -> layer1 callback D-channel
  */
 static int
@@ -479,7 +504,10 @@ l1loop_l2l1D(struct mISDNchannel *ch, struct sk_buff *skb) {
 				queue_ch_frame(ch, PH_DATA_CNF, hh->id, NULL);
 				switch (vline) {
 					case VLINE_BUS:
-						dch_vbus(dch, skb);
+						if (IS_S0(p->protocol))
+							dch_vbus_S0(dch, skb);
+						else 
+							dch_vbus_E1(dch, skb);
 						break;
 					case VLINE_LOOP:
 						dch_vline_loop(dch, skb);
@@ -853,14 +881,12 @@ release_instance(struct l1loop *hw) {
 static int __init
 l1loop_init(void)
 {
-	if (interfaces <= 0)
-		interfaces = 1;
 	if (interfaces > 64)
 		interfaces = 64;
-	if (nchannel <= 0)
-		nchannel = 2;
 	if (nchannel > 30)
 		nchannel = 30;
+	if (pri && (vline == VLINE_BUS) && (interfaces > 2))
+		interfaces = 2;
 	if (vline > MAX_VLINE_OPTION)
 		return -ENODEV;
 
