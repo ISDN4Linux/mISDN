@@ -812,7 +812,7 @@ hfcsusb_rx_frame(struct usb_fifo *fifo, __u8 *data, unsigned int len,
 	int		maxlen = 0;
 	int		fifon = fifo->fifonum;
 	int		i;
-	int		hdlc;
+	int		hdlc = 0;
 
 	if (debug & DBG_HFC_CALL_TRACE)
 		printk(KERN_DEBUG "%s: %s: fifo(%i) len(%i) "
