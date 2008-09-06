@@ -36,7 +36,8 @@ char *ISDN_P_TEXT[] = {
 };
 #define IS_TE(p) ((p & ISDN_P_TE_S0) || (p & ISDN_P_TE_E1))
 #define IS_NT(p) ((p & ISDN_P_NT_S0) || (p & ISDN_P_NT_E1))
-
+#define IS_S0(p) ((p & ISDN_P_NT_S0) || (p & ISDN_P_TE_S0))
+#define IS_E1(p) ((p & ISDN_P_NT_E1) || (p & ISDN_P_TE_E1))
 
 /* virtual bus states */
 #define VBUS_ACTIVE	1

@@ -403,15 +403,66 @@ static void dch_vline_loop(struct dchannel *dch, struct sk_buff *skb)
 }
 
 /*
- * dch layer1 bus (vline=1): copy frame to all partys
+ * dch layer1 bus (vline=1) on S0 bus
  */
-static void dch_vbus(struct dchannel *dch, struct sk_buff *skb)
+static void dch_vbus_S0(struct dchannel *dch, struct sk_buff *skb)
 {
 	struct port *me = dch->hw;
 	struct port *party;
 	struct dchannel *party_dch;
 	int i;
 
+	if (vbusnt) {
+		if (me != vbusnt) {
+			/* TE -> NT */
+			vbusnt->dch.rx_skb = skb_copy(skb, GFP_KERNEL);
+			if (vbusnt->dch.rx_skb)
+				recv_Dchannel(&vbusnt->dch);
+			/* virtual E-channel ECHO */
+			for (i=0; i<interfaces; i++) {
+				party = hw->ports + i;
+				if ((party != vbusnt) && test_bit(FLG_ACTIVE,
+				     &party->dch.Flags)) {
+					party_dch = &party->dch;
+					party_dch->rx_skb = skb_copy(skb,
+							GFP_KERNEL);
+					if (party_dch->rx_skb)
+						recv_Echannel(party_dch,
+							party_dch);
+				}
+			}
+		} else {
+			/* NT -> all TEs */
+			for (i=0; i<interfaces; i++) {
+				party = hw->ports + i;
+				if ((me != party) && test_bit(FLG_ACTIVE,
+				     &party->dch.Flags)) {
+					party_dch = &party->dch;
+					party_dch->rx_skb = skb_copy(skb,
+							GFP_KERNEL);
+					if (party_dch->rx_skb)
+						recv_Dchannel(party_dch);
+				}
+			}
+		}
+	}
+
+	dev_kfree_skb(skb);
+	skb = NULL;
+	get_next_dframe(dch);
+}
+
+/*
+ * dch layer1 bus (vline=1) on E1 bus
+ */
+static void dch_vbus_E1(struct dchannel *dch, struct sk_buff *skb)
+{
+	struct port *me = dch->hw;
+	struct port *party;
+	struct dchannel *party_dch;
+	int i;
+
+	/* NT->TE / TE->NT */
 	for (i=0; i<interfaces; i++) {
 		party = hw->ports + i;
 		if ((me != party) && test_bit(FLG_ACTIVE, &party->dch.Flags)) {
@@ -421,11 +472,11 @@ static void dch_vbus(struct dchannel *dch, struct sk_buff *skb)
 				recv_Dchannel(party_dch);
 		}
 	}
+
 	dev_kfree_skb(skb);
 	skb = NULL;
 	get_next_dframe(dch);
 }
-
 /*
  * layer2 -> layer1 callback D-channel
  */
@@ -453,7 +504,10 @@ l1loop_l2l1D(struct mISDNchannel *ch, struct sk_buff *skb) {
 				queue_ch_frame(ch, PH_DATA_CNF, hh->id, NULL);
 				switch (vline) {
 					case VLINE_BUS:
-						dch_vbus(dch, skb);
+						if (IS_S0(p->protocol))
+							dch_vbus_S0(dch, skb);
+						else 
+							dch_vbus_E1(dch, skb);
 						break;
 					case VLINE_LOOP:
 						dch_vline_loop(dch, skb);
@@ -695,7 +749,10 @@ l1loop_dctrl(struct mISDNchannel *ch, u_int cmd, void *arg) {
 	switch (cmd) {
 		case OPEN_CHANNEL:
 			rq = arg;
-			if (rq->adr.channel == 0)
+			if ((rq->protocol == ISDN_P_TE_S0) ||
+			    (rq->protocol == ISDN_P_NT_S0) ||
+			    (rq->protocol == ISDN_P_NT_E1) ||
+			    (rq->protocol == ISDN_P_NT_E1))
 				err = open_dchannel(p, ch, rq);
 			else
 				err = open_bchannel(p, rq);
@@ -706,11 +763,6 @@ l1loop_dctrl(struct mISDNchannel *ch, u_int cmd, void *arg) {
 					"%s: %s: dev(%d) close from %p\n",
 					p->name, __func__, p->dch.dev.id,
 					__builtin_return_address(0));
-			/*
-			p->dch.state = VBUS_INACTIVE;
-			clear_bit(FLG_ACTIVE, &p->dch.Flags);
-			clear_bit(FLG_OPEN, &dch->Flags);
-			*/
 			module_put(THIS_MODULE);
 			break;
 		case CONTROL_CHANNEL:
@@ -829,14 +881,12 @@ release_instance(struct l1loop *hw) {
 static int __init
 l1loop_init(void)
 {
-	if (interfaces <= 0)
-		interfaces = 1;
 	if (interfaces > 64)
 		interfaces = 64;
-	if (nchannel <= 0)
-		nchannel = 2;
 	if (nchannel > 30)
 		nchannel = 30;
+	if (pri && (vline == VLINE_BUS) && (interfaces > 2))
+		interfaces = 2;
 	if (vline > MAX_VLINE_OPTION)
 		return -ENODEV;
 

@@ -188,7 +188,7 @@ validconf[][19] = {
 	 EP_ISO, EP_NUL, EP_ISO, EP_NUL, EP_ISO, EP_NUL, EP_NUL, EP_NUL,
 	 CNF_3INT3ISO, 2, 0},
 	/* ISO in, ISO out config */
-	{EP_NUL, EP_NUL, EP_NUL, EP_NUL, EP_NUL, EP_NUL, EP_NUL, EP_NUL,
+	{EP_NOP, EP_NOP, EP_NOP, EP_NOP, EP_NOP, EP_NOP, EP_NOP, EP_NOP,
 	 EP_ISO, EP_ISO, EP_ISO, EP_ISO, EP_ISO, EP_ISO, EP_NOP, EP_ISO,
 	 CNF_4ISO3ISO, 2, 1},
 	{EP_NUL, EP_NUL, EP_NUL, EP_NUL, EP_NUL, EP_NUL, EP_NUL, EP_NUL,
@@ -260,8 +260,9 @@ struct usb_fifo {
 	struct iso_urb	iso[2]; /* two urbs to have one always
 					 one pending */
 
-	struct dchannel *dch;	/* link to hfcsusb_t->dch, 0 if Fifos is bch */
-	struct bchannel *bch;	/* link to hfcsusb_t->bch, 0 if Fifos is dch */
+	struct dchannel *dch;	/* link to hfcsusb_t->dch */
+	struct bchannel *bch;	/* link to hfcsusb_t->bch */
+	struct dchannel *ech;	/* link to hfcsusb_t->ech, TODO: E-CHANNEL */
 	int last_urblen;	/* remember length of last packet */
 	__u8 stop_gracefull;	/* stops URB retransmission */
 };
@@ -270,6 +271,7 @@ struct hfcsusb {
 	struct list_head	list;
 	struct dchannel		dch;
 	struct bchannel		bch[2];
+	struct dchannel		ech; /* TODO : wait for struct echannel ;) */
 
 	struct usb_device	*dev;		/* our device */
 	struct usb_interface	*intf;		/* used interface */
@@ -400,6 +402,12 @@ static struct usb_device_id hfcsusb_idtab[] = {
 	 .driver_info = (unsigned long) &((struct hfcsusb_vdata)
 			  {LED_SCHEME1, {0x02, 0, 0x01, 0x04},
 			   "Eicon DIVA USB 4.0"}),
+	},
+	{
+	 USB_DEVICE(0x0586, 0x0102),
+	 .driver_info = (unsigned long) &((struct hfcsusb_vdata)
+			  {LED_SCHEME1, {0x88, -64, -32, -16},
+			   "ZyXEL OMNI.NET USB II"}),
 	},
 	{ }
 };
