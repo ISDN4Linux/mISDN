@@ -504,7 +504,7 @@ l1loop_l2l1D(struct mISDNchannel *ch, struct sk_buff *skb) {
 				queue_ch_frame(ch, PH_DATA_CNF, hh->id, NULL);
 				switch (vline) {
 					case VLINE_BUS:
-						if (IS_S0(p->protocol))
+						if (IS_ISDN_P_S0(p->protocol))
 							dch_vbus_S0(dch, skb);
 						else 
 							dch_vbus_E1(dch, skb);
@@ -525,7 +525,7 @@ l1loop_l2l1D(struct mISDNchannel *ch, struct sk_buff *skb) {
 					"%s: %s: PH_ACTIVATE_REQ %s\n",
 					p->name, __func__, ptext);
 			ret = 0;
-			if (IS_NT(p->protocol)) {
+			if (IS_ISDN_P_NT(p->protocol)) {
 				if (test_bit(FLG_ACTIVE, &dch->Flags))
 					_queue_data(&dch->dev.D,
 						PH_ACTIVATE_CNF, MISDN_ID_ANY,
@@ -552,7 +552,7 @@ l1loop_l2l1D(struct mISDNchannel *ch, struct sk_buff *skb) {
 					p->name, __func__,  ptext);
 			test_and_clear_bit(FLG_L2_ACTIVATED, &dch->Flags);
 
-			if (IS_NT(p->protocol))
+			if (IS_ISDN_P_NT(p->protocol))
 				ph_command(p, L1_DEACTIVATE_NT);
 
 			spin_lock(&p->lock);
@@ -650,11 +650,12 @@ open_dchannel(struct port *p, struct mISDNchannel *ch, struct channel_req *rq)
 		return -EINVAL;
 
 	if (!p->initdone) {
-		if ((vline==VLINE_BUS) && (IS_NT(rq->protocol)) && vbusnt)
+		if ((vline==VLINE_BUS) && (IS_ISDN_P_NT(rq->protocol))
+				   && vbusnt)
 			return -EPROTONOSUPPORT;
 
 		/* set VBUS NT interface */
-		if ((vline==VLINE_BUS) && (IS_NT(rq->protocol)))
+		if ((vline==VLINE_BUS) && (IS_ISDN_P_NT(rq->protocol)))
 			vbusnt = p;
 
 		p->initdone = 1;
