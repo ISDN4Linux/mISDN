@@ -39,7 +39,7 @@
 #define MAX_BCH_SIZE 		2048	/* allowed B-channel packet size */
 
 #define HFCUSB_RX_THRESHOLD 	64	/* threshold for fifo report bit rx */
-#define HFCUSB_TX_THRESHOLD 	64	/* threshold for fifo report bit tx */
+#define HFCUSB_TX_THRESHOLD 	96	/* threshold for fifo report bit tx */
 
 #define HFCUSB_CHIP_ID		0x16	/* Chip ID register index */
 #define HFCUSB_CIRM		0x00	/* cirm register index */
@@ -100,7 +100,7 @@ static int iso_packets[8] =
 #define SINK_MIN	48
 #define SINK_DMIN	12
 #define SINK_DMAX	18
-#define BITLINE_INF	(-64*8)
+#define BITLINE_INF	(-96*8)
 
 /* HFC-S USB register access by Control-URSs */
 #define write_reg_atomic(a, b, c) \
