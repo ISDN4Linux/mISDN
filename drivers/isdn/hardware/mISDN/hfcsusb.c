@@ -227,9 +227,12 @@ hfcusb_l2l1B(struct mISDNchannel *ch, struct sk_buff *skb)
 			printk(KERN_DEBUG "%s: %s PH_DATA_REQ ret(%i)\n",
 				hw->name, __func__, ret);
 		if (ret > 0) {
-			if (!test_bit(FLG_TRANSPARENT, &bch->Flags))
-				queue_ch_frame(ch, PH_DATA_CNF,
-				hh->id, NULL);
+			/*
+			 * other l1 drivers don't send early confirms on
+			 * transp data, but hfcsusb does because tx_next
+			 * skb is needed in tx_iso_complete()
+			 */
+			queue_ch_frame(ch, PH_DATA_CNF, hh->id, NULL);
 			ret = 0;
 		}
 		return ret;
@@ -1323,17 +1326,17 @@ tx_iso_complete(struct urb *urb)
 					printk("\n");
 				}
 
-				if (fifo->bch && test_bit(FLG_TRANSPARENT,
-				    &fifo->bch->Flags))
-					confirm_Bsend(fifo->bch);
-
 				dev_kfree_skb(tx_skb);
 				tx_skb = NULL;
 				if (fifo->dch && get_next_dframe(fifo->dch))
 					tx_skb = fifo->dch->tx_skb;
 				else if (fifo->bch &&
-				    get_next_bframe(fifo->bch))
+				    get_next_bframe(fifo->bch)) {
+					if (fifo->bch && test_bit(FLG_TRANSPARENT,
+					    &fifo->bch->Flags))
+						confirm_Bsend(fifo->bch);
 					tx_skb = fifo->bch->tx_skb;
+				}
 			}
 		}
 		errcode = usb_submit_urb(urb, GFP_ATOMIC);
