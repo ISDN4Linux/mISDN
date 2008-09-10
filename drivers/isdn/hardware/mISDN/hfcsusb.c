@@ -1332,7 +1332,7 @@ tx_iso_complete(struct urb *urb)
 					tx_skb = fifo->dch->tx_skb;
 				else if (fifo->bch &&
 				    get_next_bframe(fifo->bch)) {
-					if (fifo->bch && test_bit(FLG_TRANSPARENT,
+					if (test_bit(FLG_TRANSPARENT,
 					    &fifo->bch->Flags))
 						confirm_Bsend(fifo->bch);
 					tx_skb = fifo->bch->tx_skb;
