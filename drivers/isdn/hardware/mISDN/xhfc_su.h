@@ -135,6 +135,7 @@ struct port {
 	__u8 timers;
 	__u8 initdone;
 	int nt_timer;
+	struct timer_list f7_timer;
 
 	u_long	l1_flags;
 	struct timer_list t3_timer; /* timer 3 for activation/deactivation */

@@ -61,7 +61,7 @@ static int xhfc_setup_bch(struct bchannel *bch, int protocol);
 static void xhfc_setup_dch(struct dchannel *dch);
 static void xhfc_bh_handler(unsigned long ul_hw);
 static void ph_state(struct dchannel *dch);
-
+static void f7_timer_expire(struct port *port);
 /*
  * Physical S/U commands to control Line Interface
  */
@@ -655,6 +655,13 @@ setup_instance(struct xhfc *xhfc)
 				 &p->dch.dev.bchannels);
 		}
 
+		/*
+		 * init F7 timer to delay ACTIVATE INDICATION
+		 */
+		init_timer(&p->f7_timer);
+		p->f7_timer.data = (long) p;
+		p->f7_timer.function = (void *) f7_timer_expire;
+
 		snprintf(p->name, MISDN_MAX_IDLEN - 1, "%s.%d",
 			 DRIVER_NAME, xhfc_cnt + 1);
 		printk(KERN_INFO "%s: registered as '%s'\n", DRIVER_NAME,
@@ -1147,6 +1154,15 @@ xhfc_dctrl(struct mISDNchannel *ch, u_int cmd, void *arg)
 }
 
 /*
+ * send ACTIVATE INDICATION to l2
+ */
+static void
+f7_timer_expire(struct port *port)
+{
+	l1_event(port->dch.l1, XHFC_L1_F7);
+}
+
+/*
  * S0 TE state change event handler
  */
 static void
@@ -1157,6 +1173,9 @@ ph_state_te(struct dchannel *dch)
 	if (debug)
 		printk(KERN_INFO "%s: %s: TE F%d\n",
 		       p->name, __func__, dch->state);
+
+	if ((dch->state != 7) && timer_pending(&p->f7_timer))
+		del_timer(&p->f7_timer);		     
 
 	switch (dch->state) {
 		case 0:
@@ -1173,7 +1192,11 @@ ph_state_te(struct dchannel *dch)
 			l1_event(dch->l1, INFO2);
 			break;
 		case 7:
-			l1_event(dch->l1, XHFC_L1_F7);
+			/* delay ACTIVATE INDICATION for 1ms */
+			if (!(timer_pending(&p->f7_timer))) {
+				p->f7_timer.expires = jiffies + (HZ / 1000);
+				add_timer(&p->f7_timer);
+			}
 			break;
 	}
 }
