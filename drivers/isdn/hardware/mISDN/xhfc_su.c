@@ -1204,8 +1204,8 @@ ph_state_nt(struct dchannel *dch)
 			} else {
 				p->timers |= NT_ACTIVATION_TIMER;
 				p->nt_timer = NT_T1_COUNT;
-				write_xhfc(xhfc, R_SU_SEL, p->idx);
-				write_xhfc(xhfc, A_SU_WR_STA, M_SU_SET_G2_G3);
+				write_xhfc(p->xhfc, R_SU_SEL, p->idx);
+				write_xhfc(p->xhfc, A_SU_WR_STA, M_SU_SET_G2_G3);
 			}
 			break;
 		case (3):
