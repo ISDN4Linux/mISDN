@@ -516,7 +516,7 @@ read32_xhfc(struct xhfc * xhfc, __u8 reg_addr)
 	    reg_addr;
 	data =
 	    *(volatile __u32 *) xhfc->pi->membase +
-	    PCI2PI_XHFC_OFFSETS[xhfc->chipidx]
+	        PCI2PI_XHFC_OFFSETS[xhfc->chipidx];
 	    spin_unlock_irqrestore(&xhfc->pi->lock, flags);
 	return (data);
 }
@@ -576,7 +576,7 @@ sread_xhfc(struct xhfc *xhfc, __u8 reg_addr)
 	    R_INT_DATA;
 	data =
 	    *(volatile __u8 *) (xhfc->pi->membase +
-				PCI2PI_XHFC_OFFSETS[xhfc->chipidx])
+				PCI2PI_XHFC_OFFSETS[xhfc->chipidx]);
 	    spin_unlock_irqrestore(&xhfc->pi->lock, flags);
 	return (data);
 }

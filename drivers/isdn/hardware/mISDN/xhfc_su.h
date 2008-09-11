@@ -106,9 +106,10 @@
 
 
 /* DEBUG flags, use combined value for module parameter debug=x */
-#define DEBUG_HFC_IRQ		0x00010000
-#define DEBUG_HFC_FIFO_ERR	0x00020000
-#define DEBUG_HFC_FIFO		0x00040000
+#define DEBUG_HFC_FIFO_ERR	0x00010000
+#define DEBUG_HFC_FIFO_STAT	0x00020000
+#define DEBUG_HFC_FIFO_DATA	0x00020000
+#define DEBUG_HFC_IRQ		0x00100000
 
 #define USE_F0_COUNTER	1
 #define DEFAULT_TRANSP_BURST_SZ 128

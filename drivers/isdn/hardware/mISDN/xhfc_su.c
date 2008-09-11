@@ -25,7 +25,6 @@
  *      H - l1 driver flags described in hfcs_usb.h
  *      G - common mISDN debug flags described at mISDNhw.h
  */
-
 #include <linux/module.h>
 #include <linux/delay.h>
 #include <linux/mISDNhw.h>
@@ -37,7 +36,7 @@
 #include "xhfc_pci2pi.h"
 #endif
 
-const char *xhfc_rev = "Revision: 0.1.1 (socket), 2008-09-03";
+const char *xhfc_rev = "Revision: 0.1.2 (socket), 2008-09-11";
 
 /* modules params */
 static unsigned int debug = 0;
@@ -709,11 +708,6 @@ release_instance(struct xhfc *hw)
 	return 0;
 }
 
-/*****************************************************************************
- * below: mISDN base skel Hardware layer1 base impementation
- *
- */
-
 /*
  * Layer 1 callback function
  */
@@ -816,11 +810,8 @@ xhfc_l2l1B(struct mISDNchannel *ch, struct sk_buff *skb)
 			ret = bchannel_senddata(bch, skb);
 			spin_unlock_bh(&p->lock);
 			if (ret > 0) {
-				if (!test_bit
-				    (FLG_TRANSPARENT, &bch->Flags))
-					queue_ch_frame(ch, PH_DATA_CNF,
-						       hh->id, NULL);
 				ret = 0;
+				queue_ch_frame(ch, PH_DATA_CNF, hh->id, NULL);
 			}
 			return ret;
 		case PH_ACTIVATE_REQ:
@@ -1012,7 +1003,16 @@ open_dchannel(struct port *p, struct mISDNchannel *ch,
 		return -EINVAL;
 
 	test_and_clear_bit(FLG_ACTIVE, &p->dch.Flags);
+	test_and_clear_bit(FLG_ACTIVE, &p->ech.Flags);
 	p->dch.state = 0;
+
+	/* E-Channel logging */
+	if (rq->adr.channel == 1) {
+		xhfc_setup_ech(&p->ech);
+		set_bit(FLG_ACTIVE, &p->ech.Flags);
+		_queue_data(&p->ech.dev.D, PH_ACTIVATE_IND,
+			     MISDN_ID_ANY, 0, NULL, GFP_ATOMIC);
+	}
 
 	if (!p->initdone) {
 		if (IS_ISDN_P_S0(rq->protocol))
@@ -1119,7 +1119,8 @@ xhfc_dctrl(struct mISDNchannel *ch, u_int cmd, void *arg)
 	switch (cmd) {
 		case OPEN_CHANNEL:
 			rq = arg;
-			if (rq->adr.channel == 0)
+			if ((IS_ISDN_P_S0(rq->protocol)) ||
+			    (IS_ISDN_P_UP0(rq->protocol)))
 				err = open_dchannel(p, ch, rq);
 			else
 				err = open_bchannel(p, rq);
@@ -1203,6 +1204,8 @@ ph_state_nt(struct dchannel *dch)
 			} else {
 				p->timers |= NT_ACTIVATION_TIMER;
 				p->nt_timer = NT_T1_COUNT;
+				write_xhfc(xhfc, R_SU_SEL, p->idx);
+				write_xhfc(xhfc, A_SU_WR_STA, M_SU_SET_G2_G3);
 			}
 			break;
 		case (3):
@@ -1241,7 +1244,7 @@ xhfc_write_fifo(struct xhfc *xhfc, __u8 channel)
 	int remain, tx_busy = 0;
 	int hdlc = 0;
 	int *tx_idx = NULL;
-	struct sk_buff *tx_skb = NULL;
+	struct sk_buff **tx_skb = NULL;
 	struct port *port = xhfc->port + (channel / 4);
 	struct bchannel *bch = NULL;
 	struct dchannel *dch = NULL;
@@ -1253,18 +1256,16 @@ xhfc_write_fifo(struct xhfc *xhfc, __u8 channel)
 	switch (channel % 4) {
 		case 0:
 		case 1:
-			tx_skb = port->bch[channel % 4].tx_skb;
-			tx_idx = &port->bch[channel % 4].tx_idx;
 			bch = &port->bch[channel % 4];
+			tx_skb = &bch->tx_skb;
+			tx_idx = &bch->tx_idx;
 			tx_busy = test_bit(FLG_TX_BUSY, &bch->Flags);
-			hdlc =
-			    test_bit(FLG_HDLC,
-				     &port->bch[channel % 4].Flags);
+			hdlc = test_bit(FLG_HDLC, &bch->Flags);
 			break;
 		case 2:
-			tx_skb = port->dch.tx_skb;
-			tx_idx = &port->dch.tx_idx;
 			dch = &port->dch;
+			tx_skb = &dch->tx_skb;
+			tx_idx = &dch->tx_idx;
 			tx_busy = test_bit(FLG_TX_BUSY, &dch->Flags);
 			hdlc = 1;
 			break;
@@ -1273,13 +1274,13 @@ xhfc_write_fifo(struct xhfc *xhfc, __u8 channel)
 			spin_unlock(&port->lock);
 			return;
 	}
-	if (!tx_skb || !tx_busy) {
+	if (!*tx_skb || !tx_busy) {
 		spin_unlock(&port->lock);
 		return;
 	}
 
       send_buffer:
-	remain = tx_skb->len - *tx_idx;
+	remain = (*tx_skb)->len - *tx_idx;
 	if (remain <= 0) {
 		spin_unlock(&port->lock);
 		return;
@@ -1296,18 +1297,18 @@ xhfc_write_fifo(struct xhfc *xhfc, __u8 channel)
 
 	fcnt = 0x07 - ((f1 - f2) & 0x07); /* free frame count in tx fifo */
 
-	if (debug & DEBUG_HFC_FIFO) {
+	if (debug & DEBUG_HFC_FIFO_STAT) {
 		printk(KERN_INFO
 		       "%s channel(%i) len(%i) idx(%i) f1(%i) f2(%i) fcnt(%i) "
 		       "tcnt(%i) free(%i) fstat(%i)\n",
-		       __FUNCTION__, channel, tx_skb->len, *tx_idx,
+		       __FUNCTION__, channel, (*tx_skb)->len, *tx_idx,
 		       f1, f2, fcnt, tcnt, free, fstat);
 	}
 
 	/* check for fifo underrun during frame transmission */
 	fstat = read_xhfc(xhfc, A_FIFO_STA);
 	if (fstat & M_FIFO_ERR) {
-		if (debug & DEBUG_HFC_FIFO) {
+		if (debug & DEBUG_HFC_FIFO_ERR) {
 			printk(KERN_INFO
 			       "%s transmit fifo channel(%i) underrun idx(%i),"
 			       "A_FIFO_STA(0x%02x)\n",
@@ -1324,10 +1325,10 @@ xhfc_write_fifo(struct xhfc *xhfc, __u8 channel)
 	}
 
 	if (free && fcnt && tcnt) {
-		data = tx_skb->data + *tx_idx;
+		data = (*tx_skb)->data + *tx_idx;
 		*tx_idx += tcnt;
 
-		if (debug & DEBUG_HFC_FIFO) {
+		if (debug & DEBUG_HFC_FIFO_DATA) {
 			printk("%s channel(%i) writing: ",
 			       xhfc->name, channel);
 
@@ -1351,7 +1352,7 @@ xhfc_write_fifo(struct xhfc *xhfc, __u8 channel)
 		}
 
 		/* skb data complete */
-		if (*tx_idx == tx_skb->len) {
+		if (*tx_idx == (*tx_skb)->len) {
 			if (hdlc)
 				xhfc_inc_f(xhfc);
 			else
@@ -1360,7 +1361,7 @@ xhfc_write_fifo(struct xhfc *xhfc, __u8 channel)
 			/* check for fifo underrun during frame transmission */
 			fstat = read_xhfc(xhfc, A_FIFO_STA);
 			if (fstat & M_FIFO_ERR) {
-				if (debug & DEBUG_HFC_FIFO) {
+				if (debug & DEBUG_HFC_FIFO_ERR) {
 					printk(KERN_INFO
 					       "%s transmit fifo channel(%i) "
 					       "underrun during transmission, "
@@ -1378,25 +1379,22 @@ xhfc_write_fifo(struct xhfc *xhfc, __u8 channel)
 				}
 			}
 
-			/* confirm transparent bchannel data */
-			if (bch && !hdlc)
-				confirm_Bsend(bch);
+			dev_kfree_skb(*tx_skb);
+			*tx_skb = NULL;
+			if (bch) {
+				if (get_next_bframe(bch) && !hdlc)
+					confirm_Bsend(bch);
+			}
+			if (dch)
+				get_next_dframe(dch);
 
-			dev_kfree_skb(tx_skb);
-			tx_skb = NULL;
-
-			if (dch && get_next_dframe(dch))
-				tx_skb = dch->tx_skb;
-			if (bch && get_next_bframe(bch))
-				tx_skb = bch->tx_skb;
-
-			if (tx_skb) {
-				if (debug & DEBUG_HFC_FIFO)
+			if (*tx_skb) {
+				if (debug & DEBUG_HFC_FIFO_DATA)
 					printk(KERN_INFO
 					       "channel(%i) has next_tx_frame\n",
 					       channel);
 				if ((free - tcnt) > 8) {
-					if (debug & DEBUG_HFC_FIFO)
+					if (debug & DEBUG_HFC_FIFO_DATA)
 						printk(KERN_INFO
 						       "channel(%i) continue "
 						       "B-TX immediatetly\n",
@@ -1454,6 +1452,7 @@ xhfc_read_fifo(struct xhfc *xhfc, __u8 channel)
 			rx_skb = &ech->rx_skb;
 			maxlen = ech->maxlen;
 			hdlc = 1;
+			break;
 		default:
 			spin_unlock(&port->lock);
 			return;
@@ -1464,7 +1463,7 @@ xhfc_read_fifo(struct xhfc *xhfc, __u8 channel)
 
 	fstat = read_xhfc(xhfc, A_FIFO_STA);
 	if (fstat & M_FIFO_ERR) {
-		if (debug & DEBUG_HFC_FIFO)
+		if (debug & DEBUG_HFC_FIFO_ERR)
 			printk(KERN_INFO
 			       "RX fifo overflow channel(%i), "
 			       "A_FIFO_STA(0x%02x) f0cnt(%i)\n",
@@ -1488,7 +1487,7 @@ xhfc_read_fifo(struct xhfc *xhfc, __u8 channel)
 		rcnt = read_xhfc(xhfc, A_USAGE) - 1;
 	}
 
-	if (debug & DEBUG_HFC_FIFO) {
+	if (debug & DEBUG_HFC_FIFO_STAT) {
 		if (*rx_skb)
 			i = (*rx_skb)->len;
 		else
@@ -1533,7 +1532,7 @@ xhfc_read_fifo(struct xhfc *xhfc, __u8 channel)
 		if (f1 != f2) {
 			xhfc_inc_f(xhfc);
 
-			if (debug & DEBUG_HFC_FIFO) {
+			if (debug & DEBUG_HFC_FIFO_DATA) {
 				printk(KERN_INFO
 				       "channel(%i) new RX len(%i): ",
 				       channel, (*rx_skb)->len);
@@ -1547,7 +1546,7 @@ xhfc_read_fifo(struct xhfc *xhfc, __u8 channel)
 
 			/* check minimum frame size */
 			if ((*rx_skb)->len < 4) {
-				if (debug & DEBUG_HFC_FIFO)
+				if (debug & DEBUG_HFC_FIFO_ERR)
 					printk(KERN_INFO
 					       "%s: frame in channel(%i) "
 					       "< minimum size\n",
@@ -1557,7 +1556,7 @@ xhfc_read_fifo(struct xhfc *xhfc, __u8 channel)
 
 			/* check crc */
 			if ((*rx_skb)->data[(*rx_skb)->len - 1]) {
-				if (debug & DEBUG_HFC_FIFO)
+				if (debug & DEBUG_HFC_FIFO_ERR)
 					printk(KERN_INFO
 					       "%s: channel(%i) CRC-error\n",
 					       __FUNCTION__, channel);
@@ -1579,7 +1578,7 @@ xhfc_read_fifo(struct xhfc *xhfc, __u8 channel)
 			if (*rx_skb)
 				skb_trim(*rx_skb, 0);
 			if (read_xhfc(xhfc, A_USAGE) > 8) {
-				if (debug & DEBUG_HFC_FIFO)
+				if (debug & DEBUG_HFC_FIFO_DATA)
 					printk(KERN_INFO
 					       "%s: channel(%i) continue "
 					       "xhfc_read_fifo\n",
@@ -1708,7 +1707,6 @@ xhfc_interrupt(int intno, void *dev_id)
 			xhfc->fifo_irq |=
 			    (read_xhfc(xhfc, R_FIFO_BL0_IRQ + j) <<
 			     (j * 8));
-
 
 		/* call bottom half at events
 		 *   - Timer Interrupt (or other misc_irq sources)
