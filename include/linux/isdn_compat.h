@@ -51,6 +51,15 @@ typedef void    (WFUNC_t)(void *);
 #define _INIT_WORK(a, b) INIT_WORK(a, b)
 #endif
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,27)
+#define _EACH_DEVICE(a, b, c) class_for_each_device(a, b, c)
+#define _FIND_DEVICE(a, b, c) class_find_device(a, b, c)
+#else
+#define _EACH_DEVICE(a, b, c) class_for_each_device(a, NULL, b, c)
+#define _FIND_DEVICE(a, b, c) class_find_device(a, NULL, b, c)
+#endif
+
+
 #include <linux/interrupt.h>
 #ifndef IRQF_SHARED
 #define IRQF_SHARED	SA_SHIRQ

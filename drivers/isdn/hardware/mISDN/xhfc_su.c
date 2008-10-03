@@ -593,7 +593,7 @@ init_xhfc(struct xhfc *xhfc)
  * init mISDN interface (called for each XHFC)
  */
 int
-setup_instance(struct xhfc *xhfc)
+setup_instance(struct xhfc *xhfc, struct device *parent)
 {
 	struct port *p;
 	int err = 0, i, j;
@@ -667,7 +667,7 @@ setup_instance(struct xhfc *xhfc)
 		printk(KERN_INFO "%s: registered as '%s'\n", DRIVER_NAME,
 		       p->name);
 
-		err = mISDN_register_device(&p->dch.dev, p->name);
+		err = mISDN_register_device(&p->dch.dev, parent, p->name);
 		if (err) {
 			mISDN_freebchannel(&p->bch[1]);
 			mISDN_freebchannel(&p->bch[0]);

@@ -1835,7 +1835,7 @@ hfc_bctrl(struct mISDNchannel *ch, u_int cmd, void *arg)
 }
 
 static int
-setup_instance(struct hfcsusb *hw)
+setup_instance(struct hfcsusb *hw, struct device *parent)
 {
 	u_long	flags;
 	int	err, i;
@@ -1890,7 +1890,7 @@ setup_instance(struct hfcsusb *hw)
 	printk(KERN_INFO "%s: registered as '%s'\n",
 	    DRIVER_NAME, hw->name);
 
-	err = mISDN_register_device(&hw->dch.dev, hw->name);
+	err = mISDN_register_device(&hw->dch.dev, parent, hw->name);
 	if (err)
 		goto out;
 
@@ -2098,7 +2098,7 @@ hfcsusb_probe(struct usb_interface *intf, const struct usb_device_id *id)
 	    hw->name, __func__, driver_info->vend_name,
 	    conf_str[small_match], ifnum, alt_used);
 
-	if (setup_instance(hw))
+	if (setup_instance(hw, dev->dev.parent))
 		return -EIO;
 
 	hw->intf = intf;
