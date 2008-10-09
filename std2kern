@@ -274,6 +274,7 @@ else
 	drivers/isdn/hardware/mISDN/Kconfig \
 	drivers/isdn/mISDN/Makefile \
 	drivers/isdn/mISDN/Kconfig \
+	drivers/isdn/mISDN/octvqe/Makefile \
 	drivers/isdn/Kconfig \
 	drivers/isdn/Makefile; do
 	calc_version_file $i 

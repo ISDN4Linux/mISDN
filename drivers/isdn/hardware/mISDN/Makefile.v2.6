@@ -9,33 +9,12 @@ endif
 
 EXTRA_CFLAGS += -DMISDNVERSION=\"$(MISDNVERSION)\"
 
-ifdef CONFIG_MISDN_AVM_FRITZ
-obj-$(CONFIG_MISDN) += avmfritz.o
-endif
-
-ifdef CONFIG_MISDN_NETJET
-obj-$(CONFIG_MISDN) += netjetpci.o
-endif
-
 ifdef CONFIG_MISDN_HFCPCI
 obj-$(CONFIG_MISDN) += hfcpci.o
 endif
 
 ifdef CONFIG_MISDN_HFCUSB
 obj-$(CONFIG_MISDN) += hfcsusb.o
-endif
-
-ifdef CONFIG_MISDN_HFCMINI
-obj-$(CONFIG_MISDN) += hfcsmini.o
-endif
-
-ifdef CONFIG_MISDN_SPEEDFAX
-obj-$(CONFIG_MISDN) += sedlfax.o
-# obj-$(CONFIG_MISDN) += faxl3.o
-endif
-
-ifdef CONFIG_MISDN_W6692
-obj-$(CONFIG_MISDN) += w6692pci.o
 endif
 
 ifdef CONFIG_MISDN_HFCMULTI
@@ -56,11 +35,6 @@ endif
 
 # multi objects
 
-sedlfax-objs := sedl_fax.o isar.o
-avmfritz-objs := avm_fritz.o
-netjetpci-objs := netjet.o
-hfcsmini-objs := hfcs_mini.o
-w6692pci-objs := w6692.o
 xhfc-objs := xhfc_su.o xhfc_pci2pi.o
 mISDN_isac-objs := isac.o arcofi.o
 mISDN_hwskel-objs := hwskel.o
