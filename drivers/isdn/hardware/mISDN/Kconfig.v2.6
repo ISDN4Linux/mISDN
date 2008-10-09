@@ -2,27 +2,15 @@
 # modularer ISDN driver
 #
 
-config MISDN_AVM_FRITZ
-	bool "Support for AVM Fritz!Cards"
-	depends on PCI || ISA
-	help
-	  Enable support for AVM Fritz!Card PCI and PnP.
-
-config MISDN_NETJET
-       bool "Support for NETJet cards"
-       depends on PCI
-       help
-          Enable support for Traverse Technologies' NETJet PCI cards.
-
 config MISDN_HFCPCI
-	bool "Support for HFC PCI cards"
+	tristate "Support for HFC PCI cards"
 	depends on PCI
 	help
 	  Enable support for card with Cologne Chips Design HFC PCI based
 	  cards.
 
 config MISDN_HFCMULTI
-	bool "Support for HFC multiport cards (HFC-4S/8S/E1)"
+	tristate "Support for HFC multiport cards (HFC-4S/8S/E1)"
 	depends on PCI
 	help
 	  Enable support for card with Cologne Chip AG's HFC multiport
@@ -32,48 +20,21 @@ config MISDN_HFCMULTI
 	   * HFC-8S (8 S/T interfaces on one chip)
 	   * HFC-E1 (E1 interface for 2Mbit ISDN)
 
-if MISDN_HFCMULTI!=n
-
-config HFCMULTI_PCIMEM
-	bool "HFC multiport driver with memory mapped IO"
-	depends on PCI
-	help
-	  Use memory mapped PCI access rather than IO access.
-	  This feature MIGHT be slightly faster, especially when
-	  using hardware DTMF detection. Also it may cause trouble with some
-	  PCI bridges.
-	  If unsure, say 'N'.
-
-endif
-
 config MISDN_HFCUSB
-	bool "Support for HFC-S USB based TAs"
-	depends on USB && EXPERIMENTAL
+	tristate "Support for HFC-S USB based TAs"
+	depends on USB
 	help
 	  Enable support for USB ISDN TAs with Cologne Chip AG's
 	  HFC-S USB ISDN Controller
 
-config MISDN_HFCMINI
-	bool "Support for 'HFC-S mini' based TAs"
-	depends on PCI
-	help
-	  Enable support for Cologne Chip AG's 'HFC-S mini' Evaluation Card
-
 config MISDN_XHFC
-	bool "Support for XHFC based cards"
+	tristate "Support for XHFC PCI2PI evalboard"
 	depends on PCI
 	help
 	  Enable support for Cologne Chips AG's XHFC Evaluation Card
 
-config MISDN_SPEEDFAX
-	bool "Support for Sedlbauer Speedfax+"
-	depends on PCI || ISA
-	help
-	  Enable support for Sedlbauer Speedfax+.
-
-config MISDN_W6692
-	bool "Support for Winbond 6692 based cards"
-	depends on PCI
-	help
-	  Enable support for Winbond 6692 PCI chip based cards.
-
+config MISDN_L1LOOP
+        tristate "Support for virtual ISDN loop devices"
+        help
+          Enable support for mISDN_l1loop to use virtual ISDN devices connected
+          to virtual bus system
