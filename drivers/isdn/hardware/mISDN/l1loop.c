@@ -71,7 +71,7 @@ module_param(interfaces, uint, 0);
 module_param(vline, uint, 0);
 module_param(nchannel, uint, 0);
 module_param(pri, uint, 0);
-module_param(debug, uint, 0);
+module_param(debug, uint, S_IRUGO | S_IWUSR);
 #endif
 
 

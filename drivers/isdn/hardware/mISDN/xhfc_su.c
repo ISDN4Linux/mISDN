@@ -49,7 +49,7 @@ MODULE_AUTHOR("Martin Bachem");
 #ifdef MODULE_LICENSE
 MODULE_LICENSE("GPL");
 #endif
-module_param(debug, uint, 0);
+module_param(debug, uint, S_IRUGO | S_IWUSR);
 #endif
 
 /* prototypes for static functions */
