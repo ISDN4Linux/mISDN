@@ -110,7 +110,7 @@
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/slab.h>
-#define malloc(a) kmalloc((a), GFP_KERNEL)
+#define malloc(a) kmalloc((a), GFP_ATOMIC)
 #define free(a) kfree(a)
 #else
 #include <stdio.h>
