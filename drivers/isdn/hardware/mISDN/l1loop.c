@@ -71,7 +71,7 @@ module_param(interfaces, uint, 0);
 module_param(vline, uint, 0);
 module_param(nchannel, uint, 0);
 module_param(pri, uint, 0);
-module_param(debug, uint, 0);
+module_param(debug, uint, S_IRUGO | S_IWUSR);
 #endif
 
 
@@ -833,7 +833,8 @@ setup_instance(struct l1loop *hw) {
 		printk (KERN_INFO "%s: registered as '%s'\n",
 			DRIVER_NAME, p->name);
 
-		err = mISDN_register_device(&p->dch.dev, p->name);
+		/* TODO: parent device? */
+		err = mISDN_register_device(&p->dch.dev, NULL, p->name);
 		if (err) {
 			for (b=0; b<nchannel; b++)
 				mISDN_freebchannel(&p->bch[b]);

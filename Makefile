@@ -72,8 +72,8 @@ uninstall:
 	export MISDNDIR=$(MISDNDIR); ./makelib.sh uninstall
 
 modules-install:
-	cd $(LINUX) ; make INSTALL_MOD_PATH=$(INSTALL_PREFIX) SUBDIRS=$(MISDN_CORE_SRC) modules_install 
-	cd $(LINUX) ; make INSTALL_MOD_PATH=$(INSTALL_PREFIX) SUBDIRS=$(MISDN_SRC) modules_install 
+	$(MAKE) -C $(LINUX) INSTALL_MOD_PATH=$(INSTALL_PREFIX) SUBDIRS=$(MISDN_CORE_SRC) modules_install 
+	$(MAKE) -C $(LINUX) INSTALL_MOD_PATH=$(INSTALL_PREFIX) SUBDIRS=$(MISDN_SRC) modules_install 
 
 test_old_misdn:
 	export LINUX=$(LINUX); ./makelib.sh test_old_misdn

@@ -47,7 +47,7 @@ MODULE_AUTHOR("Martin Bachem");
 #ifdef MODULE_LICENSE
 MODULE_LICENSE("GPL");
 #endif
-module_param(debug, uint, 0);
+module_param(debug, uint, S_IRUGO | S_IWUSR);
 module_param(interfaces, uint, 0);
 #endif
 
@@ -691,7 +691,7 @@ setup_instance(struct hwskel *hw) {
 		printk (KERN_INFO "%s: registered as '%s'\n",
 			DRIVER_NAME, p->name);
 
-		err = mISDN_register_device(&p->dch.dev, p->name);
+		err = mISDN_register_device(&p->dch.dev, &p->pdev->dev, p->name);
 		if (err) {
 			mISDN_freebchannel(&p->bch[1]);
 			mISDN_freebchannel(&p->bch[0]);

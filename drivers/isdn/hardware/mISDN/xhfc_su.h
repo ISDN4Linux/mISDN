@@ -189,7 +189,7 @@ struct xhfc {
 /*
  * interface prototypes exportet for PI implementation, e.g. xhfc_pci2pi
  */
-int setup_instance(struct xhfc *hw);
+int setup_instance(struct xhfc *hw, struct device *parent);
 int release_instance(struct xhfc *hw);
 void enable_interrupts(struct xhfc *xhfc);
 void disable_interrupts(struct xhfc *xhfc);

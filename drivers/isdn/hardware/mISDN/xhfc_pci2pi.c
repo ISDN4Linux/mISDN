@@ -139,7 +139,7 @@ xhfc_pci_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	for (i = 0; i < pi->num_xhfcs; i++) {
 		pi->xhfc[i].pi = pi;
 		pi->xhfc[i].chipidx = i;
-		err |= setup_instance(&pi->xhfc[i]);
+		err |= setup_instance(&pi->xhfc[i], pdev->dev.parent);
 	}
 
 	if (!err) {

@@ -1,0 +1,10 @@
+/VERSION
+/drivers/isdn/hardware/mISDN/Makefile
+/drivers/isdn/mISDN/Makefile
+*.ko
+*.cmd
+*.o
+*.mod.c
+Module.symvers
+modules.order
+.tmp_versions

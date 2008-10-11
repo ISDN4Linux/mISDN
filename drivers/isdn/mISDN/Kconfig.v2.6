@@ -11,7 +11,7 @@ menuconfig MISDN
 if MISDN != n
 
 config MISDN_DSP
-	bool "Digital Audio Processing of transparent data"
+	tristate "Digital Audio Processing of transparent data"
 	help
 	  Enable support for digital audio processing capability.
 	  This module may be used for special applications that require
@@ -24,7 +24,7 @@ config MISDN_DSP
 	  If unsure, say 'N'.
 
 config MISDN_L1OIP
-	bool "ISDN over IP tunnel"
+	tristate "ISDN over IP tunnel"
 	help
 	  Enable support for ISDN over IP tunnel.
 

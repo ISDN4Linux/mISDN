@@ -381,7 +381,7 @@ data_sock_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 			memcpy(di.channelmap, dev->channelmap,
 				sizeof(di.channelmap));
 			di.nrbchan = dev->nrbchan;
-			strcpy(di.name, dev->name);
+			strcpy(di.name, dev_name(&dev->dev));
 			if (copy_to_user((void __user *)arg, &di, sizeof(di)))
 				err = -EFAULT;
 		} else
@@ -662,11 +662,25 @@ base_sock_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 			memcpy(di.channelmap, dev->channelmap,
 				sizeof(di.channelmap));
 			di.nrbchan = dev->nrbchan;
-			strcpy(di.name, dev->name);
+			strcpy(di.name, dev_name(&dev->dev));
 			if (copy_to_user((void __user *)arg, &di, sizeof(di)))
 				err = -EFAULT;
 		} else
 			err = -ENODEV;
+		break;
+	case IMSETDEVNAME:
+		{
+			struct mISDN_devrename dn;
+			if (copy_from_user(&dn, (void __user *)arg, sizeof(dn))) {
+				err = -EFAULT;
+				break;
+			}
+			dev = get_mdevice(dn.id);
+			if (dev)
+				err = device_rename(&dev->dev, dn.name);
+			else
+				err = -ENODEV;
+		}
 		break;
 	default:
 		err = -EINVAL;
