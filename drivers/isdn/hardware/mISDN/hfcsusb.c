@@ -533,17 +533,22 @@ hfc_dctrl(struct mISDNchannel *ch, u_int cmd, void *arg)
 			err = open_dchannel(hw, ch, rq);
 		else
 			err = open_bchannel(hw, rq);
+		if (!err)
+			hw->open++;
 		break;
 	case CLOSE_CHANNEL:
+		hw->open--;
 		if (debug & DEBUG_HW_OPEN)
 			printk(KERN_DEBUG
-				"%s: %s: dev(%d) close from %p\n",
+				"%s: %s: dev(%d) close from %p (open %d)\n",
 				hw->name, __func__, hw->dch.dev.id,
-				__builtin_return_address(0));
-		hfcsusb_stop_endpoint(hw, HFC_CHAN_D);
-		if (hw->fifos[HFCUSB_PCM_RX].pipe)
-			hfcsusb_stop_endpoint(hw, HFC_CHAN_E);
-		handle_led(hw, LED_POWER_ON);
+				__builtin_return_address(0), hw->open);
+		if (!hw->open) {
+			hfcsusb_stop_endpoint(hw, HFC_CHAN_D);
+			if (hw->fifos[HFCUSB_PCM_RX].pipe)
+				hfcsusb_stop_endpoint(hw, HFC_CHAN_E);
+			handle_led(hw, LED_POWER_ON);
+		}
 		module_put(THIS_MODULE);
 		break;
 	case CONTROL_CHANNEL:

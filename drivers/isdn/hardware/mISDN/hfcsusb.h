@@ -299,6 +299,7 @@ struct hfcsusb {
 
 	__u8			portmode;
 	int			nt_timer;
+	int			open;
 	__u8			timers;
 	__u8			initdone;
 	char			name[MISDN_MAX_IDLEN];
