@@ -36,7 +36,7 @@
 #include <linux/isdn_compat.h>
 #include "hfcsusb.h"
 
-const char *hfcsusb_rev = "Revision: 0.3.1 (socket), 2008-09-02";
+const char *hfcsusb_rev = "Revision: 0.3.2 (socket), 2008-11-04";
 
 static unsigned int debug;
 static int poll = DEFAULT_TRANSP_BURST_SZ;
@@ -61,6 +61,7 @@ static void hfcsusb_start_endpoint(struct hfcsusb *hw, int channel);
 static void hfcsusb_stop_endpoint(struct hfcsusb *hw, int channel);
 static int  hfcsusb_setup_bch(struct bchannel *bch, int protocol);
 static void deactivate_bchannel(struct bchannel *bch);
+static void hfcsusb_ph_info(struct hfcsusb *hw);
 
 /* start next background transfer for control channel */
 static void
@@ -259,6 +260,34 @@ hfcusb_l2l1B(struct mISDNchannel *ch, struct sk_buff *skb)
 }
 
 /*
+ * send full D/B channel status information
+ * as MPH_INFORMATION_IND
+ */
+static void
+hfcsusb_ph_info(struct hfcsusb *hw) {
+        struct ph_info * phi;
+        struct dchannel * dch = &hw->dch;
+        int i;
+
+        phi = kzalloc(sizeof(struct ph_info) +
+                dch->dev.nrbchan * sizeof(struct ph_info_ch),
+                GFP_ATOMIC);
+        phi->dch.ch.protocol = hw->protocol;
+        phi->dch.ch.Flags = dch->Flags;
+        phi->dch.state = dch->state;
+        phi->dch.num_bch = dch->dev.nrbchan;
+        for (i=0; i<dch->dev.nrbchan; i++) {
+                phi->bch[i].protocol = hw->bch[i].ch.protocol;
+                phi->bch[i].Flags = hw->bch[i].Flags;
+        }
+        _queue_data(&dch->dev.D,
+                MPH_INFORMATION_IND, MISDN_ID_ANY,
+                sizeof(struct ph_info_dch) +
+                        dch->dev.nrbchan * sizeof(struct ph_info_ch),
+                phi, GFP_ATOMIC);
+}
+
+/*
  * Layer2 -> Layer 1 Dchannel data
  */
 static int
@@ -290,9 +319,9 @@ hfcusb_l2l1D(struct mISDNchannel *ch, struct sk_buff *skb)
 		if (debug & DBG_HFC_CALL_TRACE)
 			printk(KERN_DEBUG "%s: %s: PH_ACTIVATE_REQ %s\n",
 				hw->name, __func__,
-				(hw->portmode == ISDN_P_NT_S0) ? "NT" : "TE");
+				(hw->protocol == ISDN_P_NT_S0) ? "NT" : "TE");
 
-		if (hw->portmode == ISDN_P_NT_S0) {
+		if (hw->protocol == ISDN_P_NT_S0) {
 			ret = 0;
 			if (test_bit(FLG_ACTIVE, &dch->Flags)) {
 				_queue_data(&dch->dev.D,
@@ -316,7 +345,7 @@ hfcusb_l2l1D(struct mISDNchannel *ch, struct sk_buff *skb)
 				hw->name, __func__);
 		test_and_clear_bit(FLG_L2_ACTIVATED, &dch->Flags);
 
-		if (hw->portmode == ISDN_P_NT_S0) {
+		if (hw->protocol == ISDN_P_NT_S0) {
 			hfcsusb_ph_command(hw, HFC_L1_DEACTIVATE_NT);
 			spin_lock_irqsave(&hw->lock, flags);
 			skb_queue_purge(&dch->squeue);
@@ -338,6 +367,10 @@ hfcusb_l2l1D(struct mISDNchannel *ch, struct sk_buff *skb)
 			ret = 0;
 		} else
 			ret = l1_event(dch->l1, hh->prim);
+		break;
+	case MPH_INFORMATION_REQ:
+		hfcsusb_ph_info(hw);
+		ret = 0;
 		break;
 	}
 
@@ -392,6 +425,7 @@ hfc_l1callback(struct dchannel *dch, u_int cmd)
 			hw->name, __func__, cmd);
 		return -1;
 	}
+	hfcsusb_ph_info(hw);
 	return 0;
 }
 
@@ -410,7 +444,6 @@ open_dchannel(struct hfcsusb *hw, struct mISDNchannel *ch,
 
 	test_and_clear_bit(FLG_ACTIVE, &hw->dch.Flags);
 	test_and_clear_bit(FLG_ACTIVE, &hw->ech.Flags);
-	hw->dch.state = 0;
 	hfcsusb_start_endpoint(hw, HFC_CHAN_D);
 
 	/* E-Channel logging */
@@ -426,13 +459,11 @@ open_dchannel(struct hfcsusb *hw, struct mISDNchannel *ch,
 	}
 
 	if (!hw->initdone) {
+		hw->protocol = rq->protocol;
 		if (rq->protocol == ISDN_P_TE_S0) {
-			hw->portmode = ISDN_P_TE_S0;
 			err = create_l1(&hw->dch, hfc_l1callback);
 			if (err)
 				return err;
-		} else {
-			hw->portmode = ISDN_P_NT_S0;
 		}
 		setPortMode(hw);
 		ch->protocol = rq->protocol;
@@ -443,10 +474,9 @@ open_dchannel(struct hfcsusb *hw, struct mISDNchannel *ch,
 	}
 
 	if (((ch->protocol == ISDN_P_NT_S0) && (hw->dch.state == 3)) ||
-	    ((ch->protocol == ISDN_P_TE_S0) && (hw->dch.state == 7))) {
+	    ((ch->protocol == ISDN_P_TE_S0) && (hw->dch.state == 7)))
 		_queue_data(ch, PH_ACTIVATE_IND, MISDN_ID_ANY,
 		    0, NULL, GFP_KERNEL);
-	}
 	rq->ch = ch;
 	if (!try_module_get(THIS_MODULE))
 		printk(KERN_WARNING "%s: %s: cannot get module\n",
@@ -659,6 +689,7 @@ ph_state_nt(struct dchannel *dch)
 	default:
 		break;
 	}
+	hfcsusb_ph_info(hw);
 }
 
 static void
@@ -666,9 +697,9 @@ ph_state(struct dchannel *dch)
 {
 	struct hfcsusb *hw = dch->hw;
 
-	if (hw->portmode == ISDN_P_NT_S0)
+	if (hw->protocol == ISDN_P_NT_S0)
 		ph_state_nt(dch);
-	else if (hw->portmode == ISDN_P_TE_S0)
+	else if (hw->protocol == ISDN_P_TE_S0)
 		ph_state_te(dch);
 }
 
@@ -726,7 +757,7 @@ hfcsusb_setup_bch(struct bchannel *bch, int protocol)
 		write_reg(hw, HFCUSB_CON_HDLC, conhdlc);
 		write_reg(hw, HFCUSB_INC_RES_F, 2);
 
-		sctrl = 0x40 + ((hw->portmode == ISDN_P_TE_S0) ? 0x00 : 0x04);
+		sctrl = 0x40 + ((hw->protocol == ISDN_P_TE_S0) ? 0x00 : 0x04);
 		sctrl_r = 0x0;
 		if (test_bit(FLG_ACTIVE, &hw->bch[0].Flags)) {
 			sctrl |= 1;
@@ -745,6 +776,7 @@ hfcsusb_setup_bch(struct bchannel *bch, int protocol)
 			handle_led(hw, (bch->nr == 1) ? LED_B1_OFF :
 				LED_B2_OFF);
 	}
+	hfcsusb_ph_info(hw);
 	return 0;
 }
 
@@ -1357,7 +1389,7 @@ tx_iso_complete(struct urb *urb)
 		 * changes tx_iso_complete is assumed to be called every
 		 * fifo->intervall (ms)
 		 */
-		if ((fifon == HFCUSB_D_TX) && (hw->portmode & ISDN_P_NT_S0)
+		if ((fifon == HFCUSB_D_TX) && (hw->protocol & ISDN_P_NT_S0)
 		    && (hw->timers & NT_ACTIVATION_TIMER)) {
 			if ((--hw->nt_timer) < 0)
 				schedule_event(&hw->dch, FLG_PHCHANGE);
@@ -1525,9 +1557,9 @@ setPortMode(struct hfcsusb *hw)
 {
 	if (debug & DEBUG_HW)
 		printk(KERN_DEBUG "%s: %s %s\n", hw->name, __func__,
-		   (hw->portmode & ISDN_P_TE_S0) ? "TE" : "NT");
+		   (hw->protocol & ISDN_P_TE_S0) ? "TE" : "NT");
 
-	if (hw->portmode & ISDN_P_TE_S0) {
+	if (hw->protocol & ISDN_P_TE_S0) {
 		write_reg(hw, HFCUSB_SCTRL, 0x40);
 		write_reg(hw, HFCUSB_SCTRL_E, 0x00);
 		write_reg(hw, HFCUSB_CLKDEL, CLKDEL_TE);
@@ -1585,7 +1617,7 @@ reset_hfcsusb(struct hfcsusb *hw)
 		/* enable all fifos */
 		if (i == HFCUSB_D_TX)
 			write_reg(hw, HFCUSB_CON_HDLC,
-			    (hw->portmode & ISDN_P_NT_S0) ? 0x08 : 0x09);
+			    (hw->protocol & ISDN_P_NT_S0) ? 0x08 : 0x09);
 		else
 			write_reg(hw, HFCUSB_CON_HDLC, 0x08);
 		write_reg(hw, HFCUSB_INC_RES_F, 2); /* reset the fifo */
@@ -1749,7 +1781,7 @@ release_hw(struct hfcsusb *hw)
 	hfcsusb_stop_endpoint(hw, HFC_CHAN_B2);
 	if (hw->fifos[HFCUSB_PCM_RX].pipe)
 		hfcsusb_stop_endpoint(hw, HFC_CHAN_E);
-	if (hw->portmode == ISDN_P_TE_S0)
+	if (hw->protocol == ISDN_P_TE_S0)
 		l1_event(hw->dch.l1, CLOSE_CHANNEL);
 
 	mISDN_unregister_device(&hw->dch.dev);

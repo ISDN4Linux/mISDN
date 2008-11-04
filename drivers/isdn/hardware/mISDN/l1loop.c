@@ -46,7 +46,7 @@
 #include <linux/isdn_compat.h>
 #include "l1loop.h"
 
-const char *l1loop_rev = "Revision: 0.1.4 (socket), 2008-08-27";
+const char *l1loop_rev = "Revision: 0.1.5 (socket), 2008-11-04";
 
 
 static int l1loop_cnt;
@@ -74,6 +74,33 @@ module_param(pri, uint, 0);
 module_param(debug, uint, S_IRUGO | S_IWUSR);
 #endif
 
+/*
+ * send full D/B channel status information
+ * as MPH_INFORMATION_IND
+ */
+static void l1loop_ph_info(struct port * p) {
+	struct ph_info * phi;
+	struct dchannel * dch = &p->dch;
+	int i;
+
+	phi = kzalloc(sizeof(struct ph_info) +
+		dch->dev.nrbchan * sizeof(struct ph_info_ch),
+		GFP_ATOMIC);
+
+	phi->dch.ch.protocol = p->protocol;
+	phi->dch.ch.Flags = dch->Flags;
+	phi->dch.state = dch->state;
+	phi->dch.num_bch = dch->dev.nrbchan;
+	for (i=0; i<dch->dev.nrbchan; i++) {
+		phi->bch[i].protocol = p->bch[i].ch.protocol;
+		phi->bch[i].Flags = p->bch[i].Flags;
+	}
+	_queue_data(&dch->dev.D,
+		MPH_INFORMATION_IND, MISDN_ID_ANY,
+		sizeof(struct ph_info_dch) +
+			dch->dev.nrbchan * sizeof(struct ph_info_ch),
+			phi, GFP_ATOMIC);
+}
 
 /*
  * disable/enable BChannel for desired protocoll
@@ -113,6 +140,7 @@ l1loop_setup_bch(struct bchannel *bch, int protocol)
 					p->name, __func__, protocol);
 			return (-ENOPROTOOPT);
 	}
+	l1loop_ph_info(p);
 	return (0);
 }
 
@@ -282,6 +310,7 @@ ph_state(struct dchannel *dch)
 		default:
 			break;
 	}
+	l1loop_ph_info(p);
 }
 
 /*
@@ -567,6 +596,11 @@ l1loop_l2l1D(struct mISDNchannel *ch, struct sk_buff *skb) {
 				dch->rx_skb = NULL;
 			}
 			spin_unlock(&p->lock);
+			ret = 0;
+			break;
+
+		case MPH_INFORMATION_REQ:
+			l1loop_ph_info(p);
 			ret = 0;
 			break;
 	}

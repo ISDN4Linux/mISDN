@@ -297,7 +297,7 @@ struct hfcsusb {
 	__u8			threshold_mask;
 	__u8			led_state;
 
-	__u8			portmode;
+	__u8			protocol;
 	int			nt_timer;
 	int			open;
 	__u8			timers;

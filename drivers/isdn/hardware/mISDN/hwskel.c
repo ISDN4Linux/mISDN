@@ -32,7 +32,7 @@
 #include <linux/isdn_compat.h>
 #include "hwskel.h"
 
-const char *hwskel_rev = "Revision: 0.1.2 (socket), 2008-08-24";
+const char *hwskel_rev = "Revision: 0.1.3 (socket), 2008-11-04";
 
 static unsigned int debug = 0;
 static unsigned int interfaces = 1;
@@ -51,6 +51,34 @@ module_param(debug, uint, S_IRUGO | S_IWUSR);
 module_param(interfaces, uint, 0);
 #endif
 
+
+/*
+ * send full D/B channel status information
+ * as MPH_INFORMATION_IND
+ */
+static void hwskel_ph_info(struct port * p) {
+        struct ph_info * phi;
+        struct dchannel * dch = &p->dch;
+        int i;
+
+        phi = kzalloc(sizeof(struct ph_info) +
+                dch->dev.nrbchan * sizeof(struct ph_info_ch),
+                GFP_ATOMIC);
+
+        phi->dch.ch.protocol = p->protocol;
+        phi->dch.ch.Flags = dch->Flags;
+        phi->dch.state = dch->state;
+        phi->dch.num_bch = dch->dev.nrbchan;
+        for (i=0; i<dch->dev.nrbchan; i++) {
+                phi->bch[i].protocol = p->bch[i].ch.protocol;
+                phi->bch[i].Flags = p->bch[i].Flags;
+        }
+        _queue_data(&dch->dev.D,
+                MPH_INFORMATION_IND, MISDN_ID_ANY,
+                sizeof(struct ph_info_dch) +
+                        dch->dev.nrbchan * sizeof(struct ph_info_ch),
+                        phi, GFP_ATOMIC);
+}
 
 /*
  * Layer 1 callback function
@@ -100,6 +128,7 @@ hwskel_l1callback(struct dchannel *dch, u_int cmd)
 				       p->name, __func__, cmd);
 			return -1;
 	}
+	hwskel_ph_info(p);
 	return 0;
 }
 
@@ -141,6 +170,7 @@ hwskel_setup_bch(struct bchannel *bch, int protocol)
 					p->name, __func__, protocol);
 			return (-ENOPROTOOPT);
 	}
+	hwskel_ph_info(p);
 	return (0);
 }
 
@@ -307,10 +337,10 @@ hwskel_l2l1D(struct mISDNchannel *ch, struct sk_buff *skb) {
 				printk (KERN_DEBUG
 					"%s: %s: PH_ACTIVATE_REQ %s\n",
 					p->name, __func__,
-					(p->portmode == ISDN_P_NT_S0)?
+					(p->protocol == ISDN_P_NT_S0)?
 							"NT":"TE");
 
-			if (p->portmode == ISDN_P_NT_S0) {
+			if (p->protocol == ISDN_P_NT_S0) {
 				ret = 0;
 				if (test_bit(FLG_ACTIVE, &dch->Flags)) {
 					_queue_data(&dch->dev.D,
@@ -334,7 +364,7 @@ hwskel_l2l1D(struct mISDNchannel *ch, struct sk_buff *skb) {
 					p->name, __func__);
 			test_and_clear_bit(FLG_L2_ACTIVATED, &dch->Flags);
 
-			if (p->portmode == ISDN_P_NT_S0) {
+			if (p->protocol == ISDN_P_NT_S0) {
 				hwskel_ph_command(p, L1_DEACTIVATE_NT);
 				spin_lock_irqsave(&p->lock, flags);
 				skb_queue_purge(&dch->squeue);
@@ -353,6 +383,11 @@ hwskel_l2l1D(struct mISDNchannel *ch, struct sk_buff *skb) {
 			} else {
 				ret = l1_event(dch->l1, hh->prim);
 			}
+			break;
+
+		case MPH_INFORMATION_REQ:
+			hwskel_ph_info(p);
+			ret = 0;
 			break;
 	}
 	return ret;
@@ -442,12 +477,12 @@ open_dchannel(struct port *p, struct mISDNchannel *ch, struct channel_req *rq)
 
 	if (!p->initdone) {
 		if (rq->protocol == ISDN_P_TE_S0) {
-			p->portmode = ISDN_P_TE_S0;
+			p->protocol = ISDN_P_TE_S0;
 			err = create_l1(&p->dch, hwskel_l1callback);
 			if (err)
 				return err;
 		} else {
-			p->portmode = ISDN_P_NT_S0;
+			p->protocol = ISDN_P_NT_S0;
 		}
 		ch->protocol = rq->protocol;
 		p->initdone = 1;
@@ -637,15 +672,16 @@ ph_state_nt(struct dchannel * dch)
 		default:
 			break;
 	}
+	hwskel_ph_info(p);
 }
 
 static void
 ph_state(struct dchannel *dch)
 {
 	struct port *p = dch->hw;
-	if (p->portmode == ISDN_P_NT_S0)
+	if (p->protocol == ISDN_P_NT_S0)
 		ph_state_nt(dch);
-	else if (p->portmode == ISDN_P_TE_S0)
+	else if (p->protocol == ISDN_P_TE_S0)
 		ph_state_te(dch);
 }
 
@@ -675,7 +711,7 @@ setup_instance(struct hwskel *hw) {
 		p->dch.dev.nrbchan = 2;
 		for (j=0; j<2; j++) {
 			p->bch[j].nr = j + 1;
-			set_channelmap(j + 1, p->dch->dev.channelmap);
+			set_channelmap(j + 1, p->dch.dev.channelmap);
 			p->bch[j].debug = debug;
 			mISDN_initbchannel(&p->bch[j], MAX_DATA_MEM);
 			p->bch[j].hw = p;
@@ -690,7 +726,7 @@ setup_instance(struct hwskel *hw) {
 		printk (KERN_INFO "%s: registered as '%s'\n",
 			DRIVER_NAME, p->name);
 
-		err = mISDN_register_device(&p->dch.dev, &p->pdev->dev, p->name);
+		err = mISDN_register_device(&p->dch.dev, NULL, p->name);
 		if (err) {
 			mISDN_freebchannel(&p->bch[1]);
 			mISDN_freebchannel(&p->bch[0]);
@@ -718,7 +754,7 @@ release_instance(struct hwskel *hw) {
 		p = hw->ports + i;
 		hwskel_setup_bch(&p->bch[0], ISDN_P_NONE);
 		hwskel_setup_bch(&p->bch[1], ISDN_P_NONE);
-		if (p->portmode == ISDN_P_TE_S0)
+		if (p->protocol == ISDN_P_TE_S0)
 			l1_event(p->dch.l1, CLOSE_CHANNEL);
 
 		mISDN_unregister_device(&p->dch.dev);

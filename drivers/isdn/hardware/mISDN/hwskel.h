@@ -27,7 +27,7 @@ struct port {
 	struct dchannel	dch;
 	struct bchannel	bch[2];
 	int		nt_timer;
-	__u8		portmode;
+	__u8		protocol;
 	__u8		timers;
 	__u8		initdone;
 	struct hwskel	*hw;
