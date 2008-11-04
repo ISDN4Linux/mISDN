@@ -66,7 +66,6 @@ install: all modules-install
 	$(DEPMOD) 
 	$(UPDATE_MODULES)
 	$(MODULES_UPDATE)
-	make -C config install
 
 uninstall:
 	export MISDNDIR=$(MISDNDIR); ./makelib.sh uninstall

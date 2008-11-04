@@ -2313,7 +2313,7 @@ _hfcpci_softirq(struct device *dev, void *arg)
 static void
 hfcpci_softirq(void *arg)
 {
-	(void) driver_for_each_device(&hfc_driver.driver, NULL, _hfcpci_softirq, arg);
+	(void) driver_for_each_device(&hfc_driver.driver, NULL, arg, _hfcpci_softirq);
 
 	/* if next event would be in the past ... */
 	if ((s32)(hfc_jiffies + tics - jiffies) <= 0)
@@ -2376,3 +2376,5 @@ HFC_cleanup(void)
 
 module_init(HFC_init);
 module_exit(HFC_cleanup);
+
+MODULE_DEVICE_TABLE(pci, hfc_ids);
