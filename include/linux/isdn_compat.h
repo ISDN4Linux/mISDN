@@ -59,6 +59,11 @@ typedef void    (WFUNC_t)(void *);
 #define _FIND_DEVICE(a, b, c) class_find_device(a, NULL, b, c)
 #endif
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,26)
+#define dev_name(a) ((a)->bus_id)
+#define dev_set_name(a, b, c...) sprintf((a)->bus_id, b, ## c)
+#endif
+
 
 #include <linux/interrupt.h>
 #ifndef IRQF_SHARED

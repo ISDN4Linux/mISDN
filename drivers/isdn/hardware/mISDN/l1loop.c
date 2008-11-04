@@ -817,7 +817,7 @@ setup_instance(struct l1loop *hw) {
 		p->dch.dev.nrbchan = nchannel;
 		for (b=0; b<nchannel; b++) {
 			p->bch[b].nr = b + 1;
-			set_channelmap(b + 1, p->dch->dev.channelmap);
+			set_channelmap(b + 1, p->dch.dev.channelmap);
 			p->bch[b].debug = debug;
 			mISDN_initbchannel(&p->bch[b], MAX_DATA_MEM);
 			p->bch[b].hw = p;
