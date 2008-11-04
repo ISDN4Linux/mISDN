@@ -1862,7 +1862,7 @@ setup_instance(struct hfcsusb *hw, struct device *parent)
 	hw->dch.dev.nrbchan = 2;
 	for (i = 0; i < 2; i++) {
 		hw->bch[i].nr = i + 1;
-		test_and_set_bit(i + 1, (u_long *)hw->dch.dev.channelmap);
+		set_channelmap(i + 1, hw->dch->dev.channelmap);
 		hw->bch[i].debug = debug;
 		mISDN_initbchannel(&hw->bch[i], MAX_DATA_MEM);
 		hw->bch[i].hw = hw;

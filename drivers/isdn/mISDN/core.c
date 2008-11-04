@@ -91,7 +91,7 @@ static ssize_t _show_name(struct device *dev,
                           struct device_attribute *attr,
                           char *buf)
 {
-	strcpy(buf,dev_name(dev));
+	strcpy(buf, dev_name(dev));
 	return strlen(buf);
 }
 
@@ -123,8 +123,8 @@ static ssize_t _show_channelmap(struct device *dev, struct device_attribute *att
 	char *bp = buf;
 	int i;
 
-	for(i=0;i <= mdev->nrbchan; i++) 
-		*bp++ = test_channelmap(i,mdev->channelmap) ? '1' : '0';
+	for(i=0;i <= MISDN_MAX_CHANNEL; i++) 
+		*bp++ = test_channelmap(i, mdev->channelmap) ? '1' : '0';
 	
 	return bp-buf;
 }
