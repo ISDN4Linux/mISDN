@@ -36,7 +36,7 @@
 #include <linux/isdn_compat.h>
 #include "hfcsusb.h"
 
-const char *hfcsusb_rev = "Revision: 0.3.2 (socket), 2008-11-04";
+const char *hfcsusb_rev = "Revision: 0.3.3 (socket), 2008-11-05";
 
 static unsigned int debug;
 static int poll = DEFAULT_TRANSP_BURST_SZ;
@@ -1389,7 +1389,7 @@ tx_iso_complete(struct urb *urb)
 		 * changes tx_iso_complete is assumed to be called every
 		 * fifo->intervall (ms)
 		 */
-		if ((fifon == HFCUSB_D_TX) && (hw->protocol & ISDN_P_NT_S0)
+		if ((fifon == HFCUSB_D_TX) && (hw->protocol == ISDN_P_NT_S0)
 		    && (hw->timers & NT_ACTIVATION_TIMER)) {
 			if ((--hw->nt_timer) < 0)
 				schedule_event(&hw->dch, FLG_PHCHANGE);
@@ -1557,9 +1557,9 @@ setPortMode(struct hfcsusb *hw)
 {
 	if (debug & DEBUG_HW)
 		printk(KERN_DEBUG "%s: %s %s\n", hw->name, __func__,
-		   (hw->protocol & ISDN_P_TE_S0) ? "TE" : "NT");
+		   (hw->protocol == ISDN_P_TE_S0) ? "TE" : "NT");
 
-	if (hw->protocol & ISDN_P_TE_S0) {
+	if (hw->protocol == ISDN_P_TE_S0) {
 		write_reg(hw, HFCUSB_SCTRL, 0x40);
 		write_reg(hw, HFCUSB_SCTRL_E, 0x00);
 		write_reg(hw, HFCUSB_CLKDEL, CLKDEL_TE);
@@ -1617,7 +1617,7 @@ reset_hfcsusb(struct hfcsusb *hw)
 		/* enable all fifos */
 		if (i == HFCUSB_D_TX)
 			write_reg(hw, HFCUSB_CON_HDLC,
-			    (hw->protocol & ISDN_P_NT_S0) ? 0x08 : 0x09);
+			    (hw->protocol == ISDN_P_NT_S0) ? 0x08 : 0x09);
 		else
 			write_reg(hw, HFCUSB_CON_HDLC, 0x08);
 		write_reg(hw, HFCUSB_INC_RES_F, 2); /* reset the fifo */
