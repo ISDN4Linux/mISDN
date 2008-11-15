@@ -927,7 +927,11 @@ conf_software:
 
 	/* for more than two members.. */
 
-	/* in case of hdlc, we change to software */
+	/* if no conference engine on our chip, change to software */
+	if (!dsp->features.hfc_conf)
+		goto conf_software;
+
+	/* in case of hdlc, change to software */
 	if (dsp->hdlc)
 		goto conf_software;
 
