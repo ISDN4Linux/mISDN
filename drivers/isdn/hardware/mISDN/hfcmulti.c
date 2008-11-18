@@ -5206,13 +5206,15 @@ init_multi_port(struct hfc_multi *hc, int pt)
 		    &hc->chan[i + 2].cfg);
 	}
 */
-	if (hc->ctype == HFC_TYPE_XHFC)
+	if (hc->ctype == HFC_TYPE_XHFC) {
 		snprintf(name, MISDN_MAX_IDLEN - 1, "xhfc.%d/%d",
 			HFC_cnt + 1, pt + 1);
-	else
+		ret = mISDN_register_device(&dch->dev, NULL, name);
+	} else {
 		snprintf(name, MISDN_MAX_IDLEN - 1, "hfc-%ds.%d/%d",
 			hc->ctype, HFC_cnt + 1, pt + 1);
-	ret = mISDN_register_device(&dch->dev, &hc->pci_dev->dev, name);
+		ret = mISDN_register_device(&dch->dev, &hc->pci_dev->dev, name);
+	}
 	if (ret)
 		goto free_chan;
 	hc->created[pt] = 1;
