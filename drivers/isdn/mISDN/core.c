@@ -29,7 +29,7 @@ static u64		device_ids;
 #define MAX_DEVICE_ID	63
 
 static LIST_HEAD(Bprotocols);
-DEFINE_RWLOCK(bp_lock);
+static DEFINE_RWLOCK(bp_lock);
 
 struct mISDNdevice *get_mdevice(u_int id);
 int get_mdevice_count(void);
@@ -352,7 +352,7 @@ mISDN_unregister_Bprotocol(struct Bprotocol *bp)
 }
 EXPORT_SYMBOL(mISDN_unregister_Bprotocol);
 
-int
+static int
 mISDNInit(void)
 {
 	int	err;
@@ -390,7 +390,7 @@ error1:
 	return err;
 }
 
-void mISDN_cleanup(void)
+static void mISDN_cleanup(void)
 {
 	misdn_sock_cleanup();
 	Isdnl2_cleanup();

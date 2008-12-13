@@ -1583,11 +1583,11 @@ send_packet:
 	schedule_work(&dsp->workq);
 }
 
-u32	jittercount; /* counter for jitter check */
+static u32	jittercount; /* counter for jitter check */
 struct timer_list dsp_spl_tl;
 u32	dsp_spl_jiffies; /* calculate the next time to fire */
-u16	dsp_count; /* last sample count */
-int	dsp_count_valid ; /* if we have last sample count */
+static u16	dsp_count; /* last sample count */
+static int	dsp_count_valid ; /* if we have last sample count */
 
 void
 dsp_cmx_send(void *arg)
