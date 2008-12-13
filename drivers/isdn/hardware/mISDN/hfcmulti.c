@@ -180,7 +180,6 @@ static void ph_state_change(struct dchannel *);
 static struct hfc_multi *syncmaster;
 static int plxsd_master; /* if we have a master card (yet) */
 static spinlock_t plx_lock; /* may not acquire other lock inside */
-EXPORT_SYMBOL(plx_lock);
 static spinlock_t *hfcmulti_locks[MAX_CARDS]; /* for external modules */
 EXPORT_SYMBOL(hfcmulti_locks);
 
