@@ -662,7 +662,6 @@ dsp_function(struct mISDNchannel *ch,  struct sk_buff *skb)
 	int			ret = 0;
 	u8			*digits;
 	int			cont;
-	struct			sk_buff *nskb;
 	u_long			flags;
 
 	hh = mISDN_HEAD_P(skb);
@@ -721,6 +720,7 @@ dsp_function(struct mISDNchannel *ch,  struct sk_buff *skb)
 			digits = dsp_dtmf_goertzel_decode(dsp, skb->data,
 				skb->len, (dsp_options&DSP_OPT_ULAW)?1:0);
 			while (*digits) {
+				struct sk_buff *nskb;
 				if (dsp_debug & DEBUG_DSP_DTMF)
 					printk(KERN_DEBUG "%s: digit"
 					    "(%c) to layer %s\n",
