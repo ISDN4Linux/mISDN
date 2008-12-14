@@ -181,6 +181,8 @@ static struct hfc_multi *syncmaster;
 int plxsd_master; /* if we have a master card (yet) */
 static spinlock_t plx_lock; /* may not acquire other lock inside */
 EXPORT_SYMBOL(plx_lock);
+static spinlock_t *hfcmulti_locks[MAX_CARDS]; /* for external modules */
+EXPORT_SYMBOL(hfcmulti_locks);
 
 #define	TYP_E1		1
 #define	TYP_4S		4
@@ -5261,6 +5263,7 @@ hfcmulti_init(struct hm_map *m, struct pci_dev *pdev,
 		return -ENOMEM;
 	}
 	spin_lock_init(&hc->lock);
+	hfcmulti_locks[HFC_cnt] = &hc->lock;
 	hc->mtyp = m;
 	hc->ctype =  m->type;
 	hc->ports = m->ports;
