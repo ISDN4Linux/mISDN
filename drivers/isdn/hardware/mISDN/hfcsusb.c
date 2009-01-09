@@ -264,27 +264,25 @@ hfcusb_l2l1B(struct mISDNchannel *ch, struct sk_buff *skb)
  * as MPH_INFORMATION_IND
  */
 static void
-hfcsusb_ph_info(struct hfcsusb *hw) {
-        struct ph_info * phi;
-        struct dchannel * dch = &hw->dch;
-        int i;
+hfcsusb_ph_info(struct hfcsusb *hw)
+{
+	struct ph_info *phi;
+	struct dchannel *dch = &hw->dch;
+	int i;
 
-        phi = kzalloc(sizeof(struct ph_info) +
-                dch->dev.nrbchan * sizeof(struct ph_info_ch),
-                GFP_ATOMIC);
-        phi->dch.ch.protocol = hw->protocol;
-        phi->dch.ch.Flags = dch->Flags;
-        phi->dch.state = dch->state;
-        phi->dch.num_bch = dch->dev.nrbchan;
-        for (i=0; i<dch->dev.nrbchan; i++) {
-                phi->bch[i].protocol = hw->bch[i].ch.protocol;
-                phi->bch[i].Flags = hw->bch[i].Flags;
-        }
-        _queue_data(&dch->dev.D,
-                MPH_INFORMATION_IND, MISDN_ID_ANY,
-                sizeof(struct ph_info_dch) +
-                        dch->dev.nrbchan * sizeof(struct ph_info_ch),
-                phi, GFP_ATOMIC);
+	phi = kzalloc(sizeof(struct ph_info) +
+		dch->dev.nrbchan * sizeof(struct ph_info_ch), GFP_ATOMIC);
+	phi->dch.ch.protocol = hw->protocol;
+	phi->dch.ch.Flags = dch->Flags;
+	phi->dch.state = dch->state;
+	phi->dch.num_bch = dch->dev.nrbchan;
+	for (i = 0; i < dch->dev.nrbchan; i++) {
+		phi->bch[i].protocol = hw->bch[i].ch.protocol;
+		phi->bch[i].Flags = hw->bch[i].Flags;
+	}
+	_queue_data(&dch->dev.D, MPH_INFORMATION_IND, MISDN_ID_ANY,
+		sizeof(struct ph_info_dch) + dch->dev.nrbchan *
+		sizeof(struct ph_info_ch), phi, GFP_ATOMIC);
 }
 
 /*
@@ -453,8 +451,7 @@ open_dchannel(struct hfcsusb *hw, struct mISDNchannel *ch,
 			set_bit(FLG_ACTIVE, &hw->ech.Flags);
 			_queue_data(&hw->ech.dev.D, PH_ACTIVATE_IND,
 				     MISDN_ID_ANY, 0, NULL, GFP_ATOMIC);
-		}
-		else
+		} else
 			return -EINVAL;
 	}
 
