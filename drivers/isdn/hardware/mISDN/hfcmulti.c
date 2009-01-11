@@ -3258,106 +3258,6 @@ hfcmulti_conf(struct hfc_multi *hc, int ch, int num)
  */
 
 /* NOTE: this function is experimental and therefore disabled */
-/* static */ void
-hfcmulti_splloop(struct hfc_multi *hc, int ch, u_char *data, int len)
-{
-	struct bchannel *bch = hc->chan[ch].bch;
-
-	if (!bch)
-		return;
-	/* flush and confirm pending TX data, if any */
-	get_next_bframe(bch);
-
-	/* prevent overflow */
-	if (len > hc->Zlen-1)
-		len = hc->Zlen-1;
-
-	/* select fifo */
-	HFC_outb_nodebug(hc, R_FIFO, ch<<1);
-	HFC_wait_nodebug(hc);
-
-	/* reset fifo */
-	HFC_outb(hc, A_SUBCH_CFG, 0);
-	udelay(500);
-	HFC_outb_nodebug(hc, R_INC_RES_FIFO, V_RES_F);
-	HFC_wait_nodebug(hc);
-	udelay(500);
-
-	/* if off */
-	if (len <= 0) {
-		HFC_outb_nodebug(hc, A_FIFO_DATA0_NOINC, hc->silence);
-		if (hc->chan[ch].slot_tx >= 0) {
-			if (debug & DEBUG_HFCMULTI_MODE)
-				printk(KERN_DEBUG "%s: connecting PCM due to "
-				    "no more TONE: channel %d slot_tx %d\n",
-				    __func__, ch, hc->chan[ch].slot_tx);
-			/* connect slot */
-			if (hc->ctype == HFC_TYPE_XHFC)
-				HFC_outb(hc, A_CON_HDLC, 0xc0
-				    | 0x07 << 2 | V_HDLC_TRP | V_IFF);
-					/* Enable FIFO, no interrupt */
-			else
-				HFC_outb(hc, A_CON_HDLC, 0xc0 | 0x00 |
-				    V_HDLC_TRP | V_IFF);
-			HFC_outb(hc, R_FIFO, ch<<1 | 1);
-			HFC_wait(hc);
-			if (hc->ctype == HFC_TYPE_XHFC)
-				HFC_outb(hc, A_CON_HDLC, 0xc0
-				    | 0x07 << 2 | V_HDLC_TRP | V_IFF);
-					/* Enable FIFO, no interrupt */
-			else
-				HFC_outb(hc, A_CON_HDLC, 0xc0 | 0x00 |
-				    V_HDLC_TRP | V_IFF);
-		}
-		hc->chan[ch].txpending = 0;
-		return;
-	}
-
-	/* loop fifo */
-
-	/* set mode */
-	hc->chan[ch].txpending = 2;
-
-	/* write loop data */
-	hc->write_fifo(hc, data, len);
-
-	udelay(500);
-	HFC_outb(hc, A_SUBCH_CFG, V_LOOP_FIFO);
-	udelay(500);
-
-	/* disconnect slot */
-	if (hc->chan[ch].slot_tx >= 0) {
-		if (debug & DEBUG_HFCMULTI_MODE)
-			printk(KERN_DEBUG
-			    "%s: disconnecting PCM due to TONE: channel %d "
-			    "slot_tx %d\n", __func__,
-			    ch, hc->chan[ch].slot_tx);
-		if (hc->ctype == HFC_TYPE_XHFC)
-			HFC_outb(hc, A_CON_HDLC, 0x80
-			    | 0x07 << 2 | V_HDLC_TRP | V_IFF);
-				/* Enable FIFO, no interrupt */
-		else
-			HFC_outb(hc, A_CON_HDLC, 0x80 | 0x00 |
-			    V_HDLC_TRP | V_IFF);
-		HFC_outb(hc, R_FIFO, ch<<1 | 1);
-		HFC_wait(hc);
-		if (hc->ctype == HFC_TYPE_XHFC)
-			HFC_outb(hc, A_CON_HDLC, 0x80
-			    | 0x07 << 2 | V_HDLC_TRP | V_IFF);
-				/* Enable FIFO, no interrupt */
-		else
-			HFC_outb(hc, A_CON_HDLC, 0x80 | 0x00 |
-			    V_HDLC_TRP | V_IFF);
-		HFC_outb(hc, R_FIFO, ch<<1);
-		HFC_wait(hc);
-	} else {
-		/* change fifo */
-		HFC_outb(hc, R_FIFO, ch<<1);
-		HFC_wait(hc);
-	}
-
-	udelay(300);
-}
 
 /*
  * Layer 1 callback function
@@ -3684,18 +3584,12 @@ handle_bmsg(struct mISDNchannel *ch, struct sk_buff *skb)
 			printk(KERN_DEBUG
 			    "%s: HFC_SPL_LOOP_ON (len = %d)\n",
 			    __func__, skb->len);
-			/* not working, so disabled
-			hfcmulti_splloop(hc, bch->slot, skb->data, skb->len);
-			*/
 			ret = 0;
 			break;
 		case HFC_SPL_LOOP_OFF: /* set silence */
 			if (debug & DEBUG_HFCMULTI_MSG)
 				printk(KERN_DEBUG "%s: HFC_SPL_LOOP_OFF\n",
 				    __func__);
-			/* not working, so disabled
-			hfcmulti_splloop(hc, bch->slot, NULL, 0);
-			*/
 			ret = 0;
 			break;
 		default:
