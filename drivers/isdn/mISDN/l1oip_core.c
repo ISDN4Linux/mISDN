@@ -777,7 +777,7 @@ fail:
 static void
 l1oip_socket_close(struct l1oip *hc)
 {
-	struct dchannel		*dch = hc->chan[hc->d_idx].dch;
+	struct dchannel *dch = hc->chan[hc->d_idx].dch;
 
 	/* kill thread */
 	if (hc->socket_thread) {

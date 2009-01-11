@@ -71,14 +71,14 @@ select_iclock(void)
 	if (lastclock && bestclock != lastclock) {
 		/* last used clock source still exists but changes, disable */
 		if (*debug & DEBUG_CLOCK)
-			printk("Old clock source '%s' disable.\n",
+			printk(KERN_DEBUG "Old clock source '%s' disable.\n",
 				lastclock->name);
 		lastclock->ctl(lastclock->priv, 0);
 	}
 	if (bestclock && bestclock != iclock_current) {
 		/* new clock source selected, enable */
 		if (*debug & DEBUG_CLOCK)
-			printk("New clock source '%s' enable.\n",
+			printk(KERN_DEBUG "New clock source '%s' enable.\n",
 				bestclock->name);
 		bestclock->ctl(bestclock->priv, 1);
 	}
@@ -125,7 +125,8 @@ mISDN_unregister_clock(struct mISDNclock *iclock)
 	write_lock_irqsave(&iclock_lock, flags);
 	if (iclock_current == iclock) {
 		if (*debug & DEBUG_CLOCK)
-			printk("Current clock source '%s' unregisters.\n",
+			printk(KERN_DEBUG
+				"Current clock source '%s' unregisters.\n",
 				iclock->name);
 		iclock->ctl(iclock->priv, 0);
 	}
@@ -148,7 +149,7 @@ mISDN_clock_update(struct mISDNclock *iclock, int samples, struct timeval *tv)
 		printk(KERN_ERR "%s: '%s' sends us clock updates, but we do "
 			"listen to '%s'. This is a bug!\n", __func__,
 			iclock->name,
-			iclock_current?iclock_current->name:"nothing");
+			iclock_current ? iclock_current->name : "nothing");
 		iclock->ctl(iclock->priv, 0);
 		write_unlock_irqrestore(&iclock_lock, flags);
 		return;
@@ -182,7 +183,7 @@ mISDN_clock_update(struct mISDNclock *iclock, int samples, struct timeval *tv)
 		iclock_tv_valid = 1;
 		if (*debug & DEBUG_CLOCK)
 			printk("Received first clock from source '%s'.\n",
-				iclock_current?iclock_current->name:"nothing");
+			    iclock_current ? iclock_current->name : "nothing");
 	}
 	write_unlock_irqrestore(&iclock_lock, flags);
 }
