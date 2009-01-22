@@ -1583,11 +1583,11 @@ send_packet:
 	schedule_work(&dsp->workq);
 }
 
-u32	jittercount; /* counter for jitter check */
+static u32	jittercount; /* counter for jitter check */
 struct timer_list dsp_spl_tl;
 u32	dsp_spl_jiffies; /* calculate the next time to fire */
-u16	dsp_count; /* last sample count */
-int	dsp_count_valid ; /* if we have last sample count */
+static u16	dsp_count; /* last sample count */
+static int	dsp_count_valid ; /* if we have last sample count */
 
 void
 dsp_cmx_send(void *arg)
@@ -1841,7 +1841,9 @@ dsp_cmx_transmit(struct dsp *dsp, struct sk_buff *skb)
 		/* write to the space we have left */
 		ww = (ww - 1) & CMX_BUFF_MASK; /* end one byte prior tx_R */
 		if (dsp_debug & DEBUG_DSP_CLOCK)
-			printk(KERN_DEBUG "%s: TX overflow space=%d skb->len=%d, w=0x%04x, ww=0x%04x\n", __func__, space, skb->len, w, ww);
+			printk(KERN_DEBUG "%s: TX overflow space=%d skb->len="
+			    "%d, w=0x%04x, ww=0x%04x\n", __func__, space,
+			    skb->len, w, ww);
 	} else
 		/* write until all byte are copied */
 		ww = (w + skb->len) & CMX_BUFF_MASK;
@@ -1895,7 +1897,7 @@ dsp_cmx_hdlc(struct dsp *dsp, struct sk_buff *skb)
 		/* in case of hardware (echo) */
 		if (dsp->pcm_slot_tx >= 0)
 			return;
-		if (dsp->echo)
+		if (dsp->echo) {
 			nskb = skb_clone(skb, GFP_ATOMIC);
 			if (nskb) {
 				hh = mISDN_HEAD_P(nskb);
@@ -1904,6 +1906,7 @@ dsp_cmx_hdlc(struct dsp *dsp, struct sk_buff *skb)
 				skb_queue_tail(&dsp->sendq, nskb);
 				schedule_work(&dsp->workq);
 			}
+		}
 		return;
 	}
 	/* in case of hardware conference */

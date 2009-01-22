@@ -555,13 +555,13 @@ _queue_data(struct mISDNchannel *ch, u_int prim,
 
 /* global register/unregister functions */
 
-extern int	mISDN_register_device(struct mISDNdevice *, struct device *parent,
-                                  char *name);
+extern int	mISDN_register_device(struct mISDNdevice *,
+					struct device *parent, char *name);
 extern void	mISDN_unregister_device(struct mISDNdevice *);
 extern int	mISDN_register_Bprotocol(struct Bprotocol *);
 extern void	mISDN_unregister_Bprotocol(struct Bprotocol *);
 extern struct mISDNclock *mISDN_register_clock(char *, int, clockctl_func_t *,
-			void *);
+						void *);
 extern void	mISDN_unregister_clock(struct mISDNclock *);
 
 static inline struct mISDNdevice *dev_to_mISDN(struct device *dev)
@@ -573,7 +573,7 @@ static inline struct mISDNdevice *dev_to_mISDN(struct device *dev)
 }
 
 extern void	set_channel_address(struct mISDNchannel *, u_int, u_int);
-extern void	mISDN_clock_update(struct mISDNclock *, int , struct timeval *);
+extern void	mISDN_clock_update(struct mISDNclock *, int, struct timeval *);
 extern unsigned short mISDN_clock_get(void);
 
 #endif /* __KERNEL__ */

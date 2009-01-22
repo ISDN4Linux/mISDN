@@ -29,11 +29,7 @@ static u64		device_ids;
 #define MAX_DEVICE_ID	63
 
 static LIST_HEAD(Bprotocols);
-DEFINE_RWLOCK(bp_lock);
-
-struct mISDNdevice *get_mdevice(u_int id);
-int get_mdevice_count(void);
-static int get_free_devid(void);
+static DEFINE_RWLOCK(bp_lock);
 
 static void mISDN_dev_release(struct device *dev)
 {
@@ -41,72 +37,74 @@ static void mISDN_dev_release(struct device *dev)
 }
 
 static ssize_t _show_id(struct device *dev,
-                        struct device_attribute *attr,
-                        char *buf)
+				struct device_attribute *attr, char *buf)
 {
 	struct mISDNdevice *mdev = dev_to_mISDN(dev);
-	if (!mdev) return -ENODEV;
+
+	if (!mdev)
+		return -ENODEV;
 	return sprintf(buf, "%d\n", mdev->id);
 }
 
 static ssize_t _show_nrbchan(struct device *dev,
-                             struct device_attribute *attr,
-                             char *buf)
+				struct device_attribute *attr, char *buf)
 {
 	struct mISDNdevice *mdev = dev_to_mISDN(dev);
-	if (!mdev) return -ENODEV;
+
+	if (!mdev)
+		return -ENODEV;
 	return sprintf(buf, "%d\n", mdev->nrbchan);
 }
 
 static ssize_t _show_d_protocols(struct device *dev,
-                                 struct device_attribute *attr,
-                                 char *buf)
+				struct device_attribute *attr, char *buf)
 {
 	struct mISDNdevice *mdev = dev_to_mISDN(dev);
-	if (!mdev) return -ENODEV;
+
+	if (!mdev)
+		return -ENODEV;
 	return sprintf(buf, "%d\n", mdev->Dprotocols);
 }
 
 static ssize_t _show_b_protocols(struct device *dev,
-                                 struct device_attribute *attr,
-                                 char *buf)
+				struct device_attribute *attr, char *buf)
 {
 	struct mISDNdevice *mdev = dev_to_mISDN(dev);
-	if (!mdev) return -ENODEV;
-	return sprintf(buf, "%d\n", mdev->Bprotocols |
-								get_all_Bprotocols());
+
+	if (!mdev)
+		return -ENODEV;
+	return sprintf(buf, "%d\n", mdev->Bprotocols | get_all_Bprotocols());
 }
 
 static ssize_t _show_protocol(struct device *dev,
-                              struct device_attribute *attr,
-                              char *buf)
+				struct device_attribute *attr, char *buf)
 {
 	struct mISDNdevice *mdev = dev_to_mISDN(dev);
-	if (!mdev) return -ENODEV;
-	
+
+	if (!mdev)
+		return -ENODEV;
 	return sprintf(buf, "%d\n", mdev->D.protocol);
 }
 
 static ssize_t _show_name(struct device *dev,
-                          struct device_attribute *attr,
-                          char *buf)
+				struct device_attribute *attr, char *buf)
 {
 	strcpy(buf, dev_name(dev));
 	return strlen(buf);
 }
 
-#if 0 // hangs
-static ssize_t _set_name(struct device *dev,
-                         struct device_attribute *attr,
-                         const char *buf, size_t count)
+#if 0 /* hangs */
+static ssize_t _set_name(struct device *dev, struct device_attribute *attr,
+				const char *buf, size_t count)
 {
 	int err = 0;
-	char *out = kmalloc(count+1,GFP_KERNEL);
+	char *out = kmalloc(count + 1, GFP_KERNEL);
+
 	if (!out)
 		return -ENOMEM;
 
-	memcpy(out,buf,count);
-	if(count && out[count-1] == '\n')
+	memcpy(out, buf, count);
+	if (count && out[count - 1] == '\n')
 		out[--count] = 0;
 	if (count)
 		err = device_rename(dev, out);
@@ -116,17 +114,17 @@ static ssize_t _set_name(struct device *dev,
 }
 #endif
 
-static ssize_t _show_channelmap(struct device *dev, struct device_attribute *attr,
-                        char *buf)
+static ssize_t _show_channelmap(struct device *dev,
+				struct device_attribute *attr, char *buf)
 {
 	struct mISDNdevice *mdev = dev_to_mISDN(dev);
 	char *bp = buf;
 	int i;
 
-	for(i=0;i <= MISDN_MAX_CHANNEL; i++) 
+	for (i = 0; i <= mdev->nrbchan; i++)
 		*bp++ = test_channelmap(i, mdev->channelmap) ? '1' : '0';
-	
-	return bp-buf;
+
+	return bp - buf;
 }
 
 static struct device_attribute mISDN_dev_attrs[] = {
@@ -145,7 +143,9 @@ static struct device_attribute mISDN_dev_attrs[] = {
 static int mISDN_uevent(struct device *dev, struct kobj_uevent_env *env)
 {
 	struct mISDNdevice *mdev = dev_to_mISDN(dev);
-	if (!mdev) return 0;
+
+	if (!mdev)
+		return 0;
 
 	if (add_uevent_var(env, "nchans=%d", mdev->nrbchan))
 		return -ENOMEM;
@@ -174,17 +174,19 @@ static int
 _get_mdevice(struct device *dev, void *id)
 {
 	struct mISDNdevice *mdev = dev_to_mISDN(dev);
-	if (! mdev) return 0;
-	if (mdev->id != *(u_int *)id) return 0;
+
+	if (!mdev)
+		return 0;
+	if (mdev->id != *(u_int *)id)
+		return 0;
 	return 1;
 }
 
 struct mISDNdevice
 *get_mdevice(u_int id)
 {
-	return dev_to_mISDN(
-		_FIND_DEVICE(
-			&mISDN_class, &id, _get_mdevice));
+	return dev_to_mISDN(_FIND_DEVICE(&mISDN_class, &id,
+		_get_mdevice));
 }
 
 static int
@@ -197,7 +199,8 @@ _get_mdevice_count(struct device *dev, void *cnt)
 int
 get_mdevice_count(void)
 {
-	int			cnt = 0;
+	int cnt = 0;
+
 	_EACH_DEVICE(&mISDN_class, &cnt, _get_mdevice_count);
 	return cnt;
 }
@@ -217,8 +220,7 @@ get_free_devid(void)
 
 int
 mISDN_register_device(struct mISDNdevice *dev,
-                      struct device *parent,
-                      char *name)
+			struct device *parent, char *name)
 {
 	int	err;
 
@@ -242,7 +244,7 @@ mISDN_register_device(struct mISDNdevice *dev,
 	dev->dev.class = &mISDN_class;
 	dev->dev.platform_data = dev;
 	dev->dev.parent = parent;
-	dev_set_drvdata(&dev->dev,dev);
+	dev_set_drvdata(&dev->dev, dev);
 
 	err = device_add(&dev->dev);
 	if (err)
@@ -266,7 +268,7 @@ mISDN_unregister_device(struct mISDNdevice *dev) {
 	/* sysfs_remove_link(&dev->dev.kobj, "device"); */
 	device_del(&dev->dev);
 	dev_set_drvdata(&dev->dev, NULL);
-	
+
 	test_and_clear_bit(dev->id, (u_long *)&device_ids);
 	delete_stack(dev);
 	put_device(&dev->dev);
@@ -352,7 +354,7 @@ mISDN_unregister_Bprotocol(struct Bprotocol *bp)
 }
 EXPORT_SYMBOL(mISDN_unregister_Bprotocol);
 
-int
+static int
 mISDNInit(void)
 {
 	int	err;
@@ -374,7 +376,7 @@ mISDNInit(void)
 	if (err)
 		goto error4;
 	err = misdn_sock_init(&debug);
-	if (err) 
+	if (err)
 		goto error5;
 	return 0;
 
@@ -390,7 +392,7 @@ error1:
 	return err;
 }
 
-void mISDN_cleanup(void)
+static void mISDN_cleanup(void)
 {
 	misdn_sock_cleanup();
 	Isdnl2_cleanup();

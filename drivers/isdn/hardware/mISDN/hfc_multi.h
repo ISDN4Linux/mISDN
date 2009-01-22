@@ -208,8 +208,8 @@ struct hfc_multi {
 	void		(*write_fifo)(struct hfc_multi *hc, u_char *data,
 				int len);
 	u_long		pci_origmembase, plx_origmembase;
-	u_char		*pci_membase; /* PCI memory (MUST BE BYTE POINTER) */
-	u_char		*plx_membase; /* PLX memory */
+	void __iomem	*pci_membase; /* PCI memory */
+	void __iomem	*plx_membase; /* PLX memory */
 	u_long		xhfc_origmembase;
 	volatile u_char	*xhfc_membase;
 	volatile u_long	*xhfc_memaddr, *xhfc_memdata;

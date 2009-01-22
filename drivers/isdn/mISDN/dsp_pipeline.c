@@ -101,7 +101,7 @@ int mISDN_dsp_element_register(struct mISDN_dsp_element *elem)
 	entry->dev.class = elements_class;
 	entry->dev.release = mISDN_dsp_dev_release;
 	dev_set_drvdata(&entry->dev, elem);
-	strlcpy(entry->dev.bus_id, elem->name, BUS_ID_SIZE);
+	dev_set_name(&entry->dev, elem->name);
 	ret = device_register(&entry->dev);
 	if (ret) {
 		printk(KERN_ERR "%s: failed to register %s\n",
@@ -110,8 +110,7 @@ int mISDN_dsp_element_register(struct mISDN_dsp_element *elem)
 	}
 	list_add_tail(&entry->list, &dsp_elements);
 
-	for (i = 0; i < (sizeof(element_attributes)
-		/ sizeof(struct device_attribute)); ++i)
+	for (i = 0; i < ARRAY_SIZE(element_attributes); ++i) {
 		ret = device_create_file(&entry->dev,
 				&element_attributes[i]);
 		if (ret) {
@@ -119,6 +118,7 @@ int mISDN_dsp_element_register(struct mISDN_dsp_element *elem)
 				__func__);
 			goto err2;
 		}
+	}
 
 #ifdef PIPELINE_DEBUG
 	printk(KERN_DEBUG "%s: %s registered\n", __func__, elem->name);
@@ -263,7 +263,7 @@ int dsp_pipeline_build(struct dsp_pipeline *pipeline, const char *cfg)
 		name = strsep(&tok, "(");
 		args = strsep(&tok, ")");
 		if (args && !*args)
-			args = 0;
+			args = NULL;
 
 		list_for_each_entry_safe(entry, n, &dsp_elements, list)
 			if (!strcmp(entry->elem->name, name)) {

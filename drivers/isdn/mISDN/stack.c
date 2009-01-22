@@ -36,7 +36,7 @@ _queue_message(struct mISDNstack *st, struct sk_buff *skb)
 	}
 }
 
-int
+static int
 mISDN_queue_message(struct mISDNchannel *ch, struct sk_buff *skb)
 {
 	_queue_message(ch->st, skb);
@@ -172,7 +172,8 @@ send_msg_to_layer(struct mISDNstack *st, struct sk_buff *skb)
 		else
 			printk(KERN_WARNING
 			    "%s: dev(%s) prim(%x) id(%x) no channel\n",
-			    __func__, dev_name(&st->dev->dev), hh->prim, hh->id);
+			    __func__, dev_name(&st->dev->dev), hh->prim,
+			    hh->id);
 	} else if (lm == 0x8) {
 		WARN_ON(lm == 0x8);
 		ch = get_channel4id(st, hh->id);
@@ -181,7 +182,8 @@ send_msg_to_layer(struct mISDNstack *st, struct sk_buff *skb)
 		else
 			printk(KERN_WARNING
 			    "%s: dev(%s) prim(%x) id(%x) no channel\n",
-			    __func__, dev_name(&st->dev->dev), hh->prim, hh->id);
+			    __func__, dev_name(&st->dev->dev), hh->prim,
+			    hh->id);
 	} else {
 		/* broadcast not handled yet */
 		printk(KERN_WARNING "%s: dev(%s) prim %x not delivered\n",
@@ -209,7 +211,8 @@ mISDNStackd(void *data)
 	unlock_kernel();
 #endif
 	if (*debug & DEBUG_MSG_THREAD)
-		printk(KERN_DEBUG "mISDNStackd %s started\n", dev_name(&st->dev->dev));
+		printk(KERN_DEBUG "mISDNStackd %s started\n",
+		    dev_name(&st->dev->dev));
 
 	if (st->notify != NULL) {
 		complete(st->notify);
@@ -303,7 +306,8 @@ mISDNStackd(void *data)
 #ifdef MISDN_MSG_STATS
 	printk(KERN_DEBUG "mISDNStackd daemon for %s proceed %d "
 	    "msg %d sleep %d stopped\n",
-	    dev_name(&st->dev->dev), st->msg_cnt, st->sleep_cnt, st->stopped_cnt);
+	    dev_name(&st->dev->dev), st->msg_cnt, st->sleep_cnt,
+	    st->stopped_cnt);
 	printk(KERN_DEBUG
 	    "mISDNStackd daemon for %s utime(%ld) stime(%ld)\n",
 	    dev_name(&st->dev->dev), st->thread->utime, st->thread->stime);
@@ -401,7 +405,8 @@ create_stack(struct mISDNdevice *dev)
 	newst->own.send = mISDN_queue_message;
 	newst->own.recv = mISDN_queue_message;
 	if (*debug & DEBUG_CORE_FUNC)
-		printk(KERN_DEBUG "%s: st(%s)\n", __func__, dev_name(&newst->dev->dev));
+		printk(KERN_DEBUG "%s: st(%s)\n", __func__,
+		    dev_name(&newst->dev->dev));
 	newst->notify = &done;
 	newst->thread = kthread_run(mISDNStackd, (void *)newst, "mISDN_%s",
 		dev_name(&newst->dev->dev));
@@ -428,8 +433,8 @@ connect_layer1(struct mISDNdevice *dev, struct mISDNchannel *ch,
 
 	if (*debug &  DEBUG_CORE_FUNC)
 		printk(KERN_DEBUG "%s: %s proto(%x) adr(%d %d %d %d)\n",
-			__func__, dev_name(&dev->dev), protocol, adr->dev, adr->channel,
-			 adr->sapi, adr->tei);
+			__func__, dev_name(&dev->dev), protocol, adr->dev,
+			adr->channel, adr->sapi, adr->tei);
 	switch (protocol) {
 	case ISDN_P_NT_S0:
 	case ISDN_P_NT_E1:
