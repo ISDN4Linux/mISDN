@@ -49,10 +49,8 @@ struct ec_prv {
 	uint16_t echotimer;
 	uint16_t echostate;
 	uint16_t echolastupdate;
-	char txbuf[ECHOCAN_BUFLEN];
-	int  txbuflen;
-	char rxbuf[ECHOCAN_BUFLEN];
-	int  rxbuflen;
+	u8 txbuff[ECHOCAN_BUFF_SIZE];
+	int  tx_W;
 	int  underrun;
 	int  overflow;
 };
@@ -73,8 +71,8 @@ dsp_cancel_new(int deftaps, int training)
 	p->echotimer = training ? training : 0;
 	p->echostate = training ? ECHO_STATE_PRETRAINING : ECHO_STATE_IDLE;
 	p->echolastupdate = 0;
-	p->txbuflen = 0;
-	p->rxbuflen = 0;
+	memset(p->txbuff, dsp_silence, ECHOCAN_BUFF_SIZE);
+	p->tx_W = 0;
 	p->underrun = 0;
 	p->overflow = 0;
 
@@ -95,19 +93,42 @@ dsp_cancel_free(struct ec_prv *p)
 	kfree(p);
 }
 
-/** Processes one TX- and one RX-packet with echocancellation */
-static inline void
-echocancel_chunk(struct ec_prv *p, uint8_t *rxchunk,
-    uint8_t *txchunk, uint16_t size)
+static inline void dsp_cancel_tx(struct ec_prv *p, u8 *data, int len)
 {
-	int16_t rxlin, txlin;
-	uint16_t x;
+	u8 *d;
+	int w;
 
+	if (!p || !data)
+		return;
+
+	d = p->txbuff;
+	w = p->tx_W;
+	while (len--) {
+		d[w] = *data++;
+		w = (w + 1) & ECHOCAN_BUFF_MASK;
+	}
+	p->tx_W = w;
+}
+
+/** Processes one TX- and one RX-packet with echocancellation */
+static inline void dsp_cancel_rx(struct ec_prv *p, u8 *data, int len)
+{
+	int16_t	rxlin, txlin;
+	int	r;
+	u8	*s;
+
+	if (!p || !data)
+		return;
+
+	s = p->txbuff;
+	/* calculation V0.1 : 'len' samples off the end */
+	r = (p->tx_W - len) & ECHOCAN_BUFF_MASK;
+	kernel_fpu_begin();
 	if (p->echostate & __ECHO_STATE_MUTE) {
 		/* Special stuff for training the echo can */
-		for (x = 0; x < size; x++) {
-			rxlin = dsp_audio_law_to_s32[rxchunk[x]];
-			txlin = dsp_audio_law_to_s32[txchunk[x]];
+		while (len--) {
+			rxlin = dsp_audio_law_to_s32[*data];
+			txlin = dsp_audio_law_to_s32[s[r]];
 			if (p->echostate == ECHO_STATE_PRETRAINING) {
 				if (--p->echotimer <= 0) {
 					p->echotimer = 0;
@@ -126,59 +147,17 @@ echocancel_chunk(struct ec_prv *p, uint8_t *rxchunk,
 				}
 			}
 			rxlin = 0;
-			rxchunk[x] = dsp_audio_s16_to_law[(int)rxlin];
+			*data++ = dsp_audio_s16_to_law[rxlin & 0xffff];
+			r = (r + 1) & ECHOCAN_BUFF_MASK;
 		}
 	} else {
-		for (x = 0; x < size; x++) {
-			rxlin = dsp_audio_law_to_s32[rxchunk[x]&0xff];
-			txlin = dsp_audio_law_to_s32[txchunk[x]&0xff];
+		while (len--) {
+			rxlin = dsp_audio_law_to_s32[*data];
+			txlin = dsp_audio_law_to_s32[s[r]];
 			rxlin = echo_can_update(p->ec, txlin, rxlin);
-			rxchunk[x] = dsp_audio_s16_to_law[rxlin&0xffff];
+			*data++ = dsp_audio_s16_to_law[rxlin & 0xffff];
+			r = (r + 1) & ECHOCAN_BUFF_MASK;
 		}
 	}
-}
-
-static inline void dsp_cancel_tx(struct ec_prv *p, u8 *data, int len)
-{
-	if (!p || !data)
-		return;
-
-	if (p->txbuflen + len < ECHOCAN_BUFLEN) {
-		memcpy(&p->txbuf[p->txbuflen], data, len);
-		p->txbuflen += len;
-	} else {
-		if (p->overflow >= 4000) {
-			printk(KERN_DEBUG "ECHOCAN: TXBUF Overflow:%d "
-				"txbuflen:%d txcancellen:%d\n", p->overflow,
-				p->txbuflen, len);
-			p->overflow = 0;
-		}
-		p->overflow += len;
-		p->txbuflen = 0;
-	}
-}
-
-static inline void dsp_cancel_rx(struct ec_prv *p, u8 *data, int len)
-{
-	if (!p || !data)
-		return;
-
-	if (len <= p->txbuflen) {
-		char tmp[ECHOCAN_BUFLEN];
-		int delta = p->txbuflen - len;
-
-		memcpy(tmp, &p->txbuf[len], delta);
-		kernel_fpu_begin();
-		echocancel_chunk(p, data, p->txbuf, len);
-		kernel_fpu_end();
-		memcpy(p->txbuf, tmp, delta);
-		p->txbuflen = delta;
-	} else {
-		if (p->underrun >= 4000) {
-			printk("ECHOCAN: TXBUF Underrun:%d txbuflen:%d "
-			    "rxcancellen:%d\n", p->underrun, p->txbuflen, len);
-			p->underrun = 0;
-		}
-		p->underrun += len;
-	}
+	kernel_fpu_end();
 }
