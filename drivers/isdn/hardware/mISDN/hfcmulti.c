@@ -183,6 +183,8 @@ static spinlock_t plx_lock; /* may not acquire other lock inside */
 EXPORT_SYMBOL(plx_lock); /* for external modules */
 static spinlock_t *hfcmulti_locks[MAX_CARDS]; /* for external modules */
 EXPORT_SYMBOL(hfcmulti_locks);
+static void __iomem *hfcmulti_plxmem[MAX_CARDS]; /* for external modules */
+EXPORT_SYMBOL(hfcmulti_plxmem);
 
 #define	TYP_E1		1
 #define	TYP_4S		4
@@ -4595,6 +4597,7 @@ setup_pci(struct hfc_multi *hc, struct pci_dev *pdev,
 			pci_disable_device(hc->pci_dev);
 			return -EIO;
 		}
+		hfcmulti_plxmem[hc->id] = hc->plx_membase;
 		printk(KERN_INFO
 		    "HFC-multi: plx_membase:%#lx plx_origmembase:%#lx\n",
 		    (u_long)hc->plx_membase, hc->plx_origmembase);
