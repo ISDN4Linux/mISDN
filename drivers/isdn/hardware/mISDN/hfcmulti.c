@@ -5361,7 +5361,7 @@ hfcmulti_init(struct hm_map *m, struct pci_dev *pdev,
 		hc->iclock = mISDN_register_clock("HFCMulti", 0, clockctl, hc);
 
 	/* initialize hardware */
-	hc->irq = m->irq;
+	hc->irq = (m->irq)?:hc->pci_dev->irq;
 	ret_err = init_card(hc);
 	if (ret_err) {
 		printk(KERN_ERR "init card returns %d\n", ret_err);
@@ -5562,7 +5562,6 @@ hfcmulti_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 		    "Please contact the driver maintainer for support.\n");
 		return -ENODEV;
 	}
-	m->irq = pdev->irq;
 	ret = hfcmulti_init(m, pdev, ent);
 	if (ret)
 		return ret;
