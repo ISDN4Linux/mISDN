@@ -87,9 +87,9 @@ static void process_tx(void *p, u8 *data, int len)
 	dsp_cancel_tx(p, data, len);
 }
 
-static void process_rx(void *p, u8 *data, int len)
+static void process_rx(void *p, u8 *data, int len, unsigned int txlen)
 {
-	dsp_cancel_rx(p, data, len);
+	dsp_cancel_rx(p, data, len, txlen);
 }
 
 static struct mISDN_dsp_element_arg args[] = {

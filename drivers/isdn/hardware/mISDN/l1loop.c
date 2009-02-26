@@ -183,7 +183,7 @@ static void bch_vline_loop(struct bchannel *bch, struct sk_buff *skb)
 
 	bch->rx_skb = skb_copy(skb, GFP_KERNEL);
 	if (bch->rx_skb)
-		recv_Bchannel(bch);
+		recv_Bchannel(bch, MISDN_ID_ANY);
 	else
 		if (debug & DEBUG_HW)
 			printk (KERN_ERR "%s: %s: mI_alloc_skb failed \n",
@@ -211,7 +211,7 @@ static void bch_vbus(struct bchannel *bch, struct sk_buff *skb)
 			/* immediately queue data to bch's RX queue */
 			target->rx_skb = skb_copy(skb, GFP_KERNEL);
 			if (target->rx_skb)
-				recv_Bchannel(target);
+				recv_Bchannel(target, MISDN_ID_ANY);
 		}
 	}
 

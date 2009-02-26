@@ -231,7 +231,7 @@ hwskel_l2l1B(struct mISDNchannel *ch, struct sk_buff *skb) {
 				// l1 virtual bchannel loop
 				bch->rx_skb = skb_copy(skb, GFP_ATOMIC);
 				if (bch->rx_skb) {
-					recv_Bchannel(bch);
+					recv_Bchannel(bch, MISDN_ID_ANY);
 				} else {
 					if (debug & DEBUG_HW)
 						printk (KERN_ERR

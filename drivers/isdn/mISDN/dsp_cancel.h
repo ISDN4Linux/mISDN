@@ -111,7 +111,7 @@ static inline void dsp_cancel_tx(struct ec_prv *p, u8 *data, int len)
 }
 
 /** Processes one TX- and one RX-packet with echocancellation */
-static inline void dsp_cancel_rx(struct ec_prv *p, u8 *data, int len)
+static inline void dsp_cancel_rx(struct ec_prv *p, u8 *data, int len, unsigned int txlen)
 {
 	int16_t	rxlin, txlin;
 	int	r;
@@ -120,9 +120,12 @@ static inline void dsp_cancel_rx(struct ec_prv *p, u8 *data, int len)
 	if (!p || !data)
 		return;
 
+	if (txlen > 0xf000)
+		txlen = 0; /* if not supported */
+
 	s = p->txbuff;
-	/* calculation V0.1 : 'len' samples off the end */
-	r = (p->tx_W - len) & ECHOCAN_BUFF_MASK;
+	/* calculation V0.1 : 'len' and 'txlen' samples off the end */
+	r = (p->tx_W - len - txlen) & ECHOCAN_BUFF_MASK;
 	kernel_fpu_begin();
 	if (p->echostate & __ECHO_STATE_MUTE) {
 		/* Special stuff for training the echo can */
