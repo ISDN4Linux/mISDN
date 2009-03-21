@@ -125,7 +125,7 @@ struct dsp_dtmf {
 		/* buffers one full dtmf frame */
 	u8		lastwhat, lastdigit;
 	int		count;
-	u8		digits[16]; /* just the dtmf result */
+	u8		digits[16]; /* dtmf result */
 };
 
 
