@@ -37,6 +37,8 @@
 #define echo_can_traintap oslec_echo_can_traintap
 #include "dsp_cancel.h"
 
+/*#define DEBUG */
+
 static void *new(const char *arg)
 {
 	int deftaps = 128,
@@ -78,8 +80,10 @@ static void *new(const char *arg)
 	}
 
 _out:
+#ifdef DEBUG
 	printk(KERN_DEBUG "%s: creating %s with deftaps=%d and training=%d\n",
 		__func__, EC_TYPE, deftaps, training);
+#endif
 	return dsp_cancel_new(deftaps, training);
 }
 

@@ -112,6 +112,7 @@ struct dsp_conf {
 
 #define DSP_DTMF_NPOINTS 102
 
+/* keep buffers low, so they can be used in atomic memory structures */
 #define ECHOCAN_BUFF_SIZE 0x400 /* must be 2**n */
 #define ECHOCAN_BUFF_MASK 0x3ff /* -1 */
 

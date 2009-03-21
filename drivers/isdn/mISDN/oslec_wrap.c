@@ -61,16 +61,9 @@
 
 /* number of cycles we are using per call */
 
-/* We need this lock as multiple threads may try to manipulate
-   the globals used for diagnostics at the same time */
-
-DECLARE_MUTEX(oslec_lock);
-
 struct echo_can_state *oslec_echo_can_create(int len, int adaption_mode)
 {
   struct echo_can_state *ec;
-
-  down(&oslec_lock);
 
   ec = (struct echo_can_state *)malloc(sizeof(struct echo_can_state));
   ec->ec = (void *)echo_can_create(len,   ECHO_CAN_USE_ADAPTION
@@ -78,20 +71,13 @@ struct echo_can_state *oslec_echo_can_create(int len, int adaption_mode)
 					| ECHO_CAN_USE_CLIP
 					| ECHO_CAN_USE_TX_HPF
 					| ECHO_CAN_USE_RX_HPF);
-
-  up(&oslec_lock);
-
   return ec;
 }
 
 void oslec_echo_can_free(struct echo_can_state *ec)
 {
-  down(&oslec_lock);
-
   echo_can_free((struct echo_can_state_s *)(ec->ec));
   free(ec);
-
-  up(&oslec_lock);
 }
 
 short oslec_echo_can_update(struct echo_can_state *ec, short iref, short isig)

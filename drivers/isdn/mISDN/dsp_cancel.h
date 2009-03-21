@@ -60,7 +60,7 @@ dsp_cancel_new(int deftaps, int training)
 {
 	struct ec_prv *p;
 
-	p = kmalloc(sizeof(struct ec_prv), GFP_KERNEL);
+	p = kzalloc(sizeof(struct ec_prv), GFP_ATOMIC);
 	if (!p)
 		goto err1;
 

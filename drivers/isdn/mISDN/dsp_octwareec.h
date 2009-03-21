@@ -57,7 +57,7 @@ static inline struct echo_can_state
 	struct echo_can_state *pEchoCanceller = NULL;
 
 	/* Allocate echo canceller state structure. */
-	pEchoCanceller = kmalloc(sizeof(struct echo_can_state), GFP_KERNEL);
+	pEchoCanceller = kmalloc(sizeof(struct echo_can_state), GFP_ATOMIC);
 	if (pEchoCanceller != NULL) {
 		pEchoCanceller->pvOctvqeEchoCanceller =
 		    ZapOctVqeApiEcChannelInitialize(len, adaption_mode);
