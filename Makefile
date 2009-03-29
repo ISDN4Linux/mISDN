@@ -83,6 +83,8 @@ test_old_misdn:
 force:
 	rm -f $(LINUX)/include/linux/mISDNif.h
 	rm -f $(LINUX)/include/linux/isdn_compat.h
+	rm -f $(LINUX)/include/linux/mISDNdsp.h
+	rm -f $(LINUX)/include/linux/mISDNhw.h 
 	rm -f /usr/include/linux/mISDNif.h
 	rm -f /usr/include/linux/isdn_compat.h
 
