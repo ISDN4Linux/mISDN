@@ -775,7 +775,7 @@ tei_ph_data_ind(struct teimgr *tm, u_int mt, u_char *dp, int len)
 }
 
 static struct layer2 *
-create_new_tei(struct manager *mgr, int tei)
+create_new_tei(struct manager *mgr, int tei, int sapi)
 {
 	u_long		opt = 0;
 	u_long		flags;
@@ -789,7 +789,7 @@ create_new_tei(struct manager *mgr, int tei)
 	if (mgr->ch.st->dev->Dprotocols
 	  & ((1 << ISDN_P_TE_E1) | (1 << ISDN_P_NT_E1)))
 		test_and_set_bit(OPTION_L2_PMX, &opt);
-	l2 = create_l2(mgr->up, ISDN_P_LAPD_NT, (u_int)opt, (u_long)tei);
+	l2 = create_l2(mgr->up, ISDN_P_LAPD_NT, (u_int)opt, tei, sapi);
 	if (!l2) {
 		printk(KERN_WARNING "%s:no memory for layer2\n", __func__);
 		return NULL;
@@ -837,12 +837,15 @@ new_tei_req(struct manager *mgr, u_char *dp)
 	ri += dp[1];
 	if (!mgr->up)
 		goto denied;
-	tei = get_free_tei(mgr);
+	if (dp[3] != 0xff)
+		tei = dp[3] >> 1; /* 3GPP TS 08.56 6.1.11.2 */
+	else
+		tei = get_free_tei(mgr);
 	if (tei < 0) {
 		printk(KERN_WARNING "%s:No free tei\n", __func__);
 		goto denied;
 	}
-	l2 = create_new_tei(mgr, tei);
+	l2 = create_new_tei(mgr, tei, 0);
 	if (!l2)
 		goto denied;
 	else
@@ -974,8 +977,6 @@ create_teimgr(struct manager *mgr, struct channel_req *crq)
 			__func__, dev_name(&mgr->ch.st->dev->dev),
 			crq->protocol, crq->adr.dev, crq->adr.channel,
 			crq->adr.sapi, crq->adr.tei);
-	if (crq->adr.sapi != 0) /* not supported yet */
-		return -EINVAL;
 	if (crq->adr.tei > GROUP_TEI)
 		return -EINVAL;
 	if (crq->adr.tei < 64)
@@ -1023,7 +1024,7 @@ create_teimgr(struct manager *mgr, struct channel_req *crq)
 		return 0;
 	}
 	l2 = create_l2(crq->ch, crq->protocol, (u_int)opt,
-		(u_long)crq->adr.tei);
+		crq->adr.tei, crq->adr.sapi);
 	if (!l2)
 		return -ENOMEM;
 	l2->tm = kzalloc(sizeof(struct teimgr), GFP_KERNEL);
@@ -1168,7 +1169,7 @@ static int
 check_data(struct manager *mgr, struct sk_buff *skb)
 {
 	struct mISDNhead	*hh =  mISDN_HEAD_P(skb);
-	int			ret, tei;
+	int			ret, tei, sapi;
 	struct layer2		*l2;
 
 	if (*debug & DEBUG_L2_CTRL)
@@ -1180,18 +1181,16 @@ check_data(struct manager *mgr, struct sk_buff *skb)
 		return -ENOTCONN;
 	if (skb->len != 3)
 		return -ENOTCONN;
-	if (skb->data[0] != 0)
-		/* only SAPI 0 command */
-		return -ENOTCONN;
+	sapi = skb->data[0] >> 2;
 	if (!(skb->data[1] & 1)) /* invalid EA1 */
 		return -EINVAL;
-	tei = skb->data[1] >> 0;
+	tei = skb->data[1] >> 1;
 	if (tei > 63) /* not a fixed tei */
 		return -ENOTCONN;
 	if ((skb->data[2] & ~0x10) != SABME)
 		return -ENOTCONN;
 	/* We got a SABME for a fixed TEI */
-	l2 = create_new_tei(mgr, tei);
+	l2 = create_new_tei(mgr, tei, sapi);
 	if (!l2)
 		return -ENOMEM;
 	ret = l2->ch.send(&l2->ch, skb);
