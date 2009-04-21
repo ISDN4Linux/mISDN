@@ -1363,6 +1363,10 @@ xhfc_write_fifo(struct xhfc *xhfc, __u8 channel)
 		/* write data to FIFO */
 		i = 0;
 		while (i < tcnt) {
+                        write_xhfc(xhfc, A_FIFO_DATA, *(data + i));
+                        i++;
+		        /*
+		        // optimized bulk writes
 			if ((tcnt - i) >= 4) {
 				write32_xhfc(xhfc, A_FIFO_DATA,
 					     *((__u32 *) (data + i)));
@@ -1371,6 +1375,7 @@ xhfc_write_fifo(struct xhfc *xhfc, __u8 channel)
 				write_xhfc(xhfc, A_FIFO_DATA, *(data + i));
 				i++;
 			}
+			*/
 		}
 
 		/* skb data complete */
@@ -1536,6 +1541,10 @@ xhfc_read_fifo(struct xhfc *xhfc, __u8 channel)
 		/* read data from FIFO */
 		i = 0;
 		while (i < rcnt) {
+		        *(data + i) = read_xhfc(xhfc, A_FIFO_DATA);
+		        i++;
+        		/*
+        		// optimized bulk reads:
 			if ((rcnt - i) >= 4) {
 				*((__u32 *) (data + i)) =
 				    read32_xhfc(xhfc, A_FIFO_DATA);
@@ -1544,6 +1553,7 @@ xhfc_read_fifo(struct xhfc *xhfc, __u8 channel)
 				*(data + i) = read_xhfc(xhfc, A_FIFO_DATA);
 				i++;
 			}
+                        */
 		}
 	} else {
 		spin_unlock(&port->lock);
