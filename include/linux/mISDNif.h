@@ -229,7 +229,6 @@
 #define OPTION_L2_PTP		2
 #define OPTION_L2_FIXEDTEI	3
 #define OPTION_L2_CLEANUP	4
-#define OPTION_L1_HOLD		5
 
 /* should be in sync with linux/kobject.h:KOBJ_NAME_LEN */
 #define MISDN_MAX_IDLEN		20
@@ -324,7 +323,6 @@ struct ph_info {
 #define IMCTRLREQ	_IOR('I', 69, int)
 #define IMCLEAR_L2	_IOR('I', 70, int)
 #define IMSETDEVNAME	_IOR('I', 71, struct mISDN_devrename)
-#define IMHOLD_L1	_IOR('I', 72, int)
 
 static inline int
 test_channelmap(u_int nr, u_char *map)

@@ -122,10 +122,8 @@ da_deactivate(struct FsmInst *fi, int event, void *arg)
 	}
 	read_unlock_irqrestore(&mgr->lock, flags);
 	/* All TEI are inactiv */
-	if (!test_bit(OPTION_L1_HOLD, &mgr->options)) {
-		mISDN_FsmAddTimer(&mgr->datimer, DATIMER_VAL, EV_DATIMER, NULL, 1);
-		mISDN_FsmChangeState(fi, ST_L1_DEACT_PENDING);
-	}
+	mISDN_FsmAddTimer(&mgr->datimer, DATIMER_VAL, EV_DATIMER, NULL, 1);
+	mISDN_FsmChangeState(fi, ST_L1_DEACT_PENDING);
 }
 
 static void
@@ -134,10 +132,9 @@ da_ui(struct FsmInst *fi, int event, void *arg)
 	struct manager	*mgr = fi->userdata;
 
 	/* restart da timer */
-	if (!test_bit(OPTION_L1_HOLD, &mgr->options)) {
-		mISDN_FsmDelTimer(&mgr->datimer, 2);
-		mISDN_FsmAddTimer(&mgr->datimer, DATIMER_VAL, EV_DATIMER, NULL, 2);
-	}
+	mISDN_FsmDelTimer(&mgr->datimer, 2);
+	mISDN_FsmAddTimer(&mgr->datimer, DATIMER_VAL, EV_DATIMER, NULL, 2);
+
 }
 
 static void
@@ -1107,7 +1104,6 @@ free_teimanager(struct manager *mgr)
 {
 	struct layer2	*l2, *nl2;
 
-	test_and_clear_bit(OPTION_L1_HOLD, &mgr->options);
 	if (test_bit(MGR_OPT_NETWORK, &mgr->options)) {
 		/* not locked lock is taken in release tei */
 		mgr->up = NULL;
@@ -1138,30 +1134,13 @@ static int
 ctrl_teimanager(struct manager *mgr, void *arg)
 {
 	/* currently we only have one option */
-	int	*val = (int *)arg;
-	int	ret = 0;
+	int	clean = *((int *)arg);
 
-	switch(val[0]) {
-		case IMCLEAR_L2:
-			if (val[1])
-				test_and_set_bit(OPTION_L2_CLEANUP,
-					&mgr->options);
-			else
-				test_and_clear_bit(OPTION_L2_CLEANUP,
-					&mgr->options);
-			break;
-		case IMHOLD_L1:
-			if (val[1])
-				test_and_set_bit(OPTION_L1_HOLD,
-					&mgr->options);
-			else
-				test_and_clear_bit(OPTION_L1_HOLD,
-					&mgr->options);
-			break;
-		default:
-			ret = -EINVAL;
-	}
-	return ret;
+	if (clean)
+		test_and_set_bit(OPTION_L2_CLEANUP, &mgr->options);
+	else
+		test_and_clear_bit(OPTION_L2_CLEANUP, &mgr->options);
+	return 0;
 }
 
 /* This function does create a L2 for fixed TEI in NT Mode */
