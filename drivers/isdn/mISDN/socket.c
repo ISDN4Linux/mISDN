@@ -222,7 +222,7 @@ mISDN_sock_sendmsg(struct kiocb *iocb, struct socket *sock,
 	} else { /* use default for L2 messages */
 		if ((sk->sk_protocol == ISDN_P_LAPD_TE) ||
 		    (sk->sk_protocol == ISDN_P_LAPD_NT))
-		    mISDN_HEAD_ID(skb) = _pms(sk)->ch.nr;
+			mISDN_HEAD_ID(skb) = _pms(sk)->ch.nr;
 	}
 
 	if (*debug & DEBUG_SOCKET)
@@ -230,8 +230,10 @@ mISDN_sock_sendmsg(struct kiocb *iocb, struct socket *sock,
 		     __func__, mISDN_HEAD_ID(skb));
 
 	err = -ENODEV;
-	if (!_pms(sk)->ch.peer ||
-	    (err = _pms(sk)->ch.recv(_pms(sk)->ch.peer, skb)))
+	if (!_pms(sk)->ch.peer)
+		goto drop;
+	err = _pms(sk)->ch.recv(_pms(sk)->ch.peer, skb);
+	if (err)
 		goto drop;
 
 	err = len;

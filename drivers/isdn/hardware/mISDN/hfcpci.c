@@ -257,7 +257,7 @@ reset_hfcpci(struct hfc_pci *hc)
 	Write_hfc(hc, HFCPCI_INT_M1, hc->hw.int_m1);
 
 	/* Clear already pending ints */
-	if (Read_hfc(hc, HFCPCI_INT_S1));
+	val = Read_hfc(hc, HFCPCI_INT_S1);
 
 	/* set NT/TE mode */
 	hfcpci_setmode(hc);
@@ -499,7 +499,8 @@ receive_dmsg(struct hfc_pci *hc)
 			df->f2 = ((df->f2 + 1) & MAX_D_FRAMES) |
 			    (MAX_D_FRAMES + 1);	/* next buffer */
 			df->za[df->f2 & D_FREG_MASK].z2 =
-			    cpu_to_le16((le16_to_cpu(zp->z2) + rcnt) & (D_FIFO_SIZE - 1));
+			    cpu_to_le16((le16_to_cpu(zp->z2) + rcnt) &
+			    (D_FIFO_SIZE - 1));
 		} else {
 			dch->rx_skb = mI_alloc_skb(rcnt - 3, GFP_ATOMIC);
 			if (!dch->rx_skb) {
@@ -541,7 +542,8 @@ receive_dmsg(struct hfc_pci *hc)
  * check for transparent receive data and read max one 'poll' size if avail
  */
 static void
-hfcpci_empty_fifo_trans(struct bchannel *bch, struct bzfifo *rxbz, struct bzfifo *txbz, u_char *bdata)
+hfcpci_empty_fifo_trans(struct bchannel *bch, struct bzfifo *rxbz,
+	struct bzfifo *txbz, u_char *bdata)
 {
 	 __le16	*z1r, *z2r, *z1t, *z2t;
 	int	new_z2, fcnt_rx, fcnt_tx, maxlen;
@@ -965,6 +967,7 @@ static void
 ph_state_nt(struct dchannel *dch)
 {
 	struct hfc_pci	*hc = dch->hw;
+	u_char	val;
 
 	if (dch->debug)
 		printk(KERN_DEBUG "%s: NT newstate %x\n",
@@ -978,7 +981,7 @@ ph_state_nt(struct dchannel *dch)
 			hc->hw.int_m1 &= ~HFCPCI_INTS_TIMER;
 			Write_hfc(hc, HFCPCI_INT_M1, hc->hw.int_m1);
 			/* Clear already pending ints */
-			if (Read_hfc(hc, HFCPCI_INT_S1));
+			val = Read_hfc(hc, HFCPCI_INT_S1);
 			Write_hfc(hc, HFCPCI_STATES, 4 | HFCPCI_LOAD_STATE);
 			udelay(10);
 			Write_hfc(hc, HFCPCI_STATES, 4);
@@ -1326,8 +1329,8 @@ mode_hfcpci(struct bchannel *bch, int bc, int protocol)
 	case (ISDN_P_B_RAW):
 		bch->state = protocol;
 		bch->nr = bc;
-		hfcpci_clear_fifo_rx(hc, (fifo2 & 2)?1:0);
-		hfcpci_clear_fifo_tx(hc, (fifo2 & 2)?1:0);
+		hfcpci_clear_fifo_rx(hc, (fifo2 & 2) ? 1 : 0);
+		hfcpci_clear_fifo_tx(hc, (fifo2 & 2) ? 1 : 0);
 		if (bc & 2) {
 			hc->hw.sctrl |= SCTRL_B2_ENA;
 			hc->hw.sctrl_r |= SCTRL_B2_ENA;
@@ -1361,8 +1364,8 @@ mode_hfcpci(struct bchannel *bch, int bc, int protocol)
 	case (ISDN_P_B_HDLC):
 		bch->state = protocol;
 		bch->nr = bc;
-		hfcpci_clear_fifo_rx(hc, (fifo2 & 2)?1:0);
-		hfcpci_clear_fifo_tx(hc, (fifo2 & 2)?1:0);
+		hfcpci_clear_fifo_rx(hc, (fifo2 & 2) ? 1 : 0);
+		hfcpci_clear_fifo_tx(hc, (fifo2 & 2) ? 1 : 0);
 		if (bc & 2) {
 			hc->hw.sctrl |= SCTRL_B2_ENA;
 			hc->hw.sctrl_r |= SCTRL_B2_ENA;
@@ -1456,7 +1459,7 @@ set_hfcpci_rxtest(struct bchannel *bch, int protocol, int chan)
 	switch (protocol) {
 	case (ISDN_P_B_RAW):
 		bch->state = protocol;
-		hfcpci_clear_fifo_rx(hc, (chan & 2)?1:0);
+		hfcpci_clear_fifo_rx(hc, (chan & 2) ? 1 : 0);
 		if (chan & 2) {
 			hc->hw.sctrl_r |= SCTRL_B2_ENA;
 			hc->hw.fifo_en |= HFCPCI_FIFOEN_B2RX;
@@ -1481,7 +1484,7 @@ set_hfcpci_rxtest(struct bchannel *bch, int protocol, int chan)
 		break;
 	case (ISDN_P_B_HDLC):
 		bch->state = protocol;
-		hfcpci_clear_fifo_rx(hc, (chan & 2)?1:0);
+		hfcpci_clear_fifo_rx(hc, (chan & 2) ? 1 : 0);
 		if (chan & 2) {
 			hc->hw.sctrl_r |= SCTRL_B2_ENA;
 			hc->hw.last_bfifo_cnt[1] = 0;
@@ -2046,7 +2049,8 @@ setup_hw(struct hfc_pci *hc)
 		printk(KERN_WARNING "HFC-PCI: No IRQ for PCI card found\n");
 		return 1;
 	}
-	hc->hw.pci_io = (char __iomem *)(unsigned long)hc->pdev->resource[1].start;
+	hc->hw.pci_io =
+		(char __iomem *)(unsigned long)hc->pdev->resource[1].start;
 
 	if (!hc->hw.pci_io) {
 		printk(KERN_WARNING "HFC-PCI: No IO-Mem for PCI card found\n");

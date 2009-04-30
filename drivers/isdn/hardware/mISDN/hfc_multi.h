@@ -18,7 +18,7 @@
 #define	PCI_ENA_MEMIO	0x02
 
 /*
- * Defines for the SDG embedded board using the XHFC-4SU chip 
+ * Defines for the SDG embedded board using the XHFC-4SU chip
  */
 #ifdef CONFIG_8xx
 #include <asm/8xx_immap.h>
@@ -28,24 +28,24 @@
  */
 #define IMAP_ADDR	0xFFF00000
 
-typedef struct io_port {
-        ushort  iop_padir;
-        ushort  iop_papar;
-        ushort  iop_paodr;
-        ushort  iop_padat;
-} iop8xx_t;
+struct io_port {
+	ushort	iop_padir;
+	ushort	iop_papar;
+	ushort	iop_paodr;
+	ushort	iop_padat;
+};
 
-typedef struct comm_proc {
-        uint    cp_pbdir;
-        uint    cp_pbpar;
-        ushort  cp_pbodr;
-        uint    cp_pbdat;
-} cpm8xx_t;
+struct comm_proc {
+	uint	cp_pbdir;
+	uint	cp_pbpar;
+	ushort	cp_pbodr;
+	uint	cp_pbdat;
+};
 
-typedef struct immap {
-	iop8xx_t        im_ioport;
-	cpm8xx_t        im_cpm;
-} immap_t;
+struct immap {
+	struct io_port		im_ioport;
+	struct comm_proc        im_cpm;
+};
 #endif /* CONFIG_8xx */
 #define XHFC_IRQ	4		/* SIU_IRQ2 */
 #define XHFC_MEMBASE	0xFE000000
@@ -213,9 +213,9 @@ struct hfc_multi {
 	void __iomem	*pci_membase; /* PCI memory */
 	void __iomem	*plx_membase; /* PLX memory */
 	u_long		xhfc_origmembase;
-	volatile u_char	*xhfc_membase;
-	volatile u_long	*xhfc_memaddr, *xhfc_memdata;
-	volatile immap_t *immap;
+	u_char		*xhfc_membase;
+	u_long		*xhfc_memaddr, *xhfc_memdata;
+	struct immap	*immap;
 	u_long		pb_irqmsk;	/* Portbit mask to check the IRQ line */
 	u_long		pci_iobase; /* PCI IO */
 	struct hfcm_hw	hw;	/* remember data of write-only-registers */

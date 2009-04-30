@@ -280,7 +280,7 @@ dsp_fill_empty(struct dsp *dsp)
 static int
 dsp_control_req(struct dsp *dsp, struct mISDNhead *hh, struct sk_buff *skb)
 {
-	struct		sk_buff *nskb;
+	struct sk_buff	*nskb;
 	int ret = 0;
 	int cont;
 	u8 *data;
@@ -424,7 +424,8 @@ tone_off:
 			dsp_cmx_debug(dsp);
 		break;
 	case DSP_ECHO_OFF: /* disable echo */
-		dsp->echo.software = dsp->echo.hardware = 0;
+		dsp->echo.software = 0;
+		dsp->echo.hardware = 0;
 		if (dsp_debug & DEBUG_DSP_CORE)
 			printk(KERN_DEBUG "%s: disable cmx-echo\n", __func__);
 		dsp_cmx_hardware(dsp->conf, dsp);
@@ -557,7 +558,7 @@ tone_off:
 			dsp->pipeline.inuse = 1;
 			dsp_cmx_hardware(dsp->conf, dsp);
 			ret = dsp_pipeline_build(&dsp->pipeline,
-				len > 0 ? (char *)data : NULL);
+				len > 0 ? data : NULL);
 			dsp_cmx_hardware(dsp->conf, dsp);
 			dsp_rx_off(dsp);
 		}
@@ -705,7 +706,7 @@ dsp_function(struct mISDNchannel *ch,  struct sk_buff *skb)
 		}
 
 		spin_lock_irqsave(&dsp_lock, flags);
-		
+
 		/* decrypt if enabled */
 		if (dsp->bf_enable)
 			dsp_bf_decrypt(dsp, skb->data, skb->len);
@@ -719,14 +720,14 @@ dsp_function(struct mISDNchannel *ch,  struct sk_buff *skb)
 		/* check if dtmf soft decoding is turned on */
 		if (dsp->dtmf.software) {
 			digits = dsp_dtmf_goertzel_decode(dsp, skb->data,
-				skb->len, (dsp_options&DSP_OPT_ULAW)?1:0);
+				skb->len, (dsp_options&DSP_OPT_ULAW) ? 1 : 0);
 		}
 		/* we need to process receive data if software */
 		if (dsp->conf && dsp->conf->software) {
 			/* process data from card at cmx */
 			dsp_cmx_receive(dsp, skb);
 		}
-		
+
 		spin_unlock_irqrestore(&dsp_lock, flags);
 
 		/* send dtmf result, if any */
@@ -951,7 +952,7 @@ dsp_ctrl(struct mISDNchannel *ch, u_int cmd, void *arg)
 	int		err = 0;
 
 	if (debug & DEBUG_DSP_CTRL)
-	printk(KERN_DEBUG "%s:(%x)\n", __func__, cmd);
+		printk(KERN_DEBUG "%s:(%x)\n", __func__, cmd);
 
 	switch (cmd) {
 	case OPEN_CHANNEL:
@@ -1174,9 +1175,9 @@ static int dsp_init(void)
 
 	/* init conversion tables */
 	dsp_audio_generate_law_tables();
-	dsp_silence = (dsp_options&DSP_OPT_ULAW)?0xff:0x2a;
-	dsp_audio_law_to_s32 = (dsp_options&DSP_OPT_ULAW)?dsp_audio_ulaw_to_s32:
-		dsp_audio_alaw_to_s32;
+	dsp_silence = (dsp_options&DSP_OPT_ULAW) ? 0xff : 0x2a;
+	dsp_audio_law_to_s32 = (dsp_options&DSP_OPT_ULAW) ?
+		dsp_audio_ulaw_to_s32 : dsp_audio_alaw_to_s32;
 	dsp_audio_generate_s2law_table();
 	dsp_audio_generate_seven();
 	dsp_audio_generate_mix_table();

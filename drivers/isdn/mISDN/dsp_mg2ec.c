@@ -31,7 +31,7 @@
 #include "dsp_mg2ec.h"
 #include "dsp_cancel.h"
 
-static void* new(const char *arg)
+static void *new(const char *arg)
 {
 	int deftaps = 128,
 		training = 0,

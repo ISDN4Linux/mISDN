@@ -1389,7 +1389,8 @@ dsp_cmx_send_member(struct dsp *dsp, int len, s32 *c, int members)
 		while (r != rr && t != tt) {
 #ifdef CMX_TX_DEBUG
 			if (strlen(debugbuf) < 48)
-			    sprintf(debugbuf+strlen(debugbuf), " %02x", p[t]);
+				sprintf(debugbuf+strlen(debugbuf), " %02x",
+				    p[t]);
 #endif
 			*d++ = p[t]; /* write tx_buff */
 			t = (t+1) & CMX_BUFF_MASK;

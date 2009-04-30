@@ -63,7 +63,7 @@
 
 /* we need a dynamic level of suppression varying with the ratio of the
    power of the echo to the power of the reference signal this is
-   done so that we have a  smoother background. 		
+   done so that we have a  smoother background.
    we have a higher suppression when the power ratio is closer to
    suppr_ceil and reduces logarithmically as we approach suppr_floor.
  */
