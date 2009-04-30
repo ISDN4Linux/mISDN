@@ -28,7 +28,7 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
- * $Id: echo.c,v 1.20 2006/12/01 18:00:48 steveu Exp $
+ * Id: echo.c,v 1.20 2006/12/01 18:00:48 steveu
  */
 
 /*! \file */
@@ -264,6 +264,13 @@ echo_can_state_t *echo_can_create(int len, int adaption_mode)
 		return  NULL;
 	memset(ec, 0, sizeof(*ec));
 
+	ec->snapshot = malloc(ec->taps*sizeof(int16_t));
+	if (ec->napshot == NULL) {
+		free(ec);
+		return  NULL;
+	}
+	memset(ec->snapshot, 0, sizeof(int16_t) * ec->taps);
+
 	ec->taps = len;
 	ec->log2taps = top_bit(len);
 	ec->curr_pos = ec->taps - 1;
@@ -274,6 +281,7 @@ echo_can_state_t *echo_can_create(int len, int adaption_mode)
 		if (ec->fir_taps16[i] == NULL) {
 			for (j = 0; j < i; j++)
 				free(ec->fir_taps16[j]);
+			free(ec->snapshot);
 			free(ec);
 			return  NULL;
 		}
@@ -287,21 +295,9 @@ echo_can_state_t *echo_can_create(int len, int adaption_mode)
 		ec->fir_taps16[1],
 		ec->taps);
 
-	for (i = 0; i < 5; i++)
-		ec->xvtx[i] = ec->yvtx[i] = ec->xvrx[i] = ec->yvrx[i] = 0;
-
 	ec->cng_level = 1000;
 	echo_can_adaption_mode(ec, adaption_mode);
 
-	ec->snapshot = (int16_t *)malloc(ec->taps*sizeof(int16_t));
-	memset(ec->snapshot, 0, sizeof(int16_t)*ec->taps);
-
-	ec->cond_met = 0;
-	ec->Pstates = 0;
-	ec->Ltxacc = ec->Lrxacc = ec->Lcleanacc = ec->Lclean_bgacc = 0;
-	ec->Ltx = ec->Lrx = ec->Lclean = ec->Lclean_bg = 0;
-	ec->tx_1 = ec->tx_2 = ec->rx_1 = ec->rx_2 = 0;
-	ec->Lbgn = ec->Lbgn_acc = 0;
 	ec->Lbgn_upper = 200;
 	ec->Lbgn_upper_acc = ec->Lbgn_upper << 13;
 
