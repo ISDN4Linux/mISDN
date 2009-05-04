@@ -4492,7 +4492,7 @@ setup_embedded(struct hfc_multi *hc, struct hm_map *m)
 	}
 
 	/* Prepare the MPC8XX PortA 10 as output (address/data selector) */
-	hc->immap = (immap_t *)(IMAP_ADDR);
+	hc->immap = (struct immap *)(IMAP_ADDR);
 	hc->immap->im_ioport.iop_papar &= ~(PA_XHFC_A0);
 	hc->immap->im_ioport.iop_paodr &= ~(PA_XHFC_A0);
 	hc->immap->im_ioport.iop_padir |=   PA_XHFC_A0;
