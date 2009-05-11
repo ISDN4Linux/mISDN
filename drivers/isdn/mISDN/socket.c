@@ -209,7 +209,7 @@ mISDN_sock_sendmsg(struct kiocb *iocb, struct socket *sock,
 
 	if (memcpy_fromiovec(skb_put(skb, len), msg->msg_iov, len)) {
 		err = -EFAULT;
-		goto drop;
+		goto done;
 	}
 
 	memcpy(mISDN_HEAD_P(skb), skb->data, MISDN_HEADER_LEN);
@@ -231,20 +231,20 @@ mISDN_sock_sendmsg(struct kiocb *iocb, struct socket *sock,
 
 	err = -ENODEV;
 	if (!_pms(sk)->ch.peer)
-		goto drop;
+		goto done;
 	err = _pms(sk)->ch.recv(_pms(sk)->ch.peer, skb);
 	if (err)
-		goto drop;
-
-	err = len;
+		goto done;
+	else {
+		skb = NULL;
+		err = len;
+	}
 
 done:
+	if (skb)
+		kfree_skb(skb);
 	release_sock(sk);
 	return err;
-
-drop:
-	kfree_skb(skb);
-	goto done;
 }
 
 static int
