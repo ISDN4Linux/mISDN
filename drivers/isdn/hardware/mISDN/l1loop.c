@@ -203,7 +203,7 @@ static void bch_vbus(struct bchannel *bch, struct sk_buff *skb)
 	struct bchannel *target = NULL;
 	int i, b;
 
-	b = bch->nr-1;
+	b = bch->nr - 1 - (bch->nr > 16);
 	for (i=0; i<interfaces; i++) {
 		party = hw->ports + i;
 		target = &party->bch[b];
@@ -721,11 +721,11 @@ open_dchannel(struct port *p, struct mISDNchannel *ch, struct channel_req *rq)
 }
 
 static int
-open_bchannel(struct port * p, struct channel_req *rq)
+open_bchannel(struct port * p, struct dchannel *dch, struct channel_req *rq)
 {
 	struct bchannel *bch;
 
-	if (rq->adr.channel > 2)
+	if (!test_channelmap(rq->adr.channel, dch->dev.channelmap))
 		return -EINVAL;
 	if (rq->protocol == ISDN_P_NONE)
 		return -EINVAL;
@@ -734,7 +734,7 @@ open_bchannel(struct port * p, struct channel_req *rq)
 		printk (KERN_DEBUG "%s: %s B%i\n",
 			p->name, __func__, rq->adr.channel);
 
-	bch = &p->bch[rq->adr.channel - 1];
+	bch = &p->bch[rq->adr.channel - 1 - (rq->adr.channel > 16)];
 	if (test_and_set_bit(FLG_OPEN, &bch->Flags))
 		return -EBUSY; /* b-channel can be only open once */
 	test_and_clear_bit(FLG_FILLEMPTY, &bch->Flags);
@@ -790,7 +790,7 @@ l1loop_dctrl(struct mISDNchannel *ch, u_int cmd, void *arg) {
 			    (rq->protocol == ISDN_P_NT_E1))
 				err = open_dchannel(p, ch, rq);
 			else
-				err = open_bchannel(p, rq);
+				err = open_bchannel(p, dch, rq);
 			break;
 		case CLOSE_CHANNEL:
 			if (debug & DEBUG_HW_OPEN)
@@ -850,14 +850,14 @@ setup_instance(struct l1loop *hw) {
 		p->dch.dev.D.ctrl = l1loop_dctrl;
 		p->dch.dev.nrbchan = nchannel;
 		for (b=0; b<nchannel; b++) {
-			p->bch[b].nr = b + 1;
-			set_channelmap(b + 1, p->dch.dev.channelmap);
+			p->bch[b].nr = b + 1 + (b >= 15);
+			set_channelmap(p->bch[b].nr, p->dch.dev.channelmap);
 			p->bch[b].debug = debug;
 			mISDN_initbchannel(&p->bch[b], MAX_DATA_MEM);
 			p->bch[b].hw = p;
 			p->bch[b].ch.send = l1loop_l2l1B;
 			p->bch[b].ch.ctrl = l1loop_bctrl;
-			p->bch[b].ch.nr = b + 1;
+			p->bch[b].ch.nr = p->bch[b].nr;
 			list_add(&p->bch[b].ch.list, &p->dch.dev.bchannels);
 		}
 
