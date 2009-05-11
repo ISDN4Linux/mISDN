@@ -46,7 +46,7 @@
 #define FREE(a) free(a)
 #endif
 
-#define ABS(a) abs((a != -32768)? a : -32767)
+#define ABS(a) abs((a != -32768) ? a : -32767)
 
 #define RESTORE_COEFFS {\
 				int x;\
@@ -559,10 +559,11 @@ echo_can_update(struct echo_can_state *ec, short iref, short isig)
 							pos++;
 
 						if (*pos > max_coeffs[
-							USED_COEFFS-1])
-						memmove(pos+1, pos, (USED_COEFFS
-							-(pos-max_coeffs)-1)
-							*sizeof(int));
+						    USED_COEFFS-1])
+							memmove(pos+1, pos,
+							    (USED_COEFFS -
+							    (pos-max_coeffs) -
+							    1) * sizeof(int));
 
 						*pos = abs(ec->a_i[k]);
 					}

@@ -123,7 +123,8 @@ da_deactivate(struct FsmInst *fi, int event, void *arg)
 	read_unlock_irqrestore(&mgr->lock, flags);
 	/* All TEI are inactiv */
 	if (!test_bit(OPTION_L1_HOLD, &mgr->options)) {
-		mISDN_FsmAddTimer(&mgr->datimer, DATIMER_VAL, EV_DATIMER, NULL, 1);
+		mISDN_FsmAddTimer(&mgr->datimer, DATIMER_VAL, EV_DATIMER,
+			NULL, 1);
 		mISDN_FsmChangeState(fi, ST_L1_DEACT_PENDING);
 	}
 }
@@ -136,7 +137,8 @@ da_ui(struct FsmInst *fi, int event, void *arg)
 	/* restart da timer */
 	if (!test_bit(OPTION_L1_HOLD, &mgr->options)) {
 		mISDN_FsmDelTimer(&mgr->datimer, 2);
-		mISDN_FsmAddTimer(&mgr->datimer, DATIMER_VAL, EV_DATIMER, NULL, 2);
+		mISDN_FsmAddTimer(&mgr->datimer, DATIMER_VAL, EV_DATIMER,
+			NULL, 2);
 	}
 }
 
@@ -869,7 +871,6 @@ ph_data_ind(struct manager *mgr, struct sk_buff *skb)
 			    __func__, skb->len);
 		goto done;
 	}
-	if (*debug  & DEBUG_L2_TEI)
 
 	if ((skb->data[0] >> 2) != TEI_SAPI) /* not for us */
 		goto done;
@@ -1141,25 +1142,21 @@ ctrl_teimanager(struct manager *mgr, void *arg)
 	int	*val = (int *)arg;
 	int	ret = 0;
 
-	switch(val[0]) {
-		case IMCLEAR_L2:
-			if (val[1])
-				test_and_set_bit(OPTION_L2_CLEANUP,
-					&mgr->options);
-			else
-				test_and_clear_bit(OPTION_L2_CLEANUP,
-					&mgr->options);
-			break;
-		case IMHOLD_L1:
-			if (val[1])
-				test_and_set_bit(OPTION_L1_HOLD,
-					&mgr->options);
-			else
-				test_and_clear_bit(OPTION_L1_HOLD,
-					&mgr->options);
-			break;
-		default:
-			ret = -EINVAL;
+	switch (val[0]) {
+	case IMCLEAR_L2:
+		if (val[1])
+			test_and_set_bit(OPTION_L2_CLEANUP, &mgr->options);
+		else
+			test_and_clear_bit(OPTION_L2_CLEANUP, &mgr->options);
+		break;
+	case IMHOLD_L1:
+		if (val[1])
+			test_and_set_bit(OPTION_L1_HOLD, &mgr->options);
+		else
+			test_and_clear_bit(OPTION_L1_HOLD, &mgr->options);
+		break;
+	default:
+		ret = -EINVAL;
 	}
 	return ret;
 }

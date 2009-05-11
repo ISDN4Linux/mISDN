@@ -1861,7 +1861,7 @@ ph_data_indication(struct layer2 *l2, struct mISDNhead *hh, struct sk_buff *skb)
 		if (psapi != l2->sapi) {
 			/* not our bussiness */
 			if (*debug & DEBUG_L2)
-			  	printk(KERN_DEBUG "%s: sapi %d/%d mismatch\n",
+				printk(KERN_DEBUG "%s: sapi %d/%d mismatch\n",
 					__func__, psapi, l2->sapi);
 			dev_kfree_skb(skb);
 			return 0;

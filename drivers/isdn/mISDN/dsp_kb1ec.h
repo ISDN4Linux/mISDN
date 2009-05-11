@@ -594,7 +594,7 @@ static inline struct echo_can_state *echo_can_create(int len, int adaption_mode)
 		2 * sizeof(short) * (maxu) +	/* u_s */
 		2 * sizeof(short) * len);	/* y_tilde_s */
 	if (ec)
-	  init_cc(ec, len, maxy, maxu);
+		init_cc(ec, len, maxy, maxu);
 	return ec;
 }
 
