@@ -56,8 +56,8 @@ static const char *hfcpci_revision = "2.0";
 static int HFC_cnt;
 static uint debug;
 static uint poll, tics;
-struct timer_list hfc_tl;
-u32	hfc_jiffies;
+static struct timer_list hfc_tl;
+static unsigned long hfc_jiffies;
 
 MODULE_AUTHOR("Karsten Keil");
 MODULE_LICENSE("GPL");
@@ -1270,8 +1270,7 @@ mode_hfcpci(struct bchannel *bch, int bc, int protocol)
 		rx_slot = (bc>>8) & 0xff;
 		tx_slot = (bc>>16) & 0xff;
 		bc = bc & 0xff;
-	} else if (test_bit(HFC_CFG_PCM, &hc->cfg) &&
-	    (protocol > ISDN_P_NONE))
+	} else if (test_bit(HFC_CFG_PCM, &hc->cfg) && (protocol > ISDN_P_NONE))
 		printk(KERN_WARNING "%s: no pcm channel id but HFC_CFG_PCM\n",
 		    __func__);
 	if (hc->chanlimit > 1) {
@@ -2292,7 +2291,7 @@ hfc_remove_pci(struct pci_dev *pdev)
 		release_card(card);
 	else
 		if (debug)
-			printk(KERN_WARNING "%s: drvdata already removed\n",
+			printk(KERN_DEBUG "%s: drvdata already removed\n",
 			    __func__);
 }
 

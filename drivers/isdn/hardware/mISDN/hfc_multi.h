@@ -44,7 +44,7 @@ struct comm_proc {
 
 struct immap {
 	struct io_port		im_ioport;
-	struct comm_proc        im_cpm;
+	struct comm_proc	im_cpm;
 };
 #endif /* CONFIG_8xx */
 #define XHFC_IRQ	4		/* SIU_IRQ2 */

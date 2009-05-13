@@ -1495,9 +1495,8 @@ controller_fail:
 				writel(pv, plx_acc_32);
 				spin_unlock_irqrestore(&plx_lock, plx_flags);
 				if (debug & DEBUG_HFCMULTI_INIT)
-					printk(KERN_DEBUG
-					    "%s: master: PLX_GPIO"
-					    "=%x\n", __func__, pv);
+					printk(KERN_DEBUG "%s: master: "
+					    "PLX_GPIO=%x\n", __func__, pv);
 			}
 			hc->hw.r_pcm_md0 |= V_PCM_MD;
 			HFC_outb(hc, R_PCM_MD0, hc->hw.r_pcm_md0 | 0x00);
@@ -4237,7 +4236,6 @@ channel_dctrl(struct dchannel *dch, struct mISDN_ctrl_req *cq)
 		if (debug & DEBUG_HFCMULTI_MSG)
 			printk(KERN_DEBUG "%s: MISDN_CTRL_HFC_WD_RESET\n",
 			    __func__);
-		/* reset watchdog counter */
 		HFC_outb(hc, R_BERT_WD_MD, hc->hw.r_bert_wd_md | V_WD_RES);
 		break;
 	default:

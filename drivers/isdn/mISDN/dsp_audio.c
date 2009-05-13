@@ -211,9 +211,8 @@ dsp_audio_generate_seven(void)
 		j = 0;
 		for (k = 0; k < 256; k++) {
 			if (dsp_audio_alaw_to_s32[k]
-			    < dsp_audio_alaw_to_s32[i]) {
+			    < dsp_audio_alaw_to_s32[i])
 				j++;
-			}
 		}
 		sorted_alaw[j] = i;
 	}
