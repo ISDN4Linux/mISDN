@@ -51,36 +51,33 @@ const char *l1loop_rev = "Revision: 0.1.5 (socket), 2008-11-04";
 
 static int l1loop_cnt;
 static LIST_HEAD(l1loop_list);
-static rwlock_t l1loop_lock = RW_LOCK_UNLOCKED;
-struct l1loop * hw;
-struct port *vbusnt = NULL; /* NT of virtual S0/E1 bus when using vline=1 */
+static DEFINE_RWLOCK(l1loop_lock);
+struct l1loop *hw;
+struct port *vbusnt; /* NT of virtual S0/E1 bus when using vline=1 */
 
 /* module params */
 static unsigned int interfaces = 2;
 static unsigned int vline = 1;
 static unsigned int nchannel = 2;
-static unsigned int pri = 0;
-static unsigned int debug = 0;
+static unsigned int pri;
+static unsigned int debug;
 
-#ifdef MODULE
 MODULE_AUTHOR("Martin Bachem");
-#ifdef MODULE_LICENSE
 MODULE_LICENSE("GPL");
-#endif
-module_param(interfaces, uint, 0);
-module_param(vline, uint, 0);
-module_param(nchannel, uint, 0);
-module_param(pri, uint, 0);
+module_param(interfaces, uint, S_IRUGO | S_IWUSR);
+module_param(vline, uint, S_IRUGO | S_IWUSR);
+module_param(nchannel, uint, S_IRUGO | S_IWUSR);
+module_param(pri, uint, S_IRUGO | S_IWUSR);
 module_param(debug, uint, S_IRUGO | S_IWUSR);
-#endif
 
 /*
  * send full D/B channel status information
  * as MPH_INFORMATION_IND
  */
-static void l1loop_ph_info(struct port * p) {
-	struct ph_info * phi;
-	struct dchannel * dch = &p->dch;
+static void l1loop_ph_info(struct port *p)
+{
+	struct ph_info *phi;
+	struct dchannel *dch = &p->dch;
 	int i;
 
 	phi = kzalloc(sizeof(struct ph_info) +
@@ -91,7 +88,7 @@ static void l1loop_ph_info(struct port * p) {
 	phi->dch.ch.Flags = dch->Flags;
 	phi->dch.state = dch->state;
 	phi->dch.num_bch = dch->dev.nrbchan;
-	for (i=0; i<dch->dev.nrbchan; i++) {
+	for (i = 0; i < dch->dev.nrbchan; i++) {
 		phi->bch[i].protocol = p->bch[i].ch.protocol;
 		phi->bch[i].Flags = p->bch[i].Flags;
 	}
@@ -116,32 +113,32 @@ l1loop_setup_bch(struct bchannel *bch, int protocol)
 			bch->nr);
 
 	switch (protocol) {
-		case (-1):	/* used for init */
-			bch->state = -1;
-			/* fall trough */
-		case (ISDN_P_NONE):
-			if (bch->state == ISDN_P_NONE)
-				return (0); /* already in idle state */
-			bch->state = ISDN_P_NONE;
-			clear_bit(FLG_HDLC, &bch->Flags);
-			clear_bit(FLG_TRANSPARENT, &bch->Flags);
-			break;
-		case (ISDN_P_B_RAW):
-			bch->state = protocol;
-			set_bit(FLG_TRANSPARENT, &bch->Flags);
-			break;
-		case (ISDN_P_B_HDLC):
-			bch->state = protocol;
-			set_bit(FLG_HDLC, &bch->Flags);
-			break;
-		default:
-			if (debug & DEBUG_HW)
-				printk(KERN_DEBUG "%s: %s: prot not known %x\n",
-					p->name, __func__, protocol);
-			return (-ENOPROTOOPT);
+	case (-1):	/* used for init */
+		bch->state = -1;
+		/* fall trough */
+	case (ISDN_P_NONE):
+		if (bch->state == ISDN_P_NONE)
+			return 0; /* already in idle state */
+		bch->state = ISDN_P_NONE;
+		clear_bit(FLG_HDLC, &bch->Flags);
+		clear_bit(FLG_TRANSPARENT, &bch->Flags);
+		break;
+	case (ISDN_P_B_RAW):
+		bch->state = protocol;
+		set_bit(FLG_TRANSPARENT, &bch->Flags);
+		break;
+	case (ISDN_P_B_HDLC):
+		bch->state = protocol;
+		set_bit(FLG_HDLC, &bch->Flags);
+		break;
+	default:
+		if (debug & DEBUG_HW)
+			printk(KERN_DEBUG "%s: %s: prot not known %x\n",
+				p->name, __func__, protocol);
+		return -ENOPROTOOPT;
 	}
 	l1loop_ph_info(p);
-	return (0);
+	return 0;
 }
 
 static void
@@ -186,7 +183,7 @@ static void bch_vline_loop(struct bchannel *bch, struct sk_buff *skb)
 		recv_Bchannel(bch, MISDN_ID_ANY);
 	else
 		if (debug & DEBUG_HW)
-			printk (KERN_ERR "%s: %s: mI_alloc_skb failed \n",
+			printk(KERN_ERR "%s: %s: mI_alloc_skb failed \n",
 				p->name, __func__);
 	dev_kfree_skb(skb);
 	skb = NULL;
@@ -204,7 +201,7 @@ static void bch_vbus(struct bchannel *bch, struct sk_buff *skb)
 	int i, b;
 
 	b = bch->nr - 1 - (bch->nr > 16);
-	for (i=0; i<interfaces; i++) {
+	for (i = 0; i < interfaces; i++) {
 		party = hw->ports + i;
 		target = &party->bch[b];
 		if ((me != party) && test_bit(FLG_ACTIVE, &target->Flags)) {
@@ -226,46 +223,46 @@ static void bch_vbus(struct bchannel *bch, struct sk_buff *skb)
 static int
 l1loop_l2l1B(struct mISDNchannel *ch, struct sk_buff *skb) {
 	struct bchannel		*bch = container_of(ch, struct bchannel, ch);
-	struct port 		*p = bch->hw;
+	struct port		*p = bch->hw;
 	int			ret = -EINVAL;
 	struct mISDNhead	*hh = mISDN_HEAD_P(skb);
 
 	switch (hh->prim) {
-		case PH_DATA_REQ:
-			spin_lock(&p->lock);
-			ret = bchannel_senddata(bch, skb);
-			spin_unlock(&p->lock);
-			if (ret > 0) {
-				ret = 0;
-				queue_ch_frame(ch, PH_DATA_CNF, hh->id, NULL);
-				switch (vline) {
-					case VLINE_BUS:
-						bch_vbus(bch, skb);
-						break;
-					case VLINE_LOOP:
-						bch_vline_loop(bch, skb);
-						break;
-					case VLINE_NONE:
-					default:
-						break;
-				}
-			}
-			return ret;
-		case PH_ACTIVATE_REQ:
-			if (!test_and_set_bit(FLG_ACTIVE, &bch->Flags))
-				ret = l1loop_setup_bch(bch, ch->protocol);
-			else
-				ret = 0;
-			if (!ret)
-				_queue_data(ch, PH_ACTIVATE_IND, MISDN_ID_ANY,
-					0, NULL, GFP_KERNEL);
-			break;
-		case PH_DEACTIVATE_REQ:
-			deactivate_bchannel(bch);
-			_queue_data(ch, PH_DEACTIVATE_IND, MISDN_ID_ANY,
-				    0, NULL, GFP_KERNEL);
+	case PH_DATA_REQ:
+		spin_lock(&p->lock);
+		ret = bchannel_senddata(bch, skb);
+		spin_unlock(&p->lock);
+		if (ret > 0) {
 			ret = 0;
-			break;
+			queue_ch_frame(ch, PH_DATA_CNF, hh->id, NULL);
+			switch (vline) {
+			case VLINE_BUS:
+				bch_vbus(bch, skb);
+				break;
+			case VLINE_LOOP:
+				bch_vline_loop(bch, skb);
+				break;
+			case VLINE_NONE:
+			default:
+				break;
+			}
+		}
+		return ret;
+	case PH_ACTIVATE_REQ:
+		if (!test_and_set_bit(FLG_ACTIVE, &bch->Flags))
+			ret = l1loop_setup_bch(bch, ch->protocol);
+		else
+			ret = 0;
+		if (!ret)
+			_queue_data(ch, PH_ACTIVATE_IND, MISDN_ID_ANY,
+				0, NULL, GFP_KERNEL);
+		break;
+	case PH_DEACTIVATE_REQ:
+		deactivate_bchannel(bch);
+		_queue_data(ch, PH_DEACTIVATE_IND, MISDN_ID_ANY,
+			0, NULL, GFP_KERNEL);
+		ret = 0;
+		break;
 	}
 	if (!ret)
 		dev_kfree_skb(skb);
@@ -287,28 +284,28 @@ ph_state(struct dchannel *dch)
 		ptext = ISDN_P_TEXT[ISDN_P_MAX+1];
 
 	if (debug & DEBUG_HW)
-		printk (KERN_DEBUG "%s: %s: %s %s (%i)\n",
+		printk(KERN_DEBUG "%s: %s: %s %s (%i)\n",
 			p->name, __func__, ptext,
-			(dch->state)?"ACTIVE":"INACTIVE",
+			(dch->state) ? "ACTIVE" : "INACTIVE",
 			test_bit(FLG_ACTIVE, &dch->Flags));
 
 	switch (dch->state) {
-		case VBUS_INACTIVE:
-			clear_bit(FLG_L2_ACTIVATED, &dch->Flags);
-			clear_bit(FLG_ACTIVE, &dch->Flags);
-			_queue_data(&dch->dev.D, PH_DEACTIVATE_IND,
-				     MISDN_ID_ANY, 0, NULL, GFP_KERNEL);
-			break;
-		case VBUS_ACTIVE:
-			if (!(test_and_set_bit(FLG_ACTIVE, &dch->Flags)))
-				_queue_data(&dch->dev.D, PH_ACTIVATE_IND,
-					     MISDN_ID_ANY, 0, NULL, GFP_KERNEL);
-			else
-				_queue_data(&dch->dev.D, PH_ACTIVATE_CNF,
-					     MISDN_ID_ANY, 0, NULL, GFP_KERNEL);
-			break;
-		default:
-			break;
+	case VBUS_INACTIVE:
+		clear_bit(FLG_L2_ACTIVATED, &dch->Flags);
+		clear_bit(FLG_ACTIVE, &dch->Flags);
+		_queue_data(&dch->dev.D, PH_DEACTIVATE_IND,
+			MISDN_ID_ANY, 0, NULL, GFP_KERNEL);
+		break;
+	case VBUS_ACTIVE:
+		if (!(test_and_set_bit(FLG_ACTIVE, &dch->Flags)))
+			_queue_data(&dch->dev.D, PH_ACTIVATE_IND,
+				MISDN_ID_ANY, 0, NULL, GFP_KERNEL);
+		else
+			_queue_data(&dch->dev.D, PH_ACTIVATE_CNF,
+				MISDN_ID_ANY, 0, NULL, GFP_KERNEL);
+		break;
+	default:
+		break;
 	}
 	l1loop_ph_info(p);
 }
@@ -322,14 +319,13 @@ vbus_activate(struct port *p)
 	int i;
 
 	if (vbusnt) {
-		for (i=0; i<interfaces; i++) {
+		for (i = 0; i < interfaces; i++) {
 			p = hw->ports + i;
 			p->dch.state = VBUS_ACTIVE;
 			if (test_bit(FLG_OPEN, &p->dch.Flags))
 				ph_state(&p->dch);
 		}
-	}
-	else {
+	} else {
 		/* no interfaces opened as NT yet */
 		p->dch.state = VBUS_INACTIVE;
 		ph_state(&p->dch);
@@ -345,7 +341,7 @@ vbus_deactivate(struct port *p)
 	struct dchannel *dch;
 	int i;
 
-	for (i=0; i<interfaces; i++) {
+	for (i = 0; i < interfaces; i++) {
 		p = hw->ports + i;
 		dch = &p->dch;
 		dch->state = VBUS_ACTIVE;
@@ -359,56 +355,57 @@ vbus_deactivate(struct port *p)
  *    L1_ACTIVATE_TE, L1_ACTIVATE_NT, L1_DEACTIVATE_NT
  */
 static void
-ph_command(struct port * p, u_char command) {
+ph_command(struct port *p, u_char command)
+{
 	if (debug & DEBUG_HW)
 		printk(KERN_DEBUG "%s: %s: %x\n",
 		       p->name, __func__, command);
 	switch (command) {
-		case L1_ACTIVATE_TE:
-			switch (vline) {
-				case VLINE_BUS:
-					vbus_activate(p);
-					break;
-				case VLINE_LOOP:
-					p->dch.state = VBUS_ACTIVE;
-					schedule_event(&p->dch, FLG_PHCHANGE);
-					break;
-				case VLINE_NONE:
-				default:
-					p->dch.state = VBUS_INACTIVE;
-					schedule_event(&p->dch, FLG_PHCHANGE);
-					break;
-			}
+	case L1_ACTIVATE_TE:
+		switch (vline) {
+		case VLINE_BUS:
+			vbus_activate(p);
 			break;
-		case L1_ACTIVATE_NT:
-			switch (vline) {
-				case VLINE_BUS:
-					vbus_activate(p);
-					break;
-				case VLINE_LOOP:
-					p->dch.state = VBUS_ACTIVE;
-					schedule_event(&p->dch, FLG_PHCHANGE);
-					break;
-				case VLINE_NONE:
-				default:
-					p->dch.state = VBUS_INACTIVE;
-					schedule_event(&p->dch, FLG_PHCHANGE);
-					break;
-			}
+		case VLINE_LOOP:
+			p->dch.state = VBUS_ACTIVE;
+			schedule_event(&p->dch, FLG_PHCHANGE);
 			break;
-		case L1_DEACTIVATE_NT:
-			switch (vline) {
-				case VLINE_BUS:
-					vbus_deactivate(p);
-					break;
-				case VLINE_LOOP:
-					p->dch.state = VBUS_ACTIVE;
-					schedule_event(&p->dch, FLG_PHCHANGE);
-				case VLINE_NONE:
-				default:
-					break;
-			}
+		case VLINE_NONE:
+		default:
+			p->dch.state = VBUS_INACTIVE;
+			schedule_event(&p->dch, FLG_PHCHANGE);
 			break;
+		}
+		break;
+	case L1_ACTIVATE_NT:
+		switch (vline) {
+		case VLINE_BUS:
+			vbus_activate(p);
+			break;
+		case VLINE_LOOP:
+			p->dch.state = VBUS_ACTIVE;
+			schedule_event(&p->dch, FLG_PHCHANGE);
+			break;
+		case VLINE_NONE:
+		default:
+			p->dch.state = VBUS_INACTIVE;
+			schedule_event(&p->dch, FLG_PHCHANGE);
+			break;
+		}
+		break;
+	case L1_DEACTIVATE_NT:
+		switch (vline) {
+		case VLINE_BUS:
+			vbus_deactivate(p);
+			break;
+		case VLINE_LOOP:
+			p->dch.state = VBUS_ACTIVE;
+			schedule_event(&p->dch, FLG_PHCHANGE);
+		case VLINE_NONE:
+		default:
+			break;
+		}
+		break;
 	}
 }
 
@@ -424,7 +421,7 @@ static void dch_vline_loop(struct dchannel *dch, struct sk_buff *skb)
 		recv_Dchannel(dch);
 	else
 		if (debug & DEBUG_HW)
-			printk (KERN_ERR "%s: %s: mI_alloc_skb failed \n",
+			printk(KERN_ERR "%s: %s: mI_alloc_skb failed \n",
 				p->name, __func__);
 	dev_kfree_skb(skb);
 	skb = NULL;
@@ -448,7 +445,7 @@ static void dch_vbus_S0(struct dchannel *dch, struct sk_buff *skb)
 			if (vbusnt->dch.rx_skb)
 				recv_Dchannel(&vbusnt->dch);
 			/* virtual E-channel ECHO */
-			for (i=0; i<interfaces; i++) {
+			for (i = 0; i < interfaces; i++) {
 				party = hw->ports + i;
 				if ((party != vbusnt) && test_bit(FLG_ACTIVE,
 				     &party->dch.Flags)) {
@@ -462,7 +459,7 @@ static void dch_vbus_S0(struct dchannel *dch, struct sk_buff *skb)
 			}
 		} else {
 			/* NT -> all TEs */
-			for (i=0; i<interfaces; i++) {
+			for (i = 0; i < interfaces; i++) {
 				party = hw->ports + i;
 				if ((me != party) && test_bit(FLG_ACTIVE,
 				     &party->dch.Flags)) {
@@ -475,7 +472,6 @@ static void dch_vbus_S0(struct dchannel *dch, struct sk_buff *skb)
 			}
 		}
 	}
-
 	dev_kfree_skb(skb);
 	skb = NULL;
 	get_next_dframe(dch);
@@ -492,7 +488,7 @@ static void dch_vbus_E1(struct dchannel *dch, struct sk_buff *skb)
 	int i;
 
 	/* NT->TE / TE->NT */
-	for (i=0; i<interfaces; i++) {
+	for (i = 0; i < interfaces; i++) {
 		party = hw->ports + i;
 		if ((me != party) && test_bit(FLG_ACTIVE, &party->dch.Flags)) {
 			party_dch = &party->dch;
@@ -501,7 +497,6 @@ static void dch_vbus_E1(struct dchannel *dch, struct sk_buff *skb)
 				recv_Dchannel(party_dch);
 		}
 	}
-
 	dev_kfree_skb(skb);
 	skb = NULL;
 	get_next_dframe(dch);
@@ -524,85 +519,78 @@ l1loop_l2l1D(struct mISDNchannel *ch, struct sk_buff *skb) {
 		ptext = ISDN_P_TEXT[ISDN_P_MAX+1];
 
 	switch (hh->prim) {
-		case PH_DATA_REQ:
-			spin_lock(&p->lock);
-			ret = dchannel_senddata(dch, skb);
-			spin_unlock(&p->lock);
-			if (ret > 0) {
-				ret = 0;
-				queue_ch_frame(ch, PH_DATA_CNF, hh->id, NULL);
-				switch (vline) {
-					case VLINE_BUS:
-						if (IS_ISDN_P_S0(p->protocol))
-							dch_vbus_S0(dch, skb);
-						else 
-							dch_vbus_E1(dch, skb);
-						break;
-					case VLINE_LOOP:
-						dch_vline_loop(dch, skb);
-						break;
-					case VLINE_NONE:
-					default:
-						break;
-				}
-			}
-			return ret;
-
-		case PH_ACTIVATE_REQ:
-			if (debug & DEBUG_HW)
-				printk (KERN_DEBUG
-					"%s: %s: PH_ACTIVATE_REQ %s\n",
-					p->name, __func__, ptext);
+	case PH_DATA_REQ:
+		spin_lock(&p->lock);
+		ret = dchannel_senddata(dch, skb);
+		spin_unlock(&p->lock);
+		if (ret > 0) {
 			ret = 0;
-			if (IS_ISDN_P_NT(p->protocol)) {
-				if (test_bit(FLG_ACTIVE, &dch->Flags))
-					_queue_data(&dch->dev.D,
-						PH_ACTIVATE_CNF, MISDN_ID_ANY,
-						0, NULL, GFP_KERNEL);
-				else {
-					ph_command(p, L1_ACTIVATE_NT);
-					test_and_set_bit(FLG_L2_ACTIVATED,
-						&dch->Flags);
-				}
-			} else {
-				if (test_bit(FLG_ACTIVE, &dch->Flags))
-					_queue_data(&dch->dev.D,
-						PH_ACTIVATE_CNF, MISDN_ID_ANY,
-						0, NULL, GFP_KERNEL);
+			queue_ch_frame(ch, PH_DATA_CNF, hh->id, NULL);
+			switch (vline) {
+			case VLINE_BUS:
+				if (IS_ISDN_P_S0(p->protocol))
+					dch_vbus_S0(dch, skb);
 				else
-					ph_command(p, L1_ACTIVATE_TE);
+					dch_vbus_E1(dch, skb);
+				break;
+			case VLINE_LOOP:
+				dch_vline_loop(dch, skb);
+				break;
+			case VLINE_NONE:
+			default:
+				break;
 			}
-			break;
-
-		case PH_DEACTIVATE_REQ:
-			if (debug & DEBUG_HW)
-				printk (KERN_DEBUG
-					"%s: %s: PH_DEACTIVATE_REQ %s\n",
-					p->name, __func__,  ptext);
-			test_and_clear_bit(FLG_L2_ACTIVATED, &dch->Flags);
-
-			if (IS_ISDN_P_NT(p->protocol))
-				ph_command(p, L1_DEACTIVATE_NT);
-
-			spin_lock(&p->lock);
-			skb_queue_purge(&dch->squeue);
-			if (dch->tx_skb) {
-				dev_kfree_skb(dch->tx_skb);
-				dch->tx_skb = NULL;
+		}
+		return ret;
+	case PH_ACTIVATE_REQ:
+		if (debug & DEBUG_HW)
+			printk(KERN_DEBUG "%s: %s: PH_ACTIVATE_REQ %s\n",
+				p->name, __func__, ptext);
+		ret = 0;
+		if (IS_ISDN_P_NT(p->protocol)) {
+			if (test_bit(FLG_ACTIVE, &dch->Flags))
+				_queue_data(&dch->dev.D, PH_ACTIVATE_CNF,
+					MISDN_ID_ANY, 0, NULL, GFP_KERNEL);
+			else {
+				ph_command(p, L1_ACTIVATE_NT);
+				test_and_set_bit(FLG_L2_ACTIVATED,
+					&dch->Flags);
 			}
-			dch->tx_idx = 0;
-			if (dch->rx_skb) {
-				dev_kfree_skb(dch->rx_skb);
-				dch->rx_skb = NULL;
-			}
-			spin_unlock(&p->lock);
-			ret = 0;
-			break;
+		} else {
+			if (test_bit(FLG_ACTIVE, &dch->Flags))
+				_queue_data(&dch->dev.D, PH_ACTIVATE_CNF,
+					 MISDN_ID_ANY, 0, NULL, GFP_KERNEL);
+			else
+				ph_command(p, L1_ACTIVATE_TE);
+		}
+		break;
+	case PH_DEACTIVATE_REQ:
+		if (debug & DEBUG_HW)
+			printk(KERN_DEBUG "%s: %s: PH_DEACTIVATE_REQ %s\n",
+				p->name, __func__,  ptext);
+		test_and_clear_bit(FLG_L2_ACTIVATED, &dch->Flags);
 
-		case MPH_INFORMATION_REQ:
-			l1loop_ph_info(p);
-			ret = 0;
-			break;
+		if (IS_ISDN_P_NT(p->protocol))
+			ph_command(p, L1_DEACTIVATE_NT);
+
+		spin_lock(&p->lock);
+		skb_queue_purge(&dch->squeue);
+		if (dch->tx_skb) {
+			dev_kfree_skb(dch->tx_skb);
+			dch->tx_skb = NULL;
+		}
+		dch->tx_idx = 0;
+		if (dch->rx_skb) {
+			dev_kfree_skb(dch->rx_skb);
+			dch->rx_skb = NULL;
+		}
+		spin_unlock(&p->lock);
+		ret = 0;
+		break;
+	case MPH_INFORMATION_REQ:
+		l1loop_ph_info(p);
+		ret = 0;
+		break;
 	}
 	return ret;
 }
@@ -616,22 +604,21 @@ channel_bctrl(struct bchannel *bch, struct mISDN_ctrl_req *cq)
 	int	ret = 0;
 
 	switch (cq->op) {
-		case MISDN_CTRL_GETOP:
-			cq->op = MISDN_CTRL_FILL_EMPTY;
-			break;
-		case MISDN_CTRL_FILL_EMPTY:
-			test_and_set_bit(FLG_FILLEMPTY, &bch->Flags);
-			if (debug & DEBUG_HW_OPEN)
-				printk(KERN_DEBUG
-					"%s: FILL_EMPTY request (nr=%d "
-					"off=%d)\n", __func__, bch->nr,
-					!!cq->p1);
-			break;
-		default:
-			printk(KERN_WARNING "%s: unknown Op %x\n",
-			       __func__, cq->op);
-			ret = -EINVAL;
-			break;
+	case MISDN_CTRL_GETOP:
+		cq->op = MISDN_CTRL_FILL_EMPTY;
+		break;
+	case MISDN_CTRL_FILL_EMPTY:
+		test_and_set_bit(FLG_FILLEMPTY, &bch->Flags);
+		if (debug & DEBUG_HW_OPEN)
+			printk(KERN_DEBUG
+				"%s: FILL_EMPTY request (nr=%d off=%d)\n",
+				__func__, bch->nr, !!cq->p1);
+		break;
+	default:
+		printk(KERN_WARNING "%s: unknown Op %x\n",
+			__func__, cq->op);
+		ret = -EINVAL;
+		break;
 	}
 	return ret;
 }
@@ -649,22 +636,22 @@ l1loop_bctrl(struct mISDNchannel *ch, u_int cmd, void *arg)
 		printk(KERN_DEBUG "%s: cmd:%x %p\n", __func__, cmd, arg);
 
 	switch (cmd) {
-		case CLOSE_CHANNEL:
-			test_and_clear_bit(FLG_OPEN, &bch->Flags);
-			if (test_bit(FLG_ACTIVE, &bch->Flags))
-				deactivate_bchannel(bch);
-			ch->protocol = ISDN_P_NONE;
-			ch->peer = NULL;
-			module_put(THIS_MODULE);
-			ret = 0;
-			break;
-		case CONTROL_CHANNEL:
-			ret = channel_bctrl(bch, arg);
-			break;
-		default:
-			ret = -EINVAL;
-			printk(KERN_WARNING "%s: unknown prim(%x)\n",
-			       __func__, cmd);
+	case CLOSE_CHANNEL:
+		test_and_clear_bit(FLG_OPEN, &bch->Flags);
+		if (test_bit(FLG_ACTIVE, &bch->Flags))
+			deactivate_bchannel(bch);
+		ch->protocol = ISDN_P_NONE;
+		ch->peer = NULL;
+		module_put(THIS_MODULE);
+		ret = 0;
+		break;
+	case CONTROL_CHANNEL:
+		ret = channel_bctrl(bch, arg);
+		break;
+	default:
+		ret = -EINVAL;
+		printk(KERN_WARNING "%s: unknown prim(%x)\n",
+			__func__, cmd);
 	}
 	return ret;
 }
@@ -684,12 +671,12 @@ open_dchannel(struct port *p, struct mISDNchannel *ch, struct channel_req *rq)
 		return -EINVAL;
 
 	if (!p->initdone) {
-		if ((vline==VLINE_BUS) && (IS_ISDN_P_NT(rq->protocol))
+		if ((vline == VLINE_BUS) && (IS_ISDN_P_NT(rq->protocol))
 				   && vbusnt)
 			return -EPROTONOSUPPORT;
 
 		/* set VBUS NT interface */
-		if ((vline==VLINE_BUS) && (IS_ISDN_P_NT(rq->protocol)))
+		if ((vline == VLINE_BUS) && (IS_ISDN_P_NT(rq->protocol)))
 			vbusnt = p;
 
 		p->initdone = 1;
@@ -703,7 +690,7 @@ open_dchannel(struct port *p, struct mISDNchannel *ch, struct channel_req *rq)
 
 	set_bit(FLG_OPEN, &p->dch.Flags);
 	if (vbusnt) {
- 		if (p != vbusnt)
+		if (p != vbusnt)
 			p->dch.state = vbusnt->dch.state;
 	} else {
 		if (debug & DEBUG_HW_OPEN)
@@ -721,7 +708,7 @@ open_dchannel(struct port *p, struct mISDNchannel *ch, struct channel_req *rq)
 }
 
 static int
-open_bchannel(struct port * p, struct dchannel *dch, struct channel_req *rq)
+open_bchannel(struct port *p, struct dchannel *dch, struct channel_req *rq)
 {
 	struct bchannel *bch;
 
@@ -731,7 +718,7 @@ open_bchannel(struct port * p, struct dchannel *dch, struct channel_req *rq)
 		return -EINVAL;
 
 	if (debug & DEBUG_HW)
-		printk (KERN_DEBUG "%s: %s B%i\n",
+		printk(KERN_DEBUG "%s: %s B%i\n",
 			p->name, __func__, rq->adr.channel);
 
 	bch = &p->bch[rq->adr.channel - 1 - (rq->adr.channel > 16)];
@@ -753,19 +740,19 @@ channel_ctrl(struct port *p, struct mISDN_ctrl_req *cq)
 	int ret = 0;
 
 	if (debug)
-		printk (KERN_DEBUG "%s: %s op(0x%x) channel(0x%x)\n",
+		printk(KERN_DEBUG "%s: %s op(0x%x) channel(0x%x)\n",
 			p->name, __func__, (cq->op), (cq->channel));
 
-	switch(cq->op) {
-		case MISDN_CTRL_GETOP:
-			cq->op = MISDN_CTRL_LOOP | MISDN_CTRL_CONNECT |
-					MISDN_CTRL_DISCONNECT;
-			break;
-		default:
-			printk(KERN_WARNING "%s: %s: unknown Op %x\n",
-			       p->name, __func__, cq->op);
-			ret= -EINVAL;
-			break;
+	switch (cq->op) {
+	case MISDN_CTRL_GETOP:
+		cq->op = MISDN_CTRL_LOOP | MISDN_CTRL_CONNECT |
+			MISDN_CTRL_DISCONNECT;
+		break;
+	default:
+		printk(KERN_WARNING "%s: %s: unknown Op %x\n",
+			p->name, __func__, cq->op);
+		ret = -EINVAL;
+		break;
 	}
 	return ret;
 }
@@ -782,33 +769,31 @@ l1loop_dctrl(struct mISDNchannel *ch, u_int cmd, void *arg) {
 		printk(KERN_DEBUG "%s: %s: cmd:%x %p\n",
 		       p->name, __func__, cmd, arg);
 	switch (cmd) {
-		case OPEN_CHANNEL:
-			rq = arg;
-			if ((rq->protocol == ISDN_P_TE_S0) ||
-			    (rq->protocol == ISDN_P_NT_S0) ||
-			    (rq->protocol == ISDN_P_NT_E1) ||
-			    (rq->protocol == ISDN_P_NT_E1))
-				err = open_dchannel(p, ch, rq);
-			else
-				err = open_bchannel(p, dch, rq);
-			break;
-		case CLOSE_CHANNEL:
-			if (debug & DEBUG_HW_OPEN)
-				printk(KERN_DEBUG
-					"%s: %s: dev(%d) close from %p\n",
-					p->name, __func__, p->dch.dev.id,
-					__builtin_return_address(0));
-			module_put(THIS_MODULE);
-			break;
-		case CONTROL_CHANNEL:
-			err = channel_ctrl(p, arg);
-			break;
-		default:
-			if (dch->debug & DEBUG_HW)
-				printk(KERN_DEBUG
-					"%s: %s: unknown command %x\n",
-					p->name, __func__, cmd);
-			return -EINVAL;
+	case OPEN_CHANNEL:
+		rq = arg;
+		if ((rq->protocol == ISDN_P_TE_S0) ||
+		    (rq->protocol == ISDN_P_NT_S0) ||
+		    (rq->protocol == ISDN_P_NT_E1) ||
+		    (rq->protocol == ISDN_P_NT_E1))
+			err = open_dchannel(p, ch, rq);
+		else
+			err = open_bchannel(p, dch, rq);
+		break;
+	case CLOSE_CHANNEL:
+		if (debug & DEBUG_HW_OPEN)
+			printk(KERN_DEBUG "%s: %s: dev(%d) close from %p\n",
+				p->name, __func__, p->dch.dev.id,
+				__builtin_return_address(0));
+		module_put(THIS_MODULE);
+		break;
+	case CONTROL_CHANNEL:
+		err = channel_ctrl(p, arg);
+		break;
+	default:
+		if (dch->debug & DEBUG_HW)
+			printk(KERN_DEBUG "%s: %s: unknown command %x\n",
+				p->name, __func__, cmd);
+		return -EINVAL;
 	}
 	return err;
 }
@@ -817,21 +802,18 @@ static int
 setup_instance(struct l1loop *hw) {
 	struct port *p;
 	u_long	flags;
-	int	err=0, i, b;
+	int	err = 0, i, b;
 
 	if (debug)
-		printk (KERN_DEBUG "%s: %s\n", DRIVER_NAME, __func__);
+		printk(KERN_DEBUG "%s: %s\n", DRIVER_NAME, __func__);
 
-	spin_lock_init(&hw->lock);
-
-	for (i=0; i<interfaces; i++) {
+	for (i = 0; i < interfaces; i++) {
 		p = hw->ports + i;
-
-		if (!(p->bch = kzalloc(sizeof(struct bchannel)*nchannel,
-		      GFP_KERNEL))) {
-			      printk(KERN_ERR "%s: %s: no kmem for bchannels\n",
-				     DRIVER_NAME, __FUNCTION__);
-			      return -ENOMEM;
+		p->bch = kzalloc(sizeof(struct bchannel)*nchannel, GFP_KERNEL);
+		if (!p->bch) {
+			printk(KERN_ERR "%s: %s: no kmem for bchannels\n",
+				DRIVER_NAME, __func__);
+			return -ENOMEM;
 		}
 
 		spin_lock_init(&p->lock);
@@ -849,7 +831,7 @@ setup_instance(struct l1loop *hw) {
 		p->dch.dev.D.send = l1loop_l2l1D;
 		p->dch.dev.D.ctrl = l1loop_dctrl;
 		p->dch.dev.nrbchan = nchannel;
-		for (b=0; b<nchannel; b++) {
+		for (b = 0; b < nchannel; b++) {
 			p->bch[b].nr = b + 1 + (b >= 15);
 			set_channelmap(p->bch[b].nr, p->dch.dev.channelmap);
 			p->bch[b].debug = debug;
@@ -863,13 +845,13 @@ setup_instance(struct l1loop *hw) {
 
 		snprintf(p->name, MISDN_MAX_IDLEN - 1, "%s.%d", DRIVER_NAME,
 			 l1loop_cnt + 1);
-		printk (KERN_INFO "%s: registered as '%s'\n",
+		printk(KERN_INFO "%s: registered as '%s'\n",
 			DRIVER_NAME, p->name);
 
 		/* TODO: parent device? */
 		err = mISDN_register_device(&p->dch.dev, NULL, p->name);
 		if (err) {
-			for (b=0; b<nchannel; b++)
+			for (b = 0; b < nchannel; b++)
 				mISDN_freebchannel(&p->bch[b]);
 			mISDN_freedchannel(&p->dch);
 		} else {
@@ -885,27 +867,26 @@ setup_instance(struct l1loop *hw) {
 
 static int
 release_instance(struct l1loop *hw) {
-	struct port * p;
+	struct port *p;
 	int i, b;
 
 	if (debug)
-		printk (KERN_DEBUG "%s: %s\n", DRIVER_NAME, __func__);
+		printk(KERN_DEBUG "%s: %s\n", DRIVER_NAME, __func__);
 
-	for (i=0; i<interfaces; i++) {
+	for (i = 0; i < interfaces; i++) {
 		p = hw->ports + i;
-		for (b=0; b<nchannel; b++)
+		for (b = 0; b < nchannel; b++)
 			l1loop_setup_bch(&p->bch[b], ISDN_P_NONE);
 
 		mISDN_unregister_device(&p->dch.dev);
-		for (b=0; b<nchannel; b++)
+		for (b = 0; b < nchannel; b++)
 			mISDN_freebchannel(&p->bch[b]);
 		mISDN_freedchannel(&p->dch);
 	}
 
 	if (hw) {
 		if (hw->ports) {
-			if (hw->ports->bch)
-				kfree(hw->ports->bch);
+			kfree(hw->ports->bch);
 			kfree(hw->ports);
 		}
 		kfree(hw);
@@ -929,15 +910,16 @@ l1loop_init(void)
 		"debug(0x%x) interfaces(%i) nchannel(%i) vline(%s)\n",
 		l1loop_rev, debug, interfaces, nchannel, VLINE_MODES[vline]);
 
-	if (!(hw = kzalloc(sizeof(struct l1loop), GFP_KERNEL))) {
+	hw = kzalloc(sizeof(struct l1loop), GFP_KERNEL);
+	if (!hw) {
 		printk(KERN_ERR "%s: %s: no kmem for hw\n",
-		       DRIVER_NAME, __FUNCTION__);
+		       DRIVER_NAME, __func__);
 		return -ENOMEM;
 	}
-	if (!(hw->ports = kzalloc(sizeof(struct port)*interfaces,
-	      GFP_KERNEL))) {
+	hw->ports = kzalloc(sizeof(struct port)*interfaces, GFP_KERNEL);
+	if (!hw->ports) {
 		printk(KERN_ERR "%s: %s: no kmem for interfaces\n",
-		       DRIVER_NAME, __FUNCTION__);
+		       DRIVER_NAME, __func__);
 		kfree(hw);
 		return -ENOMEM;
 	}

@@ -43,7 +43,7 @@ char *ISDN_P_TEXT[] = {
 struct hwskel;
 
 struct port {
-	spinlock_t	lock;
+	spinlock_t	lock; /* port lock */
 	char		name[MISDN_MAX_IDLEN];
 	struct dchannel	dch;
 	struct bchannel	*bch;
@@ -53,7 +53,6 @@ struct port {
 };
 
 struct l1loop {
-	spinlock_t		lock;
 	struct list_head	list;
 	struct port		*ports;
 };
