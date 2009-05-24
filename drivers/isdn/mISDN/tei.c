@@ -426,7 +426,7 @@ done:
 }
 
 static void
-put_tei_msg(struct manager *mgr, u_char m_id, unsigned int ri, u_char tei)
+put_tei_msg(struct manager *mgr, u_char m_id, unsigned int ri, int tei)
 {
 	struct sk_buff *skb;
 	u_char bp[8];
@@ -440,9 +440,8 @@ put_tei_msg(struct manager *mgr, u_char m_id, unsigned int ri, u_char tei)
 	bp[4] = ri >> 8;
 	bp[5] = ri & 0xff;
 	bp[6] = m_id;
-	bp[7] = (tei << 1) | 1;
-	skb = _alloc_mISDN_skb(PH_DATA_REQ, new_id(mgr),
-	    8, bp, GFP_ATOMIC);
+	bp[7] = ((tei << 1) & 0xff) | 1;
+	skb = _alloc_mISDN_skb(PH_DATA_REQ, new_id(mgr), 8, bp, GFP_ATOMIC);
 	if (!skb) {
 		printk(KERN_WARNING "%s: no skb for tei msg\n", __func__);
 		return;
@@ -786,12 +785,12 @@ create_new_tei(struct manager *mgr, int tei, int sapi)
 
 	if (!mgr->up)
 		return NULL;
-	if (tei < 64)
+	if ((tei >= 0) && (tei < 64))
 		test_and_set_bit(OPTION_L2_FIXEDTEI, &opt);
 	if (mgr->ch.st->dev->Dprotocols
 	  & ((1 << ISDN_P_TE_E1) | (1 << ISDN_P_NT_E1)))
 		test_and_set_bit(OPTION_L2_PMX, &opt);
-	l2 = create_l2(mgr->up, ISDN_P_LAPD_NT, (u_int)opt, tei, sapi);
+	l2 = create_l2(mgr->up, ISDN_P_LAPD_NT, opt, tei, sapi);
 	if (!l2) {
 		printk(KERN_WARNING "%s:no memory for layer2\n", __func__);
 		return NULL;
@@ -839,6 +838,8 @@ new_tei_req(struct manager *mgr, u_char *dp)
 	ri += dp[1];
 	if (!mgr->up)
 		goto denied;
+	if (!(dp[3] & 1)) /* Extension bit != 1 */
+		goto denied;
 	if (dp[3] != 0xff)
 		tei = dp[3] >> 1; /* 3GPP TS 08.56 6.1.11.2 */
 	else
@@ -847,7 +848,7 @@ new_tei_req(struct manager *mgr, u_char *dp)
 		printk(KERN_WARNING "%s:No free tei\n", __func__);
 		goto denied;
 	}
-	l2 = create_new_tei(mgr, tei, 0);
+	l2 = create_new_tei(mgr, tei, CTRL_SAPI);
 	if (!l2)
 		goto denied;
 	else
@@ -1024,7 +1025,7 @@ create_teimgr(struct manager *mgr, struct channel_req *crq)
 		}
 		return 0;
 	}
-	l2 = create_l2(crq->ch, crq->protocol, (u_int)opt,
+	l2 = create_l2(crq->ch, crq->protocol, opt,
 		crq->adr.tei, crq->adr.sapi);
 	if (!l2)
 		return -ENOMEM;
@@ -1178,6 +1179,8 @@ check_data(struct manager *mgr, struct sk_buff *skb)
 		return -ENOTCONN;
 	if (skb->len != 3)
 		return -ENOTCONN;
+	if (skb->data[0] & 3) /* EA0 and CR must be  0 */
+		return -EINVAL;
 	sapi = skb->data[0] >> 2;
 	if (!(skb->data[1] & 1)) /* invalid EA1 */
 		return -EINVAL;

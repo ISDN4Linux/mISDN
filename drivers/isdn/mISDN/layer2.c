@@ -2066,8 +2066,8 @@ l2_ctrl(struct mISDNchannel *ch, u_int cmd, void *arg)
 }
 
 struct layer2 *
-create_l2(struct mISDNchannel *ch, u_int protocol, u_long options, u_int tei,
-		u_int sapi)
+create_l2(struct mISDNchannel *ch, u_int protocol, u_long options, int tei,
+		int sapi)
 {
 	struct layer2		*l2;
 	struct channel_req	rq;
