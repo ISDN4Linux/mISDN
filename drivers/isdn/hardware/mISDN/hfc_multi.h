@@ -17,36 +17,6 @@
 #define	PCI_ENA_REGIO	0x01
 #define	PCI_ENA_MEMIO	0x02
 
-/*
- * Defines for the SDG embedded board using the XHFC-4SU chip
- */
-#ifdef CONFIG_8xx
-#include <asm/8xx_immap.h>
-#else
-/*
- * Dummy defines to make the compiler work for other architectures
- */
-#define IMAP_ADDR	0xFFF00000
-
-struct io_port {
-	ushort	iop_padir;
-	ushort	iop_papar;
-	ushort	iop_paodr;
-	ushort	iop_padat;
-};
-
-struct comm_proc {
-	uint	cp_pbdir;
-	uint	cp_pbpar;
-	ushort	cp_pbodr;
-	uint	cp_pbdat;
-};
-
-struct immap {
-	struct io_port		im_ioport;
-	struct comm_proc	im_cpm;
-};
-#endif /* CONFIG_8xx */
 #define XHFC_IRQ	4		/* SIU_IRQ2 */
 #define XHFC_MEMBASE	0xFE000000
 #define XHFC_MEMSIZE    0x00001000
@@ -215,7 +185,9 @@ struct hfc_multi {
 	u_long		xhfc_origmembase;
 	u_char		*xhfc_membase;
 	u_long		*xhfc_memaddr, *xhfc_memdata;
+#ifdef CONFIG_MISDN_HFCMULTI_8xx
 	struct immap	*immap;
+#endif
 	u_long		pb_irqmsk;	/* Portbit mask to check the IRQ line */
 	u_long		pci_iobase; /* PCI IO */
 	struct hfcm_hw	hw;	/* remember data of write-only-registers */
