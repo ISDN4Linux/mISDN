@@ -185,21 +185,7 @@ deactivate_bchannel(struct bchannel *bch)
 		       p->name, __func__, bch->nr);
 
 	spin_lock_irqsave(&p->lock, flags);
-	if (test_and_clear_bit(FLG_TX_NEXT, &bch->Flags)) {
-		dev_kfree_skb(bch->next_skb);
-		bch->next_skb = NULL;
-	}
-	if (bch->tx_skb) {
-		dev_kfree_skb(bch->tx_skb);
-		bch->tx_skb = NULL;
-	}
-	bch->tx_idx = 0;
-	if (bch->rx_skb) {
-		dev_kfree_skb(bch->rx_skb);
-		bch->rx_skb = NULL;
-	}
-	clear_bit(FLG_ACTIVE, &bch->Flags);
-	clear_bit(FLG_TX_BUSY, &bch->Flags);
+	mISDN_clear_bchannel(bch);
 	spin_unlock_irqrestore(&p->lock, flags);
 
 	hwskel_setup_bch(bch, ISDN_P_NONE);
