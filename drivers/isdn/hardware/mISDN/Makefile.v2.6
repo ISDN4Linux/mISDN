@@ -33,12 +33,20 @@ ifdef CONFIG_MISDN_AVMFRITZ
 obj-$(CONFIG_MISDN) += avmfritz.o
 endif
 
+ifdef CONFIG_MISDN_SPEEDFAX
+obj-$(CONFIG_MISDN) += speedfax.o
+endif
+
 ifdef CONFIG_MISDN_L1LOOP
 obj-$(CONFIG_MISDN) += mISDN_l1loop.o
 endif
 
 ifdef CONFIG_MISDN_ISAC
 obj-$(CONFIG_MISDN) += mISDNisac.o
+endif
+
+ifdef CONFIG_MISDN_ISAR
+obj-$(CONFIG_MISDN) += mISDNisar.o
 endif
 
 # multi objects
