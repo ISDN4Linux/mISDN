@@ -43,6 +43,18 @@ config MISDN_XHFC
 	help
 	  Enable support for Cologne Chips AG's XHFC Evaluation Card
 
+config MISDN_AVMFRITZ
+	tristate "Support for AVM FRITZ!CARD PCI"
+	depends on MISDN
+	depends on PCI
+	select MISDN_ISAC
+	help
+	  Enable support for AVMs FRITZ!CARD PCI cards
+
+config MISDN_ISAC
+	tristate
+	depends on MISDN
+
 config MISDN_L1LOOP
         tristate "Support for virtual ISDN loop devices"
         help

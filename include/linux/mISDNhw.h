@@ -22,6 +22,10 @@
 #include <linux/mISDNif.h>
 #include <linux/timer.h>
 
+typedef	u8	(read_reg_t)(void *, u8);
+typedef	void	(write_reg_t)(void *, u8, u8);
+typedef	void	(fifo_func_t)(void *, u8 *, int);
+
 /*
  * HW DEBUG 0xHHHHGGGG
  * H - hardware driver specific bits
