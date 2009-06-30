@@ -37,6 +37,10 @@ ifdef CONFIG_MISDN_SPEEDFAX
 obj-$(CONFIG_MISDN) += speedfax.o
 endif
 
+ifdef CONFIG_MISDN_INFINEON
+obj-$(CONFIG_MISDN) += mISDNinfineon.o
+endif
+
 ifdef CONFIG_MISDN_L1LOOP
 obj-$(CONFIG_MISDN) += mISDN_l1loop.o
 endif
