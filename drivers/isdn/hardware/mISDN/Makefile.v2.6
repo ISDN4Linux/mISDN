@@ -29,13 +29,20 @@ ifdef CONFIG_MISDN_HWSKEL
 obj-$(CONFIG_MISDN) += mISDN_hwskel.o
 endif
 
+ifdef CONFIG_MISDN_AVMFRITZ
+obj-$(CONFIG_MISDN) += avmfritz.o
+endif
+
 ifdef CONFIG_MISDN_L1LOOP
 obj-$(CONFIG_MISDN) += mISDN_l1loop.o
+endif
+
+ifdef CONFIG_MISDN_IPAC
+obj-$(CONFIG_MISDN) += mISDNipac.o
 endif
 
 # multi objects
 
 xhfc-objs := xhfc_su.o xhfc_pci2pi.o
-mISDN_isac-objs := isac.o arcofi.o
 mISDN_hwskel-objs := hwskel.o
 mISDN_l1loop-objs := l1loop.o
