@@ -12,6 +12,7 @@ obj-$(CONFIG_MISDN_L1LOOP) += mISDN_l1loop.o
 obj-$(CONFIG_MISDN_AVMFRITZ) += avmfritz.o
 obj-$(CONFIG_MISDN_SPEEDFAX) += speedfax.o
 obj-$(CONFIG_MISDN_INFINEON) += mISDNinfineon.o
+obj-$(CONFIG_MISDN_W6692) += w6692.o
 # chip modules
 obj-$(CONFIG_MISDN_IPAC) += mISDNipac.o
 obj-$(CONFIG_MISDN_ISAR) += mISDNisar.o
