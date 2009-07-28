@@ -668,7 +668,7 @@ l1oip_socket_thread(void *data)
 	if (!recvbuf) {
 		printk(KERN_ERR "%s: Failed to alloc recvbuf.\n", __func__);
 		ret = -ENOMEM;
-		goto fail1;
+		goto fail;
 	}
 
 	/* make daemon */
@@ -678,7 +678,7 @@ l1oip_socket_thread(void *data)
 	if (sock_create(PF_INET, SOCK_DGRAM, IPPROTO_UDP, &socket)) {
 		printk(KERN_ERR "%s: Failed to create socket.\n", __func__);
 		ret = -EIO;
-		goto fail2;
+		goto fail;
 	}
 
 	/* set incoming address */
@@ -697,14 +697,14 @@ l1oip_socket_thread(void *data)
 		printk(KERN_ERR "%s: Failed to bind socket to port %d.\n",
 			__func__, hc->localport);
 		ret = -EINVAL;
-		goto fail2;
+		goto fail;
 	}
 
 	/* check sk */
 	if (socket->sk == NULL) {
 		printk(KERN_ERR "%s: socket->sk == NULL\n", __func__);
 		ret = -EIO;
-		goto fail2;
+		goto fail;
 	}
 
 	/* build receive message */
@@ -731,10 +731,10 @@ l1oip_socket_thread(void *data)
 	while (!signal_pending(current)) {
 		struct kvec iov = {
 			.iov_base = recvbuf,
-			.iov_len = recvbuf_size,
+			.iov_len = sizeof(recvbuf),
 		};
 		recvlen = kernel_recvmsg(socket, &msg, &iov, 1,
-					 recvbuf_size, 0);
+					 sizeof(recvbuf), 0);
 		if (recvlen > 0) {
 			l1oip_socket_parse(hc, &sin_rx, recvbuf, recvlen);
 		} else {
@@ -759,11 +759,10 @@ l1oip_socket_thread(void *data)
 		printk(KERN_DEBUG "%s: socket thread terminating\n",
 			__func__);
 
-fail1:
+fail:
 	/* free recvbuf */
 	kfree(recvbuf);
 
-fail2:
 	/* close socket */
 	if (socket)
 		sock_release(socket);
