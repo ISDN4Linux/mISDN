@@ -741,8 +741,8 @@ conf_software:
 					    member->dsp->pcm_slot_tx,
 					    member->dsp->pcm_bank_tx,
 					    member->dsp->pcm_bank_rx);
-				conf->hardware = 0;
-				conf->software = 1;
+				conf->hardware = 1;
+				conf->software = tx_data;
 				return;
 			}
 			/* find a new slot */
@@ -833,8 +833,8 @@ conf_software:
 					    nextm->dsp->name,
 					    member->dsp->pcm_slot_tx,
 					    member->dsp->pcm_slot_rx);
-				conf->hardware = 0;
-				conf->software = 1;
+				conf->hardware = 1;
+				conf->software = tx_data;
 				return;
 			}
 			/* find two new slot */
@@ -938,8 +938,11 @@ conf_software:
 	/* for more than two members.. */
 
 	/* if all members already have the same conference */
-	if (all_conf)
+	if (all_conf) {
+		conf->hardware = 1;
+		conf->software = tx_data;
 		return;
+	}
 
 	/*
 	 * if there is an existing conference, but not all members have joined
@@ -1012,6 +1015,8 @@ join_members:
 			dsp_cmx_hw_message(member->dsp,
 			    MISDN_CTRL_HFC_CONF_JOIN, current_conf, 0, 0, 0);
 		}
+		conf->hardware = 1;
+		conf->software = tx_data;
 		return;
 	}
 
