@@ -3063,8 +3063,10 @@ mode_hfcmulti(struct hfc_multi *hc, int ch, int protocol, int slot_tx,
 			HFC_outb(hc, A_CON_HDLC, 0x20 | V_HDLC_TRP | V_IFF);
 			HFC_outb(hc, A_SUBCH_CFG, 0);
 			HFC_outb(hc, A_IRQ_MSK, 0);
-			HFC_outb(hc, R_INC_RES_FIFO, V_RES_F);
-			HFC_wait(hc);
+			if (hc->chan[ch].protocol != protocol) {
+				HFC_outb(hc, R_INC_RES_FIFO, V_RES_F);
+				HFC_wait(hc);
+			}
 			HFC_outb(hc, R_SLOT, ((((ch / 4) * 8) +
 			    ((ch % 4) * 4) + 1) << 1) | 1);
 			HFC_outb(hc, A_SL_CFG, 0x80 | 0x20 | (ch << 1) | 1);
@@ -3084,8 +3086,10 @@ mode_hfcmulti(struct hfc_multi *hc, int ch, int protocol, int slot_tx,
 			HFC_outb(hc, A_CON_HDLC, 0x20 | V_HDLC_TRP | V_IFF);
 			HFC_outb(hc, A_SUBCH_CFG, 0);
 			HFC_outb(hc, A_IRQ_MSK, 0);
-			HFC_outb(hc, R_INC_RES_FIFO, V_RES_F);
-			HFC_wait(hc);
+			if (hc->chan[ch].protocol != protocol) {
+				HFC_outb(hc, R_INC_RES_FIFO, V_RES_F);
+				HFC_wait(hc);
+			}
 			/* tx silence */
 			HFC_outb_nodebug(hc, A_FIFO_DATA0_NOINC, hc->silence);
 			HFC_outb(hc, R_SLOT, (((ch / 4) * 8) +
@@ -3104,8 +3108,10 @@ mode_hfcmulti(struct hfc_multi *hc, int ch, int protocol, int slot_tx,
 					V_HDLC_TRP | V_IFF);
 			HFC_outb(hc, A_SUBCH_CFG, 0);
 			HFC_outb(hc, A_IRQ_MSK, 0);
-			HFC_outb(hc, R_INC_RES_FIFO, V_RES_F);
-			HFC_wait(hc);
+			if (hc->chan[ch].protocol != protocol) {
+				HFC_outb(hc, R_INC_RES_FIFO, V_RES_F);
+				HFC_wait(hc);
+			}
 			/* tx silence */
 			HFC_outb_nodebug(hc, A_FIFO_DATA0_NOINC, hc->silence);
 			/* enable RX fifo */
@@ -3120,8 +3126,10 @@ mode_hfcmulti(struct hfc_multi *hc, int ch, int protocol, int slot_tx,
 						V_HDLC_TRP);
 			HFC_outb(hc, A_SUBCH_CFG, 0);
 			HFC_outb(hc, A_IRQ_MSK, 0);
-			HFC_outb(hc, R_INC_RES_FIFO, V_RES_F);
-			HFC_wait(hc);
+			if (hc->chan[ch].protocol != protocol) {
+				HFC_outb(hc, R_INC_RES_FIFO, V_RES_F);
+				HFC_wait(hc);
+			}
 		}
 		if (hc->ctype != HFC_TYPE_E1) {
 			hc->hw.a_st_ctrl0[hc->chan[ch].port] |=
