@@ -418,8 +418,9 @@ hdlc_empty_fifo(struct bchannel *bch, int count)
 		addr = fc->addr + (bch->nr == 2 ?
 			AVM_HDLC_FIFO_2 : AVM_HDLC_FIFO_1);
 	else {
+		outl(bch->nr == 2 ? AVM_HDLC_2 : AVM_HDLC_1,
+			fc->addr + CHIP_INDEX);
 		addr = fc->addr + CHIP_WINDOW;
-		outl(bch->nr == 2 ? AVM_HDLC_2 : AVM_HDLC_1, fc->addr);
 	}
 	while (cnt < count) {
 		val = le32_to_cpu(inl(addr));
