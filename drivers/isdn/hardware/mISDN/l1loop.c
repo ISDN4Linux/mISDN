@@ -29,8 +29,12 @@
  *         will configure all others as TE interface)
  *     2 : VLOOP (each interface is virtually equipped with a cross
  *         connector, so all data is looped internally)
+ *     3 : VLINK (an even number of interfaces must be given.
+ *         every pair of these interfaces is interlinked)
  * - nchannel=<n>, n=[2..30] default 2
  *     number of bchannels each interface will consist of
+ *     if vline==VLINK, multiple nchannel values may be given to
+ *     define the number of channels for each pair of interfaces.
  * - pri=<n>, n=[0,1] default 0
  *      0: register all interfaces as BRI
  *      1: register all interfaces as PRI
@@ -58,7 +62,7 @@ struct port *vbusnt; /* NT of virtual S0/E1 bus when using vline=1 */
 /* module params */
 static unsigned int interfaces = 2;
 static unsigned int vline = 1;
-static unsigned int nchannel = 2;
+static unsigned int nchannel[32] = {2};
 static unsigned int pri;
 static unsigned int debug;
 
@@ -66,7 +70,7 @@ MODULE_AUTHOR("Martin Bachem");
 MODULE_LICENSE("GPL");
 module_param(interfaces, uint, S_IRUGO | S_IWUSR);
 module_param(vline, uint, S_IRUGO | S_IWUSR);
-module_param(nchannel, uint, S_IRUGO | S_IWUSR);
+module_param_array(nchannel, uint, NULL, S_IRUGO | S_IWUSR);
 module_param(pri, uint, S_IRUGO | S_IWUSR);
 module_param(debug, uint, S_IRUGO | S_IWUSR);
 
@@ -186,7 +190,6 @@ static void bch_vline_loop(struct bchannel *bch, struct sk_buff *skb)
 			printk(KERN_ERR "%s: %s: mI_alloc_skb failed \n",
 				p->name, __func__);
 	dev_kfree_skb(skb);
-	skb = NULL;
 	get_next_bframe(bch);
 }
 
@@ -213,7 +216,29 @@ static void bch_vbus(struct bchannel *bch, struct sk_buff *skb)
 	}
 
 	dev_kfree_skb(skb);
-	skb = NULL;
+	get_next_bframe(bch);
+}
+
+/*
+ * bch layer1 link (vline=3): copy frame to ohter party, if bch(x) FLAG_ACTIVE
+ */
+static void bch_vlink(struct bchannel *bch, struct sk_buff *skb)
+{
+	struct port *me = bch->hw;
+	struct port *party = &hw->ports[me->instance ^ 1];
+	struct bchannel *target = NULL;
+	int b;
+
+	b = bch->nr - 1 - (bch->nr > 16);
+	target = &party->bch[b];
+	if (test_bit(FLG_ACTIVE, &target->Flags)) {
+		/* immediately queue data to bch's RX queue */
+		target->rx_skb = skb_copy(skb, GFP_KERNEL);
+		if (target->rx_skb)
+			recv_Bchannel(target, MISDN_ID_ANY);
+	}
+
+	dev_kfree_skb(skb);
 	get_next_bframe(bch);
 }
 
@@ -241,6 +266,9 @@ l1loop_l2l1B(struct mISDNchannel *ch, struct sk_buff *skb) {
 				break;
 			case VLINE_LOOP:
 				bch_vline_loop(bch, skb);
+				break;
+			case VLINE_LINK:
+				bch_vlink(bch, skb);
 				break;
 			case VLINE_NONE:
 			default:
@@ -344,9 +372,42 @@ vbus_deactivate(struct port *p)
 	for (i = 0; i < interfaces; i++) {
 		p = hw->ports + i;
 		dch = &p->dch;
-		dch->state = VBUS_ACTIVE;
+		dch->state = VBUS_INACTIVE;
 		if (test_bit(FLG_OPEN, &p->dch.Flags))
 			ph_state(dch);
+	}
+}
+
+/*
+ * every activation (NT and TE) causes the ohter listening party to activate
+ */
+static void
+vlink_activate(struct port *p)
+{
+	struct port *party = &hw->ports[p->instance ^ 1];
+
+	if (test_bit(FLG_OPEN, &party->dch.Flags)) {
+		party->dch.state = VBUS_ACTIVE;
+		ph_state(&party->dch);
+	} else {
+		p->dch.state = VBUS_INACTIVE;
+		ph_state(&p->dch);
+	}
+}
+
+/*
+ * set every party member to state VLINK_ACTIVE
+ */
+static void
+vlink_deactivate(struct port *p)
+{
+	struct port *party = &hw->ports[p->instance ^ 1];
+
+	p->dch.state = VBUS_INACTIVE;
+	ph_state(&p->dch);
+	if (test_bit(FLG_OPEN, &party->dch.Flags)) {
+		party->dch.state = VBUS_INACTIVE;
+		ph_state(&party->dch);
 	}
 }
 
@@ -370,6 +431,9 @@ ph_command(struct port *p, u_char command)
 			p->dch.state = VBUS_ACTIVE;
 			schedule_event(&p->dch, FLG_PHCHANGE);
 			break;
+		case VLINE_LINK:
+			vlink_activate(p);
+			break;
 		case VLINE_NONE:
 		default:
 			p->dch.state = VBUS_INACTIVE;
@@ -386,6 +450,9 @@ ph_command(struct port *p, u_char command)
 			p->dch.state = VBUS_ACTIVE;
 			schedule_event(&p->dch, FLG_PHCHANGE);
 			break;
+		case VLINE_LINK:
+			vlink_activate(p);
+			break;
 		case VLINE_NONE:
 		default:
 			p->dch.state = VBUS_INACTIVE;
@@ -399,8 +466,11 @@ ph_command(struct port *p, u_char command)
 			vbus_deactivate(p);
 			break;
 		case VLINE_LOOP:
-			p->dch.state = VBUS_ACTIVE;
+			p->dch.state = VBUS_INACTIVE;
 			schedule_event(&p->dch, FLG_PHCHANGE);
+		case VLINE_LINK:
+			vlink_deactivate(p);
+			break;
 		case VLINE_NONE:
 		default:
 			break;
@@ -424,7 +494,24 @@ static void dch_vline_loop(struct dchannel *dch, struct sk_buff *skb)
 			printk(KERN_ERR "%s: %s: mI_alloc_skb failed \n",
 				p->name, __func__);
 	dev_kfree_skb(skb);
-	skb = NULL;
+	get_next_dframe(dch);
+}
+
+/*
+ * dch layer1 link (vline=3): connect each pair of D-channel data
+ */
+static void dch_vline_link(struct dchannel *dch, struct sk_buff *skb)
+{
+	struct port *me = dch->hw;
+	struct port *party = &hw->ports[me->instance ^ 1];
+	struct dchannel *party_dch = &party->dch;
+
+	if (test_bit(FLG_ACTIVE, &party_dch->Flags)) {
+		party_dch->rx_skb = skb_copy(skb, GFP_KERNEL);
+		if (party_dch->rx_skb)
+			recv_Dchannel(party_dch);
+	}
+	dev_kfree_skb(skb);
 	get_next_dframe(dch);
 }
 
@@ -473,7 +560,6 @@ static void dch_vbus_S0(struct dchannel *dch, struct sk_buff *skb)
 		}
 	}
 	dev_kfree_skb(skb);
-	skb = NULL;
 	get_next_dframe(dch);
 }
 
@@ -498,9 +584,9 @@ static void dch_vbus_E1(struct dchannel *dch, struct sk_buff *skb)
 		}
 	}
 	dev_kfree_skb(skb);
-	skb = NULL;
 	get_next_dframe(dch);
 }
+
 /*
  * layer2 -> layer1 callback D-channel
  */
@@ -536,6 +622,8 @@ l1loop_l2l1D(struct mISDNchannel *ch, struct sk_buff *skb) {
 			case VLINE_LOOP:
 				dch_vline_loop(dch, skb);
 				break;
+			case VLINE_LINK:
+				dch_vline_link(dch, skb);
 			case VLINE_NONE:
 			default:
 				break;
@@ -773,7 +861,7 @@ l1loop_dctrl(struct mISDNchannel *ch, u_int cmd, void *arg) {
 		rq = arg;
 		if ((rq->protocol == ISDN_P_TE_S0) ||
 		    (rq->protocol == ISDN_P_NT_S0) ||
-		    (rq->protocol == ISDN_P_NT_E1) ||
+		    (rq->protocol == ISDN_P_TE_E1) ||
 		    (rq->protocol == ISDN_P_NT_E1))
 			err = open_dchannel(p, ch, rq);
 		else
@@ -802,14 +890,17 @@ static int
 setup_instance(struct l1loop *hw) {
 	struct port *p;
 	u_long	flags;
-	int	err = 0, i, b;
+	int	err = 0, i, b, n;
 
 	if (debug)
 		printk(KERN_DEBUG "%s: %s\n", DRIVER_NAME, __func__);
 
 	for (i = 0; i < interfaces; i++) {
 		p = hw->ports + i;
-		p->bch = kzalloc(sizeof(struct bchannel)*nchannel, GFP_KERNEL);
+		n = nchannel[0];
+		if (vline == VLINE_LINK && nchannel[i >> 1])
+			n = nchannel[i >> 1];
+		p->bch = kzalloc(sizeof(struct bchannel)*n, GFP_KERNEL);
 		if (!p->bch) {
 			printk(KERN_ERR "%s: %s: no kmem for bchannels\n",
 				DRIVER_NAME, __func__);
@@ -817,6 +908,7 @@ setup_instance(struct l1loop *hw) {
 		}
 
 		spin_lock_init(&p->lock);
+		p->instance = i;
 		mISDN_initdchannel(&p->dch, MAX_DFRAME_LEN_L1, ph_state);
 		p->dch.debug = debug & 0xFFFF;
 		p->dch.hw = p;
@@ -830,8 +922,9 @@ setup_instance(struct l1loop *hw) {
 				(1 << (ISDN_P_B_HDLC & ISDN_P_B_MASK));
 		p->dch.dev.D.send = l1loop_l2l1D;
 		p->dch.dev.D.ctrl = l1loop_dctrl;
-		p->dch.dev.nrbchan = nchannel;
-		for (b = 0; b < nchannel; b++) {
+		p->dch.dev.nrbchan = n;
+		p->nrbchan = n;
+		for (b = 0; b < n; b++) {
 			p->bch[b].nr = b + 1 + (b >= 15);
 			set_channelmap(p->bch[b].nr, p->dch.dev.channelmap);
 			p->bch[b].debug = debug;
@@ -851,7 +944,7 @@ setup_instance(struct l1loop *hw) {
 		/* TODO: parent device? */
 		err = mISDN_register_device(&p->dch.dev, NULL, p->name);
 		if (err) {
-			for (b = 0; b < nchannel; b++)
+			for (b = 0; b < n; b++)
 				mISDN_freebchannel(&p->bch[b]);
 			mISDN_freedchannel(&p->dch);
 		} else {
@@ -875,11 +968,11 @@ release_instance(struct l1loop *hw) {
 
 	for (i = 0; i < interfaces; i++) {
 		p = hw->ports + i;
-		for (b = 0; b < nchannel; b++)
+		for (b = 0; b < p->nrbchan; b++)
 			l1loop_setup_bch(&p->bch[b], ISDN_P_NONE);
 
 		mISDN_unregister_device(&p->dch.dev);
-		for (b = 0; b < nchannel; b++)
+		for (b = 0; b < p->nrbchan; b++)
 			mISDN_freebchannel(&p->bch[b]);
 		mISDN_freedchannel(&p->dch);
 	}
@@ -897,18 +990,32 @@ release_instance(struct l1loop *hw) {
 static int __init
 l1loop_init(void)
 {
+	int i;
+
+	if (vline == 3 && (interfaces & 1)) {
+		printk(KERN_ERR "%s: %s: an even number of interfaces are "
+			"expected\n", DRIVER_NAME, __func__);
+		return -EINVAL;
+	}
 	if (interfaces > 64)
 		interfaces = 64;
-	if (nchannel > 30)
-		nchannel = 30;
+	if (vline == 3) {
+		for (i = 0; i < (interfaces >> 1); i++) {
+			if (nchannel[i] > 30)
+				nchannel[i] = 30;
+		}
+	} else {
+		if (nchannel[0] > 30)
+			nchannel[0] = 30;
+	}
 	if (pri && (vline == VLINE_BUS) && (interfaces > 2))
 		interfaces = 2;
 	if (vline > MAX_VLINE_OPTION)
 		return -ENODEV;
 
 	printk(KERN_INFO DRIVER_NAME " driver Rev. %s "
-		"debug(0x%x) interfaces(%i) nchannel(%i) vline(%s)\n",
-		l1loop_rev, debug, interfaces, nchannel, VLINE_MODES[vline]);
+		"debug(0x%x) interfaces(%i) nchannel[0](%i) vline(%s)\n",
+		l1loop_rev, debug, interfaces, nchannel[0], VLINE_MODES[vline]);
 
 	hw = kzalloc(sizeof(struct l1loop), GFP_KERNEL);
 	if (!hw) {

@@ -17,12 +17,14 @@
 #define VLINE_NONE		0
 #define VLINE_BUS		1
 #define VLINE_LOOP		2
-#define MAX_VLINE_OPTION	2
+#define VLINE_LINK		3
+#define MAX_VLINE_OPTION	3
 
 const char *VLINE_MODES[] = {
 	"none",
 	"bus",
-	"loop"
+	"loop",
+	"link"
 };
 
 #define ISDN_P_MAX ISDN_P_NT_E1
@@ -44,9 +46,11 @@ struct hwskel;
 
 struct port {
 	spinlock_t	lock; /* port lock */
+	int		instance;
 	char		name[MISDN_MAX_IDLEN];
 	struct dchannel	dch;
 	struct bchannel	*bch;
+	int		nrbchan;
 	__u8		protocol;
 	__u8		initdone;
 	struct hwskel	*hw;
