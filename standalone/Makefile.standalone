@@ -31,7 +31,7 @@ MISDN_CORE_SRC=$(MISDNDIR)/drivers/isdn/mISDN
 ########################################
 
 #CONFIGS+=CONFIG_MISDN_DRV=m 
-CONFIGS+=CONFIG_MISDN_DSP=m 
+#CONFIGS+=CONFIG_MISDN_DSP=m 
 CONFIGS+=CONFIG_MISDN_MEMDEBUG=y 
 CONFIGS+=CONFIG_MISDN_HFCMULTI=m 
 CONFIGS+=CONFIG_MISDN_HFCPCI=m
@@ -57,7 +57,7 @@ MISDNVERSION=$(shell cat VERSION)
 
 MINCLUDES+=-I$(MISDNDIR)/include
 
-all: VERSION test_old_misdn
+all: VERSION
 	cp $(MISDNDIR)/drivers/isdn/hardware/mISDN/Makefile.v2.6 $(MISDNDIR)/drivers/isdn/hardware/mISDN/Makefile
 	cp $(MISDNDIR)/drivers/isdn/mISDN/Makefile.v2.6 $(MISDNDIR)/drivers/isdn/mISDN/Makefile
 	export MINCLUDES=$(MISDNDIR)/include ; export MISDNVERSION=$(MISDNVERSION); make -C $(LINUX) SUBDIRS=$(MISDN_CORE_SRC) modules $(CONFIGS)  
@@ -70,14 +70,11 @@ install: all modules-install
 	$(MODULES_UPDATE)
 
 uninstall:
-	export MISDNDIR=$(MISDNDIR); ./makelib.sh uninstall
+	export MISDNDIR=$(MISDNDIR); uninstall
 
 modules-install:
 	$(MAKE) -C $(LINUX) INSTALL_MOD_PATH=$(INSTALL_PREFIX) SUBDIRS=$(MISDN_CORE_SRC) modules_install 
 	$(MAKE) -C $(LINUX) INSTALL_MOD_PATH=$(INSTALL_PREFIX) SUBDIRS=$(MISDN_SRC) modules_install 
-
-test_old_misdn:
-	export LINUX=$(LINUX); ./makelib.sh test_old_misdn
 
 
 .PHONY: modules-install install all clean VERSION

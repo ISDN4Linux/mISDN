@@ -1,0 +1,60 @@
+
+SDIRS := $(filter-out %.tmp_versions,$(shell $(FIND) ../drivers/isdn -type d -print))
+SDIRS += $(filter-out %.tmp_versions,$(shell $(FIND) ../include/ -type d -print))
+TDIRS := $(SDIRS:../%=%)
+IFILES := $(shell $(FIND) ../include/linux -name '*.h' -print)
+SFILES := $(shell $(FIND) ../drivers/isdn -name '*.[ch]' -print)
+#SFILES := ../drivers/isdn/mISDN/core.c drivers/isdn/mISDN/tei.c ./drivers/isdn/mISDN/core.h
+TFILES := $(SFILES:../%=%)
+NIFILES := $(IFILES:../%.h=%_s.h)
+HFILES := $(IFILES:../include/%.h=%)
+MFILES := $(shell $(FIND) ../drivers/isdn -name 'Makefile*' -print)
+NMFILES := $(MFILES:../%=%)
+
+$(TDIRS):
+	mkdir -p $@
+
+$(NMFILES): % : ../%
+	cp -a $< $@;
+
+$(NIFILES): %_s.h : ../%.h
+	@echo preparing $@
+	@$(SED)  -f header.sed $< > $@__
+	@if diff -q $< $@__ >/dev/null; then \
+		cp -a $< $@;\
+	else \
+		cp $@__ $@; \
+	fi
+	@rm -f $@__
+
+
+$(TFILES): % : ../%
+	@echo preparing $@
+	@$(SED)  -f header.sed $< > $@__
+	@if diff -q $< $@__ >/dev/null; then \
+		cp -a $< $@;\
+	else \
+		cp $@__ $@; \
+	fi
+	@rm -f $@__
+
+header.sed: $(IFILES)
+	-rm -f $@
+	for i in $(HFILES); do \
+		echo "s%#include <$${i}.h>%#include <$${i}_s.h>%g">>$@; \
+	done
+
+btree: header.sed $(TDIRS) $(TFILES) $(NIFILES) $(NMFILES)
+
+
+modules: btree
+	$(MAKE) -f Makefile.standalone
+
+distclean: clean
+	rm -rf drivers include Makefile
+
+clean:
+	rm *~ header.sed
+
+.PHONY: btree modules
+
