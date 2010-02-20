@@ -492,9 +492,11 @@ isacsx_rme_irq(struct isac_hw *isac)
 	}
 }
 
-static void
-isac_interrupt(struct isac_hw *isac, u8 val)
+irqreturn_t
+mISDNisac_irq(struct isac_hw *isac, u8 val)
 {
+	if (unlikely(!val))
+		return IRQ_NONE;
 	pr_debug("%s: ISAC interrupt %02x\n", isac->name, val);
 	if (isac->type & IPAC_TYPE_ISACX) {
 		if (val & ISACX__CIC)
@@ -556,7 +558,9 @@ isac_interrupt(struct isac_hw *isac, u8 val)
 				isac_mos_irq(isac);
 		}
 	}
+	return IRQ_HANDLED;
 }
+EXPORT_SYMBOL(mISDNisac_irq);
 
 static int
 isac_l1hw(struct mISDNchannel *ch, struct sk_buff *skb)
@@ -611,24 +615,12 @@ isac_ctrl(struct isac_hw *isac, u32 cmd, u_long para)
 				tl |= 0x0c;
 			else if (para & 2) /* B2 */
 				tl |= 0x3;
-			if (ISAC_USE_IOM1 & isac->type) {
-				/* IOM 1 Mode */
-				if (!tl) {
-					WriteISAC(isac, ISAC_SPCR, 0xa);
-					WriteISAC(isac, ISAC_ADF1, 0x2);
-				} else {
-					WriteISAC(isac, ISAC_SPCR, tl);
-					WriteISAC(isac, ISAC_ADF1, 0xa);
-				}
-			} else {
-				/* IOM 2 Mode */
-				WriteISAC(isac,
-					ISAC_SPCR, tl);
-				if (tl)
-					WriteISAC(isac, ISAC_ADF1, 0x8);
-				else
-					WriteISAC(isac, ISAC_ADF1, 0x0);
-			}
+			/* we only support IOM2 mode */
+			WriteISAC(isac, ISAC_SPCR, tl);
+			if (tl)
+				WriteISAC(isac, ISAC_ADF1, 0x8);
+			else
+				WriteISAC(isac, ISAC_ADF1, 0x0);
 		}
 		spin_unlock_irqrestore(isac->hwlock, flags);
 		break;
@@ -709,6 +701,10 @@ isac_l1cmd(struct dchannel *dch, u32 cmd)
 static void
 isac_release(struct isac_hw *isac)
 {
+	if (isac->type & IPAC_TYPE_ISACX)
+		WriteISAC(isac, ISACX_MASK, 0xff);
+	else
+		WriteISAC(isac, ISAC_MASK, 0xff);
 	if (isac->dch.timer.function != NULL) {
 		del_timer(&isac->dch.timer);
 		isac->dch.timer.function = NULL;
@@ -791,6 +787,14 @@ isac_init(struct isac_hw *isac)
 	init_timer(&isac->dch.timer);
 	isac->mocr = 0xaa;
 	if (isac->type & IPAC_TYPE_ISACX) {
+		/* Disable all IRQ */
+		WriteISAC(isac, ISACX_MASK, 0xff);
+		val = ReadISAC(isac, ISACX_STARD);
+		pr_debug("%s: ISACX STARD %x\n", isac->name, val);
+		val = ReadISAC(isac, ISACX_ISTAD);
+		pr_debug("%s: ISACX ISTAD %x\n", isac->name, val);
+		val = ReadISAC(isac, ISACX_ISTA);
+		pr_debug("%s: ISACX ISTA %x\n", isac->name, val);
 		/* clear LDD */
 		WriteISAC(isac, ISACX_TR_CONF0, 0x00);
 		/* enable transmitter */
@@ -798,9 +802,6 @@ isac_init(struct isac_hw *isac)
 		/* transparent mode 0, RAC, stop/go */
 		WriteISAC(isac, ISACX_MODED, 0xc9);
 		/* all HDLC IRQ unmasked */
-		WriteISAC(isac, ISACX_MASKD, 0x03);
-		/* unmask ICD, CID IRQs */
-		WriteISAC(isac, ISACX_MASK, ~(ISACX__ICD | ISACX__CIC));
 		val = ReadISAC(isac, ISACX_ID);
 		if (isac->dch.debug & DEBUG_HW)
 			pr_notice("%s: ISACX Design ID %x\n",
@@ -810,62 +811,10 @@ isac_init(struct isac_hw *isac)
 		isac->state = val >> 4;
 		isac_ph_state_change(isac);
 		ph_command(isac, ISAC_CMD_RS);
+		WriteISAC(isac, ISACX_MASK, IPACX__ON);
+		WriteISAC(isac, ISACX_MASKD, 0x00);
 	} else { /* old isac */
 		WriteISAC(isac, ISAC_MASK, 0xff);
-		val = ReadISAC(isac, ISAC_RBCH);
-		if (isac->dch.debug & DEBUG_HW)
-			pr_notice("%s: ISAC version (%x): %s\n", isac->name,
-				val, ISACVer[(val >> 5) & 3]);
-		isac->type |= ((val >> 5) & 3);
-		if (ISAC_USE_IOM1 & isac->type) {
-			/* IOM 1 Mode */
-			WriteISAC(isac, ISAC_ADF2, 0x0);
-			WriteISAC(isac, ISAC_SPCR, 0xa);
-			WriteISAC(isac, ISAC_ADF1, 0x2);
-			WriteISAC(isac, ISAC_STCR, 0x70);
-			WriteISAC(isac, ISAC_MODE, 0xc9);
-		} else {
-			/* IOM 2 Mode */
-			if (!isac->adf2)
-				isac->adf2 = 0x80;
-			WriteISAC(isac, ISAC_ADF2, isac->adf2);
-			WriteISAC(isac, ISAC_SQXR, 0x2f);
-			WriteISAC(isac, ISAC_SPCR, 0x00);
-			WriteISAC(isac, ISAC_STCR, 0x70);
-			WriteISAC(isac, ISAC_MODE, 0xc9);
-			WriteISAC(isac, ISAC_TIMR, 0x00);
-			WriteISAC(isac, ISAC_ADF1, 0x00);
-		}
-		val = ReadISAC(isac, ISAC_CIR0);
-		pr_debug("%s: ISAC CIR0 %x\n", isac->name, val);
-		isac->state = (val >> 2) & 0xf;
-		isac_ph_state_change(isac);
-		ph_command(isac, ISAC_CMD_RS);
-		WriteISAC(isac, ISAC_MASK, 0x0);
-	}
-	return err;
-}
-
-void
-isac_clear(struct isac_hw *isac)
-{
-	u8 val, eval;
-
-	if (isac->type & IPAC_TYPE_ISACX) {
-		/* Disable all IRQ */
-		WriteISAC(isac, ISACX_MASK, 0xff);
-		val = ReadISAC(isac, ISACX_STARD);
-		pr_debug("%s: ISACX STARD %x\n", isac->name, val);
-		val = ReadISAC(isac, ISACX_ISTAD);
-		pr_debug("%s: ISACX ISTAD %x\n", isac->name, val);
-		val = ReadISAC(isac, ISACX_ISTA);
-		pr_debug("%s: ISACX ISTA %x\n", isac->name, val);
-		isac->mask = IPACX__ON;
-		WriteISAC(isac, ISACX_MASK, isac->mask);
-		WriteISAC(isac, ISACX_MASKD, 0x00);
-		WriteISAC(isac, ISACX_CMDRD, 0x41);
-	} else if (isac->type & IPAC_TYPE_ISAC) {
-		WriteISAC(isac, ISAC_MASK, 0xFF);
 		val = ReadISAC(isac, ISAC_STAR);
 		pr_debug("%s: ISAC STAR %x\n", isac->name, val);
 		val = ReadISAC(isac, ISAC_MODE);
@@ -875,25 +824,46 @@ isac_clear(struct isac_hw *isac)
 		val = ReadISAC(isac, ISAC_ISTA);
 		pr_debug("%s: ISAC ISTA %x\n", isac->name, val);
 		if (val & 0x01) {
-			eval = ReadISAC(isac, ISAC_EXIR);
-			pr_debug("%s: ISAC EXIR %x\n", isac->name, eval);
+			val = ReadISAC(isac, ISAC_EXIR);
+			pr_debug("%s: ISAC EXIR %x\n", isac->name, val);
 		}
-		isac->mask = 0;
-		WriteISAC(isac, ISAC_MASK, isac->mask);
-		WriteISAC(isac, ISAC_CMDR, 0x41);
+		val = ReadISAC(isac, ISAC_RBCH);
+		if (isac->dch.debug & DEBUG_HW)
+			pr_notice("%s: ISAC version (%x): %s\n", isac->name,
+				val, ISACVer[(val >> 5) & 3]);
+		isac->type |= ((val >> 5) & 3);
+		if (!isac->adf2)
+			isac->adf2 = 0x80;
+		if (!(isac->adf2 & 0x80)) { /* only IOM 2 Mode */
+			pr_info("%s: only support IOM2 mode but adf2=%02x\n",
+				isac->name, isac->adf2);
+			isac_release(isac);
+			return -EINVAL;
+		}
+		WriteISAC(isac, ISAC_ADF2, isac->adf2);
+		WriteISAC(isac, ISAC_SQXR, 0x2f);
+		WriteISAC(isac, ISAC_SPCR, 0x00);
+		WriteISAC(isac, ISAC_STCR, 0x70);
+		WriteISAC(isac, ISAC_MODE, 0xc9);
+		WriteISAC(isac, ISAC_TIMR, 0x00);
+		WriteISAC(isac, ISAC_ADF1, 0x00);
+		val = ReadISAC(isac, ISAC_CIR0);
+		pr_debug("%s: ISAC CIR0 %x\n", isac->name, val);
+		isac->state = (val >> 2) & 0xf;
+		isac_ph_state_change(isac);
 		ph_command(isac, ISAC_CMD_RS);
+		WriteISAC(isac, ISAC_MASK, 0);
 	}
+	return err;
 }
 
 int
-mISDN_isac_init(struct isac_hw *isac, void *hw)
+mISDNisac_init(struct isac_hw *isac, void *hw)
 {
 	mISDN_initdchannel(&isac->dch, MAX_DFRAME_LEN_L1, isac_ph_state_bh);
 	isac->dch.hw = hw;
 	isac->dch.dev.D.send = isac_l1hw;
 	isac->init = isac_init;
-	isac->clear = isac_clear;
-	isac->interrupt = isac_interrupt;
 	isac->release = isac_release;
 	isac->ctrl = isac_ctrl;
 	isac->open = open_dchannel;
@@ -901,7 +871,7 @@ mISDN_isac_init(struct isac_hw *isac, void *hw)
 	isac->dch.dev.nrbchan = 2;
 	return 0;
 }
-EXPORT_SYMBOL(mISDN_isac_init);
+EXPORT_SYMBOL(mISDNisac_init);
 
 static void
 waitforCEC(struct hscx_hw *hx)
@@ -1175,8 +1145,8 @@ ipac_irq(struct hscx_hw *hx, u8 ista)
 	}
 }
 
-static irqreturn_t
-ipac_interrupt(struct ipac_hw *ipac, int maxloop)
+irqreturn_t
+mISDNipac_irq(struct ipac_hw *ipac, int maxloop)
 {
 	int cnt = maxloop + 1;
 	u8 ista, istad;
@@ -1191,7 +1161,7 @@ ipac_interrupt(struct ipac_hw *ipac, int maxloop)
 			if (ista & IPACX__ICB)
 				ipac_irq(&ipac->hscx[1], ista);
 			if (ista & (ISACX__ICD | ISACX__CIC))
-				isac_interrupt(&ipac->isac, ista);
+				mISDNisac_irq(&ipac->isac, ista);
 			ista = ReadIPAC(ipac, ISACX_ISTA);
 		}
 	} else if (ipac->type & IPAC_TYPE_IPAC) {
@@ -1205,7 +1175,7 @@ ipac_interrupt(struct ipac_hw *ipac, int maxloop)
 					pr_debug("%s TIN2 irq\n", ipac->name);
 				if (ista & IPAC__EXD)
 					istad |= 1; /* ISAC EXI */
-				isac_interrupt(isac, istad);
+				mISDNisac_irq(isac, istad);
 			}
 			if (ista & (IPAC__ICA | IPAC__EXA))
 				ipac_irq(&ipac->hscx[0], ista);
@@ -1222,7 +1192,7 @@ ipac_interrupt(struct ipac_hw *ipac, int maxloop)
 			istad = ReadISAC(isac, ISAC_ISTA);
 			pr_debug("%s: ISTAD %02x\n", ipac->name, istad);
 			if (istad)
-				isac_interrupt(isac, istad);
+				mISDNisac_irq(isac, istad);
 			if (0 == (ista | istad))
 				break;
 			cnt--;
@@ -1238,6 +1208,7 @@ ipac_interrupt(struct ipac_hw *ipac, int maxloop)
 			maxloop, smp_processor_id());
 	return IRQ_HANDLED;
 }
+EXPORT_SYMBOL(mISDNipac_irq);
 
 static int
 hscx_mode(struct hscx_hw *hscx, u32 bprotocol)
@@ -1473,15 +1444,6 @@ free_ipac(struct ipac_hw *ipac)
 	isac_release(&ipac->isac);
 }
 
-static int
-ipac_init(struct ipac_hw *ipac)
-{
-	int ret;
-
-	ret = isac_init(&ipac->isac);
-	return ret;
-}
-
 static const char *HSCXVer[] =
 {"A1", "?1", "A2", "?3", "A3", "V2.1", "?6", "?7",
  "?8", "?9", "?10", "?11", "?12", "?13", "?14", "???"};
@@ -1511,12 +1473,11 @@ hscx_init(struct hscx_hw *hx)
 	WriteHSCX(hx, IPAC_RCCR, 0x07);
 }
 
-static void
-ipac_clear(struct ipac_hw *ipac)
+static int
+ipac_init(struct ipac_hw *ipac)
 {
 	u8 val;
 
-	isac_clear(&ipac->isac);
 	if (ipac->type & IPAC_TYPE_HSCX) {
 		hscx_init(&ipac->hscx[0]);
 		hscx_init(&ipac->hscx[1]);
@@ -1524,8 +1485,7 @@ ipac_clear(struct ipac_hw *ipac)
 	} else if (ipac->type & IPAC_TYPE_IPAC) {
 		hscx_init(&ipac->hscx[0]);
 		hscx_init(&ipac->hscx[1]);
-		ipac->mask = IPAC__ON;
-		WriteIPAC(ipac, IPAC_MASK, ipac->mask);
+		WriteIPAC(ipac, IPAC_MASK, IPAC__ON);
 		val = ReadIPAC(ipac, IPAC_CONF);
 		/* conf is default 0, but can be overwritten by card setup */
 		pr_debug("%s: IPAC CONF %02x/%02x\n", ipac->name,
@@ -1534,10 +1494,9 @@ ipac_clear(struct ipac_hw *ipac)
 		val = ReadIPAC(ipac, IPAC_ID);
 		if (ipac->hscx[0].bch.debug & DEBUG_HW)
 			pr_notice("%s: IPAC Design ID %02x\n", ipac->name, val);
-	} else if (ipac->type & IPAC_TYPE_IPACX) {
-		ipac->mask = IPACX__ON;
-		WriteIPAC(ipac, ISACX_MASK, ipac->mask);
 	}
+	/* nothing special for IPACX to do here */
+	return isac_init(&ipac->isac);
 }
 
 static int
@@ -1622,7 +1581,7 @@ ipac_dctrl(struct mISDNchannel *ch, u32 cmd, void *arg)
 }
 
 u32
-mISDN_ipac_init(struct ipac_hw *ipac, void *hw)
+mISDNipac_init(struct ipac_hw *ipac, void *hw)
 {
 	u32 ret;
 	u8 i;
@@ -1651,7 +1610,7 @@ mISDN_ipac_init(struct ipac_hw *ipac, void *hw)
 	} else
 		return 0;
 
-	mISDN_isac_init(&ipac->isac, hw);
+	mISDNisac_init(&ipac->isac, hw);
 
 	ipac->isac.dch.dev.D.ctrl = ipac_dctrl;
 
@@ -1672,15 +1631,13 @@ mISDN_ipac_init(struct ipac_hw *ipac, void *hw)
 	}
 
 	ipac->init = ipac_init;
-	ipac->clear = ipac_clear;
-	ipac->interrupt = ipac_interrupt;
 	ipac->release = free_ipac;
 
 	ret =	(1 << (ISDN_P_B_RAW & ISDN_P_B_MASK)) |
 		(1 << (ISDN_P_B_HDLC & ISDN_P_B_MASK));
 	return ret;
 }
-EXPORT_SYMBOL(mISDN_ipac_init);
+EXPORT_SYMBOL(mISDNipac_init);
 
 static int __init
 isac_mod_init(void)

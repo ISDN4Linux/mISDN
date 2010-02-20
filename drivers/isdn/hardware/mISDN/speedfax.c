@@ -110,6 +110,7 @@ set_debug(const char *val, struct kernel_param *kp)
 MODULE_AUTHOR("Karsten Keil");
 MODULE_LICENSE("GPL v2");
 MODULE_VERSION(SPEEDFAX_REV);
+MODULE_FIRMWARE("isdn/ISAR.BIN");
 module_param_call(debug, set_debug, param_get_uint, &debug, S_IRUGO | S_IWUSR);
 MODULE_PARM_DESC(debug, "Speedfax debug mask");
 module_param(irqloops, uint, S_IRUGO | S_IWUSR);
@@ -135,10 +136,10 @@ speedfax_irq(int intno, void *dev_id)
 	val = ReadISAR_IND(sf, ISAR_IRQBIT);
 Start_ISAR:
 	if (val & ISAR_IRQSTA)
-		sf->isar.interrupt(&sf->isar);
+		mISDNisar_irq(&sf->isar);
 	val = ReadISAC_IND(sf, ISAC_ISTA);
 	if (val)
-		sf->isac.interrupt(&sf->isac, val);
+		mISDNisac_irq(&sf->isac, val);
 	val = ReadISAR_IND(sf, ISAR_IRQBIT);
 	if ((val & ISAR_IRQSTA) && cnt--)
 		goto Start_ISAR;
@@ -289,7 +290,6 @@ init_card(struct sfax_hw *sf)
 	}
 	while (cnt--) {
 		spin_lock_irqsave(&sf->lock, flags);
-		sf->isac.clear(&sf->isac);
 		ret = sf->isac.init(&sf->isac);
 		if (ret) {
 			spin_unlock_irqrestore(&sf->lock, flags);
@@ -396,11 +396,11 @@ setup_instance(struct sfax_hw *card)
 		pr_notice("%s: got firmware %zu bytes\n",
 			card->name, firmware->size);
 
-	mISDN_isac_init(&card->isac, card);
+	mISDNisac_init(&card->isac, card);
 
 	card->isac.dch.dev.D.ctrl = sfax_dctrl;
 	card->isac.dch.dev.Bprotocols =
-		mISDN_isar_init(&card->isar, card);
+		mISDNisar_init(&card->isar, card);
 	for (i = 0; i < 2; i++) {
 		set_channelmap(i + 1, card->isac.dch.dev.channelmap);
 		list_add(&card->isar.ch[i].bch.ch.list,
@@ -511,8 +511,8 @@ Speedfax_init(void)
 {
 	int err;
 
-	pr_notice("Sedlbauer Speedfax+ Driver Rev. %s - %zu\n",
-		SPEEDFAX_REV, sizeof(struct sfax_hw));
+	pr_notice("Sedlbauer Speedfax+ Driver Rev. %s\n",
+		SPEEDFAX_REV);
 	err = pci_register_driver(&sfaxpci_driver);
 	return err;
 }

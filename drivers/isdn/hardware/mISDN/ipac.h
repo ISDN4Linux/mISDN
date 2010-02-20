@@ -30,15 +30,13 @@ struct isac_hw {
 	u32			off;		/* offset to isac regs */
 	char			*name;
 	spinlock_t		*hwlock;	/* lock HW acccess */
-	read_reg_t		*read_reg;
-	write_reg_t		*write_reg;
-	fifo_func_t		*read_fifo;
-	fifo_func_t		*write_fifo;
+	read_reg_func		*read_reg;
+	write_reg_func		*write_reg;
+	fifo_func		*read_fifo;
+	fifo_func		*write_fifo;
 	int			(*monitor)(void *, u32, u8 *, int);
-	void			(*interrupt)(struct isac_hw *, u8);
 	void			(*release)(struct isac_hw *);
 	int			(*init)(struct isac_hw *);
-	void			(*clear)(struct isac_hw *);
 	int			(*ctrl)(struct isac_hw *, u32, u_long);
 	int			(*open)(struct isac_hw *, struct channel_req *);
 	u8			*mon_tx;
@@ -54,7 +52,6 @@ struct isac_hw {
 	u8			mocr;
 	u8			adf2;
 	u8			state;
-	u8			mask;
 };
 
 struct ipac_hw;
@@ -76,16 +73,13 @@ struct ipac_hw {
 	spinlock_t		*hwlock;	/* lock HW acccess */
 	struct module		*owner;
 	u32			type;
-	read_reg_t		*read_reg;
-	write_reg_t		*write_reg;
-	fifo_func_t		*read_fifo;
-	fifo_func_t		*write_fifo;
-	irqreturn_t		(*interrupt)(struct ipac_hw *, int);
+	read_reg_func		*read_reg;
+	write_reg_func		*write_reg;
+	fifo_func		*read_fifo;
+	fifo_func		*write_fifo;
 	void			(*release)(struct ipac_hw *);
 	int			(*init)(struct ipac_hw *);
-	void			(*clear)(struct ipac_hw *);
 	int			(*ctrl)(struct ipac_hw *, u32, u_long);
-	u8			mask;
 	u8			conf;
 };
 
@@ -95,8 +89,7 @@ struct ipac_hw {
 #define IPAC_TYPE_IPACX		0x0080
 #define IPAC_TYPE_HSCX		0x0100
 
-#define ISAC_USE_IOM1		0x1000
-#define ISAC_USE_ARCOFI		0x2000
+#define ISAC_USE_ARCOFI		0x1000
 
 /* Monitor functions */
 #define MONITOR_RX_0		0x1000
@@ -406,5 +399,7 @@ struct ipac_hw {
 
 #define IPACX_B_ON		0x0B
 
-extern int mISDN_isac_init(struct isac_hw *, void *);
-extern u32 mISDN_ipac_init(struct ipac_hw *, void *);
+extern int mISDNisac_init(struct isac_hw *, void *);
+extern irqreturn_t mISDNisac_irq(struct isac_hw *, u8);
+extern u32 mISDNipac_init(struct ipac_hw *, void *);
+extern irqreturn_t mISDNipac_irq(struct ipac_hw *, int);

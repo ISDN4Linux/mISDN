@@ -298,7 +298,7 @@ diva_irq(int intno, void *dev_id)
 		return IRQ_NONE; /* shared */
 	}
 	hw->irqcnt++;
-	hw->ipac.interrupt(&hw->ipac, irqloops);
+	mISDNipac_irq(&hw->ipac, irqloops);
 	spin_unlock(&hw->lock);
 	return IRQ_HANDLED;
 }
@@ -316,7 +316,7 @@ diva20x_irq(int intno, void *dev_id)
 		return IRQ_NONE; /* shared */
 	}
 	hw->irqcnt++;
-	hw->ipac.interrupt(&hw->ipac, irqloops);
+	mISDNipac_irq(&hw->ipac, irqloops);
 	writeb(PITA_INT0_STATUS, hw->cfg.p); /* ACK PITA INT0 */
 	spin_unlock(&hw->lock);
 	return IRQ_HANDLED;
@@ -335,7 +335,7 @@ tiger_irq(int intno, void *dev_id)
 		return IRQ_NONE; /* shared */
 	}
 	hw->irqcnt++;
-	hw->ipac.interrupt(&hw->ipac, irqloops);
+	mISDNipac_irq(&hw->ipac, irqloops);
 	spin_unlock(&hw->lock);
 	return IRQ_HANDLED;
 }
@@ -353,7 +353,7 @@ elsa_irq(int intno, void *dev_id)
 		return IRQ_NONE; /* shared */
 	}
 	hw->irqcnt++;
-	hw->ipac.interrupt(&hw->ipac, irqloops);
+	mISDNipac_irq(&hw->ipac, irqloops);
 	spin_unlock(&hw->lock);
 	return IRQ_HANDLED;
 }
@@ -372,7 +372,7 @@ niccy_irq(int intno, void *dev_id)
 	}
 	outl(val, (u32)hw->cfg.start + NICCY_IRQ_CTRL_REG);
 	hw->irqcnt++;
-	hw->ipac.interrupt(&hw->ipac, irqloops);
+	mISDNipac_irq(&hw->ipac, irqloops);
 	spin_unlock(&hw->lock);
 	return IRQ_HANDLED;
 }
@@ -384,7 +384,7 @@ gazel_irq(int intno, void *dev_id)
 	irqreturn_t ret;
 
 	spin_lock(&hw->lock);
-	ret = hw->ipac.interrupt(&hw->ipac, irqloops);
+	ret = mISDNipac_irq(&hw->ipac, irqloops);
 	spin_unlock(&hw->lock);
 	return ret;
 }
@@ -402,7 +402,7 @@ ipac_irq(int intno, void *dev_id)
 		return IRQ_NONE; /* shared */
 	}
 	hw->irqcnt++;
-	hw->ipac.interrupt(&hw->ipac, irqloops);
+	mISDNipac_irq(&hw->ipac, irqloops);
 	spin_unlock(&hw->lock);
 	return IRQ_HANDLED;
 }
@@ -635,7 +635,6 @@ init_irq(struct inf_hw *hw)
 				hw->name, ret);
 			break;
 		}
-		hw->ipac.clear(&hw->ipac);
 		spin_unlock_irqrestore(&hw->lock, flags);
 		msleep_interruptible(10);
 		if (debug & DEBUG_HW)
@@ -932,7 +931,7 @@ setup_instance(struct inf_hw *card)
 		goto error_setup;
 
 	card->ipac.isac.dch.dev.Bprotocols =
-		mISDN_ipac_init(&card->ipac, card);
+		mISDNipac_init(&card->ipac, card);
 
 	if (card->ipac.isac.dch.dev.Bprotocols == 0)
 		goto error_setup;;

@@ -1042,8 +1042,8 @@ isar_pump_statev_fax(struct isar_ch *ch, u8 devt) {
 	}
 }
 
-static void
-isar_int_main(struct isar_hw *isar)
+void
+mISDNisar_irq(struct isar_hw *isar)
 {
 	struct isar_ch *ch;
 
@@ -1139,6 +1139,7 @@ isar_int_main(struct isar_hw *isar)
 		break;
 	}
 }
+EXPORT_SYMBOL(mISDNisar_irq);
 
 static void
 ftimer_handler(unsigned long data)
@@ -1681,7 +1682,7 @@ isar_open(struct isar_hw *isar, struct channel_req *rq)
 }
 
 u32
-mISDN_isar_init(struct isar_hw *isar, void *hw)
+mISDNisar_init(struct isar_hw *isar, void *hw)
 {
 	u32 ret, i;
 
@@ -1699,7 +1700,6 @@ mISDN_isar_init(struct isar_hw *isar, void *hw)
 	isar->init = &init_isar;
 	isar->release = &free_isar;
 	isar->firmware = &load_firmware;
-	isar->interrupt = &isar_int_main;
 	isar->open = &isar_open;
 
 	ret =	(1 << (ISDN_P_B_RAW & ISDN_P_B_MASK)) |
@@ -1708,12 +1708,9 @@ mISDN_isar_init(struct isar_hw *isar, void *hw)
 		(1 << (ISDN_P_B_MODEM_ASYNC & ISDN_P_B_MASK)) |
 		(1 << (ISDN_P_B_T30_FAX & ISDN_P_B_MASK));
 
-	pr_info("ISAR data struct (%zu,%zu,%zu) mdl(%d)\n",
-		sizeof(*isar), sizeof(isar->ch[0]), sizeof(isar->ch[0].bch),
-		isar->ch[0].bch.maxlen);
 	return ret;
 }
-EXPORT_SYMBOL(mISDN_isar_init);
+EXPORT_SYMBOL(mISDNisar_init);
 
 static int isar_mod_init(void)
 {

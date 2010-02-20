@@ -47,12 +47,11 @@ struct isar_hw {
 	spinlock_t	*hwlock;	/* lock HW acccess */
 	char		*name;
 	struct module	*owner;
-	read_reg_t	*read_reg;
-	write_reg_t	*write_reg;
-	fifo_func_t	*read_fifo;
-	fifo_func_t	*write_fifo;
+	read_reg_func	*read_reg;
+	write_reg_func	*write_reg;
+	fifo_func	*read_fifo;
+	fifo_func	*write_fifo;
 	int		(*ctrl)(void *, u32, u_long);
-	void		(*interrupt)(struct isar_hw *);
 	void		(*release)(struct isar_hw *);
 	int		(*init)(struct isar_hw *);
 	int		(*open)(struct isar_hw *, struct channel_req *);
@@ -266,4 +265,5 @@ struct isar_hw {
 #define STFAX_ESCAPE	5
 #define STFAX_SILDET	6
 
-extern u32 mISDN_isar_init(struct isar_hw *, void *);
+extern u32 mISDNisar_init(struct isar_hw *, void *);
+extern void mISDNisar_irq(struct isar_hw *);

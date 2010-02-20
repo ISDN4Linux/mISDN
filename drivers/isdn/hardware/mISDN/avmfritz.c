@@ -418,9 +418,8 @@ hdlc_empty_fifo(struct bchannel *bch, int count)
 		addr = fc->addr + (bch->nr == 2 ?
 			AVM_HDLC_FIFO_2 : AVM_HDLC_FIFO_1);
 	else {
-		outl(bch->nr == 2 ? AVM_HDLC_2 : AVM_HDLC_1,
-			fc->addr + CHIP_INDEX);
 		addr = fc->addr + CHIP_WINDOW;
+		outl(bch->nr == 2 ? AVM_HDLC_2 : AVM_HDLC_1, fc->addr);
 	}
 	while (cnt < count) {
 		val = le32_to_cpu(inl(addr));
@@ -610,7 +609,7 @@ avm_fritz_interrupt(int intno, void *dev_id)
 
 	if (!(sval & AVM_STATUS0_IRQ_ISAC)) {
 		val = ReadISAC_V1(fc, ISAC_ISTA);
-		fc->isac.interrupt(&fc->isac, val);
+		mISDNisac_irq(&fc->isac, val);
 	}
 	if (!(sval & AVM_STATUS0_IRQ_HDLC))
 		HDLC_irq_main(fc);
@@ -639,7 +638,7 @@ avm_fritzv2_interrupt(int intno, void *dev_id)
 		HDLC_irq_main(fc);
 	if (sval & AVM_STATUS0_IRQ_ISAC) {
 		val = ReadISAC_V2(fc, ISACX_ISTA);
-		fc->isac.interrupt(&fc->isac, val);
+		mISDNisac_irq(&fc->isac, val);
 	}
 	if (sval & AVM_STATUS0_IRQ_TIMER) {
 		pr_debug("%s: timer irq\n", fc->name);
@@ -771,7 +770,6 @@ init_card(struct fritzcard *fc)
 	}
 	while (cnt--) {
 		spin_lock_irqsave(&fc->lock, flags);
-		fc->isac.clear(&fc->isac);
 		ret = fc->isac.init(&fc->isac);
 		if (ret) {
 			spin_unlock_irqrestore(&fc->lock, flags);
@@ -794,7 +792,7 @@ init_card(struct fritzcard *fc)
 		/* Timeout 10ms */
 		msleep_interruptible(10);
 		if (debug & DEBUG_HW)
-			pr_debug("%s: IRQ %d count %d\n", fc->name,
+			pr_notice("%s: IRQ %d count %d\n", fc->name,
 				fc->irq, fc->irqcnt);
 		if (!fc->irqcnt) {
 			pr_info("%s: IRQ(%d) getting no IRQs during init %d\n",
@@ -1032,7 +1030,7 @@ setup_instance(struct fritzcard *card)
 	card->isac.name = card->name;
 	spin_lock_init(&card->lock);
 	card->isac.hwlock = &card->lock;
-	mISDN_isac_init(&card->isac, card);
+	mISDNisac_init(&card->isac, card);
 
 	card->isac.dch.dev.Bprotocols = (1 << (ISDN_P_B_RAW & ISDN_P_B_MASK)) |
 	    (1 << (ISDN_P_B_HDLC & ISDN_P_B_MASK));
