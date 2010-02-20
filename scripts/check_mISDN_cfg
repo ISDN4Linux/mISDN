@@ -1,0 +1,28 @@
+#!/bin/sh
+#
+#check if all given config words are defined in file
+# syntax: check_mISDN_cfg <file> [config word...]
+# return 0 if all words are handled
+#        1 if not
+#	 2 on other errors
+#
+
+if [ $# -lt 3 ]; then
+	echo "syntax: check_mISDN_cfg <file> [config word...]"
+	exit 2
+fi
+res=0
+file=$1
+shift
+cat $file |sed 's/$/___xX/g' > $file.tmp
+while [ $# -gt 0 ]; do
+	if grep "${1}___xX" $file.tmp > /dev/null; then
+		x=0
+	else
+		echo "$1 not found"
+		res=1
+	fi
+	shift
+done
+rm -f $file.tmp
+exit $res

@@ -1,0 +1,25 @@
+#!/bin/sh
+#
+# search for all MISDN configs in Kconfig files
+#
+# syntax: find_CONFIG_MISDN <directories to search>
+#
+
+if [ $# -lt 1 ]; then
+	echo "usage find_CONFIG_MISDN <directories to search>"
+	exit 1
+fi
+
+for d in $@; do
+	KCONFIG=`find $d -name Kconfig -print`
+	CONF=""
+	for f in ${KCONFIG}; do
+		conf=`${GREP} '^menuconfig.*MISDN' $f | ${AWK} '{print $2}'`
+		CONF="$CONF $conf" 
+		conf=`${GREP} '^config.*MISDN' $f | ${AWK} '{print $2}'`
+		CONF="$CONF $conf"
+	done
+	for c in $CONF; do
+		echo "CONFIG_$c"
+	done
+done

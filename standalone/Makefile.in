@@ -8,53 +8,108 @@ SFILES := $(shell $(FIND) ../drivers/isdn -name '*.[ch]' -print)
 TFILES := $(SFILES:../%=%)
 NIFILES := $(IFILES:../%.h=%_s.h)
 HFILES := $(IFILES:../include/%.h=%)
-MFILES := $(shell $(FIND) ../drivers/isdn -name 'Makefile*' -print)
+MFILES := $(shell $(FIND) ../drivers/isdn -name 'Makefile' -print)
 NMFILES := $(MFILES:../%=%)
+MISDN_DEFINES=$(shell ../scripts/find_CONFIG_MISDN ../drivers)
+KCONFIGS := $(shell $(FIND) ../drivers -name 'Kconfig' -print)
+
+MISDN_DEFINES_M := $(MISDN_DEFINES:%=_M%)
+
+export MISDN_DEFINES_M
+
+misdn.configs: $(KCONFIGS)
+	@-rm -f $@_
+	@for c in $(MISDN_DEFINES); do \
+		echo $$c >> $@_; \
+	done
+	@$(SORT) -r $@_ > $@
+	@-rm -f $@_
+
 
 $(TDIRS):
 	mkdir -p $@
 
-$(NMFILES): % : ../%
-	cp -a $< $@;
-
-$(NIFILES): %_s.h : ../%.h
+$(NMFILES): % : ../% misdn.sed
 	@echo preparing $@
-	@$(SED)  -f header.sed $< > $@__
+	@echo "# special rules for standalone" > $@
+	@echo "EXTRA_CFLAGS += -I\$$(MISDN_INC)"  >> $@
+	@echo "EXTRA_CFLAGS += \$$(MISDN_CFLAGS)" >> $@
+	@$(SED)  -f misdn.sed $< >> $@
+	
+
+$(NIFILES): %_s.h : ../%.h misdn.sed
+	@echo preparing $@
+	@$(SED)  -f misdn.sed $< > $@__
 	@if diff -q $< $@__ >/dev/null; then \
-		cp -a $< $@;\
+		cp  $< $@;\
 	else \
 		cp $@__ $@; \
 	fi
 	@rm -f $@__
 
+$(TFILES): misdn.sed
 
 $(TFILES): % : ../%
 	@echo preparing $@
-	@$(SED)  -f header.sed $< > $@__
+	@$(SED)  -f misdn.sed $< > $@__
 	@if diff -q $< $@__ >/dev/null; then \
-		cp -a $< $@;\
+		cp  $< $@;\
 	else \
 		cp $@__ $@; \
 	fi
 	@rm -f $@__
 
-header.sed: $(IFILES)
-	-rm -f $@
-	for i in $(HFILES); do \
+misdn.sed: $(KCONFIGS) $(IFILES) misdn.configs
+	@echo preparing $@
+	@-rm -f $@
+	
+	@for i in $(HFILES); do \
 		echo "s%#include <$${i}.h>%#include <$${i}_s.h>%g">>$@; \
 	done
+	@XXX=0; \
+	for i in $(shell cat misdn.configs); do \
+		XXX=`expr $$XXX \+ 1`; \
+		echo "s%$$i%_Mxxxxx__$${XXX}__%g">>$@; \
+	done
+	@XXX=0; \
+	for i in $(shell cat misdn.configs); do \
+		XXX=`expr $$XXX \+ 1`; \
+		echo "s%_Mxxxxx__$${XXX}__%_M$$i%g">>$@; \
+	done
 
-btree: header.sed $(TDIRS) $(TFILES) $(NIFILES) $(NMFILES)
+btree: misdn.sed $(TDIRS) $(TFILES) $(NIFILES) $(NMFILES)
+
+mISDN.cfg: ../mISDN.cfg.default
+	@if test -f $@ ; then \
+		echo "$? newer as $@ please check"; \
+		exit 1; \
+	else \
+		cp $< $@; \
+	fi
+
+check_mISDN_cfg: mISDN.cfg ../scripts/check_mISDN_cfg
+	@../scripts/check_mISDN_cfg mISDN.cfg $(MISDN_DEFINES)
+	-rm -f mISDN.cfg.D
+	-rm -f mISDN.cfg.M
+	@for i in $(MISDN_DEFINES); do \
+		if grep "^$$i" mISDN.cfg >>/dev/null; then \
+			echo "enable $$i"; \
+			echo "-D_M$$i" >>mISDN.cfg.D; \
+			echo "_M$$i=m" >>mISDN.cfg.M; \
+		else \
+			echo "disable $$i"; \
+		fi \
+	done
 
 
-modules: btree
-	$(MAKE) -f Makefile.standalone
+modules: misdn.sed btree check_mISDN_cfg
+	$(MAKE) -f Makefile.standalone MISDN_CFLAGS="$(shell cat mISDN.cfg.D)" $(shell cat mISDN.cfg.M) modules
 
 distclean: clean
 	rm -rf drivers include Makefile
 
 clean:
-	rm *~ header.sed
+	rm -f *~ misdn.sed misdn.configs mISDN.cfg.D mISDN.cfg.M
 
-.PHONY: btree modules
+.PHONY: btree modules check_mISDN_cfg
 

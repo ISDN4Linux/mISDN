@@ -16,6 +16,8 @@ AC_PROG_AWK
 AC_PROG_FIND
 AC_PROG_DIFF
 AC_PROG_PATCH
+AC_PROG_IFNAMES
+AC_PROG_SORT
 # Checks for libraries.
 
 # Checks for header files.

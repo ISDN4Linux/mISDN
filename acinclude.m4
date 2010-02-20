@@ -25,3 +25,18 @@ AC_DEFUN([AC_PROG_PATCH], [
 	fi
 ])
 
+AC_DEFUN([AC_PROG_SORT], [
+	AC_ARG_VAR(SORT, [unix sort utility])
+	AC_PATH_PROG(SORT, sort,[NotFound])
+	if test x$SORT = xNotFound
+	then
+		AC_MSG_ERROR([sort utility not found]);
+	fi
+])
+
+AC_DEFUN([AC_PROG_IFNAMES], [
+	AC_ARG_VAR(IFNAMES, [autoconf ifnames utility])
+	AC_PATH_PROG(IFNAMES, ifnames,[NotFound])
+	dnl missing ifnames is not fatal
+])
+

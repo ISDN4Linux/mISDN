@@ -1,0 +1,30 @@
+#
+# This is the default config file for standalone builds
+# Do not change it, if you need a other configuration
+# copy it to standalone/mISDN.cfg and edit it here 
+#
+# other as with kernel .config files we do not assign a value here
+# You should only comment out features (add # before it)
+# Do not delete a feature, we check if all features are contained
+# in this file
+#
+
+# that should be always enabled
+CONFIG_MISDN
+#
+# hardware support features
+CONFIG_MISDN_HFCPCI
+CONFIG_MISDN_HFCMULTI
+#CONFIG_MISDN_HFCMULTI_8xx
+CONFIG_MISDN_HFCUSB
+CONFIG_MISDN_XHFC
+CONFIG_MISDN_L1LOOP
+CONFIG_MISDN_AVMFRITZ
+CONFIG_MISDN_SPEEDFAX
+CONFIG_MISDN_INFINEON
+CONFIG_MISDN_IPAC
+CONFIG_MISDN_ISAR
+
+# core features
+CONFIG_MISDN_DSP
+CONFIG_MISDN_L1OIP
