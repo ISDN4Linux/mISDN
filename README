@@ -25,4 +25,4 @@ Steps to compile:
    If you want to unset one feature, please set a '#' before it (do not
    remove the line!)
 3. make modules
-4. make modules install
+4. make modules-install

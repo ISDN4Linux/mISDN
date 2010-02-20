@@ -4,6 +4,6 @@ export FIND SED DIFF GREP AWK SORT IFNAMES
 
 SUBDIRS = standalone
 
-modules:
+modules modules-install:
 	$(MAKE) -C standalone $@
 

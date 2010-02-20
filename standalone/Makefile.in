@@ -104,12 +104,16 @@ check_mISDN_cfg: mISDN.cfg ../scripts/check_mISDN_cfg
 
 modules: misdn.sed btree check_mISDN_cfg
 	$(MAKE) -f Makefile.standalone MISDN_CFLAGS="$(shell cat mISDN.cfg.D)" $(shell cat mISDN.cfg.M) modules
+	touch modules
 
+modules-install: modules
+	$(MAKE) -f Makefile.standalone $@
+	
 distclean: clean
 	rm -rf drivers include Makefile
 
 clean:
-	rm -f *~ misdn.sed misdn.configs mISDN.cfg.D mISDN.cfg.M
+	rm -f *~ misdn.sed misdn.configs mISDN.cfg.D mISDN.cfg.M modules
 
-.PHONY: btree modules check_mISDN_cfg
+.PHONY: btree modules-install check_mISDN_cfg
 
