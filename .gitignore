@@ -10,7 +10,6 @@ modules.order
 ChangeLog
 standalone/mISDN.cfg
 autom4te.cache
-install-sh
 INSTALL
 standalone/Makefile
 /Makefile
