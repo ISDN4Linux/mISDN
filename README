@@ -1,0 +1,28 @@
+New build system for the external tree
+
+In the past it was a problem to compile mISDN for newer kernel versions
+which already have mISDN, you need to delete files in the kernel or
+patch the kernel with the new version.
+A second issue was, that some files in the standalone tree (Makefile and
+some header files) were different to the in kernel version to allow proper
+standalone builds. This caused higher maintenance effort to generate patches
+for the kernel and for back porting kernel patches.
+To solve this, I started to use autoconf/automake and generate a copy of the
+driver tree for standalone compiles. The files are processed with sed to
+make sure that here are no naming conflicts with the kernel.
+
+1. The mISDN include files from include/linux are renamed (*.h --> *_s.h)
+2. All CONFIG_MISDN* defines are changed to _MCONFIG_MISDN
+
+These actions make it possible to compile mISDN standalone without
+any influence from the in kernel mISDN version.
+
+Steps to compile:
+
+1. run ./configure
+2. Copy mISDN.cfg.default to standalone/mISDN.cfg and edit it for you needs
+   It contain a list with all CONFIG_MISDN* defines, one per line
+   If you want to unset one feature, please set a '#' before it (do not
+   remove the line!)
+3. make modules
+4. make modules install
