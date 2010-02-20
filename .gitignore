@@ -1,6 +1,4 @@
 /VERSION
-/drivers/isdn/hardware/mISDN/Makefile
-/drivers/isdn/mISDN/Makefile
 *.ko
 *.cmd
 *.o
