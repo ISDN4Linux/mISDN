@@ -1,4 +1,22 @@
 
+BASEDIR := $(shell pwd)
+
+INSTALL_PREFIX := /
+export INSTALL_PREFIX
+
+#PATH to linux source/headers
+#LINUX=/usr/src/linux
+
+ifndef KVERS
+KVERS:=$(shell uname -r)
+endif
+
+MODS := /lib/modules/$(KVERS)
+LINUX := $(MODS)/build
+LINUX_SOURCE := $(MODS)/source
+
+
+
 SDIRS := $(filter-out %.tmp_versions,$(shell $(FIND) ../drivers/isdn -type d -print))
 SDIRS += $(filter-out %.tmp_versions,$(shell $(FIND) ../include/ -type d -print))
 TDIRS := $(SDIRS:../%=%)
@@ -102,18 +120,30 @@ check_mISDN_cfg: mISDN.cfg ../scripts/check_mISDN_cfg
 	done
 
 
-modules: misdn.sed btree check_mISDN_cfg
-	$(MAKE) -f Makefile.standalone MISDN_CFLAGS="$(shell cat mISDN.cfg.D)" $(shell cat mISDN.cfg.M) modules
-	touch modules
-
-modules-install: modules
-	$(MAKE) -f Makefile.standalone $@
-	
 distclean: clean
 	rm -rf drivers include Makefile
 
 clean:
 	rm -f *~ misdn.sed misdn.configs mISDN.cfg.D mISDN.cfg.M modules
 
-.PHONY: btree modules-install check_mISDN_cfg
+MISDNDIR := $(BASEDIR)
 
+MISDN_SRC := $(MISDNDIR)/drivers/isdn/hardware/mISDN
+MISDN_CORE_SRC := $(MISDNDIR)/drivers/isdn/mISDN
+
+modules: misdn.sed btree check_mISDN_cfg
+	-rm -f modules
+	export MISDN_INC=$(MISDNDIR)/include; export MISDN_CFLAGS="$(shell cat mISDN.cfg.D)"; make -C $(LINUX)  $(shell cat mISDN.cfg.M) SUBDIRS=$(MISDN_CORE_SRC) modules
+	cp $(MISDN_CORE_SRC)/Module.symvers $(MISDN_SRC)
+	export MISDN_INC=$(MISDNDIR)/include; export MISDN_CFLAGS="$(shell cat mISDN.cfg.D)"; make -C $(LINUX) $(shell cat mISDN.cfg.M) SUBDIRS=$(MISDN_SRC) modules  
+	touch modules
+
+uninstall:
+	export MISDNDIR=$(MISDNDIR); uninstall
+
+modules-install:
+	$(MAKE) -C $(LINUX) INSTALL_MOD_PATH=$(INSTALL_PREFIX) SUBDIRS=$(MISDN_CORE_SRC) modules_install 
+	$(MAKE) -C $(LINUX) INSTALL_MOD_PATH=$(INSTALL_PREFIX) SUBDIRS=$(MISDN_SRC) modules_install 
+
+
+.PHONY: btree modules-install check_mISDN_cfg
