@@ -24,6 +24,46 @@ AC_PROG_SORT
 
 # Checks for library functions.
 
+# define kernel build directory
+
+AC_PROG_KERNEL_BUILD_DIR
+
+if test -z "$KERNEL_BUILD_DIR"; then
+	if test -z "$KERNEL_VERSION"; then
+		KERNEL_VERSION=`uname -r`
+	fi
+	KERNEL_MOD_DIR=/lib/modules/$KERNEL_VERSION
+	KERNEL_BUILD_DIR=$KERNEL_MOD_DIR/build
+	KERNEL_SOURCE_DIR=$KERNEL_MOD_DIR/source
+else
+	if test -d $KERNEL_BUILD_DIR/source; then
+		KERNEL_SOURCE_DIR=$KERNEL_BUILD_DIR/source
+	else
+		KERNEL_SOURCE_DIR=$KERNEL_BUILD_DIR
+	fi
+		
+fi
+
+if test -d $KERNEL_BUILD_DIR -a -d $KERNEL_SOURCE_DIR; then
+	if test -f $KERNEL_BUILD_DIR/include/linux/version.h; then
+		vcl=`$GREP LINUX_VERSION_CODE $KERNEL_BUILD_DIR/include/linux/version.h`
+		KVERSION=`echo $vcl |$AWK '{printf ("%d.%d.%d",$3 / 65536, (($3/256)%256),$3 % 256)}'`
+	else
+		AC_MSG_ERROR([cannot find $KERNEL_BUILD_DIR/include/linux/version.h])
+	fi
+	if test x$KERNEL_BUILD_DIR = x$KERNEL_SOURCE_DIR; then
+		AC_MSG_NOTICE([Configured for $KVERSION kernel source $KERNEL_SOURCE_DIR])
+	else
+		AC_MSG_NOTICE([Configured for $KVERSION  kernel build $KERNEL_BUILD_DIR source $KERNEL_SOURCE_DIR])
+	fi
+else
+	AC_MSG_ERROR([kernel build tree does not exist build:$KERNEL_BUILD_DIR / source:$KERNEL_SOURCE_DIR])
+fi
+
+AC_SUBST(KERNEL_BUILD_DIR)
+AC_SUBST(KERNEL_SOURCE_DIR)
+AC_SUBST(KVERSION)
+
 AC_CONFIG_FILES([
 	Makefile
 	standalone/Makefile

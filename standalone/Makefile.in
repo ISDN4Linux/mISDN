@@ -7,15 +7,9 @@ export INSTALL_PREFIX
 #PATH to linux source/headers
 #LINUX=/usr/src/linux
 
-ifndef KVERS
-KVERS:=$(shell uname -r)
-endif
-
-MODS := /lib/modules/$(KVERS)
-LINUX := $(MODS)/build
-LINUX_SOURCE := $(MODS)/source
-
-
+LINUX := @KERNEL_BUILD_DIR@
+LINUX_SOURCE := @KERNEL_SOURCE_DIR@
+KVERSION := @KVERSION@
 
 SDIRS := $(filter-out %.tmp_versions,$(shell $(FIND) ../drivers/isdn -type d -print))
 SDIRS += $(filter-out %.tmp_versions,$(shell $(FIND) ../include/ -type d -print))

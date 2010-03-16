@@ -40,3 +40,17 @@ AC_DEFUN([AC_PROG_IFNAMES], [
 	dnl missing ifnames is not fatal
 ])
 
+AC_DEFUN([AC_PROG_KERNEL_BUILD_DIR], [
+	AC_ARG_WITH([kerneldir],
+	AS_HELP_STRING([--with-kerneldir=<path>], [path to the kernel build directory]), [
+		if test -d $withval
+		then
+			KERNEL_BUILD_DIR=$withval
+		else
+			AC_MSG_ERROR([kernel build directory ($withval) does not exist])
+		fi
+	],
+	[
+		KERNEL_BUILD_DIR=
+	])
+])
