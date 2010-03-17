@@ -47,7 +47,6 @@
 #include <linux/module.h>
 #include <linux/delay.h>
 #include <linux/mISDNhw.h>
-#include <linux/isdn_compat.h>
 #include "l1loop.h"
 
 const char *l1loop_rev = "Revision: 0.1.5 (socket), 2008-11-04";

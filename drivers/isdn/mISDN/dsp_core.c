@@ -1061,7 +1061,7 @@ dspcreate(struct channel_req *crq)
 		printk(KERN_DEBUG "%s: creating new dsp instance\n", __func__);
 
 	/* default enabled */
-	_INIT_WORK(&ndsp->workq, (void *)dsp_send_bh);
+	INIT_WORK(&ndsp->workq, (void *)dsp_send_bh);
 	skb_queue_head_init(&ndsp->sendq);
 	ndsp->ch.send = dsp_function;
 	ndsp->ch.ctrl = dsp_ctrl;

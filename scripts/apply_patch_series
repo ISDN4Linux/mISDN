@@ -1,0 +1,20 @@
+#!/bin/bash
+#
+# little helper to apply a series file
+#
+# call with apply_patch_series <series file>
+#
+if [ $# -lt 1 ]; then
+	echo "usage: $0 <series file>"
+	exit
+fi
+
+series=$1
+shift
+
+while read -r pname popt ; do
+	if [ "${pname:0:1}" != "#" ]; then
+		echo "Apply $pname : opts=$popt"
+		$PATCH -p1 $popt < patches/${pname}
+	fi
+done < <(cat $series)

@@ -95,6 +95,9 @@ INSTALL_DATA = @INSTALL_DATA@
 INSTALL_PROGRAM = @INSTALL_PROGRAM@
 INSTALL_SCRIPT = @INSTALL_SCRIPT@
 INSTALL_STRIP_PROGRAM = @INSTALL_STRIP_PROGRAM@
+KERNEL_BUILD_DIR = @KERNEL_BUILD_DIR@
+KERNEL_SOURCE_DIR = @KERNEL_SOURCE_DIR@
+KVERSION = @KVERSION@
 LDFLAGS = @LDFLAGS@
 LIBOBJS = @LIBOBJS@
 LIBS = @LIBS@
@@ -601,9 +604,9 @@ uninstall-am:
 	pdf-am ps ps-am tags tags-recursive uninstall uninstall-am
 
 
-export FIND SED DIFF GREP AWK SORT IFNAMES
+export PATCH FIND SED DIFF GREP AWK SORT IFNAMES
 
-modules modules-install:
+modules modules-install unpatched_tree patched_tree:
 	$(MAKE) -C standalone $@
 # Tell versions [3.59,3.63) of GNU make to not export all variables.
 # Otherwise a system limit (for SysV at least) may be exceeded.

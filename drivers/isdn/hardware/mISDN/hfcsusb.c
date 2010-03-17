@@ -33,7 +33,6 @@
 #include <linux/delay.h>
 #include <linux/usb.h>
 #include <linux/mISDNhw.h>
-#include <linux/isdn_compat.h>
 #include "hfcsusb.h"
 
 static const char *hfcsusb_rev = "Revision: 0.3.4 (socket), 2009-12-16";

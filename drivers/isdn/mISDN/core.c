@@ -185,7 +185,7 @@ _get_mdevice(struct device *dev, void *id)
 struct mISDNdevice
 *get_mdevice(u_int id)
 {
-	return dev_to_mISDN(_FIND_DEVICE(&mISDN_class, &id,
+	return dev_to_mISDN(class_find_device(&mISDN_class, NULL, &id,
 		_get_mdevice));
 }
 
@@ -201,7 +201,7 @@ get_mdevice_count(void)
 {
 	int cnt = 0;
 
-	_EACH_DEVICE(&mISDN_class, &cnt, _get_mdevice_count);
+	class_for_each_device(&mISDN_class, NULL, &cnt, _get_mdevice_count);
 	return cnt;
 }
 

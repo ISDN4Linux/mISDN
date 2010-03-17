@@ -402,7 +402,6 @@ struct mISDN_ctrl_req {
 #define MISDN_OPT_TEIMGR	2
 
 #ifdef __KERNEL__
-#include <linux/isdn_compat.h>
 #include <linux/list.h>
 #include <linux/skbuff.h>
 #include <linux/net.h>

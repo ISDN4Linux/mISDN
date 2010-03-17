@@ -1,9 +1,9 @@
 CLEANFILES = *~
 
-export FIND SED DIFF GREP AWK SORT IFNAMES
+export PATCH FIND SED DIFF GREP AWK SORT IFNAMES
 
 SUBDIRS = standalone
 
-modules modules-install:
+modules modules-install unpatched_tree patched_tree:
 	$(MAKE) -C standalone $@
 

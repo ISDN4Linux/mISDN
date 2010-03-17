@@ -74,7 +74,7 @@ mISDN_initdchannel(struct dchannel *ch, int maxlen, void *phf)
 	skb_queue_head_init(&ch->squeue);
 	skb_queue_head_init(&ch->rqueue);
 	INIT_LIST_HEAD(&ch->dev.bchannels);
-	_INIT_WORK(&ch->workq, dchannel_bh);
+	INIT_WORK(&ch->workq, dchannel_bh);
 	return 0;
 }
 EXPORT_SYMBOL(mISDN_initdchannel);
@@ -91,7 +91,7 @@ mISDN_initbchannel(struct bchannel *ch, int maxlen)
 	skb_queue_head_init(&ch->rqueue);
 	ch->rcount = 0;
 	ch->next_skb = NULL;
-	_INIT_WORK(&ch->workq, bchannel_bh);
+	INIT_WORK(&ch->workq, bchannel_bh);
 	return 0;
 }
 EXPORT_SYMBOL(mISDN_initbchannel);

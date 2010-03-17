@@ -603,6 +603,9 @@ PACKAGE_BUGREPORT='i4ldeveloper@listserv.isdn4linux.de'
 ac_unique_file="drivers/isdn/mISDN/core.c"
 ac_subst_vars='LTLIBOBJS
 LIBOBJS
+KVERSION
+KERNEL_SOURCE_DIR
+KERNEL_BUILD_DIR
 SORT
 IFNAMES
 PATCH
@@ -690,6 +693,7 @@ ac_subst_files=''
 ac_user_opts='
 enable_option_checking
 enable_dependency_tracking
+with_kerneldir
 '
       ac_precious_vars='build_alias
 host_alias
@@ -1332,6 +1336,11 @@ Optional Features:
   --enable-FEATURE[=ARG]  include FEATURE [ARG=yes]
   --disable-dependency-tracking  speeds up one-time build
   --enable-dependency-tracking   do not reject slow dependency extractors
+
+Optional Packages:
+  --with-PACKAGE[=ARG]    use PACKAGE [ARG=yes]
+  --without-PACKAGE       do not use PACKAGE (same as --with-PACKAGE=no)
+  --with-kerneldir=<path> path to the kernel build directory
 
 Some influential environment variables:
   CC          C compiler command
@@ -3851,6 +3860,72 @@ $as_echo "$as_me: error: sort utility not found" >&2;}
 # Checks for header files.
 
 # Checks for library functions.
+
+# define kernel build directory
+
+
+
+# Check whether --with-kerneldir was given.
+if test "${with_kerneldir+set}" = set; then
+  withval=$with_kerneldir;
+		if test -d $withval
+		then
+			KERNEL_BUILD_DIR=$withval
+		else
+			{ { $as_echo "$as_me:$LINENO: error: kernel build directory ($withval) does not exist" >&5
+$as_echo "$as_me: error: kernel build directory ($withval) does not exist" >&2;}
+   { (exit 1); exit 1; }; }
+		fi
+
+else
+
+		KERNEL_BUILD_DIR=
+
+fi
+
+
+
+if test -z "$KERNEL_BUILD_DIR"; then
+	if test -z "$KERNEL_VERSION"; then
+		KERNEL_VERSION=`uname -r`
+	fi
+	KERNEL_MOD_DIR=/lib/modules/$KERNEL_VERSION
+	KERNEL_BUILD_DIR=$KERNEL_MOD_DIR/build
+	KERNEL_SOURCE_DIR=$KERNEL_MOD_DIR/source
+else
+	if test -d $KERNEL_BUILD_DIR/source; then
+		KERNEL_SOURCE_DIR=$KERNEL_BUILD_DIR/source
+	else
+		KERNEL_SOURCE_DIR=$KERNEL_BUILD_DIR
+	fi
+
+fi
+
+if test -d $KERNEL_BUILD_DIR -a -d $KERNEL_SOURCE_DIR; then
+	if test -f $KERNEL_BUILD_DIR/include/linux/version.h; then
+		vcl=`$GREP LINUX_VERSION_CODE $KERNEL_BUILD_DIR/include/linux/version.h`
+		KVERSION=`echo $vcl |$AWK '{printf ("%d.%d.%d",$3 / 65536, (($3/256)%256),$3 % 256)}'`
+	else
+		{ { $as_echo "$as_me:$LINENO: error: cannot find $KERNEL_BUILD_DIR/include/linux/version.h" >&5
+$as_echo "$as_me: error: cannot find $KERNEL_BUILD_DIR/include/linux/version.h" >&2;}
+   { (exit 1); exit 1; }; }
+	fi
+	if test x$KERNEL_BUILD_DIR = x$KERNEL_SOURCE_DIR; then
+		{ $as_echo "$as_me:$LINENO: Configured for $KVERSION kernel source $KERNEL_SOURCE_DIR" >&5
+$as_echo "$as_me: Configured for $KVERSION kernel source $KERNEL_SOURCE_DIR" >&6;}
+	else
+		{ $as_echo "$as_me:$LINENO: Configured for $KVERSION  kernel build $KERNEL_BUILD_DIR source $KERNEL_SOURCE_DIR" >&5
+$as_echo "$as_me: Configured for $KVERSION  kernel build $KERNEL_BUILD_DIR source $KERNEL_SOURCE_DIR" >&6;}
+	fi
+else
+	{ { $as_echo "$as_me:$LINENO: error: kernel build tree does not exist build:$KERNEL_BUILD_DIR / source:$KERNEL_SOURCE_DIR" >&5
+$as_echo "$as_me: error: kernel build tree does not exist build:$KERNEL_BUILD_DIR / source:$KERNEL_SOURCE_DIR" >&2;}
+   { (exit 1); exit 1; }; }
+fi
+
+
+
+
 
 ac_config_files="$ac_config_files Makefile standalone/Makefile"
 

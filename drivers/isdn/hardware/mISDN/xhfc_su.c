@@ -28,7 +28,6 @@
 #include <linux/module.h>
 #include <linux/delay.h>
 #include <linux/mISDNhw.h>
-#include <linux/isdn_compat.h>
 #include "xhfc_su.h"
 
 #if BRIDGE == BRIDGE_PCI2PI

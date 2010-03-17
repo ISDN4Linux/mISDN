@@ -1,0 +1,35 @@
+In mainline since 2.6.33
+
+From 169e9d214b758aff062b448a8c5d198bff9e93d0 Mon Sep 17 00:00:00 2001
+From: Eric Paris <eparis@redhat.com>
+Date: Thu, 5 Nov 2009 22:18:14 -0800
+Subject: [PATCH] net: pass kern to net_proto_family create function
+
+The generic __sock_create function has a kern argument which allows the
+security system to make decisions based on if a socket is being created by
+the kernel or by userspace.  This patch passes that flag to the
+net_proto_family specific create function, so it can do the same thing.
+
+Signed-off-by: Eric Paris <eparis@redhat.com>
+Acked-by: Arnaldo Carvalho de Melo <acme@redhat.com>
+Signed-off-by: David S. Miller <davem@davemloft.net>
+---
+ drivers/isdn/mISDN/socket.c |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
+
+diff --git a/drivers/isdn/mISDN/socket.c b/drivers/isdn/mISDN/socket.c
+index c36f521..ec651b6 100644
+--- a/drivers/isdn/mISDN/socket.c
++++ b/drivers/isdn/mISDN/socket.c
+@@ -779,7 +779,7 @@ base_sock_create(struct net *net, struct socket *sock, int protocol)
+ }
+ 
+ static int
+-mISDN_sock_create(struct net *net, struct socket *sock, int proto)
++mISDN_sock_create(struct net *net, struct socket *sock, int proto, int kern)
+ {
+ 	int err = -EPROTONOSUPPORT;
+ 
+-- 
+1.6.0.2
+

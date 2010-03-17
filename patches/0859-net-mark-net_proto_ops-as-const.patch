@@ -1,0 +1,30 @@
+From 2c999694bf783e5ab6cc1e5197add85d391591d4 Mon Sep 17 00:00:00 2001
+From: Stephen Hemminger <shemminger@vyatta.com>
+Date: Mon, 5 Oct 2009 05:58:39 +0000
+Subject: [PATCH] net: mark net_proto_ops as const
+
+All usages of structure net_proto_ops should be declared const.
+
+Signed-off-by: Stephen Hemminger <shemminger@vyatta.com>
+Signed-off-by: David S. Miller <davem@davemloft.net>
+---
+ drivers/isdn/mISDN/socket.c |    3 +--
+ 1 files changed, 1 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/isdn/mISDN/socket.c b/drivers/isdn/mISDN/socket.c
+index 8167346..fcfe17a 100644
+--- a/drivers/isdn/mISDN/socket.c
++++ b/drivers/isdn/mISDN/socket.c
+@@ -808,8 +808,7 @@ mISDN_sock_create(struct net *net, struct socket *sock, int proto, int kern)
+ 	return err;
+ }
+ 
+-static struct
+-net_proto_family mISDN_sock_family_ops = {
++static const struct net_proto_family mISDN_sock_family_ops = {
+ 	.owner  = THIS_MODULE,
+ 	.family = PF_ISDN,
+ 	.create = mISDN_sock_create,
+-- 
+1.6.0.2
+
