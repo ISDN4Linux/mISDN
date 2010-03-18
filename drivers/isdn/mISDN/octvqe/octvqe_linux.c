@@ -42,6 +42,7 @@ $Octasic_Revision: 21 $
 #include <linux/seq_file.h>
 #include <linux/poll.h>
 #include <linux/moduleparam.h>
+#include <linux/sched.h>
 #include <linux/wait.h>
 
 /* user<-> kernel space access functions */
