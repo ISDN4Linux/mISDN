@@ -131,7 +131,7 @@ MISDN_CORE_SRC := $(MISDNDIR)/drivers/isdn/mISDN
 patched_tree: unpatched_tree
 	if test -f series -a ! -f patched; then \
 		../scripts/apply_patch_series series; \
-		touch patched \
+		touch patched; \
 	else \
 		echo "no series found"; \
 	fi
