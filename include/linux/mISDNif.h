@@ -104,7 +104,7 @@
 #define DL_UNITDATA_IND		0x3108
 #define DL_INFORMATION_IND	0x0008
 
-/* intern layer 2 managment */
+/* intern layer 2 management */
 #define MDL_ASSIGN_REQ		0x1804
 #define MDL_ASSIGN_IND		0x1904
 #define MDL_REMOVE_REQ		0x1A04
@@ -272,12 +272,6 @@ struct mISDNhead {
 
 #define MISDN_MAX_CHANNEL	127
 #define MISDN_CHMAP_SIZE	((MISDN_MAX_CHANNEL + 1) >> 3)
-
-/* socket */
-#ifndef	AF_ISDN
-#define AF_ISDN		27
-#define PF_ISDN		AF_ISDN
-#endif
 
 #define SOL_MISDN	0
 

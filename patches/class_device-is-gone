@@ -1,0 +1,140 @@
+From a47aa20e7fda642e94a14fb43532291bfb80429d Mon Sep 17 00:00:00 2001
+From: Karsten Keil <kkeil@suse.de>
+Date: Sun, 27 Jul 2008 01:13:36 +0200
+Subject: [PATCH] class_device is gone in 2.6.26
+
+Signed-off-by: Karsten Keil <kkeil@suse.de>
+---
+ drivers/isdn/mISDN/dsp_pipeline.c |   46 ++++++++++++++----------------------
+ include/linux/mISDNif.h           |    6 ++--
+ 2 files changed, 21 insertions(+), 31 deletions(-)
+
+Index: standalone/drivers/isdn/mISDN/dsp_pipeline.c
+===================================================================
+--- standalone.orig/drivers/isdn/mISDN/dsp_pipeline.c
++++ standalone/drivers/isdn/mISDN/dsp_pipeline.c
+@@ -42,19 +42,26 @@ struct dsp_pipeline_entry {
+ };
+ struct dsp_element_entry {
+ 	struct mISDN_dsp_element *elem;
+-	struct device	     dev;
++	struct class_device  dev;
+ 	struct list_head     list;
+ };
+ 
+ static LIST_HEAD(dsp_elements);
+ 
+ /* sysfs */
+-static struct class *elements_class;
++static void elements_class_release(struct class_device *dev)
++{}
++
++static struct class elements_class = {
++	.name = "mISDN-dsp-elements",
++	.owner = THIS_MODULE,
++	.release = &elements_class_release,
++};
+ 
+ static ssize_t
+-attr_show_args(struct device *dev, struct device_attribute *attr, char *buf)
++attr_show_args(struct class_device *dev, char *buf)
+ {
+-	struct mISDN_dsp_element *elem = dev_get_drvdata(dev);
++	struct mISDN_dsp_element *elem = class_get_devdata(dev);
+ 	int i;
+ 	char *p = buf;
+ 
+@@ -70,19 +77,10 @@ attr_show_args(struct device *dev, struc
+ 	return p - buf;
+ }
+ 
+-static struct device_attribute element_attributes[] = {
++static struct class_device_attribute element_attributes[] = {
+ 	__ATTR(args, 0444, attr_show_args, NULL),
+ };
+ 
+-static void
+-mISDN_dsp_dev_release(struct device *dev)
+-{
+-	struct dsp_element_entry *entry =
+-		container_of(dev, struct dsp_element_entry, dev);
+-	list_del(&entry->list);
+-	kfree(entry);
+-}
+-
+ int mISDN_dsp_element_register(struct mISDN_dsp_element *elem)
+ {
+ 	struct dsp_element_entry *entry;
+@@ -97,11 +95,10 @@ int mISDN_dsp_element_register(struct mI
+ 
+ 	entry->elem = elem;
+ 
+-	entry->dev.class = elements_class;
+-	entry->dev.release = mISDN_dsp_dev_release;
+-	dev_set_drvdata(&entry->dev, elem);
+-	dev_set_name(&entry->dev, elem->name);
+-	ret = device_register(&entry->dev);
++	entry->dev.class = &elements_class;
++	class_set_devdata(&entry->dev, elem);
++	snprintf(entry->dev.class_id, BUS_ID_SIZE, elem->name);
++	ret = class_device_register(&entry->dev);
+ 	if (ret) {
+ 		printk(KERN_ERR "%s: failed to register %s\n",
+ 			__func__, elem->name);
+@@ -110,7 +107,7 @@ int mISDN_dsp_element_register(struct mI
+ 	list_add_tail(&entry->list, &dsp_elements);
+ 
+ 	for (i = 0; i < ARRAY_SIZE(element_attributes); ++i) {
+-		ret = device_create_file(&entry->dev,
++		ret = class_device_create_file(&entry->dev,
+ 				&element_attributes[i]);
+ 		if (ret) {
+ 			printk(KERN_ERR "%s: failed to create device file\n",
+@@ -126,7 +123,7 @@ int mISDN_dsp_element_register(struct mI
+ 	return 0;
+ 
+ err2:
+-	device_unregister(&entry->dev);
++	class_device_unregister(&entry->dev);
+ 	return ret;
+ err1:
+ 	kfree(entry);
+@@ -143,11 +140,13 @@ void mISDN_dsp_element_unregister(struct
+ 
+ 	list_for_each_entry_safe(entry, n, &dsp_elements, list)
+ 		if (entry->elem == elem) {
+-			device_unregister(&entry->dev);
++			list_del(&entry->list);
++			class_device_unregister(&entry->dev);
+ #ifdef PIPELINE_DEBUG
+ 			printk(KERN_DEBUG "%s: %s unregistered\n",
+ 				__func__, elem->name);
+ #endif
++			kfree(entry);
+ 			return;
+ 		}
+ 	printk(KERN_ERR "%s: element %s not in list.\n", __func__, elem->name);
+@@ -156,9 +155,11 @@ EXPORT_SYMBOL(mISDN_dsp_element_unregist
+ 
+ int dsp_pipeline_module_init(void)
+ {
+-	elements_class = class_create(THIS_MODULE, "dsp_pipeline");
+-	if (IS_ERR(elements_class))
+-		return PTR_ERR(elements_class);
++	int ret;
++
++	ret = class_register(&elements_class);
++	if (ret)
++		return ret;
+ 
+ #ifdef PIPELINE_DEBUG
+ 	printk(KERN_DEBUG "%s: dsp pipeline module initialized\n", __func__);
+@@ -175,7 +176,7 @@ void dsp_pipeline_module_exit(void)
+ 
+ 	dsp_hwec_exit();
+ 
+-	class_destroy(elements_class);
++	class_unregister(&elements_class);
+ 
+ 	list_for_each_entry_safe(entry, n, &dsp_elements, list) {
+ 		list_del(&entry->list);

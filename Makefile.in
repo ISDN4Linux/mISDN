@@ -606,7 +606,7 @@ uninstall-am:
 
 export PATCH FIND SED DIFF GREP AWK SORT IFNAMES
 
-modules modules-install unpatched_tree patched_tree:
+modules modules-install unpatched_tree patched_tree modules_ quilt_tree:
 	$(MAKE) -C standalone $@
 # Tell versions [3.59,3.63) of GNU make to not export all variables.
 # Otherwise a system limit (for SysV at least) may be exceeded.

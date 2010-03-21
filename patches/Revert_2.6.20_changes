@@ -1,0 +1,48 @@
+Index: standalone/drivers/isdn/mISDN/dsp_core.c
+===================================================================
+--- standalone.orig/drivers/isdn/mISDN/dsp_core.c
++++ standalone/drivers/isdn/mISDN/dsp_core.c
+@@ -1063,7 +1063,7 @@ dspcreate(struct channel_req *crq)
+ 		printk(KERN_DEBUG "%s: creating new dsp instance\n", __func__);
+ 
+ 	/* default enabled */
+-	INIT_WORK(&ndsp->workq, (void *)dsp_send_bh);
++	INIT_WORK(&ndsp->workq, (void *)dsp_send_bh, &ndsp->workq);
+ 	skb_queue_head_init(&ndsp->sendq);
+ 	ndsp->ch.send = dsp_function;
+ 	ndsp->ch.ctrl = dsp_ctrl;
+Index: standalone/drivers/isdn/mISDN/hwchannel.c
+===================================================================
+--- standalone.orig/drivers/isdn/mISDN/hwchannel.c
++++ standalone/drivers/isdn/mISDN/hwchannel.c
+@@ -74,7 +74,7 @@ mISDN_initdchannel(struct dchannel *ch,
+ 	skb_queue_head_init(&ch->squeue);
+ 	skb_queue_head_init(&ch->rqueue);
+ 	INIT_LIST_HEAD(&ch->dev.bchannels);
+-	INIT_WORK(&ch->workq, dchannel_bh);
++	INIT_WORK(&ch->workq, (void *)dchannel_bh, &ch->workq);
+ 	return 0;
+ }
+ EXPORT_SYMBOL(mISDN_initdchannel);
+@@ -91,7 +91,7 @@ mISDN_initbchannel(struct bchannel *ch,
+ 	skb_queue_head_init(&ch->rqueue);
+ 	ch->rcount = 0;
+ 	ch->next_skb = NULL;
+-	INIT_WORK(&ch->workq, bchannel_bh);
++	INIT_WORK(&ch->workq, (void *)bchannel_bh, &ch->workq);
+ 	return 0;
+ }
+ EXPORT_SYMBOL(mISDN_initbchannel);
+Index: standalone/drivers/isdn/mISDN/l1oip_core.c
+===================================================================
+--- standalone.orig/drivers/isdn/mISDN/l1oip_core.c
++++ standalone/drivers/isdn/mISDN/l1oip_core.c
+@@ -1516,7 +1516,7 @@ l1oip_init(void)
+ 			l1oip_cleanup();
+ 			return -ENOMEM;
+ 		}
+-		INIT_WORK(&hc->workq, (void *)l1oip_send_bh);
++		INIT_WORK(&hc->workq, (void *)l1oip_send_bh, &hc->workq);
+ 
+ 		spin_lock(&l1oip_lock);
+ 		list_add_tail(&hc->list, &l1oip_ilist);

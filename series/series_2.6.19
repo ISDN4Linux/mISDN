@@ -1,0 +1,11 @@
+0857-net-pass-kern-to-net_proto_family-create-function.patch -R
+0859-net-mark-net_proto_ops-as-const.patch -R
+0858-net-Make-setsockopt-optlen-be-unsigned.patch -R
+Fix_class_find_device_class_for_each_device
+Add_AF_ISDN
+class_device-is-gone
+0735-mISDN-Say-hello-to-sys-class-mISDN.patch
+Revert_2.6.24_changes
+Revert_2.6.22_changes
+Revert_2.6.21_changes
+Revert_2.6.20_changes

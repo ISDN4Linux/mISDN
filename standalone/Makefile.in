@@ -114,7 +114,7 @@ check_mISDN_cfg: mISDN.cfg ../scripts/check_mISDN_cfg
 	done
 
 clean_tree:
-	rm -rf drivers include series
+	rm -rf drivers include series .pc
 
 distclean: clean clean_tree
 	rm -f Makefile
@@ -145,12 +145,19 @@ unpatched_tree: clean_tree
 		echo "no series for kernel version $(KVERSION)"; \
 	fi
 
-modules: patched_tree misdn.sed check_mISDN_cfg
+quilt_tree: unpatched_tree
+	quilt push -a
+
+modules_:
 	-rm -f modules 
-	export MISDN_INC=$(MISDNDIR)/include; export MISDN_CFLAGS="$(shell cat mISDN.cfg.D)"; make -C $(LINUX)  $(shell cat mISDN.cfg.M) SUBDIRS=$(MISDN_CORE_SRC) modules
+	export MISDN_INC=$(MISDNDIR)/include; export MISDN_CFLAGS="$(shell cat mISDN.cfg.D)"; $(MAKE) -C $(LINUX)  $(shell cat mISDN.cfg.M) SUBDIRS=$(MISDN_CORE_SRC) modules
 	cp $(MISDN_CORE_SRC)/Module.symvers $(MISDN_SRC)
-	export MISDN_INC=$(MISDNDIR)/include; export MISDN_CFLAGS="$(shell cat mISDN.cfg.D)"; make -C $(LINUX) $(shell cat mISDN.cfg.M) SUBDIRS=$(MISDN_SRC) modules  
+	export MISDN_INC=$(MISDNDIR)/include; export MISDN_CFLAGS="$(shell cat mISDN.cfg.D)"; $(MAKE) -C $(LINUX) $(shell cat mISDN.cfg.M) SUBDIRS=$(MISDN_SRC) modules  
 	touch modules
+
+
+modules: patched_tree misdn.sed check_mISDN_cfg
+	$(MAKE) modules_
 
 uninstall:
 	export MISDNDIR=$(MISDNDIR); uninstall
@@ -160,4 +167,5 @@ modules-install:
 	$(MAKE) -C $(LINUX) INSTALL_MOD_PATH=$(INSTALL_PREFIX) SUBDIRS=$(MISDN_SRC) modules_install 
 
 
-.PHONY: btree modules-install check_mISDN_cfg patched_tree clean_tree unpatched_tree new_tree
+.PHONY: btree modules-install check_mISDN_cfg patched_tree clean_tree unpatched_tree new_tree modules_ quilt_tree
+

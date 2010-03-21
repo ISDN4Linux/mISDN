@@ -1,0 +1,414 @@
+From a47aa20e7fda642e94a14fb43532291bfb80429d Mon Sep 17 00:00:00 2001
+From: Karsten Keil <kkeil@suse.de>
+Date: Sun, 27 Jul 2008 01:13:36 +0200
+Subject: [PATCH] class_device is gone in 2.6.26
+
+Signed-off-by: Karsten Keil <kkeil@suse.de>
+---
+ drivers/isdn/mISDN/dsp_pipeline.c |   46 ++++++++++++++----------------------
+ include/linux/mISDNif.h           |    6 ++--
+ 2 files changed, 21 insertions(+), 31 deletions(-)
+
+Index: standalone/drivers/isdn/mISDN/dsp_pipeline.c
+===================================================================
+--- standalone.orig/drivers/isdn/mISDN/dsp_pipeline.c
++++ standalone/drivers/isdn/mISDN/dsp_pipeline.c
+@@ -42,19 +42,26 @@ struct dsp_pipeline_entry {
+ };
+ struct dsp_element_entry {
+ 	struct mISDN_dsp_element *elem;
+-	struct device	     dev;
++	struct class_device  dev;
+ 	struct list_head     list;
+ };
+ 
+ static LIST_HEAD(dsp_elements);
+ 
+ /* sysfs */
+-static struct class *elements_class;
++static void elements_class_release(struct class_device *dev)
++{}
++
++static struct class elements_class = {
++	.name = "mISDN-dsp-elements",
++	.owner = THIS_MODULE,
++	.release = &elements_class_release,
++};
+ 
+ static ssize_t
+-attr_show_args(struct device *dev, struct device_attribute *attr, char *buf)
++attr_show_args(struct class_device *dev, char *buf)
+ {
+-	struct mISDN_dsp_element *elem = dev_get_drvdata(dev);
++	struct mISDN_dsp_element *elem = class_get_devdata(dev);
+ 	int i;
+ 	char *p = buf;
+ 
+@@ -70,19 +77,10 @@ attr_show_args(struct device *dev, struc
+ 	return p - buf;
+ }
+ 
+-static struct device_attribute element_attributes[] = {
++static struct class_device_attribute element_attributes[] = {
+ 	__ATTR(args, 0444, attr_show_args, NULL),
+ };
+ 
+-static void
+-mISDN_dsp_dev_release(struct device *dev)
+-{
+-	struct dsp_element_entry *entry =
+-		container_of(dev, struct dsp_element_entry, dev);
+-	list_del(&entry->list);
+-	kfree(entry);
+-}
+-
+ int mISDN_dsp_element_register(struct mISDN_dsp_element *elem)
+ {
+ 	struct dsp_element_entry *entry;
+@@ -97,11 +95,10 @@ int mISDN_dsp_element_register(struct mI
+ 
+ 	entry->elem = elem;
+ 
+-	entry->dev.class = elements_class;
+-	entry->dev.release = mISDN_dsp_dev_release;
+-	dev_set_drvdata(&entry->dev, elem);
+-	dev_set_name(&entry->dev, elem->name);
+-	ret = device_register(&entry->dev);
++	entry->dev.class = &elements_class;
++	class_set_devdata(&entry->dev, elem);
++	snprintf(entry->dev.class_id, BUS_ID_SIZE, elem->name);
++	ret = class_device_register(&entry->dev);
+ 	if (ret) {
+ 		printk(KERN_ERR "%s: failed to register %s\n",
+ 			__func__, elem->name);
+@@ -110,7 +107,7 @@ int mISDN_dsp_element_register(struct mI
+ 	list_add_tail(&entry->list, &dsp_elements);
+ 
+ 	for (i = 0; i < ARRAY_SIZE(element_attributes); ++i) {
+-		ret = device_create_file(&entry->dev,
++		ret = class_device_create_file(&entry->dev,
+ 				&element_attributes[i]);
+ 		if (ret) {
+ 			printk(KERN_ERR "%s: failed to create device file\n",
+@@ -126,7 +123,7 @@ int mISDN_dsp_element_register(struct mI
+ 	return 0;
+ 
+ err2:
+-	device_unregister(&entry->dev);
++	class_device_unregister(&entry->dev);
+ 	return ret;
+ err1:
+ 	kfree(entry);
+@@ -143,11 +140,13 @@ void mISDN_dsp_element_unregister(struct
+ 
+ 	list_for_each_entry_safe(entry, n, &dsp_elements, list)
+ 		if (entry->elem == elem) {
+-			device_unregister(&entry->dev);
++			list_del(&entry->list);
++			class_device_unregister(&entry->dev);
+ #ifdef PIPELINE_DEBUG
+ 			printk(KERN_DEBUG "%s: %s unregistered\n",
+ 				__func__, elem->name);
+ #endif
++			kfree(entry);
+ 			return;
+ 		}
+ 	printk(KERN_ERR "%s: element %s not in list.\n", __func__, elem->name);
+@@ -156,9 +155,11 @@ EXPORT_SYMBOL(mISDN_dsp_element_unregist
+ 
+ int dsp_pipeline_module_init(void)
+ {
+-	elements_class = class_create(THIS_MODULE, "dsp_pipeline");
+-	if (IS_ERR(elements_class))
+-		return PTR_ERR(elements_class);
++	int ret;
++
++	ret = class_register(&elements_class);
++	if (ret)
++		return ret;
+ 
+ #ifdef PIPELINE_DEBUG
+ 	printk(KERN_DEBUG "%s: dsp pipeline module initialized\n", __func__);
+@@ -175,7 +176,7 @@ void dsp_pipeline_module_exit(void)
+ 
+ 	dsp_hwec_exit();
+ 
+-	class_destroy(elements_class);
++	class_unregister(&elements_class);
+ 
+ 	list_for_each_entry_safe(entry, n, &dsp_elements, list) {
+ 		list_del(&entry->list);
+Index: standalone/include/linux/mISDNif_s.h
+===================================================================
+--- standalone.orig/include/linux/mISDNif_s.h
++++ standalone/include/linux/mISDNif_s.h
+@@ -493,7 +493,7 @@ struct mISDNdevice {
+ 	u_char			channelmap[MISDN_CHMAP_SIZE];
+ 	struct list_head	bchannels;
+ 	struct mISDNchannel	*teimgr;
+-	struct device		dev;
++	struct class_device	cdev;
+ };
+ 
+ struct mISDNstack {
+Index: standalone/drivers/isdn/mISDN/core.c
+===================================================================
+--- standalone.orig/drivers/isdn/mISDN/core.c
++++ standalone/drivers/isdn/mISDN/core.c
+@@ -89,7 +89,7 @@ static ssize_t _show_protocol(struct dev
+ static ssize_t _show_name(struct device *dev,
+ 				struct device_attribute *attr, char *buf)
+ {
+-	strcpy(buf, dev_name(dev));
++	strcpy(buf, dev->bus_id);
+ 	return strlen(buf);
+ }
+ 
+@@ -229,24 +229,23 @@ mISDN_register_device(struct mISDNdevice
+ 		goto error1;
+ 	dev->id = err;
+ 
+-	device_initialize(&dev->dev);
++	class_device_initialize(&dev->cdev);
+ 	if (name && name[0])
+-		dev_set_name(&dev->dev, "%s", name);
++		snprintf(dev->cdev.class_id, BUS_ID_SIZE, "%s", name);
+ 	else
+-		dev_set_name(&dev->dev, "mISDN%d", dev->id);
++		snprintf(dev->cdev.class_id, BUS_ID_SIZE, "mISDN%d", dev->id);
+ 	if (debug & DEBUG_CORE)
+ 		printk(KERN_DEBUG "mISDN_register %s %d\n",
+-			dev_name(&dev->dev), dev->id);
++			dev->cdev.class_id, dev->id);
+ 	err = create_stack(dev);
+ 	if (err)
+ 		goto error1;
+ 
+-	dev->dev.class = &mISDN_class;
+-	dev->dev.platform_data = dev;
+-	dev->dev.parent = parent;
+-	dev_set_drvdata(&dev->dev, dev);
++	dev->cdev.class = &mISDN_class;
++	dev->cdev.dev = parent;
++	class_set_devdata(&dev->cdev, dev);
+ 
+-	err = device_add(&dev->dev);
++	err = class_device_register(&dev->cdev);
+ 	if (err)
+ 		goto error3;
+ 	return 0;
+@@ -264,14 +263,13 @@ void
+ mISDN_unregister_device(struct mISDNdevice *dev) {
+ 	if (debug & DEBUG_CORE)
+ 		printk(KERN_DEBUG "mISDN_unregister %s %d\n",
+-			dev_name(&dev->dev), dev->id);
++			dev->cdev.class_id, dev->id);
+ 	/* sysfs_remove_link(&dev->dev.kobj, "device"); */
+-	device_del(&dev->dev);
+-	dev_set_drvdata(&dev->dev, NULL);
++	class_device_unregister(&dev->cdev);
++	class_set_devdata(&dev->cdev, NULL);
+ 
+ 	test_and_clear_bit(dev->id, (u_long *)&device_ids);
+ 	delete_stack(dev);
+-	put_device(&dev->dev);
+ }
+ EXPORT_SYMBOL(mISDN_unregister_device);
+ 
+Index: standalone/drivers/isdn/mISDN/layer1.c
+===================================================================
+--- standalone.orig/drivers/isdn/mISDN/layer1.c
++++ standalone/drivers/isdn/mISDN/layer1.c
+@@ -101,7 +101,7 @@ l1m_debug(struct FsmInst *fi, char *fmt,
+ 	va_list va;
+ 
+ 	va_start(va, fmt);
+-	printk(KERN_DEBUG "%s: ", dev_name(&l1->dch->dev.dev));
++	printk(KERN_DEBUG "%s: ", l1->dch->dev.cdev.class_id);
+ 	vprintk(fmt, va);
+ 	printk("\n");
+ 	va_end(va);
+Index: standalone/drivers/isdn/mISDN/socket.c
+===================================================================
+--- standalone.orig/drivers/isdn/mISDN/socket.c
++++ standalone/drivers/isdn/mISDN/socket.c
+@@ -398,7 +398,7 @@ data_sock_ioctl(struct socket *sock, uns
+ 			memcpy(di.channelmap, dev->channelmap,
+ 				sizeof(di.channelmap));
+ 			di.nrbchan = dev->nrbchan;
+-			strcpy(di.name, dev_name(&dev->dev));
++			strcpy(di.name, dev->cdev.class_id);
+ 			if (copy_to_user((void __user *)arg, &di, sizeof(di)))
+ 				err = -EFAULT;
+ 		} else
+@@ -678,7 +678,7 @@ base_sock_ioctl(struct socket *sock, uns
+ 			memcpy(di.channelmap, dev->channelmap,
+ 				sizeof(di.channelmap));
+ 			di.nrbchan = dev->nrbchan;
+-			strcpy(di.name, dev_name(&dev->dev));
++			strcpy(di.name, dev->cdev.class_id);
+ 			if (copy_to_user((void __user *)arg, &di, sizeof(di)))
+ 				err = -EFAULT;
+ 		} else
+@@ -694,7 +694,7 @@ base_sock_ioctl(struct socket *sock, uns
+ 			}
+ 			dev = get_mdevice(dn.id);
+ 			if (dev)
+-				err = device_rename(&dev->dev, dn.name);
++				strlcpy(dev->cdev.class_id, dn.name, BUS_ID_SIZE);
+ 			else
+ 				err = -ENODEV;
+ 		}
+Index: standalone/drivers/isdn/mISDN/stack.c
+===================================================================
+--- standalone.orig/drivers/isdn/mISDN/stack.c
++++ standalone/drivers/isdn/mISDN/stack.c
+@@ -173,7 +173,7 @@ send_msg_to_layer(struct mISDNstack *st,
+ 		else
+ 			printk(KERN_WARNING
+ 			    "%s: dev(%s) prim(%x) id(%x) no channel\n",
+-			    __func__, dev_name(&st->dev->dev), hh->prim,
++			    __func__, st->dev->cdev.class_id, hh->prim,
+ 			    hh->id);
+ 	} else if (lm == 0x8) {
+ 		WARN_ON(lm == 0x8);
+@@ -183,12 +183,12 @@ send_msg_to_layer(struct mISDNstack *st,
+ 		else
+ 			printk(KERN_WARNING
+ 			    "%s: dev(%s) prim(%x) id(%x) no channel\n",
+-			    __func__, dev_name(&st->dev->dev), hh->prim,
++			    __func__, st->dev->cdev.class_id, hh->prim,
+ 			    hh->id);
+ 	} else {
+ 		/* broadcast not handled yet */
+ 		printk(KERN_WARNING "%s: dev(%s) prim %x not delivered\n",
+-		    __func__, dev_name(&st->dev->dev), hh->prim);
++		    __func__, st->dev->cdev.class_id, hh->prim);
+ 	}
+ 	return -ESRCH;
+ }
+@@ -213,7 +213,7 @@ mISDNStackd(void *data)
+ #endif
+ 	if (*debug & DEBUG_MSG_THREAD)
+ 		printk(KERN_DEBUG "mISDNStackd %s started\n",
+-		    dev_name(&st->dev->dev));
++		    st->dev->cdev.class_id);
+ 
+ 	if (st->notify != NULL) {
+ 		complete(st->notify);
+@@ -249,7 +249,7 @@ mISDNStackd(void *data)
+ 					printk(KERN_DEBUG
+ 					    "%s: %s prim(%x) id(%x) "
+ 					    "send call(%d)\n",
+-					    __func__, dev_name(&st->dev->dev),
++					    __func__, st->dev->cdev.class_id,
+ 					    mISDN_HEAD_PRIM(skb),
+ 					    mISDN_HEAD_ID(skb), err);
+ 				dev_kfree_skb(skb);
+@@ -292,7 +292,7 @@ mISDNStackd(void *data)
+ 		    mISDN_STACK_ACTION_MASK));
+ 		if (*debug & DEBUG_MSG_THREAD)
+ 			printk(KERN_DEBUG "%s: %s wake status %08lx\n",
+-			    __func__, dev_name(&st->dev->dev), st->status);
++			    __func__, st->dev->cdev.class_id, st->status);
+ 		test_and_set_bit(mISDN_STACK_ACTIVE, &st->status);
+ 
+ 		test_and_clear_bit(mISDN_STACK_WAKEUP, &st->status);
+@@ -307,16 +307,16 @@ mISDNStackd(void *data)
+ #ifdef MISDN_MSG_STATS
+ 	printk(KERN_DEBUG "mISDNStackd daemon for %s proceed %d "
+ 	    "msg %d sleep %d stopped\n",
+-	    dev_name(&st->dev->dev), st->msg_cnt, st->sleep_cnt,
++	    st->dev->cdev.class_id, st->msg_cnt, st->sleep_cnt,
+ 	    st->stopped_cnt);
+ 	printk(KERN_DEBUG
+ 	    "mISDNStackd daemon for %s utime(%ld) stime(%ld)\n",
+-	    dev_name(&st->dev->dev), st->thread->utime, st->thread->stime);
++	    st->dev->cdev.class_id, st->thread->utime, st->thread->stime);
+ 	printk(KERN_DEBUG
+ 	    "mISDNStackd daemon for %s nvcsw(%ld) nivcsw(%ld)\n",
+-	    dev_name(&st->dev->dev), st->thread->nvcsw, st->thread->nivcsw);
++	    st->dev->cdev.class_id, st->thread->nvcsw, st->thread->nivcsw);
+ 	printk(KERN_DEBUG "mISDNStackd daemon for %s killed now\n",
+-	    dev_name(&st->dev->dev));
++	    st->dev->cdev.class_id);
+ #endif
+ 	test_and_set_bit(mISDN_STACK_KILLED, &st->status);
+ 	test_and_clear_bit(mISDN_STACK_RUNNING, &st->status);
+@@ -407,15 +407,15 @@ create_stack(struct mISDNdevice *dev)
+ 	newst->own.recv = mISDN_queue_message;
+ 	if (*debug & DEBUG_CORE_FUNC)
+ 		printk(KERN_DEBUG "%s: st(%s)\n", __func__,
+-		    dev_name(&newst->dev->dev));
++		    newst->dev->cdev.class_id);
+ 	newst->notify = &done;
+ 	newst->thread = kthread_run(mISDNStackd, (void *)newst, "mISDN_%s",
+-		dev_name(&newst->dev->dev));
++		newst->dev->cdev.class_id);
+ 	if (IS_ERR(newst->thread)) {
+ 		err = PTR_ERR(newst->thread);
+ 		printk(KERN_ERR
+ 			"mISDN:cannot create kernel thread for %s (%d)\n",
+-			dev_name(&newst->dev->dev), err);
++			newst->dev->cdev.class_id, err);
+ 		delete_teimanager(dev->teimgr);
+ 		kfree(newst);
+ 	} else
+@@ -434,7 +434,7 @@ connect_layer1(struct mISDNdevice *dev,
+ 
+ 	if (*debug &  DEBUG_CORE_FUNC)
+ 		printk(KERN_DEBUG "%s: %s proto(%x) adr(%d %d %d %d)\n",
+-			__func__, dev_name(&dev->dev), protocol, adr->dev,
++			__func__, dev->cdev.class_id, protocol, adr->dev,
+ 			adr->channel, adr->sapi, adr->tei);
+ 	switch (protocol) {
+ 	case ISDN_P_NT_S0:
+@@ -471,7 +471,7 @@ connect_Bstack(struct mISDNdevice *dev,
+ 
+ 	if (*debug &  DEBUG_CORE_FUNC)
+ 		printk(KERN_DEBUG "%s: %s proto(%x) adr(%d %d %d %d)\n",
+-			__func__, dev_name(&dev->dev), protocol,
++			__func__, dev->cdev.class_id, protocol,
+ 			adr->dev, adr->channel, adr->sapi,
+ 			adr->tei);
+ 	ch->st = dev->D.st;
+@@ -527,7 +527,7 @@ create_l2entity(struct mISDNdevice *dev,
+ 
+ 	if (*debug &  DEBUG_CORE_FUNC)
+ 		printk(KERN_DEBUG "%s: %s proto(%x) adr(%d %d %d %d)\n",
+-			__func__, dev_name(&dev->dev), protocol,
++			__func__, dev->cdev.class_id, protocol,
+ 			adr->dev, adr->channel, adr->sapi,
+ 			adr->tei);
+ 	rq.protocol = ISDN_P_TE_S0;
+@@ -579,7 +579,7 @@ delete_channel(struct mISDNchannel *ch)
+ 	}
+ 	if (*debug & DEBUG_CORE_FUNC)
+ 		printk(KERN_DEBUG "%s: st(%s) protocol(%x)\n", __func__,
+-		    dev_name(&ch->st->dev->dev), ch->protocol);
++		    ch->st->dev->cdev.class_id, ch->protocol);
+ 	if (ch->protocol >= ISDN_P_B_START) {
+ 		if (ch->peer) {
+ 			ch->peer->ctrl(ch->peer, CLOSE_CHANNEL, NULL);
+@@ -632,7 +632,7 @@ delete_stack(struct mISDNdevice *dev)
+ 
+ 	if (*debug & DEBUG_CORE_FUNC)
+ 		printk(KERN_DEBUG "%s: st(%s)\n", __func__,
+-		    dev_name(&st->dev->dev));
++		    st->dev->cdev.class_id);
+ 	if (dev->teimgr)
+ 		delete_teimanager(dev->teimgr);
+ 	if (st->thread) {
+Index: standalone/drivers/isdn/mISDN/tei.c
+===================================================================
+--- standalone.orig/drivers/isdn/mISDN/tei.c
++++ standalone/drivers/isdn/mISDN/tei.c
+@@ -973,7 +973,7 @@ create_teimgr(struct manager *mgr, struc
+ 
+ 	if (*debug & DEBUG_L2_TEI)
+ 		printk(KERN_DEBUG "%s: %s proto(%x) adr(%d %d %d %d)\n",
+-			__func__, dev_name(&mgr->ch.st->dev->dev),
++			__func__, mgr->ch.st->dev->cdev.class_id,
+ 			crq->protocol, crq->adr.dev, crq->adr.channel,
+ 			crq->adr.sapi, crq->adr.tei);
+ 	if (crq->adr.tei > GROUP_TEI)
