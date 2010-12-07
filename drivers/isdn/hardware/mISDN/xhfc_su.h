@@ -71,11 +71,12 @@
 
 
 /* NT / TE defines */
-#define NT_T1_COUNT	25	/* number of 4ms interrupts for G2 timeout */
+#define NT_T1_COUNT	250	/* number of 4ms interrupts for G2 timeout */
 #define CLK_DLY_TE	0x0e	/* CLKDEL in TE mode */
 #define CLK_DLY_NT	0x6c	/* CLKDEL in NT mode */
 #define STA_ACTIVATE	0x60	/* start activation   in A_SU_WR_STA */
 #define STA_DEACTIVATE	0x40	/* start deactivation in A_SU_WR_STA */
+#define STA_LOAD	0x10	/* load state in A_SU_WR_STA */
 #define LIF_MODE_NT	0x04	/* Line Interface NT mode */
 #define XHFC_TIMER_T3	8000	/* 8s activation timer T3 */
 #define XHFC_TIMER_T4	500	/* 500ms deactivation timer T4 */

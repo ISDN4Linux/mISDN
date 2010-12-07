@@ -1203,11 +1203,18 @@ ph_state_nt(struct dchannel *dch)
 			test_and_clear_bit(FLG_L2_ACTIVATED, &dch->Flags);
 			p->nt_timer = 0;
 			p->timers &= ~NT_ACTIVATION_TIMER;
+			_queue_data(&dch->dev.D, PH_DEACTIVATE_IND,
+				    MISDN_ID_ANY, 0, NULL, GFP_ATOMIC);
 			break;
 		case (2):
 			if (p->nt_timer < 0) {
 				p->nt_timer = 0;
 				p->timers &= ~NT_ACTIVATION_TIMER;
+				write_xhfc(p->xhfc, R_SU_SEL, p->idx);
+				write_xhfc(p->xhfc, A_SU_WR_STA, 4 | STA_LOAD);
+				udelay(10);
+				write_xhfc(p->xhfc, A_SU_WR_STA, 4);
+				dch->state = 4;
 			} else {
 				p->timers |= NT_ACTIVATION_TIMER;
 				p->nt_timer = NT_T1_COUNT;
