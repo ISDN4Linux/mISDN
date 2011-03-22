@@ -31,7 +31,7 @@
  *         connector, so all data is looped internally)
  *     3 : VLINK (an even number of interfaces must be given.
  *         every pair of these interfaces is interlinked)
- * - nchannel=<n>, n=[2..30] default 2
+ * - nchannel=<n>, n=[2..126] default 2
  *     number of bchannels each interface will consist of
  *     if vline==VLINK, multiple nchannel values may be given to
  *     define the number of channels for each pair of interfaces.
@@ -1000,12 +1000,12 @@ l1loop_init(void)
 		interfaces = 64;
 	if (vline == 3) {
 		for (i = 0; i < (interfaces >> 1); i++) {
-			if (nchannel[i] > 30)
-				nchannel[i] = 30;
+			if (nchannel[i] > 126)
+				nchannel[i] = 126;
 		}
 	} else {
-		if (nchannel[0] > 30)
-			nchannel[0] = 30;
+		if (nchannel[0] > 126)
+			nchannel[0] = 126;
 	}
 	if (pri && (vline == VLINE_BUS) && (interfaces > 2))
 		interfaces = 2;
