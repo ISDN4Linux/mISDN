@@ -1,0 +1,40 @@
+From 9db9f279be5e663ae0de8b3349f07b38b18e9215 Mon Sep 17 00:00:00 2001
+From: Peter Huewe <peterhuewe@gmx.de>
+Date: Thu, 15 Jul 2010 09:05:38 +0000
+Subject: [PATCH] mISDN: Convert pci_table entries to PCI_VDEVICE (if
+ PCI_ANY_ID is used)
+
+From mainline
+This patch converts pci_table entries, where .subvendor=PCI_ANY_ID and
+.subdevice=PCI_ANY_ID, .class=0 and .class_mask=0, to use the
+PCI_VDEVICE macro, and thus improves readability.
+
+Signed-off-by: Peter Huewe <peterhuewe@gmx.de>
+Signed-off-by: David S. Miller <davem@davemloft.net>
+---
+ drivers/isdn/hardware/mISDN/hfcmulti.c |    9 +++------
+ 1 files changed, 3 insertions(+), 6 deletions(-)
+
+diff --git a/drivers/isdn/hardware/mISDN/hfcmulti.c b/drivers/isdn/hardware/mISDN/hfcmulti.c
+index 095ed76..987fb18 100644
+--- a/drivers/isdn/hardware/mISDN/hfcmulti.c
++++ b/drivers/isdn/hardware/mISDN/hfcmulti.c
+@@ -5354,12 +5354,9 @@ static struct pci_device_id hfmultipci_ids[] __devinitdata = {
+ 	{ PCI_VENDOR_ID_CCD, PCI_DEVICE_ID_CCD_HFCE1, PCI_VENDOR_ID_CCD,
+ 		PCI_SUBDEVICE_ID_CCD_JHSE1, 0, 0, H(25)}, /* Junghanns E1 */
+ 
+-	{ PCI_VENDOR_ID_CCD, PCI_DEVICE_ID_CCD_HFC4S, PCI_ANY_ID, PCI_ANY_ID,
+-		0, 0, 0},
+-	{ PCI_VENDOR_ID_CCD, PCI_DEVICE_ID_CCD_HFC8S, PCI_ANY_ID, PCI_ANY_ID,
+-		0, 0, 0},
+-	{ PCI_VENDOR_ID_CCD, PCI_DEVICE_ID_CCD_HFCE1, PCI_ANY_ID, PCI_ANY_ID,
+-		0, 0, 0},
++	{ PCI_VDEVICE(CCD, PCI_DEVICE_ID_CCD_HFC4S), 0 },
++	{ PCI_VDEVICE(CCD, PCI_DEVICE_ID_CCD_HFC8S), 0 },
++	{ PCI_VDEVICE(CCD, PCI_DEVICE_ID_CCD_HFCE1), 0 },
+ 	{0, }
+ };
+ #undef H
+-- 
+1.7.5
+
