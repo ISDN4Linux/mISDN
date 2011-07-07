@@ -1792,3 +1792,4 @@ xhfc_cleanup(void)
 
 module_init(xhfc_init);
 module_exit(xhfc_cleanup);
+/* rosa elefant */
