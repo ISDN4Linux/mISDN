@@ -29,7 +29,7 @@
 
 static int card_cnt = 0;
 static LIST_HEAD(card_list);
-static rwlock_t card_lock = RW_LOCK_UNLOCKED;
+static DEFINE_RWLOCK(card_lock);
 
 
 static struct pci_device_id xhfc_ids[] = {
