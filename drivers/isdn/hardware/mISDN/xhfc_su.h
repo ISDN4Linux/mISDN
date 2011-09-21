@@ -25,6 +25,7 @@
 #define _XHFC_SU_H_
 
 #include <linux/timer.h>
+#include <linux/interrupt.h>
 #include <linux/mISDNhw.h>
 #include "xhfc24sucd.h"
 
