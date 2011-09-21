@@ -44,6 +44,7 @@ $Octasic_Revision: 21 $
 #include <linux/moduleparam.h>
 #include <linux/sched.h>
 #include <linux/wait.h>
+#include <linux/mutex.h>
 
 /* user<-> kernel space access functions */
 #include <asm/uaccess.h>
@@ -949,16 +950,16 @@ static unsigned int octdev_poll(
 	return iMask;
 }
 
-static int octdev_ioctl(struct inode *inode , struct file *filp, unsigned int cmd , unsigned long arg)
+static long octdev_ioctl(struct file *filp, unsigned int cmd , unsigned long arg)
 {
-    tPOCTVQE_CHAN_INSTANCE pChan;
+	tPOCTVQE_CHAN_INSTANCE pChan;
 
-    /* Retrieve channel index. */
-    pChan = (tPOCTVQE_CHAN_INSTANCE)filp->private_data;
-    if (pChan == NULL) {
-	printk(KERN_ERR "%s: Invalid private data channel (NULL)\n", DEV_NAME);
-	return -EINVAL;
-    }
+	/* Retrieve channel index. */
+	pChan = (tPOCTVQE_CHAN_INSTANCE)filp->private_data;
+	if (pChan == NULL) {
+		printk(KERN_ERR "%s: Invalid private data channel (NULL)\n", DEV_NAME);
+		return -EINVAL;
+	}
 
 	switch (cmd) {
 	case OCTDEV_IOCTL_TAIL_LENGTH:
@@ -1104,14 +1105,14 @@ int octdev_proc_open(struct inode *inode, struct file *file)
     return seq_open(file, &octdev_seq_ops);
 }
 
-static struct file_operations octdev_fops = {
-    owner:	    THIS_MODULE,
-    open:	     octdev_open,
-    read:	     octdev_read,
-    write:	    octdev_write,
-    release:	  octdev_release,
-    poll:	     octdev_poll,
-    ioctl:	    octdev_ioctl,
+static const struct file_operations octdev_fops = {
+	.owner		= THIS_MODULE,
+	.open		= octdev_open,
+	.read		= octdev_read,
+	.write		= octdev_write,
+	.release	= octdev_release,
+	.poll		= octdev_poll,
+	.unlocked_ioctl	= octdev_ioctl,
 };
 
 static int octvqe_init(void)
