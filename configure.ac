@@ -48,6 +48,10 @@ if test -d $KERNEL_BUILD_DIR -a -d $KERNEL_SOURCE_DIR; then
 	if test -f $KERNEL_BUILD_DIR/include/linux/version.h; then
 		vcl=`$GREP LINUX_VERSION_CODE $KERNEL_BUILD_DIR/include/linux/version.h`
 		KVERSION=`echo $vcl |$AWK '{printf ("%d.%d.%d",$3 / 65536, (($3/256)%256),$3 % 256)}'`
+		KMAJOR=`echo $vcl |$AWK '{printf ("%d",$3 / 65536)}'`
+		if test x$KMAJOR = x3; then
+			KVERSION=`echo $vcl |$AWK '{printf ("%d.%d",$3 / 65536, (($3/256)%256))}'`
+		fi
 	else
 		AC_MSG_ERROR([cannot find $KERNEL_BUILD_DIR/include/linux/version.h])
 	fi
