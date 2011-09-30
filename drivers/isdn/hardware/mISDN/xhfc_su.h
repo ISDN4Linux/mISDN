@@ -87,9 +87,12 @@
 #define L1_FORCE_DEACTIVATE_TE	0x01
 #define L1_ACTIVATE_NT		0x02
 #define L1_DEACTIVATE_NT	0x03
-#define L1_TESTLOOP_B1		0x04
-#define L1_TESTLOOP_B2		0x05
-#define L1_TESTLOOP_D		0x06
+#define L1_SET_TESTLOOP_B1		0x04
+#define L1_SET_TESTLOOP_B2		0x05
+#define L1_SET_TESTLOOP_D		0x06
+#define L1_UNSET_TESTLOOP_B1		0x07
+#define L1_UNSET_TESTLOOP_B2		0x08
+#define L1_UNSET_TESTLOOP_D		0x09
 
 
 /* xhfc Layer1 Flags (stored in xhfc_port_t->l1_flags) */
