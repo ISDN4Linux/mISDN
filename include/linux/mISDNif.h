@@ -388,6 +388,7 @@ clear_channelmap(u_int nr, u_char *map)
 #define MISDN_CTRL_HFC_ECHOCAN_OFF 	0x4008
 #define MISDN_CTRL_HFC_WD_INIT		0x4009
 #define MISDN_CTRL_HFC_WD_RESET		0x400A
+#define MISDN_CTRL_XHFC_CUSTOM_CMD	0x8000
 
 /* special PCM slot numbers */
 #define MISDN_PCM_SLOT_DISABLE	-1	/* PCM disabled */
