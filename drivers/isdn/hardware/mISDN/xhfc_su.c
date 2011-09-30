@@ -1159,7 +1159,7 @@ ph_state_te(struct dchannel *dch)
 		       p->name, __func__, dch->state);
 
 	if ((dch->state != 7) && timer_pending(&p->f7_timer))
-		del_timer(&p->f7_timer);		     
+		del_timer(&p->f7_timer);
 
 	switch (dch->state) {
 		case 0:
@@ -1512,10 +1512,10 @@ xhfc_read_fifo(struct xhfc *xhfc, __u8 channel)
 		else
 			i = 0;
 		printk(KERN_INFO "reading %i bytes channel(%i) "
-		       "irq_cnt(%i) fstat(%i) idx(%i) f1(%i) f2(%i) "
+		       "irq_cnt(%i) fstat(%i) idx(%i/%i) f1(%i) f2(%i) "
 		       "z1(%i) z2(%i)\n",
-		       rcnt, channel, xhfc->irq_cnt, fstat, i, f1, f2, z1,
-		       z2);
+		       rcnt, channel, xhfc->irq_cnt, fstat, i, maxlen,
+		       f1, f2, z1, z2);
 	}
 
 	if (rcnt > 0) {
@@ -1527,6 +1527,17 @@ xhfc_read_fifo(struct xhfc *xhfc, __u8 channel)
 				spin_unlock(&port->lock);
 				return;
 			}
+		}
+
+		if ((rcnt + (*rx_skb)->len) > maxlen) {
+			if (debug & DEBUG_HFC_FIFO_ERR) {
+				printk(KERN_INFO
+				       "%s: channel(%i) fifo rx data exceeding skb maxlen(%d)\n",
+				       __FUNCTION__, channel, maxlen);
+			}
+			skb_trim(*rx_skb, 0);
+			xhfc_resetfifo(xhfc);
+			return;
 		}
 		data = skb_put(*rx_skb, rcnt);
 
