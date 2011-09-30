@@ -835,6 +835,35 @@ channel_ctrl(struct port *p, struct mISDN_ctrl_req *cq)
 		cq->op = MISDN_CTRL_LOOP | MISDN_CTRL_CONNECT |
 			MISDN_CTRL_DISCONNECT;
 		break;
+
+	case MISDN_CTRL_LOOP:
+		/*
+		 * cq->channel:
+		 *   0 disable all testloop
+		 *   1 B1 loop only
+		 *   2 B2 loop only
+		 *   4 D  loop only
+		 *   3 B1 + B2 loop
+		 *   7 B1 + B2 + D loop
+		 */
+		if ((cq->channel < 0) || (cq->channel > 7) || (!(cq->channel & 0x7))) {
+			ret = -EINVAL;
+			break;
+		}
+		if (cq->channel & 1) {
+			printk(KERN_INFO "%s: %s: @TODO enable testloop B1\n",
+				p->name, __func__);
+		}
+		if (cq->channel & 2) {
+			printk(KERN_INFO "%s: %s: @TODO enable testloop B2\n",
+				p->name, __func__);
+		}
+		if (cq->channel & 4) {
+			printk(KERN_INFO "%s: %s: @TODO enable testloop D\n",
+				p->name, __func__);
+		}
+		break;
+
 	default:
 		printk(KERN_WARNING "%s: %s: unknown Op %x\n",
 			p->name, __func__, cq->op);
