@@ -119,9 +119,6 @@
 #define USE_F0_COUNTER	1
 #define DEFAULT_TRANSP_BURST_SZ 128
 
-#ifndef MISDN_CTRL_XHFC_CUSTOM_CMD
-#define MISDN_CTRL_XHFC_CUSTOM_CMD 0x8000
-#endif
 
 struct xhfc_port;
 struct xhfc_pi;

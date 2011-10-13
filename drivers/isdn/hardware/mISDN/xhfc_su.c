@@ -1136,7 +1136,7 @@ channel_ctrl(struct port *p, struct mISDN_ctrl_req *cq)
 	switch (cq->op) {
 		case MISDN_CTRL_GETOP:
 			cq->op = MISDN_CTRL_LOOP | MISDN_CTRL_CONNECT |
-			    MISDN_CTRL_DISCONNECT | MISDN_CTRL_XHFC_CUSTOM_CMD;
+			    MISDN_CTRL_DISCONNECT;
 			break;
 
 		case MISDN_CTRL_LOOP:
@@ -1170,36 +1170,6 @@ channel_ctrl(struct port *p, struct mISDN_ctrl_req *cq)
 				xhfc_ph_command(p, L1_SET_TESTLOOP_D);
 			} else {
 				xhfc_ph_command(p, L1_UNSET_TESTLOOP_D);
-			}
-			break;
-
-		case MISDN_CTRL_XHFC_CUSTOM_CMD:
-			switch (cq->p1) {
-				case 1 :
-					ret = read_xhfc(p->xhfc,
-						(__u8)(cq->p2 & 0xFF));
-					printk(KERN_WARNING "%s: %s: read_xhfc(0x%x) = %x\n",
-						p->name, __func__,
-						(__u8)(cq->p2 & 0xFF),
-						ret);
-					break;
-				case 2 :
-					ret = sread_xhfc(p->xhfc,
-						(__u8)(cq->p2 & 0xFF));
-					printk(KERN_WARNING "%s: %s: sread_xhfc(0x%x) = %x\n",
-						p->name, __func__,
-						(__u8)(cq->p2 & 0xFF),
-						ret);
-					break;
-				case 3 :
-					write_xhfc(p->xhfc,
-						(__u8)(cq->p2 & 0xFF),
-						(__u8)((cq->p2 >> 8) & 0xFF));
-					printk(KERN_WARNING "%s: %s: write_xhfc(0x%x, 0x%x)\n",
-						p->name, __func__,
-						(__u8)(cq->p2 & 0xFF),
-						(__u8)((cq->p2 >> 8) & 0xFF));
-					break;
 			}
 			break;
 
