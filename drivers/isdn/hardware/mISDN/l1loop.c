@@ -186,7 +186,7 @@ static void bch_vline_loop(struct bchannel *bch, struct sk_buff *skb)
 		recv_Bchannel(bch, MISDN_ID_ANY);
 	else
 		if (debug & DEBUG_HW)
-			printk(KERN_ERR "%s: %s: mI_alloc_skb failed \n",
+			printk(KERN_ERR "%s: %s: mI_alloc_skb failed\n",
 				p->name, __func__);
 	dev_kfree_skb(skb);
 	get_next_bframe(bch);
@@ -490,7 +490,7 @@ static void dch_vline_loop(struct dchannel *dch, struct sk_buff *skb)
 		recv_Dchannel(dch);
 	else
 		if (debug & DEBUG_HW)
-			printk(KERN_ERR "%s: %s: mI_alloc_skb failed \n",
+			printk(KERN_ERR "%s: %s: mI_alloc_skb failed\n",
 				p->name, __func__);
 	dev_kfree_skb(skb);
 	get_next_dframe(dch);
@@ -846,7 +846,7 @@ channel_ctrl(struct port *p, struct mISDN_ctrl_req *cq)
 		 *   3 B1 + B2 loop
 		 *   7 B1 + B2 + D loop
 		 */
-		if ((cq->channel < 0) || (cq->channel > 7) || (!(cq->channel & 0x7))) {
+		if (cq->channel < 0 || cq->channel > 7 || !(cq->channel & 7)) {
 			ret = -EINVAL;
 			break;
 		}
