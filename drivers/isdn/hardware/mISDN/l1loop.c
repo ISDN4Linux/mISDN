@@ -1,7 +1,7 @@
 /* l1loop.c
  * virtual mISDN layer1 driver
  *
- * Copyright 2008 by Martin Bachem (info@bachem-it.com)
+ * Copyright 2008 by Martin Bachem (info@colognechip.com)
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -49,7 +49,7 @@
 #include <linux/mISDNhw.h>
 #include "l1loop.h"
 
-const char *l1loop_rev = "Revision: 0.1.5 (socket), 2008-11-04";
+const char *l1loop_rev = "v0.2, 2011-09-30";
 
 
 static int l1loop_cnt;
