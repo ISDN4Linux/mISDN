@@ -1,7 +1,7 @@
 /* l1loop.c
  * virtual mISDN layer1 driver
  *
- * Copyright 2008 by Martin Bachem (info@bachem-it.com)
+ * Copyright 2008 by Martin Bachem (info@colognechip.com)
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -49,7 +49,7 @@
 #include <linux/mISDNhw.h>
 #include "l1loop.h"
 
-const char *l1loop_rev = "Revision: 0.1.5 (socket), 2008-11-04";
+const char *l1loop_rev = "v0.2, 2011-09-30";
 
 
 static int l1loop_cnt;
@@ -186,7 +186,7 @@ static void bch_vline_loop(struct bchannel *bch, struct sk_buff *skb)
 		recv_Bchannel(bch, MISDN_ID_ANY);
 	else
 		if (debug & DEBUG_HW)
-			printk(KERN_ERR "%s: %s: mI_alloc_skb failed \n",
+			printk(KERN_ERR "%s: %s: mI_alloc_skb failed\n",
 				p->name, __func__);
 	dev_kfree_skb(skb);
 	get_next_bframe(bch);
@@ -490,7 +490,7 @@ static void dch_vline_loop(struct dchannel *dch, struct sk_buff *skb)
 		recv_Dchannel(dch);
 	else
 		if (debug & DEBUG_HW)
-			printk(KERN_ERR "%s: %s: mI_alloc_skb failed \n",
+			printk(KERN_ERR "%s: %s: mI_alloc_skb failed\n",
 				p->name, __func__);
 	dev_kfree_skb(skb);
 	get_next_dframe(dch);
@@ -835,6 +835,35 @@ channel_ctrl(struct port *p, struct mISDN_ctrl_req *cq)
 		cq->op = MISDN_CTRL_LOOP | MISDN_CTRL_CONNECT |
 			MISDN_CTRL_DISCONNECT;
 		break;
+
+	case MISDN_CTRL_LOOP:
+		/*
+		 * cq->channel:
+		 *   0 disable all testloop
+		 *   1 B1 loop only
+		 *   2 B2 loop only
+		 *   4 D  loop only
+		 *   3 B1 + B2 loop
+		 *   7 B1 + B2 + D loop
+		 */
+		if (cq->channel < 0 || cq->channel > 7 || !(cq->channel & 7)) {
+			ret = -EINVAL;
+			break;
+		}
+		if (cq->channel & 1) {
+			printk(KERN_INFO "%s: %s: @TODO enable testloop B1\n",
+				p->name, __func__);
+		}
+		if (cq->channel & 2) {
+			printk(KERN_INFO "%s: %s: @TODO enable testloop B2\n",
+				p->name, __func__);
+		}
+		if (cq->channel & 4) {
+			printk(KERN_INFO "%s: %s: @TODO enable testloop D\n",
+				p->name, __func__);
+		}
+		break;
+
 	default:
 		printk(KERN_WARNING "%s: %s: unknown Op %x\n",
 			p->name, __func__, cq->op);

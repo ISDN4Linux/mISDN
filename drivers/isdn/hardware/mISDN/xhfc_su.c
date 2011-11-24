@@ -35,7 +35,7 @@
 #include "xhfc_pci2pi.h"
 #endif
 
-const char *xhfc_rev = "Revision: 0.1.2 (socket), 2008-09-11";
+const char *xhfc_rev = "Revision: 0.1.6 (socket), 2011-07-12";
 
 /* modules params */
 static unsigned int debug = 0;
@@ -69,9 +69,12 @@ char *XHFC_PH_COMMANDS[] = {
 	"L1_FORCE_DEACTIVATE_TE",
 	"L1_ACTIVATE_NT",
 	"L1_DEACTIVATE_NT",
-	"L1_TESTLOOP_B1",
-	"L1_TESTLOOP_B2",
-	"L1_TESTLOOP_D"
+	"L1_SET_TESTLOOP_B1",
+	"L1_SET_TESTLOOP_B2",
+	"L1_SET_TESTLOOP_D",
+	"L1_UNSET_TESTLOOP_B1",
+	"L1_UNSET_TESTLOOP_B2",
+	"L1_UNSET_TESTLOOP_D"
 };
 
 
@@ -376,7 +379,7 @@ xhfc_ph_command(struct port *port, u_char command)
 			write_xhfc(xhfc, A_SU_WR_STA, STA_DEACTIVATE);
 			break;
 
-		case L1_TESTLOOP_B1:
+		case L1_SET_TESTLOOP_B1:
 			/* connect B1-SU RX with PCM TX */
 			setup_fifo(xhfc, port->idx * 8, 0xC6, 0, 0, 0);
 			/* connect B1-SU TX with PCM RX */
@@ -396,7 +399,21 @@ xhfc_ph_command(struct port *port, u_char command)
 			setup_su(xhfc, port->idx, 0, 1);
 			break;
 
-		case L1_TESTLOOP_B2:
+		case L1_UNSET_TESTLOOP_B1:
+			/* disable RX/TX fifos */
+			setup_fifo(xhfc, port->idx * 8, 4, 0, 0, 0);
+			setup_fifo(xhfc, port->idx * 8 + 1, 4, 0, 0, 0);
+
+			/* disable PCM timeslots */
+			write_xhfc(xhfc, R_SLOT, port->idx * 8);
+			write_xhfc(xhfc, A_SL_CFG, 0);
+			write_xhfc(xhfc, R_SLOT, port->idx * 8 + 1);
+			write_xhfc(xhfc, A_SL_CFG, 0);
+
+			setup_su(xhfc, port->idx, 0, 0);
+			break;
+
+		case L1_SET_TESTLOOP_B2:
 			/* connect B2-SU RX with PCM TX */
 			setup_fifo(xhfc, port->idx * 8 + 2, 0xC6, 0, 0, 0);
 			/* connect B2-SU TX with PCM RX */
@@ -417,28 +434,101 @@ xhfc_ph_command(struct port *port, u_char command)
 			setup_su(xhfc, port->idx, 1, 1);
 			break;
 
-		case L1_TESTLOOP_D:
+		case L1_UNSET_TESTLOOP_B2:
+			/* disable RX/TX fifos */
+			setup_fifo(xhfc, port->idx * 8 + 2, 4, 0, 0, 0);
+			setup_fifo(xhfc, port->idx * 8 + 3, 4, 0, 0, 0);
+
+			/* disable PCM timeslots */
+			write_xhfc(xhfc, R_SLOT, port->idx * 8 + 2);
+			write_xhfc(xhfc, A_SL_CFG, 0);
+			write_xhfc(xhfc, R_SLOT, port->idx * 8 + 3);
+			write_xhfc(xhfc, A_SL_CFG, 0);
+
+			setup_su(xhfc, port->idx, 1, 0);
+			break;
+
+		case L1_SET_TESTLOOP_D:
 			/* connect D-SU RX with PCM TX */
-			setup_fifo(xhfc, port->idx * 8 + 4, 0xC4, 2,
-				   M_FR_ABO, 1);
+			setup_fifo(xhfc, port->idx * 8 + 4, 0xC4, 2, 0, 0);
 			/* connect D-SU TX with PCM RX */
-			setup_fifo(xhfc, port->idx * 8 + 5, 0xC4, 2,
-				   M_FR_ABO | M_FIFO_IRQMSK, 1);
+			setup_fifo(xhfc, port->idx * 8 + 5, 0xC4, 2, 0, 0);
 
 			/* PCM timeslot D TX */
 			write_xhfc(xhfc, R_SLOT, port->idx * 8 + 4);
 			/* enable D TX timeslot on STIO1 */
-			write_xhfc(xhfc, A_SL_CFG,
-				   port->idx * 8 + 4 + 0x80);
+			write_xhfc(xhfc, A_SL_CFG, port->idx * 8 + 4 + 0x80);
 
 			/* PCM timeslot D RX */
 			write_xhfc(xhfc, R_SLOT, port->idx * 8 + 5);
 			/* enable D RX timeslot on STIO1 */
-			write_xhfc(xhfc, A_SL_CFG,
-				   port->idx * 8 + 5 + 0xC0);
+			write_xhfc(xhfc, A_SL_CFG, port->idx * 8 + 5 + 0xC0);
+			break;
+
+		case L1_UNSET_TESTLOOP_D:
+			// enable Fifos
+			setup_fifo(xhfc, port->idx * 8 + 4, 5, 2, M_FR_ABO, 1);
+			setup_fifo(xhfc, port->idx * 8 + 5, 5, 2, M_FR_ABO | M_FIFO_IRQMSK, 1);
+
+			/* disable PCM timeslots */
+			write_xhfc(xhfc, R_SLOT, port->idx * 8 + 4);
+			write_xhfc(xhfc, A_SL_CFG, 0);
+			write_xhfc(xhfc, R_SLOT, port->idx * 8 + 5);
+			write_xhfc(xhfc, A_SL_CFG, 0);
 			break;
 	}
 }
+
+/*
+ * xhfc reset sequence:
+ */
+static int
+reset_xhfc(struct xhfc *xhfc)
+{
+	int timeout = 0x2000;
+
+	if (debug & DEBUG_HW) {
+		printk(KERN_INFO "%s %s", xhfc->name, __FUNCTION__);
+	}
+
+	/* software reset to enable R_FIFO_MD setting */
+	write_xhfc(xhfc, R_CIRM, M_SRES);
+	udelay(5);
+	write_xhfc(xhfc, R_CIRM, 0);
+
+	/* amplitude */
+	write_xhfc(xhfc, R_PWM_MD, 0x80);
+	write_xhfc(xhfc, R_PWM1, 0x18);
+
+	write_xhfc(xhfc, R_FIFO_THRES, 0x11);
+
+	while ((read_xhfc(xhfc, R_STATUS) & (M_BUSY | M_PCM_INIT)) && (timeout)) {
+		timeout--;
+	}
+
+	if (!(timeout)) {
+		if (debug & DEBUG_HW) {
+			printk(KERN_ERR
+			       "%s %s: initialization sequence "
+			       "not completed!\n",
+			       xhfc->name, __FUNCTION__);
+		}
+		return (-ENODEV);
+	}
+
+	/* set PCM master mode */
+	SET_V_PCM_MD(xhfc->pcm_md0, 1);
+	write_xhfc(xhfc, R_PCM_MD0, xhfc->pcm_md0);
+
+	/* set pll adjust */
+	SET_V_PCM_IDX(xhfc->pcm_md0, 0x09);
+	SET_V_PLL_ADJ(xhfc->pcm_md1, 3);
+	write_xhfc(xhfc, R_PCM_MD0, xhfc->pcm_md0);
+	write_xhfc(xhfc, R_PCM_MD1, xhfc->pcm_md1);
+
+	return 0;
+}
+
 
 /*
  * initialise the XHFC ISDN controller
@@ -448,7 +538,6 @@ static int
 init_xhfc(struct xhfc *xhfc)
 {
 	int err = 0;
-	int timeout = 0x2000;
 	__u8 chip_id;
 
 	chip_id = read_xhfc(xhfc, R_CHIP_ID);
@@ -534,41 +623,7 @@ init_xhfc(struct xhfc *xhfc)
 	}
 
 	spin_lock_init(&xhfc->lock);
-
-	/* software reset to enable R_FIFO_MD setting */
-	write_xhfc(xhfc, R_CIRM, M_SRES);
-	udelay(5);
-	write_xhfc(xhfc, R_CIRM, 0);
-
-	/* amplitude */
-	write_xhfc(xhfc, R_PWM_MD, 0x80);
-	write_xhfc(xhfc, R_PWM1, 0x18);
-
-	write_xhfc(xhfc, R_FIFO_THRES, 0x11);
-
-	while ((read_xhfc(xhfc, R_STATUS) & (M_BUSY | M_PCM_INIT))
-	       && (timeout))
-		timeout--;
-
-	if (!(timeout)) {
-		if (debug & DEBUG_HW)
-			printk(KERN_ERR
-			       "%s %s: initialization sequence "
-			       "not completed!\n",
-			       xhfc->name, __FUNCTION__);
-		return (-ENODEV);
-	}
-
-	/* set PCM master mode */
-	SET_V_PCM_MD(xhfc->pcm_md0, 1);
-	write_xhfc(xhfc, R_PCM_MD0, xhfc->pcm_md0);
-
-	/* set pll adjust */
-	SET_V_PCM_IDX(xhfc->pcm_md0, 0x09);
-	SET_V_PLL_ADJ(xhfc->pcm_md1, 3);
-	write_xhfc(xhfc, R_PCM_MD0, xhfc->pcm_md0);
-	write_xhfc(xhfc, R_PCM_MD1, xhfc->pcm_md1);
-
+	reset_xhfc(xhfc);
 
 	/* perfom short irq test */
 	xhfc->testirq = 1;
@@ -1083,6 +1138,41 @@ channel_ctrl(struct port *p, struct mISDN_ctrl_req *cq)
 			cq->op = MISDN_CTRL_LOOP | MISDN_CTRL_CONNECT |
 			    MISDN_CTRL_DISCONNECT;
 			break;
+
+		case MISDN_CTRL_LOOP:
+			/*
+			 * control testloops (line RX -> line TX)
+			 *
+			 * cq->channel:
+			 *   0 disable all
+			 *   bit0 : 1: set B1 loop, 0: unset B1 loop
+			 *   bit1 : 1: set B2 loop, 0: unset B2 loop
+			 *   bit2 : 1: set D  loop, 0: unset D  loop
+			 *
+			 *   e.g. 3 enables B1 + B2 and disabled D loop
+			 */
+			if ((cq->channel < 0) || (cq->channel > 7)) {
+				ret = -EINVAL;
+				break;
+			}
+
+			if (cq->channel & 1) {
+				xhfc_ph_command(p, L1_SET_TESTLOOP_B1);
+			} else {
+				xhfc_ph_command(p, L1_UNSET_TESTLOOP_B1);
+			}
+			if (cq->channel & 2) {
+				xhfc_ph_command(p, L1_SET_TESTLOOP_B2);
+			} else {
+				xhfc_ph_command(p, L1_UNSET_TESTLOOP_B2);
+			}
+			if (cq->channel & 4) {
+				xhfc_ph_command(p, L1_SET_TESTLOOP_D);
+			} else {
+				xhfc_ph_command(p, L1_UNSET_TESTLOOP_D);
+			}
+			break;
+
 		default:
 			printk(KERN_WARNING "%s: %s: unknown Op %x\n",
 			       p->name, __func__, cq->op);
@@ -1159,7 +1249,7 @@ ph_state_te(struct dchannel *dch)
 		       p->name, __func__, dch->state);
 
 	if ((dch->state != 7) && timer_pending(&p->f7_timer))
-		del_timer(&p->f7_timer);		     
+		del_timer(&p->f7_timer);
 
 	switch (dch->state) {
 		case 0:
@@ -1512,10 +1602,10 @@ xhfc_read_fifo(struct xhfc *xhfc, __u8 channel)
 		else
 			i = 0;
 		printk(KERN_INFO "reading %i bytes channel(%i) "
-		       "irq_cnt(%i) fstat(%i) idx(%i) f1(%i) f2(%i) "
+		       "irq_cnt(%i) fstat(%i) idx(%i/%i) f1(%i) f2(%i) "
 		       "z1(%i) z2(%i)\n",
-		       rcnt, channel, xhfc->irq_cnt, fstat, i, f1, f2, z1,
-		       z2);
+		       rcnt, channel, xhfc->irq_cnt, fstat, i, maxlen,
+		       f1, f2, z1, z2);
 	}
 
 	if (rcnt > 0) {
@@ -1527,6 +1617,17 @@ xhfc_read_fifo(struct xhfc *xhfc, __u8 channel)
 				spin_unlock(&port->lock);
 				return;
 			}
+		}
+
+		if ((rcnt + (*rx_skb)->len) > maxlen) {
+			if (debug & DEBUG_HFC_FIFO_ERR) {
+				printk(KERN_INFO
+				       "%s: channel(%i) fifo rx data exceeding skb maxlen(%d)\n",
+				       __FUNCTION__, channel, maxlen);
+			}
+			skb_trim(*rx_skb, 0);
+			xhfc_resetfifo(xhfc);
+			return;
 		}
 		data = skb_put(*rx_skb, rcnt);
 
