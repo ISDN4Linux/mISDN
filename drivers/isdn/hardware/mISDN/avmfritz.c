@@ -836,15 +836,24 @@ init_card(struct fritzcard *fc)
 static int
 channel_bctrl(struct bchannel *bch, struct mISDN_ctrl_req *cq)
 {
-	int ret = 0;
+	int ret = 0, o1, o2;
 	struct fritzcard *fc = bch->hw;
 
 	switch (cq->op) {
 	case MISDN_CTRL_GETOP:
-		cq->op = 0;
+		cq->op = MISDN_CTRL_RX_BUFFER;
 		break;
-	/* Nothing implemented yet */
-	case MISDN_CTRL_FILL_EMPTY:
+	case MISDN_CTRL_RX_BUFFER:
+		/* We return the old values */
+		o1 = bch->minlen;
+		o2 =  bch->maxlen;
+		if (cq->p1 != MISDN_CTRL_RX_SIZE_IGNORE)
+			bch->minlen = cq->p1;
+		if (cq->p2 != MISDN_CTRL_RX_SIZE_IGNORE)
+			bch->minlen = cq->p2;
+		cq->p1 = o1;
+		cq->p2 = o2;
+		break;
 	default:
 		pr_info("%s: %s unknown Op %x\n", fc->name, __func__, cq->op);
 		ret = -EINVAL;
