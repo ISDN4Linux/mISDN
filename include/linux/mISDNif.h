@@ -37,7 +37,7 @@
  */
 #define	MISDN_MAJOR_VERSION	1
 #define	MISDN_MINOR_VERSION	1
-#define MISDN_RELEASE		29
+#define MISDN_RELEASE		30
 
 /* primitives for information exchange
  * generell format
@@ -367,6 +367,7 @@ clear_channelmap(u_int nr, u_char *map)
 #define MISDN_CTRL_LOOP			0x00000001
 #define MISDN_CTRL_CONNECT		0x00000002
 #define MISDN_CTRL_DISCONNECT		0x00000004
+#define MISDN_CTRL_RX_BUFFER		0x00000008
 #define MISDN_CTRL_GET_PCM_SLOTS	0x00000010
 #define MISDN_CTRL_SET_PCM_SLOTS	0x00000020
 #define MISDN_CTRL_SETPEER		0x00000040
@@ -393,6 +394,14 @@ clear_channelmap(u_int nr, u_char *map)
 #define MISDN_CTRL_L1_AIS_TEST		0x00010002
 #define MISDN_CTRL_L1_TS0_MODE		0x00010003
 #define MISDN_CTRL_L1_GET_SYNC_INFO	0x00010004
+
+/* special RX buffer values for MISDN_CTRL_RX_BUFFER
+ * req.p1 is minimum buffer size, req.p2 the maximum
+ * MISDN_CTRL_RX_SIZE_ IGNORE value will not change but is still read back
+ */
+#define MISDN_CTRL_RX_SIZE_NOCHECK	-1
+#define MISDN_CTRL_RX_SIZE_IGNORE	-2
+
 
 /* special PCM slot numbers */
 #define MISDN_PCM_SLOT_DISABLE	-1	/* PCM disabled */
