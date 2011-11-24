@@ -955,11 +955,8 @@ w6692_l2l1B(struct mISDNchannel *ch, struct sk_buff *skb)
 			id = hh->id; /* skb can be freed */
 			ret = 0;
 			W6692_fill_Bfifo(bc);
-			spin_unlock_irqrestore(&card->lock, flags);
-			if (!test_bit(FLG_TRANSPARENT, &bch->Flags))
-				queue_ch_frame(ch, PH_DATA_CNF, id, NULL);
-		} else
-			spin_unlock_irqrestore(&card->lock, flags);
+		}
+		spin_unlock_irqrestore(&card->lock, flags);
 		return ret;
 	case PH_ACTIVATE_REQ:
 		spin_lock_irqsave(&card->lock, flags);

@@ -1702,11 +1702,8 @@ hfcpci_l2l1B(struct mISDNchannel *ch, struct sk_buff *skb)
 			id = hh->id; /* skb can be freed */
 			hfcpci_fill_fifo(bch);
 			ret = 0;
-			spin_unlock_irqrestore(&hc->lock, flags);
-			if (!test_bit(FLG_TRANSPARENT, &bch->Flags))
-				queue_ch_frame(ch, PH_DATA_CNF, id, NULL);
-		} else
-			spin_unlock_irqrestore(&hc->lock, flags);
+		}
+		spin_unlock_irqrestore(&hc->lock, flags);
 		return ret;
 	case PH_ACTIVATE_REQ:
 		spin_lock_irqsave(&hc->lock, flags);

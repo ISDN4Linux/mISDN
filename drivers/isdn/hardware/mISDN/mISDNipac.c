@@ -1349,11 +1349,8 @@ hscx_l2l1(struct mISDNchannel *ch, struct sk_buff *skb)
 			id = hh->id; /* skb can be freed */
 			ret = 0;
 			hscx_fill_fifo(hx);
-			spin_unlock_irqrestore(hx->ip->hwlock, flags);
-			if (!test_bit(FLG_TRANSPARENT, &bch->Flags))
-				queue_ch_frame(ch, PH_DATA_CNF, id, NULL);
-		} else
-			spin_unlock_irqrestore(hx->ip->hwlock, flags);
+		}
+		spin_unlock_irqrestore(hx->ip->hwlock, flags);
 		return ret;
 	case PH_ACTIVATE_REQ:
 		spin_lock_irqsave(hx->ip->hwlock, flags);
