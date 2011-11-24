@@ -699,7 +699,7 @@ setup_instance(struct xhfc *xhfc, struct device *parent)
 			p->bch[j].nr = j + 1;
 			set_channelmap(j + 1, p->dch.dev.channelmap);
 			p->bch[j].debug = debug;
-			mISDN_initbchannel(&p->bch[j], MAX_DATA_MEM);
+			mISDN_initbchannel(&p->bch[j], MAX_DATA_MEM, -1);
 			p->bch[j].hw = p;
 			p->bch[j].ch.send = xhfc_l2l1B;
 			p->bch[j].ch.ctrl = xhfc_bctrl;

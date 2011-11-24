@@ -2117,7 +2117,7 @@ setup_card(struct hfc_pci *card)
 		card->bch[i].nr = i + 1;
 		set_channelmap(i + 1, card->dch.dev.channelmap);
 		card->bch[i].debug = debug;
-		mISDN_initbchannel(&card->bch[i], MAX_DATA_MEM);
+		mISDN_initbchannel(&card->bch[i], MAX_DATA_MEM, -1);
 		card->bch[i].hw = card;
 		card->bch[i].ch.send = hfcpci_l2l1B;
 		card->bch[i].ch.ctrl = hfc_bctrl;

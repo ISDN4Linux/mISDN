@@ -697,7 +697,13 @@ setup_instance(struct hwskel *hw) {
 			p->bch[j].nr = j + 1;
 			set_channelmap(j + 1, p->dch.dev.channelmap);
 			p->bch[j].debug = debug;
-			mISDN_initbchannel(&p->bch[j], MAX_DATA_MEM);
+			/* minimum transparent datalen -1 cause that
+			 * the driver will send what it has.
+			 * If a positive value is set, the driver should
+			 * only send a packet upstream, if this size is
+			 * reached.
+			 */
+			mISDN_initbchannel(&p->bch[j], MAX_DATA_MEM, -1);
 			p->bch[j].hw = p;
 			p->bch[j].ch.send = hwskel_l2l1B;
 			p->bch[j].ch.ctrl = hwskel_bctrl;

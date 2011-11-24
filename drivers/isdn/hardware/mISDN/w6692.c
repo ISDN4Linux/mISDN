@@ -1312,7 +1312,7 @@ setup_instance(struct w6692_hw *card)
 	card->dch.hw = card;
 	card->dch.dev.nrbchan = 2;
 	for (i = 0; i < 2; i++) {
-		mISDN_initbchannel(&card->bc[i].bch, MAX_DATA_MEM);
+		mISDN_initbchannel(&card->bc[i].bch, MAX_DATA_MEM, -1);
 		card->bc[i].bch.hw = card;
 		card->bc[i].bch.nr = i + 1;
 		card->bc[i].bch.ch.nr = i + 1;
