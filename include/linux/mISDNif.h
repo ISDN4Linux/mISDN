@@ -37,7 +37,7 @@
  */
 #define	MISDN_MAJOR_VERSION	1
 #define	MISDN_MINOR_VERSION	1
-#define MISDN_RELEASE		27
+#define MISDN_RELEASE		28
 
 /* primitives for information exchange
  * generell format
@@ -598,6 +598,7 @@ static inline struct mISDNdevice *dev_to_mISDN(struct device *dev)
 extern void	set_channel_address(struct mISDNchannel *, u_int, u_int);
 extern void	mISDN_clock_update(struct mISDNclock *, int, struct timeval *);
 extern unsigned short mISDN_clock_get(void);
+extern const char *mISDNDevName4ch(struct mISDNchannel *);
 
 #endif /* __KERNEL__ */
 #endif /* mISDNIF_H */
