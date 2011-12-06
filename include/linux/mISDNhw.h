@@ -73,7 +73,9 @@
 #define FLG_LL_OK		24
 #define FLG_LL_CONN		25
 #define FLG_DTMFSEND		26
-
+/* stop sending received data upstream */
+#define FLG_RX_OFF		27
+#define FLG_FIFO_STATUS		28
 /* workq events */
 #define FLG_RECVQUEUE		30
 #define	FLG_PHCHANGE		31
