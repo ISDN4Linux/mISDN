@@ -263,6 +263,8 @@ struct usb_fifo {
 	struct dchannel *dch;	/* link to hfcsusb_t->dch */
 	struct bchannel *bch;	/* link to hfcsusb_t->bch */
 	struct dchannel *ech;	/* link to hfcsusb_t->ech, TODO: E-CHANNEL */
+	struct sk_buff	*ctx;	/* current TX skb */
+	int		ctxi;	/* next byte to write from current TX skb */
 	int last_urblen;	/* remember length of last packet */
 	__u8 stop_gracefull;	/* stops URB retransmission */
 };
@@ -282,7 +284,6 @@ struct hfcsusb {
 	int			packet_size;
 	int			iso_packet_size;
 	struct usb_fifo		fifos[HFCUSB_NUM_FIFOS];
-
 	/* control pipe background handling */
 	struct ctrl_buf		ctrl_buff[HFC_CTRL_BUFSIZE];
 	int			ctrl_in_idx, ctrl_out_idx, ctrl_cnt;
@@ -293,15 +294,16 @@ struct hfcsusb {
 	int			ctrl_in_pipe, ctrl_out_pipe;
 	spinlock_t		ctrl_lock; /* lock for ctrl */
 	spinlock_t              lock;
+	int			nt_timer;
+	int			open;
+	int			dropcnt[2];
 
 	__u8			threshold_mask;
 	__u8			led_state;
-
 	__u8			protocol;
-	int			nt_timer;
-	int			open;
 	__u8			timers;
 	__u8			initdone;
+	__u8			fillbyte[2];
 	char			name[MISDN_MAX_IDLEN];
 };
 
