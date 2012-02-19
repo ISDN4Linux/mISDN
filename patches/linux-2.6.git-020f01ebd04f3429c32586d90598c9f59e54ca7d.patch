@@ -45,7 +45,7 @@ diff --git a/drivers/isdn/mISDN/layer2.c b/drivers/isdn/mISDN/layer2.c
 index c973717..4ae7505 100644
 --- a/drivers/isdn/mISDN/layer2.c
 +++ b/drivers/isdn/mISDN/layer2.c
-@@ -95,14 +95,20 @@ static void
+@@ -95,15 +95,20 @@ static void
  l2m_debug(struct FsmInst *fi, char *fmt, ...)
  {
  	struct layer2 *l2 = fi->userdata;
@@ -56,15 +56,16 @@ index c973717..4ae7505 100644
  		return;
 +
  	va_start(va, fmt);
--	printk(KERN_DEBUG "l2 (sapi %d tei %d): ", l2->sapi, l2->tei);
+-	printk(KERN_DEBUG "%s l2 (sapi %d tei %d): ",
+-		mISDNDevName4ch(&l2->ch), l2->sapi, l2->tei);
 -	vprintk(fmt, va);
 -	printk("\n");
 +
 +	vaf.fmt = fmt;
 +	vaf.va = &va;
 +
-+	printk(KERN_DEBUG "l2 (sapi %d tei %d): %pV\n",
-+	       l2->sapi, l2->tei, &vaf);
++	printk(KERN_DEBUG "%s l2 (sapi %d tei %d): %pV\n",
++	       mISDNDevName4ch(&l2->ch), l2->sapi, l2->tei, &vaf);
 +
  	va_end(va);
  }
