@@ -684,7 +684,7 @@ uninstall-am:
 
 export PATCH FIND SED DIFF GREP AWK SORT IFNAMES INSTALL_MOD_PATH
 
-modules modules-install unpatched_tree patched_tree modules_ quilt_tree:
+modules modules_install unpatched_tree patched_tree modules_ quilt_tree:
 	$(MAKE) -C standalone INSTALL_MOD_PATH=$(INSTALL_MOD_PATH) $@
 
 # Tell versions [3.59,3.63) of GNU make to not export all variables.
