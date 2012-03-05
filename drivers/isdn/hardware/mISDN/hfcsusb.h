@@ -341,6 +341,12 @@ static const char *HFC_NT_LAYER1_STATES[HFC_MAX_NT_LAYER1_STATE + 1] = {
 /* supported devices */
 static struct usb_device_id hfcsusb_idtab[] = {
 	{
+	 USB_DEVICE(0x1ae7, 0x0525),
+	 .driver_info = (unsigned long) &((struct hfcsusb_vdata)
+			  {LED_SCHEME1, {0x88, -64, -32, -16},
+			  "X-Tensions USB ISDN TA XC-525"}),
+	},
+        {
 	 USB_DEVICE(0x0959, 0x2bd0),
 	 .driver_info = (unsigned long) &((struct hfcsusb_vdata)
 			  {LED_OFF, {4, 0, 2, 1},
