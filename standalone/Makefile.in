@@ -162,10 +162,10 @@ modules: patched_tree misdn.sed check_mISDN_cfg
 uninstall:
 	export MISDNDIR=$(MISDNDIR); uninstall
 
-modules-install:
-	$(MAKE) -C $(LINUX) INSTALL_MOD_PATH=$(INSTALL_PREFIX) SUBDIRS=$(MISDN_CORE_SRC) modules_install 
-	$(MAKE) -C $(LINUX) INSTALL_MOD_PATH=$(INSTALL_PREFIX) SUBDIRS=$(MISDN_SRC) modules_install 
+modules_install:
+	$(MAKE) -C $(LINUX) INSTALL_MOD_PATH=$(INSTALL_PREFIX) SUBDIRS=$(MISDN_CORE_SRC) $@
+	$(MAKE) -C $(LINUX) INSTALL_MOD_PATH=$(INSTALL_PREFIX) SUBDIRS=$(MISDN_SRC) $@
 
 
-.PHONY: btree modules-install check_mISDN_cfg patched_tree clean_tree unpatched_tree new_tree modules_ quilt_tree
+.PHONY: btree modules_install check_mISDN_cfg patched_tree clean_tree unpatched_tree new_tree modules_ quilt_tree
 
