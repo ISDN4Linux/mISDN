@@ -2186,10 +2186,6 @@ next_frame:
 		HFC_wait_nodebug(hc);
 	}
 
-	/* send confirm, since get_net_bframe will not do it with trans */
-	if (bch && test_bit(FLG_TRANSPARENT, &bch->Flags))
-		confirm_Bsend(bch);
-
 	/* check for next frame */
 	dev_kfree_skb(*sp);
 	if (bch && get_next_bframe(bch)) { /* hdlc is confirmed here */
