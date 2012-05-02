@@ -703,7 +703,7 @@ setup_instance(struct hwskel *hw) {
 			 * only send a packet upstream, if this size is
 			 * reached.
 			 */
-			mISDN_initbchannel(&p->bch[j], MAX_DATA_MEM, -1);
+			mISDN_initbchannel(&p->bch[j], MAX_DATA_MEM, 0);
 			p->bch[j].hw = p;
 			p->bch[j].ch.send = hwskel_l2l1B;
 			p->bch[j].ch.ctrl = hwskel_bctrl;

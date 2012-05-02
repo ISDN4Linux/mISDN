@@ -37,7 +37,7 @@
  */
 #define	MISDN_MAJOR_VERSION	1
 #define	MISDN_MINOR_VERSION	1
-#define MISDN_RELEASE		31
+#define MISDN_RELEASE		32
 
 /* primitives for information exchange
  * generell format
@@ -405,10 +405,10 @@ clear_channelmap(u_int nr, u_char *map)
 
 /* special RX buffer values for MISDN_CTRL_RX_BUFFER
  * req.p1 is minimum buffer size, req.p2 the maximum
- * MISDN_CTRL_RX_SIZE_ IGNORE value will not change but is still read back
+ * MISDN_CTRL_RX_SIZE_IGNORE value will not change the current value but do
+ * still read it back
  */
-#define MISDN_CTRL_RX_SIZE_NOCHECK	-1
-#define MISDN_CTRL_RX_SIZE_IGNORE	-2
+#define MISDN_CTRL_RX_SIZE_IGNORE	-1
 
 
 /* special PCM slot numbers */
