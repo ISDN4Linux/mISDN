@@ -1491,8 +1491,7 @@ xhfc_write_fifo(struct xhfc *xhfc, __u8 channel)
 			dev_kfree_skb(*tx_skb);
 			*tx_skb = NULL;
 			if (bch) {
-				if (get_next_bframe(bch) && !hdlc)
-					confirm_Bsend(bch);
+				get_next_bframe(bch);
 			}
 			if (dch)
 				get_next_dframe(dch);
@@ -1693,7 +1692,7 @@ xhfc_read_fifo(struct xhfc *xhfc, __u8 channel)
 
 			/* send PH_DATA_IND */
 			if (bch)
-				recv_Bchannel(bch, MISDN_ID_ANY);
+				recv_Bchannel(bch, MISDN_ID_ANY, false);
 			if (dch)
 				recv_Dchannel(dch);
 			if (ech)
@@ -1723,7 +1722,7 @@ xhfc_read_fifo(struct xhfc *xhfc, __u8 channel)
 	} else {
 		xhfc_selfifo(xhfc, (channel * 2) + 1);
 		if (bch && ((*rx_skb)->len >= 128))
-			recv_Bchannel(bch, MISDN_ID_ANY);
+			recv_Bchannel(bch, MISDN_ID_ANY, false);
 	}
 	spin_unlock(&port->lock);
 }

@@ -2358,7 +2358,7 @@ next_frame:
 			if (dch)
 				recv_Dchannel(dch);
 			else
-				recv_Bchannel(bch, MISDN_ID_ANY);
+				recv_Bchannel(bch, MISDN_ID_ANY, false);
 			*sp = skb;
 			again++;
 			goto next_frame;
@@ -2373,7 +2373,7 @@ next_frame:
 			       "(z1=%04x, z2=%04x) TRANS\n",
 			       __func__, hc->id + 1, ch, Zsize, z1, z2);
 		/* only bch is transparent */
-		recv_Bchannel(bch, hc->chan[ch].Zfill);
+		recv_Bchannel(bch, hc->chan[ch].Zfill, false);
 	}
 }
 
@@ -3580,8 +3580,9 @@ channel_bctrl(struct bchannel *bch, struct mISDN_ctrl_req *cq)
 
 	switch (cq->op) {
 	case MISDN_CTRL_GETOP:
-		cq->op = MISDN_CTRL_HFC_OP | MISDN_CTRL_HW_FEATURES_OP
-			| MISDN_CTRL_RX_OFF | MISDN_CTRL_FILL_EMPTY;
+		ret = mISDN_ctrl_bchannel(bch, cq);
+		cq->op |= MISDN_CTRL_HFC_OP | MISDN_CTRL_HW_FEATURES_OP |
+			  MISDN_CTRL_RX_OFF | MISDN_CTRL_FILL_EMPTY;
 		break;
 	case MISDN_CTRL_RX_OFF: /* turn off / on rx stream */
 		hc->chan[bch->slot].rx_off = !!cq->p1;
@@ -3689,9 +3690,7 @@ channel_bctrl(struct bchannel *bch, struct mISDN_ctrl_req *cq)
 			ret = -EINVAL;
 		break;
 	default:
-		printk(KERN_WARNING "%s: unknown Op %x\n",
-		       __func__, cq->op);
-		ret = -EINVAL;
+		ret = mISDN_ctrl_bchannel(bch, cq);
 		break;
 	}
 	return ret;
@@ -4861,7 +4860,7 @@ init_e1_port(struct hfc_multi *hc, struct hm_map *m, int pt)
 		bch->nr = ch;
 		bch->slot = ch;
 		bch->debug = debug;
-		mISDN_initbchannel(bch, MAX_DATA_MEM);
+		mISDN_initbchannel(bch, MAX_DATA_MEM, poll >> 1);
 		bch->hw = hc;
 		bch->ch.send = handle_bmsg;
 		bch->ch.ctrl = hfcm_bctrl;
@@ -4934,7 +4933,7 @@ init_multi_port(struct hfc_multi *hc, int pt)
 		bch->nr = ch + 1;
 		bch->slot = i + ch;
 		bch->debug = debug;
-		mISDN_initbchannel(bch, MAX_DATA_MEM);
+		mISDN_initbchannel(bch, MAX_DATA_MEM, poll >> 1);
 		bch->hw = hc;
 		bch->ch.send = handle_bmsg;
 		bch->ch.ctrl = hfcm_bctrl;
