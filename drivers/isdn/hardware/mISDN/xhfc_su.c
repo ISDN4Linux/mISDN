@@ -699,7 +699,7 @@ setup_instance(struct xhfc *xhfc, struct device *parent)
 			p->bch[j].nr = j + 1;
 			set_channelmap(j + 1, p->dch.dev.channelmap);
 			p->bch[j].debug = debug;
-			mISDN_initbchannel(&p->bch[j], MAX_DATA_MEM);
+			mISDN_initbchannel(&p->bch[j], MAX_DATA_MEM, 0);
 			p->bch[j].hw = p;
 			p->bch[j].ch.send = xhfc_l2l1B;
 			p->bch[j].ch.ctrl = xhfc_bctrl;
@@ -857,7 +857,6 @@ xhfc_l2l1B(struct mISDNchannel *ch, struct sk_buff *skb)
 			spin_unlock_bh(&p->lock);
 			if (ret > 0) {
 				ret = 0;
-				queue_ch_frame(ch, PH_DATA_CNF, hh->id, NULL);
 			}
 			return ret;
 		case PH_ACTIVATE_REQ:
@@ -1018,8 +1017,7 @@ xhfc_bctrl(struct mISDNchannel *ch, u_int cmd, void *arg)
 
 		case CLOSE_CHANNEL:
 			test_and_clear_bit(FLG_OPEN, &bch->Flags);
-			if (test_bit(FLG_ACTIVE, &bch->Flags))
-				deactivate_bchannel(bch);
+			deactivate_bchannel(bch);
 			ch->protocol = ISDN_P_NONE;
 			ch->peer = NULL;
 			module_put(THIS_MODULE);

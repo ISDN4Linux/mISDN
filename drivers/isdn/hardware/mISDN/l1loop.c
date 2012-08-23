@@ -725,8 +725,7 @@ l1loop_bctrl(struct mISDNchannel *ch, u_int cmd, void *arg)
 	switch (cmd) {
 	case CLOSE_CHANNEL:
 		test_and_clear_bit(FLG_OPEN, &bch->Flags);
-		if (test_bit(FLG_ACTIVE, &bch->Flags))
-			deactivate_bchannel(bch);
+		deactivate_bchannel(bch);
 		ch->protocol = ISDN_P_NONE;
 		ch->peer = NULL;
 		module_put(THIS_MODULE);
@@ -956,7 +955,7 @@ setup_instance(struct l1loop *hw) {
 			p->bch[b].nr = b + 1 + (b >= 15);
 			set_channelmap(p->bch[b].nr, p->dch.dev.channelmap);
 			p->bch[b].debug = debug;
-			mISDN_initbchannel(&p->bch[b], MAX_DATA_MEM);
+			mISDN_initbchannel(&p->bch[b], MAX_DATA_MEM, 0);
 			p->bch[b].hw = p;
 			p->bch[b].ch.send = l1loop_l2l1B;
 			p->bch[b].ch.ctrl = l1loop_bctrl;
