@@ -3849,10 +3849,10 @@ channel_bctrl(struct bchannel *bch, struct mISDN_ctrl_req *cq)
 		/* We return the old values */
 		o1 = bch->minlen;
 		o2 =  bch->maxlen;
-		if (cq->p1 > MISDN_CTRL_RX_SIZE_IGNORE)
+		if (cq->p1 != MISDN_CTRL_RX_SIZE_IGNORE)
 			bch->minlen = cq->p1;
-		if (cq->p2 > MISDN_CTRL_RX_SIZE_IGNORE)
-			bch->maxlen = cq->p2;
+		if (cq->p2 != MISDN_CTRL_RX_SIZE_IGNORE)
+			bch->minlen = cq->p2;
 		cq->p1 = o1;
 		cq->p2 = o2;
 		break;
@@ -5198,7 +5198,7 @@ init_e1_port(struct hfc_multi *hc, struct hm_map *m, int pt)
 		bch->nr = ch;
 		bch->slot = ch;
 		bch->debug = debug;
-		mISDN_initbchannel(bch, MAX_DATA_MEM, 0);
+		mISDN_initbchannel(bch, MAX_DATA_MEM, -1);
 		bch->hw = hc;
 		bch->ch.send = handle_bmsg;
 		bch->ch.ctrl = hfcm_bctrl;
@@ -5271,7 +5271,7 @@ init_multi_port(struct hfc_multi *hc, int pt)
 		bch->nr = ch + 1;
 		bch->slot = i + ch;
 		bch->debug = debug;
-		mISDN_initbchannel(bch, MAX_DATA_MEM, 0);
+		mISDN_initbchannel(bch, MAX_DATA_MEM, -1);
 		bch->hw = hc;
 		bch->ch.send = handle_bmsg;
 		bch->ch.ctrl = hfcm_bctrl;

@@ -1020,7 +1020,7 @@ setup_instance(struct tiger_hw *card)
 	for (i = 0; i < 2; i++) {
 		card->bc[i].bch.nr = i + 1;
 		set_channelmap(i + 1, card->isac.dch.dev.channelmap);
-		mISDN_initbchannel(&card->bc[i].bch, MAX_DATA_MEM, 0);
+		mISDN_initbchannel(&card->bc[i].bch, MAX_DATA_MEM, -1);
 		card->bc[i].bch.hw = card;
 		card->bc[i].bch.ch.send = nj_l2l1B;
 		card->bc[i].bch.ch.ctrl = nj_bctrl;
