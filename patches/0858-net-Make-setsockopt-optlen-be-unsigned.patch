@@ -26,8 +26,8 @@ index ec651b6..8167346 100644
  }
  
  static int data_sock_setsockopt(struct socket *sock, int level, int optname,
--	char __user *optval, int len)
-+	char __user *optval, unsigned int len)
+-				char __user *optval, int len)
++				char __user *optval, unsigned int len)
  {
  	struct sock *sk = sock->sk;
  	int err = 0, opt = 0;

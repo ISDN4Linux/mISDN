@@ -1,0 +1,76 @@
+From d49796bb65a18c1c93897ebd5f9502e61b16b6f7 Mon Sep 17 00:00:00 2001
+From: Sarah Sharp <sarah.a.sharp@linux.intel.com>
+Date: Mon, 23 Apr 2012 10:08:51 -0700
+Subject: [PATCH] USB: Disable hub-initiated LPM for comms devices.
+
+Hub-initiated LPM is not good for USB communications devices.  Comms
+devices should be able to tell when their link can go into a lower power
+state, because they know when an incoming transmission is finished.
+Ideally, these devices would slam their links into a lower power state,
+using the device-initiated LPM, after finishing the last packet of their
+data transfer.
+
+If we enable the idle timeouts for the parent hubs to enable
+hub-initiated LPM, we will get a lot of useless LPM packets on the bus
+as the devices reject LPM transitions when they're in the middle of
+receiving data.  Worse, some devices might blindly accept the
+hub-initiated LPM and power down their radios while they're in the
+middle of receiving a transmission.
+
+The Intel Windows folks are disabling hub-initiated LPM for all USB
+communications devices under a xHCI USB 3.0 host.  In order to keep
+the Linux behavior as close as possible to Windows, we need to do the
+same in Linux.
+
+Set the disable_hub_initiated_lpm flag for for all USB communications
+drivers.  I know there aren't currently any USB 3.0 devices that
+implement these class specifications, but we should be ready if they do.
+
+Signed-off-by: Sarah Sharp <sarah.a.sharp@linux.intel.com>
+Cc: Marcel Holtmann <marcel@holtmann.org>
+Cc: Gustavo Padovan <gustavo@padovan.org>
+Cc: Johan Hedberg <johan.hedberg@gmail.com>
+Cc: Hansjoerg Lipp <hjlipp@web.de>
+Cc: Tilman Schmidt <tilman@imap.cc>
+Cc: Karsten Keil <isdn@linux-pingi.de>
+Cc: Peter Korsgaard <jacmet@sunsite.dk>
+Cc: Jan Dumon <j.dumon@option.com>
+Cc: Petko Manolov <petkan@users.sourceforge.net>
+Cc: Steve Glendinning <steve.glendinning@smsc.com>
+Cc: "John W. Linville" <linville@tuxdriver.com>
+Cc: Kalle Valo <kvalo@qca.qualcomm.com>
+Cc: "Luis R. Rodriguez" <mcgrof@qca.qualcomm.com>
+Cc: Jouni Malinen <jouni@qca.qualcomm.com>
+Cc: Vasanthakumar Thiagarajan <vthiagar@qca.qualcomm.com>
+Cc: Senthil Balasubramanian <senthilb@qca.qualcomm.com>
+Cc: Christian Lamparter <chunkeey@googlemail.com>
+Cc: Brett Rudley <brudley@broadcom.com>
+Cc: Roland Vossen <rvossen@broadcom.com>
+Cc: Arend van Spriel <arend@broadcom.com>
+Cc: "Franky (Zhenhui) Lin" <frankyl@broadcom.com>
+Cc: Kan Yan <kanyan@broadcom.com>
+Cc: Dan Williams <dcbw@redhat.com>
+Cc: Jussi Kivilinna <jussi.kivilinna@mbnet.fi>
+Cc: Ivo van Doorn <IvDoorn@gmail.com>
+Cc: Gertjan van Wingerde <gwingerde@gmail.com>
+Cc: Helmut Schaa <helmut.schaa@googlemail.com>
+Cc: Herton Ronaldo Krzesinski <herton@canonical.com>
+Cc: Hin-Tak Leung <htl10@users.sourceforge.net>
+Cc: Larry Finger <Larry.Finger@lwfinger.net>
+Cc: Chaoming Li <chaoming_li@realsil.com.cn>
+Cc: Daniel Drake <dsd@gentoo.org>
+Cc: Ulrich Kunitz <kune@deine-taler.de>
+Signed-off-by: Sarah Sharp <sarah.a.sharp@linux.intel.com>
+
+diff --git a/drivers/isdn/hardware/mISDN/hfcsusb.c b/drivers/isdn/hardware/mISDN/hfcsusb.c
+index 451135f..55c8da8 100644
+--- a/drivers/isdn/hardware/mISDN/hfcsusb.c
++++ b/drivers/isdn/hardware/mISDN/hfcsusb.c
+@@ -2134,6 +2134,7 @@ static struct usb_driver hfcsusb_drv = {
+ 	.id_table = hfcsusb_idtab,
+ 	.probe = hfcsusb_probe,
+ 	.disconnect = hfcsusb_disconnect,
++	.disable_hub_initiated_lpm = 1,
+ };
+ 
+ module_usb_driver(hfcsusb_drv);

@@ -26,14 +26,14 @@
 static u_int *debug;
 
 struct layer1 {
-	u_long			Flags;
-	struct FsmInst		l1m;
-	struct FsmTimer 	timer3;
-	struct FsmTimer 	timerX;
-	int			delay;
-	int			t3_value;
-	struct dchannel		*dch;
-	dchannel_l1callback	*dcb;
+	u_long Flags;
+	struct FsmInst l1m;
+	struct FsmTimer timer3;
+	struct FsmTimer timerX;
+	int delay;
+	int t3_value;
+	struct dchannel *dch;
+	dchannel_l1callback *dcb;
 };
 
 #define TIMER3_DEFAULT_VALUE	7000
@@ -51,7 +51,7 @@ enum {
 	ST_L1_F8,
 };
 
-#define L1S_STATE_COUNT (ST_L1_F8+1)
+#define L1S_STATE_COUNT (ST_L1_F8 + 1)
 
 static char *strL1SState[] =
 {
@@ -202,7 +202,6 @@ l1_timer3(struct FsmInst *fi, int event, void *arg)
 		l1->dcb(l1->dch, PH_DEACTIVATE_IND);
 	}
 	if (l1->l1m.state != ST_L1_F6) {
-		/* keep in F6 */
 		mISDN_FsmChangeState(fi, ST_L1_F3);
 		/* do not force anything here, we need send INFO 0 */
 	}
@@ -373,7 +372,7 @@ l1_event(struct layer1 *l1, u_int event)
 		}
 		if (*debug & DEBUG_L1)
 			printk(KERN_DEBUG "%s %x unhandled\n",
-			    __func__, event);
+			       __func__, event);
 		err = -EINVAL;
 	}
 	return err;

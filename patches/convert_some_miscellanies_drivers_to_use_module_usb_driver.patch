@@ -1,0 +1,70 @@
+commit fe7484834bb614c2c205726647635171ce6cc070
+Author: Greg Kroah-Hartman <gregkh@suse.de>
+Date:   Fri Nov 18 09:52:10 2011 -0800
+
+    USB: convert some miscellanies drivers to use module_usb_driver()
+    
+    This converts the remaining USB drivers in the kernel to use the
+    module_usb_driver() macro which makes the code smaller and a bit
+    simpler.
+    
+    Added bonus is that it removes some unneeded kernel log messages about
+    drivers loading and/or unloading.
+    
+    Cc: Guenter Roeck <guenter.roeck@ericsson.com>
+    Cc: Jean Delvare <khali@linux-fr.org>
+    Cc: Ben Dooks <ben-linux@fluff.org>
+    Cc: Till Harbaum <till@harbaum.org>
+    Cc: Karsten Keil <isdn@linux-pingi.de>
+    Cc: Chris Ball <cjb@laptop.org>
+    Cc: David Woodhouse <dwmw2@infradead.org>
+    Cc: Lauro Ramos Venancio <lauro.venancio@openbossa.org>
+    Cc: Aloisio Almeida Jr <aloisio.almeida@openbossa.org>
+    Cc: Samuel Ortiz <sameo@linux.intel.com>
+    Cc: Steve Glendinning <steve.glendinning@smsc.com>
+    Cc: Florian Tobias Schandinat <FlorianSchandinat@gmx.de>
+    Cc: Evgeniy Polyakov <zbr@ioremap.net>
+    Cc: Wim Van Sebroeck <wim@iguana.be>
+    Cc: "David S. Miller" <davem@davemloft.net>
+    Cc: Jesper Juhl <jj@chaosbits.net>
+    Cc: Artem Bityutskiy <Artem.Bityutskiy@nokia.com>
+    Cc: Jamie Iles <jamie@jamieiles.com>
+    Cc: Andrew Morton <akpm@linux-foundation.org>
+    Signed-off-by: Greg Kroah-Hartman <gregkh@suse.de>
+
+diff --git a/drivers/isdn/hardware/mISDN/hfcsusb.c b/drivers/isdn/hardware/mISDN/hfcsusb.c
+index 71a8eb6..0e1f4d5 100644
+--- a/drivers/isdn/hardware/mISDN/hfcsusb.c
++++ b/drivers/isdn/hardware/mISDN/hfcsusb.c
+@@ -2154,30 +2154,4 @@ static struct usb_driver hfcsusb_drv = {
+ 	.disconnect = hfcsusb_disconnect,
+ };
+ 
+-static int __init
+-hfcsusb_init(void)
+-{
+-	printk(KERN_INFO DRIVER_NAME " driver Rev. %s debug(0x%x) poll(%i)\n",
+-	    hfcsusb_rev, debug, poll);
+-
+-	if (usb_register(&hfcsusb_drv)) {
+-		printk(KERN_INFO DRIVER_NAME
+-		    ": Unable to register hfcsusb module at usb stack\n");
+-		return -ENODEV;
+-	}
+-
+-	return 0;
+-}
+-
+-static void __exit
+-hfcsusb_cleanup(void)
+-{
+-	if (debug & DBG_HFC_CALL_TRACE)
+-		printk(KERN_INFO DRIVER_NAME ": %s\n", __func__);
+-
+-	/* unregister Hardware */
+-	usb_deregister(&hfcsusb_drv);	/* release our driver */
+-}
+-
+-module_init(hfcsusb_init);
+-module_exit(hfcsusb_cleanup);
++module_usb_driver(hfcsusb_drv);

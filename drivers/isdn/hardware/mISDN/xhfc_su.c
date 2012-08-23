@@ -699,7 +699,7 @@ setup_instance(struct xhfc *xhfc, struct device *parent)
 			p->bch[j].nr = j + 1;
 			set_channelmap(j + 1, p->dch.dev.channelmap);
 			p->bch[j].debug = debug;
-			mISDN_initbchannel(&p->bch[j], MAX_DATA_MEM, 0);
+			mISDN_initbchannel(&p->bch[j], MAX_DATA_MEM);
 			p->bch[j].hw = p;
 			p->bch[j].ch.send = xhfc_l2l1B;
 			p->bch[j].ch.ctrl = xhfc_bctrl;
@@ -857,6 +857,7 @@ xhfc_l2l1B(struct mISDNchannel *ch, struct sk_buff *skb)
 			spin_unlock_bh(&p->lock);
 			if (ret > 0) {
 				ret = 0;
+				queue_ch_frame(ch, PH_DATA_CNF, hh->id, NULL);
 			}
 			return ret;
 		case PH_ACTIVATE_REQ:
@@ -1017,7 +1018,8 @@ xhfc_bctrl(struct mISDNchannel *ch, u_int cmd, void *arg)
 
 		case CLOSE_CHANNEL:
 			test_and_clear_bit(FLG_OPEN, &bch->Flags);
-			deactivate_bchannel(bch);
+			if (test_bit(FLG_ACTIVE, &bch->Flags))
+				deactivate_bchannel(bch);
 			ch->protocol = ISDN_P_NONE;
 			ch->peer = NULL;
 			module_put(THIS_MODULE);
@@ -1489,8 +1491,7 @@ xhfc_write_fifo(struct xhfc *xhfc, __u8 channel)
 			dev_kfree_skb(*tx_skb);
 			*tx_skb = NULL;
 			if (bch) {
-				if (get_next_bframe(bch) && !hdlc)
-					confirm_Bsend(bch);
+				get_next_bframe(bch);
 			}
 			if (dch)
 				get_next_dframe(dch);
@@ -1691,7 +1692,7 @@ xhfc_read_fifo(struct xhfc *xhfc, __u8 channel)
 
 			/* send PH_DATA_IND */
 			if (bch)
-				recv_Bchannel(bch, MISDN_ID_ANY);
+				recv_Bchannel(bch, MISDN_ID_ANY, false);
 			if (dch)
 				recv_Dchannel(dch);
 			if (ech)
@@ -1721,7 +1722,7 @@ xhfc_read_fifo(struct xhfc *xhfc, __u8 channel)
 	} else {
 		xhfc_selfifo(xhfc, (channel * 2) + 1);
 		if (bch && ((*rx_skb)->len >= 128))
-			recv_Bchannel(bch, MISDN_ID_ANY);
+			recv_Bchannel(bch, MISDN_ID_ANY, false);
 	}
 	spin_unlock(&port->lock);
 }

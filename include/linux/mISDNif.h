@@ -37,7 +37,7 @@
  */
 #define	MISDN_MAJOR_VERSION	1
 #define	MISDN_MINOR_VERSION	1
-#define MISDN_RELEASE		32
+#define MISDN_RELEASE		29
 
 /* primitives for information exchange
  * generell format
@@ -158,7 +158,6 @@
 #define HFC_VOL_CHANGE_RX	0x2602
 #define HFC_SPL_LOOP_ON		0x2603
 #define HFC_SPL_LOOP_OFF	0x2604
-
 /* for T30 FAX and analog modem */
 #define HW_MOD_FRM		0x4000
 #define HW_MOD_FRH		0x4001
@@ -171,13 +170,6 @@
 #define HW_MOD_FCERROR		0x4013
 #define HW_MOD_READY		0x4014
 #define HW_MOD_LASTDATA		0x4015
-
-/* Debug and status via PH_CONTROL */
-#define HW_FIFO_STATUS_OFF	0x8000
-#define HW_FIFO_STATUS_ON	0x8001
-#define HW_FIFO_RDO		0x8002
-#define HW_FIFO_XDU_DATA	0x8003
-#define HW_FIFO_XDU_NODATA	0x8004
 
 /* DSP_TONE_PATT_ON parameter */
 #define TONE_OFF			0x0000
@@ -242,7 +234,7 @@
 
 #define ISDN_P_B_MASK		0x1f
 #define ISDN_P_B_START		0x20
-#define ISDN_P_B_PCM		0x20
+
 #define ISDN_P_B_RAW		0x21
 #define ISDN_P_B_HDLC		0x22
 #define ISDN_P_B_X75SLP		0x23
@@ -301,8 +293,6 @@ struct mISDNversion {
 	unsigned char	minor;
 	unsigned short	release;
 };
-
-#define MAX_DEVICE_ID 63
 
 struct mISDN_devinfo {
 	u_int			id;
@@ -371,49 +361,38 @@ clear_channelmap(u_int nr, u_char *map)
 }
 
 /* CONTROL_CHANNEL parameters */
-#define MISDN_CTRL_GETOP		0x00000000
-#define MISDN_CTRL_LOOP			0x00000001
-#define MISDN_CTRL_CONNECT		0x00000002
-#define MISDN_CTRL_DISCONNECT		0x00000004
-#define MISDN_CTRL_RX_BUFFER		0x00000008
-#define MISDN_CTRL_GET_PCM_SLOTS	0x00000010
-#define MISDN_CTRL_SET_PCM_SLOTS	0x00000020
-#define MISDN_CTRL_SETPEER		0x00000040
-#define MISDN_CTRL_UNSETPEER		0x00000080
-#define MISDN_CTRL_RX_OFF		0x00000100
-#define MISDN_CTRL_FILL_EMPTY		0x00000200
-#define MISDN_CTRL_GETPEER		0x00000400
-#define MISDN_CTRL_L1_TIMER3		0x00000800
-#define MISDN_CTRL_HW_FEATURES_OP	0x00002000
-#define MISDN_CTRL_HW_FEATURES		0x00002001
-#define MISDN_CTRL_HFC_OP		0x00004000
-#define MISDN_CTRL_HFC_PCM_CONN		0x00004001
-#define MISDN_CTRL_HFC_PCM_DISC		0x00004002
-#define MISDN_CTRL_HFC_CONF_JOIN	0x00004003
-#define MISDN_CTRL_HFC_CONF_SPLIT	0x00004004
-#define MISDN_CTRL_HFC_RECEIVE_OFF	0x00004005
-#define MISDN_CTRL_HFC_RECEIVE_ON	0x00004006
-#define MISDN_CTRL_HFC_ECHOCAN_ON 	0x00004007
-#define MISDN_CTRL_HFC_ECHOCAN_OFF 	0x00004008
-#define MISDN_CTRL_HFC_WD_INIT		0x00004009
-#define MISDN_CTRL_HFC_WD_RESET		0x0000400A
-#define MISDN_CTRL_L1_TESTS		0x00010000
-#define MISDN_CTRL_L1_STATE_TEST	0x00010001
-#define MISDN_CTRL_L1_AIS_TEST		0x00010002
-#define MISDN_CTRL_L1_TS0_MODE		0x00010003
-#define MISDN_CTRL_L1_GET_SYNC_INFO	0x00010004
+#define MISDN_CTRL_GETOP		0x0000
+#define MISDN_CTRL_LOOP			0x0001
+#define MISDN_CTRL_CONNECT		0x0002
+#define MISDN_CTRL_DISCONNECT		0x0004
+#define MISDN_CTRL_RX_BUFFER		0x0008
+#define MISDN_CTRL_PCMCONNECT		0x0010
+#define MISDN_CTRL_PCMDISCONNECT	0x0020
+#define MISDN_CTRL_SETPEER		0x0040
+#define MISDN_CTRL_UNSETPEER		0x0080
+#define MISDN_CTRL_RX_OFF		0x0100
+#define MISDN_CTRL_FILL_EMPTY		0x0200
+#define MISDN_CTRL_GETPEER		0x0400
+#define MISDN_CTRL_L1_TIMER3		0x0800
+#define MISDN_CTRL_HW_FEATURES_OP	0x2000
+#define MISDN_CTRL_HW_FEATURES		0x2001
+#define MISDN_CTRL_HFC_OP		0x4000
+#define MISDN_CTRL_HFC_PCM_CONN		0x4001
+#define MISDN_CTRL_HFC_PCM_DISC		0x4002
+#define MISDN_CTRL_HFC_CONF_JOIN	0x4003
+#define MISDN_CTRL_HFC_CONF_SPLIT	0x4004
+#define MISDN_CTRL_HFC_RECEIVE_OFF	0x4005
+#define MISDN_CTRL_HFC_RECEIVE_ON	0x4006
+#define MISDN_CTRL_HFC_ECHOCAN_ON 	0x4007
+#define MISDN_CTRL_HFC_ECHOCAN_OFF 	0x4008
+#define MISDN_CTRL_HFC_WD_INIT		0x4009
+#define MISDN_CTRL_HFC_WD_RESET		0x400A
 
-/* special RX buffer values for MISDN_CTRL_RX_BUFFER
- * req.p1 is minimum buffer size, req.p2 the maximum
- * MISDN_CTRL_RX_SIZE_IGNORE value will not change the current value but do
- * still read it back
+/* special RX buffer value for MISDN_CTRL_RX_BUFFER request.p1 is the minimum
+ * buffer size request.p2 the maximum. Using  MISDN_CTRL_RX_SIZE_IGNORE will
+ * not change the value, but still read back the actual stetting.
  */
 #define MISDN_CTRL_RX_SIZE_IGNORE	-1
-
-
-/* special PCM slot numbers */
-#define MISDN_PCM_SLOT_DISABLE	-1	/* PCM disabled */
-#define MISDN_PCM_SLOT_IGNORE	-2	/* PCM setting will be not changed */
 
 /* socket options */
 #define MISDN_TIME_STAMP		0x0001
@@ -423,7 +402,6 @@ struct mISDN_ctrl_req {
 	int		channel;
 	int		p1;
 	int		p2;
-	int		p3;
 };
 
 /* muxer options */

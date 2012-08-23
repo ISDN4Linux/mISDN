@@ -1,0 +1,47 @@
+From 1ac4594d88f63ba1557cc1a30ec1f915ca55b7cb Mon Sep 17 00:00:00 2001
+From: Joe Perches <joe@perches.com>
+Date: Sat, 28 May 2011 10:36:26 -0700
+Subject: [PATCH] isdn: Convert vmalloc/memset to vzalloc
+
+Signed-off-by: Joe Perches <joe@perches.com>
+Signed-off-by: Jiri Kosina <jkosina@suse.cz>
+
+diff --git a/drivers/isdn/mISDN/dsp_core.c b/drivers/isdn/mISDN/dsp_core.c
+index 2877291..0c41553 100644
+--- a/drivers/isdn/mISDN/dsp_core.c
++++ b/drivers/isdn/mISDN/dsp_core.c
+@@ -1052,12 +1052,11 @@ dspcreate(struct channel_req *crq)
+ 	if (crq->protocol != ISDN_P_B_L2DSP
+ 	 && crq->protocol != ISDN_P_B_L2DSPHDLC)
+ 		return -EPROTONOSUPPORT;
+-	ndsp = vmalloc(sizeof(struct dsp));
++	ndsp = vzalloc(sizeof(struct dsp));
+ 	if (!ndsp) {
+ 		printk(KERN_ERR "%s: vmalloc struct dsp failed\n", __func__);
+ 		return -ENOMEM;
+ 	}
+-	memset(ndsp, 0, sizeof(struct dsp));
+ 	if (dsp_debug & DEBUG_DSP_CTRL)
+ 		printk(KERN_DEBUG "%s: creating new dsp instance\n", __func__);
+ 
+diff --git a/drivers/isdn/mISDN/l1oip_codec.c b/drivers/isdn/mISDN/l1oip_codec.c
+index bbfd1b8..5a89972 100644
+--- a/drivers/isdn/mISDN/l1oip_codec.c
++++ b/drivers/isdn/mISDN/l1oip_codec.c
+@@ -330,14 +330,12 @@ l1oip_4bit_alloc(int ulaw)
+ 		return 0;
+ 
+ 	/* alloc conversion tables */
+-	table_com = vmalloc(65536);
+-	table_dec = vmalloc(512);
++	table_com = vzalloc(65536);
++	table_dec = vzalloc(512);
+ 	if (!table_com || !table_dec) {
+ 		l1oip_4bit_free();
+ 		return -ENOMEM;
+ 	}
+-	memset(table_com, 0, 65536);
+-	memset(table_dec, 0, 512);
+ 	/* generate compression table */
+ 	i1 = 0;
+ 	while (i1 < 256) {
