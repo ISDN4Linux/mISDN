@@ -37,7 +37,7 @@
  */
 #define	MISDN_MAJOR_VERSION	1
 #define	MISDN_MINOR_VERSION	1
-#define MISDN_RELEASE		31
+#define MISDN_RELEASE		30
 
 /* primitives for information exchange
  * generell format
@@ -158,7 +158,6 @@
 #define HFC_VOL_CHANGE_RX	0x2602
 #define HFC_SPL_LOOP_ON		0x2603
 #define HFC_SPL_LOOP_OFF	0x2604
-
 /* for T30 FAX and analog modem */
 #define HW_MOD_FRM		0x4000
 #define HW_MOD_FRH		0x4001
@@ -171,13 +170,6 @@
 #define HW_MOD_FCERROR		0x4013
 #define HW_MOD_READY		0x4014
 #define HW_MOD_LASTDATA		0x4015
-
-/* Debug and status via PH_CONTROL */
-#define HW_FIFO_STATUS_OFF	0x8000
-#define HW_FIFO_STATUS_ON	0x8001
-#define HW_FIFO_RDO		0x8002
-#define HW_FIFO_XDU_DATA	0x8003
-#define HW_FIFO_XDU_NODATA	0x8004
 
 /* DSP_TONE_PATT_ON parameter */
 #define TONE_OFF			0x0000

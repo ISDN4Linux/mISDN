@@ -135,7 +135,6 @@ mISDN_clear_bchannel(struct bchannel *ch)
 	test_and_clear_bit(FLG_TX_BUSY, &ch->Flags);
 	test_and_clear_bit(FLG_TX_NEXT, &ch->Flags);
 	test_and_clear_bit(FLG_ACTIVE, &ch->Flags);
-	test_and_clear_bit(FLG_RX_OFF, &ch->Flags);
 }
 EXPORT_SYMBOL(mISDN_clear_bchannel);
 
