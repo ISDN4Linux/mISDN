@@ -2462,12 +2462,12 @@ handle_timer_irq(struct hfc_multi *hc)
 		spin_unlock_irqrestore(&HFClock, flags);
 	}
 	if (test_bit(HFC_CHIP_2MBITRAW, &hc->chip)) {
-		ch = 0;
-		if (hc->created[hc->chan[ch].port] && hc->chan[ch].bch &&
+		if (hc->created[hc->chan[0].port] && hc->chan[ch].bch &&
 		    test_bit(FLG_ACTIVE, &hc->chan[ch].bch->Flags)) {
 			ch_activ++;
-			hfcmulti_tx(hc, ch);
-			hfcmulti_rx(hc, ch);
+			hfcmulti_tx(hc, 0);
+			hfcmulti_rx(hc, 0);
+			ch = 1;
 			if (hc->chan[ch].dch &&
 			    hc->chan[ch].nt_timer > -1) {
 				dch = hc->chan[ch].dch;
