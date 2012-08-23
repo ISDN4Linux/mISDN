@@ -544,7 +544,6 @@ data_sock_bind(struct socket *sock, struct sockaddr *addr, int addr_len)
 		err = create_l2entity(_pms(sk)->dev, &_pms(sk)->ch,
 		    sk->sk_protocol, maddr);
 		break;
-	case ISDN_P_B_PCM:
 	case ISDN_P_B_RAW:
 	case ISDN_P_B_HDLC:
 	case ISDN_P_B_X75SLP:

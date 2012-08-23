@@ -37,7 +37,7 @@
  */
 #define	MISDN_MAJOR_VERSION	1
 #define	MISDN_MINOR_VERSION	1
-#define MISDN_RELEASE		24
+#define MISDN_RELEASE		21
 
 /* primitives for information exchange
  * generell format
@@ -229,7 +229,7 @@
 
 #define ISDN_P_B_MASK		0x1f
 #define ISDN_P_B_START		0x20
-#define ISDN_P_B_PCM		0x20
+
 #define ISDN_P_B_RAW		0x21
 #define ISDN_P_B_HDLC		0x22
 #define ISDN_P_B_X75SLP		0x23
@@ -360,8 +360,8 @@ clear_channelmap(u_int nr, u_char *map)
 #define MISDN_CTRL_LOOP			0x0001
 #define MISDN_CTRL_CONNECT		0x0002
 #define MISDN_CTRL_DISCONNECT		0x0004
-#define MISDN_CTRL_GET_PCM_SLOTS	0x0010
-#define MISDN_CTRL_SET_PCM_SLOTS	0x0020
+#define MISDN_CTRL_PCMCONNECT		0x0010
+#define MISDN_CTRL_PCMDISCONNECT	0x0020
 #define MISDN_CTRL_SETPEER		0x0040
 #define MISDN_CTRL_UNSETPEER		0x0080
 #define MISDN_CTRL_RX_OFF		0x0100
@@ -381,10 +381,6 @@ clear_channelmap(u_int nr, u_char *map)
 #define MISDN_CTRL_HFC_WD_INIT		0x4009
 #define MISDN_CTRL_HFC_WD_RESET		0x400A
 
-/* special PCM slot numbers */
-#define MISDN_PCM_SLOT_DISABLE	-1	/* PCM disabled */
-#define MISDN_PCM_SLOT_IGNORE	-2	/* PCM setting will be not changed */
-
 /* socket options */
 #define MISDN_TIME_STAMP		0x0001
 
@@ -393,7 +389,6 @@ struct mISDN_ctrl_req {
 	int		channel;
 	int		p1;
 	int		p2;
-	int		p3;
 };
 
 /* muxer options */

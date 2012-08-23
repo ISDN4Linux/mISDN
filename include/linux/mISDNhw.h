@@ -5,7 +5,6 @@
  *   Basic declarations for the mISDN HW channels
  *
  * Copyright 2008  by Karsten Keil <kkeil@novell.com>
- * Copyright 2009-2010  by Karsten Keil <kkeil@linux-pingi.de>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -149,8 +148,6 @@ struct bchannel {
 	u_int			state;
 	void			*hw;
 	int			slot;	/* multiport card channel slot */
-	int			pcm_tx;	/* PCM tx slot nr */
-	int			pcm_rx;	/* PCM rx slot nr */
 	struct timer_list	timer;
 	/* receive data */
 	struct sk_buff		*rx_skb;
