@@ -30,7 +30,7 @@
 #include "ipac.h"
 
 
-#define AVMFRITZ_REV	"2.2"
+#define AVMFRITZ_REV	"2.1"
 
 static int AVM_cnt;
 static int debug;
@@ -69,8 +69,7 @@ enum {
 #define HDLC_MODE_TRANS		0x02
 #define HDLC_MODE_CCR_7		0x04
 #define HDLC_MODE_CCR_16	0x08
-#define HDLC_FIFO_SIZE_128	0x20
-#define HDLC_MODE_TESTLOOP_V1	0x80
+#define HDLC_MODE_TESTLOOP	0x80
 
 #define HDLC_INT_XPR		0x80
 #define HDLC_INT_XDU		0x40
@@ -81,16 +80,13 @@ enum {
 #define HDLC_STAT_RDO		0x10
 #define HDLC_STAT_CRCVFRRAB	0x0E
 #define HDLC_STAT_CRCVFR	0x06
-#define HDLC_STAT_RML_MASK_V1	0x3f00
-#define HDLC_STAT_RML_MASK_V2	0x7f00
+#define HDLC_STAT_RML_MASK	0x3f00
 
 #define HDLC_CMD_XRS		0x80
 #define HDLC_CMD_XME		0x01
 #define HDLC_CMD_RRS		0x20
 #define HDLC_CMD_XML_MASK	0x3f00
-
-#define HDLC_FIFO_SIZE_V1	32
-#define HDLC_FIFO_SIZE_V2	128
+#define HDLC_FIFO_SIZE		32
 
 /* Fritz PCI v2.0 */
 
@@ -350,14 +346,11 @@ modehdlc(struct bchannel *bch, int protocol)
 {
 	struct fritzcard *fc = bch->hw;
 	struct hdlc_hw *hdlc;
-	u8 mode;
 
 	hdlc = &fc->hdlc[(bch->nr - 1) & 1];
 	pr_debug("%s: hdlc %c protocol %x-->%x ch %d\n", fc->name,
 		'@' + bch->nr, bch->state, protocol, bch->nr);
 	hdlc->ctrl.ctrl = 0;
-	mode = (AVM_FRITZ_PCIV2 == fc->type) ? HDLC_FIFO_SIZE_128 : 0;
-
 	switch (protocol) {
 	case -1: /* used for init */
 		bch->state = -1;
@@ -365,7 +358,7 @@ modehdlc(struct bchannel *bch, int protocol)
 		if (bch->state == ISDN_P_NONE)
 			break;
 		hdlc->ctrl.sr.cmd  = HDLC_CMD_XRS | HDLC_CMD_RRS;
-		hdlc->ctrl.sr.mode = mode | HDLC_MODE_TRANS;
+		hdlc->ctrl.sr.mode = HDLC_MODE_TRANS;
 		write_ctrl(bch, 5);
 		bch->state = ISDN_P_NONE;
 		test_and_clear_bit(FLG_HDLC, &bch->Flags);
@@ -374,7 +367,7 @@ modehdlc(struct bchannel *bch, int protocol)
 	case ISDN_P_B_RAW:
 		bch->state = protocol;
 		hdlc->ctrl.sr.cmd  = HDLC_CMD_XRS | HDLC_CMD_RRS;
-		hdlc->ctrl.sr.mode = mode | HDLC_MODE_TRANS;
+		hdlc->ctrl.sr.mode = HDLC_MODE_TRANS;
 		write_ctrl(bch, 5);
 		hdlc->ctrl.sr.cmd = HDLC_CMD_XRS;
 		write_ctrl(bch, 1);
@@ -384,7 +377,7 @@ modehdlc(struct bchannel *bch, int protocol)
 	case ISDN_P_B_HDLC:
 		bch->state = protocol;
 		hdlc->ctrl.sr.cmd  = HDLC_CMD_XRS | HDLC_CMD_RRS;
-		hdlc->ctrl.sr.mode = mode | HDLC_MODE_ITF_FLG;
+		hdlc->ctrl.sr.mode = HDLC_MODE_ITF_FLG;
 		write_ctrl(bch, 5);
 		hdlc->ctrl.sr.cmd = HDLC_CMD_XRS;
 		write_ctrl(bch, 1);
@@ -404,29 +397,21 @@ hdlc_empty_fifo(struct bchannel *bch, int count)
 	u32 *ptr;
 	u8 *p;
 	u32  val, addr;
-	int cnt;
+	int cnt = 0;
 	struct fritzcard *fc = bch->hw;
 
 	pr_debug("%s: %s %d\n", fc->name, __func__, count);
 	if (!bch->rx_skb) {
-		if (test_bit(FLG_TRANSPARENT, &bch->Flags)) {
-			if (count >= bch->minlen)
-				cnt = count;
-			else
-				cnt = 2 * bch->minlen;
-		} else
-			cnt = bch->maxlen;
-		bch->rx_skb = mI_alloc_skb(cnt, GFP_ATOMIC);
+		bch->rx_skb = mI_alloc_skb(bch->maxlen, GFP_ATOMIC);
 		if (!bch->rx_skb) {
 			pr_info("%s: B receive out of memory\n",
 				fc->name);
 			return;
 		}
-	} else
-		cnt = skb_tailroom(bch->rx_skb);
-	if (count > cnt) {
-		pr_debug("%s: overrun %d + %d free %d\n", fc->name,
-			bch->rx_skb->len, count, cnt);
+	}
+	if ((bch->rx_skb->len + count) > bch->maxlen) {
+		pr_debug("%s: overrun %d\n", fc->name,
+			bch->rx_skb->len + count);
 		return;
 	}
 	p = skb_put(bch->rx_skb, count);
@@ -438,7 +423,6 @@ hdlc_empty_fifo(struct bchannel *bch, int count)
 		addr = fc->addr + CHIP_WINDOW;
 		outl(bch->nr == 2 ? AVM_HDLC_2 : AVM_HDLC_1, fc->addr);
 	}
-	cnt = 0;
 	while (cnt < count) {
 		val = le32_to_cpu(inl(addr));
 		put_unaligned(val, ptr);
@@ -457,7 +441,7 @@ hdlc_fill_fifo(struct bchannel *bch)
 {
 	struct fritzcard *fc = bch->hw;
 	struct hdlc_hw *hdlc;
-	int count, fs, cnt = 0;
+	int count, cnt = 0;
 	u8 *p;
 	u32 *ptr, val, addr;
 
@@ -467,12 +451,10 @@ hdlc_fill_fifo(struct bchannel *bch)
 	count = bch->tx_skb->len - bch->tx_idx;
 	if (count <= 0)
 		return;
-	fs = (fc->type == AVM_FRITZ_PCIV2) ?
-		HDLC_FIFO_SIZE_V2 : HDLC_FIFO_SIZE_V1;
 	p = bch->tx_skb->data + bch->tx_idx;
 	hdlc->ctrl.sr.cmd &= ~HDLC_CMD_XME;
-	if (count > fs) {
-		count = fs;
+	if (count > HDLC_FIFO_SIZE) {
+		count = HDLC_FIFO_SIZE;
 	} else {
 		if (test_bit(FLG_HDLC, &bch->Flags))
 			hdlc->ctrl.sr.cmd |= HDLC_CMD_XME;
@@ -481,7 +463,7 @@ hdlc_fill_fifo(struct bchannel *bch)
 		bch->tx_idx, bch->tx_skb->len);
 	ptr = (u32 *)p;
 	bch->tx_idx += count;
-	hdlc->ctrl.sr.xml = ((count == fs) ? 0 : count);
+	hdlc->ctrl.sr.xml = ((count == HDLC_FIFO_SIZE) ? 0 : count);
 	if (AVM_FRITZ_PCIV2 == fc->type) {
 		__write_ctrl_pciv2(fc, hdlc, bch->nr);
 		addr = fc->addr + (bch->nr == 2 ?
@@ -511,8 +493,8 @@ HDLC_irq_xpr(struct bchannel *bch)
 	else {
 		if (bch->tx_skb) {
 			/* send confirm, on trans, free on hdlc. */
-			//if (test_bit(FLG_TRANSPARENT, &bch->Flags))
-			//	confirm_Bsend(bch);
+			if (test_bit(FLG_TRANSPARENT, &bch->Flags))
+				confirm_Bsend(bch);
 			dev_kfree_skb(bch->tx_skb);
 		}
 		if (get_next_bframe(bch))
@@ -524,22 +506,13 @@ static void
 HDLC_irq(struct bchannel *bch, u32 stat)
 {
 	struct fritzcard *fc = bch->hw;
-	int		len, fs;
-	u32		rmlMask;
+	int		len;
 	struct hdlc_hw	*hdlc;
 
 	hdlc = &fc->hdlc[(bch->nr - 1) & 1];
 	pr_debug("%s: ch%d stat %#x\n", fc->name, bch->nr, stat);
-	if (fc->type == AVM_FRITZ_PCIV2) {
-		rmlMask = HDLC_STAT_RML_MASK_V2;
-		fs = HDLC_FIFO_SIZE_V2;
-	} else {
-		rmlMask = HDLC_STAT_RML_MASK_V1;
-		fs = HDLC_FIFO_SIZE_V1;
-	}
 	if (stat & HDLC_INT_RPR) {
 		if (stat & HDLC_STAT_RDO) {
-			pr_warning("%s: ch%d stat %x RDO\n", fc->name, bch->nr, stat);
 			hdlc->ctrl.sr.xml = 0;
 			hdlc->ctrl.sr.cmd |= HDLC_CMD_RRS;
 			write_ctrl(bch, 1);
@@ -548,20 +521,20 @@ HDLC_irq(struct bchannel *bch, u32 stat)
 			if (bch->rx_skb)
 				skb_trim(bch->rx_skb, 0);
 		} else {
-			len = (stat & rmlMask) >> 8;
+			len = (stat & HDLC_STAT_RML_MASK) >> 8;
 			if (!len)
-				len = fs;
+				len = 32;
 			hdlc_empty_fifo(bch, len);
 			if (!bch->rx_skb)
 				goto handle_tx;
-			if ((stat & HDLC_STAT_RME) || (test_bit(FLG_TRANSPARENT,
-			    &bch->Flags) && bch->rx_skb->len >= bch->minlen)) {
+			if ((stat & HDLC_STAT_RME) || test_bit(FLG_TRANSPARENT,
+			    &bch->Flags)) {
 				if (((stat & HDLC_STAT_CRCVFRRAB) ==
 				    HDLC_STAT_CRCVFR) ||
 				    test_bit(FLG_TRANSPARENT, &bch->Flags)) {
 					recv_Bchannel(bch, 0);
 				} else {
-					pr_warning("%s: got invalid frame\n",
+					pr_debug("%s: got invalid frame\n",
 						fc->name);
 					skb_trim(bch->rx_skb, 0);
 				}
@@ -574,8 +547,6 @@ handle_tx:
 		 * restart transmitting the whole frame on HDLC
 		 * in transparent mode we send the next data
 		 */
-		pr_warning("%s: ch%d stat %x XDU %s\n", fc->name, bch->nr,
-			stat, bch->tx_skb ? "tx_skb" : "no tx_skb");
 		if (bch->tx_skb)
 			pr_debug("%s: ch%d XDU len(%d) idx(%d) Flags(%lx)\n",
 				fc->name, bch->nr, bch->tx_skb->len,
@@ -672,7 +643,7 @@ avm_fritzv2_interrupt(int intno, void *dev_id)
 		mISDNisac_irq(&fc->isac, val);
 	}
 	if (sval & AVM_STATUS0_IRQ_TIMER) {
-		pr_debug("%s: sval(%x) - timer irq\n", fc->name, sval);
+		pr_debug("%s: timer irq\n", fc->name);
 		outb(fc->ctrlreg | AVM_STATUS0_RES_TIMER, fc->addr + 2);
 		udelay(1);
 		outb(fc->ctrlreg, fc->addr + 2);
@@ -1042,7 +1013,7 @@ release_card(struct fritzcard *card)
 static int __devinit
 setup_instance(struct fritzcard *card)
 {
-	int i, err, minsize;
+	int i, err;
 	u_long flags;
 
 	snprintf(card->name, MISDN_MAX_IDLEN - 1, "AVM.%d", AVM_cnt + 1);
@@ -1062,11 +1033,7 @@ setup_instance(struct fritzcard *card)
 	for (i = 0; i < 2; i++) {
 		card->bch[i].nr = i + 1;
 		set_channelmap(i + 1, card->isac.dch.dev.channelmap);
-		if (AVM_FRITZ_PCIV2 == card->type)
-			minsize = HDLC_FIFO_SIZE_V2;
-		else
-			minsize = HDLC_FIFO_SIZE_V1;
-		mISDN_initbchannel(&card->bch[i], MAX_DATA_MEM, minsize);
+		mISDN_initbchannel(&card->bch[i], MAX_DATA_MEM);
 		card->bch[i].hw = card;
 		card->bch[i].ch.send = avm_l2l1B;
 		card->bch[i].ch.ctrl = avm_bctrl;

@@ -81,7 +81,7 @@ mISDN_initdchannel(struct dchannel *ch, int maxlen, void *phf)
 EXPORT_SYMBOL(mISDN_initdchannel);
 
 int
-mISDN_initbchannel(struct bchannel *ch, int maxlen, int minlen)
+mISDN_initbchannel(struct bchannel *ch, int maxlen)
 {
 	ch->Flags = 0;
 	ch->maxlen = maxlen;
@@ -89,7 +89,6 @@ mISDN_initbchannel(struct bchannel *ch, int maxlen, int minlen)
 	ch->rx_skb = NULL;
 	ch->tx_skb = NULL;
 	ch->tx_idx = 0;
-	ch->minlen = minlen;
 	skb_queue_head_init(&ch->rqueue);
 	ch->rcount = 0;
 	ch->next_skb = NULL;

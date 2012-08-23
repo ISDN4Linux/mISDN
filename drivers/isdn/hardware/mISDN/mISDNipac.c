@@ -929,29 +929,20 @@ static void
 hscx_empty_fifo(struct hscx_hw *hscx, u8 count)
 {
 	u8 *p;
-	int len;
 
 	pr_debug("%s: B%1d %d\n", hscx->ip->name, hscx->bch.nr, count);
 	if (!hscx->bch.rx_skb) {
-		if (test_bit(FLG_TRANSPARENT, &hscx->bch.Flags)) {
-			if (count >= hscx->bch.minlen)
-				len = count;
-			else
-				len= 2 * hscx->bch.minlen;
-		} else
-			len = hscx->bch.maxlen;
-		hscx->bch.rx_skb = mI_alloc_skb(len, GFP_ATOMIC);
+		hscx->bch.rx_skb = mI_alloc_skb(hscx->bch.maxlen, GFP_ATOMIC);
 		if (!hscx->bch.rx_skb) {
 			pr_info("%s: B receive out of memory\n",
 				hscx->ip->name);
 			hscx_cmdr(hscx, 0x80); /* RMC */
 			return;
 		}
-	} else
-		len = skb_tailroom(hscx->bch.rx_skb);
-	if (count > len) {
-		pr_debug("%s: overrun  %d + %d free %d\n", hscx->ip->name,
-			hscx->bch.rx_skb->len, count, len);
+	}
+	if ((hscx->bch.rx_skb->len + count) > hscx->bch.maxlen) {
+		pr_debug("%s: overrun %d\n", hscx->ip->name,
+			hscx->bch.rx_skb->len + count);
 		skb_trim(hscx->bch.rx_skb, 0);
 		hscx_cmdr(hscx, 0x80); /* RMC */
 		return;
@@ -1131,8 +1122,7 @@ ipac_irq(struct hscx_hw *hx, u8 ista)
 		hscx_empty_fifo(hx, hx->fifo_size);
 		if (test_bit(FLG_TRANSPARENT, &hx->bch.Flags)) {
 			/* receive transparent audio data */
-			if (hx->bch.rx_skb &&
-			    (hx->bch.rx_skb->len >= hx->bch.minlen))
+			if (hx->bch.rx_skb)
 				recv_Bchannel(&hx->bch, 0);
 		}
 	}
@@ -1623,8 +1613,7 @@ mISDNipac_init(struct ipac_hw *ipac, void *hw)
 		set_channelmap(i + 1, ipac->isac.dch.dev.channelmap);
 		list_add(&ipac->hscx[i].bch.ch.list,
 			&ipac->isac.dch.dev.bchannels);
-		mISDN_initbchannel(&ipac->hscx[i].bch, MAX_DATA_MEM,
-			ipac->hscx[i].fifo_size);
+		mISDN_initbchannel(&ipac->hscx[i].bch, MAX_DATA_MEM);
 		ipac->hscx[i].bch.ch.nr = i + 1;
 		ipac->hscx[i].bch.ch.send = &hscx_l2l1;
 		ipac->hscx[i].bch.ch.ctrl = hscx_bctrl;

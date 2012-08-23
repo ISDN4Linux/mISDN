@@ -955,7 +955,7 @@ setup_instance(struct l1loop *hw) {
 			p->bch[b].nr = b + 1 + (b >= 15);
 			set_channelmap(p->bch[b].nr, p->dch.dev.channelmap);
 			p->bch[b].debug = debug;
-			mISDN_initbchannel(&p->bch[b], MAX_DATA_MEM, -1);
+			mISDN_initbchannel(&p->bch[b], MAX_DATA_MEM);
 			p->bch[b].hw = p;
 			p->bch[b].ch.send = l1loop_l2l1B;
 			p->bch[b].ch.ctrl = l1loop_bctrl;
