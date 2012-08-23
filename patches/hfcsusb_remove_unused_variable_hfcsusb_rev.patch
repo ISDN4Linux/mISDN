@@ -1,0 +1,33 @@
+commit 670d6089cd4eac537af443d213cc59bd60b4268b
+Author: Danny Kukawka <danny.kukawka@bisect.de>
+Date:   Fri Feb 10 05:01:08 2012 +0000
+
+    mISDN/hfcsusb: remove unused variable hfcsusb_rev
+    
+    Removed unused variable hfcsusb_rev (-Wunused-variable) and
+    copied Revision info to file comment block above to keep the info.
+    
+    Signed-off-by: Danny Kukawka <danny.kukawka@bisect.de>
+    Signed-off-by: David S. Miller <davem@davemloft.net>
+
+diff --git a/drivers/isdn/hardware/mISDN/hfcsusb.c b/drivers/isdn/hardware/mISDN/hfcsusb.c
+index 0e1f4d5..43b4d29 100644
+--- a/drivers/isdn/hardware/mISDN/hfcsusb.c
++++ b/drivers/isdn/hardware/mISDN/hfcsusb.c
+@@ -27,6 +27,7 @@
+  *   poll=<n>, default 128
+  *     n : burst size of PH_DATA_IND at transparent rx data
+  *
++ * Revision: 0.3.3 (socket), 2008-11-05
+  */
+ 
+ #include <linux/module.h>
+@@ -36,8 +37,6 @@
+ #include <linux/slab.h>
+ #include "hfcsusb.h"
+ 
+-static const char *hfcsusb_rev = "Revision: 0.3.3 (socket), 2008-11-05";
+-
+ static unsigned int debug;
+ static int poll = DEFAULT_TRANSP_BURST_SZ;
+ 

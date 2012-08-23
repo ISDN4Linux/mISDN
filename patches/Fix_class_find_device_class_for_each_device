@@ -10,7 +10,7 @@ index 21d34be..1b8464b 100644
  {
 -	return dev_to_mISDN(class_find_device(&mISDN_class, NULL, &id,
 +	return dev_to_mISDN(class_find_device(&mISDN_class, &id,
- 		_get_mdevice));
+ 					      _get_mdevice));
  }
  
 @@ -201,7 +201,7 @@ get_mdevice_count(void)

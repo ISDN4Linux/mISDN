@@ -1,6 +1,13 @@
+linux-3.5-Disable_hub-initiated_LPM.patch -R
+hfcsusb_remove_unused_variable_hfcsusb_rev.patch -R
+convert_some_miscellanies_drivers_to_use_module_usb_driver.patch -R
+mISDN_use_memchr_inv.patch -R
 linux-2.6.git-5d76fc219ce38a226314436563f6b9d405bb6db1_export.patch -R
 linux-2.6.git-0d26aa704e5bbca5a1ee9fdf0d02277ceb507eee.patch -R
+linux-2.6.git-1ac4594d88f63ba1557cc1a30ec1f915ca55b7cb.patch -R
+Add_pr_warn.patch
 0857-net-pass-kern-to-net_proto_family-create-function.patch -R
 0859-net-mark-net_proto_ops-as-const.patch -R
 0858-net-Make-setsockopt-optlen-be-unsigned.patch -R
 linux-2.6.git-020f01ebd04f3429c32586d90598c9f59e54ca7d.patch -R
+netjet_hdlc_backport.patch

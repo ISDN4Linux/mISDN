@@ -45,7 +45,7 @@ Index: standalone/drivers/isdn/mISDN/socket.c
  {
  	int err = -EPROTONOSUPPORT;
  
- 	switch	(proto) {
+ 	switch (proto) {
  	case ISDN_P_BASE:
 -		err = base_sock_create(net, sock, proto);
 +		err = base_sock_create(sock, proto);
@@ -65,13 +65,13 @@ Index: standalone/include/linux/mISDNif_s.h
 ===================================================================
 --- standalone.orig/include/linux/mISDNif_s.h
 +++ standalone/include/linux/mISDNif_s.h
-@@ -589,5 +589,9 @@ extern void	set_channel_address(struct m
+@@ -589,6 +589,9 @@ extern void	set_channel_address(struct m
  extern void	mISDN_clock_update(struct mISDNclock *, int, struct timeval *);
  extern unsigned short mISDN_clock_get(void);
  
 +#define pr_notice(fmt, arg...)	printk(KERN_NOTICE fmt, ##arg)
 +#define pr_err(fmt, arg...)	printk(KERN_ERR fmt, ##arg)
 +#define pr_warning(fmt, arg...)	printk(KERN_WARNING fmt, ##arg)
-+
+ #define pr_warn		pr_warning
  #endif /* __KERNEL__ */
  #endif /* mISDNIF_H */

@@ -3,7 +3,7 @@ Index: standalone/drivers/isdn/hardware/mISDN/mISDNipac.c
 --- standalone.orig/drivers/isdn/hardware/mISDN/mISDNipac.c
 +++ standalone/drivers/isdn/hardware/mISDN/mISDNipac.c
 @@ -22,6 +22,7 @@
- 
+ #include <linux/slab.h>
  #include <linux/module.h>
  #include <linux/mISDNhw_s.h>
 +#include <linux/delay.h>
@@ -30,9 +30,9 @@ Index: standalone/drivers/isdn/mISDN/hwchannel.c
 --- standalone.orig/drivers/isdn/mISDN/hwchannel.c
 +++ standalone/drivers/isdn/mISDN/hwchannel.c
 @@ -398,3 +398,189 @@ bchannel_senddata(struct bchannel *ch, s
- 	}
+ 	return len;
  }
- EXPORT_SYMBOL(bchannel_senddata);
+ EXPORT_SYMBOL(bchannel_get_rxbuf);
 +
 +/* backport (copy) from lib/hexdump.c which was introduced in 2.6.22 */
 +#include <linux/ctype.h>
@@ -226,7 +226,7 @@ Index: standalone/include/linux/mISDNif_s.h
 @@ -594,5 +594,20 @@ extern unsigned short mISDN_clock_get(vo
  #define pr_info(fmt, arg...)	printk(KERN_INFO fmt, ##arg)
  #define pr_warning(fmt, arg...)	printk(KERN_WARNING fmt, ##arg)
- 
+ #define pr_warn		pr_warning
 +enum {
 +	DUMP_PREFIX_NONE,
 +	DUMP_PREFIX_ADDRESS,
