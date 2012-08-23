@@ -1292,7 +1292,7 @@ static int
 mgr_bcast(struct mISDNchannel *ch, struct sk_buff *skb)
 {
 	struct manager		*mgr = container_of(ch, struct manager, bcast);
-	struct mISDNhead	*hhc,*hh = mISDN_HEAD_P(skb);
+	struct mISDNhead	*hh = mISDN_HEAD_P(skb);
 	struct sk_buff		*cskb = NULL;
 	struct layer2		*l2;
 	u_long			flags;
@@ -1307,17 +1307,10 @@ mgr_bcast(struct mISDNchannel *ch, struct sk_buff *skb)
 				skb = NULL;
 			} else {
 				if (!cskb)
-					cskb = skb_copy(skb, GFP_ATOMIC);
+					cskb = skb_copy(skb, GFP_KERNEL);
 			}
 			if (cskb) {
-				hhc = mISDN_HEAD_P(cskb);
-				/* save original header behind normal header */
-				hhc++;
-				*hhc = *hh;
-				hhc--;
-				hhc->prim = DL_INTERN_MSG;
-				hhc->id = l2->ch.nr;
-				ret = ch->st->own.recv(&ch->st->own, cskb);
+				ret = l2->ch.send(&l2->ch, cskb);
 				if (ret) {
 					if (*debug & DEBUG_SEND_ERR)
 						printk(KERN_DEBUG
