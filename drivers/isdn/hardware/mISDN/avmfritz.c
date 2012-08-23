@@ -404,7 +404,7 @@ static void
 hdlc_empty_fifo(struct bchannel *bch, int count)
 {
 	u32 *ptr;
-	u8 *p, copy;
+	u8 *p;
 	u32  val, addr;
 	int cnt;
 	struct fritzcard *fc = bch->hw;
@@ -412,13 +412,12 @@ hdlc_empty_fifo(struct bchannel *bch, int count)
 	pr_debug("%s: %s %d\n", fc->name, __func__, count);
 	if (test_bit(FLG_RX_OFF, &bch->Flags)) {
 		/* We drop the content, but need to read all bytes from FIFO */
-		copy = 0;
+		p = NULL;
 		if (debug & DEBUG_HW_BFIFO)
 			printk(KERN_DEBUG "Dropped %d bytes - RX off\n", count);
 		val = (bch->nr -1) & 1;
 		fc->dropcnt[val] += count;
 	} else {
-		copy = 1;
 		if (!bch->rx_skb) {
 			if (test_bit(FLG_TRANSPARENT, &bch->Flags)) {
 				if (count >= bch->minlen)
@@ -441,8 +440,8 @@ hdlc_empty_fifo(struct bchannel *bch, int count)
 			return;
 		}
 		p = skb_put(bch->rx_skb, count);
-		ptr = (u32 *)p;
 	}
+	ptr = (u32 *)p;
 	if (AVM_FRITZ_PCIV2 == fc->type)
 		addr = fc->addr + (bch->nr == 2 ?
 			AVM_HDLC_FIFO_2 : AVM_HDLC_FIFO_1);
@@ -453,13 +452,13 @@ hdlc_empty_fifo(struct bchannel *bch, int count)
 	cnt = 0;
 	while (cnt < count) {
 		val = le32_to_cpu(inl(addr));
-		if (copy) {
+		if (ptr) {
 			put_unaligned(val, ptr);
 			ptr++;
 		}
 		cnt += 4;
 	}
-	if (copy && (debug & DEBUG_HW_BFIFO)) {
+	if (ptr && (debug & DEBUG_HW_BFIFO)) {
 		snprintf(fc->log, LOG_SIZE, "B%1d-recv %s %d ",
 			bch->nr, fc->name, count);
 		print_hex_dump_bytes(fc->log, DUMP_PREFIX_OFFSET, p, count);
@@ -929,10 +928,10 @@ channel_bctrl(struct bchannel *bch, struct mISDN_ctrl_req *cq)
 		/* We return the old values */
 		o1 = bch->minlen;
 		o2 =  bch->maxlen;
-		if (cq->p1 != MISDN_CTRL_RX_SIZE_IGNORE)
+		if (cq->p1 > MISDN_CTRL_RX_SIZE_IGNORE)
 			bch->minlen = cq->p1;
-		if (cq->p2 != MISDN_CTRL_RX_SIZE_IGNORE)
-			bch->minlen = cq->p2;
+		if (cq->p2 > MISDN_CTRL_RX_SIZE_IGNORE)
+			bch->maxlen = cq->p2;
 		cq->p1 = o1;
 		cq->p2 = o2;
 		break;

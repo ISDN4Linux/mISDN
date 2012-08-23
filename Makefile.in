@@ -35,7 +35,7 @@ subdir = .
 DIST_COMMON = README $(am__configure_deps) $(srcdir)/Makefile.am \
 	$(srcdir)/Makefile.in $(srcdir)/config.h.in \
 	$(top_srcdir)/configure $(top_srcdir)/standalone/Makefile.in \
-	COPYING ChangeLog install-sh missing
+	COPYING install-sh missing
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/acinclude.m4 \
 	$(top_srcdir)/configure.ac
@@ -682,10 +682,10 @@ uninstall-am:
 	pdf-am ps ps-am tags tags-recursive uninstall uninstall-am
 
 
-export PATCH FIND SED DIFF GREP AWK SORT IFNAMES
+export PATCH FIND SED DIFF GREP AWK SORT IFNAMES INSTALL_MOD_PATH
 
-modules modules-install unpatched_tree patched_tree modules_ quilt_tree:
-	$(MAKE) -C standalone $@
+modules modules_install unpatched_tree patched_tree modules_ quilt_tree:
+	$(MAKE) -C standalone INSTALL_MOD_PATH=$(INSTALL_MOD_PATH) $@
 
 # Tell versions [3.59,3.63) of GNU make to not export all variables.
 # Otherwise a system limit (for SysV at least) may be exceeded.

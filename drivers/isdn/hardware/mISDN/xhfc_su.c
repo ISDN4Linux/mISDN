@@ -699,7 +699,7 @@ setup_instance(struct xhfc *xhfc, struct device *parent)
 			p->bch[j].nr = j + 1;
 			set_channelmap(j + 1, p->dch.dev.channelmap);
 			p->bch[j].debug = debug;
-			mISDN_initbchannel(&p->bch[j], MAX_DATA_MEM, -1);
+			mISDN_initbchannel(&p->bch[j], MAX_DATA_MEM, 0);
 			p->bch[j].hw = p;
 			p->bch[j].ch.send = xhfc_l2l1B;
 			p->bch[j].ch.ctrl = xhfc_bctrl;
@@ -1524,7 +1524,7 @@ xhfc_write_fifo(struct xhfc *xhfc, __u8 channel)
 static void
 xhfc_read_fifo(struct xhfc *xhfc, __u8 channel)
 {
-	__u8 f1 = 0, f2 = 0, z1 = 0, z2 = 0;
+	__u8 f1 = 0, f2 = 0, z1 = 0, z2 = 0, pending;
 	__u8 fstat = 0;
 	int i;
 	int rcnt; /* read rcnt bytes out of fifo */
@@ -1700,12 +1700,15 @@ xhfc_read_fifo(struct xhfc *xhfc, __u8 channel)
 		      read_exit:
 			if (*rx_skb)
 				skb_trim(*rx_skb, 0);
-			if (read_xhfc(xhfc, A_USAGE) > 8) {
-				if (debug & DEBUG_HFC_FIFO_DATA)
-					printk(KERN_INFO
-					       "%s: channel(%i) continue "
-					       "xhfc_read_fifo\n",
-					       __FUNCTION__, channel);
+
+			pending = read_xhfc(xhfc, A_USAGE);
+			f2++;
+			f2 %= 8;
+			if (pending > 8 || f1 != f2) {
+				if (debug & DEBUG_HFC_FIFO_STAT)
+					printk(KERN_DEBUG
+					       "%s: channel(%i) continue for %d bytes f2(%d)\n",
+					       __func__, channel, pending, f2);
 				goto receive_buffer;
 			}
 			spin_unlock(&port->lock);

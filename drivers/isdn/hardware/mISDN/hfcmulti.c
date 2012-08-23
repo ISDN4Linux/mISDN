@@ -2186,10 +2186,6 @@ next_frame:
 		HFC_wait_nodebug(hc);
 	}
 
-	/* send confirm, since get_net_bframe will not do it with trans */
-	if (bch && test_bit(FLG_TRANSPARENT, &bch->Flags))
-		confirm_Bsend(bch);
-
 	/* check for next frame */
 	dev_kfree_skb(*sp);
 	if (bch && get_next_bframe(bch)) { /* hdlc is confirmed here */
@@ -2380,25 +2376,36 @@ next_frame:
 	} else {
 		/* transparent */
 		if (*sp == NULL) {
-			*sp = mI_alloc_skb(Zsize, GFP_ATOMIC);
+			if (Zsize >= bch->minlen)
+				temp = Zsize;
+			else
+				temp = 2 * bch->minlen;
+			if (temp > maxlen)
+				temp = maxlen;
+
+			*sp = mI_alloc_skb(temp, GFP_ATOMIC);
 			if (*sp == NULL) {
 				printk(KERN_DEBUG "%s: No mem for rx_skb\n",
 				    __func__);
 				return;
 			}
 		}
-		if (Zsize > skb_tailroom(*sp))
-			Zsize = skb_tailroom(*sp);
-		hc->read_fifo(hc, skb_put(*sp, Zsize), Zsize);
-		skb = NULL;
+		temp = Zsize;
+		if (temp > skb_tailroom(*sp))
+			temp = skb_tailroom(*sp);
+		hc->read_fifo(hc, skb_put(*sp, temp), temp);
 		if (debug & DEBUG_HFCMULTI_FIFO)
 			printk(KERN_DEBUG
-			    "%s(card %d): fifo(%d) reading %d bytes "
-			    "(z1=%04x, z2=%04x) TRANS\n",
-				__func__, hc->id + 1, ch, Zsize, z1, z2);
-		/* only bch is transparent */
-		recv_Bchannel(bch, hc->chan[ch].Zfill);
-		*sp = skb;
+			    "%s(card %d): fifo(%d) reading %d/%d bytes "
+			    "(z1=%04x, z2=%04x) TRANS\n", __func__,
+			    hc->id + 1, ch, temp, Zsize, z1, z2);
+		Zsize -= temp;
+		if ((*sp)->len >= bch->minlen) {
+			recv_Bchannel(bch, hc->chan[ch].Zfill);
+			*sp = NULL;
+			if (Zsize)
+				goto next_frame;
+		}
 	}
 }
 
@@ -2462,12 +2469,12 @@ handle_timer_irq(struct hfc_multi *hc)
 		spin_unlock_irqrestore(&HFClock, flags);
 	}
 	if (test_bit(HFC_CHIP_2MBITRAW, &hc->chip)) {
-		if (hc->created[hc->chan[0].port] && hc->chan[ch].bch &&
+		ch = 0;
+		if (hc->created[hc->chan[ch].port] && hc->chan[ch].bch &&
 		    test_bit(FLG_ACTIVE, &hc->chan[ch].bch->Flags)) {
 			ch_activ++;
-			hfcmulti_tx(hc, 0);
-			hfcmulti_rx(hc, 0);
-			ch = 1;
+			hfcmulti_tx(hc, ch);
+			hfcmulti_rx(hc, ch);
 			if (hc->chan[ch].dch &&
 			    hc->chan[ch].nt_timer > -1) {
 				dch = hc->chan[ch].dch;
@@ -3684,21 +3691,21 @@ static int
 channel_bctrl(struct bchannel *bch, struct mISDN_ctrl_req *cq)
 {
 	int			ret = 0;
-	struct dsp_features	*features =
-		(struct dsp_features *)(*((u_long *)&cq->p1));
+	struct dsp_features	*features;
 	struct hfc_multi	*hc = bch->hw;
 	int			slot_tx;
 	int			bank_tx;
 	int			slot_rx;
 	int			bank_rx;
 	int			num;
+	int			o1, o2;
 	u8			v1, v2;
 
 	switch (cq->op) {
 	case MISDN_CTRL_GETOP:
 		cq->op = MISDN_CTRL_HFC_OP | MISDN_CTRL_HW_FEATURES_OP |
 			MISDN_CTRL_RX_OFF | MISDN_CTRL_FILL_EMPTY |
-			MISDN_CTRL_L1_TESTS;
+			MISDN_CTRL_L1_TESTS | MISDN_CTRL_RX_BUFFER;
 		break;
 	case MISDN_CTRL_RX_OFF: /* turn off / on rx stream */
 		hc->chan[bch->slot].rx_off = !!cq->p1;
@@ -3720,6 +3727,7 @@ channel_bctrl(struct bchannel *bch, struct mISDN_ctrl_req *cq)
 				"off=%d)\n", __func__, bch->nr, !!cq->p1);
 		break;
 	case MISDN_CTRL_HW_FEATURES: /* fill features structure */
+		features = (struct dsp_features *)(*((u_long *)&cq->p1));
 		if (debug & DEBUG_HFCMULTI_MSG)
 			printk(KERN_DEBUG "%s: HW_FEATURE request\n",
 			    __func__);
@@ -3836,6 +3844,17 @@ channel_bctrl(struct bchannel *bch, struct mISDN_ctrl_req *cq)
 		cq->p2 |= (HFC_inb(hc, R_RX_SL0_2) << 16);
 		cq->p3 = HFC_inb(hc, R_JATT_STA);
 		cq->p3 |= (HFC_inb(hc, R_SLIP) << 8);
+		break;
+	case MISDN_CTRL_RX_BUFFER:
+		/* We return the old values */
+		o1 = bch->minlen;
+		o2 =  bch->maxlen;
+		if (cq->p1 > MISDN_CTRL_RX_SIZE_IGNORE)
+			bch->minlen = cq->p1;
+		if (cq->p2 > MISDN_CTRL_RX_SIZE_IGNORE)
+			bch->maxlen = cq->p2;
+		cq->p1 = o1;
+		cq->p2 = o2;
 		break;
 	default:
 		printk(KERN_WARNING "%s: unknown Op %x\n",
@@ -5179,7 +5198,7 @@ init_e1_port(struct hfc_multi *hc, struct hm_map *m, int pt)
 		bch->nr = ch;
 		bch->slot = ch;
 		bch->debug = debug;
-		mISDN_initbchannel(bch, MAX_DATA_MEM, -1);
+		mISDN_initbchannel(bch, MAX_DATA_MEM, 0);
 		bch->hw = hc;
 		bch->ch.send = handle_bmsg;
 		bch->ch.ctrl = hfcm_bctrl;
@@ -5252,7 +5271,7 @@ init_multi_port(struct hfc_multi *hc, int pt)
 		bch->nr = ch + 1;
 		bch->slot = i + ch;
 		bch->debug = debug;
-		mISDN_initbchannel(bch, MAX_DATA_MEM, -1);
+		mISDN_initbchannel(bch, MAX_DATA_MEM, 0);
 		bch->hw = hc;
 		bch->ch.send = handle_bmsg;
 		bch->ch.ctrl = hfcm_bctrl;

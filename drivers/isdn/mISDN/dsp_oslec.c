@@ -28,6 +28,7 @@
 
 #include <linux/mISDNif.h>
 #include <linux/mISDNdsp.h>
+#include <linux/module.h>
 #include "core.h"
 #include "dsp.h"
 #include "oslec.h"

@@ -585,3 +585,17 @@ Index: standalone/include/linux/mISDNif_s.h
  }
  
  extern void	set_channel_address(struct mISDNchannel *, u_int, u_int);
+
+Index: standalone/drivers/isdn/mISDN/core.c
+===================================================================
+--- standalone.orig/drivers/isdn/mISDN/core.c	2012-07-25 10:07:53.000000000 +0200
++++ standalone/drivers/isdn/mISDN/core.c	2012-07-25 10:14:45.000000000 +0200
+@@ -215,7 +215,7 @@
+ 		return msg_no_stack;
+ 	if (!ch->st->dev)
+ 		return msg_no_stackdev;
+-	return dev_name(&ch->st->dev->dev);
++	return dev_name(ch->st->dev);
+ };
+ EXPORT_SYMBOL(mISDNDevName4ch);
+ 

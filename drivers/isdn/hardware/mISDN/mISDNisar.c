@@ -29,6 +29,7 @@
 #include <linux/delay.h>
 #include <linux/vmalloc.h>
 #include <linux/mISDNhw.h>
+#include <linux/module.h>
 #include "isar.h"
 
 #define ISAR_REV	"2.1"
@@ -1682,7 +1683,7 @@ mISDNisar_init(struct isar_hw *isar, void *hw)
 	isar->hw = hw;
 	for (i = 0; i < 2; i++) {
 		isar->ch[i].bch.nr = i + 1;
-		mISDN_initbchannel(&isar->ch[i].bch, MAX_DATA_MEM, -1);
+		mISDN_initbchannel(&isar->ch[i].bch, MAX_DATA_MEM, 0);
 		isar->ch[i].bch.ch.nr = i + 1;
 		isar->ch[i].bch.ch.send = &isar_l2l1;
 		isar->ch[i].bch.ch.ctrl = isar_bctrl;

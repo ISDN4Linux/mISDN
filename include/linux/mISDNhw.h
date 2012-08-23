@@ -160,7 +160,7 @@ struct bchannel {
 	/* receive data */
 	struct sk_buff		*rx_skb;
 	int			maxlen;
-	int			minlen; /* for transparent data -1 no check */
+	unsigned int		minlen; /* for transparent data - 0 no check */
 	/* send data */
 	struct sk_buff		*next_skb;
 	struct sk_buff		*tx_skb;
@@ -175,7 +175,7 @@ struct bchannel {
 };
 
 extern int	mISDN_initdchannel(struct dchannel *, int, void *);
-extern int	mISDN_initbchannel(struct bchannel *, int, int);
+extern int	mISDN_initbchannel(struct bchannel *, int, unsigned int);
 extern int	mISDN_freedchannel(struct dchannel *);
 extern void	mISDN_clear_bchannel(struct bchannel *);
 extern int	mISDN_freebchannel(struct bchannel *);
