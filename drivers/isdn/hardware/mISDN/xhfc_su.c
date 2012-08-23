@@ -857,6 +857,7 @@ xhfc_l2l1B(struct mISDNchannel *ch, struct sk_buff *skb)
 			spin_unlock_bh(&p->lock);
 			if (ret > 0) {
 				ret = 0;
+				queue_ch_frame(ch, PH_DATA_CNF, hh->id, NULL);
 			}
 			return ret;
 		case PH_ACTIVATE_REQ:

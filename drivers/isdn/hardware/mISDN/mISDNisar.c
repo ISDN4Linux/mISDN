@@ -1490,8 +1490,11 @@ isar_l2l1(struct mISDNchannel *ch, struct sk_buff *skb)
 			id = hh->id; /* skb can be freed */
 			ret = 0;
 			isar_fill_fifo(ich);
-		}
-		spin_unlock_irqrestore(ich->is->hwlock, flags);
+			spin_unlock_irqrestore(ich->is->hwlock, flags);
+			if (!test_bit(FLG_TRANSPARENT, &bch->Flags))
+				queue_ch_frame(ch, PH_DATA_CNF, id, NULL);
+		} else
+			spin_unlock_irqrestore(ich->is->hwlock, flags);
 		return ret;
 	case PH_ACTIVATE_REQ:
 		spin_lock_irqsave(ich->is->hwlock, flags);

@@ -743,8 +743,11 @@ nj_l2l1B(struct mISDNchannel *ch, struct sk_buff *skb)
 			id = hh->id; /* skb can be freed */
 			fill_dma(bc);
 			ret = 0;
-		}
-		spin_unlock_irqrestore(&card->lock, flags);
+			spin_unlock_irqrestore(&card->lock, flags);
+			if (!test_bit(FLG_TRANSPARENT, &bch->Flags))
+				queue_ch_frame(ch, PH_DATA_CNF, id, NULL);
+		} else
+			spin_unlock_irqrestore(&card->lock, flags);
 		return ret;
 	case PH_ACTIVATE_REQ:
 		spin_lock_irqsave(&card->lock, flags);

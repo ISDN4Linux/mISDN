@@ -228,6 +228,12 @@ hfcusb_l2l1B(struct mISDNchannel *ch, struct sk_buff *skb)
 			printk(KERN_DEBUG "%s: %s PH_DATA_REQ ret(%i)\n",
 				hw->name, __func__, ret);
 		if (ret > 0) {
+			/*
+			 * other l1 drivers don't send early confirms on
+			 * transp data, but hfcsusb does because tx_next
+			 * skb is needed in tx_iso_complete()
+			 */
+			queue_ch_frame(ch, PH_DATA_CNF, hh->id, NULL);
 			ret = 0;
 		}
 		return ret;

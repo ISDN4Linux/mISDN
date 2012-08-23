@@ -3592,8 +3592,13 @@ handle_bmsg(struct mISDNchannel *ch, struct sk_buff *skb)
 			/* start fifo */
 			HFC_outb_nodebug(hc, R_FIFO, 0);
 			HFC_wait_nodebug(hc);
-		}
-		spin_unlock_irqrestore(&hc->lock, flags);
+			if (!test_bit(FLG_TRANSPARENT, &bch->Flags)) {
+				spin_unlock_irqrestore(&hc->lock, flags);
+				queue_ch_frame(ch, PH_DATA_CNF, id, NULL);
+			} else
+				spin_unlock_irqrestore(&hc->lock, flags);
+		} else
+			spin_unlock_irqrestore(&hc->lock, flags);
 		return ret;
 	case PH_ACTIVATE_REQ:
 		if (debug & DEBUG_HFCMULTI_MSG)
