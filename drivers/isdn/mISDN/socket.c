@@ -22,6 +22,9 @@
 
 static u_int	*debug;
 
+/* marker for version from git.misdn.eu */
+#define MISDN_GIT_RELEASE	0x4000
+
 static struct proto mISDN_proto = {
 	.name		= "misdn",
 	.owner		= THIS_MODULE,
@@ -375,7 +378,7 @@ data_sock_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 	case IMGETVERSION:
 		ver.major = MISDN_MAJOR_VERSION;
 		ver.minor = MISDN_MINOR_VERSION;
-		ver.release = MISDN_RELEASE;
+		ver.release = MISDN_RELEASE | MISDN_GIT_RELEASE;
 		if (copy_to_user((void __user *)arg, &ver, sizeof(ver)))
 			err = -EFAULT;
 		break;
@@ -659,7 +662,7 @@ base_sock_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 	case IMGETVERSION:
 		ver.major = MISDN_MAJOR_VERSION;
 		ver.minor = MISDN_MINOR_VERSION;
-		ver.release = MISDN_RELEASE;
+		ver.release = MISDN_RELEASE | MISDN_GIT_RELEASE;
 		if (copy_to_user((void __user *)arg, &ver, sizeof(ver)))
 			err = -EFAULT;
 		break;
