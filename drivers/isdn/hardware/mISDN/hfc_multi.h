@@ -12,7 +12,6 @@
 #define	DEBUG_HFCMULTI_FILL	0x00800000
 #define	DEBUG_HFCMULTI_SYNC	0x01000000
 #define	DEBUG_HFCMULTI_DTMF	0x02000000
-#define	DEBUG_HFCMULTI_TIMER	0x04000000
 #define	DEBUG_HFCMULTI_LOCK	0x80000000
 
 #define	PCI_ENA_REGIO	0x01
@@ -72,10 +71,7 @@ struct hfcm_hw {
 	u_char	r_dtmf;
 	u_char	r_st_sync;
 	u_char	r_sci_msk;
-	u_char	r_tx0;
-	u_char	r_tx1;
-	u_char	r_rx_sl0_cfg0;
-	u_char	r_tx_sl0_cfg1;
+	u_char	r_tx0, r_tx1;
 	u_char	a_st_ctrl0[8];
 	u_char	r_bert_wd_md;
 	timer_t	timer;
@@ -118,7 +114,6 @@ struct hfcm_hw {
 					/* hw */
 #define	HFC_CHIP_PLXSD		14 /* whether we have a Speech-Design PLX */
 #define	HFC_CHIP_EMBSD          15 /* whether we have a SD Embedded board */
-#define HFC_CHIP_2MBITRAW	16 /* special mode to access full 32 byte frame data */
 
 #define HFC_IO_MODE_PCIMEM	0x00 /* normal memory mapped IO */
 #define HFC_IO_MODE_REGIO	0x01 /* PCI io access */
@@ -339,23 +334,24 @@ struct hfc_multi {
 #define R_LOS0			0x22
 #define R_LOS1			0x23
 #define R_RX0			0x24
-#define R_RX_SL0_CFG0		0x25
-#define R_RX_SL0_CFG1		0x26
+#define R_RX_FR0		0x25
+#define R_RX_FR1		0x26
 #define R_TX0			0x28
 #define R_TX1			0x29
-#define R_TX_SL0_CFG0		0x2C
-#define R_TX_SL0		0x2D
-#define R_TX_SL0_CFG1		0x2E
-#define R_JATT_CFG		0x2F
+#define R_TX_FR0		0x2C
+
+#define R_TX_FR1		0x2D
+#define R_TX_FR2		0x2E
+#define R_JATT_ATT		0x2F /* undocumented */
 #define A_ST_RD_STATE		0x30
 #define A_ST_WR_STATE		0x30
-#define R_RX_OFFS		0x30
+#define R_RX_OFF		0x30
 #define A_ST_CTRL0		0x31
 #define R_SYNC_OUT		0x31
 #define A_ST_CTRL1		0x32
 #define A_ST_CTRL2		0x33
 #define A_ST_SQ_WR		0x34
-#define R_TX_OFFS		0x34
+#define R_TX_OFF		0x34
 #define R_SYNC_CTRL		0x35
 #define A_ST_CLK_DLY		0x37
 #define R_PWM0			0x38
@@ -418,8 +414,8 @@ struct hfc_multi {
 #define R_RX_SL0_0		0x25
 #define R_RX_SL0_1		0x26
 #define R_RX_SL0_2		0x27
-#define R_JATT_STA		0x2B
-#define R_SLIP			0x2C
+#define R_JATT_DIR		0x2b /* undocumented */
+#define R_SLIP			0x2c
 #define A_ST_RD_STA		0x30
 #define R_FAS_EC		0x30
 #define R_FAS_ECL		0x30
@@ -434,12 +430,12 @@ struct hfc_multi {
 #define R_E_EC			0x36
 #define R_E_ECL			0x36
 #define R_E_ECH			0x37
-#define R_SA6_VAL13_EC		0x38
-#define R_SA6_VAL13_ECL		0x38
-#define R_SA6_VAL13_ECH		0x39
-#define R_SA6_VAL23_EC		0x3A
-#define R_SA6_VAL23_ECL		0x3A
-#define R_SA6_VAL23_ECH		0x3B
+#define R_SA6_SA13_EC		0x38
+#define R_SA6_SA13_ECL		0x38
+#define R_SA6_SA13_ECH		0x39
+#define R_SA6_SA23_EC		0x3A
+#define R_SA6_SA23_ECL		0x3A
+#define R_SA6_SA23_ECH		0x3B
 #define A_ST_B1_RX		0x3C
 #define A_ST_B2_RX		0x3D
 #define A_ST_D_RX		0x3E
@@ -628,7 +624,7 @@ struct hfc_multi {
 #define V_RX_INV_CLK		0x20
 #define V_RX_INV_DATA		0x40
 #define V_AIS_ITU		0x80
-/* R_RX_SL0_CFG0 */
+/* R_RX_FR0 */
 #define V_NO_INSYNC		0x01
 #define V_AUTO_RESYNC		0x02
 #define V_AUTO_RECO		0x04
@@ -637,7 +633,7 @@ struct hfc_multi {
 #define V_XCRC_SYNC		0x20
 #define V_MF_RESYNC		0x40
 #define V_RESYNC		0x80
-/* R_RX_SL0_CFG1 */
+/* R_RX_FR1 */
 #define V_RX_MF			0x01
 #define V_RX_MF_SYNC		0x02
 #define V_RX_SL0_RAM		0x04
@@ -658,17 +654,17 @@ struct hfc_multi {
 #define V_ATX			0x20
 #define V_NTRI			0x40
 #define V_AUTO_ERR_RES		0x80
-/* R_TX_SL0_CFG0 */
+/* R_TX_FR0 */
 #define V_TRP_FAS		0x01
 #define V_TRP_NFAS		0x02
 #define V_TRP_RAL		0x04
 #define V_TRP_SA		0x08
-/* R_TX_SL0 */
+/* R_TX_FR1 */
 #define V_TX_FAS		0x01
 #define V_TX_NFAS		0x02
 #define V_TX_RAL		0x04
 #define V_TX_SA			0x08
-/* R_TX_SL0_CFG1 */
+/* R_TX_FR2 */
 #define V_TX_MF			0x01
 #define V_TRP_SL0		0x02
 #define V_TX_SL0_RAM		0x04
@@ -676,7 +672,7 @@ struct hfc_multi {
 #define V_NEG_E			0x20
 #define V_XS12_ON		0x40
 #define V_XS15_ON		0x80
-/* R_RX_OFFS */
+/* R_RX_OFF */
 #define V_RX_SZ			0x01
 #define V_RX_INIT		0x04
 /* R_SYNC_OUT */
@@ -684,7 +680,7 @@ struct hfc_multi {
 #define V_IPATS0		0x20
 #define V_IPATS1		0x40
 #define V_IPATS2		0x80
-/* R_TX_OFFS */
+/* R_TX_OFF */
 #define V_TX_SZ			0x01
 #define V_TX_INIT		0x04
 /* R_SYNC_CTRL */
@@ -1123,20 +1119,20 @@ struct hfc_register_names {
 	{"R_LOS0",		0x22},
 	{"R_LOS1",		0x23},
 	{"R_RX0",		0x24},
-	{"R_RX_SL0_CFG0",	0x25},
-	{"R_RX_SL0_CFG1",	0x26},
+	{"R_RX_FR0",		0x25},
+	{"R_RX_FR1",		0x26},
 	{"R_TX0",		0x28},
 	{"R_TX1",		0x29},
-	{"R_TX_SL0_CFG0",	0x2C},
-	{"R_TX_SL0",		0x2D},
-	{"R_TX_SL0_CFG1",	0x2E},
+	{"R_TX_FR0",		0x2C},
+	{"R_TX_FR1",		0x2D},
+	{"R_TX_FR2",		0x2E},
 	{"R_JATT_ATT",		0x2F},
-	{"A_ST_xx_STA/R_RX_OFFS", 0x30},
+	{"A_ST_xx_STA/R_RX_OFF", 0x30},
 	{"A_ST_CTRL0/R_SYNC_OUT", 0x31},
 	{"A_ST_CTRL1",		0x32},
 	{"A_ST_CTRL2",		0x33},
 	{"A_ST_SQ_WR",		0x34},
-	{"R_TX_OFFS",		0x34},
+	{"R_TX_OFF",		0x34},
 	{"R_SYNC_CTRL",		0x35},
 	{"A_ST_CLK_DLY",	0x37},
 	{"R_PWM0",		0x38},
@@ -1198,9 +1194,8 @@ struct hfc_register_names {
 	{"R_RX_SL0_0",		0x25},
 	{"R_RX_SL0_1",		0x26},
 	{"R_RX_SL0_2",		0x27},
-	{"R_JATT_STA",		0x2b},
+	{"R_JATT_DIR",		0x2b},
 	{"R_SLIP",		0x2c},
-	{"R_JATT_CFG",		0x2f},
 	{"A_ST_RD_STA",		0x30},
 	{"R_FAS_ECL",		0x30},
 	{"R_FAS_ECH",		0x31},
@@ -1210,10 +1205,10 @@ struct hfc_register_names {
 	{"R_CRC_ECH",		0x35},
 	{"R_E_ECL",		0x36},
 	{"R_E_ECH",		0x37},
-	{"R_SA6_VAL13_ECL",	0x38},
-	{"R_SA6_VAL13_ECH",	0x39},
-	{"R_SA6_VAL23_ECL",	0x3A},
-	{"R_SA6_VAL23_ECH",	0x3B},
+	{"R_SA6_SA13_ECL",	0x38},
+	{"R_SA6_SA13_ECH",	0x39},
+	{"R_SA6_SA23_ECL",	0x3A},
+	{"R_SA6_SA23_ECH",	0x3B},
 	{"A_ST_B1_RX",		0x3C},
 	{"A_ST_B2_RX",		0x3D},
 	{"A_ST_D_RX",		0x3E},
