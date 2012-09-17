@@ -32,39 +32,39 @@ Date:   Fri Nov 18 09:52:10 2011 -0800
     Cc: Andrew Morton <akpm@linux-foundation.org>
     Signed-off-by: Greg Kroah-Hartman <gregkh@suse.de>
 
-diff --git a/drivers/isdn/hardware/mISDN/hfcsusb.c b/drivers/isdn/hardware/mISDN/hfcsusb.c
-index 71a8eb6..0e1f4d5 100644
---- a/drivers/isdn/hardware/mISDN/hfcsusb.c
-+++ b/drivers/isdn/hardware/mISDN/hfcsusb.c
-@@ -2154,30 +2154,4 @@ static struct usb_driver hfcsusb_drv = {
+Index: standalone/drivers/isdn/hardware/mISDN/hfcsusb.c
+===================================================================
+--- standalone.orig/drivers/isdn/hardware/mISDN/hfcsusb.c
++++ standalone/drivers/isdn/hardware/mISDN/hfcsusb.c
+@@ -2137,4 +2137,30 @@ static struct usb_driver hfcsusb_drv = {
  	.disconnect = hfcsusb_disconnect,
  };
  
--static int __init
--hfcsusb_init(void)
--{
--	printk(KERN_INFO DRIVER_NAME " driver Rev. %s debug(0x%x) poll(%i)\n",
--	    hfcsusb_rev, debug, poll);
--
--	if (usb_register(&hfcsusb_drv)) {
--		printk(KERN_INFO DRIVER_NAME
--		    ": Unable to register hfcsusb module at usb stack\n");
--		return -ENODEV;
--	}
--
--	return 0;
--}
--
--static void __exit
--hfcsusb_cleanup(void)
--{
--	if (debug & DBG_HFC_CALL_TRACE)
--		printk(KERN_INFO DRIVER_NAME ": %s\n", __func__);
--
--	/* unregister Hardware */
--	usb_deregister(&hfcsusb_drv);	/* release our driver */
--}
--
--module_init(hfcsusb_init);
--module_exit(hfcsusb_cleanup);
-+module_usb_driver(hfcsusb_drv);
+-module_usb_driver(hfcsusb_drv);
++static int __init
++hfcsusb_init(void)
++{
++	printk(KERN_INFO DRIVER_NAME " driver Rev. %s debug(0x%x) poll(%i)\n",
++	    hfcsusb_rev, debug, poll);
++
++	if (usb_register(&hfcsusb_drv)) {
++		printk(KERN_INFO DRIVER_NAME
++		    ": Unable to register hfcsusb module at usb stack\n");
++		return -ENODEV;
++	}
++
++	return 0;
++}
++
++static void __exit
++hfcsusb_cleanup(void)
++{
++	if (debug & DBG_HFC_CALL_TRACE)
++		printk(KERN_INFO DRIVER_NAME ": %s\n", __func__);
++
++	/* unregister Hardware */
++	usb_deregister(&hfcsusb_drv);	/* release our driver */
++}
++
++module_init(hfcsusb_init);
++module_exit(hfcsusb_cleanup);

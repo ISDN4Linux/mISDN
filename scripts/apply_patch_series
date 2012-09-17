@@ -11,10 +11,16 @@ fi
 
 series=$1
 shift
-
+rm -f .patchOK
 while read -r pname popt ; do
 	if [ "${pname:0:1}" != "#" ]; then
 		echo "Apply $pname : opts=$popt"
 		$PATCH -p1 $popt < patches/${pname}
+		res=$?
+		if [ $res -ne 0 ]; then
+			echo "Error on $PATCH -p1 $popt < patches/${pname}"
+			exit 1
+		fi 
 	fi
 done < <(cat $series)
+echo "All patches OK" >> .patchOK

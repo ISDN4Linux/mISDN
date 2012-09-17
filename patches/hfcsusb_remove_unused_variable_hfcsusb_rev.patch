@@ -10,24 +10,24 @@ Date:   Fri Feb 10 05:01:08 2012 +0000
     Signed-off-by: Danny Kukawka <danny.kukawka@bisect.de>
     Signed-off-by: David S. Miller <davem@davemloft.net>
 
-diff --git a/drivers/isdn/hardware/mISDN/hfcsusb.c b/drivers/isdn/hardware/mISDN/hfcsusb.c
-index 0e1f4d5..43b4d29 100644
---- a/drivers/isdn/hardware/mISDN/hfcsusb.c
-+++ b/drivers/isdn/hardware/mISDN/hfcsusb.c
-@@ -27,6 +27,7 @@
+Index: standalone/drivers/isdn/hardware/mISDN/hfcsusb.c
+===================================================================
+--- standalone.orig/drivers/isdn/hardware/mISDN/hfcsusb.c
++++ standalone/drivers/isdn/hardware/mISDN/hfcsusb.c
+@@ -27,7 +27,6 @@
   *   poll=<n>, default 128
   *     n : burst size of PH_DATA_IND at transparent rx data
   *
-+ * Revision: 0.3.3 (socket), 2008-11-05
+- * Revision: 0.3.3 (socket), 2008-11-05
   */
  
  #include <linux/module.h>
-@@ -36,8 +37,6 @@
+@@ -37,6 +36,8 @@
  #include <linux/slab.h>
  #include "hfcsusb.h"
  
--static const char *hfcsusb_rev = "Revision: 0.3.3 (socket), 2008-11-05";
--
++static const char *hfcsusb_rev = "Revision: 0.3.3 (socket), 2008-11-05";
++
  static unsigned int debug;
  static int poll = DEFAULT_TRANSP_BURST_SZ;
  

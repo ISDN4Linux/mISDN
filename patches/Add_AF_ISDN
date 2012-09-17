@@ -2,7 +2,7 @@ Index: standalone/include/linux/mISDNif_s.h
 ===================================================================
 --- standalone.orig/include/linux/mISDNif_s.h
 +++ standalone/include/linux/mISDNif_s.h
-@@ -273,6 +273,12 @@ struct mISDNhead {
+@@ -278,6 +278,12 @@ struct mISDNhead {
  #define MISDN_MAX_CHANNEL	127
  #define MISDN_CHMAP_SIZE	((MISDN_MAX_CHANNEL + 1) >> 3)
  

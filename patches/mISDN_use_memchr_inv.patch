@@ -12,46 +12,46 @@ Date:   Fri Jan 27 04:24:55 2012 +0000
     Cc: netdev@vger.kernel.org
     Signed-off-by: David S. Miller <davem@davemloft.net>
 
-diff --git a/drivers/isdn/mISDN/l1oip_core.c b/drivers/isdn/mISDN/l1oip_core.c
-index 22f8ec8..04f115a 100644
---- a/drivers/isdn/mISDN/l1oip_core.c
-+++ b/drivers/isdn/mISDN/l1oip_core.c
-@@ -1112,7 +1112,7 @@ handle_bmsg(struct mISDNchannel *ch, struct sk_buff *skb)
+Index: standalone/drivers/isdn/mISDN/l1oip_core.c
+===================================================================
+--- standalone.orig/drivers/isdn/mISDN/l1oip_core.c
++++ standalone/drivers/isdn/mISDN/l1oip_core.c
+@@ -1112,7 +1112,7 @@ handle_bmsg(struct mISDNchannel *ch, str
  	struct l1oip			*hc = bch->hw;
  	int			ret = -EINVAL;
  	struct mISDNhead	*hh = mISDN_HEAD_P(skb);
--	int			l, ll, i;
-+	int			l, ll;
+-	int			l, ll;
++	int			l, ll, i;
  	unsigned char		*p;
  
  	switch (hh->prim) {
-@@ -1128,13 +1128,8 @@ handle_bmsg(struct mISDNchannel *ch, struct sk_buff *skb)
+@@ -1128,8 +1128,13 @@ handle_bmsg(struct mISDNchannel *ch, str
  			break;
  		}
  		/* check for AIS / ulaw-silence */
--		p = skb->data;
++		p = skb->data;
  		l = skb->len;
--		for (i = 0; i < l; i++) {
--			if (*p++ != 0xff)
--				break;
--		}
--		if (i == l) {
-+		if (!memchr_inv(skb->data, 0xff, l)) {
+-		if (!memchr_inv(skb->data, 0xff, l)) {
++		for (i = 0; i < l; i++) {
++			if (*p++ != 0xff)
++				break;
++		}
++		if (i == l) {
  			if (debug & DEBUG_L1OIP_MSG)
  				printk(KERN_DEBUG "%s: got AIS, not sending, "
- 					"but counting\n", __func__);
-@@ -1144,13 +1139,8 @@ handle_bmsg(struct mISDNchannel *ch, struct sk_buff *skb)
+ 				       "but counting\n", __func__);
+@@ -1139,8 +1144,13 @@ handle_bmsg(struct mISDNchannel *ch, str
  			return 0;
  		}
  		/* check for silence */
--		p = skb->data;
++		p = skb->data;
  		l = skb->len;
--		for (i = 0; i < l; i++) {
--			if (*p++ != 0x2a)
--				break;
--		}
--		if (i == l) {
-+		if (!memchr_inv(skb->data, 0x2a, l)) {
+-		if (!memchr_inv(skb->data, 0x2a, l)) {
++		for (i = 0; i < l; i++) {
++			if (*p++ != 0x2a)
++				break;
++		}
++		if (i == l) {
  			if (debug & DEBUG_L1OIP_MSG)
  				printk(KERN_DEBUG "%s: got silence, not sending"
- 					", but counting\n", __func__);
+ 				       ", but counting\n", __func__);

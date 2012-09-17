@@ -62,15 +62,15 @@ Cc: Daniel Drake <dsd@gentoo.org>
 Cc: Ulrich Kunitz <kune@deine-taler.de>
 Signed-off-by: Sarah Sharp <sarah.a.sharp@linux.intel.com>
 
-diff --git a/drivers/isdn/hardware/mISDN/hfcsusb.c b/drivers/isdn/hardware/mISDN/hfcsusb.c
-index 451135f..55c8da8 100644
---- a/drivers/isdn/hardware/mISDN/hfcsusb.c
-+++ b/drivers/isdn/hardware/mISDN/hfcsusb.c
-@@ -2134,6 +2134,7 @@ static struct usb_driver hfcsusb_drv = {
+Index: standalone/drivers/isdn/hardware/mISDN/hfcsusb.c
+===================================================================
+--- standalone.orig/drivers/isdn/hardware/mISDN/hfcsusb.c
++++ standalone/drivers/isdn/hardware/mISDN/hfcsusb.c
+@@ -2134,7 +2134,6 @@ static struct usb_driver hfcsusb_drv = {
  	.id_table = hfcsusb_idtab,
  	.probe = hfcsusb_probe,
  	.disconnect = hfcsusb_disconnect,
-+	.disable_hub_initiated_lpm = 1,
+-	.disable_hub_initiated_lpm = 1,
  };
  
  module_usb_driver(hfcsusb_drv);

@@ -1,6 +1,7 @@
-diff -uprN standalone.old/drivers/isdn/hardware/mISDN/isdnhdlc.h standalone/drivers/isdn/hardware/mISDN/isdnhdlc.h
---- standalone.old/drivers/isdn/hardware/mISDN/isdnhdlc.h	1970-01-01 01:00:00.000000000 +0100
-+++ standalone/drivers/isdn/hardware/mISDN/isdnhdlc.h	2012-08-22 20:53:36.000000000 +0200
+Index: standalone/drivers/isdn/hardware/mISDN/isdnhdlc.h
+===================================================================
+--- /dev/null
++++ standalone/drivers/isdn/hardware/mISDN/isdnhdlc.h
 @@ -0,0 +1,82 @@
 +/*
 + * hdlc.h  --  General purpose ISDN HDLC decoder.
@@ -84,9 +85,10 @@ diff -uprN standalone.old/drivers/isdn/hardware/mISDN/isdnhdlc.h standalone/driv
 +			u16 slen, int *count, u8 *dst, int dsize);
 +
 +#endif /* __ISDNHDLC_H__ */
-diff -uprN standalone.old/drivers/isdn/hardware/mISDN/netjet.c standalone/drivers/isdn/hardware/mISDN/netjet.c
---- standalone.old/drivers/isdn/hardware/mISDN/netjet.c	2012-08-22 20:27:54.000000000 +0200
-+++ standalone/drivers/isdn/hardware/mISDN/netjet.c	2012-08-22 20:51:19.000000000 +0200
+Index: standalone/drivers/isdn/hardware/mISDN/netjet.c
+===================================================================
+--- standalone.orig/drivers/isdn/hardware/mISDN/netjet.c
++++ standalone/drivers/isdn/hardware/mISDN/netjet.c
 @@ -29,7 +29,7 @@
  #include "ipac.h"
  #include "iohelper.h"
@@ -96,9 +98,10 @@ diff -uprN standalone.old/drivers/isdn/hardware/mISDN/netjet.c standalone/driver
  
  #define NETJET_REV	"2.0"
  
-diff -uprN standalone.old/drivers/isdn/hardware/mISDN/isdnhdlc.c standalone/drivers/isdn/hardware/mISDN/isdnhdlc.c
---- standalone.old/drivers/isdn/hardware/mISDN/isdnhdlc.c	1970-01-01 01:00:00.000000000 +0100
-+++ standalone/drivers/isdn/hardware/mISDN/isdnhdlc.c	2012-08-22 21:09:26.000000000 +0200
+Index: standalone/drivers/isdn/hardware/mISDN/isdnhdlc.c
+===================================================================
+--- /dev/null
++++ standalone/drivers/isdn/hardware/mISDN/isdnhdlc.c
 @@ -0,0 +1,651 @@
 +/*
 + * isdnhdlc.c  --  General purpose ISDN HDLC decoder.
@@ -751,9 +754,10 @@ diff -uprN standalone.old/drivers/isdn/hardware/mISDN/isdnhdlc.c standalone/driv
 +
 +	return len;
 +}
-diff -uprN standalone.old/drivers/isdn/hardware/mISDN/isdnhdlc.c~ standalone/drivers/isdn/hardware/mISDN/isdnhdlc.c~
---- standalone.old/drivers/isdn/hardware/mISDN/isdnhdlc.c~	1970-01-01 01:00:00.000000000 +0100
-+++ standalone/drivers/isdn/hardware/mISDN/isdnhdlc.c~	2012-08-22 20:55:36.000000000 +0200
+Index: standalone/drivers/isdn/hardware/mISDN/isdnhdlc.c~
+===================================================================
+--- /dev/null
++++ standalone/drivers/isdn/hardware/mISDN/isdnhdlc.c~
 @@ -0,0 +1,615 @@
 +/*
 + * isdnhdlc.c  --  General purpose ISDN HDLC decoder.

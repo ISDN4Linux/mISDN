@@ -1,5 +1,7 @@
---- standalone.old/drivers/isdn/hardware/mISDN/netjet.c	2012-08-22 19:19:34.000000000 +0200
-+++ standalone/drivers/isdn/hardware/mISDN/netjet.c	2012-08-22 20:11:04.000000000 +0200
+Index: standalone/drivers/isdn/hardware/mISDN/netjet.c
+===================================================================
+--- standalone.orig/drivers/isdn/hardware/mISDN/netjet.c
++++ standalone/drivers/isdn/hardware/mISDN/netjet.c
 @@ -983,7 +983,6 @@ nj_release(struct tiger_hw *card)
  	write_lock_irqsave(&card_lock, flags);
  	list_del(&card->list);

@@ -18,19 +18,16 @@ Signed-off-by: David S. Miller <davem@davemloft.net>
  drivers/isdn/mISDN/socket.c |    2 +-
  1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/drivers/isdn/mISDN/socket.c b/drivers/isdn/mISDN/socket.c
-index ec651b6..8167346 100644
---- a/drivers/isdn/mISDN/socket.c
-+++ b/drivers/isdn/mISDN/socket.c
-@@ -415,7 +415,7 @@ data_sock_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
+Index: standalone/drivers/isdn/mISDN/socket.c
+===================================================================
+--- standalone.orig/drivers/isdn/mISDN/socket.c
++++ standalone/drivers/isdn/mISDN/socket.c
+@@ -420,7 +420,7 @@ data_sock_ioctl(struct socket *sock, uns
  }
  
  static int data_sock_setsockopt(struct socket *sock, int level, int optname,
--				char __user *optval, int len)
-+				char __user *optval, unsigned int len)
+-				char __user *optval, unsigned int len)
++				char __user *optval, int len)
  {
  	struct sock *sk = sock->sk;
  	int err = 0, opt = 0;
--- 
-1.6.0.2
-

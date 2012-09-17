@@ -11,20 +11,17 @@ Signed-off-by: David S. Miller <davem@davemloft.net>
  drivers/isdn/mISDN/socket.c |    3 +--
  1 files changed, 1 insertions(+), 2 deletions(-)
 
-diff --git a/drivers/isdn/mISDN/socket.c b/drivers/isdn/mISDN/socket.c
-index 8167346..fcfe17a 100644
---- a/drivers/isdn/mISDN/socket.c
-+++ b/drivers/isdn/mISDN/socket.c
-@@ -808,8 +808,7 @@ mISDN_sock_create(struct net *net, struct socket *sock, int proto, int kern)
+Index: standalone/drivers/isdn/mISDN/socket.c
+===================================================================
+--- standalone.orig/drivers/isdn/mISDN/socket.c
++++ standalone/drivers/isdn/mISDN/socket.c
+@@ -817,7 +817,8 @@ mISDN_sock_create(struct net *net, struc
  	return err;
  }
  
--static struct
--net_proto_family mISDN_sock_family_ops = {
-+static const struct net_proto_family mISDN_sock_family_ops = {
+-static const struct net_proto_family mISDN_sock_family_ops = {
++static struct
++net_proto_family mISDN_sock_family_ops = {
  	.owner  = THIS_MODULE,
  	.family = PF_ISDN,
  	.create = mISDN_sock_create,
--- 
-1.6.0.2
-

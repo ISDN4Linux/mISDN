@@ -17,41 +17,38 @@ Cc: netdev@vger.kernel.org
  drivers/isdn/mISDN/l1oip_core.c |    2 ++
  2 files changed, 4 insertions(+), 2 deletions(-)
 
-diff --git a/drivers/isdn/mISDN/hwchannel.c b/drivers/isdn/mISDN/hwchannel.c
-index 307bd6e..199f374 100644
---- a/drivers/isdn/mISDN/hwchannel.c
-+++ b/drivers/isdn/mISDN/hwchannel.c
-@@ -110,7 +110,7 @@ mISDN_freedchannel(struct dchannel *ch)
+Index: standalone/drivers/isdn/mISDN/hwchannel.c
+===================================================================
+--- standalone.orig/drivers/isdn/mISDN/hwchannel.c
++++ standalone/drivers/isdn/mISDN/hwchannel.c
+@@ -116,7 +116,7 @@ mISDN_freedchannel(struct dchannel *ch)
  	}
  	skb_queue_purge(&ch->squeue);
  	skb_queue_purge(&ch->rqueue);
--	flush_scheduled_work();
-+	flush_work_sync(&ch->workq);
+-	flush_work_sync(&ch->workq);
++	flush_scheduled_work();
  	return 0;
  }
  EXPORT_SYMBOL(mISDN_freedchannel);
-@@ -143,7 +143,7 @@ mISDN_freebchannel(struct bchannel *ch)
+@@ -157,7 +157,7 @@ mISDN_freebchannel(struct bchannel *ch)
  	mISDN_clear_bchannel(ch);
  	skb_queue_purge(&ch->rqueue);
  	ch->rcount = 0;
--	flush_scheduled_work();
-+	flush_work_sync(&ch->workq);
+-	flush_work_sync(&ch->workq);
++	flush_scheduled_work();
  	return 0;
  }
  EXPORT_SYMBOL(mISDN_freebchannel);
-diff --git a/drivers/isdn/mISDN/l1oip_core.c b/drivers/isdn/mISDN/l1oip_core.c
-index 5b59796..bd526f6 100644
---- a/drivers/isdn/mISDN/l1oip_core.c
-+++ b/drivers/isdn/mISDN/l1oip_core.c
-@@ -1269,6 +1269,8 @@ release_card(struct l1oip *hc)
+Index: standalone/drivers/isdn/mISDN/l1oip_core.c
+===================================================================
+--- standalone.orig/drivers/isdn/mISDN/l1oip_core.c
++++ standalone/drivers/isdn/mISDN/l1oip_core.c
+@@ -1269,8 +1269,6 @@ release_card(struct l1oip *hc)
  	if (timer_pending(&hc->timeout_tl))
  		del_timer(&hc->timeout_tl);
  
-+	cancel_work_sync(&hc->workq);
-+
+-	cancel_work_sync(&hc->workq);
+-
  	if (hc->socket_thread)
  		l1oip_socket_close(hc);
  
--- 
-1.7.5
-

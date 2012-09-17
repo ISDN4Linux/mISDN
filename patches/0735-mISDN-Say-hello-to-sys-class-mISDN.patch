@@ -22,7 +22,7 @@ Index: standalone/drivers/isdn/mISDN/core.c
 ===================================================================
 --- standalone.orig/drivers/isdn/mISDN/core.c
 +++ standalone/drivers/isdn/mISDN/core.c
-@@ -25,183 +25,39 @@ MODULE_AUTHOR("Karsten Keil");
+@@ -26,183 +26,39 @@ MODULE_AUTHOR("Karsten Keil");
  MODULE_LICENSE("GPL");
  module_param(debug, uint, S_IRUGO | S_IWUSR);
  
@@ -222,7 +222,7 @@ Index: standalone/drivers/isdn/mISDN/core.c
  	return cnt;
  }
  
-@@ -209,7 +65,6 @@ static int
+@@ -210,7 +66,6 @@ static int
  get_free_devid(void)
  {
  	u_int	i;
@@ -230,7 +230,7 @@ Index: standalone/drivers/isdn/mISDN/core.c
  	for (i = 0; i <= MAX_DEVICE_ID; i++)
  		if (!test_and_set_bit(i, (u_long *)&device_ids))
  			break;
-@@ -222,6 +77,7 @@ int
+@@ -223,6 +78,7 @@ int
  mISDN_register_device(struct mISDNdevice *dev,
  		      struct device *parent, char *name)
  {
@@ -238,7 +238,7 @@ Index: standalone/drivers/isdn/mISDN/core.c
  	int	err;
  
  	err = get_free_devid();
-@@ -229,31 +85,22 @@ mISDN_register_device(struct mISDNdevice
+@@ -230,31 +86,22 @@ mISDN_register_device(struct mISDNdevice
  		goto error1;
  	dev->id = err;
  
@@ -278,7 +278,7 @@ Index: standalone/drivers/isdn/mISDN/core.c
  error1:
  	return err;
  
-@@ -262,16 +109,17 @@ EXPORT_SYMBOL(mISDN_register_device);
+@@ -263,16 +110,17 @@ EXPORT_SYMBOL(mISDN_register_device);
  
  void
  mISDN_unregister_device(struct mISDNdevice *dev) {
@@ -301,7 +301,16 @@ Index: standalone/drivers/isdn/mISDN/core.c
  }
  EXPORT_SYMBOL(mISDN_unregister_device);
  
-@@ -363,31 +211,26 @@ mISDNInit(void)
+@@ -367,7 +215,7 @@ const char *mISDNDevName4ch(struct mISDN
+ 		return msg_no_stack;
+ 	if (!ch->st->dev)
+ 		return msg_no_stackdev;
+-	return dev_name(&ch->st->dev->dev);
++	return dev_name(ch->st->dev);
+ };
+ EXPORT_SYMBOL(mISDNDevName4ch);
+ 
+@@ -380,31 +228,26 @@ mISDNInit(void)
  	       MISDN_MAJOR_VERSION, MISDN_MINOR_VERSION, MISDN_RELEASE);
  	mISDN_init_clock(&debug);
  	mISDN_initstack(&debug);
@@ -340,7 +349,7 @@ Index: standalone/drivers/isdn/mISDN/core.c
  error1:
  	return err;
  }
-@@ -398,7 +241,6 @@ static void mISDN_cleanup(void)
+@@ -415,7 +258,6 @@ static void mISDN_cleanup(void)
  	Isdnl2_cleanup();
  	l1_cleanup();
  	mISDN_timer_cleanup();
@@ -352,7 +361,7 @@ Index: standalone/drivers/isdn/mISDN/l1oip_core.c
 ===================================================================
 --- standalone.orig/drivers/isdn/mISDN/l1oip_core.c
 +++ standalone/drivers/isdn/mISDN/l1oip_core.c
-@@ -1436,7 +1436,6 @@ init_card(struct l1oip *hc, int pri, int
+@@ -1437,7 +1437,6 @@ init_card(struct l1oip *hc, int pri, int
  		hc->chan[i + ch].bch = bch;
  		set_channelmap(bch->nr, dch->dev.channelmap);
  	}
@@ -364,7 +373,7 @@ Index: standalone/drivers/isdn/mISDN/layer1.c
 ===================================================================
 --- standalone.orig/drivers/isdn/mISDN/layer1.c
 +++ standalone/drivers/isdn/mISDN/layer1.c
-@@ -101,7 +101,7 @@ l1m_debug(struct FsmInst *fi, char *fmt,
+@@ -104,7 +104,7 @@ l1m_debug(struct FsmInst *fi, char *fmt,
  	va_list va;
  
  	va_start(va, fmt);
@@ -377,7 +386,7 @@ Index: standalone/drivers/isdn/mISDN/socket.c
 ===================================================================
 --- standalone.orig/drivers/isdn/mISDN/socket.c
 +++ standalone/drivers/isdn/mISDN/socket.c
-@@ -398,7 +398,7 @@ data_sock_ioctl(struct socket *sock, uns
+@@ -403,7 +403,7 @@ data_sock_ioctl(struct socket *sock, uns
  			memcpy(di.channelmap, dev->channelmap,
  			       sizeof(di.channelmap));
  			di.nrbchan = dev->nrbchan;
@@ -386,7 +395,7 @@ Index: standalone/drivers/isdn/mISDN/socket.c
  			if (copy_to_user((void __user *)arg, &di, sizeof(di)))
  				err = -EFAULT;
  		} else
-@@ -678,7 +678,7 @@ base_sock_ioctl(struct socket *sock, uns
+@@ -687,7 +687,7 @@ base_sock_ioctl(struct socket *sock, uns
  			memcpy(di.channelmap, dev->channelmap,
  			       sizeof(di.channelmap));
  			di.nrbchan = dev->nrbchan;
@@ -395,7 +404,7 @@ Index: standalone/drivers/isdn/mISDN/socket.c
  			if (copy_to_user((void __user *)arg, &di, sizeof(di)))
  				err = -EFAULT;
  		} else
-@@ -694,7 +694,7 @@ base_sock_ioctl(struct socket *sock, uns
+@@ -703,7 +703,7 @@ base_sock_ioctl(struct socket *sock, uns
  		}
  		dev = get_mdevice(dn.id);
  		if (dev)
@@ -432,7 +441,7 @@ Index: standalone/drivers/isdn/mISDN/stack.c
  	}
  	return -ESRCH;
  }
-@@ -213,7 +213,7 @@ mISDNStackd(void *data)
+@@ -207,7 +207,7 @@ mISDNStackd(void *data)
  	sigfillset(&current->blocked);
  	if (*debug & DEBUG_MSG_THREAD)
  		printk(KERN_DEBUG "mISDNStackd %s started\n",
@@ -441,7 +450,7 @@ Index: standalone/drivers/isdn/mISDN/stack.c
  
  	if (st->notify != NULL) {
  		complete(st->notify);
-@@ -249,7 +249,7 @@ mISDNStackd(void *data)
+@@ -243,7 +243,7 @@ mISDNStackd(void *data)
  					printk(KERN_DEBUG
  					       "%s: %s prim(%x) id(%x) "
  					       "send call(%d)\n",
@@ -450,7 +459,7 @@ Index: standalone/drivers/isdn/mISDN/stack.c
  					       mISDN_HEAD_PRIM(skb),
  					       mISDN_HEAD_ID(skb), err);
  				dev_kfree_skb(skb);
-@@ -292,7 +292,7 @@ mISDNStackd(void *data)
+@@ -286,7 +286,7 @@ mISDNStackd(void *data)
  						     mISDN_STACK_ACTION_MASK));
  		if (*debug & DEBUG_MSG_THREAD)
  			printk(KERN_DEBUG "%s: %s wake status %08lx\n",
@@ -459,7 +468,7 @@ Index: standalone/drivers/isdn/mISDN/stack.c
  		test_and_set_bit(mISDN_STACK_ACTIVE, &st->status);
  
  		test_and_clear_bit(mISDN_STACK_WAKEUP, &st->status);
-@@ -307,16 +307,16 @@ mISDNStackd(void *data)
+@@ -301,16 +301,16 @@ mISDNStackd(void *data)
  #ifdef MISDN_MSG_STATS
  	printk(KERN_DEBUG "mISDNStackd daemon for %s proceed %d "
  	       "msg %d sleep %d stopped\n",
@@ -480,7 +489,7 @@ Index: standalone/drivers/isdn/mISDN/stack.c
  #endif
  	test_and_set_bit(mISDN_STACK_KILLED, &st->status);
  	test_and_clear_bit(mISDN_STACK_RUNNING, &st->status);
-@@ -407,15 +407,15 @@ create_stack(struct mISDNdevice *dev)
+@@ -401,15 +401,15 @@ create_stack(struct mISDNdevice *dev)
  	newst->own.recv = mISDN_queue_message;
  	if (*debug & DEBUG_CORE_FUNC)
  		printk(KERN_DEBUG "%s: st(%s)\n", __func__,
@@ -499,7 +508,7 @@ Index: standalone/drivers/isdn/mISDN/stack.c
  		delete_teimanager(dev->teimgr);
  		kfree(newst);
  	} else
-@@ -434,7 +434,7 @@ connect_layer1(struct mISDNdevice *dev,
+@@ -428,7 +428,7 @@ connect_layer1(struct mISDNdevice *dev,
  
  	if (*debug &  DEBUG_CORE_FUNC)
  		printk(KERN_DEBUG "%s: %s proto(%x) adr(%d %d %d %d)\n",
@@ -508,7 +517,7 @@ Index: standalone/drivers/isdn/mISDN/stack.c
  		       adr->channel, adr->sapi, adr->tei);
  	switch (protocol) {
  	case ISDN_P_NT_S0:
-@@ -471,7 +471,7 @@ connect_Bstack(struct mISDNdevice *dev,
+@@ -465,7 +465,7 @@ connect_Bstack(struct mISDNdevice *dev,
  
  	if (*debug &  DEBUG_CORE_FUNC)
  		printk(KERN_DEBUG "%s: %s proto(%x) adr(%d %d %d %d)\n",
@@ -517,7 +526,7 @@ Index: standalone/drivers/isdn/mISDN/stack.c
  		       adr->dev, adr->channel, adr->sapi,
  		       adr->tei);
  	ch->st = dev->D.st;
-@@ -527,7 +527,7 @@ create_l2entity(struct mISDNdevice *dev,
+@@ -521,7 +521,7 @@ create_l2entity(struct mISDNdevice *dev,
  
  	if (*debug &  DEBUG_CORE_FUNC)
  		printk(KERN_DEBUG "%s: %s proto(%x) adr(%d %d %d %d)\n",
@@ -526,7 +535,7 @@ Index: standalone/drivers/isdn/mISDN/stack.c
  		       adr->dev, adr->channel, adr->sapi,
  		       adr->tei);
  	rq.protocol = ISDN_P_TE_S0;
-@@ -579,7 +579,7 @@ delete_channel(struct mISDNchannel *ch)
+@@ -573,7 +573,7 @@ delete_channel(struct mISDNchannel *ch)
  	}
  	if (*debug & DEBUG_CORE_FUNC)
  		printk(KERN_DEBUG "%s: st(%s) protocol(%x)\n", __func__,
@@ -535,7 +544,7 @@ Index: standalone/drivers/isdn/mISDN/stack.c
  	if (ch->protocol >= ISDN_P_B_START) {
  		if (ch->peer) {
  			ch->peer->ctrl(ch->peer, CLOSE_CHANNEL, NULL);
-@@ -632,7 +632,7 @@ delete_stack(struct mISDNdevice *dev)
+@@ -626,7 +626,7 @@ delete_stack(struct mISDNdevice *dev)
  
  	if (*debug & DEBUG_CORE_FUNC)
  		printk(KERN_DEBUG "%s: st(%s)\n", __func__,
@@ -548,7 +557,7 @@ Index: standalone/drivers/isdn/mISDN/tei.c
 ===================================================================
 --- standalone.orig/drivers/isdn/mISDN/tei.c
 +++ standalone/drivers/isdn/mISDN/tei.c
-@@ -973,7 +973,7 @@ create_teimgr(struct manager *mgr, struc
+@@ -988,7 +988,7 @@ create_teimgr(struct manager *mgr, struc
  
  	if (*debug & DEBUG_L2_TEI)
  		printk(KERN_DEBUG "%s: %s proto(%x) adr(%d %d %d %d)\n",
@@ -561,7 +570,7 @@ Index: standalone/include/linux/mISDNif_s.h
 ===================================================================
 --- standalone.orig/include/linux/mISDNif_s.h
 +++ standalone/include/linux/mISDNif_s.h
-@@ -493,7 +493,7 @@ struct mISDNdevice {
+@@ -506,7 +506,7 @@ struct mISDNdevice {
  	u_char			channelmap[MISDN_CHMAP_SIZE];
  	struct list_head	bchannels;
  	struct mISDNchannel	*teimgr;
@@ -570,7 +579,7 @@ Index: standalone/include/linux/mISDNif_s.h
  };
  
  struct mISDNstack {
-@@ -580,12 +580,9 @@ extern struct mISDNclock *mISDN_register
+@@ -593,12 +593,9 @@ extern struct mISDNclock *mISDN_register
  						void *);
  extern void	mISDN_unregister_clock(struct mISDNclock *);
  
@@ -585,25 +594,10 @@ Index: standalone/include/linux/mISDNif_s.h
  }
  
  extern void	set_channel_address(struct mISDNchannel *, u_int, u_int);
-
-Index: standalone/drivers/isdn/mISDN/core.c
-===================================================================
---- standalone.orig/drivers/isdn/mISDN/core.c	2012-07-25 10:07:53.000000000 +0200
-+++ standalone/drivers/isdn/mISDN/core.c	2012-07-25 10:14:45.000000000 +0200
-@@ -215,7 +215,7 @@
- 		return msg_no_stack;
- 	if (!ch->st->dev)
- 		return msg_no_stackdev;
--	return dev_name(&ch->st->dev->dev);
-+	return dev_name(ch->st->dev);
- };
- EXPORT_SYMBOL(mISDNDevName4ch);
- 
-
 Index: standalone/drivers/isdn/hardware/mISDN/netjet.c
 ===================================================================
---- standalone.old/drivers/isdn/hardware/mISDN/netjet.c	2012-08-22 19:19:34.000000000 +0200
-+++ standalone/drivers/isdn/hardware/mISDN/netjet.c	2012-08-22 20:25:46.000000000 +0200
+--- standalone.orig/drivers/isdn/hardware/mISDN/netjet.c
++++ standalone/drivers/isdn/hardware/mISDN/netjet.c
 @@ -969,7 +969,7 @@ nj_release(struct tiger_hw *card)
  	}
  	if (card->irq > 0)

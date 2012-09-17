@@ -17,110 +17,107 @@ Signed-off-by: David S. Miller <davem@davemloft.net>
  drivers/isdn/mISDN/tei.c    |   23 +++++++++++++++++------
  3 files changed, 33 insertions(+), 12 deletions(-)
 
-diff --git a/drivers/isdn/mISDN/layer1.c b/drivers/isdn/mISDN/layer1.c
-index ac4aa18..5cc7c00 100644
---- a/drivers/isdn/mISDN/layer1.c
-+++ b/drivers/isdn/mISDN/layer1.c
-@@ -99,12 +99,16 @@ static void
+Index: standalone/drivers/isdn/mISDN/layer1.c
+===================================================================
+--- standalone.orig/drivers/isdn/mISDN/layer1.c
++++ standalone/drivers/isdn/mISDN/layer1.c
+@@ -101,16 +101,12 @@ static void
  l1m_debug(struct FsmInst *fi, char *fmt, ...)
  {
  	struct layer1 *l1 = fi->userdata;
-+	struct va_format vaf;
+-	struct va_format vaf;
  	va_list va;
  
  	va_start(va, fmt);
--	printk(KERN_DEBUG "%s: ", dev_name(&l1->dch->dev.dev));
--	vprintk(fmt, va);
--	printk("\n");
-+
-+	vaf.fmt = fmt;
-+	vaf.va = &va;
-+
-+	printk(KERN_DEBUG "%s: %pV\n", dev_name(&l1->dch->dev.dev), &vaf);
-+
+-
+-	vaf.fmt = fmt;
+-	vaf.va = &va;
+-
+-	printk(KERN_DEBUG "%s: %pV\n", dev_name(&l1->dch->dev.dev), &vaf);
+-
++	printk(KERN_DEBUG "%s: ", dev_name(&l1->dch->dev.dev));
++	vprintk(fmt, va);
++	printk("\n");
  	va_end(va);
  }
  
-diff --git a/drivers/isdn/mISDN/layer2.c b/drivers/isdn/mISDN/layer2.c
-index c973717..4ae7505 100644
---- a/drivers/isdn/mISDN/layer2.c
-+++ b/drivers/isdn/mISDN/layer2.c
-@@ -95,15 +95,20 @@ static void
+Index: standalone/drivers/isdn/mISDN/layer2.c
+===================================================================
+--- standalone.orig/drivers/isdn/mISDN/layer2.c
++++ standalone/drivers/isdn/mISDN/layer2.c
+@@ -99,20 +99,15 @@ static void
  l2m_debug(struct FsmInst *fi, char *fmt, ...)
  {
  	struct layer2 *l2 = fi->userdata;
-+	struct va_format vaf;
+-	struct va_format vaf;
  	va_list va;
  
  	if (!(*debug & DEBUG_L2_FSM))
  		return;
-+
+-
  	va_start(va, fmt);
--	printk(KERN_DEBUG "%s l2 (sapi %d tei %d): ",
--		mISDNDevName4ch(&l2->ch), l2->sapi, l2->tei);
--	vprintk(fmt, va);
--	printk("\n");
-+
-+	vaf.fmt = fmt;
-+	vaf.va = &va;
-+
-+	printk(KERN_DEBUG "%s l2 (sapi %d tei %d): %pV\n",
-+	       mISDNDevName4ch(&l2->ch), l2->sapi, l2->tei, &vaf);
-+
+-
+-	vaf.fmt = fmt;
+-	vaf.va = &va;
+-
+-	printk(KERN_DEBUG "%s l2 (sapi %d tei %d): %pV\n",
+-	       mISDNDevName4ch(&l2->ch), l2->sapi, l2->tei, &vaf);
+-
++	printk(KERN_DEBUG "%s l2 (sapi %d tei %d): ",
++		mISDNDevName4ch(&l2->ch), l2->sapi, l2->tei);
++	vprintk(fmt, va);
++	printk("\n");
  	va_end(va);
  }
  
-diff --git a/drivers/isdn/mISDN/tei.c b/drivers/isdn/mISDN/tei.c
-index 1b85d9d..687c9b6 100644
---- a/drivers/isdn/mISDN/tei.c
-+++ b/drivers/isdn/mISDN/tei.c
-@@ -79,14 +79,19 @@ static void
+Index: standalone/drivers/isdn/mISDN/tei.c
+===================================================================
+--- standalone.orig/drivers/isdn/mISDN/tei.c
++++ standalone/drivers/isdn/mISDN/tei.c
+@@ -79,19 +79,14 @@ static void
  da_debug(struct FsmInst *fi, char *fmt, ...)
  {
  	struct manager	*mgr = fi->userdata;
-+	struct va_format vaf;
+-	struct va_format vaf;
  	va_list va;
  
  	if (!(*debug & DEBUG_L2_TEIFSM))
  		return;
-+
+-
  	va_start(va, fmt);
--	printk(KERN_DEBUG "mgr(%d): ", mgr->ch.st->dev->id);
--	vprintk(fmt, va);
--	printk("\n");
-+
-+	vaf.fmt = fmt;
-+	vaf.va = &va;
-+
-+	printk(KERN_DEBUG "mgr(%d): %pV\n", mgr->ch.st->dev->id, &vaf);
-+
+-
+-	vaf.fmt = fmt;
+-	vaf.va = &va;
+-
+-	printk(KERN_DEBUG "mgr(%d): %pV\n", mgr->ch.st->dev->id, &vaf);
+-
++	printk(KERN_DEBUG "mgr(%d): ", mgr->ch.st->dev->id);
++	vprintk(fmt, va);
++	printk("\n");
  	va_end(va);
  }
  
-@@ -223,14 +228,20 @@ static void
+@@ -228,20 +223,14 @@ static void
  tei_debug(struct FsmInst *fi, char *fmt, ...)
  {
  	struct teimgr	*tm = fi->userdata;
-+	struct va_format vaf;
+-	struct va_format vaf;
  	va_list va;
  
  	if (!(*debug & DEBUG_L2_TEIFSM))
  		return;
-+
+-
  	va_start(va, fmt);
--	printk(KERN_DEBUG "sapi(%d) tei(%d): ", tm->l2->sapi, tm->l2->tei);
--	vprintk(fmt, va);
--	printk("\n");
-+
-+	vaf.fmt = fmt;
-+	vaf.va = &va;
-+
-+	printk(KERN_DEBUG "sapi(%d) tei(%d): %pV\n",
-+	       tm->l2->sapi, tm->l2->tei, &vaf);
-+
+-
+-	vaf.fmt = fmt;
+-	vaf.va = &va;
+-
+-	printk(KERN_DEBUG "sapi(%d) tei(%d): %pV\n",
+-	       tm->l2->sapi, tm->l2->tei, &vaf);
+-
++	printk(KERN_DEBUG "sapi(%d) tei(%d): ", tm->l2->sapi, tm->l2->tei);
++	vprintk(fmt, va);
++	printk("\n");
  	va_end(va);
  }
  
--- 
-1.7.5
-

@@ -1,7 +1,8 @@
-diff -ur standalone.orig/drivers/isdn/hardware/mISDN/avmfritz.c standalone/drivers/isdn/hardware/mISDN/avmfritz.c
---- standalone.orig/drivers/isdn/hardware/mISDN/avmfritz.c	2012-07-25 10:41:05.000000000 +0200
-+++ standalone/drivers/isdn/hardware/mISDN/avmfritz.c	2012-07-25 10:49:06.000000000 +0200
-@@ -658,7 +658,7 @@
+Index: standalone/drivers/isdn/hardware/mISDN/avmfritz.c
+===================================================================
+--- standalone.orig/drivers/isdn/hardware/mISDN/avmfritz.c
++++ standalone/drivers/isdn/hardware/mISDN/avmfritz.c
+@@ -630,7 +630,7 @@ HDLC_irq_main(struct fritzcard *fc)
  }
  
  static irqreturn_t
@@ -10,7 +11,7 @@ diff -ur standalone.orig/drivers/isdn/hardware/mISDN/avmfritz.c standalone/drive
  {
  	struct fritzcard *fc = dev_id;
  	u8 val;
-@@ -685,7 +685,7 @@
+@@ -657,7 +657,7 @@ avm_fritz_interrupt(int intno, void *dev
  }
  
  static irqreturn_t
@@ -19,10 +20,11 @@ diff -ur standalone.orig/drivers/isdn/hardware/mISDN/avmfritz.c standalone/drive
  {
  	struct fritzcard *fc = dev_id;
  	u8 val;
-diff -ur standalone.orig/drivers/isdn/hardware/mISDN/hfcmulti.c standalone/drivers/isdn/hardware/mISDN/hfcmulti.c
---- standalone.orig/drivers/isdn/hardware/mISDN/hfcmulti.c	2012-07-25 10:41:05.000000000 +0200
-+++ standalone/drivers/isdn/hardware/mISDN/hfcmulti.c	2012-07-25 10:48:25.000000000 +0200
-@@ -2754,7 +2754,7 @@
+Index: standalone/drivers/isdn/hardware/mISDN/hfcmulti.c
+===================================================================
+--- standalone.orig/drivers/isdn/hardware/mISDN/hfcmulti.c
++++ standalone/drivers/isdn/hardware/mISDN/hfcmulti.c
+@@ -2695,7 +2695,7 @@ fifo_irq(struct hfc_multi *hc, int block
  int irqsem;
  #endif
  static irqreturn_t
@@ -31,12 +33,11 @@ diff -ur standalone.orig/drivers/isdn/hardware/mISDN/hfcmulti.c standalone/drive
  {
  #ifdef IRQCOUNT_DEBUG
  	static int iq1 = 0, iq2 = 0, iq3 = 0, iq4 = 0,
-Nur in standalone/drivers/isdn/hardware/mISDN: hfcmulti.c~.
-Nur in standalone.orig/drivers/isdn/hardware/mISDN: hfcmulti.o.
-diff -ur standalone.orig/drivers/isdn/hardware/mISDN/hfcpci.c standalone/drivers/isdn/hardware/mISDN/hfcpci.c
---- standalone.orig/drivers/isdn/hardware/mISDN/hfcpci.c	2012-07-25 10:41:05.000000000 +0200
-+++ standalone/drivers/isdn/hardware/mISDN/hfcpci.c	2012-07-25 10:48:53.000000000 +0200
-@@ -1153,7 +1153,7 @@
+Index: standalone/drivers/isdn/hardware/mISDN/hfcpci.c
+===================================================================
+--- standalone.orig/drivers/isdn/hardware/mISDN/hfcpci.c
++++ standalone/drivers/isdn/hardware/mISDN/hfcpci.c
+@@ -1153,7 +1153,7 @@ tx_dirq(struct dchannel *dch)
  }
  
  static irqreturn_t
@@ -45,10 +46,11 @@ diff -ur standalone.orig/drivers/isdn/hardware/mISDN/hfcpci.c standalone/drivers
  {
  	struct hfc_pci	*hc = dev_id;
  	u_char		exval;
-diff -ur standalone.orig/drivers/isdn/hardware/mISDN/mISDNinfineon.c standalone/drivers/isdn/hardware/mISDN/mISDNinfineon.c
---- standalone.orig/drivers/isdn/hardware/mISDN/mISDNinfineon.c	2012-07-25 10:41:05.000000000 +0200
-+++ standalone/drivers/isdn/hardware/mISDN/mISDNinfineon.c	2012-07-25 10:50:35.000000000 +0200
-@@ -288,7 +288,7 @@
+Index: standalone/drivers/isdn/hardware/mISDN/mISDNinfineon.c
+===================================================================
+--- standalone.orig/drivers/isdn/hardware/mISDN/mISDNinfineon.c
++++ standalone/drivers/isdn/hardware/mISDN/mISDNinfineon.c
+@@ -288,7 +288,7 @@ IOFUNC_MEMIO(ISAC, inf_hw, u32, isac.a.p
  IOFUNC_MEMIO(IPAC, inf_hw, u32, hscx.a.p)
  
  static irqreturn_t
@@ -57,7 +59,7 @@ diff -ur standalone.orig/drivers/isdn/hardware/mISDN/mISDNinfineon.c standalone/
  {
  	struct inf_hw *hw = dev_id;
  	u8 val;
-@@ -306,7 +306,7 @@
+@@ -306,7 +306,7 @@ diva_irq(int intno, void *dev_id)
  }
  
  static irqreturn_t
@@ -66,7 +68,7 @@ diff -ur standalone.orig/drivers/isdn/hardware/mISDN/mISDNinfineon.c standalone/
  {
  	struct inf_hw *hw = dev_id;
  	u8 val;
-@@ -325,7 +325,7 @@
+@@ -325,7 +325,7 @@ diva20x_irq(int intno, void *dev_id)
  }
  
  static irqreturn_t
@@ -75,7 +77,7 @@ diff -ur standalone.orig/drivers/isdn/hardware/mISDN/mISDNinfineon.c standalone/
  {
  	struct inf_hw *hw = dev_id;
  	u8 val;
-@@ -343,7 +343,7 @@
+@@ -343,7 +343,7 @@ tiger_irq(int intno, void *dev_id)
  }
  
  static irqreturn_t
@@ -84,7 +86,7 @@ diff -ur standalone.orig/drivers/isdn/hardware/mISDN/mISDNinfineon.c standalone/
  {
  	struct inf_hw *hw = dev_id;
  	u8 val;
-@@ -361,7 +361,7 @@
+@@ -361,7 +361,7 @@ elsa_irq(int intno, void *dev_id)
  }
  
  static irqreturn_t
@@ -93,7 +95,7 @@ diff -ur standalone.orig/drivers/isdn/hardware/mISDN/mISDNinfineon.c standalone/
  {
  	struct inf_hw *hw = dev_id;
  	u32 val;
-@@ -380,7 +380,7 @@
+@@ -380,7 +380,7 @@ niccy_irq(int intno, void *dev_id)
  }
  
  static irqreturn_t
@@ -102,7 +104,7 @@ diff -ur standalone.orig/drivers/isdn/hardware/mISDN/mISDNinfineon.c standalone/
  {
  	struct inf_hw *hw = dev_id;
  	irqreturn_t ret;
-@@ -392,7 +392,7 @@
+@@ -392,7 +392,7 @@ gazel_irq(int intno, void *dev_id)
  }
  
  static irqreturn_t
@@ -111,10 +113,11 @@ diff -ur standalone.orig/drivers/isdn/hardware/mISDN/mISDNinfineon.c standalone/
  {
  	struct inf_hw *hw = dev_id;
  	u8 val;
-diff -ur standalone.orig/drivers/isdn/hardware/mISDN/netjet.c standalone/drivers/isdn/hardware/mISDN/netjet.c
---- standalone.orig/drivers/isdn/hardware/mISDN/netjet.c	2012-07-25 10:41:05.000000000 +0200
-+++ standalone/drivers/isdn/hardware/mISDN/netjet.c	2012-07-25 10:49:23.000000000 +0200
-@@ -663,7 +663,7 @@
+Index: standalone/drivers/isdn/hardware/mISDN/netjet.c
+===================================================================
+--- standalone.orig/drivers/isdn/hardware/mISDN/netjet.c
++++ standalone/drivers/isdn/hardware/mISDN/netjet.c
+@@ -686,7 +686,7 @@ send_tiger(struct tiger_hw *card, u8 irq
  }
  
  static irqreturn_t
@@ -123,11 +126,11 @@ diff -ur standalone.orig/drivers/isdn/hardware/mISDN/netjet.c standalone/drivers
  {
  	struct tiger_hw *card = dev_id;
  	u8 val, s1val, s0val;
-Nur in standalone/drivers/isdn/hardware/mISDN: netjet.c~.
-diff -ur standalone.orig/drivers/isdn/hardware/mISDN/speedfax.c standalone/drivers/isdn/hardware/mISDN/speedfax.c
---- standalone.orig/drivers/isdn/hardware/mISDN/speedfax.c	2012-07-25 10:41:05.000000000 +0200
-+++ standalone/drivers/isdn/hardware/mISDN/speedfax.c	2012-07-25 10:50:42.000000000 +0200
-@@ -112,7 +112,6 @@
+Index: standalone/drivers/isdn/hardware/mISDN/speedfax.c
+===================================================================
+--- standalone.orig/drivers/isdn/hardware/mISDN/speedfax.c
++++ standalone/drivers/isdn/hardware/mISDN/speedfax.c
+@@ -112,7 +112,6 @@ set_debug(const char *val, struct kernel
  MODULE_AUTHOR("Karsten Keil");
  MODULE_LICENSE("GPL v2");
  MODULE_VERSION(SPEEDFAX_REV);
@@ -135,7 +138,7 @@ diff -ur standalone.orig/drivers/isdn/hardware/mISDN/speedfax.c standalone/drive
  module_param_call(debug, set_debug, param_get_uint, &debug, S_IRUGO | S_IWUSR);
  MODULE_PARM_DESC(debug, "Speedfax debug mask");
  module_param(irqloops, uint, S_IRUGO | S_IWUSR);
-@@ -122,7 +122,7 @@
+@@ -122,7 +121,7 @@ IOFUNC_IND(ISAC, sfax_hw, p_isac)
  IOFUNC_IND(ISAR, sfax_hw, p_isar)
  
  static irqreturn_t
@@ -144,10 +147,11 @@ diff -ur standalone.orig/drivers/isdn/hardware/mISDN/speedfax.c standalone/drive
  {
  	struct sfax_hw	*sf = dev_id;
  	u8 val;
-diff -ur standalone.orig/drivers/isdn/hardware/mISDN/w6692.c standalone/drivers/isdn/hardware/mISDN/w6692.c
---- standalone.orig/drivers/isdn/hardware/mISDN/w6692.c	2012-07-25 10:41:05.000000000 +0200
-+++ standalone/drivers/isdn/hardware/mISDN/w6692.c	2012-07-25 10:49:15.000000000 +0200
-@@ -772,7 +772,7 @@
+Index: standalone/drivers/isdn/hardware/mISDN/w6692.c
+===================================================================
+--- standalone.orig/drivers/isdn/hardware/mISDN/w6692.c
++++ standalone/drivers/isdn/hardware/mISDN/w6692.c
+@@ -784,7 +784,7 @@ W6692B_interrupt(struct w6692_hw *card,
  }
  
  static irqreturn_t
@@ -156,13 +160,11 @@ diff -ur standalone.orig/drivers/isdn/hardware/mISDN/w6692.c standalone/drivers/
  {
  	struct w6692_hw	*card = dev_id;
  	u8		ista;
-Nur in standalone/drivers/isdn/hardware/mISDN: w6692.c~.
-Nur in standalone.orig/drivers/isdn/hardware/mISDN: xhfc.o.
-Nur in standalone.orig/drivers/isdn/hardware/mISDN: xhfc_pci2pi.o.
-diff -ur standalone.orig/drivers/isdn/hardware/mISDN/xhfc_su.c standalone/drivers/isdn/hardware/mISDN/xhfc_su.c
---- standalone.orig/drivers/isdn/hardware/mISDN/xhfc_su.c	2012-07-25 10:41:05.000000000 +0200
-+++ standalone/drivers/isdn/hardware/mISDN/xhfc_su.c	2012-07-25 10:48:18.000000000 +0200
-@@ -1795,7 +1795,7 @@
+Index: standalone/drivers/isdn/hardware/mISDN/xhfc_su.c
+===================================================================
+--- standalone.orig/drivers/isdn/hardware/mISDN/xhfc_su.c
++++ standalone/drivers/isdn/hardware/mISDN/xhfc_su.c
+@@ -1794,7 +1794,7 @@ xhfc_bh_handler(unsigned long ul_hw)
   * Interrupt handler
   */
  irqreturn_t
@@ -171,11 +173,11 @@ diff -ur standalone.orig/drivers/isdn/hardware/mISDN/xhfc_su.c standalone/driver
  {
  	struct xhfc_pi *pi = dev_id;
  	struct xhfc *xhfc = NULL;
-Nur in standalone/drivers/isdn/hardware/mISDN: xhfc_su.c~.
-diff -ur standalone.orig/drivers/isdn/hardware/mISDN/xhfc_su.h standalone/drivers/isdn/hardware/mISDN/xhfc_su.h
---- standalone.orig/drivers/isdn/hardware/mISDN/xhfc_su.h	2012-07-25 10:41:05.000000000 +0200
-+++ standalone/drivers/isdn/hardware/mISDN/xhfc_su.h	2012-07-25 10:48:42.000000000 +0200
-@@ -198,6 +198,6 @@
+Index: standalone/drivers/isdn/hardware/mISDN/xhfc_su.h
+===================================================================
+--- standalone.orig/drivers/isdn/hardware/mISDN/xhfc_su.h
++++ standalone/drivers/isdn/hardware/mISDN/xhfc_su.h
+@@ -198,6 +198,6 @@ int setup_instance(struct xhfc *hw, stru
  int release_instance(struct xhfc *hw);
  void enable_interrupts(struct xhfc *xhfc);
  void disable_interrupts(struct xhfc *xhfc);
@@ -183,8 +185,10 @@ diff -ur standalone.orig/drivers/isdn/hardware/mISDN/xhfc_su.h standalone/driver
 +irqreturn_t xhfc_interrupt(int intno, void *dev_id, struct pt_regs *regs);
  
  #endif /* _XHFC_SU_H_ */
---- standalone/include/linux/mISDNif_s.h~	2012-07-25 10:27:18.000000000 +0200
-+++ standalone/include/linux/mISDNif_s.h	2012-07-25 10:31:41.000000000 +0200
+Index: standalone/include/linux/mISDNif_s.h
+===================================================================
+--- standalone.orig/include/linux/mISDNif_s.h
++++ standalone/include/linux/mISDNif_s.h
 @@ -22,6 +22,7 @@
  #include <linux/types.h>
  #include <linux/errno.h>

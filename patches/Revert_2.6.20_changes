@@ -2,7 +2,7 @@ Index: standalone/drivers/isdn/mISDN/dsp_core.c
 ===================================================================
 --- standalone.orig/drivers/isdn/mISDN/dsp_core.c
 +++ standalone/drivers/isdn/mISDN/dsp_core.c
-@@ -1063,7 +1063,7 @@ dspcreate(struct channel_req *crq)
+@@ -1065,7 +1065,7 @@ dspcreate(struct channel_req *crq)
  		printk(KERN_DEBUG "%s: creating new dsp instance\n", __func__);
  
  	/* default enabled */
@@ -15,7 +15,7 @@ Index: standalone/drivers/isdn/mISDN/hwchannel.c
 ===================================================================
 --- standalone.orig/drivers/isdn/mISDN/hwchannel.c
 +++ standalone/drivers/isdn/mISDN/hwchannel.c
-@@ -74,7 +74,7 @@ mISDN_initdchannel(struct dchannel *ch,
+@@ -75,7 +75,7 @@ mISDN_initdchannel(struct dchannel *ch,
  	skb_queue_head_init(&ch->squeue);
  	skb_queue_head_init(&ch->rqueue);
  	INIT_LIST_HEAD(&ch->dev.bchannels);
@@ -24,7 +24,7 @@ Index: standalone/drivers/isdn/mISDN/hwchannel.c
  	return 0;
  }
  EXPORT_SYMBOL(mISDN_initdchannel);
-@@ -91,7 +91,7 @@ mISDN_initbchannel(struct bchannel *ch,
+@@ -98,7 +98,7 @@ mISDN_initbchannel(struct bchannel *ch,
  	skb_queue_head_init(&ch->rqueue);
  	ch->rcount = 0;
  	ch->next_skb = NULL;
@@ -37,7 +37,7 @@ Index: standalone/drivers/isdn/mISDN/l1oip_core.c
 ===================================================================
 --- standalone.orig/drivers/isdn/mISDN/l1oip_core.c
 +++ standalone/drivers/isdn/mISDN/l1oip_core.c
-@@ -1516,7 +1516,7 @@ l1oip_init(void)
+@@ -1517,7 +1517,7 @@ l1oip_init(void)
  			l1oip_cleanup();
  			return -ENOMEM;
  		}

@@ -13,20 +13,16 @@ Signed-off-by: Eric Dumazet <eric.dumazet@gmail.com>
 Signed-off-by: David S. Miller <davem@davemloft.net>
 ---
 
-diff --git a/include/linux/mISDNif.h b/include/linux/mISDNif.h
-index 78c3bed..b5e7f22 100644
---- a/include/linux/mISDNif_s.h
-+++ b/include/linux/mISDNif_s.h
-@@ -251,7 +251,7 @@
+Index: standalone/include/linux/mISDNif_s.h
+===================================================================
+--- standalone.orig/include/linux/mISDNif_s.h
++++ standalone/include/linux/mISDNif_s.h
+@@ -256,7 +256,7 @@
  struct mISDNhead {
  	unsigned int	prim;
  	unsigned int	id;
--}  __attribute__((packed));
-+}  __packed;
+-}  __packed;
++}  __attribute__((packed));
  
  #define MISDN_HEADER_LEN	sizeof(struct mISDNhead)
  #define MAX_DATA_SIZE		2048
-
--- 
-1.7.5
-

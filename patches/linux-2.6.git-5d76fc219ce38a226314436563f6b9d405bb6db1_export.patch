@@ -8,51 +8,51 @@ that we need to get EXPORT_SYMBOL variants and THIS_MODULE into scope.
 
 Signed-off-by: Paul Gortmaker <paul.gortmaker@windriver.com>
 
-diff --git a/drivers/isdn/mISDN/clock.c b/drivers/isdn/mISDN/clock.c
-index 1fa629b..7418f2d 100644
---- a/drivers/isdn/mISDN/clock.c
-+++ b/drivers/isdn/mISDN/clock.c
-@@ -38,6 +38,7 @@
+Index: standalone/drivers/isdn/mISDN/clock.c
+===================================================================
+--- standalone.orig/drivers/isdn/mISDN/clock.c
++++ standalone/drivers/isdn/mISDN/clock.c
+@@ -38,7 +38,6 @@
  #include <linux/stddef.h>
  #include <linux/spinlock.h>
  #include <linux/mISDNif_s.h>
-+#include <linux/export.h>
+-#include <linux/export.h>
  #include "core.h"
  
  static u_int *debug;
-diff --git a/drivers/isdn/mISDN/dsp_audio.c b/drivers/isdn/mISDN/dsp_audio.c
-index 9c7c645..b8f18bd0 100644
---- a/drivers/isdn/mISDN/dsp_audio.c
-+++ b/drivers/isdn/mISDN/dsp_audio.c
-@@ -12,6 +12,7 @@
+Index: standalone/drivers/isdn/mISDN/dsp_audio.c
+===================================================================
+--- standalone.orig/drivers/isdn/mISDN/dsp_audio.c
++++ standalone/drivers/isdn/mISDN/dsp_audio.c
+@@ -12,7 +12,6 @@
  #include <linux/delay.h>
  #include <linux/mISDNif_s.h>
  #include <linux/mISDNdsp_s.h>
-+#include <linux/export.h>
+-#include <linux/export.h>
  #include "core.h"
  #include "dsp.h"
  
-diff --git a/drivers/isdn/mISDN/dsp_pipeline.c b/drivers/isdn/mISDN/dsp_pipeline.c
-index 621f310..b6c9a58 100644
---- a/drivers/isdn/mISDN/dsp_pipeline.c
-+++ b/drivers/isdn/mISDN/dsp_pipeline.c
-@@ -30,6 +30,7 @@
+Index: standalone/drivers/isdn/mISDN/dsp_pipeline.c
+===================================================================
+--- standalone.orig/drivers/isdn/mISDN/dsp_pipeline.c
++++ standalone/drivers/isdn/mISDN/dsp_pipeline.c
+@@ -30,7 +30,6 @@
  #include <linux/string.h>
  #include <linux/mISDNif_s.h>
  #include <linux/mISDNdsp_s.h>
-+#include <linux/export.h>
+-#include <linux/export.h>
  #include "dsp.h"
  #include "dsp_hwec.h"
  
-diff --git a/drivers/isdn/mISDN/socket.c b/drivers/isdn/mISDN/socket.c
-index 8e32522..738ea8d 100644
---- a/drivers/isdn/mISDN/socket.c
-+++ b/drivers/isdn/mISDN/socket.c
-@@ -17,6 +17,7 @@
+Index: standalone/drivers/isdn/mISDN/socket.c
+===================================================================
+--- standalone.orig/drivers/isdn/mISDN/socket.c
++++ standalone/drivers/isdn/mISDN/socket.c
+@@ -17,7 +17,6 @@
  
  #include <linux/mISDNif_s.h>
  #include <linux/slab.h>
-+#include <linux/export.h>
+-#include <linux/export.h>
  #include "core.h"
  
  static u_int	*debug;

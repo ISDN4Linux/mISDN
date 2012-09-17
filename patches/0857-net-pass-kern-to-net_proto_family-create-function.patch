@@ -17,19 +17,16 @@ Signed-off-by: David S. Miller <davem@davemloft.net>
  drivers/isdn/mISDN/socket.c |    2 +-
  1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/drivers/isdn/mISDN/socket.c b/drivers/isdn/mISDN/socket.c
-index c36f521..ec651b6 100644
---- a/drivers/isdn/mISDN/socket.c
-+++ b/drivers/isdn/mISDN/socket.c
-@@ -779,7 +779,7 @@ base_sock_create(struct net *net, struct socket *sock, int protocol)
+Index: standalone/drivers/isdn/mISDN/socket.c
+===================================================================
+--- standalone.orig/drivers/isdn/mISDN/socket.c
++++ standalone/drivers/isdn/mISDN/socket.c
+@@ -788,7 +788,7 @@ base_sock_create(struct net *net, struct
  }
  
  static int
--mISDN_sock_create(struct net *net, struct socket *sock, int proto)
-+mISDN_sock_create(struct net *net, struct socket *sock, int proto, int kern)
+-mISDN_sock_create(struct net *net, struct socket *sock, int proto, int kern)
++mISDN_sock_create(struct net *net, struct socket *sock, int proto)
  {
  	int err = -EPROTONOSUPPORT;
  
--- 
-1.6.0.2
-

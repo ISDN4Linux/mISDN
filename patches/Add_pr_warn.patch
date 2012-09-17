@@ -2,9 +2,9 @@ Index: standalone/include/linux/mISDNif_s.h
 ===================================================================
 --- standalone.orig/include/linux/mISDNif_s.h
 +++ standalone/include/linux/mISDNif_s.h
-@@ -589,5 +589,6 @@ extern void	set_channel_address(struct m
- extern void	mISDN_clock_update(struct mISDNclock *, int, struct timeval *);
+@@ -600,5 +600,6 @@ extern void	mISDN_clock_update(struct mI
  extern unsigned short mISDN_clock_get(void);
+ extern const char *mISDNDevName4ch(struct mISDNchannel *);
  
 +#define pr_warn		pr_warning
  #endif /* __KERNEL__ */

@@ -26,3 +26,4 @@ standalone/misdn.sed
 standalone/mISDN.cfg.D
 standalone/mISDN.cfg.M
 standalone/misdn.configs
+standalone/.patchOK

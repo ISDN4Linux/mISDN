@@ -135,6 +135,7 @@ patched_tree: unpatched_tree
 	else \
 		echo "no series found"; \
 	fi
+	cat .patchOK
 
 unpatched_tree: clean_tree
 	$(MAKE) btree

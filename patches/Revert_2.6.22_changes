@@ -2,7 +2,7 @@ Index: standalone/drivers/isdn/hardware/mISDN/mISDNipac.c
 ===================================================================
 --- standalone.orig/drivers/isdn/hardware/mISDN/mISDNipac.c
 +++ standalone/drivers/isdn/hardware/mISDN/mISDNipac.c
-@@ -22,6 +22,7 @@
+@@ -24,6 +24,7 @@
  #include <linux/slab.h>
  #include <linux/module.h>
  #include <linux/mISDNhw_s.h>
@@ -14,7 +14,7 @@ Index: standalone/drivers/isdn/mISDN/dsp_core.c
 ===================================================================
 --- standalone.orig/drivers/isdn/mISDN/dsp_core.c
 +++ standalone/drivers/isdn/mISDN/dsp_core.c
-@@ -970,7 +970,9 @@ dsp_ctrl(struct mISDNchannel *ch, u_int
+@@ -972,7 +972,9 @@ dsp_ctrl(struct mISDNchannel *ch, u_int
  		dsp->b_active = 0;
  		spin_unlock_irqrestore(&dsp_lock, flags);
  		/* MUST not be locked, because it waits until queue is done. */
@@ -29,7 +29,7 @@ Index: standalone/drivers/isdn/mISDN/hwchannel.c
 ===================================================================
 --- standalone.orig/drivers/isdn/mISDN/hwchannel.c
 +++ standalone/drivers/isdn/mISDN/hwchannel.c
-@@ -398,3 +398,189 @@ bchannel_senddata(struct bchannel *ch, s
+@@ -525,3 +525,189 @@ bchannel_get_rxbuf(struct bchannel *bch,
  	return len;
  }
  EXPORT_SYMBOL(bchannel_get_rxbuf);
@@ -223,8 +223,8 @@ Index: standalone/include/linux/mISDNif_s.h
 ===================================================================
 --- standalone.orig/include/linux/mISDNif_s.h
 +++ standalone/include/linux/mISDNif_s.h
-@@ -594,5 +594,20 @@ extern unsigned short mISDN_clock_get(vo
- #define pr_info(fmt, arg...)	printk(KERN_INFO fmt, ##arg)
+@@ -607,5 +607,20 @@ extern const char *mISDNDevName4ch(struc
+ #define pr_err(fmt, arg...)	printk(KERN_ERR fmt, ##arg)
  #define pr_warning(fmt, arg...)	printk(KERN_WARNING fmt, ##arg)
  #define pr_warn		pr_warning
 +enum {

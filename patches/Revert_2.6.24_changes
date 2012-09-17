@@ -2,7 +2,7 @@ Index: standalone/drivers/isdn/mISDN/socket.c
 ===================================================================
 --- standalone.orig/drivers/isdn/mISDN/socket.c
 +++ standalone/drivers/isdn/mISDN/socket.c
-@@ -602,14 +602,14 @@ static const struct proto_ops data_sock_
+@@ -610,14 +610,14 @@ static const struct proto_ops data_sock_
  };
  
  static int
@@ -19,7 +19,7 @@ Index: standalone/drivers/isdn/mISDN/socket.c
  	if (!sk)
  		return -ENOMEM;
  
-@@ -756,14 +756,14 @@ static const struct proto_ops base_sock_
+@@ -765,14 +765,14 @@ static const struct proto_ops base_sock_
  
  
  static int
@@ -36,7 +36,7 @@ Index: standalone/drivers/isdn/mISDN/socket.c
  	if (!sk)
  		return -ENOMEM;
  
-@@ -779,13 +779,13 @@ base_sock_create(struct net *net, struct
+@@ -788,13 +788,13 @@ base_sock_create(struct net *net, struct
  }
  
  static int
@@ -52,7 +52,7 @@ Index: standalone/drivers/isdn/mISDN/socket.c
  		break;
  	case ISDN_P_TE_S0:
  	case ISDN_P_NT_S0:
-@@ -799,7 +799,7 @@ mISDN_sock_create(struct net *net, struc
+@@ -808,7 +808,7 @@ mISDN_sock_create(struct net *net, struc
  	case ISDN_P_B_L2DTMF:
  	case ISDN_P_B_L2DSP:
  	case ISDN_P_B_L2DSPHDLC:
@@ -65,9 +65,9 @@ Index: standalone/include/linux/mISDNif_s.h
 ===================================================================
 --- standalone.orig/include/linux/mISDNif_s.h
 +++ standalone/include/linux/mISDNif_s.h
-@@ -589,6 +589,9 @@ extern void	set_channel_address(struct m
- extern void	mISDN_clock_update(struct mISDNclock *, int, struct timeval *);
+@@ -603,6 +603,9 @@ extern void	mISDN_clock_update(struct mI
  extern unsigned short mISDN_clock_get(void);
+ extern const char *mISDNDevName4ch(struct mISDNchannel *);
  
 +#define pr_notice(fmt, arg...)	printk(KERN_NOTICE fmt, ##arg)
 +#define pr_err(fmt, arg...)	printk(KERN_ERR fmt, ##arg)

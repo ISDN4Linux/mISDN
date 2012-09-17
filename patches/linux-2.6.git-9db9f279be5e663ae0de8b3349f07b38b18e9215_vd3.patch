@@ -15,26 +15,23 @@ Signed-off-by: David S. Miller <davem@davemloft.net>
  drivers/isdn/hardware/mISDN/hfcmulti.c |    9 +++------
  1 files changed, 3 insertions(+), 6 deletions(-)
 
-diff --git a/drivers/isdn/hardware/mISDN/hfcmulti.c b/drivers/isdn/hardware/mISDN/hfcmulti.c
-index 095ed76..987fb18 100644
---- a/drivers/isdn/hardware/mISDN/hfcmulti.c
-+++ b/drivers/isdn/hardware/mISDN/hfcmulti.c
-@@ -5354,12 +5354,9 @@ static struct pci_device_id hfmultipci_ids[] __devinitdata = {
+Index: standalone/drivers/isdn/hardware/mISDN/hfcmulti.c
+===================================================================
+--- standalone.orig/drivers/isdn/hardware/mISDN/hfcmulti.c
++++ standalone/drivers/isdn/hardware/mISDN/hfcmulti.c
+@@ -5440,9 +5440,12 @@ static struct pci_device_id hfmultipci_i
  	{ PCI_VENDOR_ID_CCD, PCI_DEVICE_ID_CCD_HFCE1, PCI_VENDOR_ID_CCD,
- 		PCI_SUBDEVICE_ID_CCD_JHSE1, 0, 0, H(25)}, /* Junghanns E1 */
+ 	  PCI_SUBDEVICE_ID_CCD_JHSE1, 0, 0, H(25)}, /* Junghanns E1 */
  
--	{ PCI_VENDOR_ID_CCD, PCI_DEVICE_ID_CCD_HFC4S, PCI_ANY_ID, PCI_ANY_ID,
--		0, 0, 0},
--	{ PCI_VENDOR_ID_CCD, PCI_DEVICE_ID_CCD_HFC8S, PCI_ANY_ID, PCI_ANY_ID,
--		0, 0, 0},
--	{ PCI_VENDOR_ID_CCD, PCI_DEVICE_ID_CCD_HFCE1, PCI_ANY_ID, PCI_ANY_ID,
--		0, 0, 0},
-+	{ PCI_VDEVICE(CCD, PCI_DEVICE_ID_CCD_HFC4S), 0 },
-+	{ PCI_VDEVICE(CCD, PCI_DEVICE_ID_CCD_HFC8S), 0 },
-+	{ PCI_VDEVICE(CCD, PCI_DEVICE_ID_CCD_HFCE1), 0 },
+-	{ PCI_VDEVICE(CCD, PCI_DEVICE_ID_CCD_HFC4S), 0 },
+-	{ PCI_VDEVICE(CCD, PCI_DEVICE_ID_CCD_HFC8S), 0 },
+-	{ PCI_VDEVICE(CCD, PCI_DEVICE_ID_CCD_HFCE1), 0 },
++	{ PCI_VENDOR_ID_CCD, PCI_DEVICE_ID_CCD_HFC4S, PCI_ANY_ID, PCI_ANY_ID,
++		0, 0, 0},
++	{ PCI_VENDOR_ID_CCD, PCI_DEVICE_ID_CCD_HFC8S, PCI_ANY_ID, PCI_ANY_ID,
++		0, 0, 0},
++	{ PCI_VENDOR_ID_CCD, PCI_DEVICE_ID_CCD_HFCE1, PCI_ANY_ID, PCI_ANY_ID,
++		0, 0, 0},
  	{0, }
  };
  #undef H
--- 
-1.7.5
-
