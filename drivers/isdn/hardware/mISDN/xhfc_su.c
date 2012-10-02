@@ -58,6 +58,7 @@ static int xhfc_bctrl(struct mISDNchannel *ch, u_int cmd, void *arg);
 static int xhfc_dctrl(struct mISDNchannel *ch, u_int cmd, void *arg);
 static int xhfc_setup_bch(struct bchannel *bch, int protocol);
 static void xhfc_setup_dch(struct dchannel *dch);
+static void xhfc_write_fifo(struct xhfc *xhfc, __u8 channel);
 static void xhfc_bh_handler(unsigned long ul_hw);
 static void ph_state(struct dchannel *dch);
 static void f7_timer_expire(struct port *port);
@@ -844,6 +845,7 @@ xhfc_l2l1B(struct mISDNchannel *ch, struct sk_buff *skb)
 {
 	struct bchannel *bch = container_of(ch, struct bchannel, ch);
 	struct port *p = bch->hw;
+	__u8 channel = (p->idx * 4) + (bch->nr - 1);
 	int ret = -EINVAL;
 	struct mISDNhead *hh = mISDN_HEAD_P(skb);
 
@@ -852,12 +854,15 @@ xhfc_l2l1B(struct mISDNchannel *ch, struct sk_buff *skb)
 
 	switch (hh->prim) {
 		case PH_DATA_REQ:
+			spin_lock_bh(&p->xhfc->lock);
 			spin_lock_bh(&p->lock);
 			ret = bchannel_senddata(bch, skb);
 			spin_unlock_bh(&p->lock);
 			if (ret > 0) {
+				xhfc_write_fifo(p->xhfc, channel);
 				ret = 0;
 			}
+			spin_unlock_bh(&p->xhfc->lock);
 			return ret;
 		case PH_ACTIVATE_REQ:
 			if (!test_and_set_bit(FLG_ACTIVE, &bch->Flags)) {
@@ -1736,6 +1741,8 @@ xhfc_bh_handler(unsigned long ul_hw)
 	__u8 su_state;
 	struct dchannel *dch;
 
+	spin_lock_bh(&xhfc->lock);
+
 	/* timer interrupt */
 	if (GET_V_TI_IRQ(xhfc->misc_irq)) {
 		xhfc->misc_irq &= (__u8) (~M_TI_IRQ);
@@ -1788,6 +1795,8 @@ xhfc_bh_handler(unsigned long ul_hw)
 			}
 		}
 	}
+
+	spin_unlock_bh(&xhfc->lock);
 }
 
 /*
