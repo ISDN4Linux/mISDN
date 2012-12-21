@@ -312,8 +312,8 @@ struct xhfc_pi {
 
 /* prototypes: PCI bridge management */
 int init_pci_bridge(struct xhfc_pi * pi);
-int __devinit xhfc_pci_probe(struct pci_dev *pdev, const struct pci_device_id *ent);
-void __devexit xhfc_pci_remove(struct pci_dev *pdev);
+int xhfc_pci_probe(struct pci_dev *pdev, const struct pci_device_id *ent);
+void xhfc_pci_remove(struct pci_dev *pdev);
 int xhfc_register_pi(void);
 int xhfc_unregister_pi(void);
 

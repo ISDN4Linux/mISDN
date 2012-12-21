@@ -50,7 +50,7 @@ static struct pci_device_id xhfc_ids[] = {
 static struct pci_driver xhfc_driver = {
       name:DRIVER_NAME,
       probe:xhfc_pci_probe,
-      remove:__devexit_p(xhfc_pci_remove),
+      remove:xhfc_pci_remove,
       id_table:xhfc_ids,
 };
 
@@ -60,7 +60,7 @@ static struct pci_driver xhfc_driver = {
  *  and alloc 'struct xhfc' at pi->xhfc for every XHFC expected
  *  on that PCI card
  */
-int __devinit
+int
 xhfc_pci_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 {
 	struct pi_params *driver_data =
@@ -163,7 +163,7 @@ xhfc_pci_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 /*
  * PCI hotplug interface: remove card
  */
-void __devexit
+void
 xhfc_pci_remove(struct pci_dev *pdev)
 {
 	int i;
