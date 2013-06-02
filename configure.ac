@@ -45,7 +45,19 @@ else
 fi
 
 if test -d $KERNEL_BUILD_DIR -a -d $KERNEL_SOURCE_DIR; then
-	if test -f $KERNEL_BUILD_DIR/include/linux/version.h; then
+	if test -f $KERNEL_BUILD_DIR/include/generated/utsrelease.h; then
+		KMAJ_=`$GREP "^VERSION =" $KERNEL_SOURCE_DIR/Makefile | cut -d '=' -f 2`
+		KPAT_=`$GREP "^PATCHLEVEL =" $KERNEL_SOURCE_DIR/Makefile | cut -d '=' -f 2`
+		KSUB_=`$GREP "^SUBLEVEL =" $KERNEL_SOURCE_DIR/Makefile | cut -d '=' -f 2`
+		KMAJ=`echo -n $KMAJ_`
+		KPAT=`echo -n $KPAT_`
+		KSUB=`echo -n $KSUB_`
+		if test x$KMAJ = x3 -a -z "$KSUB"; then
+			KVERSION="${KMAJ}.${KPAT}"
+		else
+			KVERSION="${KMAJ}.${KPAT}.${KSUB}"
+		fi
+	elif test -f $KERNEL_BUILD_DIR/include/linux/version.h; then
 		vcl=`$GREP LINUX_VERSION_CODE $KERNEL_BUILD_DIR/include/linux/version.h`
 		KVERSION=`echo $vcl |$AWK '{printf ("%d.%d.%d",$3 / 65536, (($3/256)%256),$3 % 256)}'`
 		KMAJOR=`echo $vcl |$AWK '{printf ("%d",$3 / 65536)}'`
