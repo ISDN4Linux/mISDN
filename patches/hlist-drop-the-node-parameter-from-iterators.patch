@@ -1,0 +1,203 @@
+From b67bfe0d42cac56c512dd5da4b1b347a23f4b70a Mon Sep 17 00:00:00 2001
+From: Sasha Levin <sasha.levin@oracle.com>
+Date: Wed, 27 Feb 2013 17:06:00 -0800
+Subject: [PATCH] hlist: drop the node parameter from iterators
+
+I'm not sure why, but the hlist for each entry iterators were conceived
+
+        list_for_each_entry(pos, head, member)
+
+The hlist ones were greedy and wanted an extra parameter:
+
+        hlist_for_each_entry(tpos, pos, head, member)
+
+Why did they need an extra pos parameter? I'm not quite sure. Not only
+they don't really need it, it also prevents the iterator from looking
+exactly like the list iterator, which is unfortunate.
+
+Besides the semantic patch, there was some manual work required:
+
+ - Fix up the actual hlist iterators in linux/list.h
+ - Fix up the declaration of other iterators based on the hlist ones.
+ - A very small amount of places were using the 'node' parameter, this
+ was modified to use 'obj->member' instead.
+ - Coccinelle didn't handle the hlist_for_each_entry_safe iterator
+ properly, so those had to be fixed up manually.
+
+The semantic patch which is mostly the work of Peter Senna Tschudin is here:
+
+@@
+iterator name hlist_for_each_entry, hlist_for_each_entry_continue, hlist_for_each_entry_from, hlist_for_each_entry_rcu, hlist_for_each_entry_rcu_bh, hlist_for_each_entry_continue_rcu_bh, for_each_busy_worker, ax25_uid_for_each, ax25_for_each, inet_bind_bucket_for_each, sctp_for_each_hentry, sk_for_each, sk_for_each_rcu, sk_for_each_from, sk_for_each_safe, sk_for_each_bound, hlist_for_each_entry_safe, hlist_for_each_entry_continue_rcu, nr_neigh_for_each, nr_neigh_for_each_safe, nr_node_for_each, nr_node_for_each_safe, for_each_gfn_indirect_valid_sp, for_each_gfn_sp, for_each_host;
+
+type T;
+expression a,c,d,e;
+identifier b;
+statement S;
+@@
+
+-T b;
+    <+... when != b
+(
+hlist_for_each_entry(a,
+- b,
+c, d) S
+|
+hlist_for_each_entry_continue(a,
+- b,
+c) S
+|
+hlist_for_each_entry_from(a,
+- b,
+c) S
+|
+hlist_for_each_entry_rcu(a,
+- b,
+c, d) S
+|
+hlist_for_each_entry_rcu_bh(a,
+- b,
+c, d) S
+|
+hlist_for_each_entry_continue_rcu_bh(a,
+- b,
+c) S
+|
+for_each_busy_worker(a, c,
+- b,
+d) S
+|
+ax25_uid_for_each(a,
+- b,
+c) S
+|
+ax25_for_each(a,
+- b,
+c) S
+|
+inet_bind_bucket_for_each(a,
+- b,
+c) S
+|
+sctp_for_each_hentry(a,
+- b,
+c) S
+|
+sk_for_each(a,
+- b,
+c) S
+|
+sk_for_each_rcu(a,
+- b,
+c) S
+|
+sk_for_each_from
+-(a, b)
++(a)
+S
++ sk_for_each_from(a) S
+|
+sk_for_each_safe(a,
+- b,
+c, d) S
+|
+sk_for_each_bound(a,
+- b,
+c) S
+|
+hlist_for_each_entry_safe(a,
+- b,
+c, d, e) S
+|
+hlist_for_each_entry_continue_rcu(a,
+- b,
+c) S
+|
+nr_neigh_for_each(a,
+- b,
+c) S
+|
+nr_neigh_for_each_safe(a,
+- b,
+c, d) S
+|
+nr_node_for_each(a,
+- b,
+c) S
+|
+nr_node_for_each_safe(a,
+- b,
+c, d) S
+|
+- for_each_gfn_sp(a, c, d, b) S
++ for_each_gfn_sp(a, c, d) S
+|
+- for_each_gfn_indirect_valid_sp(a, c, d, b) S
++ for_each_gfn_indirect_valid_sp(a, c, d) S
+|
+for_each_host(a,
+- b,
+c) S
+|
+for_each_host_safe(a,
+- b,
+c, d) S
+|
+for_each_mesh_entry(a,
+- b,
+c, d) S
+)
+    ...+>
+
+[akpm@linux-foundation.org: drop bogus change from net/ipv4/raw.c]
+[akpm@linux-foundation.org: drop bogus hunk from net/ipv6/raw.c]
+[akpm@linux-foundation.org: checkpatch fixes]
+[akpm@linux-foundation.org: fix warnings]
+[akpm@linux-foudnation.org: redo intrusive kvm changes]
+Tested-by: Peter Senna Tschudin <peter.senna@gmail.com>
+Acked-by: Paul E. McKenney <paulmck@linux.vnet.ibm.com>
+Signed-off-by: Sasha Levin <sasha.levin@oracle.com>
+Cc: Wu Fengguang <fengguang.wu@intel.com>
+Cc: Marcelo Tosatti <mtosatti@redhat.com>
+Cc: Gleb Natapov <gleb@redhat.com>
+Signed-off-by: Andrew Morton <akpm@linux-foundation.org>
+Signed-off-by: Linus Torvalds <torvalds@linux-foundation.org>
+
+diff --git a/drivers/isdn/mISDN/socket.c b/drivers/isdn/mISDN/socket.c
+index abe2d69..8b07f83 100644
+--- a/drivers/isdn/mISDN/socket.c
++++ b/drivers/isdn/mISDN/socket.c
+@@ -483,7 +483,6 @@ data_sock_bind(struct socket *sock, struct sockaddr *addr, int addr_len)
+ {
+ 	struct sockaddr_mISDN *maddr = (struct sockaddr_mISDN *) addr;
+ 	struct sock *sk = sock->sk;
+-	struct hlist_node *node;
+ 	struct sock *csk;
+ 	int err = 0;
+ 
+@@ -508,7 +507,7 @@ data_sock_bind(struct socket *sock, struct sockaddr *addr, int addr_len)
+ 
+ 	if (sk->sk_protocol < ISDN_P_B_START) {
+ 		read_lock_bh(&data_sockets.lock);
+-		sk_for_each(csk, node, &data_sockets.head) {
++		sk_for_each(csk, &data_sockets.head) {
+ 			if (sk == csk)
+ 				continue;
+ 			if (_pms(csk)->dev != _pms(sk)->dev)
+diff --git a/drivers/isdn/mISDN/stack.c b/drivers/isdn/mISDN/stack.c
+index deda591..9cb4b62 100644
+--- a/drivers/isdn/mISDN/stack.c
++++ b/drivers/isdn/mISDN/stack.c
+@@ -64,12 +64,11 @@ unlock:
+ static void
+ send_socklist(struct mISDN_sock_list *sl, struct sk_buff *skb)
+ {
+-	struct hlist_node	*node;
+ 	struct sock		*sk;
+ 	struct sk_buff		*cskb = NULL;
+ 
+ 	read_lock(&sl->lock);
+-	sk_for_each(sk, node, &sl->head) {
++	sk_for_each(sk, &sl->head) {
+ 		if (sk->sk_state != MISDN_BOUND)
+ 			continue;
+ 		if (!cskb)

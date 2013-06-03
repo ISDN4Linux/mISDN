@@ -1,0 +1,58 @@
+From 43829731dd372d04d6706c51052b9dabab9ca356 Mon Sep 17 00:00:00 2001
+From: Tejun Heo <tj@kernel.org>
+Date: Mon, 20 Aug 2012 14:51:24 -0700
+Subject: [PATCH] workqueue: deprecate flush[_delayed]_work_sync()
+
+flush[_delayed]_work_sync() are now spurious.  Mark them deprecated
+and convert all users to flush[_delayed]_work().
+
+If you're cc'd and wondering what's going on: Now all workqueues are
+non-reentrant and the regular flushes guarantee that the work item is
+not pending or running on any CPU on return, so there's no reason to
+use the sync flushes at all and they're going away.
+
+This patch doesn't make any functional difference.
+
+Signed-off-by: Tejun Heo <tj@kernel.org>
+Cc: Russell King <linux@arm.linux.org.uk>
+Cc: Paul Mundt <lethal@linux-sh.org>
+Cc: Ian Campbell <ian.campbell@citrix.com>
+Cc: Jens Axboe <axboe@kernel.dk>
+Cc: Mattia Dongili <malattia@linux.it>
+Cc: Kent Yoder <key@linux.vnet.ibm.com>
+Cc: David Airlie <airlied@linux.ie>
+Cc: Jiri Kosina <jkosina@suse.cz>
+Cc: Karsten Keil <isdn@linux-pingi.de>
+Cc: Bryan Wu <bryan.wu@canonical.com>
+Cc: Benjamin Herrenschmidt <benh@kernel.crashing.org>
+Cc: Alasdair Kergon <agk@redhat.com>
+Cc: Mauro Carvalho Chehab <mchehab@infradead.org>
+Cc: Florian Tobias Schandinat <FlorianSchandinat@gmx.de>
+Cc: David Woodhouse <dwmw2@infradead.org>
+Cc: "David S. Miller" <davem@davemloft.net>
+Cc: linux-wireless@vger.kernel.org
+Cc: Anton Vorontsov <cbou@mail.ru>
+Cc: Sangbeom Kim <sbkim73@samsung.com>
+Cc: "James E.J. Bottomley" <James.Bottomley@HansenPartnership.com>
+Cc: Greg Kroah-Hartman <gregkh@linuxfoundation.org>
+Cc: Eric Van Hensbergen <ericvh@gmail.com>
+Cc: Takashi Iwai <tiwai@suse.de>
+Cc: Steven Whitehouse <swhiteho@redhat.com>
+Cc: Petr Vandrovec <petr@vandrovec.name>
+Cc: Mark Fasheh <mfasheh@suse.com>
+Cc: Christoph Hellwig <hch@infradead.org>
+Cc: Avi Kivity <avi@redhat.com>
+
+diff --git a/drivers/isdn/mISDN/hwchannel.c b/drivers/isdn/mISDN/hwchannel.c
+index ef34fd4..4b85f72 100644
+--- a/drivers/isdn/mISDN/hwchannel.c
++++ b/drivers/isdn/mISDN/hwchannel.c
+@@ -116,7 +116,7 @@ mISDN_freedchannel(struct dchannel *ch)
+ 	}
+ 	skb_queue_purge(&ch->squeue);
+ 	skb_queue_purge(&ch->rqueue);
+-	flush_work_sync(&ch->workq);
++	flush_work(&ch->workq);
+ 	return 0;
+ }
+ EXPORT_SYMBOL(mISDN_freedchannel);

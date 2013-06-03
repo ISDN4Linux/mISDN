@@ -1,0 +1,44 @@
+From 9f3b795a626ee79574595e06d1437fe0c7d51d29 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Micha=C5=82=20Miros=C5=82aw?= <mirq-linux@rere.qmqm.pl>
+Date: Fri, 1 Feb 2013 20:40:17 +0100
+Subject: [PATCH] driver-core: constify data for class_find_device()
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+All in-kernel users of class_find_device() don't really need mutable
+data for match callback.
+
+In two places (kernel/power/suspend_test.c, drivers/scsi/osd/osd_uld.c)
+this patch changes match callbacks to use const search data.
+
+The const is propagated to rtc_class_open() and power_supply_get_by_name()
+parameters.
+
+Note that there's a dev reference leak in suspend_test.c that's not
+touched in this patch.
+
+Signed-off-by: Michał Mirosław <mirq-linux@rere.qmqm.pl>
+Acked-by: Grant Likely <grant.likely@secretlab.ca>
+Signed-off-by: Greg Kroah-Hartman <gregkh@linuxfoundation.org>
+
+diff --git a/drivers/isdn/mISDN/core.c b/drivers/isdn/mISDN/core.c
+index 3e24571..da30c5c 100644
+--- a/drivers/isdn/mISDN/core.c
++++ b/drivers/isdn/mISDN/core.c
+@@ -168,13 +168,13 @@ static struct class mISDN_class = {
+ };
+ 
+ static int
+-_get_mdevice(struct device *dev, void *id)
++_get_mdevice(struct device *dev, const void *id)
+ {
+ 	struct mISDNdevice *mdev = dev_to_mISDN(dev);
+ 
+ 	if (!mdev)
+ 		return 0;
+-	if (mdev->id != *(u_int *)id)
++	if (mdev->id != *(const u_int *)id)
+ 		return 0;
+ 	return 1;
+ }
