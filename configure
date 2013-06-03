@@ -3799,7 +3799,7 @@ if test -d $KERNEL_BUILD_DIR -a -d $KERNEL_SOURCE_DIR; then
 		KMAJ=`echo -n $KMAJ_`
 		KPAT=`echo -n $KPAT_`
 		KSUB=`echo -n $KSUB_`
-		if test x$KMAJ = x3 -a -z "$KSUB"; then
+		if test x$KMAJ = x3 ; then
 			KVERSION="${KMAJ}.${KPAT}"
 		else
 			KVERSION="${KMAJ}.${KPAT}.${KSUB}"
