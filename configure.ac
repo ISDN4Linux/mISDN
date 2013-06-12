@@ -2,7 +2,7 @@
 # Process this file with autoconf to produce a configure script.
 
 AC_PREREQ([2.63])
-AC_INIT([mISDNkernel], [2.0.32], [i4ldeveloper@listserv.isdn4linux.de])
+AC_INIT([mISDNkernel], [2.0.34], [i4ldeveloper@listserv.isdn4linux.de])
 AC_CONFIG_SRCDIR([drivers/isdn/mISDN/core.c])
 AC_CONFIG_HEADERS([config.h])
 AM_INIT_AUTOMAKE([-Werror foreign])
