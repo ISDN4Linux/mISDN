@@ -43,16 +43,16 @@ Cc: Mark Fasheh <mfasheh@suse.com>
 Cc: Christoph Hellwig <hch@infradead.org>
 Cc: Avi Kivity <avi@redhat.com>
 
-diff --git a/drivers/isdn/mISDN/hwchannel.c b/drivers/isdn/mISDN/hwchannel.c
-index ef34fd4..4b85f72 100644
---- a/drivers/isdn/mISDN/hwchannel.c
-+++ b/drivers/isdn/mISDN/hwchannel.c
+Index: standalone/drivers/isdn/mISDN/hwchannel.c
+===================================================================
+--- standalone.orig/drivers/isdn/mISDN/hwchannel.c
++++ standalone/drivers/isdn/mISDN/hwchannel.c
 @@ -116,7 +116,7 @@ mISDN_freedchannel(struct dchannel *ch)
  	}
  	skb_queue_purge(&ch->squeue);
  	skb_queue_purge(&ch->rqueue);
--	flush_work_sync(&ch->workq);
-+	flush_work(&ch->workq);
+-	flush_work(&ch->workq);
++	flush_work_sync(&ch->workq);
  	return 0;
  }
  EXPORT_SYMBOL(mISDN_freedchannel);

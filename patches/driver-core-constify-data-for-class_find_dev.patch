@@ -22,23 +22,23 @@ Signed-off-by: Michał Mirosław <mirq-linux@rere.qmqm.pl>
 Acked-by: Grant Likely <grant.likely@secretlab.ca>
 Signed-off-by: Greg Kroah-Hartman <gregkh@linuxfoundation.org>
 
-diff --git a/drivers/isdn/mISDN/core.c b/drivers/isdn/mISDN/core.c
-index 3e24571..da30c5c 100644
---- a/drivers/isdn/mISDN/core.c
-+++ b/drivers/isdn/mISDN/core.c
+Index: standalone/drivers/isdn/mISDN/core.c
+===================================================================
+--- standalone.orig/drivers/isdn/mISDN/core.c
++++ standalone/drivers/isdn/mISDN/core.c
 @@ -168,13 +168,13 @@ static struct class mISDN_class = {
  };
  
  static int
--_get_mdevice(struct device *dev, void *id)
-+_get_mdevice(struct device *dev, const void *id)
+-_get_mdevice(struct device *dev, const void *id)
++_get_mdevice(struct device *dev, void *id)
  {
  	struct mISDNdevice *mdev = dev_to_mISDN(dev);
  
  	if (!mdev)
  		return 0;
--	if (mdev->id != *(u_int *)id)
-+	if (mdev->id != *(const u_int *)id)
+-	if (mdev->id != *(const u_int *)id)
++	if (mdev->id != *(u_int *)id)
  		return 0;
  	return 1;
  }

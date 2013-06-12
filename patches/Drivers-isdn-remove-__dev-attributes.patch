@@ -18,16 +18,16 @@ Signed-off-by: Greg Kroah-Hartman <gregkh@linuxfoundation.org>
 
 Backported from kernel.org, Added XHFC /KKe
 
-diff --git a/drivers/isdn/hardware/mISDN/avmfritz.c b/drivers/isdn/hardware/mISDN/avmfritz.c
-index dceaec8..292991c 100644
---- a/drivers/isdn/hardware/mISDN/avmfritz.c
-+++ b/drivers/isdn/hardware/mISDN/avmfritz.c
+Index: standalone/drivers/isdn/hardware/mISDN/avmfritz.c
+===================================================================
+--- standalone.orig/drivers/isdn/hardware/mISDN/avmfritz.c
++++ standalone/drivers/isdn/hardware/mISDN/avmfritz.c
 @@ -1034,7 +1034,7 @@ release_card(struct fritzcard *card)
  	AVM_cnt--;
  }
  
--static int __devinit
-+static int
+-static int
++static int __devinit
  setup_instance(struct fritzcard *card)
  {
  	int i, err;
@@ -35,17 +35,17 @@ index dceaec8..292991c 100644
  	return err;
  }
  
--static int __devinit
-+static int
+-static int
++static int __devinit
  fritzpci_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
  {
  	int err = -ENOMEM;
-@@ -1130,7 +1130,7 @@ fritzpci_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
+@@ -1130,7 +1130,7 @@ fritzpci_probe(struct pci_dev *pdev, con
  	return err;
  }
  
--static void __devexit
-+static void
+-static void
++static void __devexit
  fritz_remove_pci(struct pci_dev *pdev)
  {
  	struct fritzcard *card = pci_get_drvdata(pdev);
@@ -53,8 +53,8 @@ index dceaec8..292991c 100644
  			pr_info("%s: drvdata already removed\n", __func__);
  }
  
--static struct pci_device_id fcpci_ids[] __devinitdata = {
-+static struct pci_device_id fcpci_ids[] = {
+-static struct pci_device_id fcpci_ids[] = {
++static struct pci_device_id fcpci_ids[] __devinitdata = {
  	{ PCI_VENDOR_ID_AVM, PCI_DEVICE_ID_AVM_A1, PCI_ANY_ID, PCI_ANY_ID,
  	  0, 0, (unsigned long) "Fritz!Card PCI"},
  	{ PCI_VENDOR_ID_AVM, PCI_DEVICE_ID_AVM_A1_V2, PCI_ANY_ID, PCI_ANY_ID,
@@ -62,61 +62,61 @@ index dceaec8..292991c 100644
  static struct pci_driver fcpci_driver = {
  	.name = "fcpci",
  	.probe = fritzpci_probe,
--	.remove = __devexit_p(fritz_remove_pci),
-+	.remove = fritz_remove_pci,
+-	.remove = fritz_remove_pci,
++	.remove = __devexit_p(fritz_remove_pci),
  	.id_table = fcpci_ids,
  };
  
-diff --git a/drivers/isdn/hardware/mISDN/hfcmulti.c b/drivers/isdn/hardware/mISDN/hfcmulti.c
-index 8e2d286..c82636f 100644
---- a/drivers/isdn/hardware/mISDN/hfcmulti.c
-+++ b/drivers/isdn/hardware/mISDN/hfcmulti.c
+Index: standalone/drivers/isdn/hardware/mISDN/hfcmulti.c
+===================================================================
+--- standalone.orig/drivers/isdn/hardware/mISDN/hfcmulti.c
++++ standalone/drivers/isdn/hardware/mISDN/hfcmulti.c
 @@ -5279,7 +5279,7 @@ free_card:
  	return ret_err;
  }
  
--static void __devexit hfc_remove_pci(struct pci_dev *pdev)
-+static void hfc_remove_pci(struct pci_dev *pdev)
+-static void hfc_remove_pci(struct pci_dev *pdev)
++static void __devexit hfc_remove_pci(struct pci_dev *pdev)
  {
  	struct hfc_multi	*card = pci_get_drvdata(pdev);
  	u_long			flags;
-@@ -5356,7 +5356,7 @@ static const struct hm_map hfcm_map[] = {
+@@ -5356,7 +5356,7 @@ static const struct hm_map hfcm_map[] =
  
  #undef H
  #define H(x)	((unsigned long)&hfcm_map[x])
--static struct pci_device_id hfmultipci_ids[] __devinitdata = {
-+static struct pci_device_id hfmultipci_ids[] = {
+-static struct pci_device_id hfmultipci_ids[] = {
++static struct pci_device_id hfmultipci_ids[] __devinitdata = {
  
  	/* Cards with HFC-4S Chip */
  	{ PCI_VENDOR_ID_CCD, PCI_DEVICE_ID_CCD_HFC4S, PCI_VENDOR_ID_CCD,
-@@ -5477,7 +5477,7 @@ hfcmulti_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
+@@ -5477,7 +5477,7 @@ hfcmulti_probe(struct pci_dev *pdev, con
  static struct pci_driver hfcmultipci_driver = {
  	.name		= "hfc_multi",
  	.probe		= hfcmulti_probe,
--	.remove		= __devexit_p(hfc_remove_pci),
-+	.remove		= hfc_remove_pci,
+-	.remove		= hfc_remove_pci,
++	.remove		= __devexit_p(hfc_remove_pci),
  	.id_table	= hfmultipci_ids,
  };
  
-diff --git a/drivers/isdn/hardware/mISDN/hfcpci.c b/drivers/isdn/hardware/mISDN/hfcpci.c
-index 81363ff..500aed8 100644
---- a/drivers/isdn/hardware/mISDN/hfcpci.c
-+++ b/drivers/isdn/hardware/mISDN/hfcpci.c
+Index: standalone/drivers/isdn/hardware/mISDN/hfcpci.c
+===================================================================
+--- standalone.orig/drivers/isdn/hardware/mISDN/hfcpci.c
++++ standalone/drivers/isdn/hardware/mISDN/hfcpci.c
 @@ -2215,7 +2215,7 @@ static struct pci_device_id hfc_ids[] =
  	{},
  };
  
--static int __devinit
-+static int
+-static int
++static int __devinit
  hfc_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
  {
  	int		err = -ENOMEM;
-@@ -2246,7 +2246,7 @@ hfc_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
+@@ -2246,7 +2246,7 @@ hfc_probe(struct pci_dev *pdev, const st
  	return err;
  }
  
--static void __devexit
-+static void
+-static void
++static void __devexit
  hfc_remove_pci(struct pci_dev *pdev)
  {
  	struct hfc_pci	*card = pci_get_drvdata(pdev);
@@ -124,30 +124,30 @@ index 81363ff..500aed8 100644
  static struct pci_driver hfc_driver = {
  	.name = "hfcpci",
  	.probe = hfc_probe,
--	.remove = __devexit_p(hfc_remove_pci),
-+	.remove = hfc_remove_pci,
+-	.remove = hfc_remove_pci,
++	.remove = __devexit_p(hfc_remove_pci),
  	.id_table = hfc_ids,
  };
  
-diff --git a/drivers/isdn/hardware/mISDN/mISDNinfineon.c b/drivers/isdn/hardware/mISDN/mISDNinfineon.c
-index 631eb3f..c1493f4 100644
---- a/drivers/isdn/hardware/mISDN/mISDNinfineon.c
-+++ b/drivers/isdn/hardware/mISDN/mISDNinfineon.c
+Index: standalone/drivers/isdn/hardware/mISDN/mISDNinfineon.c
+===================================================================
+--- standalone.orig/drivers/isdn/hardware/mISDN/mISDNinfineon.c
++++ standalone/drivers/isdn/hardware/mISDN/mISDNinfineon.c
 @@ -125,7 +125,7 @@ struct inf_hw {
  #define PCI_SUBVENDOR_SEDLBAUER_PCI     0x53
  #define PCI_SUB_ID_SEDLBAUER            0x01
  
--static struct pci_device_id infineon_ids[] __devinitdata = {
-+static struct pci_device_id infineon_ids[] = {
+-static struct pci_device_id infineon_ids[] = {
++static struct pci_device_id infineon_ids[] __devinitdata = {
  	{ PCI_VDEVICE(EICON, PCI_DEVICE_ID_EICON_DIVA20), INF_DIVA20 },
  	{ PCI_VDEVICE(EICON, PCI_DEVICE_ID_EICON_DIVA20_U), INF_DIVA20U },
  	{ PCI_VDEVICE(EICON, PCI_DEVICE_ID_EICON_DIVA201), INF_DIVA201 },
-@@ -603,7 +603,7 @@ inf_ctrl(struct inf_hw *hw, u32 cmd, u_long arg)
+@@ -603,7 +603,7 @@ inf_ctrl(struct inf_hw *hw, u32 cmd, u_l
  	return ret;
  }
  
--static int __devinit
-+static int
+-static int
++static int __devinit
  init_irq(struct inf_hw *hw)
  {
  	int	ret, cnt = 3;
@@ -155,8 +155,8 @@ index 631eb3f..c1493f4 100644
  	}
  }
  
--static int __devinit
-+static int
+-static int
++static int __devinit
  setup_io(struct inf_hw *hw)
  {
  	int err = 0;
@@ -164,17 +164,17 @@ index 631eb3f..c1493f4 100644
  	inf_cnt--;
  }
  
--static int __devinit
-+static int
+-static int
++static int __devinit
  setup_instance(struct inf_hw *card)
  {
  	int err;
-@@ -1060,7 +1060,7 @@ static const struct inf_cinfo inf_card_info[] = {
+@@ -1060,7 +1060,7 @@ static const struct inf_cinfo inf_card_i
  	}
  };
  
--static const struct inf_cinfo * __devinit
-+static const struct inf_cinfo *
+-static const struct inf_cinfo *
++static const struct inf_cinfo * __devinit
  get_card_info(enum inf_types typ)
  {
  	const struct inf_cinfo *ci = inf_card_info;
@@ -182,17 +182,17 @@ index 631eb3f..c1493f4 100644
  	return NULL;
  }
  
--static int __devinit
-+static int
+-static int
++static int __devinit
  inf_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
  {
  	int err = -ENOMEM;
-@@ -1135,7 +1135,7 @@ inf_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
+@@ -1135,7 +1135,7 @@ inf_probe(struct pci_dev *pdev, const st
  	return err;
  }
  
--static void __devexit
-+static void
+-static void
++static void __devexit
  inf_remove(struct pci_dev *pdev)
  {
  	struct inf_hw	*card = pci_get_drvdata(pdev);
@@ -200,21 +200,21 @@ index 631eb3f..c1493f4 100644
  static struct pci_driver infineon_driver = {
  	.name = "ISDN Infineon pci",
  	.probe = inf_probe,
--	.remove = __devexit_p(inf_remove),
-+	.remove = inf_remove,
+-	.remove = inf_remove,
++	.remove = __devexit_p(inf_remove),
  	.id_table = infineon_ids,
  };
  
-diff --git a/drivers/isdn/hardware/mISDN/netjet.c b/drivers/isdn/hardware/mISDN/netjet.c
-index 9bcade5..8e29447 100644
---- a/drivers/isdn/hardware/mISDN/netjet.c
-+++ b/drivers/isdn/hardware/mISDN/netjet.c
+Index: standalone/drivers/isdn/hardware/mISDN/netjet.c
+===================================================================
+--- standalone.orig/drivers/isdn/hardware/mISDN/netjet.c
++++ standalone/drivers/isdn/hardware/mISDN/netjet.c
 @@ -1008,7 +1008,7 @@ nj_setup(struct tiger_hw *card)
  }
  
  
--static int __devinit
-+static int
+-static int
++static int __devinit
  setup_instance(struct tiger_hw *card)
  {
  	int i, err;
@@ -222,26 +222,26 @@ index 9bcade5..8e29447 100644
  	return err;
  }
  
--static int __devinit
-+static int
+-static int
++static int __devinit
  nj_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
  {
  	int err = -ENOMEM;
-@@ -1124,7 +1124,7 @@ nj_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
+@@ -1124,7 +1124,7 @@ nj_probe(struct pci_dev *pdev, const str
  }
  
  
--static void __devexit nj_remove(struct pci_dev *pdev)
-+static void nj_remove(struct pci_dev *pdev)
+-static void nj_remove(struct pci_dev *pdev)
++static void __devexit nj_remove(struct pci_dev *pdev)
  {
  	struct tiger_hw *card = pci_get_drvdata(pdev);
  
-@@ -1137,7 +1137,7 @@ static void __devexit nj_remove(struct pci_dev *pdev)
+@@ -1137,7 +1137,7 @@ static void nj_remove(struct pci_dev *pd
  /* We cannot select cards with PCI_SUB... IDs, since here are cards with
   * SUB IDs set to PCI_ANY_ID, so we need to match all and reject
   * known other cards which not work with this driver - see probe function */
--static struct pci_device_id nj_pci_ids[] __devinitdata = {
-+static struct pci_device_id nj_pci_ids[] = {
+-static struct pci_device_id nj_pci_ids[] = {
++static struct pci_device_id nj_pci_ids[] __devinitdata = {
  	{ PCI_VENDOR_ID_TIGERJET, PCI_DEVICE_ID_TIGERJET_300,
  	  PCI_ANY_ID, PCI_ANY_ID, 0, 0, 0},
  	{ }
@@ -249,21 +249,21 @@ index 9bcade5..8e29447 100644
  static struct pci_driver nj_driver = {
  	.name = "netjet",
  	.probe = nj_probe,
--	.remove = __devexit_p(nj_remove),
-+	.remove = nj_remove,
+-	.remove = nj_remove,
++	.remove = __devexit_p(nj_remove),
  	.id_table = nj_pci_ids,
  };
  
-diff --git a/drivers/isdn/hardware/mISDN/speedfax.c b/drivers/isdn/hardware/mISDN/speedfax.c
-index 93f344d..9815bb4 100644
---- a/drivers/isdn/hardware/mISDN/speedfax.c
-+++ b/drivers/isdn/hardware/mISDN/speedfax.c
-@@ -282,7 +282,7 @@ sfax_dctrl(struct mISDNchannel *ch, u32 cmd, void *arg)
+Index: standalone/drivers/isdn/hardware/mISDN/speedfax.c
+===================================================================
+--- standalone.orig/drivers/isdn/hardware/mISDN/speedfax.c
++++ standalone/drivers/isdn/hardware/mISDN/speedfax.c
+@@ -282,7 +282,7 @@ sfax_dctrl(struct mISDNchannel *ch, u32
  	return err;
  }
  
--static int __devinit
-+static int
+-static int
++static int __devinit
  init_card(struct sfax_hw *sf)
  {
  	int	ret, cnt = 3;
@@ -271,8 +271,8 @@ index 93f344d..9815bb4 100644
  }
  
  
--static int __devinit
-+static int
+-static int
++static int __devinit
  setup_speedfax(struct sfax_hw *sf)
  {
  	u_long flags;
@@ -280,8 +280,8 @@ index 93f344d..9815bb4 100644
  	sfax_cnt--;
  }
  
--static int __devinit
-+static int
+-static int
++static int __devinit
  setup_instance(struct sfax_hw *card)
  {
  	const struct firmware *firmware;
@@ -289,17 +289,17 @@ index 93f344d..9815bb4 100644
  	return err;
  }
  
--static int __devinit
-+static int
+-static int
++static int __devinit
  sfaxpci_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
  {
  	int err = -ENOMEM;
-@@ -480,7 +480,7 @@ sfaxpci_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
+@@ -480,7 +480,7 @@ sfaxpci_probe(struct pci_dev *pdev, cons
  	return err;
  }
  
--static void __devexit
-+static void
+-static void
++static void __devexit
  sfax_remove_pci(struct pci_dev *pdev)
  {
  	struct sfax_hw	*card = pci_get_drvdata(pdev);
@@ -307,8 +307,8 @@ index 93f344d..9815bb4 100644
  		pr_debug("%s: drvdata already removed\n", __func__);
  }
  
--static struct pci_device_id sfaxpci_ids[] __devinitdata = {
-+static struct pci_device_id sfaxpci_ids[] = {
+-static struct pci_device_id sfaxpci_ids[] = {
++static struct pci_device_id sfaxpci_ids[] __devinitdata = {
  	{ PCI_VENDOR_ID_TIGERJET, PCI_DEVICE_ID_TIGERJET_100,
  	  PCI_SUBVENDOR_SPEEDFAX_PYRAMID, PCI_SUB_ID_SEDLBAUER,
  	  0, 0, (unsigned long) "Pyramid Speedfax + PCI"
@@ -316,30 +316,30 @@ index 93f344d..9815bb4 100644
  static struct pci_driver sfaxpci_driver = {
  	.name = "speedfax+ pci",
  	.probe = sfaxpci_probe,
--	.remove = __devexit_p(sfax_remove_pci),
-+	.remove = sfax_remove_pci,
+-	.remove = sfax_remove_pci,
++	.remove = __devexit_p(sfax_remove_pci),
  	.id_table = sfaxpci_ids,
  };
  
-diff --git a/drivers/isdn/hardware/mISDN/w6692.c b/drivers/isdn/hardware/mISDN/w6692.c
-index 335fe64..de69f68 100644
---- a/drivers/isdn/hardware/mISDN/w6692.c
-+++ b/drivers/isdn/hardware/mISDN/w6692.c
+Index: standalone/drivers/isdn/hardware/mISDN/w6692.c
+===================================================================
+--- standalone.orig/drivers/isdn/hardware/mISDN/w6692.c
++++ standalone/drivers/isdn/hardware/mISDN/w6692.c
 @@ -1355,7 +1355,7 @@ error_setup:
  	return err;
  }
  
--static int __devinit
-+static int
+-static int
++static int __devinit
  w6692_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
  {
  	int		err = -ENOMEM;
-@@ -1387,7 +1387,7 @@ w6692_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
+@@ -1387,7 +1387,7 @@ w6692_probe(struct pci_dev *pdev, const
  	return err;
  }
  
--static void __devexit
-+static void
+-static void
++static void __devexit
  w6692_remove_pci(struct pci_dev *pdev)
  {
  	struct w6692_hw	*card = pci_get_drvdata(pdev);
@@ -347,21 +347,21 @@ index 335fe64..de69f68 100644
  static struct pci_driver w6692_driver = {
  	.name =  "w6692",
  	.probe = w6692_probe,
--	.remove = __devexit_p(w6692_remove_pci),
-+	.remove = w6692_remove_pci,
+-	.remove = w6692_remove_pci,
++	.remove = __devexit_p(w6692_remove_pci),
  	.id_table = w6692_ids,
  };
  
-diff --git a/drivers/isdn/hardware/mISDN/xhfc_pci2pi.c b/drivers/isdn/hardware/mISDN/xhfc_pci2pi.c
-index 68c7113..1a5b0dc 100644
---- a/drivers/isdn/hardware/mISDN/xhfc_pci2pi.c
-+++ b/drivers/isdn/hardware/mISDN/xhfc_pci2pi.c
-@@ -50,7 +50,7 @@ static struct pci_device_id xhfc_ids[] = {
+Index: standalone/drivers/isdn/hardware/mISDN/xhfc_pci2pi.c
+===================================================================
+--- standalone.orig/drivers/isdn/hardware/mISDN/xhfc_pci2pi.c
++++ standalone/drivers/isdn/hardware/mISDN/xhfc_pci2pi.c
+@@ -50,7 +50,7 @@ static struct pci_device_id xhfc_ids[] =
  static struct pci_driver xhfc_driver = {
        name:DRIVER_NAME,
        probe:xhfc_pci_probe,
--      remove:__devexit_p(xhfc_pci_remove),
-+      remove:xhfc_pci_remove,
+-      remove:xhfc_pci_remove,
++      remove:__devexit_p(xhfc_pci_remove),
        id_table:xhfc_ids,
  };
  
@@ -369,62 +369,62 @@ index 68c7113..1a5b0dc 100644
   *  and alloc 'struct xhfc' at pi->xhfc for every XHFC expected
   *  on that PCI card
   */
--int __devinit
-+int
+-int
++int __devinit
  xhfc_pci_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
  {
  	struct pi_params *driver_data =
-@@ -163,7 +163,7 @@ xhfc_pci_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
+@@ -163,7 +163,7 @@ xhfc_pci_probe(struct pci_dev *pdev, con
  /*
   * PCI hotplug interface: remove card
   */
--void __devexit
-+void
+-void
++void __devexit
  xhfc_pci_remove(struct pci_dev *pdev)
  {
  	int i;
-diff --git a/drivers/isdn/hardware/mISDN/xhfc_pci2pi.h b/drivers/isdn/hardware/mISDN/xhfc_pci2pi.h
-index 2ef4761..312f449 100644
---- a/drivers/isdn/hardware/mISDN/xhfc_pci2pi.h
-+++ b/drivers/isdn/hardware/mISDN/xhfc_pci2pi.h
+Index: standalone/drivers/isdn/hardware/mISDN/xhfc_pci2pi.h
+===================================================================
+--- standalone.orig/drivers/isdn/hardware/mISDN/xhfc_pci2pi.h
++++ standalone/drivers/isdn/hardware/mISDN/xhfc_pci2pi.h
 @@ -312,8 +312,8 @@ struct xhfc_pi {
  
  /* prototypes: PCI bridge management */
  int init_pci_bridge(struct xhfc_pi * pi);
--int __devinit xhfc_pci_probe(struct pci_dev *pdev, const struct pci_device_id *ent);
--void __devexit xhfc_pci_remove(struct pci_dev *pdev);
-+int xhfc_pci_probe(struct pci_dev *pdev, const struct pci_device_id *ent);
-+void xhfc_pci_remove(struct pci_dev *pdev);
+-int xhfc_pci_probe(struct pci_dev *pdev, const struct pci_device_id *ent);
+-void xhfc_pci_remove(struct pci_dev *pdev);
++int __devinit xhfc_pci_probe(struct pci_dev *pdev, const struct pci_device_id *ent);
++void __devexit xhfc_pci_remove(struct pci_dev *pdev);
  int xhfc_register_pi(void);
  int xhfc_unregister_pi(void);
  
-diff --git a/drivers/isdn/mISDN/core.c b/drivers/isdn/mISDN/core.c
-index 511ae55..eeee5c5 100644
---- a/drivers/isdn/mISDN/core.c
-+++ b/drivers/isdn/mISDN/core.c
-@@ -140,7 +140,6 @@ static struct device_attribute mISDN_dev_attrs[] = {
+Index: standalone/drivers/isdn/mISDN/core.c
+===================================================================
+--- standalone.orig/drivers/isdn/mISDN/core.c
++++ standalone/drivers/isdn/mISDN/core.c
+@@ -140,6 +140,7 @@ static struct device_attribute mISDN_dev
  	{}
  };
  
--#ifdef CONFIG_HOTPLUG
++#ifdef CONFIG_HOTPLUG
  static int mISDN_uevent(struct device *dev, struct kobj_uevent_env *env)
  {
  	struct mISDNdevice *mdev = dev_to_mISDN(dev);
-@@ -153,7 +152,6 @@ static int mISDN_uevent(struct device *dev, struct kobj_uevent_env *env)
+@@ -152,6 +153,7 @@ static int mISDN_uevent(struct device *d
  
  	return 0;
  }
--#endif
++#endif
  
  static void mISDN_class_release(struct class *cls)
  {
-@@ -163,9 +161,7 @@ static void mISDN_class_release(struct class *cls)
+@@ -161,7 +163,9 @@ static void mISDN_class_release(struct c
  static struct class mISDN_class = {
  	.name = "mISDN",
  	.owner = THIS_MODULE,
--#ifdef CONFIG_HOTPLUG
++#ifdef CONFIG_HOTPLUG
  	.dev_uevent = mISDN_uevent,
--#endif
++#endif
  	.dev_attrs = mISDN_dev_attrs,
  	.dev_release = mISDN_dev_release,
  	.class_release = mISDN_class_release,
