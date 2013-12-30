@@ -2076,6 +2076,7 @@ release_card(struct hfc_pci *hc) {
 	mISDN_freebchannel(&hc->bch[0]);
 	mISDN_freedchannel(&hc->dch);
 	pci_set_drvdata(hc->pdev, NULL);
+	pci_disable_device(hc->pdev);
 	kfree(hc);
 }
 
@@ -2241,8 +2242,10 @@ hfc_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	card->irq = pdev->irq;
 	pci_set_drvdata(pdev, card);
 	err = setup_card(card);
-	if (err)
+	if (err) {
 		pci_set_drvdata(pdev, NULL);
+		pci_disable_device(pdev);
+	}
 	return err;
 }
 
