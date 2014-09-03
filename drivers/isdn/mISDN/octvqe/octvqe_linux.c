@@ -1171,9 +1171,10 @@ static int octvqe_init(void)
 	}
 
     /* Try to create a proc entry under the /proc directory. */
-    proc_entry = create_proc_entry(DEV_NAME, 0, NULL);
-    if (proc_entry)
-	proc_entry->proc_fops = &octdev_proc_ops;
+    
+    proc_entry = proc_create(DEV_NAME, 0, NULL, &octdev_proc_ops);
+    if (!proc_entry)
+        return -ENOMEM;
 
     printk(KERN_INFO "%s: %s. Using major %d, Default EC \"%s%s\" (Built on %s %s).\n",
 	DEV_NAME, OCTVQE_MODULE_VERSION, iMajor, ZAPTEL_ECHO_NAME,
