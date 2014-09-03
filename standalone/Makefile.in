@@ -134,6 +134,7 @@ patched_tree: unpatched_tree
 		touch patched; \
 	else \
 		echo "no series found"; \
+		echo "no series found" > .patchOK; \
 	fi
 	cat .patchOK
 
