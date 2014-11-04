@@ -754,6 +754,7 @@ hfcpci_fill_fifo(struct bchannel *bch)
 	struct hfc_pci	*hc = bch->hw;
 	int		maxlen, fcnt;
 	int		count, new_z1;
+	int		fillempty = 0;
 	struct bzfifo	*bz;
 	u_char		*bdata;
 	u_char		new_f1, *src, *dst;
@@ -766,6 +767,7 @@ hfcpci_fill_fifo(struct bchannel *bch)
 		    !test_bit(FLG_TRANSPARENT, &bch->Flags))
 			return;
 		count = HFCPCI_FILLEMPTY;
+		fillempty = 1;
 	} else {
 		count = bch->tx_skb->len - bch->tx_idx;
 	}
@@ -787,7 +789,7 @@ hfcpci_fill_fifo(struct bchannel *bch)
 		fcnt = le16_to_cpu(*z2t) - le16_to_cpu(*z1t);
 		if (fcnt <= 0)
 			fcnt += B_FIFO_SIZE;
-		if (test_bit(FLG_FILLEMPTY, &bch->Flags)) {
+		if (fillempty) {
 			/* fcnt contains available bytes in fifo */
 			if (count > fcnt)
 				count = fcnt;
