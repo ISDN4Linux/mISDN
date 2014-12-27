@@ -1,0 +1,25 @@
+diff -ur linux-3.9/drivers/isdn/mISDN/stack.c linux-3.8/drivers/isdn/mISDN/stack.c
+--- linux-3.9/drivers/isdn/mISDN/stack.c	2013-06-02 14:32:31.000000000 +0200
++++ linux-3.8/drivers/isdn/mISDN/stack.c	2012-12-11 04:30:57.000000000 +0100
+@@ -202,9 +202,6 @@
+ mISDNStackd(void *data)
+ {
+ 	struct mISDNstack *st = data;
+-#ifdef MISDN_MSG_STATS
+-	cputime_t utime, stime;
+-#endif
+ 	int err = 0;
+ 
+ 	sigfillset(&current->blocked);
+@@ -306,10 +303,9 @@
+ 	       "msg %d sleep %d stopped\n",
+ 	       dev_name(&st->dev->dev), st->msg_cnt, st->sleep_cnt,
+ 	       st->stopped_cnt);
+-	task_cputime(st->thread, &utime, &stime);
+ 	printk(KERN_DEBUG
+ 	       "mISDNStackd daemon for %s utime(%ld) stime(%ld)\n",
+-	       dev_name(&st->dev->dev), utime, stime);
++	       dev_name(&st->dev->dev), st->thread->utime, st->thread->stime);
+ 	printk(KERN_DEBUG
+ 	       "mISDNStackd daemon for %s nvcsw(%ld) nivcsw(%ld)\n",
+ 	       dev_name(&st->dev->dev), st->thread->nvcsw, st->thread->nivcsw);

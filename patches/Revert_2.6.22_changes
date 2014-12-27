@@ -10,21 +10,6 @@ Index: standalone/drivers/isdn/hardware/mISDN/mISDNipac.c
  #include "ipac.h"
  
  
-Index: standalone/drivers/isdn/mISDN/dsp_core.c
-===================================================================
---- standalone.orig/drivers/isdn/mISDN/dsp_core.c
-+++ standalone/drivers/isdn/mISDN/dsp_core.c
-@@ -972,7 +972,9 @@ dsp_ctrl(struct mISDNchannel *ch, u_int
- 		dsp->b_active = 0;
- 		spin_unlock_irqrestore(&dsp_lock, flags);
- 		/* MUST not be locked, because it waits until queue is done. */
--		cancel_work_sync(&dsp->workq);
-+		/* cancel_work_sync(&dsp->workq); */
-+		/* maybe wrong backport */
-+		flush_scheduled_work();
- 		spin_lock_irqsave(&dsp_lock, flags);
- 		if (timer_pending(&dsp->tone.tl))
- 			del_timer(&dsp->tone.tl);
 Index: standalone/drivers/isdn/mISDN/hwchannel.c
 ===================================================================
 --- standalone.orig/drivers/isdn/mISDN/hwchannel.c
@@ -223,7 +208,7 @@ Index: standalone/include/linux/mISDNif_s.h
 ===================================================================
 --- standalone.orig/include/linux/mISDNif_s.h
 +++ standalone/include/linux/mISDNif_s.h
-@@ -607,5 +607,20 @@ extern const char *mISDNDevName4ch(struc
+@@ -607,5 +607,23 @@ extern const char *mISDNDevName4ch(struc
  #define pr_err(fmt, arg...)	printk(KERN_ERR fmt, ##arg)
  #define pr_warning(fmt, arg...)	printk(KERN_WARNING fmt, ##arg)
  #define pr_warn		pr_warning
@@ -241,6 +226,9 @@ Index: standalone/include/linux/mISDNif_s.h
 +extern void print_hex_dump_bytes(const char *prefix_str, int prefix_type,
 +			void *buf, size_t len);
 +#define hex_asc(x)	"0123456789abcdef"[x]
++
++/* maybe not correct backport */
++#define cancel_work_sync(wq) flush_scheduled_work()
 +
  #endif /* __KERNEL__ */
  #endif /* mISDNIF_H */

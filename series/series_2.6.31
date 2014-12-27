@@ -1,16 +1,1 @@
-hlist-drop-the-node-parameter-from-iterators.patch
-driver-core-constify-data-for-class_find_dev.patch
-workqueue-deprecate-flush_work_sync.patch
-Drivers-isdn-remove-__dev-attributes.patch
-linux-3.5-Disable_hub-initiated_LPM.patch
-hfcsusb_remove_unused_variable_hfcsusb_rev.patch
-convert_some_miscellanies_drivers_to_use_module_usb_driver.patch
-mISDN_use_memchr_inv.patch
-linux-2.6.git-5d76fc219ce38a226314436563f6b9d405bb6db1_export.patch
-linux-2.6.git-0d26aa704e5bbca5a1ee9fdf0d02277ceb507eee.patch
-linux-2.6.git-1ac4594d88f63ba1557cc1a30ec1f915ca55b7cb.patch
-Add_pr_warn.patch
-0857-net-pass-kern-to-net_proto_family-create-function.patch
-0859-net-mark-net_proto_ops-as-const.patch
-0858-net-Make-setsockopt-optlen-be-unsigned.patch
-linux-2.6.git-020f01ebd04f3429c32586d90598c9f59e54ca7d.patch  
+#include series_2.6.32

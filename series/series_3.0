@@ -1,9 +1,1 @@
-hlist-drop-the-node-parameter-from-iterators.patch
-driver-core-constify-data-for-class_find_dev.patch
-workqueue-deprecate-flush_work_sync.patch
-Drivers-isdn-remove-__dev-attributes.patch
-linux-3.5-Disable_hub-initiated_LPM.patch
-hfcsusb_remove_unused_variable_hfcsusb_rev.patch
-convert_some_miscellanies_drivers_to_use_module_usb_driver.patch
-mISDN_use_memchr_inv.patch
-linux-2.6.git-5d76fc219ce38a226314436563f6b9d405bb6db1_export.patch
+#include series_3.1

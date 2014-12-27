@@ -72,7 +72,7 @@ Index: standalone/drivers/isdn/mISDN/dsp_pipeline.c
 -	entry->dev.class = elements_class;
 -	entry->dev.release = mISDN_dsp_dev_release;
 -	dev_set_drvdata(&entry->dev, elem);
--	dev_set_name(&entry->dev, elem->name);
+-	dev_set_name(&entry->dev, "%s", elem->name);
 -	ret = device_register(&entry->dev);
 +	entry->dev.class = &elements_class;
 +	class_set_devdata(&entry->dev, elem);

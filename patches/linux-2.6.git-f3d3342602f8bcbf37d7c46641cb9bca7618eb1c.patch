@@ -1,0 +1,84 @@
+From f3d3342602f8bcbf37d7c46641cb9bca7618eb1c Mon Sep 17 00:00:00 2001
+From: Hannes Frederic Sowa <hannes@stressinduktion.org>
+Date: Thu, 21 Nov 2013 03:14:22 +0100
+Subject: [PATCH] net: rework recvmsg handler msg_name and msg_namelen logic
+
+This patch now always passes msg->msg_namelen as 0. recvmsg handlers must
+set msg_namelen to the proper size <= sizeof(struct sockaddr_storage)
+to return msg_name to the user.
+
+This prevents numerous uninitialized memory leaks we had in the
+recvmsg handlers and makes it harder for new code to accidentally leak
+uninitialized memory.
+
+Optimize for the case recvfrom is called with NULL as address. We don't
+need to copy the address at all, so set it to NULL before invoking the
+recvmsg handler. We can do so, because all the recvmsg handlers must
+cope with the case a plain read() is called on them. read() also sets
+msg_name to NULL.
+
+Also document these changes in include/linux/net.h as suggested by David
+Miller.
+
+Changes since RFC:
+
+Set msg->msg_name = NULL if user specified a NULL in msg_name but had a
+non-null msg_namelen in verify_iovec/verify_compat_iovec. This doesn't
+affect sendto as it would bail out earlier while trying to copy-in the
+address. It also more naturally reflects the logic by the callers of
+verify_iovec.
+
+With this change in place I could remove "
+if (!uaddr || msg_sys->msg_namelen == 0)
+	msg->msg_name = NULL
+".
+
+This change does not alter the user visible error logic as we ignore
+msg_namelen as long as msg_name is NULL.
+
+Also remove two unnecessary curly brackets in ___sys_recvmsg and change
+comments to netdev style.
+
+Cc: David Miller <davem@davemloft.net>
+Suggested-by: Eric Dumazet <eric.dumazet@gmail.com>
+Signed-off-by: Hannes Frederic Sowa <hannes@stressinduktion.org>
+Signed-off-by: David S. Miller <davem@davemloft.net>
+
+diff --git a/drivers/isdn/mISDN/socket.c b/drivers/isdn/mISDN/socket.c
+index e47dcb9..5cefb47 100644
+--- a/drivers/isdn/mISDN/socket.c
++++ b/drivers/isdn/mISDN/socket.c
+@@ -117,6 +117,7 @@ mISDN_sock_recvmsg(struct kiocb *iocb, struct socket *sock,
+ {
+ 	struct sk_buff		*skb;
+ 	struct sock		*sk = sock->sk;
++	struct sockaddr_mISDN	*maddr;
+ 
+ 	int		copied, err;
+ 
+@@ -134,9 +135,9 @@ mISDN_sock_recvmsg(struct kiocb *iocb, struct socket *sock,
+ 	if (!skb)
+ 		return err;
+ 
+-	if (msg->msg_name) {
+-		struct sockaddr_mISDN *maddr = msg->msg_name;
+-
++	if (msg->msg_namelen >= sizeof(struct sockaddr_mISDN)) {
++		msg->msg_namelen = sizeof(struct sockaddr_mISDN);
++		maddr = (struct sockaddr_mISDN *)msg->msg_name;
+ 		maddr->family = AF_ISDN;
+ 		maddr->dev = _pms(sk)->dev->id;
+ 		if ((sk->sk_protocol == ISDN_P_LAPD_TE) ||
+@@ -149,7 +150,11 @@ mISDN_sock_recvmsg(struct kiocb *iocb, struct socket *sock,
+ 			maddr->sapi = _pms(sk)->ch.addr & 0xFF;
+ 			maddr->tei =  (_pms(sk)->ch.addr >> 8) & 0xFF;
+ 		}
+-		msg->msg_namelen = sizeof(*maddr);
++	} else {
++		if (msg->msg_namelen)
++			printk(KERN_WARNING "%s: too small namelen %d\n",
++			       __func__, msg->msg_namelen);
++		msg->msg_namelen = 0;
+ 	}
+ 
+ 	copied = skb->len + MISDN_HEADER_LEN;

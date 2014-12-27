@@ -1,0 +1,15 @@
+diff -ur a/drivers/isdn/mISDN/timerdev.c b/drivers/isdn/mISDN/timerdev.c
+--- a/drivers/isdn/mISDN/timerdev.c	2014-12-27 12:57:14.748240162 +0100
++++ b/drivers/isdn/mISDN/timerdev.c	2014-12-27 13:01:00.514417297 +0100
+@@ -30,6 +30,10 @@
+ static DEFINE_MUTEX(mISDN_mutex);
+ static u_int	*debug;
+ 
++#ifndef list_first_entry
++#define list_first_entry(ptr, type, member) \
++	list_entry((ptr)->next, type, member)
++#endif
+ 
+ struct mISDNtimerdev {
+ 	int			next_id;
+Only in b/drivers/isdn/mISDN: timerdev.c~
