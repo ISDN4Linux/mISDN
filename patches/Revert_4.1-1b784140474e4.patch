@@ -1,0 +1,42 @@
+From 1b784140474e4fc94281a49e96c67d29df0efbde Mon Sep 17 00:00:00 2001
+From: Ying Xue <ying.xue@windriver.com>
+Date: Mon, 2 Mar 2015 15:37:48 +0800
+Subject: [PATCH] net: Remove iocb argument from sendmsg and recvmsg
+
+After TIPC doesn't depend on iocb argument in its internal
+implementations of sendmsg() and recvmsg() hooks defined in proto
+structure, no any user is using iocb argument in them at all now.
+Then we can drop the redundant iocb argument completely from kinds of
+implementations of both sendmsg() and recvmsg() in the entire
+networking stack.
+
+Cc: Christoph Hellwig <hch@lst.de>
+Suggested-by: Al Viro <viro@ZenIV.linux.org.uk>
+Signed-off-by: Ying Xue <ying.xue@windriver.com>
+Signed-off-by: David S. Miller <davem@davemloft.net>
+
+diff --git a/drivers/isdn/mISDN/socket.c b/drivers/isdn/mISDN/socket.c
+index 84b3592..8dc7290 100644
+--- a/drivers/isdn/mISDN/socket.c
++++ b/drivers/isdn/mISDN/socket.c
+@@ -112,8 +112,8 @@ mISDN_sock_cmsg(struct sock *sk, struct msghdr *msg, struct sk_buff *skb)
+ }
+ 
+ static int
+-mISDN_sock_recvmsg(struct socket *sock, struct msghdr *msg, size_t len,
+-		   int flags)
++mISDN_sock_recvmsg(struct kiocb *iocb, struct socket *sock,
++		   struct msghdr *msg, size_t len, int flags)
+ {
+ 	struct sk_buff		*skb;
+ 	struct sock		*sk = sock->sk;
+@@ -173,7 +173,8 @@ mISDN_sock_recvmsg(struct kiocb *iocb, struct socket *sock,
+ }
+ 
+ static int
+-mISDN_sock_sendmsg(struct socket *sock, struct msghdr *msg, size_t len)
++mISDN_sock_sendmsg(struct kiocb *iocb, struct socket *sock,
++		   struct msghdr *msg, size_t len)
+ {
+ 	struct sock		*sk = sock->sk;
+ 	struct sk_buff		*skb;
