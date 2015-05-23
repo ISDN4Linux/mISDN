@@ -1,0 +1,20 @@
+From 6ce8e9ce5989ae13f493062975304700be86d20e Mon Sep 17 00:00:00 2001
+From: Al Viro <viro@zeniv.linux.org.uk>
+Date: Sun, 6 Apr 2014 21:25:44 -0400
+Subject: [PATCH] new helper: memcpy_from_msg()
+
+Signed-off-by: Al Viro <viro@zeniv.linux.org.uk>
+
+diff --git a/drivers/isdn/mISDN/socket.c b/drivers/isdn/mISDN/socket.c
+index dcbd858..84b3592 100644
+--- a/drivers/isdn/mISDN/socket.c
++++ b/drivers/isdn/mISDN/socket.c
+@@ -203,7 +203,7 @@ mISDN_sock_sendmsg(struct kiocb *iocb, struct socket *sock,
+ 	if (!skb)
+ 		goto done;
+ 
+-	if (memcpy_from_msg(skb_put(skb, len), msg, len)) {
++	if (memcpy_fromiovec(skb_put(skb, len), msg->msg_iov, len)) {
+ 		err = -EFAULT;
+ 		goto done;
+ 	}

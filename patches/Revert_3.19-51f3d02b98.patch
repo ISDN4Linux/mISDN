@@ -1,0 +1,31 @@
+From 51f3d02b980a338cd291d2bc7629cdfb2568424b Mon Sep 17 00:00:00 2001
+From: "David S. Miller" <davem@davemloft.net>
+Date: Wed, 5 Nov 2014 16:46:40 -0500
+Subject: [PATCH] net: Add and use skb_copy_datagram_msg() helper.
+
+This encapsulates all of the skb_copy_datagram_iovec() callers
+with call argument signature "skb, offset, msghdr->msg_iov, length".
+
+When we move to iov_iters in the networking, the iov_iter object will
+sit in the msghdr.
+
+Having a helper like this means there will be less places to touch
+during that transformation.
+
+Based upon descriptions and patch from Al Viro.
+
+Signed-off-by: David S. Miller <davem@davemloft.net>
+
+diff --git a/drivers/isdn/mISDN/socket.c b/drivers/isdn/mISDN/socket.c
+index 1be8228..dcbd858 100644
+--- a/drivers/isdn/mISDN/socket.c
++++ b/drivers/isdn/mISDN/socket.c
+@@ -163,7 +163,7 @@ mISDN_sock_recvmsg(struct kiocb *iocb, struct socket *sock,
+ 	memcpy(skb_push(skb, MISDN_HEADER_LEN), mISDN_HEAD_P(skb),
+ 	       MISDN_HEADER_LEN);
+ 
+-	err = skb_copy_datagram_msg(skb, 0, msg, copied);
++	err = skb_copy_datagram_iovec(skb, 0, msg->msg_iov, copied);
+ 
+ 	mISDN_sock_cmsg(sk, msg, skb);
+ 
