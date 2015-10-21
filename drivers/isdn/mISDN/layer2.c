@@ -1476,9 +1476,9 @@ static void
 l2_pull_iqueue(struct FsmInst *fi, int event, void *arg)
 {
 	struct layer2	*l2 = fi->userdata;
-	struct sk_buff	*skb, *nskb, *oskb;
+	struct sk_buff	*skb, *nskb;
 	u_char		header[MAX_L2HEADER_LEN];
-	u_int		hl, p1, hr;
+	u_int		i, p1;
 
 	if (!cansend(l2))
 		return;
@@ -1486,41 +1486,25 @@ l2_pull_iqueue(struct FsmInst *fi, int event, void *arg)
 	skb = skb_dequeue(&l2->i_queue);
 	if (!skb)
 		return;
-	nskb = skb_clone(skb, GFP_ATOMIC);
+	i = sethdraddr(l2, header, CMD);
+	if (test_bit(FLG_MOD128, &l2->flag)) {
+		header[i++] = l2->vs << 1;
+		header[i++] = l2->vr << 1;
+	} else
+		header[i++] = (l2->vr << 5) | (l2->vs << 1);
+	nskb = skb_realloc_headroom(skb, i);
 	if (!nskb) {
-		printk(KERN_WARNING "%s no memory for cloning - requeue\n",
-		       mISDNDevName4ch(&l2->ch));
+		printk(KERN_WARNING "%s: no headroom(%d) copy for IFrame\n",
+		       mISDNDevName4ch(&l2->ch), i);
 		skb_queue_head(&l2->i_queue, skb);
 		return;
 	}
-	hl = sethdraddr(l2, header, CMD);
 	if (test_bit(FLG_MOD128, &l2->flag)) {
-		header[hl++] = l2->vs << 1;
-		header[hl++] = l2->vr << 1;
 		p1 = (l2->vs - l2->va) % 128;
+		l2->vs = (l2->vs + 1) % 128;
 	} else {
-		header[hl++] = (l2->vr << 5) | (l2->vs << 1);
 		p1 = (l2->vs - l2->va) % 8;
-	}
-	hr = skb_headroom(nskb);
-	if (hr >= hl) {
-		memcpy(skb_push(nskb, hl), header, hl);
-	} else {
-		printk(KERN_WARNING
-		       "%s: L2 pull_iqueue skb header(%d/%d) too short\n",
-		       mISDNDevName4ch(&l2->ch), hl, hr);
-		oskb = nskb;
-		nskb = mI_alloc_skb(oskb->len + hl, GFP_ATOMIC);
-		if (!nskb) {
-			dev_kfree_skb(oskb);
-			printk(KERN_WARNING "%s: no skb mem in %s - requeue\n",
-			       mISDNDevName4ch(&l2->ch), __func__);
-			skb_queue_head(&l2->i_queue, skb);
-			return;
-		}
-		memcpy(skb_put(nskb, hl), header, hl);
-		memcpy(skb_put(nskb, oskb->len), oskb->data, oskb->len);
-		dev_kfree_skb(oskb);
+		l2->vs = (l2->vs + 1) % 8;
 	}
 	p1 = (p1 + l2->sow) % l2->window;
 	if (l2->windowar[p1]) {
@@ -1529,10 +1513,7 @@ l2_pull_iqueue(struct FsmInst *fi, int event, void *arg)
 		dev_kfree_skb(l2->windowar[p1]);
 	}
 	l2->windowar[p1] = skb;
-	if (test_bit(FLG_MOD128, &l2->flag))
-		l2->vs = (l2->vs + 1) % 128;
-	else
-		l2->vs = (l2->vs + 1) % 8;
+	memcpy(skb_push(nskb, i), header, i);
 	l2down(l2, PH_DATA_REQ, l2_newid(l2), nskb);
 	test_and_clear_bit(FLG_ACK_PEND, &l2->flag);
 	if (!test_and_set_bit(FLG_T200_RUN, &l2->flag)) {
