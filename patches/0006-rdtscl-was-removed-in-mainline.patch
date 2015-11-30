@@ -1,0 +1,27 @@
+From 003db69a2a4171a6e24cf391545cd24f8db9902b Mon Sep 17 00:00:00 2001
+From: Karsten Keil <kkeil@linux-pingi.de>
+Date: Mon, 30 Nov 2015 12:53:41 +0100
+Subject: Revert rdtscl() was removed in mainline
+
+---
+ drivers/isdn/mISDN/octvqe/octvqe_linux.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/isdn/mISDN/octvqe/octvqe_linux.c b/drivers/isdn/mISDN/octvqe/octvqe_linux.c
+index e79b4b4..26c73bf 100644
+--- a/drivers/isdn/mISDN/octvqe/octvqe_linux.c
++++ b/drivers/isdn/mISDN/octvqe/octvqe_linux.c
+@@ -538,8 +538,8 @@ short ZapOctVqeApiEcChannelProcess(void *f_pvEcChan, short f_sRin, short f_sSin)
+ 		if (fWakeUpReader == 1) /* wake_up_interruptible waiting on read */ {
+ 			wake_up_interruptible(&pChan->ReadWaitQueue);
+ 
+-			/* Retrieve CPU time before processing. */
+-			pChan->ulTimestampIn = (unsigned long)rdtsc();
++		/* Retrieve CPU time before processing. */
++		rdtscl(pChan->ulTimestampIn);
+ 		}
+ 
+ 		if (fWakeUpWrite == 1) /* wake_up_interruptible waiting on write */
+-- 
+2.6.3
+

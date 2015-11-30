@@ -1,0 +1,74 @@
+From 1bc9b1edf262ae20f1dd059ff4c37bfae23e8ff6 Mon Sep 17 00:00:00 2001
+From: "Eric W. Biederman" <ebiederm@xmission.com>
+Date: Fri, 8 May 2015 21:09:13 -0500
+Subject: Revert net: Pass kern from net_proto_family.create to sk_alloc
+
+In preparation for changing how struct net is refcounted
+on kernel sockets pass the knowledge that we are creating
+a kernel socket from sock_create_kern through to sk_alloc.
+
+Signed-off-by: "Eric W. Biederman" <ebiederm@xmission.com>
+Signed-off-by: David S. Miller <davem@davemloft.net>
+---
+ drivers/isdn/mISDN/socket.c | 12 ++++++------
+ 1 file changed, 6 insertions(+), 6 deletions(-)
+
+diff --git a/drivers/isdn/mISDN/socket.c b/drivers/isdn/mISDN/socket.c
+index 2c309ef..f1ec1a8 100644
+--- a/drivers/isdn/mISDN/socket.c
++++ b/drivers/isdn/mISDN/socket.c
+@@ -604,14 +604,14 @@ static const struct proto_ops data_sock_ops = {
+ };
+ 
+ static int
+-data_sock_create(struct net *net, struct socket *sock, int protocol, int kern)
++data_sock_create(struct net *net, struct socket *sock, int protocol)
+ {
+ 	struct sock *sk;
+ 
+ 	if (sock->type != SOCK_DGRAM)
+ 		return -ESOCKTNOSUPPORT;
+ 
+-	sk = sk_alloc(net, PF_ISDN, GFP_KERNEL, &mISDN_proto, kern);
++	sk = sk_alloc(net, PF_ISDN, GFP_KERNEL, &mISDN_proto);
+ 	if (!sk)
+ 		return -ENOMEM;
+ 
+@@ -759,14 +759,14 @@ static const struct proto_ops base_sock_ops = {
+ 
+ 
+ static int
+-base_sock_create(struct net *net, struct socket *sock, int protocol, int kern)
++base_sock_create(struct net *net, struct socket *sock, int protocol)
+ {
+ 	struct sock *sk;
+ 
+ 	if (sock->type != SOCK_RAW)
+ 		return -ESOCKTNOSUPPORT;
+ 
+-	sk = sk_alloc(net, PF_ISDN, GFP_KERNEL, &mISDN_proto, kern);
++	sk = sk_alloc(net, PF_ISDN, GFP_KERNEL, &mISDN_proto);
+ 	if (!sk)
+ 		return -ENOMEM;
+ 
+@@ -788,7 +788,7 @@ mISDN_sock_create(struct net *net, struct socket *sock, int proto, int kern)
+ 
+ 	switch (proto) {
+ 	case ISDN_P_BASE:
+-		err = base_sock_create(net, sock, proto, kern);
++		err = base_sock_create(net, sock, proto);
+ 		break;
+ 	case ISDN_P_TE_S0:
+ 	case ISDN_P_NT_S0:
+@@ -802,7 +802,7 @@ mISDN_sock_create(struct net *net, struct socket *sock, int proto, int kern)
+ 	case ISDN_P_B_L2DTMF:
+ 	case ISDN_P_B_L2DSP:
+ 	case ISDN_P_B_L2DSPHDLC:
+-		err = data_sock_create(net, sock, proto, kern);
++		err = data_sock_create(net, sock, proto);
+ 		break;
+ 	default:
+ 		return err;
+-- 
+2.6.3
+
