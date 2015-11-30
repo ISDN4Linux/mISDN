@@ -1043,9 +1043,9 @@ int octdev_seq_show(struct seq_file *s, void *v)
     if (pChan == g_apEchoChanInst[0]) {
 	/* Retrieve API version and print it out. */
 #ifndef OCTVQE_TRIAL_VERSION
-	seq_printf(s, "%s, built on %s %s\n", OCTVQE_MODULE_VERSION, __DATE__, __TIME__);
+	seq_printf(s, "%s\n", OCTVQE_MODULE_VERSION);
 #else /* OCTVQE_TRIAL_VERSION */
-	seq_printf(s, "*** TRIAL *** %s, built on %s %s\n", OCTVQE_MODULE_VERSION, __DATE__, __TIME__);
+	seq_printf(s, "*** TRIAL *** %s\n", OCTVQE_MODULE_VERSION);
 #endif /* OCTVQE_TRIAL_VERSION */
     }
 
@@ -1176,9 +1176,9 @@ static int octvqe_init(void)
     if (!proc_entry)
         return -ENOMEM;
 
-    printk(KERN_INFO "%s: %s. Using major %d, Default EC \"%s%s\" (Built on %s %s).\n",
+    printk(KERN_INFO "%s: %s. Using major %d, Default EC \"%s%s\"\n",
 	DEV_NAME, OCTVQE_MODULE_VERSION, iMajor, ZAPTEL_ECHO_NAME,
-	ZAPTEL_ECHO_AGGRESSIVE, __DATE__, __TIME__);
+	ZAPTEL_ECHO_AGGRESSIVE);
 
     return 0;
 }
