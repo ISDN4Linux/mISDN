@@ -538,8 +538,8 @@ short ZapOctVqeApiEcChannelProcess(void *f_pvEcChan, short f_sRin, short f_sSin)
 		if (fWakeUpReader == 1) /* wake_up_interruptible waiting on read */ {
 			wake_up_interruptible(&pChan->ReadWaitQueue);
 
-		/* Retrieve CPU time before processing. */
-		rdtscl(pChan->ulTimestampIn);
+			/* Retrieve CPU time before processing. */
+			pChan->ulTimestampIn = (unsigned long)rdtsc();
 		}
 
 		if (fWakeUpWrite == 1) /* wake_up_interruptible waiting on write */
