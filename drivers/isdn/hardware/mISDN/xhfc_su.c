@@ -486,8 +486,6 @@ xhfc_ph_command(struct port *port, u_char command)
 static int
 reset_xhfc(struct xhfc *xhfc)
 {
-	int timeout = 0x2000;
-
 	if (debug & DEBUG_HW) {
 		printk(KERN_INFO "%s %s", xhfc->name, __FUNCTION__);
 	}
@@ -497,34 +495,41 @@ reset_xhfc(struct xhfc *xhfc)
 	udelay(5);
 	write_xhfc(xhfc, R_CIRM, 0);
 
-	/* amplitude */
-	write_xhfc(xhfc, R_PWM_MD, 0x80);
-	write_xhfc(xhfc, R_PWM1, 0x18);
-
 	write_xhfc(xhfc, R_FIFO_THRES, 0x11);
 
+	return 0;
+}
+
+/**
+ * pcm init sequence
+ */
+static int
+init_pcm(struct xhfc *xhfc)
+{
+	int timeout = 0x2000;
+
 	while ((read_xhfc(xhfc, R_STATUS) & (M_BUSY | M_PCM_INIT)) && (timeout)) {
-		timeout--;
-	}
+                timeout--;
+        }
 
-	if (!(timeout)) {
-		if (debug & DEBUG_HW) {
-			printk(KERN_ERR
-			       "%s %s: initialization sequence "
-			       "not completed!\n",
-			       xhfc->name, __FUNCTION__);
-		}
-		return (-ENODEV);
-	}
+        if (!(timeout)) {
+                if (debug & DEBUG_HW) {
+                        printk(KERN_ERR
+                               "%s %s: initialization sequence "
+                               "not completed!\n",
+                               xhfc->name, __FUNCTION__);
+                }
+                return (-ENODEV);
+        }
 
-	/* set PCM master mode */
-	SET_V_PCM_MD(xhfc->pcm_md0, 1);
-	write_xhfc(xhfc, R_PCM_MD0, xhfc->pcm_md0);
+        /* set PCM master mode */
+        SET_V_PCM_MD(xhfc->pcm_md0, 1);
+        write_xhfc(xhfc, R_PCM_MD0, xhfc->pcm_md0);
 
-	/* set pll adjust */
-	SET_V_PCM_IDX(xhfc->pcm_md0, 0x09);
-	SET_V_PLL_ADJ(xhfc->pcm_md1, 3);
-	write_xhfc(xhfc, R_PCM_MD0, xhfc->pcm_md0);
+        /* set pll adjust */
+        SET_V_PCM_IDX(xhfc->pcm_md0, 0x09);
+        SET_V_PLL_ADJ(xhfc->pcm_md1, 3);
+        write_xhfc(xhfc, R_PCM_MD0, xhfc->pcm_md0);
 	write_xhfc(xhfc, R_PCM_MD1, xhfc->pcm_md1);
 
 	return 0;
@@ -627,6 +632,9 @@ init_xhfc(struct xhfc *xhfc)
 	spin_lock_init(&xhfc->lock_irq);
 	reset_xhfc(xhfc);
 
+	/* init pcm */
+	init_pcm(xhfc);
+
 	/* perfom short irq test */
 	xhfc->testirq = 1;
 	enable_interrupts(xhfc);
@@ -727,6 +735,7 @@ setup_instance(struct xhfc *xhfc, struct device *parent)
 			mISDN_freebchannel(&p->bch[1]);
 			mISDN_freebchannel(&p->bch[0]);
 			mISDN_freedchannel(&p->dch);
+			mISDN_freedchannel(&p->ech);
 		} else {
 			xhfc_cnt++;
 			xhfc_setup_dch(&p->dch);
@@ -747,6 +756,10 @@ release_instance(struct xhfc *hw)
 	if (debug)
 		printk(KERN_INFO "%s: %s\n", DRIVER_NAME, __func__);
 
+	disable_interrupts(hw);
+	tasklet_disable(&hw->tasklet);
+	tasklet_kill(&hw->tasklet);
+
 	for (i = 0; i < hw->num_ports; i++) {
 		p = hw->port + i;
 		/* TODO
@@ -760,6 +773,11 @@ release_instance(struct xhfc *hw)
 		mISDN_freebchannel(&p->bch[1]);
 		mISDN_freebchannel(&p->bch[0]);
 		mISDN_freedchannel(&p->dch);
+		mISDN_freedchannel(&p->ech);
+
+		if (timer_pending(&p->f7_timer)) {
+			del_timer(&p->f7_timer);
+		}
 	}
 
 	if (hw) {
