@@ -128,6 +128,7 @@ struct xhfc;
 struct port {
 	struct xhfc * xhfc;
 	spinlock_t lock;
+
 	int idx;
 	char name[20];	/* XHFC_PI0_0_0 = PI no-0 XJFC no 0, port no 0 */
 
@@ -163,6 +164,7 @@ struct xhfc {
 	__u8 param_idx;		/* used to access module param arrays */
 
 	spinlock_t lock;
+	spinlock_t lock_irq;
 	struct tasklet_struct tasklet;	/* interrupt bottom half */
 
 	__u8 testirq;

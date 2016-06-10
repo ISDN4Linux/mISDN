@@ -624,6 +624,7 @@ init_xhfc(struct xhfc *xhfc)
 	}
 
 	spin_lock_init(&xhfc->lock);
+	spin_lock_init(&xhfc->lock_irq);
 	reset_xhfc(xhfc);
 
 	/* perfom short irq test */
@@ -1758,16 +1759,24 @@ xhfc_bh_handler(unsigned long ul_hw)
 	struct xhfc *xhfc = (struct xhfc *) ul_hw;
 	int i;
 	__u8 su_state;
+	__u8 su_irq, misc_irq;
+	__u32 fifo_irq;
 	struct dchannel *dch;
+	unsigned long flags;
+
+	/* collect XHFC irq sources */
+	spin_lock_irqsave(&xhfc->lock_irq, flags);
+	su_irq = xhfc->su_irq;
+	misc_irq = xhfc->misc_irq;
+	fifo_irq = xhfc->fifo_irq;
+	xhfc->su_irq = xhfc->misc_irq = xhfc->fifo_irq = 0;
+	spin_unlock_irqrestore(&xhfc->lock_irq, flags);
 
 	/* timer interrupt */
-	if (GET_V_TI_IRQ(xhfc->misc_irq)) {
-		xhfc->misc_irq &= (__u8) (~M_TI_IRQ);
-
+	if (GET_V_TI_IRQ(misc_irq)) {
 		/* Handle tx Fifos */
 		for (i = 0; i < xhfc->channels; i++) {
 			if ((1 << (i * 2)) & (xhfc->fifo_irqmsk)) {
-				xhfc->fifo_irq &= ~(1 << (i * 2));
 				spin_lock(&xhfc->lock);
 				xhfc_write_fifo(xhfc, i);
 				spin_unlock(&xhfc->lock);
@@ -1789,15 +1798,13 @@ xhfc_bh_handler(unsigned long ul_hw)
 
 	/* set fifo_irq when RX data over treshold */
 	for (i = 0; i < xhfc->num_ports; i++)
-		xhfc->fifo_irq |=
-		    read_xhfc(xhfc, R_FILL_BL0 + i) << (i * 8);
+		fifo_irq |= read_xhfc(xhfc, R_FILL_BL0 + i) << (i * 8);
 
 	/* Handle rx Fifos */
-	if ((xhfc->fifo_irq & xhfc->fifo_irqmsk) & FIFO_MASK_RX) {
+	if ((fifo_irq & xhfc->fifo_irqmsk) & FIFO_MASK_RX) {
 		for (i = 0; i < xhfc->channels; i++) {
-			if ((xhfc->fifo_irq & (1 << (i * 2 + 1)))
+			if ((fifo_irq & (1 << (i * 2 + 1)))
 			    & (xhfc->fifo_irqmsk)) {
-				xhfc->fifo_irq &= ~(1 << (i * 2 + 1));
 				spin_lock(&xhfc->lock);
 				xhfc_read_fifo(xhfc, i);
 				spin_unlock(&xhfc->lock);
@@ -1806,8 +1813,7 @@ xhfc_bh_handler(unsigned long ul_hw)
 	}
 
 	/* su interrupt */
-	if (xhfc->su_irq & xhfc->su_irqmsk) {
-		xhfc->su_irq = 0;
+	if (su_irq & xhfc->su_irqmsk) {
 		for (i = 0; i < xhfc->num_ports; i++) {
 			write_xhfc(xhfc, R_SU_SEL, i);
 			su_state = read_xhfc(xhfc, A_SU_RD_STA);
@@ -1832,6 +1838,8 @@ xhfc_interrupt(int intno, void *dev_id)
 	struct xhfc *xhfc = NULL;
 	__u8 i, j;
 	__u32 xhfc_irqs;
+	int sched_bh = 0;
+
 #ifdef USE_F0_COUNTER
 	__u32 f0_cnt;
 #endif
@@ -1856,6 +1864,8 @@ xhfc_interrupt(int intno, void *dev_id)
 	for (i = 0; i < pi->driver_data.num_xhfcs; i++) {
 		xhfc = &pi->xhfc[i];
 
+		spin_lock(&xhfc->lock_irq);
+
 		xhfc->misc_irq |= read_xhfc(xhfc, R_MISC_IRQ);
 		xhfc->su_irq |= read_xhfc(xhfc, R_SU_IRQ);
 
@@ -1865,14 +1875,18 @@ xhfc_interrupt(int intno, void *dev_id)
 			    (read_xhfc(xhfc, R_FIFO_BL0_IRQ + j) <<
 			     (j * 8));
 
+		sched_bh = (xhfc->misc_irq & xhfc->misc_irqmsk)
+		            || (xhfc->su_irq & xhfc->su_irqmsk)
+		            || (xhfc->fifo_irq & xhfc->fifo_irqmsk);
+
+		spin_unlock(&xhfc->lock_irq);
+
 		/* call bottom half at events
 		 *   - Timer Interrupt (or other misc_irq sources)
 		 *   - SU State change
 		 *   - Fifo FrameEnd interrupts (only at rx fifos enabled)
 		 */
-		if ((xhfc->misc_irq & xhfc->misc_irqmsk)
-		    || (xhfc->su_irq & xhfc->su_irqmsk)
-		    || (xhfc->fifo_irq & xhfc->fifo_irqmsk)) {
+		if (sched_bh) {
 
 			/* mark this xhfc really had irq */
 			xhfc_irqs |= (1 << i);
