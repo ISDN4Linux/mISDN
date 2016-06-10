@@ -834,7 +834,9 @@ deactivate_bchannel(struct bchannel *bch)
 	mISDN_clear_bchannel(bch);
 	spin_unlock_bh(&p->lock);
 
+	spin_lock_bh(&p->xhfc->lock);
 	xhfc_setup_bch(bch, ISDN_P_NONE);
+	spin_unlock_bh(&p->xhfc->lock);
 }
 
 /*
@@ -854,19 +856,22 @@ xhfc_l2l1B(struct mISDNchannel *ch, struct sk_buff *skb)
 
 	switch (hh->prim) {
 		case PH_DATA_REQ:
-			spin_lock_bh(&p->xhfc->lock);
 			spin_lock_bh(&p->lock);
 			ret = bchannel_senddata(bch, skb);
 			spin_unlock_bh(&p->lock);
+
 			if (ret > 0) {
+				spin_lock_bh(&p->xhfc->lock);
 				xhfc_write_fifo(p->xhfc, channel);
+				spin_unlock_bh(&p->xhfc->lock);
 				ret = 0;
 			}
-			spin_unlock_bh(&p->xhfc->lock);
 			return ret;
 		case PH_ACTIVATE_REQ:
 			if (!test_and_set_bit(FLG_ACTIVE, &bch->Flags)) {
+				spin_lock_bh(&p->xhfc->lock);
 				ret = xhfc_setup_bch(bch, ch->protocol);
+				spin_unlock_bh(&p->xhfc->lock);
 			} else
 				ret = 0;
 			if (!ret)
@@ -930,12 +935,16 @@ xhfc_l2l1D(struct mISDNchannel *ch, struct sk_buff *skb)
 						    MISDN_ID_ANY, 0, NULL,
 						    GFP_ATOMIC);
 				} else {
+					spin_lock_bh(&p->xhfc->lock);
 					xhfc_ph_command(p, L1_ACTIVATE_NT);
+					spin_unlock_bh(&p->xhfc->lock);
 					test_and_set_bit(FLG_L2_ACTIVATED,
 							 &dch->Flags);
 				}
 			} else {
+				spin_lock_bh(&p->xhfc->lock);
 				xhfc_ph_command(p, L1_ACTIVATE_TE);
+				spin_unlock_bh(&p->xhfc->lock);
 				ret = l1_event(dch->l1, hh->prim);
 			}
 			break;
@@ -948,7 +957,10 @@ xhfc_l2l1D(struct mISDNchannel *ch, struct sk_buff *skb)
 			test_and_clear_bit(FLG_L2_ACTIVATED, &dch->Flags);
 
 			if (p->mode & PORT_MODE_NT) {
+				spin_lock_bh(&p->xhfc->lock);
 				xhfc_ph_command(p, L1_DEACTIVATE_NT);
+				spin_unlock_bh(&p->xhfc->lock);
+
 				spin_lock_bh(&p->lock);
 				skb_queue_purge(&dch->squeue);
 				if (dch->tx_skb) {
@@ -1055,6 +1067,8 @@ open_dchannel(struct port *p, struct mISDNchannel *ch,
 	test_and_clear_bit(FLG_ACTIVE, &p->ech.Flags);
 	p->dch.state = 0;
 
+	spin_lock_bh(&p->xhfc->lock);
+
 	/* E-Channel logging */
 	if (rq->adr.channel == 1) {
 		xhfc_setup_ech(&p->ech);
@@ -1087,6 +1101,8 @@ open_dchannel(struct port *p, struct mISDNchannel *ch,
 
 	/* force initial layer1 statechanges */
 	p->xhfc->su_irq = p->xhfc->su_irqmsk;
+
+	spin_unlock_bh(&p->xhfc->lock);
 
 	if (((ch->protocol == ISDN_P_NT_S0) && (p->dch.state == 3)) ||
 	    ((ch->protocol == ISDN_P_TE_S0) && (p->dch.state == 7)))
@@ -1159,6 +1175,7 @@ channel_ctrl(struct port *p, struct mISDN_ctrl_req *cq)
 				break;
 			}
 
+			spin_lock_bh(&p->xhfc->lock);
 			if (cq->channel & 1) {
 				xhfc_ph_command(p, L1_SET_TESTLOOP_B1);
 			} else {
@@ -1174,6 +1191,7 @@ channel_ctrl(struct port *p, struct mISDN_ctrl_req *cq)
 			} else {
 				xhfc_ph_command(p, L1_UNSET_TESTLOOP_D);
 			}
+			spin_unlock_bh(&p->xhfc->lock);
 			break;
 
 		default:
@@ -1629,6 +1647,7 @@ xhfc_read_fifo(struct xhfc *xhfc, __u8 channel)
 			}
 			skb_trim(*rx_skb, 0);
 			xhfc_resetfifo(xhfc);
+			spin_unlock(&port->lock);
 			return;
 		}
 		data = skb_put(*rx_skb, rcnt);
@@ -1741,8 +1760,6 @@ xhfc_bh_handler(unsigned long ul_hw)
 	__u8 su_state;
 	struct dchannel *dch;
 
-	spin_lock_bh(&xhfc->lock);
-
 	/* timer interrupt */
 	if (GET_V_TI_IRQ(xhfc->misc_irq)) {
 		xhfc->misc_irq &= (__u8) (~M_TI_IRQ);
@@ -1751,7 +1768,9 @@ xhfc_bh_handler(unsigned long ul_hw)
 		for (i = 0; i < xhfc->channels; i++) {
 			if ((1 << (i * 2)) & (xhfc->fifo_irqmsk)) {
 				xhfc->fifo_irq &= ~(1 << (i * 2));
+				spin_lock(&xhfc->lock);
 				xhfc_write_fifo(xhfc, i);
+				spin_unlock(&xhfc->lock);
 			}
 		}
 
@@ -1761,7 +1780,9 @@ xhfc_bh_handler(unsigned long ul_hw)
 			    && (xhfc->port[i].
 				timers & NT_ACTIVATION_TIMER)) {
 				if ((--xhfc->port[i].nt_timer) < 0)
+					spin_lock(&xhfc->lock);
 					ph_state(&xhfc->port[i].dch);
+					spin_unlock(&xhfc->lock);
 			}
 		}
 	}
@@ -1777,7 +1798,9 @@ xhfc_bh_handler(unsigned long ul_hw)
 			if ((xhfc->fifo_irq & (1 << (i * 2 + 1)))
 			    & (xhfc->fifo_irqmsk)) {
 				xhfc->fifo_irq &= ~(1 << (i * 2 + 1));
+				spin_lock(&xhfc->lock);
 				xhfc_read_fifo(xhfc, i);
+				spin_unlock(&xhfc->lock);
 			}
 		}
 	}
@@ -1791,12 +1814,12 @@ xhfc_bh_handler(unsigned long ul_hw)
 			dch = &xhfc->port[i].dch;
 			if (GET_V_SU_STA(su_state) != dch->state) {
 				dch->state = GET_V_SU_STA(su_state);
+				spin_lock(&xhfc->lock);
 				ph_state(dch);
+				spin_unlock(&xhfc->lock);
 			}
 		}
 	}
-
-	spin_unlock_bh(&xhfc->lock);
 }
 
 /*
