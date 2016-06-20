@@ -258,7 +258,6 @@ l1loop_l2l1B(struct mISDNchannel *ch, struct sk_buff *skb) {
 		spin_unlock(&p->lock);
 		if (ret > 0) {
 			ret = 0;
-			queue_ch_frame(ch, PH_DATA_CNF, hh->id, NULL);
 			switch (vline) {
 			case VLINE_BUS:
 				bch_vbus(bch, skb);
