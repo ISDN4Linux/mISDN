@@ -35,7 +35,7 @@
 #include "xhfc_pci2pi.h"
 #endif
 
-const char *xhfc_rev = "Revision: 0.1.6 (socket), 2011-07-12";
+const char *xhfc_rev = "Revision: 0.2.0 2016-06-10";
 
 /* modules params */
 static unsigned int debug = 0;
