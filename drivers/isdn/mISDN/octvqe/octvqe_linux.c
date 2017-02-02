@@ -43,6 +43,7 @@ $Octasic_Revision: 21 $
 #include <linux/poll.h>
 #include <linux/moduleparam.h>
 #include <linux/sched.h>
+#include <linux/sched/signal.h>
 #include <linux/wait.h>
 #include <linux/mutex.h>
 
