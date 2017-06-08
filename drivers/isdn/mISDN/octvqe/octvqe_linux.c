@@ -206,14 +206,14 @@ int octvqe_ratelimit(void)
     if (toks > (ratelimit_burst * ratelimit_jiffies))
 	toks = ratelimit_burst * ratelimit_jiffies;
 
-	if (toks >= ratelimit_jiffies) {
-		int lost = missed;
+    if (toks >= ratelimit_jiffies) {
+	int lost = missed;
 
 	missed = 0;
 	toks -= ratelimit_jiffies;
 	spin_unlock_irqrestore(&ratelimit_lock, flags);
 	if (lost)
-	printk(KERN_WARNING "%s: %d messages suppressed.\n", DEV_NAME, lost);
+	    printk(KERN_WARNING "%s: %d messages suppressed.\n", DEV_NAME, lost);
 
 	return 1;
     }
