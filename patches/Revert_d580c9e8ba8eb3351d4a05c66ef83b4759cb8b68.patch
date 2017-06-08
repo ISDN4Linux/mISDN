@@ -1,0 +1,35 @@
+From d580c9e8ba8eb3351d4a05c66ef83b4759cb8b68 Mon Sep 17 00:00:00 2001
+From: Ingo Molnar <mingo@kernel.org>
+Date: Wed, 8 Feb 2017 18:51:30 +0100
+Subject: [PATCH] sched/headers: Prepare for new header dependencies before
+ moving code to <linux/sched/signal.h>
+
+We are going to split <linux/sched/signal.h> out of <linux/sched.h>, which
+will have to be picked up from other headers and a couple of .c files.
+
+Create a trivial placeholder <linux/sched/signal.h> file that just
+maps to <linux/sched.h> to make this patch obviously correct and
+bisectable.
+
+Include the new header in the files that are going to need it.
+
+Acked-by: Linus Torvalds <torvalds@linux-foundation.org>
+Cc: Mike Galbraith <efault@gmx.de>
+Cc: Peter Zijlstra <peterz@infradead.org>
+Cc: Thomas Gleixner <tglx@linutronix.de>
+Cc: linux-kernel@vger.kernel.org
+Signed-off-by: Ingo Molnar <mingo@kernel.org>
+
+diff --git b/drivers/isdn/mISDN/l1oip_core.c a/drivers/isdn/mISDN/l1oip_core.c
+index 6ceca7d..67c2187 100644
+--- b/drivers/isdn/mISDN/l1oip_core.c
++++ a/drivers/isdn/mISDN/l1oip_core.c
+@@ -234,8 +234,6 @@
+ #include <linux/workqueue.h>
+ #include <linux/kthread.h>
+ #include <linux/slab.h>
+-#include <linux/sched/signal.h>
+-
+ #include <net/sock.h>
+ #include "core.h"
+ #include "l1oip.h"

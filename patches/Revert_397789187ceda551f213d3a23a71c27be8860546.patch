@@ -1,0 +1,40 @@
+From 397789187ceda551f213d3a23a71c27be8860546 Mon Sep 17 00:00:00 2001
+From: Ingo Molnar <mingo@kernel.org>
+Date: Thu, 2 Feb 2017 19:15:33 +0100
+Subject: [PATCH] sched/headers: Prepare to move signal wakeup & sigpending
+ methods from <linux/sched.h> into <linux/sched/signal.h>
+
+Fix up affected files that include this signal functionality via sched.h.
+
+Acked-by: Linus Torvalds <torvalds@linux-foundation.org>
+Cc: Mike Galbraith <efault@gmx.de>
+Cc: Peter Zijlstra <peterz@infradead.org>
+Cc: Thomas Gleixner <tglx@linutronix.de>
+Cc: linux-kernel@vger.kernel.org
+Signed-off-by: Ingo Molnar <mingo@kernel.org>
+
+diff --git b/drivers/isdn/mISDN/octvqe/octvqe_linux.c a/drivers/isdn/mISDN/octvqe/octvqe_linux.c
+index 5bcee87..3511a4e 100644
+--- b/drivers/isdn/mISDN/octvqe/octvqe_linux.c
++++ a/drivers/isdn/mISDN/octvqe/octvqe_linux.c
+@@ -43,7 +43,6 @@ $Octasic_Revision: 21 $
+ #include <linux/poll.h>
+ #include <linux/moduleparam.h>
+ #include <linux/sched.h>
+-#include <linux/sched/signal.h>
+ #include <linux/wait.h>
+ #include <linux/mutex.h>
+ 
+diff --git b/drivers/isdn/mISDN/timerdev.c a/drivers/isdn/mISDN/timerdev.c
+index b1e135f..9438d7e 100644
+--- b/drivers/isdn/mISDN/timerdev.c
++++ a/drivers/isdn/mISDN/timerdev.c
+@@ -25,8 +25,6 @@
+ #include <linux/module.h>
+ #include <linux/mISDNif_s.h>
+ #include <linux/mutex.h>
+-#include <linux/sched/signal.h>
+-
+ #include "core.h"
+ 
+ static DEFINE_MUTEX(mISDN_mutex);
