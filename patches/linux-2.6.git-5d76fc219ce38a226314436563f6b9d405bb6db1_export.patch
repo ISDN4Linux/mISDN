@@ -29,9 +29,9 @@ Index: standalone/drivers/isdn/mISDN/dsp_audio.c
  #include <linux/mISDNif_s.h>
  #include <linux/mISDNdsp_s.h>
 -#include <linux/export.h>
+ #include <linux/bitrev.h>
  #include "core.h"
  #include "dsp.h"
- 
 Index: standalone/drivers/isdn/mISDN/dsp_pipeline.c
 ===================================================================
 --- standalone.orig/drivers/isdn/mISDN/dsp_pipeline.c
