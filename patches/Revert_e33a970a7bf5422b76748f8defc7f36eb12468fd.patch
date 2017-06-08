@@ -1,0 +1,30 @@
+From e33a970a7bf5422b76748f8defc7f36eb12468fd Mon Sep 17 00:00:00 2001
+From: Ingo Molnar <mingo@kernel.org>
+Date: Sun, 5 Feb 2017 11:48:36 +0100
+Subject: [PATCH] sched/headers: Prepare to move cputime functionality from
+ <linux/sched.h> into <linux/sched/cputime.h>
+
+Introduce a trivial, mostly empty <linux/sched/cputime.h> header
+to prepare for the moving of cputime functionality out of sched.h.
+
+Update all code that relies on these facilities.
+
+Acked-by: Linus Torvalds <torvalds@linux-foundation.org>
+Cc: Mike Galbraith <efault@gmx.de>
+Cc: Peter Zijlstra <peterz@infradead.org>
+Cc: Thomas Gleixner <tglx@linutronix.de>
+Cc: linux-kernel@vger.kernel.org
+Signed-off-by: Ingo Molnar <mingo@kernel.org>
+
+diff --git b/drivers/isdn/mISDN/stack.c a/drivers/isdn/mISDN/stack.c
+index 8b7faea..696f22f 100644
+--- b/drivers/isdn/mISDN/stack.c
++++ a/drivers/isdn/mISDN/stack.c
+@@ -19,7 +19,6 @@
+ #include <linux/mISDNif_s.h>
+ #include <linux/kthread.h>
+ #include <linux/sched.h>
+-#include <linux/sched/cputime.h>
+ #include <linux/signal.h>
+ 
+ #include "core.h"
