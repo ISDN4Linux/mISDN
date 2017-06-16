@@ -1932,7 +1932,7 @@ hfcmulti_dtmf(struct hfc_multi *hc)
 			hh = mISDN_HEAD_P(skb);
 			hh->prim = PH_CONTROL_IND;
 			hh->id = DTMF_HFC_COEF;
-			memcpy(skb_put(skb, 512), hc->chan[ch].coeff, 512);
+			skb_put_data(skb, hc->chan[ch].coeff, 512);
 			recv_Bchannel_skb(bch, skb);
 		}
 	}
@@ -2338,8 +2338,7 @@ next_frame:
 				skb = *sp;
 				*sp = mI_alloc_skb(skb->len, GFP_ATOMIC);
 				if (*sp) {
-					memcpy(skb_put(*sp, skb->len),
-					       skb->data, skb->len);
+					skb_put_data(*sp, skb->data, skb->len);
 					skb_trim(skb, 0);
 				} else {
 					printk(KERN_DEBUG "%s: No mem\n",
