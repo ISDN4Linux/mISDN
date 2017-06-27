@@ -256,7 +256,7 @@
 struct mISDNhead {
 	unsigned int	prim;
 	unsigned int	id;
-}  __packed;
+} __attribute__((__packed__));
 
 #define MISDN_HEADER_LEN	sizeof(struct mISDNhead)
 #define MAX_DATA_SIZE		2048
