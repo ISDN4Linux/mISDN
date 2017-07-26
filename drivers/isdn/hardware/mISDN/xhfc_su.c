@@ -1105,8 +1105,10 @@ open_dchannel(struct port *p, struct mISDNchannel *ch,
 		if (IS_ISDN_P_TE(rq->protocol)) {
 			p->mode |= PORT_MODE_TE;
 			err = create_l1(&p->dch, xhfc_l1callback);
-			if (err)
+			if (err) {
+				spin_unlock_bh(&p->xhfc->lock);
 				return err;
+			}
 		} else {
 			p->mode |= PORT_MODE_NT;
 		}
@@ -1114,8 +1116,10 @@ open_dchannel(struct port *p, struct mISDNchannel *ch,
 		ch->protocol = rq->protocol;
 		p->initdone = 1;
 	} else {
-		if (rq->protocol != ch->protocol)
+		if (rq->protocol != ch->protocol) {
+			spin_unlock_bh(&p->xhfc->lock);
 			return -EPROTONOSUPPORT;
+		}
 	}
 
 	/* force initial layer1 statechanges */
@@ -1806,10 +1810,11 @@ xhfc_bh_handler(unsigned long ul_hw)
 			if ((xhfc->port[i].mode & PORT_MODE_NT)
 			    && (xhfc->port[i].
 				timers & NT_ACTIVATION_TIMER)) {
-				if ((--xhfc->port[i].nt_timer) < 0)
+				if ((--xhfc->port[i].nt_timer) < 0) {
 					spin_lock(&xhfc->lock);
 					ph_state(&xhfc->port[i].dch);
 					spin_unlock(&xhfc->lock);
+				}
 			}
 		}
 	}
