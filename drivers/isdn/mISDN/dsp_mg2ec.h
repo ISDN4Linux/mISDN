@@ -576,9 +576,10 @@ echo_can_update(struct echo_can_state *ec, short iref, short isig)
 			if (ec->N_d > USED_COEFFS)
 				for (k = 0; k < ec->N_d; k++)
 					if (abs(ec->a_i[k]) <
-						max_coeffs[USED_COEFFS-1])
+						max_coeffs[USED_COEFFS-1]) {
 						ec->a_i[k] = 0;
 						ec->a_s[k] = 0;
+					}
 #endif
 		} else {
 #ifdef MEC2_STATS_DETAILED

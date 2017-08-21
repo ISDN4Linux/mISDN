@@ -1808,8 +1808,7 @@ xhfc_bh_handler(unsigned long ul_hw)
 		/* handle NT Timer */
 		for (i = 0; i < xhfc->num_ports; i++) {
 			if ((xhfc->port[i].mode & PORT_MODE_NT)
-			    && (xhfc->port[i].
-				timers & NT_ACTIVATION_TIMER)) {
+			    && (xhfc->port[i].timers & NT_ACTIVATION_TIMER)) {
 				if ((--xhfc->port[i].nt_timer) < 0) {
 					spin_lock(&xhfc->lock);
 					ph_state(&xhfc->port[i].dch);
