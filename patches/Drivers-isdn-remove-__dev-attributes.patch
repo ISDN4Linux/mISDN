@@ -53,8 +53,8 @@ Index: standalone/drivers/isdn/hardware/mISDN/avmfritz.c
  			pr_info("%s: drvdata already removed\n", __func__);
  }
  
--static struct pci_device_id fcpci_ids[] = {
-+static struct pci_device_id fcpci_ids[] __devinitdata = {
+-static const struct pci_device_id fcpci_ids[] = {
++static const struct pci_device_id fcpci_ids[] __devinitdata = {
  	{ PCI_VENDOR_ID_AVM, PCI_DEVICE_ID_AVM_A1, PCI_ANY_ID, PCI_ANY_ID,
  	  0, 0, (unsigned long) "Fritz!Card PCI"},
  	{ PCI_VENDOR_ID_AVM, PCI_DEVICE_ID_AVM_A1_V2, PCI_ANY_ID, PCI_ANY_ID,
@@ -84,8 +84,8 @@ Index: standalone/drivers/isdn/hardware/mISDN/hfcmulti.c
  
  #undef H
  #define H(x)	((unsigned long)&hfcm_map[x])
--static struct pci_device_id hfmultipci_ids[] = {
-+static struct pci_device_id hfmultipci_ids[] __devinitdata = {
+-static const struct pci_device_id hfmultipci_ids[] = {
++static const struct pci_device_id hfmultipci_ids[] __devinitdata = {
  
  	/* Cards with HFC-4S Chip */
  	{ PCI_VENDOR_ID_CCD, PCI_DEVICE_ID_CCD_HFC4S, PCI_VENDOR_ID_CCD,
@@ -240,8 +240,8 @@ Index: standalone/drivers/isdn/hardware/mISDN/netjet.c
  /* We cannot select cards with PCI_SUB... IDs, since here are cards with
   * SUB IDs set to PCI_ANY_ID, so we need to match all and reject
   * known other cards which not work with this driver - see probe function */
--static struct pci_device_id nj_pci_ids[] = {
-+static struct pci_device_id nj_pci_ids[] __devinitdata = {
+-static const struct pci_device_id nj_pci_ids[] = {
++static const struct pci_device_id nj_pci_ids[] __devinitdata = {
  	{ PCI_VENDOR_ID_TIGERJET, PCI_DEVICE_ID_TIGERJET_300,
  	  PCI_ANY_ID, PCI_ANY_ID, 0, 0, 0},
  	{ }
