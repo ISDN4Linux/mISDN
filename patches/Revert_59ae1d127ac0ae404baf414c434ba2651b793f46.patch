@@ -1,0 +1,180 @@
+From 59ae1d127ac0ae404baf414c434ba2651b793f46 Mon Sep 17 00:00:00 2001
+From: Johannes Berg <johannes.berg@intel.com>
+Date: Fri, 16 Jun 2017 14:29:20 +0200
+Subject: [PATCH] networking: introduce and use skb_put_data()
+
+A common pattern with skb_put() is to just want to memcpy()
+some data into the new space, introduce skb_put_data() for
+this.
+
+An spatch similar to the one for skb_put_zero() converts many
+of the places using it:
+
+    @@
+    identifier p, p2;
+    expression len, skb, data;
+    type t, t2;
+    @@
+    (
+    -p = skb_put(skb, len);
+    +p = skb_put_data(skb, data, len);
+    |
+    -p = (t)skb_put(skb, len);
+    +p = skb_put_data(skb, data, len);
+    )
+    (
+    p2 = (t2)p;
+    -memcpy(p2, data, len);
+    |
+    -memcpy(p, data, len);
+    )
+
+    @@
+    type t, t2;
+    identifier p, p2;
+    expression skb, data;
+    @@
+    t *p;
+    ...
+    (
+    -p = skb_put(skb, sizeof(t));
+    +p = skb_put_data(skb, data, sizeof(t));
+    |
+    -p = (t *)skb_put(skb, sizeof(t));
+    +p = skb_put_data(skb, data, sizeof(t));
+    )
+    (
+    p2 = (t2)p;
+    -memcpy(p2, data, sizeof(*p));
+    |
+    -memcpy(p, data, sizeof(*p));
+    )
+
+    @@
+    expression skb, len, data;
+    @@
+    -memcpy(skb_put(skb, len), data, len);
+    +skb_put_data(skb, data, len);
+
+(again, manually post-processed to retain some comments)
+
+Reviewed-by: Stephen Hemminger <stephen@networkplumber.org>
+Signed-off-by: Johannes Berg <johannes.berg@intel.com>
+Signed-off-by: David S. Miller <davem@davemloft.net>
+
+diff --git b/drivers/isdn/hardware/mISDN/hfcmulti.c a/drivers/isdn/hardware/mISDN/hfcmulti.c
+index aea0c9616ea5..961c07ee47b7 100644
+--- b/drivers/isdn/hardware/mISDN/hfcmulti.c
++++ a/drivers/isdn/hardware/mISDN/hfcmulti.c
+@@ -1926,7 +1926,7 @@ hfcmulti_dtmf(struct hfc_multi *hc)
+ 			hh = mISDN_HEAD_P(skb);
+ 			hh->prim = PH_CONTROL_IND;
+ 			hh->id = DTMF_HFC_COEF;
+-			skb_put_data(skb, hc->chan[ch].coeff, 512);
++			memcpy(skb_put(skb, 512), hc->chan[ch].coeff, 512);
+ 			recv_Bchannel_skb(bch, skb);
+ 		}
+ 	}
+@@ -2332,7 +2332,8 @@ hfcmulti_rx(struct hfc_multi *hc, int ch)
+ 				skb = *sp;
+ 				*sp = mI_alloc_skb(skb->len, GFP_ATOMIC);
+ 				if (*sp) {
+-					skb_put_data(*sp, skb->data, skb->len);
++					memcpy(skb_put(*sp, skb->len),
++					       skb->data, skb->len);
+ 					skb_trim(skb, 0);
+ 				} else {
+ 					printk(KERN_DEBUG "%s: No mem\n",
+diff --git b/drivers/isdn/hardware/mISDN/hfcsusb.c a/drivers/isdn/hardware/mISDN/hfcsusb.c
+index 17cc879ad2bb..114f3bcba1b0 100644
+--- b/drivers/isdn/hardware/mISDN/hfcsusb.c
++++ a/drivers/isdn/hardware/mISDN/hfcsusb.c
+@@ -893,7 +893,7 @@ hfcsusb_rx_frame(struct usb_fifo *fifo, __u8 *data, unsigned int len,
+ 		}
+ 	}
+ 
+-	skb_put_data(rx_skb, data, len);
++	memcpy(skb_put(rx_skb, len), data, len);
+ 
+ 	if (hdlc) {
+ 		/* we have a complete hdlc packet */
+diff --git b/drivers/isdn/mISDN/dsp_cmx.c a/drivers/isdn/mISDN/dsp_cmx.c
+index d4b6f01a3f0e..8e3aa002767b 100644
+--- b/drivers/isdn/mISDN/dsp_cmx.c
++++ a/drivers/isdn/mISDN/dsp_cmx.c
+@@ -1595,7 +1595,8 @@ dsp_cmx_send_member(struct dsp *dsp, int len, s32 *c, int members)
+ 				thh = mISDN_HEAD_P(txskb);
+ 				thh->prim = DL_DATA_REQ;
+ 				thh->id = 0;
+-				skb_put_data(txskb, nskb->data + preload, len);
++				memcpy(skb_put(txskb, len), nskb->data + preload,
++				       len);
+ 				/* queue (trigger later) */
+ 				skb_queue_tail(&dsp->sendq, txskb);
+ 			}
+diff --git b/drivers/isdn/mISDN/layer2.c a/drivers/isdn/mISDN/layer2.c
+index 7243a6746f8b..5eb380a25903 100644
+--- b/drivers/isdn/mISDN/layer2.c
++++ a/drivers/isdn/mISDN/layer2.c
+@@ -176,7 +176,7 @@ l2up_create(struct layer2 *l2, u_int prim, int len, void *arg)
+ 	hh->prim = prim;
+ 	hh->id = (l2->ch.nr << 16) | l2->ch.addr;
+ 	if (len)
+-		skb_put_data(skb, arg, len);
++		memcpy(skb_put(skb, len), arg, len);
+ 	err = l2->up->send(l2->up, skb);
+ 	if (err) {
+ 		printk(KERN_WARNING "%s: dev %s err=%d\n", __func__,
+@@ -235,7 +235,7 @@ l2down_create(struct layer2 *l2, u_int prim, u_int id, int len, void *arg)
+ 	hh->prim = prim;
+ 	hh->id = id;
+ 	if (len)
+-		skb_put_data(skb, arg, len);
++		memcpy(skb_put(skb, len), arg, len);
+ 	err = l2down_raw(l2, skb);
+ 	if (err)
+ 		dev_kfree_skb(skb);
+@@ -640,7 +640,7 @@ send_uframe(struct layer2 *l2, struct sk_buff *skb, u_char cmd, u_char cr)
+ 			return;
+ 		}
+ 	}
+-	skb_put_data(skb, tmp, i);
++	memcpy(skb_put(skb, i), tmp, i);
+ 	enqueue_super(l2, skb);
+ }
+ 
+@@ -1125,7 +1125,7 @@ enquiry_cr(struct layer2 *l2, u_char typ, u_char cr, u_char pf)
+ 		       mISDNDevName4ch(&l2->ch), __func__);
+ 		return;
+ 	}
+-	skb_put_data(skb, tmp, i);
++	memcpy(skb_put(skb, i), tmp, i);
+ 	enqueue_super(l2, skb);
+ }
+ 
+diff --git b/drivers/isdn/mISDN/tei.c a/drivers/isdn/mISDN/tei.c
+index 908127efccf8..592f597d8951 100644
+--- b/drivers/isdn/mISDN/tei.c
++++ a/drivers/isdn/mISDN/tei.c
+@@ -312,7 +312,7 @@ teiup_create(struct manager *mgr, u_int prim, int len, void *arg)
+ 	hh->prim = prim;
+ 	hh->id = (mgr->ch.nr << 16) | mgr->ch.addr;
+ 	if (len)
+-		skb_put_data(skb, arg, len);
++		memcpy(skb_put(skb, len), arg, len);
+ 	err = mgr->up->send(mgr->up, skb);
+ 	if (err) {
+ 		printk(KERN_WARNING "%s: err=%d\n", __func__, err);
+diff --git b/include/linux/mISDNif.h a/include/linux/mISDNif.h
+index a7330eb3ec64..ac02c54520e9 100644
+--- b/include/linux/mISDNif_s.h
++++ a/include/linux/mISDNif_s.h
+@@ -554,7 +554,7 @@ _alloc_mISDN_skb(u_int prim, u_int id, u_int len, void *dp, gfp_t gfp_mask)
+ 	if (!skb)
+ 		return NULL;
+ 	if (len)
+-		skb_put_data(skb, dp, len);
++		memcpy(skb_put(skb, len), dp, len);
+ 	hh = mISDN_HEAD_P(skb);
+ 	hh->prim = prim;
+ 	hh->id = id;

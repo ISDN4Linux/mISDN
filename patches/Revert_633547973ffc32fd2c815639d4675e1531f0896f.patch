@@ -1,0 +1,30 @@
+From 633547973ffc32fd2c815639d4675e1531f0896f Mon Sep 17 00:00:00 2001
+From: "Reshetova, Elena" <elena.reshetova@intel.com>
+Date: Fri, 30 Jun 2017 13:07:58 +0300
+Subject: [PATCH] net: convert sk_buff.users from atomic_t to refcount_t
+
+refcount_t type and corresponding API should be
+used instead of atomic_t when the variable is used as
+a reference counter. This allows to avoid accidental
+refcounter overflows that might lead to use-after-free
+situations.
+
+Signed-off-by: Elena Reshetova <elena.reshetova@intel.com>
+Signed-off-by: Hans Liljestrand <ishkamiel@gmail.com>
+Signed-off-by: Kees Cook <keescook@chromium.org>
+Signed-off-by: David Windsor <dwindsor@gmail.com>
+Signed-off-by: David S. Miller <davem@davemloft.net>
+
+diff --git b/drivers/isdn/mISDN/socket.c a/drivers/isdn/mISDN/socket.c
+index c5603d1a07d6..99e5f9751e8b 100644
+--- b/drivers/isdn/mISDN/socket.c
++++ a/drivers/isdn/mISDN/socket.c
+@@ -155,7 +155,7 @@ mISDN_sock_recvmsg(struct socket *sock, struct msghdr *msg, size_t len,
+ 	copied = skb->len + MISDN_HEADER_LEN;
+ 	if (len < copied) {
+ 		if (flags & MSG_PEEK)
+-			refcount_dec(&skb->users);
++			atomic_dec(&skb->users);
+ 		else
+ 			skb_queue_head(&sk->sk_receive_queue, skb);
+ 		return -ENOSPC;
