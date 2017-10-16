@@ -1243,7 +1243,7 @@ hfcpci_int(int intno, void *dev_id)
  * timer callback for D-chan busy resolution. Currently no function
  */
 static void
-hfcpci_dbusy_timer(struct hfc_pci *hc)
+hfcpci_dbusy_timer(struct timer_list *t)
 {
 }
 
@@ -1719,8 +1719,7 @@ static void
 inithfcpci(struct hfc_pci *hc)
 {
 	printk(KERN_DEBUG "inithfcpci: entered\n");
-	setup_timer(&hc->dch.timer, (void *)hfcpci_dbusy_timer,
-		    (long)&hc->dch);
+	timer_setup(&hc->dch.timer, hfcpci_dbusy_timer, 0);
 	hc->chanlimit = 2;
 	mode_hfcpci(&hc->bch[0], 1, -1);
 	mode_hfcpci(&hc->bch[1], 2, -1);
