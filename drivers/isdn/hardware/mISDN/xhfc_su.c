@@ -61,7 +61,7 @@ static void xhfc_setup_dch(struct dchannel *dch);
 static void xhfc_write_fifo(struct xhfc *xhfc, __u8 channel);
 static void xhfc_bh_handler(unsigned long ul_hw);
 static void ph_state(struct dchannel *dch);
-static void f7_timer_expire(struct port *port);
+static void f7_timer_expire(struct timer_list *t);
 /*
  * Physical S/U commands to control Line Interface
  */
@@ -721,9 +721,7 @@ setup_instance(struct xhfc *xhfc, struct device *parent)
 		/*
 		 * init F7 timer to delay ACTIVATE INDICATION
 		 */
-		init_timer(&p->f7_timer);
-		p->f7_timer.data = (long) p;
-		p->f7_timer.function = (void *) f7_timer_expire;
+		timer_setup(&p->f7_timer, f7_timer_expire, 0);
 
 		snprintf(p->name, MISDN_MAX_IDLEN - 1, "%s.%d",
 			 DRIVER_NAME, xhfc_cnt + 1);
@@ -1275,8 +1273,9 @@ xhfc_dctrl(struct mISDNchannel *ch, u_int cmd, void *arg)
  * send ACTIVATE INDICATION to l2
  */
 static void
-f7_timer_expire(struct port *port)
+f7_timer_expire(struct timer_list *t)
 {
+	struct port *port = from_timer(port, t, f7_timer);
 	l1_event(port->dch.l1, XHFC_L1_F7);
 }
 
