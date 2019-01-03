@@ -1,0 +1,18 @@
+diff --git b/drivers/isdn/mISDN/timerdev.c a/drivers/isdn/mISDN/timerdev.c
+index f4272d4..c50a343 100644
+--- b/drivers/isdn/mISDN/timerdev.c
++++ a/drivers/isdn/mISDN/timerdev.c
+@@ -141,11 +141,11 @@ mISDN_read(struct file *filep, char __user *buf, size_t count, loff_t *off)
+ 	return ret;
+ }
+ 
+-static __poll_t
++static unsigned int
+ mISDN_poll(struct file *filep, poll_table *wait)
+ {
+ 	struct mISDNtimerdev	*dev = filep->private_data;
+-	__poll_t		mask = POLLERR;
++	unsigned int		mask = POLLERR;
+ 
+ 	if (*debug & DEBUG_TIMER)
+ 		printk(KERN_DEBUG "%s(%p, %p)\n", __func__, filep, wait);
