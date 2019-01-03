@@ -1,0 +1,65 @@
+diff --git b/drivers/isdn/hardware/mISDN/avmfritz.c a/drivers/isdn/hardware/mISDN/avmfritz.c
+index ae2b266..dce6632 100644
+--- b/drivers/isdn/hardware/mISDN/avmfritz.c
++++ a/drivers/isdn/hardware/mISDN/avmfritz.c
+@@ -156,7 +156,7 @@ _set_debug(struct fritzcard *card)
+ }
+ 
+ static int
+-set_debug(const char *val, const struct kernel_param *kp)
++set_debug(const char *val, struct kernel_param *kp)
+ {
+ 	int ret;
+ 	struct fritzcard *card;
+diff --git b/drivers/isdn/hardware/mISDN/mISDNinfineon.c a/drivers/isdn/hardware/mISDN/mISDNinfineon.c
+index 1fc2906..d5bdbaf 100644
+--- b/drivers/isdn/hardware/mISDN/mISDNinfineon.c
++++ a/drivers/isdn/hardware/mISDN/mISDNinfineon.c
+@@ -244,7 +244,7 @@ _set_debug(struct inf_hw *card)
+ }
+ 
+ static int
+-set_debug(const char *val, const struct kernel_param *kp)
++set_debug(const char *val, struct kernel_param *kp)
+ {
+ 	int ret;
+ 	struct inf_hw *card;
+diff --git b/drivers/isdn/hardware/mISDN/netjet.c a/drivers/isdn/hardware/mISDN/netjet.c
+index 89d9ba8..6a6d848 100644
+--- b/drivers/isdn/hardware/mISDN/netjet.c
++++ a/drivers/isdn/hardware/mISDN/netjet.c
+@@ -111,7 +111,7 @@ _set_debug(struct tiger_hw *card)
+ }
+ 
+ static int
+-set_debug(const char *val, const struct kernel_param *kp)
++set_debug(const char *val, struct kernel_param *kp)
+ {
+ 	int ret;
+ 	struct tiger_hw *card;
+diff --git b/drivers/isdn/hardware/mISDN/speedfax.c a/drivers/isdn/hardware/mISDN/speedfax.c
+index 1f1446e..9815bb4 100644
+--- b/drivers/isdn/hardware/mISDN/speedfax.c
++++ a/drivers/isdn/hardware/mISDN/speedfax.c
+@@ -94,7 +94,7 @@ _set_debug(struct sfax_hw *card)
+ }
+ 
+ static int
+-set_debug(const char *val, const struct kernel_param *kp)
++set_debug(const char *val, struct kernel_param *kp)
+ {
+ 	int ret;
+ 	struct sfax_hw *card;
+diff --git b/drivers/isdn/hardware/mISDN/w6692.c a/drivers/isdn/hardware/mISDN/w6692.c
+index 5acf6ab..536d513 100644
+--- b/drivers/isdn/hardware/mISDN/w6692.c
++++ a/drivers/isdn/hardware/mISDN/w6692.c
+@@ -101,7 +101,7 @@ _set_debug(struct w6692_hw *card)
+ }
+ 
+ static int
+-set_debug(const char *val, const struct kernel_param *kp)
++set_debug(const char *val, struct kernel_param *kp)
+ {
+ 	int ret;
+ 	struct w6692_hw *card;

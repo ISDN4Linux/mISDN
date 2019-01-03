@@ -1,0 +1,86 @@
+diff --git b/drivers/isdn/hardware/mISDN/hfcmulti.c a/drivers/isdn/hardware/mISDN/hfcmulti.c
+index e5b9a0c..ddfb062 100644
+--- b/drivers/isdn/hardware/mISDN/hfcmulti.c
++++ a/drivers/isdn/hardware/mISDN/hfcmulti.c
+@@ -2861,7 +2861,7 @@ irq_notforus:
+  */
+ 
+ static void
+-hfcmulti_dbusy_timer(struct timer_list *t)
++hfcmulti_dbusy_timer(struct hfc_multi *hc)
+ {
+ }
+ 
+@@ -3883,7 +3883,8 @@ hfcmulti_initmode(struct dchannel *dch)
+ 		if (hc->dnum[pt]) {
+ 			mode_hfcmulti(hc, dch->slot, dch->dev.D.protocol,
+ 				      -1, 0, -1, 0);
+-			timer_setup(&dch->timer, hfcmulti_dbusy_timer, 0);
++			setup_timer(&dch->timer, (void *)hfcmulti_dbusy_timer,
++				    (long)dch);
+ 		}
+ 		for (i = 1; i <= 31; i++) {
+ 			if (!((1 << i) & hc->bmask[pt])) /* skip unused chan */
+@@ -3989,7 +3990,8 @@ hfcmulti_initmode(struct dchannel *dch)
+ 		hc->chan[i].slot_rx = -1;
+ 		hc->chan[i].conf = -1;
+ 		mode_hfcmulti(hc, i, dch->dev.D.protocol, -1, 0, -1, 0);
+-		timer_setup(&dch->timer, hfcmulti_dbusy_timer, 0);
++		setup_timer(&dch->timer, (void *)hfcmulti_dbusy_timer,
++			    (long)dch);
+ 		hc->chan[i - 2].slot_tx = -1;
+ 		hc->chan[i - 2].slot_rx = -1;
+ 		hc->chan[i - 2].conf = -1;
+diff --git b/drivers/isdn/hardware/mISDN/hfcpci.c a/drivers/isdn/hardware/mISDN/hfcpci.c
+index f4170a9..2ead502 100644
+--- b/drivers/isdn/hardware/mISDN/hfcpci.c
++++ a/drivers/isdn/hardware/mISDN/hfcpci.c
+@@ -1243,7 +1243,7 @@ hfcpci_int(int intno, void *dev_id)
+  * timer callback for D-chan busy resolution. Currently no function
+  */
+ static void
+-hfcpci_dbusy_timer(struct timer_list *t)
++hfcpci_dbusy_timer(struct hfc_pci *hc)
+ {
+ }
+ 
+@@ -1719,7 +1719,8 @@ static void
+ inithfcpci(struct hfc_pci *hc)
+ {
+ 	printk(KERN_DEBUG "inithfcpci: entered\n");
+-	timer_setup(&hc->dch.timer, hfcpci_dbusy_timer, 0);
++	setup_timer(&hc->dch.timer, (void *)hfcpci_dbusy_timer,
++		    (long)&hc->dch);
+ 	hc->chanlimit = 2;
+ 	mode_hfcpci(&hc->bch[0], 1, -1);
+ 	mode_hfcpci(&hc->bch[1], 2, -1);
+diff --git b/drivers/isdn/hardware/mISDN/mISDNisar.c a/drivers/isdn/hardware/mISDN/mISDNisar.c
+index b791688..5b07859 100644
+--- b/drivers/isdn/hardware/mISDN/mISDNisar.c
++++ a/drivers/isdn/hardware/mISDN/mISDNisar.c
+@@ -1146,9 +1146,9 @@ mISDNisar_irq(struct isar_hw *isar)
+ EXPORT_SYMBOL(mISDNisar_irq);
+ 
+ static void
+-ftimer_handler(struct timer_list *t)
++ftimer_handler(unsigned long data)
+ {
+-	struct isar_ch *ch = from_timer(ch, t, ftimer);
++	struct isar_ch *ch = (struct isar_ch *)data;
+ 
+ 	pr_debug("%s: ftimer flags %lx\n", ch->is->name, ch->bch.Flags);
+ 	test_and_clear_bit(FLG_FTI_RUN, &ch->bch.Flags);
+@@ -1635,9 +1635,11 @@ init_isar(struct isar_hw *isar)
+ 	}
+ 	if (isar->version != 1)
+ 		return -EINVAL;
+-	timer_setup(&isar->ch[0].ftimer, ftimer_handler, 0);
++	setup_timer(&isar->ch[0].ftimer, &ftimer_handler,
++		    (long)&isar->ch[0]);
+ 	test_and_set_bit(FLG_INITIALIZED, &isar->ch[0].bch.Flags);
+-	timer_setup(&isar->ch[1].ftimer, ftimer_handler, 0);
++	setup_timer(&isar->ch[1].ftimer, &ftimer_handler,
++		    (long)&isar->ch[1]);
+ 	test_and_set_bit(FLG_INITIALIZED, &isar->ch[1].bch.Flags);
+ 	return 0;
+ }

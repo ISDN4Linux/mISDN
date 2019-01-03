@@ -1,0 +1,7 @@
+#include series_4.15
+Revert_4.15_e313ac12eb13a9738116192848695da54c38b1ae.patch
+Revert_4.15_c509a8229d8df29c8308c4b03a1f6d69eb287acd.patch
+Revert_4.15_86cb30ec07cdc78ad94d94bb3756c7c2d46968b9.patch
+Revert_4.15_e99e88a9d2b067465adaa9c111ada99a041bef9a.patch
+Revert_4.15_e4dca7b7aa08b22893c45485d222b5807c1375ae.patch
+Revert_4.15_xhfc_timer_setup.patch

@@ -1,0 +1,243 @@
+diff --git b/drivers/isdn/hardware/mISDN/mISDNipac.c a/drivers/isdn/hardware/mISDN/mISDNipac.c
+index 4d78f87..e240010 100644
+--- b/drivers/isdn/hardware/mISDN/mISDNipac.c
++++ a/drivers/isdn/hardware/mISDN/mISDNipac.c
+@@ -172,6 +172,7 @@ isac_fill_fifo(struct isac_hw *isac)
+ 		pr_debug("%s: %s dbusytimer running\n", isac->name, __func__);
+ 		del_timer(&isac->dch.timer);
+ 	}
++	init_timer(&isac->dch.timer);
+ 	isac->dch.timer.expires = jiffies + ((DBUSY_TIMER_VALUE * HZ)/1000);
+ 	add_timer(&isac->dch.timer);
+ 	if (isac->dch.debug & DEBUG_HW_DFIFO) {
+@@ -726,9 +727,8 @@ isac_release(struct isac_hw *isac)
+ }
+ 
+ static void
+-dbusy_timer_handler(struct timer_list *t)
++dbusy_timer_handler(struct isac_hw *isac)
+ {
+-	struct isac_hw *isac = from_timer(isac, t, dch.timer);
+ 	int rbch, star;
+ 	u_long flags;
+ 
+@@ -796,7 +796,8 @@ isac_init(struct isac_hw *isac)
+ 	}
+ 	isac->mon_tx = NULL;
+ 	isac->mon_rx = NULL;
+-	timer_setup(&isac->dch.timer, dbusy_timer_handler, 0);
++	setup_timer(&isac->dch.timer, (void *)dbusy_timer_handler,
++		    (long)isac);
+ 	isac->mocr = 0xaa;
+ 	if (isac->type & IPAC_TYPE_ISACX) {
+ 		/* Disable all IRQ */
+diff --git b/drivers/isdn/hardware/mISDN/w6692.c a/drivers/isdn/hardware/mISDN/w6692.c
+index 536d513..d80072f 100644
+--- b/drivers/isdn/hardware/mISDN/w6692.c
++++ a/drivers/isdn/hardware/mISDN/w6692.c
+@@ -311,6 +311,7 @@ W6692_fill_Dfifo(struct w6692_hw *card)
+ 		pr_debug("%s: fill_Dfifo dbusytimer running\n", card->name);
+ 		del_timer(&dch->timer);
+ 	}
++	init_timer(&dch->timer);
+ 	dch->timer.expires = jiffies + ((DBUSY_TIMER_VALUE * HZ) / 1000);
+ 	add_timer(&dch->timer);
+ 	if (debug & DEBUG_HW_DFIFO) {
+@@ -818,9 +819,8 @@ w6692_irq(int intno, void *dev_id)
+ }
+ 
+ static void
+-dbusy_timer_handler(struct timer_list *t)
++dbusy_timer_handler(struct dchannel *dch)
+ {
+-	struct dchannel *dch = from_timer(dch, t, timer);
+ 	struct w6692_hw	*card = dch->hw;
+ 	int		rbch, star;
+ 	u_long		flags;
+@@ -852,7 +852,8 @@ static void initW6692(struct w6692_hw *card)
+ {
+ 	u8	val;
+ 
+-	timer_setup(&card->dch.timer, dbusy_timer_handler, 0);
++	setup_timer(&card->dch.timer, (void *)dbusy_timer_handler,
++		    (u_long)&card->dch);
+ 	w6692_mode(&card->bc[0], ISDN_P_NONE);
+ 	w6692_mode(&card->bc[1], ISDN_P_NONE);
+ 	WriteW6692(card, W_D_CTL, 0x00);
+diff --git b/drivers/isdn/mISDN/dsp.h a/drivers/isdn/mISDN/dsp.h
+index fa09d51..fc1733a 100644
+--- b/drivers/isdn/mISDN/dsp.h
++++ a/drivers/isdn/mISDN/dsp.h
+@@ -259,7 +259,7 @@ extern u8 *dsp_dtmf_goertzel_decode(struct dsp *dsp, u8 *data, int len,
+ 
+ extern int dsp_tone(struct dsp *dsp, int tone);
+ extern void dsp_tone_copy(struct dsp *dsp, u8 *data, int len);
+-extern void dsp_tone_timeout(struct timer_list *t);
++extern void dsp_tone_timeout(void *arg);
+ 
+ extern void dsp_bf_encrypt(struct dsp *dsp, u8 *data, int len);
+ extern void dsp_bf_decrypt(struct dsp *dsp, u8 *data, int len);
+diff --git b/drivers/isdn/mISDN/dsp_core.c a/drivers/isdn/mISDN/dsp_core.c
+index cd036e8..880e9d3 100644
+--- b/drivers/isdn/mISDN/dsp_core.c
++++ a/drivers/isdn/mISDN/dsp_core.c
+@@ -1092,7 +1092,7 @@ dspcreate(struct channel_req *crq)
+ 	ndsp->pcm_bank_tx = -1;
+ 	ndsp->hfc_conf = -1; /* current conference number */
+ 	/* set tone timer */
+-	timer_setup(&ndsp->tone.tl, dsp_tone_timeout, 0);
++	setup_timer(&ndsp->tone.tl, (void *)dsp_tone_timeout, (long)ndsp);
+ 
+ 	if (dtmfthreshold < 20 || dtmfthreshold > 500)
+ 		dtmfthreshold = 200;
+@@ -1202,7 +1202,9 @@ static int __init dsp_init(void)
+ 	}
+ 
+ 	/* set sample timer */
+-	timer_setup(&dsp_spl_tl, (void *)dsp_cmx_send, 0);
++	dsp_spl_tl.function = (void *)dsp_cmx_send;
++	dsp_spl_tl.data = 0;
++	init_timer(&dsp_spl_tl);
+ 	dsp_spl_tl.expires = jiffies + dsp_tics;
+ 	dsp_spl_jiffies = dsp_spl_tl.expires;
+ 	add_timer(&dsp_spl_tl);
+diff --git b/drivers/isdn/mISDN/dsp_tones.c a/drivers/isdn/mISDN/dsp_tones.c
+index 8389e21..057e0d6 100644
+--- b/drivers/isdn/mISDN/dsp_tones.c
++++ a/drivers/isdn/mISDN/dsp_tones.c
+@@ -457,9 +457,9 @@ dsp_tone_hw_message(struct dsp *dsp, u8 *sample, int len)
+  * timer expires *
+  *****************/
+ void
+-dsp_tone_timeout(struct timer_list *t)
++dsp_tone_timeout(void *arg)
+ {
+-	struct dsp *dsp = from_timer(dsp, t, tone.tl);
++	struct dsp *dsp = arg;
+ 	struct dsp_tone *tone = &dsp->tone;
+ 	struct pattern *pat = (struct pattern *)tone->pattern;
+ 	int index = tone->index;
+@@ -478,6 +478,7 @@ dsp_tone_timeout(struct timer_list *t)
+ 	else
+ 		dsp_tone_hw_message(dsp, pat->data[index], *(pat->siz[index]));
+ 	/* set timer */
++	init_timer(&tone->tl);
+ 	tone->tl.expires = jiffies + (pat->seq[index] * HZ) / 8000;
+ 	add_timer(&tone->tl);
+ }
+@@ -540,6 +541,7 @@ dsp_tone(struct dsp *dsp, int tone)
+ 		/* set timer */
+ 		if (timer_pending(&tonet->tl))
+ 			del_timer(&tonet->tl);
++		init_timer(&tonet->tl);
+ 		tonet->tl.expires = jiffies + (pat->seq[0] * HZ) / 8000;
+ 		add_timer(&tonet->tl);
+ 	} else {
+diff --git b/drivers/isdn/mISDN/fsm.c a/drivers/isdn/mISDN/fsm.c
+index cabcb90..92e6570 100644
+--- b/drivers/isdn/mISDN/fsm.c
++++ a/drivers/isdn/mISDN/fsm.c
+@@ -100,9 +100,8 @@ mISDN_FsmChangeState(struct FsmInst *fi, int newstate)
+ EXPORT_SYMBOL(mISDN_FsmChangeState);
+ 
+ static void
+-FsmExpireTimer(struct timer_list *t)
++FsmExpireTimer(struct FsmTimer *ft)
+ {
+-	struct FsmTimer *ft = from_timer(ft, t, tl);
+ #if FSM_TIMER_DEBUG
+ 	if (ft->fi->debug)
+ 		ft->fi->printdebug(ft->fi, "FsmExpireTimer %lx", (long) ft);
+@@ -118,7 +117,7 @@ mISDN_FsmInitTimer(struct FsmInst *fi, struct FsmTimer *ft)
+ 	if (ft->fi->debug)
+ 		ft->fi->printdebug(ft->fi, "mISDN_FsmInitTimer %lx", (long) ft);
+ #endif
+-	timer_setup(&ft->tl, FsmExpireTimer, 0);
++	setup_timer(&ft->tl, (void *)FsmExpireTimer, (long)ft);
+ }
+ EXPORT_SYMBOL(mISDN_FsmInitTimer);
+ 
+@@ -154,6 +153,7 @@ mISDN_FsmAddTimer(struct FsmTimer *ft,
+ 		}
+ 		return -1;
+ 	}
++	init_timer(&ft->tl);
+ 	ft->event = event;
+ 	ft->arg = arg;
+ 	ft->tl.expires = jiffies + (millisec * HZ) / 1000;
+@@ -175,6 +175,7 @@ mISDN_FsmRestartTimer(struct FsmTimer *ft,
+ 
+ 	if (timer_pending(&ft->tl))
+ 		del_timer(&ft->tl);
++	init_timer(&ft->tl);
+ 	ft->event = event;
+ 	ft->arg = arg;
+ 	ft->tl.expires = jiffies + (millisec * HZ) / 1000;
+diff --git b/drivers/isdn/mISDN/l1oip_core.c a/drivers/isdn/mISDN/l1oip_core.c
+index b5d590e..6be2041 100644
+--- b/drivers/isdn/mISDN/l1oip_core.c
++++ a/drivers/isdn/mISDN/l1oip_core.c
+@@ -842,18 +842,17 @@ l1oip_send_bh(struct work_struct *work)
+  * timer stuff
+  */
+ static void
+-l1oip_keepalive(struct timer_list *t)
++l1oip_keepalive(void *data)
+ {
+-	struct l1oip *hc = from_timer(hc, t, keep_tl);
++	struct l1oip *hc = (struct l1oip *)data;
+ 
+ 	schedule_work(&hc->workq);
+ }
+ 
+ static void
+-l1oip_timeout(struct timer_list *t)
++l1oip_timeout(void *data)
+ {
+-	struct l1oip			*hc = from_timer(hc, t,
+-								  timeout_tl);
++	struct l1oip			*hc = (struct l1oip *)data;
+ 	struct dchannel		*dch = hc->chan[hc->d_idx].dch;
+ 
+ 	if (debug & DEBUG_L1OIP_MSG)
+@@ -1438,11 +1437,13 @@ init_card(struct l1oip *hc, int pri, int bundle)
+ 	if (ret)
+ 		return ret;
+ 
+-	timer_setup(&hc->keep_tl, l1oip_keepalive, 0);
++	hc->keep_tl.function = (void *)l1oip_keepalive;
++	hc->keep_tl.data = (ulong)hc;
++	init_timer(&hc->keep_tl);
+ 	hc->keep_tl.expires = jiffies + 2 * HZ; /* two seconds first time */
+ 	add_timer(&hc->keep_tl);
+ 
+-	timer_setup(&hc->timeout_tl, l1oip_timeout, 0);
++	setup_timer(&hc->timeout_tl, (void *)l1oip_timeout, (ulong)hc);
+ 	hc->timeout_on = 0; /* state that we have timer off */
+ 
+ 	return 0;
+diff --git b/drivers/isdn/mISDN/timerdev.c a/drivers/isdn/mISDN/timerdev.c
+index c50a343..b1e135f 100644
+--- b/drivers/isdn/mISDN/timerdev.c
++++ a/drivers/isdn/mISDN/timerdev.c
+@@ -162,9 +162,9 @@ mISDN_poll(struct file *filep, poll_table *wait)
+ }
+ 
+ static void
+-dev_expire_timer(struct timer_list *t)
++dev_expire_timer(unsigned long data)
+ {
+-	struct mISDNtimer *timer = from_timer(timer, t, tl);
++	struct mISDNtimer *timer = (void *)data;
+ 	u_long			flags;
+ 
+ 	spin_lock_irqsave(&timer->dev->lock, flags);
+@@ -189,7 +189,7 @@ misdn_add_timer(struct mISDNtimerdev *dev, int timeout)
+ 		if (!timer)
+ 			return -ENOMEM;
+ 		timer->dev = dev;
+-		timer_setup(&timer->tl, dev_expire_timer, 0);
++		setup_timer(&timer->tl, dev_expire_timer, (long)timer);
+ 		spin_lock_irq(&dev->lock);
+ 		id = timer->id = dev->next_id++;
+ 		if (dev->next_id < 0)
