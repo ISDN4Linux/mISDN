@@ -19,6 +19,8 @@ obj-$(CONFIG_MISDN_NETJET) += netjet.o
 obj-$(CONFIG_MISDN_IPAC) += mISDNipac.o
 obj-$(CONFIG_MISDN_ISAR) += mISDNisar.o
 
+obj-$(CONFIG_MISDN_HDLC) += isdnhdlc.o
+
 # multi objects
 
 xhfc-objs := xhfc_su.o xhfc_pci2pi.o
