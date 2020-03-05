@@ -1,1 +1,3 @@
+#include series_4.20
 Revert_4.20_aa563d7bca6e882ec2bdae24603c8f016401a144.patch
+Revert_4.20-9206eb0bc5679d06d2f54b9db86fe2b9a55e07e4.patch
