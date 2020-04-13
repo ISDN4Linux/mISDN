@@ -1,0 +1,241 @@
+diff --git a/drivers/isdn/hardware/mISDN/avmfritz.c b/drivers/isdn/hardware/mISDN/avmfritz.c
+index ecc1ef6..1137dd1 100644
+--- a/drivers/isdn/hardware/mISDN/avmfritz.c
++++ b/drivers/isdn/hardware/mISDN/avmfritz.c
+@@ -402,8 +402,8 @@ hdlc_empty_fifo(struct bchannel *bch, int count)
+ 	} else {
+ 		cnt = bchannel_get_rxbuf(bch, count);
+ 		if (cnt < 0) {
+-			pr_warn("%s.B%d: No bufferspace for %d bytes\n",
+-				fc->name, bch->nr, count);
++			pr_warning("%s.B%d: No bufferspace for %d bytes\n",
++				   fc->name, bch->nr, count);
+ 			return;
+ 		}
+ 		p = skb_put(bch->rx_skb, count);
+@@ -538,8 +538,8 @@ HDLC_irq(struct bchannel *bch, u32 stat)
+ 	}
+ 	if (stat & HDLC_INT_RPR) {
+ 		if (stat & HDLC_STAT_RDO) {
+-			pr_warn("%s: ch%d stat %x RDO\n",
+-				fc->name, bch->nr, stat);
++			pr_warning("%s: ch%d stat %x RDO\n",
++				   fc->name, bch->nr, stat);
+ 			hdlc->ctrl.sr.xml = 0;
+ 			hdlc->ctrl.sr.cmd |= HDLC_CMD_RRS;
+ 			write_ctrl(bch, 1);
+@@ -561,8 +561,8 @@ HDLC_irq(struct bchannel *bch, u32 stat)
+ 				    HDLC_STAT_CRCVFR) {
+ 					recv_Bchannel(bch, 0, false);
+ 				} else {
+-					pr_warn("%s: got invalid frame\n",
+-						fc->name);
++					pr_warning("%s: got invalid frame\n",
++						   fc->name);
+ 					skb_trim(bch->rx_skb, 0);
+ 				}
+ 			}
+@@ -574,8 +574,8 @@ handle_tx:
+ 		 * restart transmitting the whole frame on HDLC
+ 		 * in transparent mode we send the next data
+ 		 */
+-		pr_warn("%s: ch%d stat %x XDU %s\n", fc->name, bch->nr,
+-			stat, bch->tx_skb ? "tx_skb" : "no tx_skb");
++		pr_warning("%s: ch%d stat %x XDU %s\n", fc->name, bch->nr,
++			   stat, bch->tx_skb ? "tx_skb" : "no tx_skb");
+ 		if (bch->tx_skb && bch->tx_skb->len) {
+ 			if (!test_bit(FLG_TRANSPARENT, &bch->Flags))
+ 				bch->tx_idx = 0;
+diff --git a/drivers/isdn/hardware/mISDN/hfcmulti.c b/drivers/isdn/hardware/mISDN/hfcmulti.c
+index 90e4bca..8405dd9 100644
+--- a/drivers/isdn/hardware/mISDN/hfcmulti.c
++++ b/drivers/isdn/hardware/mISDN/hfcmulti.c
+@@ -2254,8 +2254,8 @@ next_frame:
+ 	if (bch) {
+ 		maxlen = bchannel_get_rxbuf(bch, Zsize);
+ 		if (maxlen < 0) {
+-			pr_warn("card%d.B%d: No bufferspace for %d bytes\n",
+-				hc->id + 1, bch->nr, Zsize);
++			pr_warning("card%d.B%d: No bufferspace for %d bytes\n",
++				   hc->id + 1, bch->nr, Zsize);
+ 			return;
+ 		}
+ 		sp = &bch->rx_skb;
+@@ -2266,8 +2266,8 @@ next_frame:
+ 		if (*sp == NULL) {
+ 			*sp = mI_alloc_skb(maxlen, GFP_ATOMIC);
+ 			if (*sp == NULL) {
+-				pr_warn("card%d: No mem for dch rx_skb\n",
+-					hc->id + 1);
++				pr_warning("card%d: No mem for dch rx_skb\n",
++					   hc->id + 1);
+ 				return;
+ 			}
+ 		}
+diff --git a/drivers/isdn/hardware/mISDN/hfcpci.c b/drivers/isdn/hardware/mISDN/hfcpci.c
+index 201f792..f0fce7d 100644
+--- a/drivers/isdn/hardware/mISDN/hfcpci.c
++++ b/drivers/isdn/hardware/mISDN/hfcpci.c
+@@ -566,7 +566,8 @@ hfcpci_empty_fifo_trans(struct bchannel *bch, struct bzfifo *rxbz,
+ 	}
+ 	maxlen = bchannel_get_rxbuf(bch, fcnt_rx);
+ 	if (maxlen < 0) {
+-		pr_warn("B%d: No bufferspace for %d bytes\n", bch->nr, fcnt_rx);
++		pr_warning("B%d: No bufferspace for %d bytes\n",
++			   bch->nr, fcnt_rx);
+ 	} else {
+ 		ptr = skb_put(bch->rx_skb, fcnt_rx);
+ 		if (le16_to_cpu(*z2r) + fcnt_rx <= B_FIFO_SIZE + B_SUB_VAL)
+diff --git a/drivers/isdn/hardware/mISDN/hfcsusb.c b/drivers/isdn/hardware/mISDN/hfcsusb.c
+index b72ce80..7cbbbbe 100644
+--- a/drivers/isdn/hardware/mISDN/hfcsusb.c
++++ b/drivers/isdn/hardware/mISDN/hfcsusb.c
+@@ -841,8 +841,8 @@ hfcsusb_rx_frame(struct usb_fifo *fifo, __u8 *data, unsigned int len,
+ 		if (maxlen < 0) {
+ 			if (rx_skb)
+ 				skb_trim(rx_skb, 0);
+-			pr_warn("%s.B%d: No bufferspace for %d bytes\n",
+-				hw->name, fifo->bch->nr, len);
++			pr_warning("%s.B%d: No bufferspace for %d bytes\n",
++				   hw->name, fifo->bch->nr, len);
+ 			spin_unlock_irqrestore(&hw->lock, flags);
+ 			return;
+ 		}
+diff --git a/drivers/isdn/hardware/mISDN/mISDNipac.c b/drivers/isdn/hardware/mISDN/mISDNipac.c
+index ec47508..bca8802 100644
+--- a/drivers/isdn/hardware/mISDN/mISDNipac.c
++++ b/drivers/isdn/hardware/mISDN/mISDNipac.c
+@@ -936,8 +936,8 @@ hscx_empty_fifo(struct hscx_hw *hscx, u8 count)
+ 		hscx_cmdr(hscx, 0x80); /* RMC */
+ 		if (hscx->bch.rx_skb)
+ 			skb_trim(hscx->bch.rx_skb, 0);
+-		pr_warn("%s.B%d: No bufferspace for %d bytes\n",
+-			hscx->ip->name, hscx->bch.nr, count);
++		pr_warning("%s.B%d: No bufferspace for %d bytes\n",
++			   hscx->ip->name, hscx->bch.nr, count);
+ 		return;
+ 	}
+ 	p = skb_put(hscx->bch.rx_skb, count);
+diff --git a/drivers/isdn/hardware/mISDN/mISDNisar.c b/drivers/isdn/hardware/mISDN/mISDNisar.c
+index 096d8c5..4a3e748 100644
+--- a/drivers/isdn/hardware/mISDN/mISDNisar.c
++++ b/drivers/isdn/hardware/mISDN/mISDNisar.c
+@@ -222,7 +222,7 @@ load_firmware(struct isar_hw *isar, const u8 *buf, int size)
+ 			goto reterror;
+ 		}
+ 		if (!poll_mbox(isar, 1000)) {
+-			pr_warn("ISAR poll_mbox dkey failed\n");
++			pr_warning("ISAR poll_mbox dkey failed\n");
+ 			ret = -ETIME;
+ 			goto reterror;
+ 		}
+@@ -432,8 +432,8 @@ isar_rcv_frame(struct isar_ch *ch)
+ 	case ISDN_P_B_MODEM_ASYNC:
+ 		maxlen = bchannel_get_rxbuf(&ch->bch, ch->is->clsb);
+ 		if (maxlen < 0) {
+-			pr_warn("%s.B%d: No bufferspace for %d bytes\n",
+-				ch->is->name, ch->bch.nr, ch->is->clsb);
++			pr_warning("%s.B%d: No bufferspace for %d bytes\n",
++				   ch->is->name, ch->bch.nr, ch->is->clsb);
+ 			ch->is->write_reg(ch->is->hw, ISAR_IIA, 0);
+ 			break;
+ 		}
+@@ -443,8 +443,8 @@ isar_rcv_frame(struct isar_ch *ch)
+ 	case ISDN_P_B_HDLC:
+ 		maxlen = bchannel_get_rxbuf(&ch->bch, ch->is->clsb);
+ 		if (maxlen < 0) {
+-			pr_warn("%s.B%d: No bufferspace for %d bytes\n",
+-				ch->is->name, ch->bch.nr, ch->is->clsb);
++			pr_warning("%s.B%d: No bufferspace for %d bytes\n",
++				   ch->is->name, ch->bch.nr, ch->is->clsb);
+ 			ch->is->write_reg(ch->is->hw, ISAR_IIA, 0);
+ 			break;
+ 		}
+diff --git a/drivers/isdn/hardware/mISDN/netjet.c b/drivers/isdn/hardware/mISDN/netjet.c
+index 6aae97e..61caa7e 100644
+--- a/drivers/isdn/hardware/mISDN/netjet.c
++++ b/drivers/isdn/hardware/mISDN/netjet.c
+@@ -380,8 +380,8 @@ read_dma(struct tiger_ch *bc, u32 idx, int cnt)
+ 	stat = bchannel_get_rxbuf(&bc->bch, cnt);
+ 	/* only transparent use the count here, HDLC overun is detected later */
+ 	if (stat == -ENOMEM) {
+-		pr_warn("%s.B%d: No memory for %d bytes\n",
+-			card->name, bc->bch.nr, cnt);
++		pr_warning("%s.B%d: No memory for %d bytes\n",
++			   card->name, bc->bch.nr, cnt);
+ 		return;
+ 	}
+ 	if (test_bit(FLG_TRANSPARENT, &bc->bch.Flags))
+@@ -420,8 +420,8 @@ read_dma(struct tiger_ch *bc, u32 idx, int cnt)
+ 			recv_Bchannel(&bc->bch, 0, false);
+ 			stat = bchannel_get_rxbuf(&bc->bch, bc->bch.maxlen);
+ 			if (stat < 0) {
+-				pr_warn("%s.B%d: No memory for %d bytes\n",
+-					card->name, bc->bch.nr, cnt);
++				pr_warning("%s.B%d: No memory for %d bytes\n",
++					   card->name, bc->bch.nr, cnt);
+ 				return;
+ 			}
+ 		} else if (stat == -HDLC_CRC_ERROR) {
+diff --git a/drivers/isdn/hardware/mISDN/w6692.c b/drivers/isdn/hardware/mISDN/w6692.c
+index f3b8db7..bad55fd 100644
+--- a/drivers/isdn/hardware/mISDN/w6692.c
++++ b/drivers/isdn/hardware/mISDN/w6692.c
+@@ -466,8 +466,8 @@ W6692_empty_Bfifo(struct w6692_ch *wch, int count)
+ 		WriteW6692B(wch, W_B_CMDR, W_B_CMDR_RACK | W_B_CMDR_RACT);
+ 		if (wch->bch.rx_skb)
+ 			skb_trim(wch->bch.rx_skb, 0);
+-		pr_warn("%s.B%d: No bufferspace for %d bytes\n",
+-			card->name, wch->bch.nr, count);
++		pr_warning("%s.B%d: No bufferspace for %d bytes\n",
++			   card->name, wch->bch.nr, count);
+ 		return;
+ 	}
+ 	ptr = skb_put(wch->bch.rx_skb, count);
+@@ -729,8 +729,8 @@ W6692B_interrupt(struct w6692_hw *card, int ch)
+ 				 wch->bch.nr, star);
+ 		}
+ 		if (star & W_B_STAR_XDOW) {
+-			pr_warn("%s: B%d XDOW proto=%x\n", card->name,
+-				wch->bch.nr, wch->bch.state);
++			pr_warning("%s: B%d XDOW proto=%x\n", card->name,
++				   wch->bch.nr, wch->bch.state);
+ #ifdef ERROR_STATISTIC
+ 			wch->bch.err_xdu++;
+ #endif
+@@ -747,8 +747,8 @@ W6692B_interrupt(struct w6692_hw *card, int ch)
+ 			return; /* handle XDOW only once */
+ 	}
+ 	if (stat & W_B_EXI_XDUN) {
+-		pr_warn("%s: B%d XDUN proto=%x\n", card->name,
+-			wch->bch.nr, wch->bch.state);
++		pr_warning("%s: B%d XDUN proto=%x\n", card->name,
++			   wch->bch.nr, wch->bch.state);
+ #ifdef ERROR_STATISTIC
+ 		wch->bch.err_xdu++;
+ #endif
+diff --git a/drivers/isdn/mISDN/hwchannel.c b/drivers/isdn/mISDN/hwchannel.c
+index 8c93af0..f378173 100644
+--- a/drivers/isdn/mISDN/hwchannel.c
++++ b/drivers/isdn/mISDN/hwchannel.c
+@@ -474,8 +474,8 @@ bchannel_get_rxbuf(struct bchannel *bch, int reqlen)
+ 	if (bch->rx_skb) {
+ 		len = skb_tailroom(bch->rx_skb);
+ 		if (len < reqlen) {
+-			pr_warn("B%d no space for %d (only %d) bytes\n",
+-				bch->nr, reqlen, len);
++			pr_warning("B%d no space for %d (only %d) bytes\n",
++				   bch->nr, reqlen, len);
+ 			if (test_bit(FLG_TRANSPARENT, &bch->Flags)) {
+ 				/* send what we have now and try a new buffer */
+ 				recv_Bchannel(bch, 0, true);
+@@ -508,7 +508,8 @@ bchannel_get_rxbuf(struct bchannel *bch, int reqlen)
+ 	}
+ 	bch->rx_skb = mI_alloc_skb(len, GFP_ATOMIC);
+ 	if (!bch->rx_skb) {
+-		pr_warn("B%d receive no memory for %d bytes\n", bch->nr, len);
++		pr_warning("B%d receive no memory for %d bytes\n",
++			   bch->nr, len);
+ 		len = -ENOMEM;
+ 	}
+ 	return len;
