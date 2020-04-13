@@ -152,9 +152,9 @@ quilt_tree: unpatched_tree
 
 modules_:
 	-rm -f modules 
-	export MISDN_INC=$(MISDNDIR)/include; export MISDN_CFLAGS="$(shell cat mISDN.cfg.D)"; $(MAKE) -C $(LINUX)  $(shell cat mISDN.cfg.M) SUBDIRS=$(MISDN_CORE_SRC) modules
+	export MISDN_INC=$(MISDNDIR)/include; export MISDN_CFLAGS="$(shell cat mISDN.cfg.D)"; $(MAKE) -C $(LINUX)  $(shell cat mISDN.cfg.M) M=$(MISDN_CORE_SRC) modules
 	cp $(MISDN_CORE_SRC)/Module.symvers $(MISDN_SRC)
-	export MISDN_INC=$(MISDNDIR)/include; export MISDN_CFLAGS="$(shell cat mISDN.cfg.D)"; $(MAKE) -C $(LINUX) $(shell cat mISDN.cfg.M) SUBDIRS=$(MISDN_SRC) modules  
+	export MISDN_INC=$(MISDNDIR)/include; export MISDN_CFLAGS="$(shell cat mISDN.cfg.D)"; $(MAKE) -C $(LINUX) $(shell cat mISDN.cfg.M) M=$(MISDN_SRC) modules  
 	touch modules
 
 
