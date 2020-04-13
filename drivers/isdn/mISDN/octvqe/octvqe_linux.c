@@ -1086,12 +1086,11 @@ int octdev_seq_show(struct seq_file *s, void *v)
 
 int octdev_proc_open(struct inode *inode, struct file *file);
 
-static struct file_operations octdev_proc_ops = {
-    .owner = THIS_MODULE,
-    .open = octdev_proc_open,
-    .read = seq_read,
-    .llseek = seq_lseek,
-    .release = seq_release
+static struct proc_ops octdev_proc_ops = {
+    .proc_open = octdev_proc_open,
+    .proc_read = seq_read,
+    .proc_lseek = seq_lseek,
+    .proc_release = seq_release
 };
 
 static struct seq_operations octdev_seq_ops = {
