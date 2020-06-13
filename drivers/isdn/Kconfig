@@ -5,7 +5,7 @@
 menuconfig ISDN
 	bool "ISDN support"
 	depends on NET
-	---help---
+	help
 	  ISDN ("Integrated Services Digital Networks", called RNIS in France)
 	  is a special type of fully digital telephone service; it's mostly
 	  used to connect to your Internet service provider (with SLIP or
@@ -24,7 +24,7 @@ source "drivers/isdn/mISDN/Kconfig"
 
 menuconfig ISDN_I4L
 	tristate "Old ISDN4Linux (deprecated)"
-	---help---
+	help
 	  This driver allows you to use an ISDN adapter for networking
 	  connections and as dialin/out device.  The isdn-tty's have a built
 	  in AT-compatible modem emulator.  Network devices support autodial,
