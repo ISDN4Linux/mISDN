@@ -1226,4 +1226,3 @@ module_exit(octvqe_exit);
 MODULE_AUTHOR("Octasic Inc.");
 MODULE_DESCRIPTION("OCTVQE echo canceller");
 MODULE_LICENSE("GPL");
-MODULE_SUPPORTED_DEVICE(DEV_NAME);
