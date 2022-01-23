@@ -718,12 +718,21 @@ static ssize_t octdev_read(
 
 			add_wait_queue(&pChan->ReadWaitQueue, &WaitQ);
 
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 14, 0))
 			current->state = TASK_INTERRUPTIBLE;
+#else
+			WRITE_ONCE(current->__state, TASK_INTERRUPTIBLE);
+#endif
 
 			if (!signal_pending(current))
 				schedule();
 
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 14, 0))
 			current->state = TASK_RUNNING;
+#else
+			WRITE_ONCE(current->__state, TASK_RUNNING);
+#endif
+
 			remove_wait_queue(&pChan->ReadWaitQueue, &WaitQ);
 
 			if (signal_pending(current))
@@ -843,12 +852,21 @@ static ssize_t octdev_write(
 
 			add_wait_queue(&pChan->WriteWaitQueue, &WaitQ);
 
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 14, 0))
 			current->state = TASK_INTERRUPTIBLE;
+#else
+			WRITE_ONCE(current->__state, TASK_INTERRUPTIBLE);
+#endif
 
 			if (!signal_pending(current))
 				schedule();
 
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 14, 0))
 			current->state = TASK_RUNNING;
+#else
+			WRITE_ONCE(current->__state, TASK_RUNNING);
+#endif
+
 			remove_wait_queue(&pChan->WriteWaitQueue, &WaitQ);
 
 			if (signal_pending(current))
@@ -1208,4 +1226,3 @@ module_exit(octvqe_exit);
 MODULE_AUTHOR("Octasic Inc.");
 MODULE_DESCRIPTION("OCTVQE echo canceller");
 MODULE_LICENSE("GPL");
-MODULE_SUPPORTED_DEVICE(DEV_NAME);
