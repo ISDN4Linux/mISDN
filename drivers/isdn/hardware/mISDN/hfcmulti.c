@@ -2452,46 +2452,51 @@ handle_timer_irq(struct hfc_multi *hc)
 		dch = hc->chan[hc->dnum[0]].dch;
 		/* LOS */
 		temp = HFC_inb_nodebug(hc, R_SYNC_STA) & V_SIG_LOS;
-		hc->chan[hc->dnum[0]].los = temp;
 		if (test_bit(HFC_CFG_REPORT_LOS, &hc->chan[hc->dnum[0]].cfg)) {
-			if (!temp && hc->chan[hc->dnum[0]].los)
+			if (temp && hc->chan[hc->dnum[0]].los != temp)
 				signal_state_up(dch, L1_SIGNAL_LOS_ON,
 						"LOS detected");
-			if (temp && !hc->chan[hc->dnum[0]].los)
+			if (!temp && hc->chan[hc->dnum[0]].los != temp)
 				signal_state_up(dch, L1_SIGNAL_LOS_OFF,
 						"LOS gone");
 		}
+		hc->chan[hc->dnum[0]].los = temp;
 		if (test_bit(HFC_CFG_REPORT_AIS, &hc->chan[hc->dnum[0]].cfg)) {
 			/* AIS */
 			temp = HFC_inb_nodebug(hc, R_SYNC_STA) & V_AIS;
-			if (!temp && hc->chan[hc->dnum[0]].ais)
+			if (temp && hc->chan[hc->dnum[0]].ais != temp)
 				signal_state_up(dch, L1_SIGNAL_AIS_ON,
 						"AIS detected");
-			if (temp && !hc->chan[hc->dnum[0]].ais)
+			if (!temp && hc->chan[hc->dnum[0]].ais != temp)
 				signal_state_up(dch, L1_SIGNAL_AIS_OFF,
 						"AIS gone");
 			hc->chan[hc->dnum[0]].ais = temp;
 		}
-		if (test_bit(HFC_CFG_REPORT_SLIP, &hc->chan[hc->dnum[0]].cfg)) {
+		if (test_bit(HFC_CFG_REPORT_SLIP, &hc->chan[hc->dnum[0]].cfg)
+		 && hc->chan[hc->dnum[0]].sync) {
 			/* SLIP */
-			temp = HFC_inb_nodebug(hc, R_SLIP) & V_FOSLIP_RX;
-			if (!temp && hc->chan[hc->dnum[0]].slip_rx)
+			temp = HFC_inb_nodebug(hc, R_SLIP) & V_SLIP_RX;
+			if (temp) {
 				signal_state_up(dch, L1_SIGNAL_SLIP_RX,
 						" bit SLIP detected RX");
-			hc->chan[hc->dnum[0]].slip_rx = temp;
-			temp = HFC_inb_nodebug(hc, R_SLIP) & V_FOSLIP_TX;
-			if (!temp && hc->chan[hc->dnum[0]].slip_tx)
+				HFC_outb(hc, R_RX_OFF,
+				    hc->chan[hc->dnum[0]].jitter | V_RX_INIT);
+			}
+			temp = HFC_inb_nodebug(hc, R_SLIP) & V_SLIP_TX;
+			if (temp) {
 				signal_state_up(dch, L1_SIGNAL_SLIP_TX,
 						" bit SLIP detected TX");
-			hc->chan[hc->dnum[0]].slip_tx = temp;
+				HFC_outb(hc, R_TX_OFF,
+				    hc->chan[hc->dnum[0]].jitter | V_RX_INIT);
+			}
 		}
 		if (test_bit(HFC_CFG_REPORT_RDI, &hc->chan[hc->dnum[0]].cfg)) {
 			/* RDI */
 			temp = HFC_inb_nodebug(hc, R_RX_SL0_0) & V_A;
-			if (!temp && hc->chan[hc->dnum[0]].rdi)
+			if (temp && hc->chan[hc->dnum[0]].rdi != temp)
 				signal_state_up(dch, L1_SIGNAL_RDI_ON,
 						"RDI detected");
-			if (temp && !hc->chan[hc->dnum[0]].rdi)
+			if (!temp && hc->chan[hc->dnum[0]].rdi != temp)
 				signal_state_up(dch, L1_SIGNAL_RDI_OFF,
 						"RDI gone");
 			hc->chan[hc->dnum[0]].rdi = temp;
@@ -4079,6 +4084,12 @@ open_dchannel(struct hfc_multi *hc, struct dchannel *dch,
 		spin_lock_irqsave(&hc->lock, flags);
 		hfcmulti_initmode(dch);
 		spin_unlock_irqrestore(&hc->lock, flags);
+	}
+	if (hc->ctype == HFC_TYPE_E1) {
+		/* reset alarms and Sa bit report */
+		hc->chan[dch->slot].los = -1;
+		hc->chan[dch->slot].ais = -1;
+		hc->chan[dch->slot].rdi = -1;
 	}
 	if (test_bit(FLG_ACTIVE, &dch->Flags))
 		_queue_data(&dch->dev.D, PH_ACTIVATE_IND, MISDN_ID_ANY,
