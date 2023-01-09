@@ -44,6 +44,7 @@ struct hfc_chan {
 				/* channel is associated with */
 	int		nt_timer; /* -1 if off, 0 if elapsed, >0 if running */
 	int		los, ais, rdi; /* current alarms */
+	int		sa_bits; /* current SA bits */
 	int		jitter;
 	u_long		cfg;	/* port configuration */
 	int		sync;	/* sync state (used by E1) */
@@ -88,8 +89,9 @@ struct hfcm_hw {
 #define	HFC_CFG_REPORT_AIS	6 /* the card should report alarm ind. sign. */
 #define	HFC_CFG_REPORT_SLIP	7 /* the card should report bit slips */
 #define	HFC_CFG_REPORT_RDI	8 /* the card should report remote alarm */
-#define	HFC_CFG_DTMF		9 /* enable DTMF-detection */
-#define	HFC_CFG_CRC4		10 /* disable CRC-4 Multiframe mode, */
+#define	HFC_CFG_REPORT_SA	9 /* the card should report remote alarm */
+#define	HFC_CFG_DTMF		10 /* enable DTMF-detection */
+#define	HFC_CFG_CRC4		11 /* disable CRC-4 Multiframe mode, */
 /* use double frame instead. */
 
 #define HFC_TYPE_E1		1 /* controller is HFC-E1 */

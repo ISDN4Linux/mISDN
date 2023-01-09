@@ -55,6 +55,7 @@
  *	Bit 3     = 0x0008 = Report AIS
  *	Bit 4     = 0x0010 = Report SLIP
  *	Bit 5     = 0x0020 = Report RDI
+ *	Bit 6     = 0x0040 = Report Sa bits
  *	Bit 8     = 0x0100 = Turn off CRC-4 Multiframe Mode, use double frame
  *			     mode instead.
  *	Bit 9	  = 0x0200 = Force get clock from interface, even in NT mode.
@@ -2365,6 +2366,50 @@ next_frame:
 	}
 }
 
+/*
+ * Sa bits
+ */
+static void
+signal_state_up(struct dchannel *dch, int info, char *msg);
+
+static void report_sa_bits(struct hfc_multi *hc)
+{
+	struct hfc_chan *chan = &hc->chan[hc->dnum[0]];
+	unsigned char id, sa;
+
+	sa = HFC_inb_nodebug(hc, R_RX_SL0_2);
+	if (test_bit(HFC_CFG_CRC4, &hc->chan[hc->dnum[0]].cfg)) {
+		/* Sa61..Sa64 (MF) */
+		id = HFC_inb_nodebug(hc, R_RX_SL0_1) & 0x0f;
+	} else {
+		/* Sa6 (DF) */
+		id = (sa & 0x04) >> 2;
+	}
+	/* convert registers to byte Sa8|Sa7|Sa5|Sa4|Sa64|Sa63|Sa62|Sa61/Sa6 */
+	id |= ((sa & 0x03) << 4) | ((sa & 0x18) << 3);
+	if (id == chan->sa_bits)
+		return;
+	chan->sa_bits = id;
+	if (debug & DEBUG_HFCMULTI_MSG)
+		printk(KERN_DEBUG "%s: L1_SIGNAL_SA_BITS (bits=0x%02x)\n",
+		       __func__, id);
+	signal_state_up(chan->dch, L1_SIGNAL_SA_BITS | id, "Sa bits report");
+}
+
+static int e1_sa_bits_set(struct hfc_multi *hc, unsigned char id)
+{
+	unsigned char sa;
+
+	if (hc->ctype != HFC_TYPE_E1) {
+		printk(KERN_ERR "%s: E1_SA_BITS_SET not on E1 card.\n",
+		       __func__);
+		return -EINVAL;
+	}
+	/* convert byte Sa8|Sa7|Sa5|Sa4|.|.|.|Sa6 to register */
+	sa = (id & 0xc0) | ((id & 0x30) >> 1) | ((id & 0x01) << 5);
+	HFC_outb(hc, R_TX_FR1, sa);
+	return 0;
+}
 
 /*
  * Interrupt handler
@@ -2500,6 +2545,10 @@ handle_timer_irq(struct hfc_multi *hc)
 				signal_state_up(dch, L1_SIGNAL_RDI_OFF,
 						"RDI gone");
 			hc->chan[hc->dnum[0]].rdi = temp;
+		}
+		if (test_bit(HFC_CFG_REPORT_SA, &hc->chan[hc->dnum[0]].cfg)) {
+			/* Sa bits */
+			report_sa_bits(hc);
 		}
 		temp = HFC_inb_nodebug(hc, R_JATT_DIR);
 		switch (hc->chan[hc->dnum[0]].sync) {
@@ -2823,6 +2872,10 @@ hfcmulti_interrupt(int intno, void *dev_id)
 	}
 	if (status & V_FR_IRQSTA) {
 		/* FIFO IRQ */
+		if (test_bit(HFC_CFG_REPORT_SA, &hc->chan[hc->dnum[0]].cfg)) {
+			/* report Sa bits prior receiving HDLC frame */
+			report_sa_bits(hc);
+		}
 		r_irq_oview = HFC_inb_nodebug(hc, R_IRQ_OVIEW);
 		for (i = 0; i < 8; i++) {
 			if (r_irq_oview & (1 << i))
@@ -3343,6 +3396,7 @@ handle_dmsg(struct mISDNchannel *ch, struct sk_buff *skb)
 	int			ret = -EINVAL;
 	unsigned int		id;
 	u_long			flags;
+	int			info;
 
 	switch (hh->prim) {
 	case PH_DATA_REQ:
@@ -3444,6 +3498,29 @@ handle_dmsg(struct mISDNchannel *ch, struct sk_buff *skb)
 			__skb_queue_purge(&free_queue);
 		} else
 			ret = l1_event(dch->l1, hh->prim);
+		break;
+	case MPH_INFORMATION_REQ:
+		spin_lock_irqsave(&hc->lock, flags);
+		if (skb->len < sizeof(int)) {
+			printk(KERN_ERR
+			       "%s: PH_INFORMATION_REQ too short\n", __func__);
+			ret = -EINVAL;
+		}
+		info = *((int *)skb->data);
+		/* set Sa bits */
+		if ((info & ~L1_SIGNAL_SA_MASK) == L1_SIGNAL_SA_BITS) {
+			if (debug & DEBUG_HFCMULTI_MSG)
+				printk(KERN_DEBUG
+				       "%s: L1_SIGNAL_SA_BITS (bits=0x%02x)\n",
+				       __func__, info & L1_SIGNAL_SA_MASK);
+			ret = e1_sa_bits_set(hc, info & L1_SIGNAL_SA_MASK);
+		} else {
+			printk(KERN_ERR
+			       "%s: unknown PH_INFORMATION_REQ info %x\n",
+			       __func__, info);
+			ret = -EINVAL;
+		}
+		spin_unlock_irqrestore(&hc->lock, flags);
 		break;
 	}
 	if (!ret)
@@ -4090,6 +4167,10 @@ open_dchannel(struct hfc_multi *hc, struct dchannel *dch,
 		hc->chan[dch->slot].los = -1;
 		hc->chan[dch->slot].ais = -1;
 		hc->chan[dch->slot].rdi = -1;
+		hc->chan[dch->slot].sa_bits = -1;
+		spin_lock_irqsave(&hc->lock, flags);
+		e1_sa_bits_set(hc, 0xff);
+		spin_unlock_irqrestore(&hc->lock, flags);
 	}
 	if (test_bit(FLG_ACTIVE, &dch->Flags))
 		_queue_data(&dch->dev.D, PH_ACTIVATE_IND, MISDN_ID_ANY,
@@ -4762,6 +4843,16 @@ init_e1_port_hw(struct hfc_multi *hc, struct hm_map *m)
 			       "card(%d) port(%d)\n",
 			       __func__, HFC_cnt + 1, 1);
 		test_and_set_bit(HFC_CFG_REPORT_RDI,
+		    &hc->chan[hc->dnum[0]].cfg);
+	}
+	/* set Sa bits report */
+	if (port[Port_cnt] & 0x040) {
+		if (debug & DEBUG_HFCMULTI_INIT)
+			printk(KERN_DEBUG
+			       "%s: PORT set Sa bits report: "
+			       "card(%d) port(%d)\n",
+			       __func__, HFC_cnt + 1, 1);
+		test_and_set_bit(HFC_CFG_REPORT_SA,
 		    &hc->chan[hc->dnum[0]].cfg);
 	}
 	/* set CRC-4 Mode */
