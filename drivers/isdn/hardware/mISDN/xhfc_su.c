@@ -595,6 +595,7 @@ init_xhfc(struct xhfc *xhfc)
 			sprintf(xhfc->name, "%s_PI%d_%i",
 				CHIP_NAME_2S4U,
 				xhfc->pi->cardnum, xhfc->chipidx);
+			break;
 
 		case CHIP_ID_4SU:
 			xhfc->num_ports = 4;

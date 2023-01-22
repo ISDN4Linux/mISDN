@@ -466,6 +466,7 @@ ph_command(struct port *p, u_char command)
 		case VLINE_LOOP:
 			p->dch.state = VBUS_INACTIVE;
 			schedule_event(&p->dch, FLG_PHCHANGE);
+			break;
 		case VLINE_LINK:
 			vlink_deactivate(p);
 			break;
