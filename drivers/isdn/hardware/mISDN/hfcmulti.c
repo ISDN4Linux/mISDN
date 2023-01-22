@@ -181,11 +181,11 @@ static void ph_state_change(struct dchannel *);
 
 static struct hfc_multi *syncmaster;
 static int plxsd_master; /* if we have a master card (yet) */
-static DEFINE_SPINLOCK(plx_lock); /* may not acquire other lock inside */
+DEFINE_SPINLOCK(plx_lock); /* may not acquire other lock inside */
 EXPORT_SYMBOL(plx_lock); /* for external modules */
-static spinlock_t *hfcmulti_locks[MAX_CARDS]; /* for external modules */
+spinlock_t *hfcmulti_locks[MAX_CARDS]; /* for external modules */
 EXPORT_SYMBOL(hfcmulti_locks);
-static void __iomem *hfcmulti_plxmem[MAX_CARDS]; /* for external modules */
+void __iomem *hfcmulti_plxmem[MAX_CARDS]; /* for external modules */
 EXPORT_SYMBOL(hfcmulti_plxmem);
 
 #define	TYP_E1		1
