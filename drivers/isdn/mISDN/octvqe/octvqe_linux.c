@@ -718,12 +718,12 @@ static ssize_t octdev_read(
 
 			add_wait_queue(&pChan->ReadWaitQueue, &WaitQ);
 
-			current->state = TASK_INTERRUPTIBLE;
+			set_current_state(TASK_INTERRUPTIBLE);
 
 			if (!signal_pending(current))
 				schedule();
 
-			current->state = TASK_RUNNING;
+			set_current_state(TASK_RUNNING);
 			remove_wait_queue(&pChan->ReadWaitQueue, &WaitQ);
 
 			if (signal_pending(current))
@@ -843,12 +843,12 @@ static ssize_t octdev_write(
 
 			add_wait_queue(&pChan->WriteWaitQueue, &WaitQ);
 
-			current->state = TASK_INTERRUPTIBLE;
+			set_current_state(TASK_INTERRUPTIBLE);
 
 			if (!signal_pending(current))
 				schedule();
 
-			current->state = TASK_RUNNING;
+			set_current_state(TASK_RUNNING);
 			remove_wait_queue(&pChan->WriteWaitQueue, &WaitQ);
 
 			if (signal_pending(current))
@@ -1208,4 +1208,3 @@ module_exit(octvqe_exit);
 MODULE_AUTHOR("Octasic Inc.");
 MODULE_DESCRIPTION("OCTVQE echo canceller");
 MODULE_LICENSE("GPL");
-MODULE_SUPPORTED_DEVICE(DEV_NAME);
